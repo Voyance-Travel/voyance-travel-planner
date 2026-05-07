@@ -16,6 +16,7 @@ export interface LedgerOverride {
   perPersonUsd: number;
   source: string;
   tripId: string;
+  isProtectedFloor: boolean;
 }
 
 const PROTECTED_FLOOR_SOURCES = new Set([
@@ -24,6 +25,10 @@ const PROTECTED_FLOOR_SOURCES = new Set([
   'auto_corrected',
   'reference_fallback',
 ]);
+
+export function isProtectedFloorSource(source: string): boolean {
+  return PROTECTED_FLOOR_SOURCES.has(source);
+}
 
 const overrides = new Map<string, LedgerOverride>();
 const warnedFor = new Set<string>();

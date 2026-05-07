@@ -1,88 +1,81 @@
 ## Problem
 
-User-visible prose on Day 2 of the Venice trip:
+On the Venice luxury trip, Day 1 shows:
 
-> "A kinetic and stylish way to see **the from the water**. Explore the hidden back canals…"
+- **Day badge:** ~€51/pp
+- **Activity cards visible total:** ≥ €102 (lunch ~€17 + dinner ~€85)
 
-The intended sentence was "…to see **the city** from the water…". The literal word "city" was stripped from the description by an over-aggressive sanitizer.
+User reads "math is broken." The numbers are actually internally consistent — €102 is the **group total** and €51 is the **per-person** half — but the UI mixes the two units on the same screen, with tiny `/pp` suffixes that are easy to miss.
 
 ## Root cause
 
-`supabase/functions/generate-itinerary/sanitization.ts` line 962:
+Both surfaces compute from the same data, but render in different units:
 
-```ts
-const TEXT_SCHEMA_LEAK = /[,;|]*\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay|type|slot|isVoyancePick|optionGroup|isOption)(?:\s*[:;|]\s*[^,;|]*)?/gi;
-```
+1. **Day badge** (`EditorialItinerary.tsx` ~9895–9902) — `breakdownPerPersonUsd = breakdownGroupUsd / travelers`. Always per-person when `travelers > 1`, suffixed `/pp`.
+   - For Venice Day 1: ledger has 2 dining rows of `cost_per_person_usd` 10 and 50 → group $120 → $60/pp → ~€51/pp. ✓
 
-The intent is to strip leaked JSON schema fragments like `,duration:4,practicalTips;|`. But:
+2. **Activity cards** (`getActivityCostInfo`, lines 1044–1078) — when JSONB `cost.amount` is 0 (which is the case for every Venice Day 1 row), the code falls through to `estimateCostSync`. That engine multiplies per-person × travelers internally for dining categories, so the function returns the **group total** and re-tags `basis = 'flat'`. `basisLabel('flat', 2)` returns `''`, so the card renders the group number with **no `/pp` suffix**.
+   - Venice Day 1 cards: dinner shows `~$100` → ~€85, lunch shows `~$20` → ~€17. Sum ≈ €102.
 
-1. The trailing `(?:\s*[:;|]\s*[^,;|]*)?` group is **optional**. So a bare English word in the keyword list (`city`, `country`, `name`, `location`, `description`, `cost`, `category`, `type`, `kind`, `slot`, `tags`, etc.) is matched and deleted on its own — no `:` required.
-2. The leading `[,;|]*` is also `*` (zero or more), so the regex fires inside normal prose.
+So the day badge is in `/pp` and the cards are in group total. They sum to the right ratio (€102 / 2 = €51) but look broken because the units aren't visible side-by-side and the `/pp` suffix on the badge is small.
 
-Result: "to see the city from the water" → "to see the from the water".
-
-The same pattern exists in **two more places**:
-- `src/utils/textSanitizer.ts` line 14 (`SCHEMA_LEAK_RE`)
-- `src/utils/activityNameSanitizer.ts` (similar inline schema-leak regex if present in this file's set — verify)
-
-Other words at risk in normal prose: "cost", "category", "name", "location", "highlights", "city", "country", "type". This is why we periodically see truncated descriptions across the app, not just Venice.
+A second contributor: every visible card cost on this trip is an *estimate* (`~`), because the JSONB `cost.amount` is `0` for every Day 1 activity even though `activity_costs` has real numbers (`itinerary-sync` rows from the editor sync). The card path doesn't consult `activity_costs` for non-floor sources, so it falls back to AI estimation. Cards say `~€85` even though the ledger has the same number with high confidence.
 
 ## Fix
 
-### 1. Require the separator in the schema-leak regex
+Three changes, all in `src/components/itinerary/EditorialItinerary.tsx`. No backend changes.
 
-In all three files, change the separator group from optional to required, and require at least one separator character at the front. Replace:
+### 1. Make cards consult the ledger for any source, not just protected floors
 
-```ts
-/[,;|]*\s*(?:KEYWORD|...)(?:\s*[:;|]\s*[^,;|]*)?/gi
-```
+Today `getLedgerOverride` only returns a value when the row's `source` is in `PROTECTED_FLOOR_SOURCES` (Michelin, ticketed, auto-corrected, reference). Extend `useLedgerCostOverrideMap` (`src/utils/ledgerCostOverride.ts`) to load **all** rows, but record their source. In `getActivityCostInfo`:
 
-with:
+- If a ledger row exists for this `activity.id`, prefer it as the card's cost when:
+  - The JSONB `cost.amount` is 0 / missing, OR
+  - The source is one of the protected floors (existing behavior).
+- The override returns the value with `basis: 'per_person'` (since `cost_per_person_usd` is per-person by definition) and `isEstimated: false` (ledger writes are confirmed).
 
-```ts
-/[,;|]+\s*(?:KEYWORD|...)\s*[:;|]\s*[^,;|]*/gi
-```
+Result for Venice Day 1: lunch card shows `$10/pp` (≈ €8.5/pp), dinner card shows `$50/pp` (≈ €43/pp). Sum = €51/pp, matches the badge exactly. No more `~` either.
 
-This means the regex only fires when the keyword is preceded by a `,` / `;` / `|` AND followed by a `:` / `;` / `|` value — i.e. genuine JSON-fragment leakage like `,duration:4,city:Paris;`. A standalone "city" or "name" inside a sentence is preserved.
+### 2. Stop tagging dining estimates as `flat` group totals
 
-Files to update with the same edit:
-- `supabase/functions/generate-itinerary/sanitization.ts` (`TEXT_SCHEMA_LEAK`)
-- `src/utils/textSanitizer.ts` (`SCHEMA_LEAK_RE`)
-- `src/utils/activityNameSanitizer.ts` if it has an equivalent constant (audit before touching).
-
-### 2. Add a defensive repair pass
-
-In `sanitization.ts` (and `src/utils/textSanitizer.ts`), after the schema-leak strip, repair the most common leftover damage from sentences mauled by the old regex. Mirror the existing `the of` / `the's` repairs:
+Lines 1065–1070 retag dining as `basis = 'flat'` after `estimateCostSync` because that engine pre-multiplies. That's the unit-mixing bug for cards. Replace the retag with a divide:
 
 ```ts
-// Repair "see the from the water" / "in the of the city" gaps caused by
-// legacy aggressive schema-leak stripping that ate the noun.
-result = result
-  .replace(/\bsee the from the\b/gi, 'see the city from the')
-  .replace(/\bin the from the\b/gi, 'in the city from the')
-  .replace(/\bthe from the (water|street|river|canal|sea|sky|air|ground|inside|outside|rooftop)\b/gi, 'the city from the $1');
+const isPerPersonDining = PER_PERSON_ENGINE_CATS.has((category || '').toLowerCase());
+const finalAmount = isPerPersonDining
+  ? Math.round(amount / Math.max(travelers, 1))
+  : amount;
+const finalBasis: CostBasis = isPerPersonDining ? 'per_person' : basis;
 ```
 
-Lightweight, scoped to the leak pattern, won't touch valid prose.
+Now cards show per-person dining values consistently with `/pp`, matching the badge unit. The existing per-person tooltip ("Group total: …") that's already wired up at line 11774 will surface the multiplication for users who want it.
 
-### 3. One-time DB scrub
+### 3. Defensive day-badge consistency check (dev only)
 
-Run an UPDATE on `trips.itinerary_data` to repair existing damaged descriptions. Use a JSONB walker (mirroring the recent ghost-activity and meal-sentinel scrubs) that runs the small repair regex on `activities[].description` only. Skips locked / user / extracted / pinned items. Verify the Venice row reads cleanly after.
+Add a `console.warn` in `DayCard` when the rendered day badge value diverges from the sum of visible card costs by more than 5%, so this regresses loudly in dev rather than silently:
 
-### 4. Test coverage
-
-Add unit tests in `src/utils/__tests__/textSanitizer.test.ts` (create if missing) asserting:
-- "to see the city from the water" round-trips unchanged.
-- Real schema fragments like `",duration:4,city:Paris;|"` are still stripped.
-- Standalone words "city", "name", "location" inside English sentences are preserved.
-- Repair pass converts "see the from the water" back to "see the city from the water".
+```ts
+if (process.env.NODE_ENV !== 'production') {
+  const cardSum = day.activities.reduce((s, a) => {
+    const i = getActivityCostInfo(a, travelers, budgetTier, destination, destinationCountry, isManualMode);
+    if (i.isEstimated && !isManualMode) return s;
+    const perPp = i.basis === 'per_person' ? i.amount : i.amount / Math.max(travelers, 1);
+    return s + perPp;
+  }, 0);
+  if (totalCost > 0 && Math.abs(cardSum - totalCost) / totalCost > 0.05) {
+    console.warn(`[DayCard] Day ${day.dayNumber} badge ${totalCost.toFixed(2)} vs cards sum ${cardSum.toFixed(2)} (>5% drift)`);
+  }
+}
+```
 
 ## Verification
 
-- Reload trip `38f81fab…`, Day 2 kayak description reads "…way to see the city from the water…".
-- DB query `select count(*) from trips, jsonb_each(...) where description ~* '\bthe from the\b'` → 0 after scrub.
-- All existing sanitization tests still pass.
+- Reload the Venice trip → Day 1 lunch card reads `$10/pp` (~€8.5/pp), dinner reads `$50/pp` (~€43/pp), badge stays at ~€51/pp. Sum of card per-person values = badge.
+- Toggle a different trip with non-dining estimates (museum, transit) → those cards still render in their original basis (transit per_person, attractions per_person), nothing regresses.
+- Hover the dinner card tooltip → still shows "Group total: €85" for travelers = 2.
+- Dev console: no `[DayCard]` drift warning on any rendered day.
 
 ## Out of scope
 
-- Auditing every other regex in `sanitization.ts` for similar permissive groups (separate hardening pass; this PR fixes the known active leak).
+- Backfilling JSONB `cost.amount` from the ledger (separate cleanup; the card-side ledger lookup makes it unnecessary for display).
+- Reworking the unified `/pp` vs group toggle in the trip header (that toggle is intentional and unaffected).
