@@ -14,6 +14,7 @@ import { useMemo } from 'react';
 import type { TripPayment } from '@/services/tripPaymentsAPI';
 import { estimateCostSync, isLikelyFreePublicVenue, isPlaceholderDepartureTransfer, isPlaceholderDepartureTransferTitle, isUnconfirmedIntraCityTaxi } from '@/lib/cost-estimation';
 import { computeHotelCostUsd } from '@/lib/hotel-cost';
+import { toBudgetCategory, type BudgetCategoryKey } from '@/services/budgetCategoryMap';
 
 export interface PayableSubItem {
   id: string;
@@ -37,6 +38,8 @@ export interface PayableItem {
   subItems?: PayableSubItem[];
   /** Visual hint for grouped rows. */
   groupKind?: 'transit';
+  /** Canonical Budget by Category bucket. Mirrors the Budget tab grouping. */
+  budgetCategory?: BudgetCategoryKey;
 }
 
 interface ActivityCostRow {
