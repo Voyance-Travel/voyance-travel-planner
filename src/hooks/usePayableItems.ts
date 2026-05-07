@@ -608,14 +608,20 @@ export function usePayableItems({
     const presentItemIds = new Set(result.map(r => r.id));
     const orphanGroups = new Map<string, TripPayment[]>();
     for (const p of payments) {
-      if (p.item_type !== 'activity') continue;
+      // Cover both classic activity payments and the new grouped-transit
+      // payments (item_type='transport', item_id='transit-dN'). Without
+      // including 'transport' here, paid transit splits saved before the
+      // unification would silently disappear from the live list.
+      if (p.item_type !== 'activity' && p.item_type !== 'transport') continue;
       if (!p.item_id || isManualId(p.item_id)) continue;
       if (presentItemIds.has(p.item_id)) continue;
       // Strip optional composite suffix (_dN) to get the raw activity id.
       const itemIdStr = String(p.item_id);
       const rawActivityId = itemIdStr.replace(/_d\d+$/, '');
-      // Only recover if the activity still exists in the live itinerary.
-      if (!activityNameById.has(rawActivityId)) continue;
+      // Only recover if the activity still exists in the live itinerary, OR
+      // it's a transit group id whose day still has costed transit.
+      const isTransitGroupId = /^transit-d\d+$/.test(itemIdStr);
+      if (!isTransitGroupId && !activityNameById.has(rawActivityId)) continue;
       const group = orphanGroups.get(p.item_id) || [];
       group.push(p);
       orphanGroups.set(p.item_id, group);
