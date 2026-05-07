@@ -402,6 +402,13 @@ export function usePayableItems({
           }
         }
 
+        // Walking legs are always free, regardless of stored category. Skip
+        // entirely — don't add to transit bucket either; walks shouldn't show
+        // as $0 noise under "Local transit".
+        if (isWalkingLeg({ title: lookup.name, description: undefined })) {
+          continue;
+        }
+
         let cents = rowTotalCents(row);
 
         // Rescue: if the DB row is $0 but the itinerary JSON has an explicit
