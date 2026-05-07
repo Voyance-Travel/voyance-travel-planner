@@ -73,3 +73,24 @@ Deno.test('past-midnight cards are dropped', () => {
   assert(droppedIds.includes('b') || activities.length === 1);
   assert(repairs.some(r => r.type === 'dropped_past_midnight'));
 });
+
+Deno.test('transit overlap: pulls "Transfer to Marriott" past Breakfast', () => {
+  const acts = [
+    { id: 'b', title: 'Breakfast', category: 'dining', startTime: '08:30', endTime: '09:15' },
+    { id: 't', title: 'Transfer to Marriott', category: 'transport', startTime: '09:00', endTime: '09:45' },
+  ];
+  const { activities, repairs } = enforceTimingAndBuffers(acts);
+  assert(repairs.length > 0, 'should record a repair');
+  assert(parseTime(activities[1].startTime)! >= 9 * 60 + 15, 'transit must start at/after prev end');
+});
+
+Deno.test('transit overlap: pulls "Walk to Lunch 12:20" past Vatican ending 12:30', () => {
+  const acts = [
+    { id: 'v', title: 'Vatican Museums', category: 'culture', startTime: '09:30', endTime: '12:30' },
+    { id: 'w', title: 'Walk to Lunch', category: 'transit', startTime: '12:20', endTime: '12:40' },
+  ];
+  const { activities, repairs } = enforceTimingAndBuffers(acts);
+  assert(repairs.length > 0);
+  assert(parseTime(activities[1].startTime)! >= 12 * 60 + 30);
+});
+

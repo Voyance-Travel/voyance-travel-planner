@@ -2388,6 +2388,45 @@ export function EditorialItinerary({
     autoBufferAppliedRef.current = fp;
   }, [days, setDays]);
 
+  // Transit-overlap auto-repair — runs the shared timing-cascade so transit
+  // cards (e.g. "Transfer to Marriott", "Walk to Lunch") never sit inside the
+  // previous activity. Complements auto-buffer above which deliberately skips
+  // transport categories. Idempotent via fingerprint.
+  const transitCascadeAppliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!days || days.length === 0) return;
+    const fp = days.map(d => (d.activities || []).map(a => `${a.id}@${a.startTime || (a as any).time || ''}|${a.endTime || ''}`).join('|')).join('||');
+    if (transitCascadeAppliedRef.current === fp) return;
+
+    let cancelled = false;
+    (async () => {
+      const mod = await import('@/utils/itinerary/timingCascade');
+      if (cancelled) return;
+      let totalRepairs = 0;
+      let anyMutation = false;
+      const nextDays = days.map((day) => {
+        if (!day || !day.activities || day.activities.length < 2) return day;
+        const lockedIds = new Set<string>(
+          (day.activities as any[])
+            .filter((a) => a?.locked === true || a?.isLocked === true || (a as any)?.lock_state === 'locked')
+            .map((a) => String(a.id))
+        );
+        const result = mod.enforceTimingAndBuffers(day.activities as any[], { lockedIds });
+        if (result.repairs.length === 0) return day;
+        totalRepairs += result.repairs.length;
+        anyMutation = true;
+        return { ...day, activities: result.activities as any };
+      });
+      if (anyMutation) {
+        console.log(`[transit-cascade] auto-repaired ${totalRepairs} timing conflict(s) on load`);
+        setDays(nextDays);
+        setHasChanges(true);
+      }
+      transitCascadeAppliedRef.current = fp;
+    })();
+    return () => { cancelled = true; };
+  }, [days, setDays]);
+
   
   const handleRefreshDay = useCallback(async (dayIndex: number) => {
     const day = days[dayIndex];
