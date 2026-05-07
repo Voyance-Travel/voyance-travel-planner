@@ -17,6 +17,7 @@ import { StageLogger } from './pipeline/stage-logger.ts';
 import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { applyAnchorsWin } from './anchor-guard.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
+import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
