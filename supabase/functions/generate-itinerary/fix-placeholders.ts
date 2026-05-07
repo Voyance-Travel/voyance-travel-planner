@@ -374,20 +374,46 @@ export function getRandomFallbackRestaurant(
 }
 
 /**
- * GUARANTEED resolver — ALWAYS returns a real, named venue. Walks
- *   city pool → city pool (recycled) → regional country pool → global emergency.
- * Use this anywhere we would otherwise emit a "find a local spot" stub.
+ * Returns true if the fallback's address mentions a different city than the
+ * destination's country-mate. Prevents wrong-city venues like Tartine (SF)
+ * landing in a Venice itinerary.
+ */
+function fallbackIsCrossCity(fallback: FallbackRestaurant, destination: string): boolean {
+  if (!fallback?.address) return false;
+  const hit = detectCrossCityMention(fallback.address, destination)
+    || detectCrossCityMention(fallback.name || '', destination);
+  if (hit) {
+    console.warn(`[CROSS-CITY FALLBACK BLOCKED] "${fallback.name}" → ${hit}, destination="${destination}"`);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * GUARANTEED resolver — returns a real, named venue OR an unverified
+ * `needsVenuePick` sentinel. Walks city pool → city pool (recycled) →
+ * regional pool. NEVER returns a venue from a different city than the
+ * destination. If no city-matched real venue is available, downgrades to
+ * an unverified sentinel ($0).
  */
 export function resolveAnyMealFallback(
   city: string,
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks',
   usedNames: Set<string>,
 ): FallbackRestaurant {
-  return (
-    getRandomFallbackRestaurant(city, mealType, usedNames, false) ||
-    getRandomFallbackRestaurant(city, mealType, new Set<string>(), true) ||
-    regionalEmergencyFallback(city, mealType)
-  );
+  const candidates: Array<FallbackRestaurant | null> = [
+    getRandomFallbackRestaurant(city, mealType, usedNames, false),
+    getRandomFallbackRestaurant(city, mealType, new Set<string>(), true),
+    regionalEmergencyFallback(city, mealType),
+  ];
+  for (const c of candidates) {
+    if (!c) continue;
+    if (c.needsVenuePick) return c;
+    if (fallbackIsCrossCity(c, city)) continue;
+    return c;
+  }
+  // Last resort: unverified sentinel — never a wrong-city real venue.
+  return unverifiedMealSentinel(city, mealType);
 }
 
 // =============================================================================
