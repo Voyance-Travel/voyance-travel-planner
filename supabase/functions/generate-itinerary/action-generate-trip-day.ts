@@ -589,7 +589,6 @@ async function _handleGenerateTripDayInner(
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-            'apikey': Deno.env.get("SUPABASE_ANON_KEY") || '',
           },
           signal: controller.signal,
           body: JSON.stringify({
