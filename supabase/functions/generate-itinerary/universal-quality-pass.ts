@@ -358,12 +358,15 @@ export interface TerminalCleanupOptions {
   isFirstDay?: boolean;
   /** Is this the last day? */
   isLastDay?: boolean;
+  /** User's hotel name (used as wellness fallback for downgrade) */
+  hotelName?: string;
 }
 
 /**
  * Terminal cleanup pass — the absolute last line of defense.
  * Runs AFTER any meal guard to guarantee:
  * 1. No placeholder meals survive (uses nuclearPlaceholderSweep)
+ * 1c. No wellness placeholders survive (uses nuclearWellnessSweep)
  * 2. No activities before arrival time (Day 1)
  * 3. No activities after departure buffer (last day)
  * 
@@ -375,7 +378,7 @@ export function terminalCleanup(
 ): any[] {
   if (!activities || activities.length === 0) return activities;
 
-  const { arrivalTime24, departureTime24, departureTransportType, city, dayNumber, isFirstDay, isLastDay } = options;
+  const { arrivalTime24, departureTime24, departureTransportType, city, dayNumber, isFirstDay, isLastDay, hotelName } = options;
   const label = `TERMINAL_D${dayNumber || '?'}`;
   let removed = 0;
 
@@ -398,6 +401,19 @@ export function terminalCleanup(
         console.error(`[${label}] PLACEHOLDER SURVIVED ALL PASSES: "${title}" — this should never happen`);
       }
     }
+  }
+
+  // ── 1c. Nuclear WELLNESS sweep — final wellness placeholder safety net ──
+  // Catches "Spa Time — find a venue" rows introduced by meal-guard, manual
+  // saves, assistant edits, or any non-generator save path. Without this,
+  // wellness placeholders can persist into the saved JSON.
+  try {
+    const wellnessCount = nuclearWellnessSweep(activities, city || '', hotelName);
+    if (wellnessCount > 0) {
+      console.warn(`[${label}] Terminal wellness sweep mutated/removed ${wellnessCount} placeholder(s)`);
+    }
+  } catch (e) {
+    console.warn(`[${label}] Terminal wellness sweep failed (non-blocking):`, e);
   }
 
   // ── 1b. Deduplicate "Return to Hotel" entries — keep only the LAST one ──
