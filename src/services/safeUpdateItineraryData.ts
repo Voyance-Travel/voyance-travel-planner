@@ -6,8 +6,9 @@ import { preserveLedgerCosts } from '@/utils/preserveLedgerCosts';
  * server-repaired Michelin/ticketed/reference floor prices when the in-memory
  * copy was serialized before the repair landed. This wrapper fetches the
  * currently-persisted itinerary, runs preserveLedgerCosts to keep protected
- * cost fields, then writes — so the JSONB cost chips stay in sync with the
- * activity_costs ledger across all autosave funnels.
+ * cost fields, then writes through the backend `save-itinerary` action so the
+ * persist-day contract (ghost rows, placeholder names, prompt artifacts,
+ * cross-city venues) runs on every client write path.
  */
 export async function safeUpdateItineraryData(
   tripId: string,
@@ -26,6 +27,17 @@ export async function safeUpdateItineraryData(
     const preservedDays = preserveLedgerCosts(prevDays, nextDays);
     const merged = { ...nextItinerary, days: preservedDays };
 
+    const { error } = await supabase.functions.invoke('generate-itinerary', {
+      body: {
+        action: 'save-itinerary',
+        tripId,
+        itinerary: merged,
+        extraUpdate: { ...extraFields, updated_at: new Date().toISOString() },
+      },
+    });
+    if (!error) return { error: null };
+    console.warn('[safeUpdateItineraryData] backend save failed, falling back:', error);
+
     return await supabase
       .from('trips')
       .update({
@@ -41,7 +53,6 @@ export async function safeUpdateItineraryData(
       .update({
         itinerary_data: nextItinerary as any,
         updated_at: new Date().toISOString(),
-        ...extraFields,
       })
       .eq('id', tripId);
   }
