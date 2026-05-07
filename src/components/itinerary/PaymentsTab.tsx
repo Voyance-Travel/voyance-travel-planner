@@ -416,86 +416,31 @@ export function PaymentsTab({
     ];
   }, [miscRowItems, reserveCents]);
 
-  // Invariant: visible bucket sum must match the headline within $1.
+  // Bucket sum is for internal sanity only. The user-visible "Trip Total" is
+  // always `estimatedTotal` (canonical snapshot). Both numbers come from the
+  // same `resolveCanonicalCostRows` resolver — any divergence is a contract
+  // bug to surface in dev, never a user-facing badge to apologize for.
   const bucketSumCents =
     essentialItemsWithReserve.reduce((s, i) => s + i.amountCents, 0) +
     foodItems.reduce((s, i) => s + i.amountCents, 0) +
     activitiesOnlyItems.reduce((s, i) => s + i.amountCents, 0) +
     transitItems.reduce((s, i) => s + i.amountCents, 0) +
     miscItems.reduce((s, i) => s + i.amountCents, 0);
-  const reconciliationDriftCents = bucketSumCents - estimatedTotal;
-  // Tolerate up to $2 drift — under that, rounding from per-person × travelers
-  // and largest-remainder ledger adjustments dominates and isn't user-meaningful.
-  const reconciles = Math.abs(reconciliationDriftCents) <= 200;
-
-  // Drift badge gating
-  // ─────────────────────────────────────────────────────────────────────
-  // Three independent fetches feed this view (snapshot, activity_costs query,
-  // payments). They invalidate together but complete at different times. The
-  // old 1.5s timer was shorter than typical refetch windows and would latch
-  // the badge on whenever fetches landed in an unexpected order — that's the
-  // "stuck Reconciling…" / "Totals differ by $X" reports.
-  //
-  // New behavior:
-  //   1. Suppress the badge entirely while ANY source is still loading/fetching.
-  //   2. When drift is detected and all sources are quiet, kick a single
-  //      coordinated refetch ("auto-reconcile"), capped at 2 attempts per mount.
-  //   3. Only show the badge when the SAME drift fingerprint persists across
-  //      that auto-reconcile cycle — i.e. it's a real, actionable mismatch.
   const snapshotReady =
     !financialSnapshot.loading && !loading && !activityCostsFetching;
-
-  const [showDriftBadge, setShowDriftBadge] = useState(false);
-  const driftFingerprintRef = useRef<string | null>(null);
-  const reconcileAttemptsRef = useRef(0);
-
-  // Reset attempt counter when trip changes
-  useEffect(() => {
-    reconcileAttemptsRef.current = 0;
-    driftFingerprintRef.current = null;
-    setShowDriftBadge(false);
-  }, [tripId]);
-
-  useEffect(() => {
-    if (reconciles || !snapshotReady || estimatedTotal <= 0) {
-      setShowDriftBadge(false);
-      driftFingerprintRef.current = null;
-      return;
-    }
-    const fingerprint = `${bucketSumCents}|${estimatedTotal}`;
-    const previous = driftFingerprintRef.current;
-    driftFingerprintRef.current = fingerprint;
-
-    // Same drift survived across two render cycles — show the badge after a
-    // brief debounce so a single transient frame doesn't flash it.
-    if (previous === fingerprint) {
-      const t = setTimeout(() => setShowDriftBadge(true), 1500);
-      return () => clearTimeout(t);
-    }
-
-    // First time we're seeing this drift fingerprint — try a coordinated
-    // auto-reconcile rather than blaming the user.
-    setShowDriftBadge(false);
-    if (reconcileAttemptsRef.current < 2) {
-      reconcileAttemptsRef.current += 1;
-      const t = setTimeout(() => {
-        try { financialSnapshot.refetch(); } catch {}
-        queryClient.invalidateQueries({ queryKey: ['activity-costs-payable', tripId] });
-        queryClient.invalidateQueries({ queryKey: ['trip-inclusion-toggles', tripId] });
-        fetchPayments();
-      }, 400);
-      return () => clearTimeout(t);
-    }
-  }, [reconciles, snapshotReady, estimatedTotal, bucketSumCents, tripId, queryClient, fetchPayments, financialSnapshot]);
-
-  if (!reconciles && snapshotReady && estimatedTotal > 0) {
-    // Single warn per render burst (browser dedupes by line)
-    console.warn('[PaymentsTab] reconciliation drift', {
-      bucketSumCents,
-      estimatedTotalCents: estimatedTotal,
-      driftCents: reconciliationDriftCents,
-      attempts: reconcileAttemptsRef.current,
-    });
+  if (
+    snapshotReady &&
+    estimatedTotal > 0 &&
+    Math.abs(bucketSumCents - estimatedTotal) > 200 &&
+    import.meta.env.DEV
+  ) {
+    // Dev-only assertion. Production users see one consistent number; if this
+    // ever fires it's a unification regression, not a "reconcile" prompt.
+    console.assert(
+      false,
+      '[PaymentsTab] canonical totals diverged',
+      { bucketSumCents, estimatedTotal, driftCents: bucketSumCents - estimatedTotal }
+    );
   }
 
   /**
