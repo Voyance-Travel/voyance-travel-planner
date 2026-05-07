@@ -629,19 +629,23 @@ export function usePayableItems({
     orphanGroups.forEach((group, itemId) => {
       const primary = group[0];
       const assignedIds = group.map(pp => (pp as any)?.assigned_member_id).filter(Boolean) as string[];
+      const isTransitGroupId = /^transit-d(\d+)$/.test(itemId);
+      const transitDayMatch = itemId.match(/^transit-d(\d+)$/);
       const dayMatch = itemId.match(/_d(\d+)$/);
-      const dayNumber = dayMatch ? Number(dayMatch[1]) : undefined;
+      const dayNumber = transitDayMatch
+        ? Number(transitDayMatch[1])
+        : (dayMatch ? Number(dayMatch[1]) : undefined);
       result.push({
         id: itemId,
-        type: 'activity',
-        name: primary.item_name || 'Activity',
+        type: isTransitGroupId ? 'transport' : 'activity',
+        name: primary.item_name || (isTransitGroupId ? `Local transit — Day ${dayNumber}` : 'Activity'),
         amountCents: primary.amount_cents * (primary.quantity || 1),
         dayNumber,
         payment: primary,
         allPayments: group,
         assignedMemberId: assignedIds[0],
         assignedMemberIds: [...new Set(assignedIds)],
-        budgetCategory: 'activities',
+        budgetCategory: isTransitGroupId ? 'transit' : 'activities',
       });
     });
 
