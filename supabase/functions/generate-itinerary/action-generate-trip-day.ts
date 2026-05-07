@@ -1400,6 +1400,29 @@ async function _handleGenerateTripDayInner(
         console.log(`[generate-trip-day] Pipeline repairs: ${repairs.length} fixes — ${repairs.map(r => r.action).join(', ')}`);
         dayResult.activities = repairedDay.activities;
       }
+
+      // Auto-fill any remaining ≥3h afternoon dead gaps
+      try {
+        const { fillAfternoonDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
+        const lockedIdSet = new Set<string>(lockedActivitiesForDay.map((l: any) => l.id));
+        const filled = await fillAfternoonDeadGaps(dayResult.activities, {
+          destination: cityInfo?.cityName || destination,
+          isFirstDay,
+          isLastDay,
+          isLastDayInCity,
+          archetype: (tripMeta?.travel_dna_primary as string | undefined) || undefined,
+          dietaryRestrictions: (tripMeta?.dietary_restrictions as string[] | undefined) || [],
+          budgetTier: (tripMeta?.budget_tier as string | undefined) || 'standard',
+          tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
+          lockedIds: lockedIdSet,
+        });
+        if (filled.inserted.length > 0) {
+          console.log(`[generate-trip-day] Auto-filled ${filled.inserted.length} afternoon dead gap(s) on day ${dayNumber}`);
+          dayResult.activities = filled.activities;
+        }
+      } catch (gapErr) {
+        console.warn('[generate-trip-day] Dead-gap auto-fill failed (non-blocking):', gapErr);
+      }
     } catch (pipelineErr) {
       console.warn('[generate-trip-day] Pipeline validate/repair failed (non-blocking):', pipelineErr);
     }
