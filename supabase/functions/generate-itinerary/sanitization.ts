@@ -1064,6 +1064,15 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/\s{2,}/g, ' ')
     .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '');
 
+  // Drop orphan opening fragments left by prefix strippers, e.g.
+  // " for the late-night. ☔ Rain: ..." → "☔ Rain: ..."
+  // Conservative: requires a leading lowercase preposition, ≤80 chars, and a
+  // sentence-ending period — so capitalized real openings are never eaten.
+  result = result.replace(
+    /^\s*(?:for|at|in|before|after|around|during|by|until|on|with|to|from)\b[^.]{0,80}\.\s*/i,
+    '',
+  );
+
   // Always fix orphaned possessive "the's" / "the' s" → "the city's" (reads
   // natural regardless of destination, avoids ugly forms like "Paris's").
   result = result.replace(/\bthe['’]\s?s\b/gi, "the city's");
