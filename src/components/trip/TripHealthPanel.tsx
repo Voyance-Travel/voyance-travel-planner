@@ -60,7 +60,7 @@ export interface TripHealthPanelProps {
 
 // ─── Health Analysis ────────────────────────────────────────────────────────
 
-function analyzeHealth(days: any[]): HealthIssue[] {
+export function analyzeHealth(days: any[]): HealthIssue[] {
   const issues: HealthIssue[] = [];
 
   days.forEach((day: any) => {
