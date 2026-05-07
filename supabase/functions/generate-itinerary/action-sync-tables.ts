@@ -74,7 +74,9 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
       console.warn(`[sync-itinerary-tables] No start_date available — using today for day ${dayNumber}`);
     }
     
-    const activities = d.activities || [];
+    const activities = (d.activities || []) as any[];
+    stripPreDawnHotelReturns(activities, { dayNumber, label: 'SYNC' });
+
     
     const { data: dayRow, error: dayError } = await supabase
       .from('itinerary_days')
