@@ -252,6 +252,25 @@ export function PaymentsTab({
     fetchPayments();
   }, [fetchPayments]);
 
+  // One-shot clear of legacy "payments_drift_*" localStorage keys. The
+  // server-side fingerprint logic was removed; any leftover keys can latch
+  // a stale "Totals differ" state in the UI on first mount of older sessions.
+  useEffect(() => {
+    try {
+      const flagKey = 'payments_drift_legacy_cleared_v1';
+      if (typeof window === 'undefined' || localStorage.getItem(flagKey)) return;
+      const drop: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('payments_drift_')) drop.push(k);
+      }
+      drop.forEach(k => localStorage.removeItem(k));
+      localStorage.setItem(flagKey, '1');
+    } catch {
+      // non-fatal
+    }
+  }, []);
+
   // Fetch activity_costs from DB for category reconciliation
   const { data: activityCosts, isFetching: activityCostsFetching } = useQuery({
     queryKey: ['activity-costs-payable', tripId],
