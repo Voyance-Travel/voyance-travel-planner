@@ -3,7 +3,7 @@
  * Tracks all trip payments with group splitting and member assignment support
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { getAppUrl } from '@/utils/getAppUrl';
 
@@ -253,7 +253,7 @@ export function PaymentsTab({
   }, [fetchPayments]);
 
   // Fetch activity_costs from DB for category reconciliation
-  const { data: activityCosts } = useQuery({
+  const { data: activityCosts, isFetching: activityCostsFetching } = useQuery({
     queryKey: ['activity-costs-payable', tripId],
     queryFn: async () => {
       const { data } = await supabase
@@ -267,18 +267,25 @@ export function PaymentsTab({
   });
 
   // Keep the Payments-side caches in lockstep with useTripFinancialSnapshot.
-  // Without this, the headline Trip Total refetches on `booking-changed` while
-  // the bucket sum (built from this cached query) stays frozen on stale rows,
-  // producing a permanent "Reconciling…" badge after Fix Timing / autosave.
+  // Debounced like the snapshot's own handler — Fix Timing / autosave fire
+  // many `booking-changed` events back-to-back; without coalescing, Payments
+  // and the snapshot land at different times and produce transient drift > 1.5s
+  // that latches the "Totals differ" badge on indefinitely.
   useEffect(() => {
     if (!tripId) return;
+    let pendingTimer: ReturnType<typeof setTimeout> | null = null;
     const handler = () => {
       queryClient.invalidateQueries({ queryKey: ['activity-costs-payable', tripId] });
       queryClient.invalidateQueries({ queryKey: ['trip-inclusion-toggles', tripId] });
       fetchPayments();
+      if (pendingTimer) clearTimeout(pendingTimer);
+      pendingTimer = setTimeout(() => { fetchPayments(); }, 600);
     };
     window.addEventListener('booking-changed', handler);
-    return () => window.removeEventListener('booking-changed', handler);
+    return () => {
+      window.removeEventListener('booking-changed', handler);
+      if (pendingTimer) clearTimeout(pendingTimer);
+    };
   }, [tripId, queryClient, fetchPayments]);
 
   // Fetch trip-level inclusion toggles so the Payments list and the Trip Total
