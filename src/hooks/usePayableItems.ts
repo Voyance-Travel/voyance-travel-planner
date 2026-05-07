@@ -216,46 +216,39 @@ export function usePayableItems({
   const items = useMemo(() => {
     const result: PayableItem[] = [];
 
-    // ─── Flight from selection (UI source) ───
-    // Skip canonical flight if user has a manual flight override (avoids double-count).
-    // Also suppress until payments load to prevent a brief duplicate flash.
-    const flightTotal = (hasManualFlight || !paymentsLoaded) ? 0 : (
-      flightSelection?.totalPrice
-      || (flightSelection?.legs?.reduce((s, l) => s + (l?.price || 0), 0) || 0)
-      || ((flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0))
-    );
-
-    if (flightTotal > 0) {
-      const flightId = 'flight-selection';
-      const flightPayments = payments.filter(p => p.item_type === 'flight' && p.item_id === flightId);
-      const assignedIds = flightPayments
-        .map(p => (p as any)?.assigned_member_id)
-        .filter(Boolean) as string[];
-      const flightAirline = flightSelection?.outbound?.airline
-        || flightSelection?.legs?.[0]?.airline;
-      result.push({
-        id: flightId,
-        type: 'flight',
-        name: `Round-trip Flight${flightAirline ? ` (${flightAirline})` : ''}`,
-        amountCents: Math.round(flightTotal * 100),
-        payment: flightPayments[0],
-        allPayments: flightPayments,
-        assignedMemberId: assignedIds[0],
-        assignedMemberIds: [...new Set(assignedIds)],
-      });
-    } else if (activityCosts?.length && !hasManualFlight && paymentsLoaded) {
-      const flightRow = activityCosts.find(r => (r.category || '').toLowerCase() === 'flight' && r.day_number === 0);
-      if (flightRow && flightRow.cost_per_person_usd > 0) {
+    // ─── Flight ───
+    // Canonical day-0 activity_costs row is authoritative for amountCents
+    // (matches useTripFinancialSnapshot exactly). flightSelection is only a
+    // fallback when no canonical row exists yet (brand-new trip pre-sync).
+    // This eliminates the multi-hundred-dollar drift between Payments and
+    // Budget when selection price ≠ ledger price during a refetch window.
+    if (!hasManualFlight && paymentsLoaded) {
+      const flightRow = activityCosts?.find(
+        r => (r.category || '').toLowerCase() === 'flight' && r.day_number === 0
+      );
+      const canonicalFlightCents = flightRow && flightRow.cost_per_person_usd > 0
+        ? rowTotalCents(flightRow)
+        : 0;
+      const selectionFlightTotal =
+        flightSelection?.totalPrice
+        || (flightSelection?.legs?.reduce((s, l) => s + (l?.price || 0), 0) || 0)
+        || ((flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0));
+      const flightCents = canonicalFlightCents > 0
+        ? canonicalFlightCents
+        : Math.round((selectionFlightTotal || 0) * 100);
+      if (flightCents > 0) {
         const flightId = 'flight-selection';
         const flightPayments = payments.filter(p => p.item_type === 'flight' && p.item_id === flightId);
         const assignedIds = flightPayments
           .map(p => (p as any)?.assigned_member_id)
           .filter(Boolean) as string[];
+        const flightAirline = flightSelection?.outbound?.airline
+          || flightSelection?.legs?.[0]?.airline;
         result.push({
           id: flightId,
           type: 'flight',
-          name: 'Round-trip Flight',
-          amountCents: rowTotalCents(flightRow),
+          name: `Round-trip Flight${flightAirline ? ` (${flightAirline})` : ''}`,
+          amountCents: flightCents,
           payment: flightPayments[0],
           allPayments: flightPayments,
           assignedMemberId: assignedIds[0],
@@ -264,28 +257,21 @@ export function usePayableItems({
       }
     }
 
-    // ─── Hotel from selection ───
-    if (paymentsLoaded && !hasManualHotel && (hotelSelection?.totalPrice || hotelSelection?.pricePerNight)) {
-      const hotelId = 'hotel-selection';
-      const hotelPayments = payments.filter(p => p.item_type === 'hotel' && p.item_id === hotelId);
-      const hotelPrice = computeHotelCostUsd(null, hotelSelection as any, days.length);
-      const assignedIds = hotelPayments
-        .map(p => (p as any)?.assigned_member_id)
-        .filter(Boolean) as string[];
-      result.push({
-        id: hotelId,
-        type: 'hotel',
-        name: hotelSelection.name || 'Hotel Accommodation',
-        amountCents: Math.round(hotelPrice * 100),
-        payment: hotelPayments[0],
-        allPayments: hotelPayments,
-        assignedMemberId: assignedIds[0],
-        assignedMemberIds: [...new Set(assignedIds)],
-      });
-    } else if (paymentsLoaded && activityCosts?.length && !hasManualHotel) {
-      // Fallback: hotel cost stored as day_number=0 row
-      const hotelRow = activityCosts.find(r => (r.category || '').toLowerCase() === 'hotel' && r.day_number === 0);
-      if (hotelRow && hotelRow.cost_per_person_usd > 0) {
+    // ─── Hotel ───
+    // Canonical day-0 activity_costs row wins; hotelSelection price is fallback.
+    if (paymentsLoaded && !hasManualHotel) {
+      const hotelRow = activityCosts?.find(
+        r => (r.category || '').toLowerCase() === 'hotel' && r.day_number === 0
+      );
+      const canonicalHotelCents = hotelRow && hotelRow.cost_per_person_usd > 0
+        ? rowTotalCents(hotelRow)
+        : 0;
+      const hasSelection = !!(hotelSelection?.totalPrice || hotelSelection?.pricePerNight);
+      const selectionHotelCents = hasSelection
+        ? Math.round(computeHotelCostUsd(null, hotelSelection as any, days.length) * 100)
+        : 0;
+      const hotelCents = canonicalHotelCents > 0 ? canonicalHotelCents : selectionHotelCents;
+      if (hotelCents > 0) {
         const hotelId = 'hotel-selection';
         const hotelPayments = payments.filter(p => p.item_type === 'hotel' && p.item_id === hotelId);
         const assignedIds = hotelPayments
@@ -294,8 +280,8 @@ export function usePayableItems({
         result.push({
           id: hotelId,
           type: 'hotel',
-          name: 'Hotel Accommodation',
-          amountCents: rowTotalCents(hotelRow),
+          name: hotelSelection?.name || 'Hotel Accommodation',
+          amountCents: hotelCents,
           payment: hotelPayments[0],
           allPayments: hotelPayments,
           assignedMemberId: assignedIds[0],
