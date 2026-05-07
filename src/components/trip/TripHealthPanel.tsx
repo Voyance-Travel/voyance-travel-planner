@@ -86,10 +86,16 @@ function analyzeHealth(days: any[]): HealthIssue[] {
     }
 
     // Timing conflicts — overlapping activities
+    const TRANSIT_CATS = ['transit', 'transportation', 'transfer', 'walking', 'transport', 'commute', 'taxi', 'travel'];
+    const TRANSIT_TITLE_RE = /^(walk|transfer|return|drive|taxi|metro|train|bus|tram|ride)\b/i;
+    const isTransitLike = (cat?: string, title?: string) =>
+      TRANSIT_CATS.includes((cat || '').toLowerCase()) || TRANSIT_TITLE_RE.test(title || '');
+
     const timed = activities
       .filter((a: any) => a.startTime && a.endTime)
       .map((a: any) => ({
         name: a.name || a.title,
+        category: a.category,
         start: parseTime(a.startTime),
         end: parseTime(a.endTime),
         startStr: String(a.startTime),
@@ -101,10 +107,15 @@ function analyzeHealth(days: any[]): HealthIssue[] {
     for (let i = 0; i < timed.length - 1; i++) {
       if (timed[i].end > timed[i + 1].start) {
         const overlap = timed[i].end - timed[i + 1].start;
+        const transitInvolved =
+          isTransitLike(timed[i].category, timed[i].name) ||
+          isTransitLike(timed[i + 1].category, timed[i + 1].name);
         issues.push({
           id: `conflict-day-${dayNum}-${i}`,
-          severity: 'error',
-          message: `Day ${dayNum}: "${timed[i].name}" (${timed[i].startStr}–${timed[i].endStr}) overlaps with "${timed[i + 1].name}" (${timed[i + 1].startStr}–${timed[i + 1].endStr}) — ${overlap} min conflict`,
+          severity: transitInvolved ? 'warning' : 'error',
+          message: transitInvolved
+            ? `Day ${dayNum}: Tight transition — "${timed[i].name}" (${timed[i].startStr}–${timed[i].endStr}) runs into "${timed[i + 1].name}" (${timed[i + 1].startStr}–${timed[i + 1].endStr}). Auto-resolves on save.`
+            : `Day ${dayNum}: "${timed[i].name}" (${timed[i].startStr}–${timed[i].endStr}) overlaps with "${timed[i + 1].name}" (${timed[i + 1].startStr}–${timed[i + 1].endStr}) — ${overlap} min conflict`,
           fixLabel: 'Fix timing',
           fixAction: 'fix_timing',
           dayNumber: dayNum,
@@ -117,10 +128,9 @@ function analyzeHealth(days: any[]): HealthIssue[] {
     for (let i = 0; i < timed.length - 1; i++) {
       const gap = timed[i + 1].start - timed[i].end;
       if (gap > 0 && gap < 5) {
-        const catA = (activities[i]?.category || '').toLowerCase();
-        const catB = (activities[i + 1]?.category || '').toLowerCase();
-        const isTransit = ['transit', 'transportation', 'transfer', 'walking'].includes(catA) ||
-                          ['transit', 'transportation', 'transfer', 'walking'].includes(catB);
+        const isTransit =
+          isTransitLike(timed[i].category, timed[i].name) ||
+          isTransitLike(timed[i + 1].category, timed[i + 1].name);
         if (!isTransit) {
           issues.push({
             id: `buffer-day-${dayNum}-${i}`,

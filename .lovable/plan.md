@@ -1,69 +1,51 @@
-## What's happening
+## Problem
 
-The visible tip — `"for the late-night. ☔ Rain: Stay for an extra treatment."` — starts mid-sentence because an earlier regex pass stripped the opening clause but left a dangling preposition fragment. The likely original was:
+Day 3 Health panel flags an "error" for: Villa Medici Gardens (10:05–10:55) overlapping Walk to Hotel Flora (10:45–11:00). The "Walk to Hotel" entry is a transit/transfer card — the kind the timing cascade is designed to butt right up against the previous activity (zero-buffer is fine for transit). The shared `enforceTimingAndBuffers` cascade already has a test that pulls this exact pair forward (`timingCascade.test.ts` L25–33), and the on-load `transit-cascade` effect in `EditorialItinerary` runs it automatically.
 
-> "Advance booking required for the late-night. ☔ Rain: Stay for an extra treatment."
+So one of two things is happening:
+- The cascade ran and pushed the walk to 10:55–11:10, but the data on disk still has the old 10:45 start until the user saves, so any other reader of the trip sees the overlap.
+- Or the cascade is gated out (e.g. the walk card is `locked`, or `endTime` is missing) and never actually shifts.
 
-In `supabase/functions/generate-itinerary/sanitization.ts`, three patterns target booking-prefix language:
+Either way, `analyzeHealth` in `TripHealthPanel` reports the overlap with `severity: 'error'` regardless of category, even though one side is a transit/transfer card — so the Health panel paints a red "conflict" for a situation the system explicitly treats as benign elsewhere.
 
-- **L1014** — `/\b(?:BOOK|RESERVE|SECURE)\s+\d[\d-]*\s*(?:WEEKS?|MONTHS?|DAYS?)\s*(?:AHEAD|IN ADVANCE|...)?\b/gi`
-- **L1018** — `/\b(?:BOOK|RESERVE|SECURE)\s+(?:ASAP|IMMEDIATELY|NOW|IN ADVANCE|WELL AHEAD|EARLY)\b/gi`
-- **L1019** — `/\b(?:Advance|advance)\s+(?:booking|reservation)\s+(?:required|recommended|essential|necessary)\b/gi`
+## Fix (UI/health-classification only)
 
-Each removes the verb phrase but **not the preposition + object that follows it**, leaving fragments like " for the late-night.", " at the venue.", " before 8pm." stuck onto the next sentence.
+Make the Health panel treat transit-involved overlaps as the soft, auto-resolved condition the cascade already considers them.
 
-This is systemic — applies to any tip whose AI output started with one of these bookable-urgency prefixes.
+### `src/components/trip/TripHealthPanel.tsx` — `analyzeHealth`
 
-## Plan
+1. Reuse the existing transit-category set (already used in the buffer block):
+   ```ts
+   const TRANSIT_CATS = ['transit','transportation','transfer','walking','transport','commute','taxi','travel'];
+   const isTransitCat = (c?: string) => TRANSIT_CATS.includes((c || '').toLowerCase());
+   ```
+2. In the overlap loop (L101–114), when `timed[i].end > timed[i+1].start`:
+   - Look up the two original activities (`activities[i]`, `activities[i+1]`).
+   - If either side is a transit category, OR the title of either matches `/^(walk|transfer|return|drive|taxi|metro|train|bus|tram|ride)\b/i` (catches "Walk to Hotel Flora", "Return to Hotel", "Transfer to Marriott"), downgrade:
+     - `severity: 'warning'`
+     - message: `Day ${dayNum}: Tight transition — "${A}" (…) runs into "${B}" (…). Auto-resolves on save.`
+     - `fixLabel: 'Fix timing'`, `fixAction: 'fix_timing'` (unchanged so the existing one-click button still works).
+   - Still `break` to keep one entry per day.
+3. Health-score weighting (L302–311) already softens timing issues; no change needed beyond the severity downgrade.
 
-Two layers: extend the existing strippers to consume the trailing orphan fragment, plus a defensive post-pass that catches anything similar that gets through. Server-only fix; the client just renders what the server stores.
+### Index lookup correctness
 
-### 1. Make booking-prefix strippers consume the trailing fragment
+The existing buffer block at L120–123 reads `activities[i]` / `activities[i+1]` by index, but `timed` is sorted independently from `activities`, so those indices can disagree. Fix the same way for both blocks: tag each `timed` entry with its source activity (push `category` and `title` onto the `timed` object at L91–97) and read from there. This is the minimum change required to make the transit check reliable; without it the buffer/transit detection has been silently misaligned.
 
-In `supabase/functions/generate-itinerary/sanitization.ts`, extend the three regexes so they also swallow an optional trailing `\s+(?:for|at|in|before|after|around|during|by|until|on)\b[^.]*\.?` clause. Example for the L1019 pattern:
+### Tests
 
-```ts
-.replace(
-  /\b(?:Advance|advance)\s+(?:booking|reservation)\s+(?:required|recommended|essential|necessary)(?:\s+(?:for|at|in|before|after|around|during|by|until|on)\b[^.]*?)?\.?\s*/gi,
-  ''
-)
-```
-
-Apply the same `(?:\s+<prep>\b[^.]*?)?\.?` tail to L1014 and L1018. The non-greedy `[^.]*?` keeps the consume bounded to the current sentence and never crosses into the next one (so `☔ Rain: …` is preserved).
-
-### 2. Generic orphan-fragment post-pass
-
-After all the existing replaces in `sanitizeAITextField` (right before the orphan-article repairs around L1067), add a small post-pass that catches the same shape from any future stripper:
-
-```ts
-// Drop orphan opening fragments left by prefix strippers:
-// " for the late-night. ☔ Rain: ..." → "☔ Rain: ..."
-// Pattern: leading whitespace, lowercase preposition, short clause ending
-// in a period, then continue with the rest.
-result = result.replace(
-  /^\s*(?:for|at|in|before|after|around|during|by|until|on|with|to|from)\b[^.]{0,80}\.\s*/i,
-  ''
-);
-```
-
-The `{0,80}` cap and trailing `.` requirement keep this conservative — it won't eat an intentional sentence that happens to start with a lowercase preposition (because real first words are capitalized).
-
-### 3. Tests
-
-Extend the nearest existing test file for `sanitizeAITextField` (likely `supabase/functions/generate-itinerary/sanitization.test.ts` — confirm during impl). New cases:
-
-- `"Advance booking required for the late-night. ☔ Rain: Stay for an extra treatment."` → `"☔ Rain: Stay for an extra treatment."`
-- `"BOOK 2 WEEKS AHEAD for the chef's table. Try the tasting menu."` → `"Try the tasting menu."`
-- `"Reserve in advance at the rooftop. Sunset views are unbeatable."` → `"Sunset views are unbeatable."`
-- Regression: `"Advance booking required."` (no trailing prep) still strips cleanly to `""`.
-- Regression: `"Sunset views are unbeatable."` (no leading prefix) untouched.
+Add `src/components/trip/__tests__/TripHealthPanel.analyzeHealth.test.ts` with:
+- Villa Medici (10:05–10:55, `leisure`) + Walk to Hotel Flora (10:45–11:00, `transfer`) → exactly one issue, `severity === 'warning'`, message contains "Tight transition" and "Auto-resolves".
+- Two non-transit overlapping cards → still `severity: 'error'` (regression).
+- Walk-titled card with `category: undefined` → still classified as transit by title prefix.
 
 ## Out of scope
 
-- Backfilling stored tips. Sanitization runs every save, so on the next regen/edit the tip self-heals. Listing legacy data isn't worth the migration cost for a copy bug.
-- Client-side mirror. `sanitizeActivityText` doesn't run booking-prefix strips, so it isn't producing fragments — no need to touch.
+- No changes to the timing cascade itself; it already does the right thing.
+- No backend/data changes; the actual time shift is still owned by the existing on-load cascade and pre-save cascade.
+- Not touching the empty-day, budget-balance, or checklist branches of `analyzeHealth`.
 
 ## Files touched
 
-- `supabase/functions/generate-itinerary/sanitization.ts` — extend 3 regexes, add post-pass
-- `supabase/functions/generate-itinerary/sanitization.test.ts` (or nearest) — new cases
+- `src/components/trip/TripHealthPanel.tsx`
+- `src/components/trip/__tests__/TripHealthPanel.analyzeHealth.test.ts` (new)
