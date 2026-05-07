@@ -3411,7 +3411,11 @@ function repairBookends(
     const p = ts.split(':');
     if (p.length < 2) return ts;
     const tot = parseInt(p[0], 10) * 60 + parseInt(p[1], 10) + min;
-    return `${String(Math.floor(tot / 60) % 24).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+    // Cap at 23:45 — never wrap into the next calendar day. Bookend injectors
+    // must not produce 00:xx cards that masquerade as the next day's morning.
+    const DAY_CAP = 23 * 60 + 45;
+    const capped = Math.min(tot, DAY_CAP);
+    return `${String(Math.floor(capped / 60)).padStart(2, '0')}:${String(capped % 60).padStart(2, '0')}`;
   };
 
   const makeAccomCard = (label: string, st: string, dur: number) => ({
