@@ -531,14 +531,14 @@ export async function saveItinerary(
     lastModified: new Date().toISOString(),
   };
   
-  const { error } = await supabase
-    .from('trips')
-    .update({
-      itinerary_data: JSON.parse(JSON.stringify(mergedItinerary)),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', tripId);
-  
+  const { error } = await supabase.functions.invoke('generate-itinerary', {
+    body: {
+      action: 'save-itinerary',
+      tripId,
+      itinerary: JSON.parse(JSON.stringify(mergedItinerary)),
+    },
+  });
+
   if (error) {
     throw new Error('Failed to save itinerary');
   }
