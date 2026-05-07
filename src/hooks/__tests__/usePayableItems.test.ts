@@ -140,6 +140,7 @@ describe('usePayableItems — Flights & Hotels reconciliation', () => {
         payments: [],
         activityCosts: activityCosts as any,
         paymentsLoaded: true,
+        includeFlight: true,
       }),
     );
     const flight = result.current.items.find(i => i.type === 'flight');
