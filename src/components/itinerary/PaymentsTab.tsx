@@ -405,11 +405,15 @@ export function PaymentsTab({
     transitItems.reduce((s, i) => s + i.amountCents, 0) +
     miscItems.reduce((s, i) => s + i.amountCents, 0);
   const reconciliationDriftCents = bucketSumCents - estimatedTotal;
-  const reconciles = Math.abs(reconciliationDriftCents) <= 100;
+  // Tolerate up to $2 drift — under that, rounding from per-person × travelers
+  // and largest-remainder ledger adjustments dominates and isn't user-meaningful.
+  const reconciles = Math.abs(reconciliationDriftCents) <= 200;
 
-  // Debounce the "Reconciling…" badge: brief drift during snapshot/bucket
-  // refetch (e.g. after a Fix Timing re-sync) is normal and self-clears in
-  // a few hundred ms. Only surface the badge when drift persists ≥1.5s.
+  // Show a finite "Totals differ by $X" diagnostic only after drift persists
+  // ≥1.5s (brief drift during refetch is normal). The previous "Reconciling…"
+  // wording implied a running async job that would clear itself — it never
+  // did, leaving the badge stuck. The new wording is honest: it's a static
+  // mismatch the user can act on (or ignore).
   const [showDriftBadge, setShowDriftBadge] = useState(false);
   useEffect(() => {
     if (reconciles || financialSnapshot.loading || estimatedTotal <= 0) {
@@ -1103,7 +1107,7 @@ export function PaymentsTab({
                   className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1 justify-end"
                   title={`Bucket sum ${formatCurrency(bucketSumCents)} differs from total by ${formatCurrency(Math.abs(reconciliationDriftCents))}`}
                 >
-                  Reconciling…
+                  Totals differ by {formatCurrency(Math.abs(reconciliationDriftCents))}
                 </p>
               ) : null
             )}
