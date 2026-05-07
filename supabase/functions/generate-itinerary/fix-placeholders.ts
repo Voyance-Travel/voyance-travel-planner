@@ -846,7 +846,60 @@ export function nuclearPlaceholderSweep(
   return replaced;
 }
 
-interface PlaceholderSlot {
+// =============================================================================
+// CROSS-CITY VENUE SWEEP — last-line defense run from terminalCleanup
+// Catches any wrong-city venue (real famous venue from a different city)
+// that survived enrichment + meal injection. Downgrades to unverified
+// `needsVenuePick` ($0) sentinel rather than ship a foreign address.
+// =============================================================================
+export function nuclearCrossCitySweep(activities: any[], destination: string): number {
+  if (!activities?.length || !destination) return 0;
+  const SWEEPABLE_CATS = new Set([
+    'dining', 'restaurant', 'food',
+    'sightseeing', 'attraction', 'museum', 'culture', 'shopping',
+    'wellness', 'spa', 'activity', 'entertainment', 'relaxation',
+  ]);
+  let mutated = 0;
+  for (const a of activities) {
+    if (!a || a.locked || a.isLocked) continue;
+    const cat = String(a.category || '').toLowerCase();
+    if (!SWEEPABLE_CATS.has(cat)) continue;
+    const wrongCity = isCrossCityAddress(a, destination);
+    if (!wrongCity) continue;
+
+    // Convert to unverified sentinel — preserve start time / category / duration.
+    const startTimeStr = a.startTime || a.start_time || '12:00';
+    const mealType = parseMealType(startTimeStr);
+    const sentinel = unverifiedMealSentinel(destination, mealType);
+    const isMeal = cat === 'dining' || cat === 'restaurant' || cat === 'food'
+      || /^(breakfast|brunch|lunch|dinner|drinks)\b/i.test(a.title || '');
+
+    if (isMeal) {
+      applyFallbackToActivity(a, sentinel, mealType, new Set<string>(), undefined, destination);
+    } else {
+      // Non-meal (museum/spa/etc.) — strip the wrong-city venue, mark unverified.
+      const beforeTitle = a.title;
+      a.title = `${a.title || 'Activity'} — find a local option in ${destination}`;
+      a.name = a.title;
+      if (a.location) {
+        a.location.address = '';
+        a.location.name = '';
+      }
+      a.venue_name = '';
+      a.metadata = a.metadata || {};
+      a.metadata.unverified_venue = true;
+      a.metadata.needsVenuePick = true;
+      if (a.cost) { a.cost.amount = 0; a.cost.perPerson = 0; }
+      a.cost_per_person = 0;
+      console.warn(`[NUCLEAR CROSS-CITY] Stripped wrong-city venue from "${beforeTitle}" (was in ${wrongCity}, dest ${destination})`);
+    }
+    mutated++;
+  }
+  if (mutated > 0) {
+    console.warn(`[NUCLEAR CROSS-CITY] Downgraded ${mutated} wrong-city activit(y/ies) in ${destination}`);
+  }
+  return mutated;
+}
   activityRef: any;
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks';
 }
