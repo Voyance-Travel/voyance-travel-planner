@@ -623,6 +623,7 @@ export function usePayableItems({
           assignedMemberIds: [...new Set(assignedIds)],
           subItems,
           groupKind: 'transit',
+          budgetCategory: 'transit',
         });
       }
     }
