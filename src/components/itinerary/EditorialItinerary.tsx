@@ -9939,6 +9939,20 @@ function DayCard({
   }, 0);
   const otherTransitSubtotal = Math.max(0, transitSubtotal - airportTransferSubtotal);
   const visibleActivitiesSubtotal = Math.max(0, totalCost - transitSubtotal);
+
+  // Dev-only sanity check: warn loudly if cards sum diverges from badge >5%.
+  if (process.env.NODE_ENV !== 'production' && !dayIsPreview && totalCost > 0) {
+    const cardSum = day.activities.reduce((s, a) => {
+      const i = getActivityCostInfo(a, travelers, budgetTier, destination, destinationCountry, isManualMode);
+      if (i.isEstimated && !isManualMode) return s;
+      const perPp = i.basis === 'per_person' ? i.amount : i.amount / Math.max(travelers, 1);
+      return s + perPp;
+    }, 0);
+    if (cardSum > 0 && Math.abs(cardSum - totalCost) / totalCost > 0.05) {
+      // eslint-disable-next-line no-console
+      console.warn(`[DayCard] Day ${day.dayNumber} badge $${totalCost.toFixed(2)} vs cards sum $${cardSum.toFixed(2)} (>5% drift)`);
+    }
+  }
   
   // Transport details toggle - collapsed by default to reduce visual noise
   const [showTransportDetails, setShowTransportDetails] = useState(false);
