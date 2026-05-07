@@ -1,94 +1,74 @@
+## Problem
 
-## What's actually happening
+Frontend shows `Initial chain failed (status=401)`. That string is written by `action-generate-trip.ts` (line 770) when its self-`fetch` to `generate-itinerary` (action `generate-trip-day`) returns 401.
 
-Your Venice itinerary already has **164 cached Venice photos** in `curated_images` (103 google_places + 61 google_places_cached + 21 tripadvisor) — all stored in your Supabase storage bucket. Caching exists. The bug is that the **lookup misses** even though the photo is sitting right there, so the system pays Google again.
+The receiver (`generate-itinerary/index.ts`) only returns 401 in one place: the user-auth fallback (line 161), which means the **service-role bypass at line 122 evaluated to false**, even though the caller sent `Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}` from the same env it just read.
 
-There are three concrete reasons a regeneration triggers fresh Google Photo calls instead of reusing what we already have:
+Most likely causes (signing-key / new API-key rollout):
+1. `SUPABASE_SERVICE_ROLE_KEY` is now a non-JWT secret (e.g. `sb_secret_...`). `decodeJwtRole()` returns null, and `bearerToken === supabaseKey` should still be true — UNLESS one side trims/encodes differently or the value is empty/undefined in one invocation.
+2. The two function instances briefly read different env values during a rotation.
+3. `req.headers.get('Authorization')` arrives lowercased / re-cased by the platform, and our `.replace('Bearer ', '')` misses a `bearer ` (lowercase) prefix.
 
-### 1. Cache write key ≠ cache read key (the big one)
-
-In `supabase/functions/destination-images/index.ts`:
-
-- **Read** (line 1352): `checkCuratedCache(... entityType, cleanName, ...)` — uses the *cleaned* venue name (e.g. `"caffè florian"`).
-- **Write** (line 1455): `cacheImage(... entityType, venueName, ...)` — uses the *original raw activity title* (e.g. `"breakfast at caff florian"`).
-
-So the very first call writes a row keyed `breakfast at caff florian`. The second regeneration produces `"Morning coffee at Caffè Florian"` → cleans to `"caffè florian"` → looks up `caffè florian` → **miss** → Google call → write a *third* row keyed `morning coffee at caff florian`. Repeat forever.
-
-This is exactly what's in your DB right now — same Florian photo stored under multiple verbose AI-generated titles.
-
-### 2. Place-ID is the real identity, but we don't key on it
-
-When Google returns a photo we already have a stable `place_id` (`ChIJk6IBp9eXfkcRkwd7q8UWAik` for Florian). Activities/attractions tables use it. But the curated_images cache key is the messy AI title. Two different titles → two Google calls for the same place.
-
-### 3. Hero image goes through `getDestinationPOI` which returns different POIs
-
-For destination hero, line 1704 picks an "iconic POI" (rotating list). On regen #1 it might pick "Doge's Palace", on regen #2 "Bridge of Sighs", on regen #3 "St Mark's Basilica" — each gets cached separately, and each rotation is a fresh Places + Photos call until that specific POI is in the cache.
-
-Plus `useTripHeroImage` writes the picked URL back to `trips.metadata.hero_image` only if it isn't set — but only for that trip. A *new* Venice trip starts fresh and goes through the chain again.
-
----
+We need observability before guessing, then a robust auth path that does not depend on string-equality of a rotating secret.
 
 ## Plan
 
-All changes are server-side in the image pipeline. No UI changes.
+### 1. Add diagnostic logging in the receiver (no behavior change yet)
 
-### Step 1 — Fix the read/write key mismatch in `destination-images/index.ts`
+In `supabase/functions/generate-itinerary/index.ts` around the `isServiceRoleCall` block, log (without leaking the secret):
+- `bearerToken.length`, first 6 chars, last 4 chars
+- `supabaseKey.length`, first 6 chars, last 4 chars
+- `bearerToken === supabaseKey`
+- `decodeJwtRole(bearerToken)`
+- raw `Authorization` header prefix (first 10 chars)
+- `peekBody.action`, `peekBody.userId` presence
 
-- In `fetchImageTiered`, write the cache row using `cleanName` (the same key used for reads), not the raw `venueName`.
-- Additionally write a **second alias row** keyed by raw `venueName` only when it differs significantly, so legacy lookups still hit. (Cheaper alternative: don't bother — cleanName is canonical going forward.)
-- Run a one-shot SQL migration to consolidate existing duplicate rows: for each `(destination, place_id)` group keep the newest row and rewrite its `entity_key` to the cleanName form. Delete the dupes.
+Deploy, trigger one Venice generation, read logs to confirm root cause.
 
-### Step 2 — Add place_id-first lookup before any Google call
+### 2. Replace fragile equality check with a dedicated internal shared secret
 
-- Before TIER 2 (Google Places), if any prior cache row in the destination has a `place_id` whose canonical name fuzzy-matches `cleanName` (e.g. via `pg_trgm` similarity ≥ 0.6 on `entity_key` or `alt_text`), reuse that row's storage URL. This catches "Caffè Florian", "Cafe Florian", "Florian Caffè" → same place_id row.
-- Add an index on `curated_images(destination, place_id)`.
+Stop relying on `SUPABASE_SERVICE_ROLE_KEY` for self-chain auth. Add a new secret `INTERNAL_CHAIN_SECRET` (random 48-byte hex) and:
 
-### Step 3 — Stabilize the destination hero pick
+- **Caller** (`action-generate-trip.ts`, `action-generate-trip-day.ts`, any other self-chain spots): send headers
+  ```
+  Authorization: Bearer ${SERVICE_ROLE_KEY}   // keeps platform-level happy
+  x-internal-chain-secret: ${INTERNAL_CHAIN_SECRET}
+  ```
+- **Receiver** (`generate-itinerary/index.ts`): treat the call as service-role if `req.headers.get('x-internal-chain-secret') === Deno.env.get('INTERNAL_CHAIN_SECRET')`. Keep the existing JWT-role/exact-match path as a fallback so existing callers still work during rollout.
 
-- In `getDestinationPOI`, make the POI choice **deterministic per destination** (e.g. first POI by `popularity_score DESC, name ASC`) instead of rotating. One destination → one canonical hero POI → one cache row reused forever.
-- Persist the resolved hero URL on `destinations.hero_image_url` (writeback already exists in `destinationImagesAPI.ts`; ensure the edge function also writes it on first resolution so anonymous users seed it too).
+This is immune to signing-key rotation, JWT vs. opaque token format changes, and header re-casing.
 
-### Step 4 — Recent-lookup short circuit (the "have we looked this up in the last 6 months?" rule the user asked for)
+### 3. Make `decodeJwtRole` and bearer parsing case-insensitive
 
-Add an early guard in `fetchImageTiered`:
+Tiny hardening:
+- Match `^bearer\s+`, case-insensitive, when stripping the prefix.
+- Also accept `role: 'service_role'` from a nested `app_metadata` claim shape, if present.
 
-```ts
-// Before any Google call, ask: has THIS destination resolved ANY image
-// for a similar venue name in the last 180 days? If yes, reuse it.
-```
+### 4. Identify every self-chain caller
 
-Implementation: a single indexed query on `curated_images` filtered by `destination = $1 AND updated_at > now() - interval '180 days' AND (entity_key % $2 OR alt_text ILIKE $3)` using `pg_trgm`. Returns the highest-quality match. If found → reuse, log `[Images] 💰 6mo-window reuse hit`, zero cost.
+Search the repo for `functions/v1/generate-itinerary` and any `generate-itinerary` self-`fetch` to make sure all of them are updated to send the new header. Currently expected: `action-generate-trip.ts` and `action-generate-trip-day.ts` (day-to-day chaining).
 
-### Step 5 — Add cost-saver telemetry
+### 5. Surface a clearer error to the user when chain auth fails
 
-- Log every cache hit/miss with `{destination, key_used, source: 'curated' | 'place_id_alias' | '6mo_reuse' | 'shared_table' | 'google_places_fresh' | 'fallback'}`.
-- Surface a dashboard query: count of `google_places_fresh` per destination per day. If Venice still shows fresh fetches after this lands, we know exactly which titles are slipping through.
+If the receiver returns 401 to a self-chain, `action-generate-trip` should:
+- Log the response body (already does, line 746) — also log the **caller's** view of `serviceKey.length` / first 6 chars to compare with the receiver log.
+- Mark the trip `failed` with `generation_error: 'Internal auth failed — please retry; if it persists, rotate INTERNAL_CHAIN_SECRET.'` instead of the current generic message.
 
-### Step 6 — Validate
+### 6. Verify
 
-1. Run the consolidation migration (dry-run first, output how many rows collapse).
-2. Deploy `destination-images` edge function.
-3. Regenerate a Venice itinerary 3× and confirm log shows zero `google_places_fresh` hits and zero `Google Photos` cost-tracker increments after the first generation.
-4. Repeat for a destination with no cache (e.g. Reykjavik) → confirm normal fresh fetch on regen #1, zero fresh on regen #2 and #3.
+- Deploy both files.
+- Generate a fresh Venice itinerary.
+- Confirm in logs: `Service-role bypass for generate-trip-day, userId: ...` appears, no 401.
+- Confirm trip transitions out of `generating` into normal day-by-day progress.
 
----
+## Files touched
 
-## Technical details
+- `supabase/functions/generate-itinerary/index.ts` — diagnostic logs, header-secret bypass, case-insensitive bearer.
+- `supabase/functions/generate-itinerary/action-generate-trip.ts` — send `x-internal-chain-secret`, clearer error.
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — same header on day→day chain.
+- New secret: `INTERNAL_CHAIN_SECRET` (added via secrets tool after you approve).
 
-**Files touched**
-- `supabase/functions/destination-images/index.ts` — fix write key, add place_id-first lookup, add 6-month reuse guard, deterministic POI pick.
-- `supabase/functions/_shared/photo-storage.ts` — no change expected.
-- New migration: 
-  - Enable `pg_trgm` (probably already on).
-  - `CREATE INDEX IF NOT EXISTS idx_curated_images_dest_place ON curated_images (destination, place_id) WHERE place_id IS NOT NULL;`
-  - `CREATE INDEX IF NOT EXISTS idx_curated_images_dest_trgm ON curated_images USING gin (destination gin_trgm_ops, entity_key gin_trgm_ops);`
-  - One-shot consolidation `UPDATE`/`DELETE` for duplicate Venice-style rows.
+## Out of scope
 
-**What does NOT change**
-- Hero image React hook fallback chain.
-- Activity venue verification (`verifyVenueWithGooglePlaces`) still runs — that's a Places `searchText` call, not a Photo download, and it's already cached in `verified_venues` for 30 days.
-- Generation pipeline contract is unchanged.
-
-**Expected cost impact**
-- Every Venice (and other already-warm destination) regeneration drops Google Photo calls to ~0.
-- New destinations cost the same on the first generation, ~0 on every subsequent regeneration for 60-180 days.
+- No frontend changes (the user-facing call still uses the user JWT and is unaffected).
+- No image-cache work (already shipped in the previous loop).
