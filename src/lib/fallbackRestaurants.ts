@@ -189,10 +189,13 @@ const CITY_COUNTRY_MAP: Record<string, keyof typeof REGIONAL_EMERGENCY> = {
   lisbon: 'portugal', porto: 'portugal',
 };
 
-const GLOBAL_EMERGENCY: Record<'breakfast' | 'lunch' | 'dinner', FallbackRestaurant | null> = {
-  breakfast: null,
-  lunch: null,
-  dinner: null,
+// Real, internationally recognized last-resort venues. Mirrors the server's
+// GLOBAL_EMERGENCY_FALLBACK in supabase/functions/generate-itinerary/fix-placeholders.ts.
+// We MUST never emit a "Lunch — pick a restaurant" sentinel from any client path.
+const GLOBAL_EMERGENCY: Record<'breakfast' | 'lunch' | 'dinner', FallbackRestaurant> = {
+  breakfast: { name: "Tartine Bakery", address: "600 Guerrero St, San Francisco, CA 94110, USA", price: 18, description: "World-renowned bakery — morning pastries, country bread, great coffee." },
+  lunch: { name: "All'Antico Vinaio", address: "Via dei Neri 65, Florence, Italy", price: 14, description: "World-famous schiacciata sandwich shop. Cured meats, pecorino, creamy spreads on warm Tuscan bread." },
+  dinner: { name: "Le Comptoir du Relais", address: "9 Carrefour de l'Odéon, 75006 Paris, France", price: 65, description: "Yves Camdeborde's iconic bistro. The bistronomy template — refined French cooking in a buzzing room." },
 };
 
 function regionalEmergencyFallback(city: string, mealType: MealSlot): FallbackRestaurant | null {
