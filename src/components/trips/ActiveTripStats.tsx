@@ -123,12 +123,12 @@ export function ActiveTripStats({
               strokeWidth="4"
               strokeLinecap="round"
               strokeDasharray={`${2 * Math.PI * 34}`}
-              strokeDashoffset={`${2 * Math.PI * 34 * (1 - stats.completionRate / 100)}`}
+              strokeDashoffset={`${2 * Math.PI * 34 * (1 - (Number.isFinite(stats.completionRate) ? Math.max(0, Math.min(100, stats.completionRate)) : 0) / 100)}`}
               className="transition-all duration-700"
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="font-serif text-xl font-bold text-primary">{stats.completionRate}%</span>
+            <span className="font-serif text-xl font-bold text-primary">{Number.isFinite(stats.completionRate) ? Math.round(stats.completionRate) : 0}%</span>
           </div>
         </div>
         <div className="flex-1">
