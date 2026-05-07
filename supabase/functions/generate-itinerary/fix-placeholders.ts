@@ -4,6 +4,7 @@
  */
 
 import { type DiningConfig } from './dining-config.ts';
+import { detectCrossCityMention, isCrossCityAddress } from './cross-city-filter.ts';
 
 // =============================================================================
 // FALLBACK RESTAURANT DATABASE — Rich city-aware venue pool for placeholder replacement
