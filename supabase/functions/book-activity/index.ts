@@ -92,95 +92,122 @@ serve(async (req) => {
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
-    // Find or create Stripe customer
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    let customerId: string;
-    if (customers.data.length > 0) {
-      customerId = customers.data[0].id;
-      log("Found existing Stripe customer", { customerId });
-    } else {
-      const customer = await stripe.customers.create({ email: user.email });
-      customerId = customer.id;
-      log("Created new Stripe customer", { customerId });
-    }
-
-    // Create Stripe Checkout session for this item
-    const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
-    
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      line_items: [
-        {
-          price_data: {
-            currency: currency.toLowerCase(),
-            product_data: {
-              name: itemName,
-              description: `${itemType.charAt(0).toUpperCase() + itemType.slice(1)} booking for your trip`,
-            },
-            unit_amount: amountCents,
-          },
-          quantity,
-        },
-      ],
-      mode: "payment",
-      // Include session_id placeholder so verify-payment can use it
-      success_url: `${origin}/trip/${tripId}?payment=success&session_id={CHECKOUT_SESSION_ID}&item=${itemId}`,
-      cancel_url: `${origin}/trip/${tripId}?payment=cancelled`,
-      metadata: {
-        tripId,
-        itemType,
-        itemId,
-        userId: user.id,
-        externalProvider: externalProvider || '',
-      },
-    });
-
-    log("Created Stripe checkout session", { sessionId: session.id });
-
-    // Create or update payment record
     const serviceSupabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { data: payment, error: paymentError } = await serviceSupabase
-      .from("trip_payments")
-      .upsert({
-        trip_id: tripId,
-        user_id: user.id,
-        item_type: itemType,
-        item_id: itemId,
-        item_name: itemName,
-        amount_cents: amountCents,
-        currency,
-        quantity,
-        status: 'processing',
-        stripe_checkout_session_id: session.id,
-        external_provider: externalProvider,
-        external_booking_url: externalBookingUrl,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'trip_id,item_type,item_id',
-      })
-      .select()
-      .single();
+    // Track the payment row id so we can fail it if anything goes wrong after creation.
+    let paymentId: string | null = null;
+    let stripeSessionId: string | null = null;
 
-    if (paymentError) {
-      log("Error creating payment record", paymentError);
-      // Don't fail - we still have the Stripe session
-    } else {
-      log("Payment record created", { paymentId: payment?.id });
+    try {
+      // Find or create Stripe customer
+      const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+      let customerId: string;
+      if (customers.data.length > 0) {
+        customerId = customers.data[0].id;
+        log("Found existing Stripe customer", { customerId });
+      } else {
+        const customer = await stripe.customers.create({ email: user.email });
+        customerId = customer.id;
+        log("Created new Stripe customer", { customerId });
+      }
+
+      // Create Stripe Checkout session for this item
+      const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        line_items: [
+          {
+            price_data: {
+              currency: currency.toLowerCase(),
+              product_data: {
+                name: itemName,
+                description: `${itemType.charAt(0).toUpperCase() + itemType.slice(1)} booking for your trip`,
+              },
+              unit_amount: amountCents,
+            },
+            quantity,
+          },
+        ],
+        mode: "payment",
+        success_url: `${origin}/trip/${tripId}?payment=success&session_id={CHECKOUT_SESSION_ID}&item=${itemId}`,
+        cancel_url: `${origin}/trip/${tripId}?payment=cancelled`,
+        metadata: {
+          tripId,
+          itemType,
+          itemId,
+          userId: user.id,
+          externalProvider: externalProvider || '',
+        },
+      });
+      stripeSessionId = session.id;
+      log("Created Stripe checkout session", { sessionId: session.id });
+
+      // Create or update payment record AFTER we have a session id so it's never
+      // orphaned without a Stripe reference. If this write fails, expire the
+      // Stripe session and surface a hard error rather than handing the user a
+      // checkout URL that can never reconcile.
+      const { data: payment, error: paymentError } = await serviceSupabase
+        .from("trip_payments")
+        .upsert({
+          trip_id: tripId,
+          user_id: user.id,
+          item_type: itemType,
+          item_id: itemId,
+          item_name: itemName,
+          amount_cents: amountCents,
+          currency,
+          quantity,
+          status: 'processing',
+          stripe_checkout_session_id: session.id,
+          external_provider: externalProvider,
+          external_booking_url: externalBookingUrl,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'trip_id,item_type,item_id',
+        })
+        .select()
+        .single();
+
+      if (paymentError || !payment) {
+        log("Error creating payment record — expiring Stripe session", paymentError);
+        try { await stripe.checkout.sessions.expire(session.id); } catch (_) {}
+        return new Response(
+          JSON.stringify({ success: false, error: "Could not record booking. Please try again.", code: "PAYMENT_RECORD_FAILED" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      paymentId = payment.id;
+      log("Payment record created", { paymentId });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          checkoutUrl: session.url,
+          sessionId: session.id,
+          paymentId,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } catch (innerErr) {
+      const innerMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+      log("Inner ERROR — finalizing failed payment", { message: innerMsg, paymentId, stripeSessionId });
+      if (paymentId) {
+        await serviceSupabase
+          .from("trip_payments")
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .eq('id', paymentId);
+      } else if (stripeSessionId) {
+        await serviceSupabase
+          .from("trip_payments")
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .eq('stripe_checkout_session_id', stripeSessionId);
+      }
+      throw innerErr;
     }
-
-    return new Response(
-      JSON.stringify({ 
-        success: true,
-        checkoutUrl: session.url,
-        sessionId: session.id,
-        paymentId: payment?.id,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
 
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
