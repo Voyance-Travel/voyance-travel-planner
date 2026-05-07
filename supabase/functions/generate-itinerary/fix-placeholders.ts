@@ -327,7 +327,11 @@ export function applyFallbackToActivity(
   diningConfig?: DiningConfig,
 ): void {
   const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : mealType === 'drinks' ? 'Drinks' : 'Dinner';
-  activity.title = `${mealLabel} at ${fallback.name}`;
+  const isUnverified = fallback.needsVenuePick === true;
+
+  // Unverified "pick a restaurant" sentinel: do NOT prepend "<Meal> at ..."
+  // and force the cost to $0 so the budget engine never treats it as real spend.
+  activity.title = isUnverified ? fallback.name : `${mealLabel} at ${fallback.name}`;
   activity.name = activity.title;
   if (activity.location) {
     activity.location.name = fallback.name;
@@ -337,6 +341,22 @@ export function applyFallbackToActivity(
   }
   activity.venue_name = fallback.name;
   if (fallback.description) activity.description = fallback.description;
+
+  if (isUnverified) {
+    activity.metadata = activity.metadata || {};
+    activity.metadata.needsVenuePick = true;
+    activity.metadata.unverified_venue = true;
+    if (activity.cost) {
+      activity.cost.amount = 0;
+      activity.cost.perPerson = 0;
+    } else {
+      activity.cost = { amount: 0, currency: 'USD', perPerson: 0 };
+    }
+    activity.cost_per_person = 0;
+    usedVenueNamesInDay.add(fallback.name.toLowerCase());
+    console.warn(`[PLACEHOLDER] No vetted venue — emitted needsVenuePick slot: "${activity.title}"`);
+    return;
+  }
 
   // Price clamping: clamp to DNA config range when available
   let price = fallback.price;
