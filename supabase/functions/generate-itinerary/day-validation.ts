@@ -1089,9 +1089,14 @@ export function enforceRequiredMealsFinalGuard(
       console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Used regional/global emergency fallback "${emergency.name}" for ${mealType} in "${destination}"`);
     }
 
+    const rawTitle = venueName!.startsWith(label) ? venueName! : `${label}: ${venueName}`;
+    // Dedupe accidental "Dinner at Dinner — pick a restaurant" / "Dinner: Dinner — ..." double-labels
+    const dedupedTitle = rawTitle
+      .replace(new RegExp(`^${label}\\s+at\\s+${label}\\b\\s*[—\\-:]?\\s*`, 'i'), `${label} — `)
+      .replace(new RegExp(`^${label}\\s*[:\\-]\\s*${label}\\b\\s*[—\\-:]?\\s*`, 'i'), `${label} — `);
     result.push({
       id: crypto.randomUUID(),
-      title: venueName!.startsWith(label) ? venueName! : `${label}: ${venueName}`,
+      title: dedupedTitle,
       startTime: slot.start,
       endTime: slot.end,
       category: 'dining',

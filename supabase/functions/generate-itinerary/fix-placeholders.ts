@@ -173,6 +173,28 @@ export const INLINE_FALLBACK_RESTAURANTS: Record<string, Record<string, Fallback
       { name: "Pharmácia", address: "R. Marechal Saldanha 1, 1249-069 Lisbon", price: 40, description: "Pharmacy-themed restaurant in Santa Catarina. Creative Portuguese dishes served in lab glassware with Tagus views." },
     ],
   },
+  venice: {
+    breakfast: [
+      { name: "Pasticceria Tonolo", address: "Calle S. Pantalon 3764, 30123 Venezia VE, Italy", price: 8, description: "Cult Dorsoduro pastry counter since 1886. Krapfen, bignè, and the city's most beloved morning espresso." },
+      { name: "Caffè del Doge", address: "Calle dei Cinque 609, 30125 Venezia VE, Italy", price: 10, description: "Specialty roastery near the Rialto. Single-origin espresso and brioche in a calm canal-side bar." },
+      { name: "Rosa Salva", address: "Calle Fiubera 951, 30124 Venezia VE, Italy", price: 9, description: "Venetian institution since 1879 just off San Marco. Perfect cappuccino, krapfen, and tiny sandwiches at the counter." },
+      { name: "Marchini Time", address: "Campo S. Luca 4589, 30124 Venezia VE, Italy", price: 10, description: "Modern offshoot of the historic Marchini bakery. Outstanding cornetti and a lively standing-bar morning crowd." },
+    ],
+    lunch: [
+      { name: "All'Arco", address: "Calle dell'Occhialer 436, 30125 Venezia VE, Italy", price: 18, description: "Tiny San Polo cicchetti bar steps from the Rialto. The city's benchmark for stand-up Venetian small bites and ombre." },
+      { name: "Cantine del Vino già Schiavi", address: "Fondamenta Nani 992, 30123 Venezia VE, Italy", price: 18, description: "Iconic Dorsoduro bacaro. Creative cicchetti and natural wines eaten canal-side near the Accademia." },
+      { name: "Osteria al Squero", address: "Fondamenta Nani 943-944, 30123 Venezia VE, Italy", price: 20, description: "Cicchetti facing the working gondola squero. Spritz, baccalà mantecato, sarde in saor — pure Venezia." },
+      { name: "Trattoria alla Madonna", address: "Calle de la Madona 594, 30125 Venezia VE, Italy", price: 35, description: "1954 Rialto stalwart for classic Venetian seafood. Bigoli in salsa, fritto misto, granseola — old-school done right." },
+    ],
+    dinner: [
+      { name: "Osteria alle Testiere", address: "Calle del Mondo Novo 5801, 30122 Venezia VE, Italy", price: 75, description: "Tiny Castello icon (24 seats). Hyper-seasonal lagoon seafood, deep wine list — book weeks ahead." },
+      { name: "Antiche Carampane", address: "Rio Terà de le Carampane 1911, 30125 Venezia VE, Italy", price: 80, description: "Hidden San Polo trattoria. Pristine raw fish, spaghetti alle vongole, fritto misto — a Venetian benchmark." },
+      { name: "Al Covo", address: "Castello 3968, 30122 Venezia VE, Italy", price: 90, description: "Cesare Benelli's Castello dining room. Lagoon-led tasting that defines modern Venetian cooking." },
+      { name: "Vini da Gigio", address: "Fondamenta San Felice 3628/A, 30121 Venezia VE, Italy", price: 70, description: "Cannaregio family trattoria with a stunning wine cellar. Calf's liver Venetian-style, hand-cut pastas, warm service." },
+      { name: "Venissa", address: "Fondamenta Santa Caterina 3, Mazzorbo (Venezia), Italy", price: 180, description: "Michelin-starred lagoon-island restaurant on Mazzorbo. Vineyard-to-table tasting in a singular Venetian vineyard setting." },
+      { name: "CoVino", address: "Calle del Pestrin 3829, 30122 Venezia VE, Italy", price: 65, description: "Intimate 14-seat Castello room. Slow-Food-driven tasting menu and a brilliant small-grower wine list." },
+    ],
+  },
 };
 
 // =============================================================================
