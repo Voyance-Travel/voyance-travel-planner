@@ -973,18 +973,25 @@ function getActivityCostInfo(
   const ledgerOverride = getLedgerOverride((activity as any).id);
   if (ledgerOverride) {
     const jsonbAmt = costAmount ?? 0;
-    if (ledgerOverride.perPersonUsd >= jsonbAmt * 2 || jsonbAmt === 0) {
-      warnOnceLedgerOverride(String((activity as any).id), {
-        jsonbAmount: jsonbAmt,
-        ledgerAmount: ledgerOverride.perPersonUsd,
-        source: ledgerOverride.source,
-        title,
-      });
+    // Prefer the ledger when (a) it's a protected server floor materially above
+    // the JSONB value, OR (b) the JSONB has no usable cost — this aligns the
+    // card with the day badge / Budget tab, which both read activity_costs.
+    const floorOverride = ledgerOverride.isProtectedFloor && ledgerOverride.perPersonUsd >= jsonbAmt * 2;
+    const jsonbMissing = jsonbAmt === 0;
+    if (floorOverride || jsonbMissing) {
+      if (floorOverride) {
+        warnOnceLedgerOverride(String((activity as any).id), {
+          jsonbAmount: jsonbAmt,
+          ledgerAmount: ledgerOverride.perPersonUsd,
+          source: ledgerOverride.source,
+          title,
+        });
+      }
       return {
         amount: ledgerOverride.perPersonUsd,
         isEstimated: false,
         confidence: 'high' as const,
-        basis,
+        basis: 'per_person' as CostBasis,
       };
     }
   }
