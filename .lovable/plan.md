@@ -1,63 +1,37 @@
-## Root Cause
+## Bug
+Day 1 badge shows `(incl. €130 airport taxi)` for a trip whose departure flight is Day 3. The arrival-day breakdown is rolling a cost into the "airport taxi" slot that shouldn't be there.
 
-The wrong-city restaurants (Tartine Bakery / SF, All'Antico Vinaio / Florence, Le Comptoir du Relais / Paris, Sant'Eustachio / Rome) are **not coming from the AI** at all. They are baked into the **emergency fallback database** at `supabase/functions/generate-itinerary/fix-placeholders.ts`:
+## Root Cause Hypothesis
+In `src/components/itinerary/EditorialItinerary.tsx` (lines ~9929-9939), `airportTransferSubtotal` sums every transit-category activity on the day whose title/name/description merely **mentions** "airport". This catches:
 
-- `GLOBAL_EMERGENCY_FALLBACK` (lines 271-275) — always returns Tartine (SF), All'Antico Vinaio (Florence), Le Comptoir (Paris) regardless of destination.
-- `REGIONAL_EMERGENCY_FALLBACK['italy']` (lines 207-211) — uses Sant'Eustachio (Rome), All'Antico Vinaio (Florence), Trattoria Sostanza (Florence) for *any* Italian city, including Venice.
+1. Arrival-day "Land at VCE / water taxi from airport" rows (legit, but on Day 1 the user expects only the explicit Day-3 departure transfer to be priced).
+2. Generic transit rows whose description mentions the airport in passing ("walk from hotel — 20 min from airport district") — false positives priced via fallback.
+3. Transit legs whose `cost` came from the cost engine's airport-transfer fallback even though the leg isn't actually a paid taxi (e.g., a public-transport leg).
 
-The MEAL FINAL GUARD in `day-validation.ts` lines 1119-1128 calls `resolveAnyMealFallback`, which falls through to `regionalEmergencyFallback` → `GLOBAL_EMERGENCY_FALLBACK`. Each fallback ships its **original out-of-city address** (`Via dei Neri 65, Florence`, `600 Guerrero St, San Francisco`) pasted directly into `activity.location.address` via `applyFallbackToActivity`.
+So two separate fixes are needed: a **labeling fix** (don't claim "airport taxi" for arrival walks/public transit) and a **diagnostic** confirming whether the €130 row is a real paid taxi or a stub.
 
-The cross-city hallucination filter in `pipeline/enrich-day.ts` runs **before** this final meal-injection step, and the meal guard never re-runs cross-city validation, so the wrong-city venues sail straight into the saved itinerary.
+## Plan
 
-This explains the exact pattern in your bug report — Venice runs keep recycling Florence/Rome/Paris/SF venues because Venice's specific INLINE pool gets exhausted (the meal guard requires unique names across the trip), the regional pool returns Florence/Rome venues, and the global pool returns SF/Paris venues. None are filtered.
+### 1. Tighten the "airport taxi" detection (UI only)
+In `EditorialItinerary.tsx` around lines 9929-9940, replace the loose `/\bairport\b/` test with a stricter predicate that requires **all three**:
+- Transit category (already checked).
+- Title (not description) matches `/airport.*(taxi|transfer|shuttle|car|ride|water taxi|alilaguna|private)|(taxi|transfer|shuttle|car|water taxi).*airport/i`.
+- A positive non-walking, non-zero `cost` that came from a paid source (skip rows whose `cost.basis` is `'estimated'` with no booking, and skip rows matching `isWalkingLeg`).
 
-## Fix Plan
+Activities that just *mention* the airport (sightseeing, walks, generic transit without a vehicle keyword) fall through to "Local transit" or are excluded entirely.
 
-### 1. Strip wrong-city venues out of the regional/global fallback tables
+### 2. Diagnostic note in the dev-only sanity check
+Extend the existing `process.env.NODE_ENV !== 'production'` block (~line 9944) to log, for each day, the activities counted under `airportTransferSubtotal` (id, title, dayNumber, cost, source). This makes future regressions of "wrong-day airport cost" visible in the console without needing user reports.
 
-In `supabase/functions/generate-itinerary/fix-placeholders.ts`:
+### 3. Verify on the reported trip
+After deploying, the user re-runs the Venice itinerary. Expected outcome:
+- Day 1 badge no longer shows `(incl. €130 airport taxi)` unless Day 1 actually contains a paid airport-taxi/water-taxi/transfer activity.
+- Day 3 badge correctly shows the departure transfer subtotal.
 
-- **Delete** `GLOBAL_EMERGENCY_FALLBACK` entirely. A globally-shared "real venue" pool is fundamentally incompatible with the cross-city integrity requirement.
-- **Restructure** `REGIONAL_EMERGENCY_FALLBACK` so each country entry is a **map of city → venues** (or a list of venues each tagged with their city). Lookup must only return a venue whose `city` token matches the destination city.
-- If no city-matching regional venue exists, return a **needsVenuePick sentinel** (the existing `needsVenuePick: true` path that forces `$0` and a "find a local spot" unverified label) — never a wrong-city real venue. This is consistent with the "Wellness Venue Integrity" memory rule already applied to spas.
+### Files touched
+- `src/components/itinerary/EditorialItinerary.tsx` — only the two `reduce` blocks at lines 9917-9940 and the dev sanity-check block.
 
-### 2. Cross-city safety net on meal injection
-
-In `fix-placeholders.ts → applyFallbackToActivity` and `day-validation.ts → MEAL FINAL GUARD`:
-
-- Before applying a fallback, run `isCrossCityAddress({ location: { address: fallback.address }, venue_name: fallback.name }, destination)` from `cross-city-filter.ts`.
-- If it trips, discard the fallback and fall through to the next tier (or to the `needsVenuePick` sentinel). Add a `[CROSS-CITY FALLBACK BLOCKED]` warn log.
-
-### 3. Final post-injection cross-city sweep
-
-In `pipeline/enrich-day.ts` (or a new sweep called from `universal-quality-pass.ts → terminalCleanup`):
-
-- After meal injection completes, run `isCrossCityAddress` over every dining/wellness/sightseeing/etc. activity again. Anything wrong-city gets converted to an unverified placeholder ($0, "Lunch — find a local spot") rather than being shipped with a foreign address.
-
-### 4. Regression tests
-
-Add to `supabase/functions/generate-itinerary/fix-placeholders.test.ts` (and a new test file if needed):
-
-- Resolving a Venice meal fallback when the Venice pool is exhausted **must not** return Tartine, All'Antico Vinaio, Le Comptoir, Sant'Eustachio, or Trattoria Sostanza.
-- `applyFallbackToActivity` rejects a fallback whose address resolves to a different city via `isCrossCityAddress`.
-- Snapshot test: every entry in `REGIONAL_EMERGENCY_FALLBACK` and any per-city pool has an address whose city token matches the country's allowed list — and is the *intended* city, not just any city in that country.
-
-### 5. Memory update
-
-Append a Core rule to `mem://index.md`:
-
-> **Cross-City Fallback Integrity:** Meal/venue fallback DBs must never return a real venue from a different city than the destination. Exhausted pools downgrade to unverified `needsVenuePick` ($0) sentinels — never to a famous-but-foreign venue. Enforced in fix-placeholders.ts (no GLOBAL pool), applyFallbackToActivity (cross-city guard), and a post-injection sweep in enrich-day/terminalCleanup.
-
-## Files to Edit
-
-- `supabase/functions/generate-itinerary/fix-placeholders.ts` — remove `GLOBAL_EMERGENCY_FALLBACK`, restructure `REGIONAL_EMERGENCY_FALLBACK` to city-keyed entries, add cross-city guard in `applyFallbackToActivity` and `resolveAnyMealFallback`.
-- `supabase/functions/generate-itinerary/day-validation.ts` — guard the MEAL FINAL GUARD TRY 4 path; if emergency returns a sentinel, write the unverified placeholder with $0 instead of a wrong-city real address.
-- `supabase/functions/generate-itinerary/pipeline/enrich-day.ts` (or `universal-quality-pass.ts → terminalCleanup`) — add post-injection cross-city sweep.
-- `supabase/functions/generate-itinerary/fix-placeholders.test.ts` — new regression tests.
-- `mem://index.md` — add Core rule.
-
-## Out of Scope
-
-- AI prompt changes (the AI is not the source of these specific bugs — the fallback DB is).
-- UI/sanitizer changes.
-- Cost engine changes (already correctly snapshots $0 for `needsVenuePick`).
+### Out of scope
+- Backend cost-engine logic (airport transfers are correctly costed there).
+- Cross-day reassignment of airport-transfer activities (that's a generation-pipeline concern, not a label bug).
+- Changes to the day-total math itself — only the inline "incl. X" annotation is affected.
