@@ -648,13 +648,13 @@ export async function regenerateDay(
   }
 
   const updatedItinerary = { ...existingItinerary, days: updatedDays };
-  await supabase
-    .from('trips')
-    .update({
-      itinerary_data: JSON.parse(JSON.stringify(updatedItinerary)),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', tripId);
+  await supabase.functions.invoke('generate-itinerary', {
+    body: {
+      action: 'save-itinerary',
+      tripId,
+      itinerary: JSON.parse(JSON.stringify(updatedItinerary)),
+    },
+  });
   
   return { success: true, day: data.day };
 }
