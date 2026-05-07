@@ -72,6 +72,15 @@ export async function checkVenueCache(
 
     const row = data[0];
 
+    // Defense-in-depth: refuse to return a cached venue from a different city.
+    const crossHit =
+      detectCrossCityMention(row.name || '', destination) ||
+      detectCrossCityMention(row.address || '', destination);
+    if (crossHit) {
+      console.warn(`[VenueCache] Refusing cross-city cache hit "${row.name}" — mentions "${crossHit}", destination "${destination}"`);
+      return null;
+    }
+
     // Bump usage count (fire-and-forget)
     supabase
       .from('verified_venues')
