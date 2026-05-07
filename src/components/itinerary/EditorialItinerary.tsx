@@ -1065,23 +1065,25 @@ function getActivityCostInfo(
   const amount = (result.amount === 0 && shouldNeverBeFree) ? Math.max(10, travelers * 5) : result.amount;
 
   // estimateCostSync already multiplies per-person dining categories by travelers
-  // (see src/lib/cost-estimation.ts line 285). Returning that group total with
-  // basis 'per_person' would cause the card to (a) append a misleading "/pp"
-  // suffix and (b) show a phantom "Group total: amount × travelers" tooltip.
-  // Tag these as 'flat' so the UI treats the number as the final group total.
+  // (see src/lib/cost-estimation.ts line 285). To keep cards in the same unit
+  // as the day badge (which is per-person when travelers > 1), divide back to
+  // per-person and tag basis as 'per_person' so the "/pp" suffix and the
+  // "Group total: …" tooltip render correctly.
   const PER_PERSON_ENGINE_CATS = new Set([
     'dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee'
   ]);
-  const engineBasis: CostBasis = PER_PERSON_ENGINE_CATS.has((category || '').toLowerCase())
-    ? 'flat'
-    : basis;
+  const isPerPersonDining = PER_PERSON_ENGINE_CATS.has((category || '').toLowerCase());
+  const finalAmount = isPerPersonDining
+    ? Math.round(amount / Math.max(travelers, 1))
+    : amount;
+  const finalBasis: CostBasis = isPerPersonDining ? 'per_person' : basis;
 
-  return { 
-    amount, 
+  return {
+    amount: finalAmount,
     isEstimated: result.isEstimated,
     estimateReason: result.reason || `Estimated for ${category} in ${destinationCity || 'this area'}`,
     confidence: result.confidence,
-    basis: engineBasis,
+    basis: finalBasis,
   };
 }
 
