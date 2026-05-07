@@ -123,10 +123,11 @@ export async function handleToggleActivityLock(ctx: ActionContext): Promise<Resp
           }));
           
           if (found) {
-            const { error: saveErr } = await supabase
-              .from('trips')
-              .update({ itinerary_data: { ...itineraryData, days: updatedDays } })
-              .eq('id', tripId);
+            const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
+            const { error: saveErr } = await persistTripItinerary(
+              supabase, tripId, { ...itineraryData, days: updatedDays },
+              { skipContract: true, label: 'toggle-lock' },
+            );
             
             if (!saveErr) {
               console.log(`[toggle-activity-lock] Updated lock in itinerary_data JSON for ${activityId}`);
