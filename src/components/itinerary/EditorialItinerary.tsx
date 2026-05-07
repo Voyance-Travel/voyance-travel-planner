@@ -10945,10 +10945,13 @@ function ActivityRow({
   const existingPhoto = getActivityPhoto(activity);
   const time = activity.startTime || activity.time;
   
-  // Normalize title: use title, fallback to name (backend may return either), and strip system prefixes
+  // Normalize title: use title, fallback to name (backend may return either), and strip system prefixes.
+  // CRITICAL: pass the full activity so sanitizer can see location.name / venue_name / placeId /
+  // metadata.unverified_venue and rewrite "Spa Time — find a venue" to "Spa Session at <real venue>".
   const activityTitle = sanitizeActivityName(activity.title || (activity as { name?: string }).name, {
     category: (activity as { category?: string }).category,
     startTime: activity.startTime,
+    activity: activity as any,
   });
   
   // Use placeholder for thumbnail when no photo exists (skip for downtime/transport)
