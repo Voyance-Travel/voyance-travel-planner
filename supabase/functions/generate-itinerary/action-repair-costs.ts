@@ -595,10 +595,11 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         };
       }),
     }));
-    const { error: writeErr } = await supabase
-      .from('trips')
-      .update({ itinerary_data: { ...itData, days: patchedDays } })
-      .eq('id', tripId);
+    const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
+    const { error: writeErr } = await persistTripItinerary(
+      supabase, tripId, { ...itData, days: patchedDays },
+      { skipContract: true, label: 'repair-costs' },
+    );
     if (writeErr) {
       console.error(`[repair-trip-costs] JSONB writeback error:`, writeErr);
       // Non-fatal: activity_costs is still corrected
