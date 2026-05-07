@@ -133,7 +133,27 @@ export function resolveCanonicalCostRows({
   let flightCents = 0;
   let loggedMiscCents = 0;
 
+  // Two-pass partitioning: rows that directly match a live activity claim
+  // their JSON id first, so orphan rescue cannot reassign that same activity
+  // to a stale row in the same (day, category) bucket.
+  const directRows: CanonicalCostInputRow[] = [];
+  const orphanRows: CanonicalCostInputRow[] = [];
   for (const row of costs) {
+    const isLogisticsRow =
+      row.source === 'logistics-sync' || row.day_number == null || row.day_number === 0;
+    if (isLogisticsRow) {
+      directRows.push(row);
+      continue;
+    }
+    if (row.activity_id && liveById.has(row.activity_id)) {
+      directRows.push(row);
+      consumed.add(row.activity_id);
+    } else {
+      orphanRows.push(row);
+    }
+  }
+
+  for (const row of [...directRows, ...orphanRows]) {
     const cat = (row.category || '').toLowerCase();
     const dayNumber = row.day_number ?? 0;
     const isLogisticsRow =
