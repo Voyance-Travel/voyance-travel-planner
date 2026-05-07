@@ -830,7 +830,7 @@ export function nuclearPlaceholderSweep(
 
     // GUARANTEED resolver: city pool → recycled → regional → global. Never null.
     const fallback = resolveAnyMealFallback(city, mealType, usedNames);
-    applyFallbackToActivity(activity, fallback, mealType, usedNames, diningConfig);
+    applyFallbackToActivity(activity, fallback, mealType, usedNames, diningConfig, city);
     // Force category=DINING so downstream pricing/UI handle it correctly.
     activity.category = 'dining';
 
