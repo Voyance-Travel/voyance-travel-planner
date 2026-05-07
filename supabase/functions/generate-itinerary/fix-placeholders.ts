@@ -14,6 +14,7 @@ export interface FallbackRestaurant {
   address: string;
   price: number;
   description: string;
+  needsVenuePick?: boolean;
 }
 
 export const INLINE_FALLBACK_RESTAURANTS: Record<string, Record<string, FallbackRestaurant[]>> = {
@@ -241,9 +242,9 @@ const CITY_COUNTRY_MAP: Record<string, keyof typeof REGIONAL_EMERGENCY_FALLBACK>
 };
 
 const GLOBAL_EMERGENCY_FALLBACK: Record<'breakfast' | 'lunch' | 'dinner', FallbackRestaurant> = {
-  breakfast: { name: "Local specialty café", address: "Top-rated café near your hotel", price: 12, description: "Pick a 4.5+ star specialty café within a 5-min walk of your hotel. Order the local pastry plus a strong espresso or pour-over." },
-  lunch: { name: "Highly-rated neighborhood restaurant", address: "Top-rated lunch spot near your morning activity", price: 25, description: "Pick a 4.5+ star neighborhood restaurant near your morning activity. The concierge can confirm the booking." },
-  dinner: { name: "Highly-rated neighborhood restaurant", address: "Top-rated dinner spot near your evening activity", price: 45, description: "Pick a 4.5+ star restaurant within walking distance of your evening plans. The concierge can lock the booking." },
+  breakfast: { name: "Breakfast — pick a café", address: "", price: 0, description: "We don't have a vetted café on file for this destination yet. Tap to choose one or ask the concierge.", needsVenuePick: true },
+  lunch: { name: "Lunch — pick a restaurant", address: "", price: 0, description: "We don't have a vetted lunch spot on file for this destination yet. Tap to choose one or ask the concierge.", needsVenuePick: true },
+  dinner: { name: "Dinner — pick a restaurant", address: "", price: 0, description: "We don't have a vetted dinner spot on file for this destination yet. Tap to choose one or ask the concierge.", needsVenuePick: true },
 };
 
 function regionalEmergencyFallback(city: string, mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks'): FallbackRestaurant {
@@ -326,7 +327,11 @@ export function applyFallbackToActivity(
   diningConfig?: DiningConfig,
 ): void {
   const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : mealType === 'drinks' ? 'Drinks' : 'Dinner';
-  activity.title = `${mealLabel} at ${fallback.name}`;
+  const isUnverified = fallback.needsVenuePick === true;
+
+  // Unverified "pick a restaurant" sentinel: do NOT prepend "<Meal> at ..."
+  // and force the cost to $0 so the budget engine never treats it as real spend.
+  activity.title = isUnverified ? fallback.name : `${mealLabel} at ${fallback.name}`;
   activity.name = activity.title;
   if (activity.location) {
     activity.location.name = fallback.name;
@@ -336,6 +341,22 @@ export function applyFallbackToActivity(
   }
   activity.venue_name = fallback.name;
   if (fallback.description) activity.description = fallback.description;
+
+  if (isUnverified) {
+    activity.metadata = activity.metadata || {};
+    activity.metadata.needsVenuePick = true;
+    activity.metadata.unverified_venue = true;
+    if (activity.cost) {
+      activity.cost.amount = 0;
+      activity.cost.perPerson = 0;
+    } else {
+      activity.cost = { amount: 0, currency: 'USD', perPerson: 0 };
+    }
+    activity.cost_per_person = 0;
+    usedVenueNamesInDay.add(fallback.name.toLowerCase());
+    console.warn(`[PLACEHOLDER] No vetted venue — emitted needsVenuePick slot: "${activity.title}"`);
+    return;
+  }
 
   // Price clamping: clamp to DNA config range when available
   let price = fallback.price;
@@ -586,6 +607,10 @@ export const PLACEHOLDER_TITLE_PATTERNS = [
   /^(breakfast|lunch|dinner|brunch)\s+(spot|recommendation|place|option)/i,
   // "Sample local cuisine" etc.
   /^sample\s+(local|traditional|regional)/i,
+  // "Highly/top/well-rated …" stub-name family (e.g. "Lunch at Highly-rated neighborhood restaurant")
+  /(highly|top|well)[-\s]rated\s+(neighborhood\s+)?(restaurant|caf[eé]|bistro|trattoria|spot|eatery|venue|place)/i,
+  // "— pick a restaurant" sentinel emitted when we have no vetted venue
+  /[—\-:]\s*pick a (restaurant|caf[eé])\b/i,
 ];
 
 export const PLACEHOLDER_VENUE_PATTERNS = [
@@ -603,6 +628,13 @@ export const PLACEHOLDER_VENUE_PATTERNS = [
   /^recommended\s+(restaurant|café|cafe|spot|place|eatery)/i,
   /^popular\s+(spot|restaurant|café|cafe|eatery|place)/i,
   /^neighborhood\s+(restaurant|café|cafe|bistro|spot)/i,
+  // "Highly/top/well-rated …" stub venue names
+  /^(highly|top|well)[-\s]rated\s+(neighborhood\s+)?(restaurant|caf[eé]|bistro|trattoria|spot|eatery|venue|place)$/i,
+  // "Local specialty café" legacy stub
+  /^local\s+specialty\s+caf[eé]$/i,
+  // "Pick a restaurant / café" sentinels
+  /^.*[—\-:]\s*pick a (restaurant|caf[eé])$/i,
+  /^pick a (restaurant|caf[eé])$/i,
 ];
 
 // =============================================================================

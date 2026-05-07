@@ -1,47 +1,74 @@
-# Fix: 7-hour afternoon dead-gap between lunch and dinner on Day 2
+# Fix: "Highly-rated neighborhood restaurant" placeholder bleeding into the budget
 
-## Root cause
+## Root cause (two-layer)
 
-The Day 2 plan was lunch 12:20 (Rialto Market) → dinner 19:20, with no afternoon activity. Three layers should have caught this and didn't:
+1. **Source of the string.** `supabase/functions/generate-itinerary/fix-placeholders.ts` defines a `GLOBAL_EMERGENCY_FALLBACK` for lunch/dinner with `name: "Highly-rated neighborhood restaurant"` and a real-looking `price` ($25 / $45). It is the last resort inside `resolveAnyMealFallback()` (city pool → city pool recycled → regional country pool → global). Venice IS mapped to Italy in `CITY_COUNTRY_MAP`, so the regional path *should* win — when this stub leaks through it means either the destination string handed to the resolver was empty / malformed, or the resolver was bypassed entirely (e.g. AI emitted that exact title and no guard caught it).
 
-1. **Generator prompt** (`compile-prompt.ts:1779`) tells the AI "no dead gaps over 90 minutes" — soft guidance, the AI ignored it.
-2. **Stage-2 validator** (`generation-core.ts:2034`) only triggers a *retry* when `gap > 180`. Retries are bounded; if the AI produces the same shape twice, the bad day persists.
-3. **Repair-day §13c GAP CLOSURE** (`repair-day.ts:2904`) only *shifts* later activities earlier — it does not insert new content. With dinner anchored at 19:20 (or it being shifted alone) the user still sees an empty afternoon.
+2. **Why the placeholder guards miss it.** `PLACEHOLDER_TITLE_PATTERNS` looks for `"... at a/the ..."` and `"... at a (bistro|brasserie|café ...)"`. `PLACEHOLDER_VENUE_PATTERNS` has `/^neighborhood\s+(restaurant|...)/i` but the venue is `"Highly-rated neighborhood restaurant"` — it starts with `Highly-rated`, not `neighborhood`, so every regex misses it. `isPlaceholderMeal()` returns `false`, `nuclearPlaceholderSweep()` does nothing, and the cost-snapshot pass at `generation-core.ts:3260` happily writes the $25/$45 price into `activity_costs` as a `reference`-source row that the budget treats as real.
 
-There is on-demand `fill_dead_gap` mode in `refresh-day` and a UI nudge in `TransitGapIndicator`/`useFillDeadGap`, but nothing fills the gap automatically at generation time.
+So the bug is one bug with two failure modes: the stub itself shouldn't carry a paid venue name, and the placeholder detector should catch any "highly/top/well-rated …" name even if it does.
 
 ## Changes
 
-### 1. New repair pass: `injectAfternoonGapFiller` in `repair-day.ts`
-Add a section right before `// --- 13c. GAP CLOSURE ---` (after wellness/meal repairs, before time shifts) that:
+### 1. Kill the paid global stub — emit an explicit "pick a restaurant" slot
 
-- Walks pairs of consecutive non-transport, non-logistics, non-locked activities.
-- When a gap ≥ 180 min overlaps the 12:00–19:00 active afternoon window AND no manually-locked next activity prevents insertion, request a fill candidate.
-- Pull the candidate from the **same shared sources already used by `refresh-day`'s `fill_dead_gap` helper** (cost-reference + venue bank + Voyance picks for the destination). Reuse the existing helper to avoid divergence — extract `proposeAfternoonFiller(city, traveler, gap, prevAct, nextAct)` into a shared module if it currently lives only inside `refresh-day/index.ts`.
-- Insert as a 60–120-min activity placed after `prevAct.endTime + 15min` buffer; cap end at `nextAct.startTime - 30min` (transit buffer).
-- Tag `source: 'gap-filler-auto'`, `metadata.unverified_venue` only if the picked venue lacks a placeId.
-- Push a repair entry `{ code: MISSING_SLOT, action: 'injected_afternoon_filler' }`.
+In `supabase/functions/generate-itinerary/fix-placeholders.ts`:
 
-If no real candidate is found, fall back to a curated free-time block with a real neighborhood (e.g. "Wander Cannaregio's quiet calli") rather than a generic stub. Generic-name guard already in place will reject any "Afternoon Free Time" placeholder.
+- Remove `"Highly-rated neighborhood restaurant"` from `GLOBAL_EMERGENCY_FALLBACK`. Replace lunch/dinner/breakfast with sentinel objects flagged `needsVenuePick: true`, `price: 0`, `name: "Lunch — pick a restaurant"` / `"Dinner — pick a restaurant"` / `"Breakfast — pick a café"`.
+- Update `FallbackRestaurant` type to carry an optional `needsVenuePick?: boolean`.
+- `applyFallbackToActivity()` already writes `activity.title = "${mealLabel} at ${fallback.name}"`. When the fallback carries `needsVenuePick`, write `activity.title = fallback.name` (no `at`), set `activity.cost = { amount: 0, currency: 'USD' }`, set `activity.metadata.needsVenuePick = true`, set `activity.metadata.unverified_venue = true`. Mirrors the client behavior in `src/utils/mealGuard.ts`.
 
-### 2. Tighten Stage-2 validator
-In `generation-core.ts:2014–2044`, lower the gap threshold to **150 min** for non-arrival/non-departure days and add an explicit error string ("ADD a real afternoon activity — extending lunch or starting dinner earlier is NOT acceptable") so the retry message pushes the AI toward content rather than time-shifting.
+### 2. Harden the placeholder detector (defense in depth)
 
-### 3. Reuse the fill_dead_gap helper across edge functions
-Extract `supabase/functions/refresh-day/index.ts:206+` `proposeFillerActivity` (or equivalent) into `supabase/functions/_shared/fill-gap.ts`. Both `refresh-day` and `repair-day` call it. Single source of truth — keeps the on-demand fill button and the auto-fill consistent.
+Same file, `PLACEHOLDER_VENUE_PATTERNS` and `PLACEHOLDER_TITLE_PATTERNS`:
 
-### 4. Tests
-- `repair-day.test.ts` (or equivalent fixture test): given Day 2 with lunch 12:20–13:20 and dinner 19:20–21:00 in Venice, expect repair to inject a `sightseeing` or `culture` activity in the 14:00–18:00 window referencing a real Venice venue.
-- Sanity: arrival/departure days with intentional logistics gaps are NOT filled.
-- Sanity: gaps that are already < 180 min, or that fall outside 12:00–19:00, are not filled.
+- Add `/(highly|top|well)[-\s]rated\s+(neighborhood\s+)?(restaurant|café|cafe|bistro|trattoria|spot|eatery|venue|place)/i` to both arrays.
+- Add `/^pick a (restaurant|café|cafe)$/i` to venue patterns so any "pick a restaurant" stub is recognized as not-a-real-venue (so cost layer can suppress it).
+- Add a unit-test row in `fix-placeholders.test.ts` for `"Lunch at Highly-rated neighborhood restaurant"` and the new `"… — pick a restaurant"` shape.
+
+### 3. Suppress cost for unverified meal slots
+
+In `supabase/functions/generate-itinerary/generation-core.ts` (Stage 6 cost-snapshot pass, near line 3260):
+
+- Before writing each row, if the activity is `category === 'dining'` AND (`metadata.needsVenuePick === true` OR `metadata.unverified_venue === true` OR the title/venue matches `isPlaceholderMeal()` OR matches the new "highly/top-rated …" regex), force `cost_per_person_usd = 0`, `source = 'unverified_meal'`, `confidence = 'low'`. Mirrors the existing wellness-unverified rule from the core memory ("unverified wellness slots always snapshot $0").
+- Same activity is excluded from the post-gen budget-validation scaling (it's already $0).
+
+### 4. Mirror the client guard
+
+`src/lib/fallbackRestaurants.ts` already returns `null` from `GLOBAL_EMERGENCY` (no string leak), so the client side is fine. Add the same hardened regex to `src/utils/wellnessPlaceholderDetection.ts`-style meal detector if one exists, OR if the meal coach has its own copy, so editor UI and budget UI both flag this venue as "Pick a restaurant" instead of rendering the stub as a real line item.
+
+### 5. One-shot data repair (optional, safe)
+
+For trips already saved with this stub, add a small idempotent SQL migration:
+
+```sql
+UPDATE public.activity_costs ac
+SET cost_per_person_usd = 0,
+    source = 'unverified_meal',
+    notes = COALESCE(ac.notes, '') || ' [auto-zero: highly-rated stub]'
+FROM public.trips t
+WHERE ac.trip_id = t.id
+  AND EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(COALESCE(t.itinerary_data->'days', '[]'::jsonb)) AS d(day),
+         jsonb_array_elements(COALESCE(d.day->'activities', '[]'::jsonb)) AS a(act)
+    WHERE a.act->>'id' = ac.activity_id
+      AND (
+        a.act->>'title' ILIKE '%highly-rated%'
+        OR a.act->'location'->>'name' ILIKE '%highly-rated neighborhood%'
+      )
+  );
+```
+
+This corrects the user's current Venice budget without forcing a regeneration.
 
 ## Verification
 
-1. Deploy `generate-itinerary` and `refresh-day`.
-2. Re-generate the Venice trip. Check Day 2 afternoon: a real Venice activity (e.g. Scuola Grande di San Rocco, Peggy Guggenheim Collection, gondola/sandalo paddle, Dorsoduro wander) should appear between Rialto and dinner.
-3. Confirm no behavior regression on departure days (last-day logistics gaps are still allowed).
+1. Unit test: `nuclearPlaceholderSweep` must replace `{title: "Lunch at Highly-rated neighborhood restaurant"}` (currently passes through untouched).
+2. Unit test: `resolveAnyMealFallback("Atlantis", "lunch", ...)` returns a `needsVenuePick: true` sentinel (no paid venue).
+3. Manual: regenerate Venice trip; budget shows the lunch slot at $0 with a "Pick a restaurant" CTA, not "$25 at Highly-rated neighborhood restaurant". The user's existing trip is repaired by the migration in step 5.
 
 ## Out of scope
 
-- AI-prompt rewording. Soft prompt rules already exist; this fix is deterministic.
-- Manual-mode trips (universal locking still applies — no auto-fill on manually built itineraries).
+- Changing the AI prompt — already says "no generic names". Defense in depth is the goal here.
+- Reworking `mealGuard.ts` client logic, which already emits `needsVenuePick` correctly.
