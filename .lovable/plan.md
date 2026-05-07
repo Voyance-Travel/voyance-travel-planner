@@ -1,45 +1,47 @@
-# Fix: "Spa Time — find a venue" mislabel on Luggage Drop / Check-in cards at hotels named "...Resort & Spa"
+# Fix: 7-hour afternoon dead-gap between lunch and dinner on Day 2
 
 ## Root cause
 
-The wellness placeholder detector matches on substring `\bspa\b` anywhere in the activity title. When the hotel is named e.g. "JW Marriott Venice Resort & Spa", any logistics card titled "Luggage Drop at JW Marriott Venice Resort & Spa" or "Check-in at JW Marriott Venice Resort & Spa" trips the detector. With no numeric address attached to that synthesized card, the detector returns true and the title is rewritten to the wellness fallback `"Spa Time — find a venue"`.
+The Day 2 plan was lunch 12:20 (Rialto Market) → dinner 19:20, with no afternoon activity. Three layers should have caught this and didn't:
 
-This is symmetric on both sides:
+1. **Generator prompt** (`compile-prompt.ts:1779`) tells the AI "no dead gaps over 90 minutes" — soft guidance, the AI ignored it.
+2. **Stage-2 validator** (`generation-core.ts:2034`) only triggers a *retry* when `gap > 180`. Retries are bounded; if the AI produces the same shape twice, the bad day persists.
+3. **Repair-day §13c GAP CLOSURE** (`repair-day.ts:2904`) only *shifts* later activities earlier — it does not insert new content. With dinner anchored at 19:20 (or it being shifted alone) the user still sees an empty afternoon.
 
-- **Server**: `supabase/functions/generate-itinerary/fix-placeholders.ts` → `isPlaceholderWellness()` (line ~495). Triggered by the wellness nuclear sweep / repair pass.
-- **Client**: `src/utils/wellnessPlaceholderDetection.ts` → `isClientPlaceholderWellness()`. Triggered by every UI render via `sanitizeActivityName(..., { activity })` in `EditorialItinerary`, `TripActivityCard`, `LiveActivityCard`, `BookableItemCard`, etc.
+There is on-demand `fill_dead_gap` mode in `refresh-day` and a UI nudge in `TransitGapIndicator`/`useFillDeadGap`, but nothing fills the gap automatically at generation time.
 
-The Rome occurrence the user mentioned was the same: any hotel with "Spa" in its branding (very common in Europe — Gritti Palace Spa, Six Senses, Mandarin Oriental Spa, etc.) hits this.
+## Changes
 
-## Changes (two files + tests)
+### 1. New repair pass: `injectAfternoonGapFiller` in `repair-day.ts`
+Add a section right before `// --- 13c. GAP CLOSURE ---` (after wellness/meal repairs, before time shifts) that:
 
-### 1. `src/utils/wellnessPlaceholderDetection.ts`
-Add a hotel-logistics short-circuit at the top of `isClientPlaceholderWellness`. Return `false` immediately when:
+- Walks pairs of consecutive non-transport, non-logistics, non-locked activities.
+- When a gap ≥ 180 min overlaps the 12:00–19:00 active afternoon window AND no manually-locked next activity prevents insertion, request a fill candidate.
+- Pull the candidate from the **same shared sources already used by `refresh-day`'s `fill_dead_gap` helper** (cost-reference + venue bank + Voyance picks for the destination). Reuse the existing helper to avoid divergence — extract `proposeAfternoonFiller(city, traveler, gap, prevAct, nextAct)` into a shared module if it currently lives only inside `refresh-day/index.ts`.
+- Insert as a 60–120-min activity placed after `prevAct.endTime + 15min` buffer; cap end at `nextAct.startTime - 30min` (transit buffer).
+- Tag `source: 'gap-filler-auto'`, `metadata.unverified_venue` only if the picked venue lacks a placeId.
+- Push a repair entry `{ code: MISSING_SLOT, action: 'injected_afternoon_filler' }`.
 
-- `category` is `accommodation` or `transport` / `transportation` / `transit`, OR
-- `title` matches `/^(luggage[\s-]?drop|check[\s-]?in|check[\s-]?out|checkin|checkout|freshen[\s-]?up|return\s+to|drop\s+bags|bag[\s-]?drop|settle\s+in|hotel\s+arrival)\b/i`
+If no real candidate is found, fall back to a curated free-time block with a real neighborhood (e.g. "Wander Cannaregio's quiet calli") rather than a generic stub. Generic-name guard already in place will reject any "Afternoon Free Time" placeholder.
 
-These cards are never wellness — even if the venue name happens to contain "Spa".
+### 2. Tighten Stage-2 validator
+In `generation-core.ts:2014–2044`, lower the gap threshold to **150 min** for non-arrival/non-departure days and add an explicit error string ("ADD a real afternoon activity — extending lunch or starting dinner earlier is NOT acceptable") so the retry message pushes the AI toward content rather than time-shifting.
 
-### 2. `supabase/functions/generate-itinerary/fix-placeholders.ts`
-Apply the identical short-circuit at the top of `isPlaceholderWellness()` so the server-side nuclear sweep doesn't downgrade these cards to `Spa Time at {hotel}` either.
+### 3. Reuse the fill_dead_gap helper across edge functions
+Extract `supabase/functions/refresh-day/index.ts:206+` `proposeFillerActivity` (or equivalent) into `supabase/functions/_shared/fill-gap.ts`. Both `refresh-day` and `repair-day` call it. Single source of truth — keeps the on-demand fill button and the auto-fill consistent.
 
-### 3. Regression tests
-Extend `src/utils/__tests__/wellnessPlaceholderDetection.test.ts` and `supabase/functions/generate-itinerary/fix-placeholders.test.ts` with cases:
-
-- `Luggage Drop at JW Marriott Venice Resort & Spa` (category `accommodation`) → not flagged
-- `Check-in at Gritti Palace Spa` → not flagged
-- `Freshen up at Six Senses Spa` → not flagged
-- Sanity: `Spa Time` (category `wellness`) still flagged
-- Sanity: `Spa Valmont at Le Meurice` (allowlist) still passes through
+### 4. Tests
+- `repair-day.test.ts` (or equivalent fixture test): given Day 2 with lunch 12:20–13:20 and dinner 19:20–21:00 in Venice, expect repair to inject a `sightseeing` or `culture` activity in the 14:00–18:00 window referencing a real Venice venue.
+- Sanity: arrival/departure days with intentional logistics gaps are NOT filled.
+- Sanity: gaps that are already < 180 min, or that fall outside 12:00–19:00, are not filled.
 
 ## Verification
 
-1. Deploy `generate-itinerary`.
-2. Re-render the Venice trip preview without regenerating — the client-side fix alone should immediately restore the correct titles for Luggage Drop and Check-in.
-3. Run unit tests: `bunx vitest run src/utils/__tests__/wellnessPlaceholderDetection.test.ts`.
+1. Deploy `generate-itinerary` and `refresh-day`.
+2. Re-generate the Venice trip. Check Day 2 afternoon: a real Venice activity (e.g. Scuola Grande di San Rocco, Peggy Guggenheim Collection, gondola/sandalo paddle, Dorsoduro wander) should appear between Rialto and dinner.
+3. Confirm no behavior regression on departure days (last-day logistics gaps are still allowed).
 
 ## Out of scope
 
-- No changes to wellness detection for genuine wellness/spa activities.
-- No prompt or generation-pipeline changes — purely the placeholder-detection guard.
+- AI-prompt rewording. Soft prompt rules already exist; this fix is deterministic.
+- Manual-mode trips (universal locking still applies — no auto-fill on manually built itineraries).
