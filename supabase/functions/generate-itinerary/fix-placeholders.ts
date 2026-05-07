@@ -425,7 +425,15 @@ export function applyFallbackToActivity(
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks',
   usedVenueNamesInDay: Set<string>,
   diningConfig?: DiningConfig,
+  destinationCity?: string,
 ): void {
+  // Cross-city safety net — if a real venue from the wrong city slipped past
+  // the resolver, downgrade to an unverified sentinel rather than ship a
+  // foreign address.
+  if (destinationCity && fallback && !fallback.needsVenuePick && fallbackIsCrossCity(fallback, destinationCity)) {
+    fallback = unverifiedMealSentinel(destinationCity, mealType);
+  }
+
   const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : mealType === 'drinks' ? 'Drinks' : 'Dinner';
   const isUnverified = fallback.needsVenuePick === true;
 
