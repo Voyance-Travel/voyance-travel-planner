@@ -1,87 +1,69 @@
-## Root cause (different from last time)
+## What's happening
 
-Last fix handled: real venue + stale generic title like "Spa Time" → rewrite at render. Today's case is upstream of that.
+The visible tip — `"for the late-night. ☔ Rain: Stay for an extra treatment."` — starts mid-sentence because an earlier regex pass stripped the opening clause but left a dangling preposition fragment. The likely original was:
 
-The literal string `"Spa Time — find a venue"` is **written by the server** at `supabase/functions/generate-itinerary/pipeline/repair-day.ts:665` in the "stripped" branch of the wellness placeholder repair. That branch fires when:
+> "Advance booking required for the late-night. ☔ Rain: Stay for an extra treatment."
 
-1. The destination city isn't in the curated `INLINE_FALLBACK_WELLNESS` list (Bali, Tokyo, NYC, etc. — anywhere outside Paris/Rome/Berlin/Barcelona/London/Lisbon), AND
-2. There's no `hotelName` to downgrade to.
+In `supabase/functions/generate-itinerary/sanitization.ts`, three patterns target booking-prefix language:
 
-The branch (lines 662–678) overwrites `act.title` and `act.name` with the placeholder string but **leaves `act.location.name` untouched**. So the AI-supplied venue ("Kami Spa", with address, possibly placeId) survives in the data, while the title says "find a venue". That's the label bleed.
+- **L1014** — `/\b(?:BOOK|RESERVE|SECURE)\s+\d[\d-]*\s*(?:WEEKS?|MONTHS?|DAYS?)\s*(?:AHEAD|IN ADVANCE|...)?\b/gi`
+- **L1018** — `/\b(?:BOOK|RESERVE|SECURE)\s+(?:ASAP|IMMEDIATELY|NOW|IN ADVANCE|WELL AHEAD|EARLY)\b/gi`
+- **L1019** — `/\b(?:Advance|advance)\s+(?:booking|reservation)\s+(?:required|recommended|essential|necessary)\b/gi`
 
-The previous client rewrite (`activityNameSanitizer`) only catches *generic-pattern* titles ("Spa Time", "Wellness Refresh"). It does **not** match the literal `"Spa Time — find a venue"` string, so it can't repair this case at render time either.
+Each removes the verb phrase but **not the preposition + object that follows it**, leaving fragments like " for the late-night.", " at the venue.", " before 8pm." stuck onto the next sentence.
+
+This is systemic — applies to any tip whose AI output started with one of these bookable-urgency prefixes.
 
 ## Plan
 
-Two coordinated fixes — server stops creating the bad title when a real venue exists; client cleans up legacy data already saved with it.
+Two layers: extend the existing strippers to consume the trailing orphan fragment, plus a defensive post-pass that catches anything similar that gets through. Server-only fix; the client just renders what the server stores.
 
-### 1. Server: don't strip when a real venue is already present
+### 1. Make booking-prefix strippers consume the trailing fragment
 
-In `supabase/functions/generate-itinerary/pipeline/repair-day.ts` around line 661 (the "no fallback DB and no hotel" branch), before falling through to the placeholder-string strip, check whether the activity *already has a real-looking venue*:
-
-```ts
-const existingVenue = (act.location?.name || act.venue_name || '').trim();
-const existingAddr  = String(act.location?.address || '').trim();
-const hasRealVenue =
-  existingVenue.length >= 4 &&
-  !/^(your hotel|the spa|the wellness|hotel spa)$/i.test(existingVenue) &&
-  (existingAddr.length >= 8 ||
-   !!act?.metadata?.google_place_id ||
-   !!act?.metadata?.placeId);
-
-if (hasRealVenue) {
-  const before = act.title;
-  act.title = `Spa Session at ${existingVenue}`;
-  act.name = act.title;
-  // cost stays $0 per Wellness Venue Integrity (unverified by our DB)
-  act.cost_per_person = 0;
-  if (act.cost) act.cost.amount = 0;
-  (act as any).metadata = { ...(act as any).metadata, unverified_venue: true };
-  act.source = 'wellness-placeholder-keep-venue';
-  repairs.push({
-    code: FAILURE_CODES.GENERIC_VENUE,
-    activityIndex: vr.activityIndex,
-    action: 'kept_ai_venue_rewrote_title',
-    before,
-    after: act.title,
-  });
-  continue;
-}
-// ...existing strip path below
-```
-
-Why $0: Core memory says wellness without a curated/placeId-verified venue must snapshot $0 — we trust the venue name enough to surface it, not enough to charge for it.
-
-### 2. Client: rescue legacy data already saved with the placeholder string
-
-In `src/utils/activityNameSanitizer.ts`, in the wellness branch (around lines 211–224 from last edit), add a check for the exact placeholder string in the *raw input* — if the activity has a real venue alongside it, rewrite to "Spa Session at {venue}" instead of preserving the placeholder:
+In `supabase/functions/generate-itinerary/sanitization.ts`, extend the three regexes so they also swallow an optional trailing `\s+(?:for|at|in|before|after|around|during|by|until|on)\b[^.]*\.?` clause. Example for the L1019 pattern:
 
 ```ts
-// Legacy: server wrote "Spa Time — find a venue" but kept a real venue on
-// location.name. Rescue by rewriting from the venue.
-if (sanitized === WELLNESS_PLACEHOLDER_FALLBACK || /find a venue$/i.test(sanitized)) {
-  const venue = (probe.location?.name || probe.venue_name || '').trim();
-  if (venue && venue.length >= 4 && !/^(your hotel|the spa|hotel spa)$/i.test(venue)) {
-    return `Spa Session at ${venue}`;
-  }
-}
+.replace(
+  /\b(?:Advance|advance)\s+(?:booking|reservation)\s+(?:required|recommended|essential|necessary)(?:\s+(?:for|at|in|before|after|around|during|by|until|on)\b[^.]*?)?\.?\s*/gi,
+  ''
+)
 ```
 
-Place this *before* the existing `isClientPlaceholderWellness` block so it short-circuits.
+Apply the same `(?:\s+<prep>\b[^.]*?)?\.?` tail to L1014 and L1018. The non-greedy `[^.]*?` keeps the consume bounded to the current sentence and never crosses into the next one (so `☔ Rain: …` is preserved).
+
+### 2. Generic orphan-fragment post-pass
+
+After all the existing replaces in `sanitizeAITextField` (right before the orphan-article repairs around L1067), add a small post-pass that catches the same shape from any future stripper:
+
+```ts
+// Drop orphan opening fragments left by prefix strippers:
+// " for the late-night. ☔ Rain: ..." → "☔ Rain: ..."
+// Pattern: leading whitespace, lowercase preposition, short clause ending
+// in a period, then continue with the rest.
+result = result.replace(
+  /^\s*(?:for|at|in|before|after|around|during|by|until|on|with|to|from)\b[^.]{0,80}\.\s*/i,
+  ''
+);
+```
+
+The `{0,80}` cap and trailing `.` requirement keep this conservative — it won't eat an intentional sentence that happens to start with a lowercase preposition (because real first words are capitalized).
 
 ### 3. Tests
 
-- `supabase/functions/generate-itinerary/pipeline/repair-day.test.ts` (or nearest existing test file): new case — wellness activity with `title: "Wellness Moment"`, `location: { name: "Kami Spa", address: "Jl. Petitenget 123" }`, no fallback DB, no hotelName → after repair, title is `"Spa Session at Kami Spa"`, cost is `$0`, `metadata.unverified_venue === true`.
-- `src/utils/__tests__/wellnessPlaceholderDetection.test.ts`: new case — input title `"Spa Time — find a venue"` + venue `"Kami Spa"` + numeric address → `sanitizeActivityName` returns `"Spa Session at Kami Spa"`. Regression: same input with empty venue → returns the placeholder unchanged.
+Extend the nearest existing test file for `sanitizeAITextField` (likely `supabase/functions/generate-itinerary/sanitization.test.ts` — confirm during impl). New cases:
+
+- `"Advance booking required for the late-night. ☔ Rain: Stay for an extra treatment."` → `"☔ Rain: Stay for an extra treatment."`
+- `"BOOK 2 WEEKS AHEAD for the chef's table. Try the tasting menu."` → `"Try the tasting menu."`
+- `"Reserve in advance at the rooftop. Sunset views are unbeatable."` → `"Sunset views are unbeatable."`
+- Regression: `"Advance booking required."` (no trailing prep) still strips cleanly to `""`.
+- Regression: `"Sunset views are unbeatable."` (no leading prefix) untouched.
 
 ## Out of scope
 
-- Adding more cities to `INLINE_FALLBACK_WELLNESS` (separate content task).
-- Backfilling stored titles in DB; the client rescue handles render and the next save persists the fix.
-- Changing the cost policy for AI-supplied wellness venues (stays $0).
+- Backfilling stored tips. Sanitization runs every save, so on the next regen/edit the tip self-heals. Listing legacy data isn't worth the migration cost for a copy bug.
+- Client-side mirror. `sanitizeActivityText` doesn't run booking-prefix strips, so it isn't producing fragments — no need to touch.
 
 ## Files touched
 
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — keep AI venue branch before the strip
-- `src/utils/activityNameSanitizer.ts` — render-time rescue of literal placeholder string
-- Tests in both layers
+- `supabase/functions/generate-itinerary/sanitization.ts` — extend 3 regexes, add post-pass
+- `supabase/functions/generate-itinerary/sanitization.test.ts` (or nearest) — new cases
