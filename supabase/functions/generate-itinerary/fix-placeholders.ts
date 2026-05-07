@@ -607,6 +607,10 @@ export const PLACEHOLDER_TITLE_PATTERNS = [
   /^(breakfast|lunch|dinner|brunch)\s+(spot|recommendation|place|option)/i,
   // "Sample local cuisine" etc.
   /^sample\s+(local|traditional|regional)/i,
+  // "Highly/top/well-rated …" stub-name family (e.g. "Lunch at Highly-rated neighborhood restaurant")
+  /(highly|top|well)[-\s]rated\s+(neighborhood\s+)?(restaurant|caf[eé]|bistro|trattoria|spot|eatery|venue|place)/i,
+  // "— pick a restaurant" sentinel emitted when we have no vetted venue
+  /[—\-:]\s*pick a (restaurant|caf[eé])\b/i,
 ];
 
 export const PLACEHOLDER_VENUE_PATTERNS = [
@@ -624,6 +628,13 @@ export const PLACEHOLDER_VENUE_PATTERNS = [
   /^recommended\s+(restaurant|café|cafe|spot|place|eatery)/i,
   /^popular\s+(spot|restaurant|café|cafe|eatery|place)/i,
   /^neighborhood\s+(restaurant|café|cafe|bistro|spot)/i,
+  // "Highly/top/well-rated …" stub venue names
+  /^(highly|top|well)[-\s]rated\s+(neighborhood\s+)?(restaurant|caf[eé]|bistro|trattoria|spot|eatery|venue|place)$/i,
+  // "Local specialty café" legacy stub
+  /^local\s+specialty\s+caf[eé]$/i,
+  // "Pick a restaurant / café" sentinels
+  /^.*[—\-:]\s*pick a (restaurant|caf[eé])$/i,
+  /^pick a (restaurant|caf[eé])$/i,
 ];
 
 // =============================================================================
