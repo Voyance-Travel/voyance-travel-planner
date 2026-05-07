@@ -363,6 +363,21 @@ export function PaymentsTab({
     ];
   }, [essentialItems, reserveCents]);
 
+  // ─── Split activity items into Budget by Category buckets so the Payments
+  //     tab and Budget tab use identical groupings (food/activities/transit). ───
+  const foodItems = useMemo(
+    () => activityItems.filter(i => i.budgetCategory === 'food'),
+    [activityItems]
+  );
+  const activitiesOnlyItems = useMemo(
+    () => activityItems.filter(i => !i.budgetCategory || i.budgetCategory === 'activities' || i.budgetCategory === 'misc'),
+    [activityItems]
+  );
+  const transitItems = useMemo(
+    () => activityItems.filter(i => i.budgetCategory === 'transit' || i.groupKind === 'transit'),
+    [activityItems]
+  );
+
   // Invariant: bucket sum must match the headline within $1.
   const bucketSumCents =
     essentialItemsWithReserve.reduce((s, i) => s + i.amountCents, 0) +
