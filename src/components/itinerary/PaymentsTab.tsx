@@ -1107,7 +1107,7 @@ export function PaymentsTab({
                   className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1 justify-end"
                   title={`Bucket sum ${formatCurrency(bucketSumCents)} differs from total by ${formatCurrency(Math.abs(reconciliationDriftCents))}`}
                 >
-                  Reconciling…
+                  Totals differ by {formatCurrency(Math.abs(reconciliationDriftCents))}
                 </p>
               ) : null
             )}
