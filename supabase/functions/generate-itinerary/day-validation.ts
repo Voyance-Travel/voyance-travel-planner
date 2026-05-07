@@ -860,6 +860,23 @@ export function enforceRequiredMealsFinalGuard(
   }
   fallbackVenues = cleanFallbackVenues;
 
+  // Strip any prior placeholder meal sentinels ("Lunch — pick a restaurant" etc.)
+  // BEFORE detection so the guard sees them as missing and re-injects a real
+  // named venue. Without this, a sentinel from a prior pass survives forever
+  // because the title contains "lunch" and satisfies meal compliance.
+  {
+    const before = activities.length;
+    for (let i = activities.length - 1; i >= 0; i--) {
+      if (isPlaceholderMealActivity(activities[i] as any)) {
+        const removed = activities.splice(i, 1)[0] as any;
+        console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: stripped placeholder meal "${removed?.title || ''}" before re-injection`);
+      }
+    }
+    if (before !== activities.length) {
+      console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: removed ${before - activities.length} placeholder meal slot(s)`);
+    }
+  }
+
   const detected = detectMealSlots(activities);
 
   // PRE-PASS 0: Relabel any meal whose title contradicts its time slot
