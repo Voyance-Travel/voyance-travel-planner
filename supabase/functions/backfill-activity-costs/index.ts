@@ -10,6 +10,7 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { isWalkingLeg } from "../_shared/walking-leg.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
