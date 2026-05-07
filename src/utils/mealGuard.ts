@@ -276,7 +276,7 @@ export function enforceItineraryMealCompliance(
 
     for (const mealType of missing) {
       const real = resolveAnyMealFallback(dayDestination, mealType, usedNames);
-      usedNames.add(real.name.toLowerCase());
+      if (!real.needsVenuePick) usedNames.add(real.name.toLowerCase());
       day.activities.push(
         buildFallbackActivity(
           mealType,
@@ -285,14 +285,10 @@ export function enforceItineraryMealCompliance(
           real.description,
           false,
           real.price,
+          real.needsVenuePick,
         ),
       );
     }
-
-    day.activities = sortByTime(day.activities);
-    details.push({ dayNumber: day.dayNumber, injected: missing });
-    totalInjected += missing.length;
-  }
 
   if (totalInjected > 0) {
     console.warn(`[MealGuard-Client] Injected ${totalInjected} generic meals across ${details.length} days`);
