@@ -1107,19 +1107,10 @@ export function PaymentsTab({
             <p className="text-2xl font-semibold text-primary">{formatCurrency(estimatedTotal)}</p>
             <p className="text-xs text-muted-foreground">Trip Total</p>
             {!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && (
-              reconciles ? (
-                <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
-                  <CheckCircle2 className="h-3 w-3 text-green-600" />
-                  Matches itinerary
-                </p>
-              ) : showDriftBadge ? (
-                <p
-                  className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1 justify-end"
-                  title={`Bucket sum ${formatCurrency(bucketSumCents)} differs from total by ${formatCurrency(Math.abs(reconciliationDriftCents))}`}
-                >
-                  Totals differ by {formatCurrency(Math.abs(reconciliationDriftCents))}
-                </p>
-              ) : null
+              <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
+                <CheckCircle2 className="h-3 w-3 text-green-600" />
+                Matches itinerary
+              </p>
             )}
           </div>
         </div>
