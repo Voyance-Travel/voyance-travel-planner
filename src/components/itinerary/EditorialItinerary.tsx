@@ -1410,7 +1410,18 @@ export function EditorialItinerary({
           // Only write rows with actual costs (skip $0 to avoid noise)
           if (costPerPerson > 0) {
             // Guard: don't write positive rows for free public venues
-            const { isLikelyFreePublicVenue: isFreeVenue, isPlaceholderDepartureTransfer } = await import('@/lib/cost-estimation');
+            const { isLikelyFreePublicVenue: isFreeVenue, isPlaceholderDepartureTransfer, isWalkingLeg } = await import('@/lib/cost-estimation');
+            // Guard: walking legs are always free, regardless of stored category.
+            // Mirrors backend pipeline guard so the All Costs / Payments views
+            // never see a synthesized "Walk to X — $20" row.
+            if (isWalkingLeg({
+              title: act.title,
+              description: (act as any).description,
+              bookingRequired: (act as any).bookingRequired,
+            })) {
+              console.log(`[syncBudgetFromDays] Skipping walking leg: "${act.title}"`);
+              continue;
+            }
             const isFree = isFreeVenue({
               title: act.title,
               category: act.category,
