@@ -65,13 +65,13 @@ export function useLedgerCostOverrideMap(tripId: string | undefined): void {
       }
       for (const row of data as any[]) {
         const src = String(row.source || '');
-        if (!PROTECTED_FLOOR_SOURCES.has(src)) continue;
         const perPerson = Number(row.cost_per_person_usd) || 0;
         if (perPerson <= 0 || !row.activity_id) continue;
         overrides.set(String(row.activity_id), {
           perPersonUsd: perPerson,
           source: src,
           tripId,
+          isProtectedFloor: PROTECTED_FLOOR_SOURCES.has(src),
         });
       }
     };
