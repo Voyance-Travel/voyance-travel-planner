@@ -462,6 +462,7 @@ export function usePayableItems({
           allPayments: activityPayments,
           assignedMemberId: assignedIds[0],
           assignedMemberIds: [...new Set(assignedIds)],
+          budgetCategory: toBudgetCategory(row.category),
         });
       }
 
@@ -485,6 +486,7 @@ export function usePayableItems({
           assignedMemberIds: [...new Set(assignedIds)],
           subItems,
           groupKind: 'transit',
+          budgetCategory: 'transit',
         });
       }
     }
