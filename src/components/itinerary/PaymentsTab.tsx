@@ -1265,6 +1265,7 @@ export function PaymentsTab({
             { key: 'food', items: foodItems, label: 'Food & Dining', icon: <Utensils className="h-5 w-5 text-accent" /> },
             { key: 'activities', items: activitiesOnlyItems, label: 'Activities & Experiences', icon: <Camera className="h-5 w-5 text-accent" /> },
             { key: 'transit', items: transitItems, label: 'Local Transit', icon: <Car className="h-5 w-5 text-accent" /> },
+            { key: 'misc', items: miscItems, label: 'Spending Money & Tips', icon: <Wallet className="h-5 w-5 text-accent" /> },
           ] as const).map(({ key, items, label, icon }) => items.length > 0 && (
             <Card key={key} className="overflow-hidden">
               <button
