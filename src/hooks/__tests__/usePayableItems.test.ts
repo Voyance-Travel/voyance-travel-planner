@@ -106,6 +106,45 @@ describe('usePayableItems — Flights & Hotels reconciliation', () => {
     expect(result.current.items.find(i => i.id === 'hotel-selection')).toBeUndefined();
     expect(result.current.items.find(i => i.id === 'flight-selection')).toBeUndefined();
   });
+
+  it('uses canonical day-0 hotel cost when it differs from selection price (Budget/Payments agreement)', () => {
+    const activityCosts = [
+      { activity_id: 'hotel-d0', day_number: 0, category: 'hotel', cost_per_person_usd: 900, num_travelers: 1 },
+    ];
+    const { result } = renderHook(() =>
+      usePayableItems({
+        days: baseDays,
+        flightSelection: null,
+        hotelSelection: { name: 'Hotel Danieli', totalPrice: 1200 },
+        travelers: 1,
+        payments: [],
+        activityCosts: activityCosts as any,
+        paymentsLoaded: true,
+      }),
+    );
+    const hotel = result.current.items.find(i => i.type === 'hotel');
+    expect(hotel?.amountCents).toBe(90000); // canonical wins, not selection $1200
+    expect(hotel?.name).toBe('Hotel Danieli'); // label still from selection
+  });
+
+  it('uses canonical day-0 flight cost when it differs from selection price', () => {
+    const activityCosts = [
+      { activity_id: 'flight-d0', day_number: 0, category: 'flight', cost_per_person_usd: 700, num_travelers: 2 },
+    ];
+    const { result } = renderHook(() =>
+      usePayableItems({
+        days: baseDays,
+        flightSelection: { totalPrice: 1800, outbound: { airline: 'Air France' } } as any,
+        hotelSelection: null,
+        travelers: 2,
+        payments: [],
+        activityCosts: activityCosts as any,
+        paymentsLoaded: true,
+      }),
+    );
+    const flight = result.current.items.find(i => i.type === 'flight');
+    expect(flight?.amountCents).toBe(140000); // canonical $700×2, not selection $1800
+  });
 });
 
 describe('usePayableItems — orphan-rescue dedupe', () => {
