@@ -1565,8 +1565,11 @@ async function fetchImageTiered(
         destination
       );
 
-      // Cache AI images with lower quality score
-      await cacheImage(supabase, entityType, venueName, destination, persistentAiImage, 0.5);
+      // Cache AI images with lower quality score — keyed on cleanName for hits
+      await cacheImage(supabase, entityType, cleanName, destination, persistentAiImage, 0.5);
+      if (cleanName !== venueName) {
+        await cacheImage(supabase, entityType, venueName, destination, persistentAiImage, 0.5);
+      }
       return persistentAiImage;
     }
   }
