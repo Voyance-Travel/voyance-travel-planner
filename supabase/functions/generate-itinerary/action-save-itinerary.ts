@@ -360,6 +360,12 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           (trip as any)?.destination ||
           ((trip as any)?.metadata?.destination as string | undefined) ||
           'the destination';
+        const tripMetaForHotel = ((trip as any)?.metadata || {}) as Record<string, any>;
+        const savedHotelName: string | undefined =
+          tripMetaForHotel?.selected_hotel?.name ||
+          tripMetaForHotel?.hotel?.name ||
+          tripMetaForHotel?.accommodation?.name ||
+          undefined;
         terminalCleanup(itineraryDays[i].activities, {
           arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
           departureTime24: isLastDay ? savedDepartureTime24 : undefined,
@@ -367,6 +373,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           dayNumber,
           isFirstDay,
           isLastDay,
+          hotelName: savedHotelName,
         });
         itineraryDays[i] = { ...itineraryDays[i], activities: itineraryDays[i].activities };
       } catch (_e) { /* non-blocking */ }
