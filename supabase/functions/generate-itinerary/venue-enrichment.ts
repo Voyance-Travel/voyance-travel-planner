@@ -378,6 +378,10 @@ export async function verifyVenueWithDualAI(
   const googleResult = await verifyVenueWithGooglePlaces(venueName, destination, GOOGLE_MAPS_API_KEY, hotelCoordinates);
 
   if (!googleResult || !googleResult.isValid) {
+    // Propagate cross-city verdict so caller can drop the activity entirely.
+    if (googleResult?.crossCityHallucination) {
+      return googleResult;
+    }
     return {
       isValid: false,
       confidence: 0.4,
