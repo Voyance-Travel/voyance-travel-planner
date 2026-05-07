@@ -18,6 +18,7 @@ import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { applyAnchorsWin } from './anchor-guard.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
+import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
