@@ -1049,7 +1049,31 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  // ── FILLER ACTIVITY FILTER ──
+  // ── CROSS-CITY ADDRESS FILTER — drop activities whose address points to a
+  //   well-known city that isn't the destination (catches AI pulling real
+  //   restaurants from training data and dropping them in the wrong city). ──
+  if (Array.isArray(dayResult?.activities)) {
+    const { isCrossCityAddress } = await import('./cross-city-filter.ts');
+    const dest = (cityInfo?.cityName || destination || '').trim();
+    if (dest) {
+      const beforeCC = dayResult.activities.length;
+      dayResult.activities = dayResult.activities.filter((act: any) => {
+        if (act.locked) return true;
+        const cat = String(act.category || '').toLowerCase();
+        if (!['dining', 'restaurant', 'food', 'sightseeing', 'attraction', 'museum', 'culture', 'shopping'].includes(cat)) return true;
+        const wrongCity = isCrossCityAddress(act, dest);
+        if (wrongCity) {
+          console.warn(`[CROSS-CITY ADDRESS] Day ${dayNumber}: removed "${act.title}" — address mentions ${wrongCity}, destination is ${dest}`);
+          return false;
+        }
+        return true;
+      });
+      if (dayResult.activities.length < beforeCC) {
+        console.warn(`[CROSS-CITY ADDRESS] Day ${dayNumber}: removed ${beforeCC - dayResult.activities.length} wrong-city activities`);
+      }
+    }
+  }
+
   {
     const FILLER_TITLE_PATTERNS = [
       /end of day reflection/i,
