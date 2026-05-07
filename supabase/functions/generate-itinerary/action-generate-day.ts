@@ -200,28 +200,6 @@ export async function handleGenerateDay(
     console.warn('[generate-day] trip_day_intents seeding failed (non-blocking):', seedErr);
     }
 
-    // ── CROSS-CITY ADDRESS FILTER ──
-    if (Array.isArray(normalizedActivities)) {
-      const { isCrossCityAddress } = await import('./cross-city-filter.ts');
-      const dest = (destination || '').trim();
-      if (dest) {
-        const beforeCC = normalizedActivities.length;
-        normalizedActivities = normalizedActivities.filter((act: any) => {
-          if (act.locked) return true;
-          const cat = String(act.category || '').toLowerCase();
-          if (!['dining', 'restaurant', 'food', 'sightseeing', 'attraction', 'museum', 'culture', 'shopping'].includes(cat)) return true;
-          const wrongCity = isCrossCityAddress(act, dest);
-          if (wrongCity) {
-            console.warn(`[CROSS-CITY ADDRESS] Day ${dayNumber}: removed "${act.title}" — address mentions ${wrongCity}, destination is ${dest}`);
-            return false;
-          }
-          return true;
-        });
-        if (normalizedActivities.length < beforeCC) {
-          console.warn(`[CROSS-CITY ADDRESS] Day ${dayNumber}: removed ${beforeCC - normalizedActivities.length} wrong-city activities`);
-        }
-      }
-    }
 
   // ═══════════════════════════════════════════════════════════════════════
   // COMPILED PROMPT: Preferences, trip intents, must-dos, timing, profile,
