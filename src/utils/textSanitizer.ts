@@ -9,9 +9,11 @@ const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\u3040-\u309F\u30A0-\u30FF\
 // Regex to detect garbled/corrupted text patterns (nonsensical fragments)
 const GARBLED_PATTERN = /(?:[bcdfghjklmnpqrstvwxz]{5,}|[A-Z][a-z]{0,2}[A-Z][a-z]{0,2}[A-Z])/g;
 
-// Regex to detect leaked JSON schema field names in text values
-// e.g. "宣,duration:4,practicalTips;|" or ",theme:" or ",title: -" artifacts
-const SCHEMA_LEAK_RE = /[,;|]*\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay)\s*[:;|]\s*[^,;|]*/gi;
+// Regex to detect leaked JSON schema field names in text values.
+// Requires BOTH a leading separator and a key:value form so plain English
+// words (city, country, name, location, cost, type, ...) inside prose are
+// preserved. Only true JSON fragments like ",duration:4,city:Paris;|" match.
+const SCHEMA_LEAK_RE = /[,;|]+\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay)\s*[:;|]\s*[^,;|]*/gi;
 
 /**
  * Replace em dashes (—) with standard dashes ( - ) in any text.
@@ -33,7 +35,12 @@ export function sanitizeText(text: string | undefined | null): string {
     .replace(
       /\b(in|to|of|over|for|about|around|across|throughout|from|into|toward|towards|through|within|near)\s+the([.!?,;])/gi,
       '$1 the city$2'
-    );
+    )
+    // Repair "see/in/of the from the <noun>" gaps caused by legacy
+    // aggressive schema-leak stripping that ate the word "city".
+    .replace(/\b(see|view|explore|experience|enjoy|admire|photograph) the from the\b/gi, '$1 the city from the')
+    .replace(/\b(in|of|across|over|through|around|from) the from the\b/gi, '$1 the city from the')
+    .replace(/\bthe from the (water|street|streets|river|canal|canals|sea|sky|air|ground|inside|outside|rooftop|rooftops|hilltop|hilltops|harbor|harbour|lagoon|coast)\b/gi, 'the city from the $1');
 }
 
 /**
