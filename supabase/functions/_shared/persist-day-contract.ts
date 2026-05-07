@@ -125,10 +125,11 @@ export function enforcePersistDayContract<T = any>(
       continue;
     }
 
-    // 2. Placeholder names (covers wellness + meal + generic + prompt artifacts)
-    if (PLACEHOLDER_NAME_RE.test(title)) {
-      // Prompt-artifact subclass for clearer logs
-      const reason: ContractViolation = /\(\s*(?:slot|aesthetic\s+slot|placeholder|name|venue)\s*\)/i.test(title)
+    // 2. Placeholder names (covers wellness + meal + generic + prompt artifacts).
+    //    Check ALL venue-bearing fields, not just title — leaks have shown up
+    //    in name / venue_name / location.name on fresh generations.
+    if (PLACEHOLDER_NAME_RE.test(placeholderBlob)) {
+      const reason: ContractViolation = /\(\s*(?:slot|aesthetic\s+slot|placeholder|name|venue)\s*\)/i.test(placeholderBlob)
         ? 'prompt-artifact'
         : 'placeholder-name';
       drops.push({ dayNumber: ctx.dayNumber, title, reason });
