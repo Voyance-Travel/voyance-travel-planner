@@ -69,7 +69,7 @@ export function VoucherModal({
             <DialogTitle>Booking Confirmation</DialogTitle>
           </div>
           <DialogDescription>
-            Your booking details for "{sanitizeActivityName(activity.title)}"
+            Your booking details for "{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}"
           </DialogDescription>
         </DialogHeader>
 
@@ -113,7 +113,7 @@ export function VoucherModal({
 
           {/* Activity Details */}
           <div className="space-y-3">
-            <h4 className="font-medium">{sanitizeActivityName(activity.title)}</h4>
+            <h4 className="font-medium">{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}</h4>
             
             {activity.description && (
               <p className="text-sm text-muted-foreground">{activity.description}</p>
