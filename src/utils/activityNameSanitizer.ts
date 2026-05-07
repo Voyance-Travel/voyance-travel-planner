@@ -11,6 +11,7 @@ import {
 } from './stubVenueDetection';
 import {
   isClientPlaceholderWellness,
+  hasGenericWellnessTitle,
   WELLNESS_PLACEHOLDER_FALLBACK,
   type WellnessActivityShape,
 } from './wellnessPlaceholderDetection';
