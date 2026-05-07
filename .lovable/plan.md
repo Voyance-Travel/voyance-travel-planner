@@ -1,51 +1,33 @@
-## Problem
+## What’s actually happening
 
-Day 3 Health panel flags an "error" for: Villa Medici Gardens (10:05–10:55) overlapping Walk to Hotel Flora (10:45–11:00). The "Walk to Hotel" entry is a transit/transfer card — the kind the timing cascade is designed to butt right up against the previous activity (zero-buffer is fine for transit). The shared `enforceTimingAndBuffers` cascade already has a test that pulls this exact pair forward (`timingCascade.test.ts` L25–33), and the on-load `transit-cascade` effect in `EditorialItinerary` runs it automatically.
+- The repeated “A listener indicated an asynchronous response…” console messages are Chrome extension/runtime noise. They are not the itinerary failure.
+- The itinerary is failing because the backend starts `generate-trip`, then its internal self-call to `generate-trip-day` is being rejected as unauthorized: `Auth getUser failed: invalid claim: missing sub claim`.
+- That leaves the trip stuck in `generating`, so the UI never gets a completed itinerary.
+- The SVG `<circle>` warnings are separate: at least one animated/progress SVG can render `cx`, `cy`, or `r` as `undefined` in the deployed bundle. This should be guarded so warnings don’t mask real generation errors.
 
-So one of two things is happening:
-- The cascade ran and pushed the walk to 10:55–11:10, but the data on disk still has the old 10:45 start until the user saves, so any other reader of the trip sees the overlap.
-- Or the cascade is gated out (e.g. the walk card is `locked`, or `endTime` is missing) and never actually shifts.
+## Plan
 
-Either way, `analyzeHealth` in `TripHealthPanel` reports the overlap with `severity: 'error'` regardless of category, even though one side is a transit/transfer card — so the Health panel paints a red "conflict" for a situation the system explicitly treats as benign elsewhere.
+1. **Fix backend self-chaining authorization**
+   - Update `generate-itinerary` auth handling so service-role internal calls are recognized before normal user JWT validation.
+   - Keep the existing whitelist, but make sure all legitimate internal chain actions are covered: `generate-trip`, `generate-trip-day`, `generate-day`, and `regenerate-day`.
+   - Add `apikey` to internal chain fetch headers where missing, matching the rest of the function’s internal calls.
 
-## Fix (UI/health-classification only)
+2. **Make generation failure visible instead of stuck**
+   - If the initial self-chain launch returns a non-2xx response after retries, mark the trip as `failed` and persist a clear `chain_error` in trip metadata.
+   - Return a clear error payload to the frontend instead of reporting “generating” when the chain never started.
 
-Make the Health panel treat transit-involved overlaps as the soft, auto-resolved condition the cascade already considers them.
+3. **Guard the SVG circle renderer**
+   - Harden the loading/progress SVG component(s) so `cx`, `cy`, and `r` are always finite numbers before rendering.
+   - Clamp progress and completion values to safe numeric ranges.
 
-### `src/components/trip/TripHealthPanel.tsx` — `analyzeHealth`
+4. **Validate**
+   - Run the focused edge-function tests if present.
+   - Deploy/test `generate-itinerary` with the affected trip path and confirm the backend no longer logs `missing sub claim` for internal chain calls.
+   - Confirm the trip transitions out of stuck `generating` into either active progress or a clear failed state.
 
-1. Reuse the existing transit-category set (already used in the buffer block):
-   ```ts
-   const TRANSIT_CATS = ['transit','transportation','transfer','walking','transport','commute','taxi','travel'];
-   const isTransitCat = (c?: string) => TRANSIT_CATS.includes((c || '').toLowerCase());
-   ```
-2. In the overlap loop (L101–114), when `timed[i].end > timed[i+1].start`:
-   - Look up the two original activities (`activities[i]`, `activities[i+1]`).
-   - If either side is a transit category, OR the title of either matches `/^(walk|transfer|return|drive|taxi|metro|train|bus|tram|ride)\b/i` (catches "Walk to Hotel Flora", "Return to Hotel", "Transfer to Marriott"), downgrade:
-     - `severity: 'warning'`
-     - message: `Day ${dayNum}: Tight transition — "${A}" (…) runs into "${B}" (…). Auto-resolves on save.`
-     - `fixLabel: 'Fix timing'`, `fixAction: 'fix_timing'` (unchanged so the existing one-click button still works).
-   - Still `break` to keep one entry per day.
-3. Health-score weighting (L302–311) already softens timing issues; no change needed beyond the severity downgrade.
+## Files likely touched
 
-### Index lookup correctness
-
-The existing buffer block at L120–123 reads `activities[i]` / `activities[i+1]` by index, but `timed` is sorted independently from `activities`, so those indices can disagree. Fix the same way for both blocks: tag each `timed` entry with its source activity (push `category` and `title` onto the `timed` object at L91–97) and read from there. This is the minimum change required to make the transit check reliable; without it the buffer/transit detection has been silently misaligned.
-
-### Tests
-
-Add `src/components/trip/__tests__/TripHealthPanel.analyzeHealth.test.ts` with:
-- Villa Medici (10:05–10:55, `leisure`) + Walk to Hotel Flora (10:45–11:00, `transfer`) → exactly one issue, `severity === 'warning'`, message contains "Tight transition" and "Auto-resolves".
-- Two non-transit overlapping cards → still `severity: 'error'` (regression).
-- Walk-titled card with `category: undefined` → still classified as transit by title prefix.
-
-## Out of scope
-
-- No changes to the timing cascade itself; it already does the right thing.
-- No backend/data changes; the actual time shift is still owned by the existing on-load cascade and pre-save cascade.
-- Not touching the empty-day, budget-balance, or checklist branches of `analyzeHealth`.
-
-## Files touched
-
-- `src/components/trip/TripHealthPanel.tsx`
-- `src/components/trip/__tests__/TripHealthPanel.analyzeHealth.test.ts` (new)
+- `supabase/functions/generate-itinerary/index.ts`
+- `supabase/functions/generate-itinerary/action-generate-trip.ts`
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` if any chain header path is inconsistent
+- `src/components/planner/shared/GenerationAnimation.tsx` and possibly `src/components/common/PreferenceNudge.tsx` / `src/components/trips/ActiveTripStats.tsx` for SVG guards
