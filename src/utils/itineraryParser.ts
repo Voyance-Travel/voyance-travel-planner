@@ -24,6 +24,11 @@ function sanitizeDisplayString(value: string | undefined | null): string | undef
   const cleaned = value
     .replace(NON_LATIN_SCRIPT, '')
     .replace(SCHEMA_LEAK_RE, '')
+    // Strip leaked AI prompt scaffolding ("This satisfies your 'Deep Context' requirement",
+    // "(AESTHETIC slot)", "(slot)") that escaped the server-side sanitizer.
+    .replace(/(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+['"\u2018\u2019\u201C\u201D][^'"\u2018\u2019\u201C\u201D]{2,40}['"\u2018\u2019\u201C\u201D]\s+(?:interest|preference|request|need|requirement|slot|moment|stop|block)\b[^.]*\.?\s*/gi, '')
+    .replace(/\s*\(\s*(?:[A-Z][A-Z\s/&-]{1,30}\s+)?slot\s*\)\s*/gi, ' ')
+    .replace(/\s*\(\s*(?:AESTHETIC|NARRATIVE|MOOD|TONE|VIBE|THEME|ARCHETYPE|PERSONA|CONTEXT|FULFILLS?|SLOT)(?:\s+[A-Z][A-Z\s/&-]{0,30})?\s*\)\s*/g, ' ')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
     .replace(/\s{2,}/g, ' ')
