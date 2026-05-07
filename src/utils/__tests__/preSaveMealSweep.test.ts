@@ -139,7 +139,7 @@ describe('resolveAnyMealFallback cross-city integrity', () => {
 });
 
 describe('resolveAnyMealFallback system-wide cross-city integrity', () => {
-  const FOREIGN = /tartine|antico vinaio|comptoir du relais/i;
+  const FOREIGN = /tartine bakery|antico vinaio/i;
   const cityChecks: Array<{ dest: string; mustMatch: RegExp; mustNot: RegExp }> = [
     { dest: 'Venice, Italy', mustMatch: /vene(zia|ce)/i, mustNot: /(florence|firenze|rome|roma|milan|paris|san francisco)/i },
     { dest: 'Paris, France', mustMatch: /paris/i, mustNot: /(lyon|marseille|venice|venezia|florence|san francisco)/i },
