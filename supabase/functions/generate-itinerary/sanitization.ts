@@ -1023,6 +1023,12 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/\b(?:Advance|advance)\s+(?:booking|reservation)\s+(?:required|recommended|essential|necessary)(?:\s+(?:for|at|in|before|after|around|during|by|until|on|with|to)\b[^.]*)?\.?\s*/gi, '')
     // AI self-referential commentary
     .replace(/(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+\w+\s+(?:interest|preference|request|need|requirement)\b[^.]*\.?/gi, '')
+    // Same pattern but with quoted multi-word archetype labels: "satisfies your 'Deep Context' requirement"
+    .replace(/(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+['"\u2018\u2019\u201C\u201D][^'"\u2018\u2019\u201C\u201D]{2,40}['"\u2018\u2019\u201C\u201D]\s+(?:interest|preference|request|need|requirement|slot|moment|stop|block)\b[^.]*\.?\s*/gi, '')
+    // Bare "(slot)" or "(<LABEL> slot)" / "(AESTHETIC slot)"
+    .replace(/\s*\(\s*(?:[A-Z][A-Z\s/&-]{1,30}\s+)?slot\s*\)\s*/gi, ' ')
+    // ALL-CAPS label tags like "(AESTHETIC)", "(NARRATIVE MOOD)", "(ARCHETYPE FIT)"
+    .replace(/\s*\(\s*(?:AESTHETIC|NARRATIVE|MOOD|TONE|VIBE|THEME|ARCHETYPE|PERSONA|CONTEXT|FULFILLS?|SLOT)(?:\s+[A-Z][A-Z\s/&-]{0,30})?\s*\)\s*/g, ' ')
     // "Since the traveler/user/guest loves/prefers..." reasoning sentences
     .replace(/(?:^|\.\s*)Since\s+(?:the|this|your)\s+(?:traveler|user|guest|visitor|group)\s+[^.]*\./gi, '')
     // Parenthetical notes containing AI-indicator language (broad catch-all)
