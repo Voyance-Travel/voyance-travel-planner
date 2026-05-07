@@ -420,17 +420,22 @@ export function usePayableItems({
         });
       }
 
-      // Emit one grouped transit row per day
+      // Emit one grouped transit row per day. Type is 'transport' so manual
+      // transport, costed transfers, and grouped transit all live in the same
+      // bucket. Look up payments by either ('transport'|'activity') so legacy
+      // rows saved before this unification still attach to the same group.
       const sortedTransitDays = Array.from(transitByDay.entries()).sort((a, b) => a[0] - b[0]);
       for (const [dayNumber, { totalCents, subItems }] of sortedTransitDays) {
         const groupId = `transit-d${dayNumber}`;
-        const groupPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === groupId);
+        const groupPayments = payments.filter(p =>
+          (p.item_type === 'transport' || p.item_type === 'activity') && p.item_id === groupId
+        );
         const assignedIds = groupPayments
           .map(p => (p as any)?.assigned_member_id)
           .filter(Boolean) as string[];
         result.push({
           id: groupId,
-          type: 'activity',
+          type: 'transport',
           name: `Local transit — Day ${dayNumber}`,
           amountCents: totalCents,
           dayNumber,
