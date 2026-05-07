@@ -4,6 +4,7 @@
  */
 
 import { type ActionContext, okJson, errorJson } from './action-types.ts';
+import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 
 export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;
