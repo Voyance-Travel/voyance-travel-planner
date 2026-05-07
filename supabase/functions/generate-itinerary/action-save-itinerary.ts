@@ -10,6 +10,7 @@ import { applyAnchorsWin as sharedApplyAnchorsWin } from './anchor-guard.ts';
 import { buildDayLedger, type DayLedger } from './day-ledger.ts';
 import { ledgerCheck } from './ledger-check.ts';
 import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
+import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
