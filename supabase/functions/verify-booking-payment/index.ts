@@ -49,13 +49,25 @@ serve(async (req) => {
     });
 
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    logStep("Session retrieved", { status: session.payment_status, tripId: session.metadata?.trip_id });
+    const sessStatus = (session as any).status; // 'open' | 'complete' | 'expired'
+    logStep("Session retrieved", { status: session.payment_status, sessStatus, tripId: session.metadata?.trip_id });
 
     if (session.payment_status !== 'paid') {
-      return new Response(JSON.stringify({ 
-        success: false, 
+      // Finalize stale rows so they don't block reconciliation forever.
+      if (sessStatus && sessStatus !== 'open') {
+        const newStatus = sessStatus === 'expired' ? 'cancelled' : 'failed';
+        await supabaseClient
+          .from('trip_payments')
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq('stripe_checkout_session_id', sessionId)
+          .in('status', ['pending', 'processing']);
+        logStep("Finalized unpaid payment rows", { newStatus });
+      }
+      return new Response(JSON.stringify({
+        success: false,
         status: session.payment_status,
-        error: 'Payment not completed' 
+        sessStatus,
+        error: 'Payment not completed'
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
