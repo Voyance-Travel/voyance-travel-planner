@@ -659,22 +659,51 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         });
         console.warn(`[Repair] WELLNESS_PLACEHOLDER: No fallback for "${cityKey}" — downgraded "${before}" → "${act.title}" ($0)`);
       } else {
-        // No fallback DB and no hotel — strip cost, mark for refinement
-        act.cost_per_person = 0;
-        if (act.cost) act.cost.amount = 0;
-        act.title = 'Spa Time — find a venue';
-        act.name = act.title;
-        act.description = "We couldn't verify a spa venue here. Tap the assistant to suggest one.";
-        (act as any).needsRefinement = true;
-        act.source = 'wellness-placeholder-stripped';
-        repairs.push({
-          code: FAILURE_CODES.GENERIC_VENUE,
-          activityIndex: vr.activityIndex,
-          action: 'stripped_wellness_placeholder',
-          before,
-          after: act.title,
-        });
-        console.warn(`[Repair] WELLNESS_PLACEHOLDER: No fallback or hotel — stripped "${before}"`);
+        // No fallback DB and no hotel — but the AI may have already attached
+        // a real-looking venue. Prefer keeping that venue (with $0 cost,
+        // unverified) over the "find a venue" placeholder string.
+        const existingVenue = (act.location?.name || (act as any).venue_name || '').trim();
+        const existingAddr = String(act.location?.address || '').trim();
+        const hasRealVenue =
+          existingVenue.length >= 4 &&
+          !/^(your hotel|the spa|the wellness|hotel spa)$/i.test(existingVenue) &&
+          (existingAddr.length >= 8 ||
+            !!(act as any)?.metadata?.google_place_id ||
+            !!(act as any)?.metadata?.placeId);
+
+        if (hasRealVenue) {
+          act.cost_per_person = 0;
+          if (act.cost) act.cost.amount = 0;
+          act.title = `Spa Session at ${existingVenue}`;
+          act.name = act.title;
+          (act as any).metadata = { ...((act as any).metadata || {}), unverified_venue: true };
+          act.source = 'wellness-placeholder-keep-venue';
+          repairs.push({
+            code: FAILURE_CODES.GENERIC_VENUE,
+            activityIndex: vr.activityIndex,
+            action: 'kept_ai_venue_rewrote_title',
+            before,
+            after: act.title,
+          });
+          console.log(`[Repair] WELLNESS_PLACEHOLDER: kept AI venue "${existingVenue}" — "${before}" → "${act.title}" ($0, unverified)`);
+        } else {
+          // No fallback DB, no hotel, no real venue — strip cost, mark for refinement
+          act.cost_per_person = 0;
+          if (act.cost) act.cost.amount = 0;
+          act.title = 'Spa Time — find a venue';
+          act.name = act.title;
+          act.description = "We couldn't verify a spa venue here. Tap the assistant to suggest one.";
+          (act as any).needsRefinement = true;
+          act.source = 'wellness-placeholder-stripped';
+          repairs.push({
+            code: FAILURE_CODES.GENERIC_VENUE,
+            activityIndex: vr.activityIndex,
+            action: 'stripped_wellness_placeholder',
+            before,
+            after: act.title,
+          });
+          console.warn(`[Repair] WELLNESS_PLACEHOLDER: No fallback or hotel — stripped "${before}"`);
+        }
       }
     }
 

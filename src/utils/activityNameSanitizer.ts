@@ -209,6 +209,21 @@ export function sanitizeActivityName(
           category: opts.activity.category ?? opts?.category,
         }
       : { title: sanitized, category: opts?.category };
+
+    // Legacy rescue: server wrote the literal "Spa Time — find a venue"
+    // placeholder but kept a real venue on location.name. Rewrite from the
+    // venue rather than preserving the placeholder string.
+    if (sanitized === WELLNESS_PLACEHOLDER_FALLBACK || /find a venue\s*$/i.test(sanitized)) {
+      const venue = (probe.location?.name || probe.venue_name || '').trim();
+      if (
+        venue &&
+        venue.length >= 4 &&
+        !/^(your hotel|the spa|the wellness|hotel spa)$/i.test(venue)
+      ) {
+        return `Spa Session at ${venue}`;
+      }
+    }
+
     if (isClientPlaceholderWellness(probe)) {
       return WELLNESS_PLACEHOLDER_FALLBACK;
     }
