@@ -198,7 +198,7 @@ export async function handleGenerateDay(
     }
   } catch (seedErr) {
     console.warn('[generate-day] trip_day_intents seeding failed (non-blocking):', seedErr);
-  }
+    }
 
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -450,6 +450,30 @@ export async function handleGenerateDay(
       });
       if (normalizedActivities.length < beforeFilter) {
         console.log(`[HALLUCINATION FILTER] Day ${dayNumber}: removed ${beforeFilter - normalizedActivities.length} fake restaurants`);
+      }
+    }
+
+    // ── CROSS-CITY ADDRESS FILTER — drop activities whose address points to a
+    //   different well-known city than the destination. ──
+    if (Array.isArray(normalizedActivities)) {
+      const { isCrossCityAddress } = await import('./cross-city-filter.ts');
+      const dest = (destination || '').trim();
+      if (dest) {
+        const beforeCC = normalizedActivities.length;
+        normalizedActivities = normalizedActivities.filter((act: any) => {
+          if (act.locked) return true;
+          const cat = String(act.category || '').toLowerCase();
+          if (!['dining', 'restaurant', 'food', 'sightseeing', 'attraction', 'museum', 'culture', 'shopping'].includes(cat)) return true;
+          const wrongCity = isCrossCityAddress(act, dest);
+          if (wrongCity) {
+            console.warn(`[CROSS-CITY ADDRESS] Day ${dayNumber}: removed "${act.title}" — address mentions ${wrongCity}, destination is ${dest}`);
+            return false;
+          }
+          return true;
+        });
+        if (normalizedActivities.length < beforeCC) {
+          console.warn(`[CROSS-CITY ADDRESS] Day ${dayNumber}: removed ${beforeCC - normalizedActivities.length} wrong-city activities`);
+        }
       }
     }
 

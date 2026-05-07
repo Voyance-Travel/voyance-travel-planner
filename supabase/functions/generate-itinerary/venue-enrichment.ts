@@ -249,8 +249,27 @@ export async function verifyVenueWithGooglePlaces(
         place.location.longitude
       );
       if (distKm > 50) {
+        const enrichedDisplayName = place.displayName?.text || '';
+        const overlap = computeNameOverlap(venueName, enrichedDisplayName);
+        const { extractCityFromFormattedAddress } = await import('./cross-city-filter.ts');
+        const resolvedCity = extractCityFromFormattedAddress(place.formattedAddress) || undefined;
+        // High name overlap + far away = AI hallucinated a real venue from another city.
+        if (overlap >= 0.6) {
+          console.log(
+            `[Stage 4] 🚨 [CROSS-CITY HALLUCINATION] "${venueName}" → "${enrichedDisplayName}" is ${distKm.toFixed(0)}km from ${destination} (resolved city: ${resolvedCity || 'unknown'})`
+          );
+          return {
+            isValid: false,
+            confidence: 0,
+            crossCityHallucination: true,
+            resolvedCity,
+            intendedCity: destination,
+            distanceFromDestKm: distKm,
+            sourceProvider: 'google_places',
+          };
+        }
         console.log(
-          `[Stage 4] ❌ REJECTED venue "${venueName}" → "${place.displayName?.text}" is ${distKm.toFixed(0)}km from ${destination} (max 50km)`
+          `[Stage 4] ❌ REJECTED venue "${venueName}" → "${enrichedDisplayName}" is ${distKm.toFixed(0)}km from ${destination} (max 50km)`
         );
         return null;
       }
@@ -359,6 +378,10 @@ export async function verifyVenueWithDualAI(
   const googleResult = await verifyVenueWithGooglePlaces(venueName, destination, GOOGLE_MAPS_API_KEY, hotelCoordinates);
 
   if (!googleResult || !googleResult.isValid) {
+    // Propagate cross-city verdict so caller can drop the activity entirely.
+    if (googleResult?.crossCityHallucination) {
+      return googleResult;
+    }
     return {
       isValid: false,
       confidence: 0.4,
@@ -665,7 +688,21 @@ export async function enrichActivity(
     }
 
     // Apply venue verification data (with name mismatch guard)
-    if (venueData) {
+    if (venueData?.crossCityHallucination) {
+      const cat = (activity.category || '').toLowerCase();
+      // Only auto-remove for venue-style categories where wrong-city is a hard fail.
+      const removableCats = ['dining', 'restaurant', 'food', 'sightseeing', 'attraction', 'museum', 'culture', 'shopping'];
+      if (!(activity as any).locked && removableCats.includes(cat)) {
+        (enriched as any).crossCityHallucination = true;
+        (enriched as any).removed = true;
+        (enriched as any).removalReason =
+          `Cross-city hallucination — "${activity.title}" resolved to ${venueData.resolvedCity || 'unknown city'}, expected ${venueData.intendedCity}`;
+        console.warn(`[Stage 4] 🗑 [CROSS-CITY] Marking "${activity.title}" for removal — Google placed in ${venueData.resolvedCity || 'unknown'}`);
+      } else {
+        console.warn(`[Stage 4] [CROSS-CITY] "${activity.title}" wrong-city but locked or non-removable category (${cat}) — keeping`);
+      }
+    }
+    if (venueData && !venueData.crossCityHallucination) {
       // Protect the venue name from being overwritten by a mismatched Places result
       if (venueData.confidence !== undefined && venueData.confidence < 0.5) {
         // Low-confidence match — preserve original name, still use coords/address

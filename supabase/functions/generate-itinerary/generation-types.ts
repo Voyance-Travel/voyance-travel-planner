@@ -380,6 +380,13 @@ export interface VenueVerification {
     | 'viator'
     | 'internal_db'
     | 'ai_verified';
+  /** Set when Google Places resolved the AI venue name to a high-name-overlap match
+   *  that is physically located outside the destination (>50km). The activity is a
+   *  cross-city hallucination (real venue, wrong city) and should be removed. */
+  crossCityHallucination?: boolean;
+  resolvedCity?: string;
+  intendedCity?: string;
+  distanceFromDestKm?: number;
 }
 
 export interface CachedVenue {
