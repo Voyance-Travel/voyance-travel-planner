@@ -1511,8 +1511,12 @@ async function fetchImageTiered(
       destination
     );
 
-    // Cache the result with quality score
-    await cacheImage(supabase, entityType, venueName, destination, persistentBestImage, qualityScore);
+    // Cache the result with quality score — keyed on cleanName so reads hit.
+    // Also alias under the raw venueName so legacy lookups continue to hit.
+    await cacheImage(supabase, entityType, cleanName, destination, persistentBestImage, qualityScore);
+    if (cleanName !== venueName) {
+      await cacheImage(supabase, entityType, venueName, destination, persistentBestImage, qualityScore);
+    }
 
     // Store in shared venue cache for cross-function reuse
     if (bestImage.placeId) {
