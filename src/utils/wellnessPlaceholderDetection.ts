@@ -62,12 +62,28 @@ export function hasGenericWellnessTitle(title: string | undefined | null): boole
  * Mirrors `isPlaceholderWellness` from fix-placeholders.ts (sans cityName/hotelName
  * checks the client doesn't always have).
  */
+export const HOTEL_LOGISTICS_TITLE_RE =
+  /^\s*(luggage[\s-]?drop|drop\s+bags|bag[\s-]?drop|check[\s-]?in|check[\s-]?out|checkin|checkout|freshen[\s-]?up|return\s+to|settle\s+in|hotel\s+arrival|arrive\s+at\s+(your\s+)?hotel|transfer\s+to)/i;
+
 export function isClientPlaceholderWellness(activity: WellnessActivityShape | null | undefined): boolean {
   if (!activity) return false;
   const category = (activity.category || '').toLowerCase();
   const title = (activity.title || activity.name || '').trim();
   const venue = ((activity.location?.name) || activity.venue_name || '').trim();
   const address = String(activity.location?.address || '').trim();
+
+  // Hotel logistics & transport short-circuit — these cards are never wellness,
+  // even if the hotel name happens to contain "Spa" (e.g. "JW Marriott Venice
+  // Resort & Spa", "Gritti Palace Spa", "Six Senses Spa").
+  if (
+    category === 'accommodation' ||
+    category === 'transport' ||
+    category === 'transportation' ||
+    category === 'transit' ||
+    HOTEL_LOGISTICS_TITLE_RE.test(title)
+  ) {
+    return false;
+  }
 
   const isWellnessCat = category === 'wellness' || category === 'spa';
   const isWellnessTitle = WELLNESS_KEYWORD_RE.test(title);

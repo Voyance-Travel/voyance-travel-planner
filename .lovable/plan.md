@@ -1,40 +1,45 @@
-# Fix: Day 1 starts at 12:15 AM with phantom "Return to Hotel"
+# Fix: "Spa Time — find a venue" mislabel on Luggage Drop / Check-in cards at hotels named "...Resort & Spa"
 
 ## Root cause
 
-Two cooperating bugs in `supabase/functions/generate-itinerary/pipeline/repair-day.ts`:
+The wellness placeholder detector matches on substring `\bspa\b` anywhere in the activity title. When the hotel is named e.g. "JW Marriott Venice Resort & Spa", any logistics card titled "Luggage Drop at JW Marriott Venice Resort & Spa" or "Check-in at JW Marriott Venice Resort & Spa" trips the detector. With no numeric address attached to that synthesized card, the detector returns true and the title is rewritten to the wellness fallback `"Spa Time — find a venue"`.
 
-1. **Midnight wrap in `offset()`** (line 3409–3415) uses `% 24`, so when the end-of-day "Return to Hotel" injection is computed against a late activity (e.g. nightcap ending 23:55), `offset(et, 20)` produces `00:15` — silently rolling into the next calendar day.
+This is symmetric on both sides:
 
-2. **Morning phantom strip skips Day 1 when no check-in exists.** The `MORNING PHANTOM STRIP` block (line 3468+) on Day 1 only strips hotel-accommodation cards that appear **before** the check-in index. If `day1CheckInIdx < 0`, the condition `(!isFirstDay || (day1CheckInIdx >= 0 && firstRealIdx < day1CheckInIdx))` evaluates false and the phantom 00:15 "Return to Your Hotel" survives. (Same gap also lets phantoms leak when a previous day's wrapped 00:15 return ends up serialized as the first item of the next day.)
+- **Server**: `supabase/functions/generate-itinerary/fix-placeholders.ts` → `isPlaceholderWellness()` (line ~495). Triggered by the wellness nuclear sweep / repair pass.
+- **Client**: `src/utils/wellnessPlaceholderDetection.ts` → `isClientPlaceholderWellness()`. Triggered by every UI render via `sanitizeActivityName(..., { activity })` in `EditorialItinerary`, `TripActivityCard`, `LiveActivityCard`, `BookableItemCard`, etc.
 
-Result: Day 1 = `[00:15 Return to Your Hotel] → transit → 09:45 Luggage Drop → ...`
+The Rome occurrence the user mentioned was the same: any hotel with "Spa" in its branding (very common in Europe — Gritti Palace Spa, Six Senses, Mandarin Oriental Spa, etc.) hits this.
 
-## Changes (one file)
+## Changes (two files + tests)
 
-`supabase/functions/generate-itinerary/pipeline/repair-day.ts`
+### 1. `src/utils/wellnessPlaceholderDetection.ts`
+Add a hotel-logistics short-circuit at the top of `isClientPlaceholderWellness`. Return `false` immediately when:
 
-### 1. Cap `offset()` against midnight wrap
-Change the helper used by the bookend injectors so a return-to-hotel time can never land in the next calendar day. If `tot >= 24*60`, clamp to `23:45` (and let downstream gap logic skip rather than wrap). Optionally return a sentinel that the two injection sites (line ~3633 freshen-up, line ~3686/3687 end-of-day return) check, and **abort the injection** instead of producing a 00:15 card.
+- `category` is `accommodation` or `transport` / `transportation` / `transit`, OR
+- `title` matches `/^(luggage[\s-]?drop|check[\s-]?in|check[\s-]?out|checkin|checkout|freshen[\s-]?up|return\s+to|drop\s+bags|bag[\s-]?drop|settle\s+in|hotel\s+arrival)\b/i`
 
-### 2. Strip pre-dawn hotel phantoms unconditionally
-In the `MORNING PHANTOM STRIP` block (line 3472+), add a rule that runs **regardless of Day 1 / check-in state**: if the first non-transport activity is hotel-related accommodation **and** its `startTime` is before `05:00`, strip it (and any preceding transport-to-hotel card). This is the same behavior the hotel-change branch already uses at line 3492–3494, generalized.
+These cards are never wellness — even if the venue name happens to contain "Spa".
 
-This catches:
-- Day 1 with no check-in (current bug)
-- Any day where a previous-session phantom or wrap-around return leaked to the top
-- Avoids regressing legitimate early-morning checkouts (those are caught by `isCheckinOrCheckout` exclusion already in the surrounding `if`)
+### 2. `supabase/functions/generate-itinerary/fix-placeholders.ts`
+Apply the identical short-circuit at the top of `isPlaceholderWellness()` so the server-side nuclear sweep doesn't downgrade these cards to `Spa Time at {hotel}` either.
 
-### 3. Add a regression test
-Add a fixture-style unit test under `supabase/functions/generate-itinerary/` that feeds a Day 1 starting with a `00:15 Return to Your Hotel` accommodation card and asserts the repair pass removes it. Mirrors existing test files in that folder (e.g. `ledger-check.test.ts`).
+### 3. Regression tests
+Extend `src/utils/__tests__/wellnessPlaceholderDetection.test.ts` and `supabase/functions/generate-itinerary/fix-placeholders.test.ts` with cases:
+
+- `Luggage Drop at JW Marriott Venice Resort & Spa` (category `accommodation`) → not flagged
+- `Check-in at Gritti Palace Spa` → not flagged
+- `Freshen up at Six Senses Spa` → not flagged
+- Sanity: `Spa Time` (category `wellness`) still flagged
+- Sanity: `Spa Valmont at Le Meurice` (allowlist) still passes through
 
 ## Verification
 
 1. Deploy `generate-itinerary`.
-2. Re-run the failing Venice itinerary; confirm Day 1 first item is the morning anchor (Caffè Florian / Luggage Drop), not a 00:15 hotel return.
-3. Check edge function logs for new repair codes: `stripped_morning_hotel_phantom` should fire on the regression input; no `injected_hotel_return` should produce a `00:xx` startTime.
+2. Re-render the Venice trip preview without regenerating — the client-side fix alone should immediately restore the correct titles for Luggage Drop and Check-in.
+3. Run unit tests: `bunx vitest run src/utils/__tests__/wellnessPlaceholderDetection.test.ts`.
 
 ## Out of scope
 
-- The 401/502 self-chain auth fix from the previous turn stays as-is.
-- No prompt changes — this is purely the deterministic repair pass.
+- No changes to wellness detection for genuine wellness/spa activities.
+- No prompt or generation-pipeline changes — purely the placeholder-detection guard.
