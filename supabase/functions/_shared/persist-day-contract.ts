@@ -149,7 +149,7 @@ export async function enforceContractOnDays(
   let detectCrossCityMention: ((text: string, destination: string) => string | null) | null = null;
   if (ctx.destination) {
     try {
-      const mod = await import('../generate-itinerary/cross-city-filter.ts');
+      const mod = await import('./cross-city-filter.ts');
       detectCrossCityMention = mod.detectCrossCityMention;
     } catch {
       detectCrossCityMention = null;
