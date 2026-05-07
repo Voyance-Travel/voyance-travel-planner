@@ -169,6 +169,23 @@ serve(async (req) => {
     const activitiesCents = Math.round((activitiesTotal || 0) * 100);
 
     // Initialize Stripe
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not configured");
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+
+    // Find or create Stripe customer for this user
+    let customerId: string | undefined;
+    try {
+      const customers = await stripe.customers.list({ email: userEmail!, limit: 1 });
+      if (customers.data.length > 0) {
+        customerId = customers.data[0].id;
+      }
+    } catch (e) {
+      logStep("Stripe customer lookup failed (continuing as guest checkout)", { error: e instanceof Error ? e.message : String(e) });
+    }
+
+    const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
+
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
 
     // Trip service fee (always required)
@@ -177,15 +194,11 @@ serve(async (req) => {
       quantity: 1,
     });
 
-    // Add booking totals as line items if present
     if (flightCents > 0) {
       lineItems.push({
         price_data: {
           currency: 'usd',
-          product_data: {
-            name: 'Flight Booking',
-            description: `Flights for trip to ${trip.destination}`,
-          },
+          product_data: { name: 'Flight Booking', description: `Flights for trip to ${trip.destination}` },
           unit_amount: flightCents,
         },
         quantity: 1,
@@ -196,10 +209,7 @@ serve(async (req) => {
       lineItems.push({
         price_data: {
           currency: 'usd',
-          product_data: {
-            name: 'Hotel Booking',
-            description: `Accommodation in ${trip.destination}`,
-          },
+          product_data: { name: 'Hotel Booking', description: `Accommodation in ${trip.destination}` },
           unit_amount: hotelCents,
         },
         quantity: 1,
@@ -210,129 +220,142 @@ serve(async (req) => {
       lineItems.push({
         price_data: {
           currency: 'usd',
-          product_data: {
-            name: 'Activities & Experiences',
-            description: `Curated activities for your trip`,
-          },
+          product_data: { name: 'Activities & Experiences', description: `Curated activities for your trip` },
           unit_amount: activitiesCents,
         },
         quantity: 1,
       });
     }
 
-    // Create checkout session
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      customer_email: customerId ? undefined : userEmail,
-      line_items: lineItems,
-      mode: "payment",
-      success_url: `${origin}/trips/${tripId}/confirmation?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/planner/booking?tripId=${tripId}&canceled=true`,
-      metadata: {
-        user_id: userId,
-        trip_id: tripId,
-        trip_destination: trip.destination,
-      },
-    });
+    let stripeSessionId: string | null = null;
+    let insertedRowIds: string[] = [];
 
-    logStep("Checkout session created", { sessionId: session.id });
-
-    // Generate booking reference (VOY-XXXXXXXX format)
-    const bookingReference = `VOY-${tripId.slice(0, 8).toUpperCase()}`;
-
-    // Update trip status to pending payment with booking reference
-    await serviceClient
-      .from('trips')
-      .update({ 
-        status: 'planning',
+    try {
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        customer_email: customerId ? undefined : userEmail,
+        line_items: lineItems,
+        mode: "payment",
+        success_url: `${origin}/trips/${tripId}/confirmation?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${origin}/planner/booking?tripId=${tripId}&canceled=true`,
         metadata: {
-          ...(trip.metadata as object || {}),
-          checkout_session_id: session.id,
-          payment_status: 'pending',
-          booking_reference: bookingReference,
+          user_id: userId,
+          trip_id: tripId,
+          trip_destination: trip.destination,
         },
-      })
-      .eq('id', tripId);
-
-    // Create pending payment records in trip_payments for each item
-    const paymentRecords = [];
-    
-    // Flight payment record
-    if (flightCents > 0 && trip.flight_selection) {
-      const flightData = trip.flight_selection as any;
-      paymentRecords.push({
-        trip_id: tripId,
-        user_id: userId,
-        item_type: 'flight',
-        item_id: flightData?.id || `flight-${tripId.slice(0, 8)}`,
-        item_name: `Flights to ${trip.destination}`,
-        amount_cents: flightCents,
-        currency: 'USD',
-        quantity: 1,
-        status: 'pending',
-        stripe_checkout_session_id: session.id,
-        external_provider: 'amadeus',
       });
-    }
+      stripeSessionId = session.id;
+      logStep("Checkout session created", { sessionId: session.id });
 
-    // Hotel payment record
-    if (hotelCents > 0 && trip.hotel_selection) {
-      const hotelData = trip.hotel_selection as any;
-      paymentRecords.push({
-        trip_id: tripId,
-        user_id: userId,
-        item_type: 'hotel',
-        item_id: hotelData?.hotelId || hotelData?.id || `hotel-${tripId.slice(0, 8)}`,
-        item_name: hotelData?.name || `Hotel in ${trip.destination}`,
-        amount_cents: hotelCents,
-        currency: 'USD',
-        quantity: 1,
-        status: 'pending',
-        stripe_checkout_session_id: session.id,
-        external_provider: 'amadeus',
-      });
-    }
+      // Generate booking reference (VOY-XXXXXXXX format)
+      const bookingReference = `VOY-${tripId.slice(0, 8).toUpperCase()}`;
 
-    // Activities payment record (aggregated)
-    if (activitiesCents > 0) {
-      paymentRecords.push({
-        trip_id: tripId,
-        user_id: userId,
-        item_type: 'activity',
-        item_id: `activities-${tripId.slice(0, 8)}`,
-        item_name: `Activities & Experiences`,
-        amount_cents: activitiesCents,
-        currency: 'USD',
-        quantity: 1,
-        status: 'pending',
-        stripe_checkout_session_id: session.id,
-      });
-    }
+      // Update trip status to pending payment with booking reference
+      await serviceClient
+        .from('trips')
+        .update({
+          status: 'planning',
+          metadata: {
+            ...(trip.metadata as object || {}),
+            checkout_session_id: session.id,
+            payment_status: 'pending',
+            booking_reference: bookingReference,
+          },
+        })
+        .eq('id', tripId);
 
-    // Insert payment records (upsert to handle retries)
-    if (paymentRecords.length > 0) {
-      const { error: paymentError } = await serviceClient
-        .from('trip_payments')
-        .upsert(paymentRecords, { 
-          onConflict: 'trip_id,item_type,item_id',
-          ignoreDuplicates: false 
+      // Create pending payment records in trip_payments for each item
+      const paymentRecords: any[] = [];
+
+      if (flightCents > 0 && trip.flight_selection) {
+        const flightData = trip.flight_selection as any;
+        paymentRecords.push({
+          trip_id: tripId,
+          user_id: userId,
+          item_type: 'flight',
+          item_id: flightData?.id || `flight-${tripId.slice(0, 8)}`,
+          item_name: `Flights to ${trip.destination}`,
+          amount_cents: flightCents,
+          currency: 'USD',
+          quantity: 1,
+          status: 'pending',
+          stripe_checkout_session_id: session.id,
+          external_provider: 'amadeus',
         });
-      
-      if (paymentError) {
-        logStep("Warning: Failed to create payment records", { error: paymentError.message });
-      } else {
-        logStep("Payment records created", { count: paymentRecords.length });
       }
-    }
 
-    return new Response(JSON.stringify({ 
-      url: session.url, 
-      sessionId: session.id,
-      bookingReference,
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+      if (hotelCents > 0 && trip.hotel_selection) {
+        const hotelData = trip.hotel_selection as any;
+        paymentRecords.push({
+          trip_id: tripId,
+          user_id: userId,
+          item_type: 'hotel',
+          item_id: hotelData?.hotelId || hotelData?.id || `hotel-${tripId.slice(0, 8)}`,
+          item_name: hotelData?.name || `Hotel in ${trip.destination}`,
+          amount_cents: hotelCents,
+          currency: 'USD',
+          quantity: 1,
+          status: 'pending',
+          stripe_checkout_session_id: session.id,
+          external_provider: 'amadeus',
+        });
+      }
+
+      if (activitiesCents > 0) {
+        paymentRecords.push({
+          trip_id: tripId,
+          user_id: userId,
+          item_type: 'activity',
+          item_id: `activities-${tripId.slice(0, 8)}`,
+          item_name: `Activities & Experiences`,
+          amount_cents: activitiesCents,
+          currency: 'USD',
+          quantity: 1,
+          status: 'pending',
+          stripe_checkout_session_id: session.id,
+        });
+      }
+
+      if (paymentRecords.length > 0) {
+        const { data: inserted, error: paymentError } = await serviceClient
+          .from('trip_payments')
+          .upsert(paymentRecords, {
+            onConflict: 'trip_id,item_type,item_id',
+            ignoreDuplicates: false,
+          })
+          .select('id');
+
+        if (paymentError) {
+          logStep("Payment record write failed — expiring Stripe session to prevent stuck reconciliation", { error: paymentError.message });
+          try { await stripe.checkout.sessions.expire(session.id); } catch (_) {}
+          return new Response(JSON.stringify({ error: "Could not record booking. Please try again.", code: "PAYMENT_RECORD_FAILED" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500,
+          });
+        }
+        insertedRowIds = (inserted || []).map((r: any) => r.id);
+        logStep("Payment records created", { count: insertedRowIds.length });
+      }
+
+      return new Response(JSON.stringify({
+        url: session.url,
+        sessionId: session.id,
+        bookingReference,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    } catch (innerErr) {
+      const innerMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+      logStep("Inner ERROR — finalizing failed payments", { message: innerMsg, stripeSessionId, count: insertedRowIds.length });
+      if (stripeSessionId) {
+        await serviceClient
+          .from('trip_payments')
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .eq('stripe_checkout_session_id', stripeSessionId)
+          .in('status', ['pending', 'processing']);
+      }
+      throw innerErr;
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR", { message: errorMessage });

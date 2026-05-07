@@ -230,9 +230,16 @@ export function PaymentsTab({
     return merged;
   }, [rawTripMembers, collaborators, ownerId, ownerName, tripId, travelers]);
 
-  // Fetch payments — with optional delay for DB write consistency
+  // Fetch payments — with optional delay for DB write consistency. Also runs a
+  // best-effort RPC to expire stale pending/processing rows older than 1h with
+  // a Stripe session but no completion, so the UI never stays "Reconciling…".
   const fetchPayments = useCallback(async (delayMs = 0) => {
     if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+    try {
+      await supabase.rpc('expire_stale_trip_payments', { p_trip_id: tripId, p_max_age_minutes: 60 });
+    } catch {
+      // Non-fatal — proceed to fetch
+    }
     const result = await getTripPayments(tripId);
     if (result.success) {
       setPayments(result.payments || []);

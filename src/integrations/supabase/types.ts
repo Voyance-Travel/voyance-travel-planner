@@ -9652,6 +9652,10 @@ export type Database = {
         Args: { p_cost: number; p_user_id: string }
         Returns: Json
       }
+      expire_stale_trip_payments: {
+        Args: { p_max_age_minutes?: number; p_trip_id?: string }
+        Returns: Json
+      }
       fulfill_credit_purchase: {
         Args: {
           p_amount_cents: number
