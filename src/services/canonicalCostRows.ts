@@ -149,6 +149,10 @@ export function resolveCanonicalCostRows({
       }
     }
 
+    // Walking legs are always free, regardless of stored category. Skip
+    // entirely so the header total agrees with Payments.
+    if (lookup && isWalkingLeg({ title: lookup.name })) continue;
+
     let cents = rowCentsFor(row);
 
     // $0 JSON rescue (paid categories only)
