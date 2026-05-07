@@ -2649,14 +2649,14 @@ export async function earlySaveItinerary(supabase: any, tripId: string, days: St
       }
     };
 
-    const { error } = await supabase
-      .from('trips')
-      .update({
-        itinerary_data: itineraryData,
+    const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
+    const { error } = await persistTripItinerary(supabase, tripId, itineraryData, {
+      label: 'early-save',
+      extraUpdate: {
         itinerary_status: 'generating',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', tripId);
+        updated_at: new Date().toISOString(),
+      },
+    });
 
     if (error) {
       console.error('[Stage 3] Early save failed:', error);
@@ -3058,7 +3058,6 @@ export async function finalSaveItinerary(
     }
 
     const updatePayload: Record<string, unknown> = {
-      itinerary_data: frontendReadyData,
       itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',
       dna_snapshot: dnaSnapshot,
       updated_at: new Date().toISOString(),
@@ -3075,10 +3074,12 @@ export async function finalSaveItinerary(
       updatePayload.end_date = computedEndDate;
     }
 
-    const { error } = await supabase
-      .from('trips')
-      .update(updatePayload)
-      .eq('id', tripId);
+    const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
+    const { error } = await persistTripItinerary(supabase, tripId, frontendReadyData, {
+      destination: context.destination ?? null,
+      label: 'final-save',
+      extraUpdate: updatePayload,
+    });
 
     if (error) {
       console.error('[Stage 6] Final save failed:', error);

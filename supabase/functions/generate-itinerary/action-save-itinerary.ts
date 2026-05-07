@@ -739,32 +739,11 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // Kill any "45:00:00"-shaped duration the AI / manual edits / pasted
   // data may have left behind. Without this, raw JSON carries clock-style
   // duration strings even though the UI hides them via render-time coerce.
-  try {
-    const { normalizeDurationsInDays } = await import('./_shared/duration-format.ts');
-    normalizeDurationsInDays(itineraryDays);
-    (itinerary as any).days = itineraryDays;
-  } catch (durErr) {
-    console.warn('[save-itinerary] duration normalization failed (non-blocking):', durErr);
-  }
-
-  // ── STEP 2.99: PERSIST-DAY CONTRACT ─────────────────────────────
-  // Single boundary that filters dirty rows BEFORE they hit the DB:
-  //   - ghost rows (00:00-04:59 hotel/wellness/logistics, non-locked)
-  //   - placeholder names ("find a venue", "find a local spot", etc.)
-  //   - prompt artifacts ("(slot)", "(aesthetic slot)")
-  // Locked / user / manual / extracted / pinned activities pass through.
-  try {
-    const { enforceContractOnDays } = await import('../_shared/persist-day-contract.ts');
-    await enforceContractOnDays(itineraryDays, {
-      destination: (currentTrip as any)?.destination ?? null,
-    });
-    (itinerary as any).days = itineraryDays;
-  } catch (contractErr) {
-    console.warn('[save-itinerary] persist-day contract failed (non-blocking):', contractErr);
-  }
-
-  const updatePayload: Record<string, any> = {
-    itinerary_data: itinerary,
+  // Duration normalize + persist-day contract + write all happen inside
+  // the shared persistTripItinerary helper so every write path enforces the
+  // same boundary contract.
+  const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
+  const extraUpdate: Record<string, any> = {
     itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',
     updated_at: new Date().toISOString(),
     ...(emptyItineraryDetected && {
@@ -775,11 +754,11 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       },
     }),
   };
-
-  const { error } = await supabase
-    .from('trips')
-    .update(updatePayload)
-    .eq('id', tripId);
+  const { error } = await persistTripItinerary(supabase, tripId, itinerary, {
+    destination: (currentTrip as any)?.destination ?? null,
+    extraUpdate,
+    label: 'save-itinerary',
+  });
 
   if (error) {
     console.error("[save-itinerary] Failed:", error);

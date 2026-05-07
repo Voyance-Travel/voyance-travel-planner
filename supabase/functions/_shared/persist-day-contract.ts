@@ -163,9 +163,17 @@ export async function enforceContractOnDays(
     });
     let cleaned = activities;
 
+    // Per-day city wins over trip-level destination so multi-city trips
+    // (e.g. Florence day in a Venice trip) filter against the right city.
+    const perDayDest =
+      (day as any)?.cityName ||
+      (day as any)?.dayDestination ||
+      (day as any)?.city ||
+      ctx.destination;
+
     // Cross-city sweep on what survives placeholder/ghost contract.
-    if (detectCrossCityMention && ctx.destination) {
-      const dest = ctx.destination;
+    if (detectCrossCityMention && perDayDest) {
+      const dest = perDayDest;
       cleaned = cleaned.filter((a: any) => {
         if (isLockedRow(a)) return true;
         const cat = String(a?.category || a?.type || '').toLowerCase();
