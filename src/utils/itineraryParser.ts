@@ -29,6 +29,19 @@ function sanitizeDisplayString(value: string | undefined | null): string | undef
     .replace(/(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+['"\u2018\u2019\u201C\u201D][^'"\u2018\u2019\u201C\u201D]{2,40}['"\u2018\u2019\u201C\u201D]\s+(?:interest|preference|request|need|requirement|slot|moment|stop|block)\b[^.]*\.?\s*/gi, '')
     .replace(/\s*\(\s*(?:[A-Z][A-Z\s/&-]{1,30}\s+)?slot\s*\)\s*/gi, ' ')
     .replace(/\s*\(\s*(?:AESTHETIC|NARRATIVE|MOOD|TONE|VIBE|THEME|ARCHETYPE|PERSONA|CONTEXT|FULFILLS?|SLOT)(?:\s+[A-Z][A-Z\s/&-]{0,30})?\s*\)\s*/g, ' ')
+    // Quoted-archetype clauses anywhere: "...providing the 'Deep Context' required..."
+    .replace(/\b(?:providing|satisfying|fulfilling|matching|delivering|offering|reflecting|catering to|aligning with|aligns with|tailored to|in line with|required for)\s+(?:the\s+)?['"\u2018\u201C][^'"\u2019\u201D]{2,40}['"\u2019\u201D]\s+(?:interest|preference|requirement|required|slot|need|moment|context|arche\w*|profile|trait|fit)[^.]*\.?/gi, '')
+    // Bare Fulfills/Satisfies/Addresses sentences (no leading "This")
+    .replace(/(?:^|[.!?]\s+)(?:Fulfills?|Satisfies|Addresses|Specifically\s+(?:fulfills?|satisfies|addresses))\b[^.]*\b(?:requirement|interest|slot|block|moment|need|preference|profile|arche\w*)\b[^.]*\.?/gi, ' ')
+    // "As a 'Label' arche..." framing
+    .replace(/\bAs\s+a\s+['"\u2018\u201C][^'"\u2019\u201D]{2,40}['"\u2019\u201D]\s+arche\w*[^.]*\.?/gi, '')
+    // "provides/offers/delivers [the] deep|rich|essential [historical] context..."
+    .replace(/\b(?:provid(?:es|ing)|offer(?:s|ing)|deliver(?:s|ing))\s+(?:the\s+)?(?:deep|rich|essential)\s+(?:historical\s+)?context[^.]*\.?/gi, '')
+    .replace(/\bfor\s+this\s+traveler\s+profile\b\.?/gi, '')
+    // Orphan fragments left by prior strippers: "This is ;" / "is ;" / repeated punctuation
+    .replace(/\bThis\s+is\s*[;,.]\s*/gi, '')
+    .replace(/\bis\s*;\s*/gi, '')
+    .replace(/[.,;:]{2,}/g, '.')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
     .replace(/\s{2,}/g, ' ')
