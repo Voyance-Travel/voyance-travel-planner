@@ -210,11 +210,31 @@ export function sanitizeActivityName(
         }
       : { title: sanitized, category: opts?.category };
 
+    // Hotel / logistics short-circuit — these rows are never wellness even if
+    // the title accidentally carries the legacy placeholder string. Strip the
+    // "— find a venue" suffix and return the venue/hotel-oriented label so we
+    // never surface "Spa Time — find a venue" on a Return-to-Hotel / check-in
+    // / transfer / accommodation card.
+    const probeCat = String(probe.category || '').toLowerCase();
+    const probeVenue = String(probe.location?.name || probe.venue_name || '').trim();
+    const HOTEL_VENUE_RE = /\b(hotel|resort|inn|lodge|guesthouse|hostel|palazzo|palace|hyatt|marriott|hilton|ritz|sheraton|westin|four\s+seasons|aman|six\s+senses|st\.?\s+regis|park\s+hyatt|grand\s+hyatt|jw\s+marriott)\b/i;
+    const LOGISTICS_TITLE_RE = /^\s*(luggage[\s-]?drop|drop\s+bags|bag[\s-]?drop|check[\s-]?in|check[\s-]?out|checkin|checkout|freshen[\s-]?up|return\s+to|settle\s+in|hotel\s+arrival|arrive\s+at\s+(your\s+)?hotel|transfer\s+to)/i;
+    const isHotelOrLogistics =
+      ['accommodation', 'stay', 'transport', 'transportation', 'transit', 'logistics', 'flight'].includes(probeCat) ||
+      LOGISTICS_TITLE_RE.test(sanitized) ||
+      HOTEL_VENUE_RE.test(probeVenue);
+
+    if (isHotelOrLogistics) {
+      // Drop any leaked wellness placeholder suffix
+      const cleaned = sanitized.replace(/\s*[—–-]\s*find a venue\s*$/i, '').trim();
+      return cleaned || (probeVenue ? `Return to ${probeVenue}` : 'Activity');
+    }
+
     // Legacy rescue: server wrote the literal "Spa Time — find a venue"
     // placeholder but kept a real venue on location.name. Rewrite from the
     // venue rather than preserving the placeholder string.
     if (sanitized === WELLNESS_PLACEHOLDER_FALLBACK || /find a venue\s*$/i.test(sanitized)) {
-      const venue = (probe.location?.name || probe.venue_name || '').trim();
+      const venue = probeVenue;
       if (
         venue &&
         venue.length >= 4 &&
