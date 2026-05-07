@@ -6,6 +6,7 @@
  */
 
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { isWalkingLeg } from "../_shared/walking-leg.ts";
 
 import type {
   MultiCityDayInfo,
