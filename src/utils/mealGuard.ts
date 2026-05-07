@@ -290,6 +290,11 @@ export function enforceItineraryMealCompliance(
       );
     }
 
+    day.activities = sortByTime(day.activities);
+    details.push({ dayNumber: day.dayNumber, injected: missing });
+    totalInjected += missing.length;
+  }
+
   if (totalInjected > 0) {
     console.warn(`[MealGuard-Client] Injected ${totalInjected} generic meals across ${details.length} days`);
   }
@@ -340,7 +345,13 @@ export async function enforceItineraryMealComplianceAsync(
 
     for (const mealType of missing) {
       const venue = realVenues[mealType];
-      if (venue) {
+      // Cross-city guard: ignore verified_venues hits whose address points
+      // at a different city than the destination.
+      const isCrossCity = venue && (
+        !!detectCrossCityMention(venue.address || '', dayDestination) ||
+        !!detectCrossCityMention(venue.name || '', dayDestination)
+      );
+      if (venue && !isCrossCity) {
         usedNames.add(venue.name.toLowerCase());
         day.activities.push(
           buildFallbackActivity(
@@ -355,9 +366,8 @@ export async function enforceItineraryMealComplianceAsync(
         continue;
       }
 
-      // GUARANTEED: city → recycled → regional → global emergency. Always real.
       const real = resolveAnyMealFallback(dayDestination, mealType, usedNames);
-      usedNames.add(real.name.toLowerCase());
+      if (!real.needsVenuePick) usedNames.add(real.name.toLowerCase());
       day.activities.push(
         buildFallbackActivity(
           mealType,
@@ -366,6 +376,7 @@ export async function enforceItineraryMealComplianceAsync(
           real.description,
           false,
           real.price,
+          real.needsVenuePick,
         ),
       );
     }
