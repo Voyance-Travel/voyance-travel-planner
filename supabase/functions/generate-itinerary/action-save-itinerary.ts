@@ -13,6 +13,7 @@ import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
 import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../_shared/prompt-leak-scrub.ts';
+import { stripVenueMealSuffix, VENUE_MEAL_SUFFIX_RE } from '../_shared/venue-name.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
@@ -142,15 +143,32 @@ function normalizeDays(days: any[], tripStartDate: string | null): any[] {
     // from description/tips/notes before the JSON snapshot lands in DB.
     let _bodyLeakSwept = 0;
     let _titleLeakSwept = 0;
+    let _mealSuffixSwept = 0;
     for (const a of activities) {
       if (scrubBodyPromptLeaks(a).changed) _bodyLeakSwept++;
       if (scrubTitleLeaks(a).changed) _titleLeakSwept++;
+      // Strip "(Breakfast)/(Lunch)/(Dinner)" suffix from title/name/location.name
+      for (const k of ['title', 'name'] as const) {
+        if (typeof a?.[k] === 'string' && VENUE_MEAL_SUFFIX_RE.test(a[k])) {
+          a[k] = stripVenueMealSuffix(a[k]);
+          _mealSuffixSwept++;
+        }
+      }
+      const loc = (a as any)?.location;
+      if (loc && typeof loc === 'object' && typeof loc.name === 'string'
+          && VENUE_MEAL_SUFFIX_RE.test(loc.name)) {
+        loc.name = stripVenueMealSuffix(loc.name);
+        _mealSuffixSwept++;
+      }
     }
     if (_bodyLeakSwept > 0) {
       console.log(`[SAVE] body_prompt_leak_scrubbed day=${dayNumber} count=${_bodyLeakSwept}`);
     }
     if (_titleLeakSwept > 0) {
       console.log(`[SAVE] title_prompt_leak_scrubbed day=${dayNumber} count=${_titleLeakSwept}`);
+    }
+    if (_mealSuffixSwept > 0) {
+      console.log(`[SAVE] venue_meal_suffix_stripped day=${dayNumber} count=${_mealSuffixSwept}`);
     }
     return { ...day, dayNumber, date, activities };
   });

@@ -27,6 +27,13 @@ const TRAILING_OR_QUALIFIER_RE = /\s+or\s+(?:high.end|similar|equivalent|compara
 // Strip "slot: " prefix from descriptions
 const SLOT_PREFIX_RE = /^slot:\s*/i;
 
+// Strip trailing meal-type suffix on venue/activity names (e.g.
+// "Sagra Rooftop Restaurant (Breakfast)" → "Sagra Rooftop Restaurant").
+// Mirrors supabase/functions/_shared/venue-name.ts. Only meal-type words
+// are removed; legit parentheticals like "(closed Sundays)" are preserved.
+// See mem://constraints/itinerary/venue-meal-suffix-strip
+const VENUE_MEAL_SUFFIX_RE = /\s*\((?:breakfast|lunch|dinner|brunch)\)\s*$/i;
+
 // Strip "Fulfills the ... slot/requirement." sentences
 const FULFILLS_RE = /\.?\s*Fulfills the\s+[^.]*?(?:slot|requirement|block)\.\s*/gi;
 
@@ -111,6 +118,9 @@ export function sanitizeActivityName(
   // here (NOT through sanitizeText), so this is the UI safety net for tokens
   // that survived the edge/DB scrubbers.
   sanitized = stripPromptArtifacts(sanitized);
+
+  // Strip trailing meal-type suffix baked into legacy venue names.
+  sanitized = sanitized.replace(VENUE_MEAL_SUFFIX_RE, '').trim();
 
   // Strip prompt-template label leaks ("Reservation Urgency: .", "Booking Window: 1 week.")
   // when they end up in card titles. Mirrors the server-side scrubTitleLeaks.
@@ -358,6 +368,7 @@ export function sanitizeActivityText(text: string | undefined | null): string {
     .replace(PROMPT_ARTIFACT_REPLACE_RE, '')
     .replace(RESERVATION_LABEL_LEAK_RE, '')
     .replace(ORPHAN_EMPTY_LABEL_RE, '')
+    .replace(VENUE_MEAL_SUFFIX_RE, '')
     .replace(FULFILLS_RE, ' ')
     .replace(META_DISTANCE_COST_RE, '')
     .replace(INLINE_META_RE, '')
