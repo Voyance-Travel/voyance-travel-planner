@@ -466,19 +466,35 @@ export function PaymentsTab({
     miscItems.reduce((s, i) => s + i.amountCents, 0);
   const snapshotReady =
     !financialSnapshot.loading && !loading && !activityCostsFetching;
-  if (
-    snapshotReady &&
-    estimatedTotal > 0 &&
-    Math.abs(bucketSumCents - estimatedTotal) > 200 &&
-    import.meta.env.DEV
-  ) {
-    // Dev-only assertion. Production users see one consistent number; if this
-    // ever fires it's a unification regression, not a "reconcile" prompt.
-    console.assert(
-      false,
-      '[PaymentsTab] canonical totals diverged',
-      { bucketSumCents, estimatedTotal, driftCents: bucketSumCents - estimatedTotal }
-    );
+  // Structured drift telemetry — fires once per (tripId, divergencePath) so we
+  // can attribute live drift reports without spamming the console. Classifies
+  // the mismatch as Path A (snapshot ≠ payable items header), Path B (bucket
+  // sum ≠ headline), or Path C (orphan paid drift).
+  const driftReportedRef = useRef<string | null>(null);
+  if (snapshotReady && estimatedTotal > 0) {
+    const bucketDrift = Math.abs(bucketSumCents - estimatedTotal);
+    const payableDrift = Math.abs(payableTotalCents - financialSnapshot.tripTotalCents);
+    const paidDrift = Math.abs((totals.paid || 0) - financialSnapshot.paidCents);
+    let path: 'A' | 'B' | 'C' | 'none' = 'none';
+    if (payableDrift > 200) path = 'A';
+    else if (bucketDrift > 200) path = 'B';
+    else if (paidDrift > 200) path = 'C';
+    if (path !== 'none') {
+      const fingerprint = `${tripId}|${path}|${estimatedTotal}|${bucketSumCents}|${paidAmount}`;
+      if (driftReportedRef.current !== fingerprint) {
+        driftReportedRef.current = fingerprint;
+        console.warn('[PaymentsTab] divergence', {
+          path,
+          snapshotTotal: financialSnapshot.tripTotalCents,
+          bucketSum: bucketSumCents,
+          payableTotal: payableTotalCents,
+          tripPaymentsPaidSum: totals.paid,
+          snapshotPaidCents: financialSnapshot.paidCents,
+          reserveCents,
+          tripId,
+        });
+      }
+    }
   }
 
   /**
