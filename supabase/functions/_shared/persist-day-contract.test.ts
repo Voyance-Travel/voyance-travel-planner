@@ -88,3 +88,12 @@ Deno.test('drops placeholder leaked into venue_name field (not title)', () => {
   assertEquals(activities.length, 0);
   assertEquals(drops[0].reason, 'placeholder-name');
 });
+
+Deno.test('drops prompt artifact leaked into description (not title)', () => {
+  const acts = [
+    { title: 'Dinner at Osteria', description: 'A relaxed evening (AESTHETIC slot) with locals', startTime: '19:30', category: 'dining' },
+  ];
+  const { activities, drops } = enforcePersistDayContract(acts);
+  assertEquals(activities.length, 0);
+  assertEquals(drops[0].reason, 'prompt-artifact');
+});
