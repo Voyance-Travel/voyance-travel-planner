@@ -30,6 +30,22 @@ const SLOT_PREFIX_RE = /^slot:\s*/i;
 // Strip "Fulfills the ... slot/requirement." sentences
 const FULFILLS_RE = /\.?\s*Fulfills the\s+[^.]*?(?:slot|requirement|block)\.\s*/gi;
 
+// Prompt-artifact tokens leaked from the generator: "(slot)", "(AESTHETIC slot)",
+// "(<TAG> placeholder)", AND bare ALLCAPS-with-underscore tokens like
+// "(FLEX_WINDOW)", "(INTEREST_SLOT)", "(NARRATIVE_MOOD)", "(DEEP_CONTEXT)".
+// Underscore is required on the bare alternative so legit acronyms like
+// "(NYC)" / "(USA)" are NOT stripped. See mem://technical/itinerary/stateful-regex-strip-bug.
+// IMPORTANT: keep two regexes — non-global for `.test()`, /g for `.replace()`.
+const PROMPT_ARTIFACT_TEST_RE =
+  /\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)/i;
+const PROMPT_ARTIFACT_REPLACE_RE =
+  /\s*\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)/gi;
+
+function stripPromptArtifacts(input: string): string {
+  if (!input || !PROMPT_ARTIFACT_TEST_RE.test(input)) return input;
+  return input.replace(PROMPT_ARTIFACT_REPLACE_RE, '').replace(/\s{2,}/g, ' ').trim();
+}
+
 // Strip distance/cost metadata in tips: "(Level 39 of Hotel, ~0.1km, ~$40)"
 const META_DISTANCE_COST_RE = /\((?:[^)]*?~\d+(?:\.\d+)?(?:km|mi|m)\b[^)]*?)\)/gi;
 const INLINE_META_RE = /,?\s*~\d+(?:\.\d+)?(?:km|mi|m)\b,?\s*~?\$?\d+/gi;
