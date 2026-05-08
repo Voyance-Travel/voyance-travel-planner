@@ -1242,6 +1242,16 @@ export async function handleGenerateDay(
         try {
           const { fillAfternoonDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
           const lockedIdSet = new Set<string>((lockedActivities as any[]).map((l: any) => l.id));
+          // Last-day upper bound: departure − buffer (180m flight / 120m train)
+          const _gdDepRaw = (flightContext as any)?.returnDepartureTime24 as string | undefined;
+          const _gdLatestMins = isLastDay && _gdDepRaw
+            ? (() => {
+                const m = _gdDepRaw.match(/(\d{1,2}):(\d{2})/);
+                if (!m) return undefined;
+                const isTrain = _departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(_departureTransportType);
+                return parseInt(m[1]) * 60 + parseInt(m[2]) - (isTrain ? 120 : 180);
+              })()
+            : undefined;
           const filled = await fillAfternoonDeadGaps(normalizedActivities, {
             destination: resolvedDestination || destination || '',
             isFirstDay,
@@ -1252,20 +1262,28 @@ export async function handleGenerateDay(
             budgetTier: budgetTier || 'standard',
             tripCurrency: 'USD',
             lockedIds: lockedIdSet,
+            latestUsableMins: _gdLatestMins,
           });
           if (filled.inserted.length > 0) {
-            console.log(`[pipeline] Day ${dayNumber}: auto-filled ${filled.inserted.length} afternoon dead gap(s)`);
+            console.log(`[pipeline] Day ${dayNumber}: auto-filled ${filled.inserted.length} afternoon dead gap(s)${isLastDay ? ' (last-day mode)' : ''}`);
             normalizedActivities = filled.activities;
             generatedDay.activities = normalizedActivities;
           }
           // Density observability — flag any remaining ≥3h afternoon gap.
           const { reportRemainingAfternoonDeadGap } = await import('./pipeline/fill-dead-gaps.ts');
-          const remaining = reportRemainingAfternoonDeadGap(normalizedActivities);
+          const remaining = reportRemainingAfternoonDeadGap(normalizedActivities, _gdLatestMins);
           if (remaining >= 180) {
-            console.warn(`[QUALITY] Day ${dayNumber} still has ${remaining}m unplanned 12:00-19:00 after all passes — gap-fill exhausted`);
-            generatedDay.metadata = generatedDay.metadata || {};
-            generatedDay.metadata.quality = generatedDay.metadata.quality || {};
-            generatedDay.metadata.quality.unfilled_dead_gap_minutes = remaining;
+            if (isLastDay) {
+              console.warn(`[LAST_DAY_GAP] day=${dayNumber} gap=${remaining}m bound=${_gdLatestMins ?? 'none'} — gap-fill exhausted before departure window`);
+              generatedDay.metadata = generatedDay.metadata || {};
+              generatedDay.metadata.quality = generatedDay.metadata.quality || {};
+              generatedDay.metadata.quality.unfilled_departure_day_gap_minutes = remaining;
+            } else {
+              console.warn(`[QUALITY] Day ${dayNumber} still has ${remaining}m unplanned 12:00-19:00 after all passes — gap-fill exhausted`);
+              generatedDay.metadata = generatedDay.metadata || {};
+              generatedDay.metadata.quality = generatedDay.metadata.quality || {};
+              generatedDay.metadata.quality.unfilled_dead_gap_minutes = remaining;
+            }
           }
         } catch (gapErr) {
           console.warn('[pipeline] Dead-gap auto-fill failed (non-blocking):', gapErr);
@@ -1457,7 +1475,7 @@ export async function handleGenerateDay(
             let { data: venues } = await supabase
               .from('verified_venues')
               .select('name, address, category')
-              .ilike('city', `%${destQuery}%`)
+              .ilike('destination', `%${destQuery}%`)
               .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
               .limit(30);
             if ((!venues || venues.length === 0) && destQuery.includes(',')) {
@@ -1465,7 +1483,7 @@ export async function handleGenerateDay(
               const broader = await supabase
                 .from('verified_venues')
                 .select('name, address, category')
-                .ilike('city', `%${cityOnly}%`)
+                .ilike('destination', `%${cityOnly}%`)
                 .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
                 .limit(30);
               venues = broader.data;

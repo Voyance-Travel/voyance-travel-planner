@@ -43,6 +43,14 @@ export interface FillDeadGapsOptions {
   lockedIds?: Set<string>;
   /** Disable when in build-myself / manual mode */
   enabled?: boolean;
+  /**
+   * Last-day upper bound (HH:MM minutes-from-midnight).
+   * Typically `departureTime − buffer` (180m flight / 120m train) or hotel
+   * checkout. When set on a last day, dead-gap fill runs with the upper bound
+   * = min(AFTERNOON_END_MIN, latestUsableMins). When omitted on a last day,
+   * dead-gap fill is skipped (legacy behaviour).
+   */
+  latestUsableMins?: number;
 }
 
 export interface FillDeadGapsResult {
@@ -59,10 +67,21 @@ export async function fillAfternoonDeadGaps(
   opts: FillDeadGapsOptions,
 ): Promise<FillDeadGapsResult> {
   if (opts.enabled === false) return { activities: [...activities], inserted: [] };
-  if (opts.isFirstDay || opts.isLastDay) return { activities: [...activities], inserted: [] };
+  // Arrival day: skip (handled by dedicated arrival-day pacing).
+  if (opts.isFirstDay) return { activities: [...activities], inserted: [] };
+  // Departure day: only run when caller provided a usable upper bound,
+  // otherwise we don't know how late we can schedule activities.
+  if (opts.isLastDay && (opts.latestUsableMins === undefined || opts.latestUsableMins <= AFTERNOON_START_MIN)) {
+    return { activities: [...activities], inserted: [] };
+  }
   if (!Array.isArray(activities) || activities.length < 2) {
     return { activities: [...activities], inserted: [] };
   }
+
+  // Effective upper bound for this day's afternoon window.
+  const effectiveAfternoonEnd = opts.isLastDay && opts.latestUsableMins !== undefined
+    ? Math.min(AFTERNOON_END_MIN, opts.latestUsableMins)
+    : AFTERNOON_END_MIN;
 
   // Sort a copy by startTime for gap detection
   const work = [...activities].sort((a, b) => {
@@ -81,7 +100,13 @@ export async function fillAfternoonDeadGaps(
     const curr = work[i];
     const next = work[i + 1];
 
-    if (isLogisticsActivity(curr) || isLogisticsActivity(next)) {
+    // On last-day, the gap-end neighbour is typically a logistics card
+    // (Hotel Checkout / Airport Transfer). We still want to fill the gap
+    // BEFORE it. So allow logistics-next on last day; only block when curr
+    // is logistics or when the next item is locked.
+    const currIsLogistics = isLogisticsActivity(curr);
+    const nextIsLogistics = isLogisticsActivity(next);
+    if (currIsLogistics || (nextIsLogistics && !opts.isLastDay)) {
       i++;
       continue;
     }
@@ -97,21 +122,30 @@ export async function fillAfternoonDeadGaps(
       continue;
     }
 
-    const gap = nextStart - currEnd;
+    // Effective gap end clamped to the day's usable upper bound.
+    const clampedNextStart = Math.min(nextStart, effectiveAfternoonEnd);
+    const gap = clampedNextStart - currEnd;
     if (gap < MIN_GAP_MIN) {
       i++;
       continue;
     }
 
-    // Must overlap afternoon window
+    // Must overlap afternoon window (using effective upper bound)
     const overlapStart = Math.max(currEnd, AFTERNOON_START_MIN);
-    const overlapEnd = Math.min(nextStart, AFTERNOON_END_MIN);
+    const overlapEnd = Math.min(clampedNextStart, effectiveAfternoonEnd);
     if (overlapEnd - overlapStart < MIN_USABLE_OVERLAP_MIN) {
       i++;
       continue;
     }
 
-    console.log(`[fill-dead-gaps] Detected ${Math.round(gap / 60)}h gap between "${curr.title}" (${curr.endTime}) and "${next.title}" (${next.startTime}) — requesting filler`);
+    // Compute clamped gapEndTime string for the AI prompt
+    const clampedEndHHMM = (() => {
+      const h = Math.floor(clampedNextStart / 60);
+      const m = clampedNextStart % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    })();
+
+    console.log(`[fill-dead-gaps] Detected ${Math.round(gap / 60)}h gap between "${curr.title}" (${curr.endTime}) and "${next.title}" (${next.startTime})${opts.isLastDay ? ' [last-day, clamped to ' + clampedEndHHMM + ']' : ''} — requesting filler`);
 
     let proposed: any = null;
     try {
@@ -119,14 +153,14 @@ export async function fillAfternoonDeadGaps(
         activities: work.map(a => ({ id: a.id, title: a.title, startTime: a.startTime, endTime: a.endTime })),
         destination: opts.destination,
         gapStartTime: curr.endTime!,
-        gapEndTime: next.startTime!,
+        gapEndTime: clampedEndHHMM,
         beforeId: curr.id,
         afterId: next.id,
         archetype: opts.archetype,
         dietaryRestrictions: opts.dietaryRestrictions,
         budgetTier: opts.budgetTier,
         tripCurrency: opts.tripCurrency,
-      }, { source: 'gap-filler-auto' });
+      }, { source: opts.isLastDay ? 'gap-filler-lastday' : 'gap-filler-auto' });
     } catch (e) {
       console.warn('[fill-dead-gaps] proposeGapFiller threw:', e);
     }
@@ -151,23 +185,30 @@ export async function fillAfternoonDeadGaps(
 /**
  * Inspect a finalized day for any remaining ≥180-min unplanned afternoon window.
  * Returns the largest such gap in minutes (0 if none). Non-mutating.
+ *
+ * On last day, pass `latestUsableMins` to clamp the upper bound to the
+ * usable departure window.
  */
-export function reportRemainingAfternoonDeadGap(activities: any[]): number {
+export function reportRemainingAfternoonDeadGap(activities: any[], latestUsableMins?: number): number {
   if (!Array.isArray(activities) || activities.length < 2) return 0;
   const sorted = [...activities].sort((a, b) => {
     const sa = parseTime(a?.startTime) ?? 0;
     const sb = parseTime(b?.startTime) ?? 0;
     return sa - sb;
   });
+  const upperBound = latestUsableMins !== undefined
+    ? Math.min(AFTERNOON_END_MIN, latestUsableMins)
+    : AFTERNOON_END_MIN;
   let largest = 0;
   for (let i = 0; i < sorted.length - 1; i++) {
     const currEnd = parseTime(sorted[i]?.endTime) ?? parseTime(sorted[i]?.startTime);
     const nextStart = parseTime(sorted[i + 1]?.startTime);
     if (currEnd === null || nextStart === null) continue;
-    const gap = nextStart - currEnd;
+    const clampedNext = Math.min(nextStart, upperBound);
+    const gap = clampedNext - currEnd;
     if (gap < MIN_GAP_MIN) continue;
     const overlapStart = Math.max(currEnd, AFTERNOON_START_MIN);
-    const overlapEnd = Math.min(nextStart, AFTERNOON_END_MIN);
+    const overlapEnd = Math.min(clampedNext, upperBound);
     if (overlapEnd - overlapStart < MIN_USABLE_OVERLAP_MIN) continue;
     if (gap > largest) largest = gap;
   }
