@@ -1,87 +1,86 @@
-# Day 2 ghost return — bookend bleeds past midnight (23:45 → 12:44 AM)
+# "Reservation Urgency: ." trailing-period leak in activity body
 
 ## What the user sees
 
-Day 2 ends with:
+A Wellness Session card on Day 1 renders a line:
 
 ```
-…last activity ends 23:45
-23:45 → 12:44 AM   Return to JW Marriott Venice Resort & Spa   (59 min)
+Reservation Urgency: .
 ```
 
-The card starts in-bounds (23:45) but its `endTime` is past midnight, so the UI renders "12:44 AM" — a Day-3-territory bleed and the same shape of bug as the prior pre-dawn ghosts.
+Trailing period, blank value — a classic prompt-template leak.
 
-## Root cause (single hole, three exits)
+## Root cause
 
-There are three independent "drop past 23:30" passes, and **all three explicitly exempt hotel-return / freshen-up / check-in cards from the cutoff**:
+The generator wires `buildReservationUrgencyPrompt()` (`reservation-urgency.ts:132`) into the system prompt at two sites:
 
-1. `supabase/functions/_shared/timing-cascade.ts:286-302` — `isEndOfDayBookend` exempts hotel-return from the past-midnight drop.
-2. `supabase/functions/generate-itinerary/pipeline/repair-day.ts:2786-2808` — same exemption (`'return to' / 'freshen up' / 'check-in'`).
-3. `supabase/functions/generate-itinerary/pipeline/repair-day.ts:2885-2904` — same exemption after duration enforcement.
+- `action-generate-trip.ts:332-340` (full-trip path)
+- `generation-core.ts:890` (per-day path), composed at `generation-core.ts:903`
 
-The exemption is correct in principle (we want a bookend even at 23:30+), but **none of these passes ever clamps the bookend's `endTime` to ≤ 23:59**. Combined with:
+The prompt header reads `RESERVATION URGENCY REQUIREMENTS` and instructs the model to emit a JSON field `"reservationUrgency"`. It NEVER asks for the literal label "Reservation Urgency: " to appear in user-facing text. The model is bleeding the prompt label into the activity `description` / `tips` body — sometimes with a value, sometimes (as here) as a bare `Reservation Urgency: .` orphan.
 
-- `runStep8` in `universal-quality-pass.ts` only caps end at 23:59 for cards *it* injects — not for cards already in the array.
-- `makeAccomCard` (`repair-day.ts:3424`) builds a return card with raw `offset(st, dur)` — no upper clamp on the result.
-- The minimum-duration cascade (`repair-day.ts:2811-2864`) skips `accommodation`, but the **buffer / overlap cascade** can still shift a bookend's `startTime` later, leaving the original `durationMinutes` intact and computing `endTime = start + dur` past midnight.
+Why nothing strips it today:
 
-So a card that the AI emitted with `start=23:45, dur=59` (or one that got pushed from 23:00 → 23:45 by an earlier overlap cascade while keeping its 59-min duration) survives every cutoff and prints "12:44 AM".
+1. **`pipeline/validate-day.ts:checkLabelLeaks`** only scans `title`, not `description` / `tips` / `notes`. So `TITLE_LABEL_LEAK` repair never fires for body leaks.
+2. **`src/utils/activityNameSanitizer.ts:sanitizeActivityText`** has a long strip list (`SYSTEM_LABEL_RE`, `SLOT_PREFIX_RE`, `PROMPT_ARTIFACT_REPLACE_RE`, etc.) but no pattern for `Reservation Urgency:` or other AI-echoed prompt headers (e.g. `Booking Urgency:`, `Reservation Window:`, `Booking Window:`).
+3. **No backend scrub on description/tips** — `repair-day.ts` only scrubs titles and times. The bad string is persisted to `itinerary_activities.description` / `.tips` and surfaces every render.
 
-The pre-dawn UI scrubber (`src/lib/itinerary/hideGhostActivities.ts`) doesn't catch this either — it only hides 00:00-04:59 *start times*, not late-night cards whose **end** crosses midnight.
+## Fix — defense in depth across the same surfaces we use for other prompt-leak bugs
 
-## Fix — clamp the bookend window everywhere it's exempted
+### Layer 1 — UI sanitizer (immediate heal for already-persisted data)
 
-Single shared helper + three call sites, plus a UI safety net that mirrors the existing pre-dawn scrubber.
+`src/utils/activityNameSanitizer.ts:sanitizeActivityText`:
 
-### Layer 1 — Shared `clampBookendEndTime` helper (new)
+- Add `RESERVATION_LABEL_LEAK_RE` matching the bare prompt label (with optional value):
+  - `\b(?:Reservation|Booking)\s+(?:Urgency|Window|Lead\s*Time)\s*:\s*[^.\n]*\.?` — strips the entire `Label: …` segment up to the next sentence boundary.
+- Add an **orphan key:value scrubber** that catches any line/segment shaped `^\s*[A-Z][A-Za-z ]{2,40}\s*:\s*\.?\s*$` (label followed by nothing or just a period). Conservative whitelist — only when the value is empty or a lone punctuation mark — so we never eat real `"Note: closed Mondays."` content.
+- Wire both into the existing `.replace(...)` chain right after `PROMPT_ARTIFACT_REPLACE_RE` and before the whitespace squash.
+- Update `src/utils/__tests__/activityNameSanitizer.artifacts.test.ts` with three cases:
+  - `"Soothing massage. Reservation Urgency: ."` → `"Soothing massage."`
+  - `"Reservation Urgency: book_soon. Spa with hammam."` → `"Spa with hammam."`
+  - Real content `"Reservation: required for Sunday brunch."` is preserved (singular `Reservation:` ≠ template label).
 
-New file `supabase/functions/_shared/clamp-bookend.ts`:
+### Layer 2 — Backend pre-persist scrub (kill at the source)
 
-- `clampBookendEndTime(act, { latestEnd = '23:59' })`:
-  - Identifies hotel-return / freshen-up / check-in cards by the same regex/category set already used in the three exemption blocks.
-  - If `endTime > latestEnd`, sets `endTime = latestEnd`, recomputes `durationMinutes` from `(end - start)`, and if the new duration drops below 5 min, also pulls `startTime` back to `latestEnd - 15` (preserves a visible 15-min bookend).
-  - Returns a structured result so callers can log a single `[BOOKEND_CLAMP]` line for observability.
-- `clampAllBookends(activities, ctx)` — array helper that runs the above over an activity list and returns the count of clamps (for `metadata.quality.bookend_clamped_count`).
+`supabase/functions/generate-itinerary/pipeline/repair-day.ts`:
 
-### Layer 2 — Wire into the three exemption sites
+- Add a small `scrubBodyPromptLeaks(act)` helper near the existing `TITLE_LABEL_LEAK` block (~line 2499) that strips the same `RESERVATION_LABEL_LEAK_RE` plus the orphan-key:value pattern from `description`, `tips`, `insiderTip`, `notes`, `details`. Use the same regexes shared with the UI to keep behavior aligned (extract to `_shared/prompt-leak-scrub.ts`).
+- Run it inside the existing day repair loop, push a repair entry `action: 'scrubbed_body_prompt_leak'` for observability.
 
-- `supabase/functions/_shared/timing-cascade.ts` — inside `isEndOfDayBookend`-exempt branch, call `clampBookendEndTime` before `return true`. Push a new repair `type: 'bookend_clamped'`.
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts:2786-2808` — same: clamp before the `return true` exemptions; push `repairs` entry `action: 'bookend_clamped_post_overlap'`.
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts:2885-2904` — same: clamp before exemption; push `action: 'bookend_clamped_post_duration'`.
+`supabase/functions/generate-itinerary/action-save-itinerary.ts`:
 
-### Layer 3 — Clamp at the bookend builders
+- Apply the same shared scrub at JSON snapshot time (next to the existing pre-dawn / bookend sweeps), so legacy days flowing through save also self-heal.
 
-- `repair-day.ts:3424 makeAccomCard` — wrap the computed `endTime` with the shared clamp so any newly-built return/freshen-up card is born in-bounds.
-- `universal-quality-pass.ts:runStep8` — already caps at 23:59, but route through the shared helper so the regex stays in one place.
+### Layer 3 — Validator widening
 
-### Layer 4 — Final pre-persist sweep
+`supabase/functions/generate-itinerary/pipeline/validate-day.ts:checkLabelLeaks`:
 
-- `supabase/functions/generate-itinerary/pipeline/persist-day.ts` — right next to the existing `stripPreDawnHotelReturns` call, run `clampAllBookends(normalizedActivities, { dayNumber, label: 'PERSIST' })` and `clampAllBookends(generatedDay.activities, { … })`. Persist `metadata.quality.bookend_clamped_count` on the day row when > 0.
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — same sweep at JSON snapshot time so legacy data flowing through save also gets fixed.
+- Extend the loop to also scan `description`, `tips`, `notes` against a new `BODY_LABEL_LEAK_PATTERNS` set (same `RESERVATION_LABEL_LEAK_RE` + orphan-key:value).
+- When found, raise `FAILURE_CODES.TITLE_LABEL_LEAK` with the field name; the repair pass calls the shared scrub.
 
-### Layer 5 — UI safety net (mirrors pre-dawn scrubber)
+### Layer 4 — (Optional, low-risk) Prompt hardening
 
-- `src/lib/itinerary/hideGhostActivities.ts` — extend `isGhostActivity` with a "post-midnight bleed" check:
-  - If the card matches `HOTEL_RETURN_RE` AND its `endTime` parses past midnight (i.e. `endMins < startMins`, OR `endMins > 23*60+59`), treat as a ghost and hide.
-  - Same source/lock exemption rules as today (never hide `is_locked`, `user`, `manual`, `extracted`, `pinned`).
-- This mirrors the existing pre-dawn rule and means already-persisted trips heal on next render without a regen.
+`supabase/functions/generate-itinerary/reservation-urgency.ts:buildReservationUrgencyPrompt`:
+
+- Append one line: `IMPORTANT: Do NOT include the words "Reservation Urgency" or this section's labels anywhere in user-facing description, tips, or notes — only in the JSON "reservationUrgency" field.` Keeps future regressions less likely.
 
 ## Files to edit
 
-- New: `supabase/functions/_shared/clamp-bookend.ts`
-- Edit: `supabase/functions/_shared/timing-cascade.ts` (exemption branch)
-- Edit: `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (two cutoff exemptions + `makeAccomCard`)
-- Edit: `supabase/functions/generate-itinerary/universal-quality-pass.ts` (`runStep8` routes through helper)
-- Edit: `supabase/functions/generate-itinerary/pipeline/persist-day.ts` (final sweep + metadata)
-- Edit: `supabase/functions/generate-itinerary/action-save-itinerary.ts` (snapshot-time sweep)
-- Edit: `src/lib/itinerary/hideGhostActivities.ts` (post-midnight bleed branch)
+- New: `supabase/functions/_shared/prompt-leak-scrub.ts` — shared regex + `scrubBodyPromptLeaks(act)` helper used by repair, save, and validator.
+- Edit: `src/utils/activityNameSanitizer.ts` — add reservation-label + orphan-key:value strip in `sanitizeActivityText`.
+- Edit: `src/utils/__tests__/activityNameSanitizer.artifacts.test.ts` — add the three scenarios above.
+- Edit: `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — call shared scrub in the body-leak repair step.
+- Edit: `supabase/functions/generate-itinerary/pipeline/validate-day.ts` — widen `checkLabelLeaks` to scan body fields.
+- Edit: `supabase/functions/generate-itinerary/action-save-itinerary.ts` — final body-leak sweep next to existing predawn/bookend sweeps.
+- Edit: `supabase/functions/generate-itinerary/reservation-urgency.ts` — one-line prompt hardening.
 - New tests:
-  - `supabase/functions/_shared/__tests__/clamp-bookend.test.ts` — start 23:45 + 59 min → end 23:59, dur 14 min; start 23:55 + 30 min → start pulled back to 23:44 to preserve a 15-min window; locked cards untouched.
-  - `supabase/functions/generate-itinerary/__tests__/bookend-clamp-cascade.test.ts` — overlap-cascade pushes return from 23:00 to 23:45 → final endTime ≤ 23:59, count appears in repairs.
+  - `supabase/functions/_shared/__tests__/prompt-leak-scrub.test.ts` — covers `Reservation Urgency: .` strip, value-bearing strip, false-positive guard for legit `"Reservation: required for X."`.
 
 ## Memory
 
-- Update `mem://constraints/itinerary/dinner-required-defer-hotel-return` (or add sibling `mem://constraints/itinerary/bookend-clamp-end-of-day`):
-  - Hotel-return / freshen-up / check-in cards are exempted from the 23:30 drop in three places — each exemption MUST run `clampBookendEndTime` so the card can never end past 23:59.
-  - `metadata.quality.bookend_clamped_count` and `repair.action='bookend_clamped_*'` are the regression sentinels.
-- Update `mem://index.md` Ghost Activity Filter line to mention the post-midnight-bleed branch alongside the existing pre-dawn rule.
+Add `mem://constraints/itinerary/reservation-urgency-prompt-leak`:
+- Prompt label `Reservation Urgency:` (and siblings `Booking Urgency`, `Reservation Window`, `Booking Window`) MUST NEVER appear in user-facing description/tips. Stripped by shared `scrubBodyPromptLeaks` (server) + `sanitizeActivityText` (UI).
+- Orphan `Label: .` key:value patterns with empty/dot value are stripped at all 3 surfaces.
+- Sentinel: `repair.action='scrubbed_body_prompt_leak'`.
+
+Update `mem://index.md` Core to add a one-liner: "Prompt-template labels (`Reservation Urgency:` etc.) never live in description/tips — shared `scrubBodyPromptLeaks` enforces at validate / repair / save / UI."
