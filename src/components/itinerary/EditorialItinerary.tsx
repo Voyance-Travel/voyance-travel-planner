@@ -11329,13 +11329,16 @@ function ActivityRow({
           {(() => {
             const locN = activity.location?.name?.trim();
             const dedupLocName = (locN && locN !== activityTitle) ? locN : '';
-            return (dedupLocName || activity.location?.address) ? (
+            const rawAddr = activity.location?.address;
+            const addrSafe = (rawAddr && !isWeakAddress(rawAddr)) ? rawAddr : '';
+            const display = dedupLocName || addrSafe;
+            return display ? (
             <div className={cn(
               "flex items-center gap-1.5 text-xs text-muted-foreground",
               !canViewPremium && "blur-sm pointer-events-none select-none"
             )}>
               <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
-              <span className="truncate">{dedupLocName || activity.location?.address}</span>
+              <span className="truncate">{display}</span>
             </div>
             ) : null;
           })()}
