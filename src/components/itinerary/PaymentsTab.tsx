@@ -293,12 +293,29 @@ export function PaymentsTab({
   useEffect(() => {
     if (!tripId) return;
     let pendingTimer: ReturnType<typeof setTimeout> | null = null;
-    const handler = () => {
-      queryClient.invalidateQueries({ queryKey: ['activity-costs-payable', tripId] });
-      queryClient.invalidateQueries({ queryKey: ['trip-inclusion-toggles', tripId] });
-      fetchPayments();
-      if (pendingTimer) clearTimeout(pendingTimer);
-      pendingTimer = setTimeout(() => { fetchPayments(); }, 600);
+    let leadingFiredAt = 0;
+    const handler = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail || {};
+      const coalesceMs: number = typeof detail.coalesceMs === 'number' ? detail.coalesceMs : 600;
+      const now = Date.now();
+      // Leading-edge: fire immediately if we haven't recently.
+      if (now - leadingFiredAt > coalesceMs) {
+        leadingFiredAt = now;
+        queryClient.invalidateQueries({ queryKey: ['activity-costs-payable', tripId] });
+        queryClient.invalidateQueries({ queryKey: ['trip-inclusion-toggles', tripId] });
+        fetchPayments();
+      }
+      // Trailing-edge: ensure a single follow-up refetch lands AFTER the burst
+      // settles. Do NOT re-arm if a timer is already pending — this is what
+      // caused the "Reconciling…" loop during back-to-back Fix-Timing events.
+      if (!pendingTimer) {
+        pendingTimer = setTimeout(() => {
+          pendingTimer = null;
+          queryClient.invalidateQueries({ queryKey: ['activity-costs-payable', tripId] });
+          queryClient.invalidateQueries({ queryKey: ['trip-inclusion-toggles', tripId] });
+          fetchPayments();
+        }, coalesceMs);
+      }
     };
     window.addEventListener('booking-changed', handler);
     return () => {
