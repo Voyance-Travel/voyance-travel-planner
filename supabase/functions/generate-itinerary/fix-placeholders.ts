@@ -852,47 +852,52 @@ export function nuclearPlaceholderSweep(
 // that survived enrichment + meal injection. Downgrades to unverified
 // `needsVenuePick` ($0) sentinel rather than ship a foreign address.
 // =============================================================================
+const SWEEPABLE_CROSS_CITY_CATS = new Set([
+  'dining', 'restaurant', 'food',
+  'sightseeing', 'attraction', 'museum', 'culture', 'shopping',
+  'wellness', 'spa', 'activity', 'entertainment', 'relaxation',
+]);
+
+/**
+ * Per-activity cross-city downgrade — extracted from nuclearCrossCitySweep so
+ * the unified scrubActivity boundary can call it on a single activity.
+ * Returns the downgraded city name (foreign city detected) or null when no
+ * change applied. Mutates the activity in place.
+ */
+export function downgradeCrossCityActivity(a: any, destination: string): string | null {
+  if (!a || a.locked || a.isLocked || !destination) return null;
+  const cat = String(a.category || '').toLowerCase();
+  if (!SWEEPABLE_CROSS_CITY_CATS.has(cat)) return null;
+  const wrongCity = isCrossCityAddress(a, destination);
+  if (!wrongCity) return null;
+  const startTimeStr = a.startTime || a.start_time || '12:00';
+  const mealType = parseMealType(startTimeStr);
+  const sentinel = unverifiedMealSentinel(destination, mealType);
+  const isMeal = cat === 'dining' || cat === 'restaurant' || cat === 'food'
+    || /^(breakfast|brunch|lunch|dinner|drinks)\b/i.test(a.title || '');
+  if (isMeal) {
+    applyFallbackToActivity(a, sentinel, mealType, new Set<string>(), undefined, destination);
+  } else {
+    a.title = `${a.title || 'Activity'} — find a local option in ${destination}`;
+    a.name = a.title;
+    if (a.location) { a.location.address = ''; a.location.name = ''; }
+    a.venue_name = '';
+    a.metadata = a.metadata || {};
+    a.metadata.unverified_venue = true;
+    a.metadata.needsVenuePick = true;
+    if (a.cost) { a.cost.amount = 0; a.cost.perPerson = 0; }
+    a.cost_per_person = 0;
+  }
+  return wrongCity;
+}
+
 export function nuclearCrossCitySweep(activities: any[], destination: string): number {
   if (!activities?.length || !destination) return 0;
-  const SWEEPABLE_CATS = new Set([
-    'dining', 'restaurant', 'food',
-    'sightseeing', 'attraction', 'museum', 'culture', 'shopping',
-    'wellness', 'spa', 'activity', 'entertainment', 'relaxation',
-  ]);
   let mutated = 0;
   for (const a of activities) {
-    if (!a || a.locked || a.isLocked) continue;
-    const cat = String(a.category || '').toLowerCase();
-    if (!SWEEPABLE_CATS.has(cat)) continue;
-    const wrongCity = isCrossCityAddress(a, destination);
+    const wrongCity = downgradeCrossCityActivity(a, destination);
     if (!wrongCity) continue;
-
-    // Convert to unverified sentinel — preserve start time / category / duration.
-    const startTimeStr = a.startTime || a.start_time || '12:00';
-    const mealType = parseMealType(startTimeStr);
-    const sentinel = unverifiedMealSentinel(destination, mealType);
-    const isMeal = cat === 'dining' || cat === 'restaurant' || cat === 'food'
-      || /^(breakfast|brunch|lunch|dinner|drinks)\b/i.test(a.title || '');
-
-    if (isMeal) {
-      applyFallbackToActivity(a, sentinel, mealType, new Set<string>(), undefined, destination);
-    } else {
-      // Non-meal (museum/spa/etc.) — strip the wrong-city venue, mark unverified.
-      const beforeTitle = a.title;
-      a.title = `${a.title || 'Activity'} — find a local option in ${destination}`;
-      a.name = a.title;
-      if (a.location) {
-        a.location.address = '';
-        a.location.name = '';
-      }
-      a.venue_name = '';
-      a.metadata = a.metadata || {};
-      a.metadata.unverified_venue = true;
-      a.metadata.needsVenuePick = true;
-      if (a.cost) { a.cost.amount = 0; a.cost.perPerson = 0; }
-      a.cost_per_person = 0;
-      console.warn(`[NUCLEAR CROSS-CITY] Stripped wrong-city venue from "${beforeTitle}" (was in ${wrongCity}, dest ${destination})`);
-    }
+    console.warn(`[NUCLEAR CROSS-CITY] Downgraded "${a.title}" (was in ${wrongCity}, dest ${destination})`);
     mutated++;
   }
   if (mutated > 0) {
