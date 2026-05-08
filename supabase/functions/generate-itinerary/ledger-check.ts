@@ -217,6 +217,18 @@ export async function ledgerCheck(
     }
   }
 
+  // Pull the trip destination once — used by vibe-clash downgrade to resolve
+  // a real casual fallback (cross-city safe).
+  let tripDestination = '';
+  if (opts?.supabase && opts?.tripId) {
+    try {
+      const { data } = await opts.supabase.from('trips').select('destination').eq('id', opts.tripId).maybeSingle();
+      tripDestination = (data?.destination || '').toString();
+    } catch (e) {
+      console.warn('[ledger-check] destination fetch failed (non-blocking):', String(e));
+    }
+  }
+
   const out = days.map((d) => ({
     ...d,
     activities: Array.isArray(d.activities) ? [...d.activities] : [],
