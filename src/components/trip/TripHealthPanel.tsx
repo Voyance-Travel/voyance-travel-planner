@@ -91,6 +91,14 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
     const isTransitLike = (cat?: string, title?: string) =>
       TRANSIT_CATS.includes((cat || '').toLowerCase()) || TRANSIT_TITLE_RE.test(title || '');
 
+    // Gate: skip timing checks if any non-transit activity is missing start/end.
+    // Prevents phantom overlap/buffer warnings from optimistic edits or partial hydration.
+    const allTimed = realActivities.every((a: any) => {
+      if (isTransitLike(a.category, a.name || a.title)) return true;
+      return !!a.startTime && !!a.endTime;
+    });
+    if (!allTimed) return;
+
     const timed = activities
       .filter((a: any) => a.startTime && a.endTime)
       .map((a: any) => ({
