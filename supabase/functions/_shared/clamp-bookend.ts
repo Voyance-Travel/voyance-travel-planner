@@ -72,16 +72,24 @@ function minsToHHMM(mins: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-export function isBookendCard(act: any): boolean {
+export function isBookendCard(act: any, hotelName?: string | null): boolean {
   if (!act) return false;
   const cat = String(act.category || '').toLowerCase();
   const title = String(act.title || act.name || '').toLowerCase();
   const locName = String(act.location?.name || '').toLowerCase();
+  const combined = `${title} ${locName}`;
 
-  if (ACCOM_CATS.has(cat) && HOTEL_BOOKEND_TITLE_RE.test(title)) return true;
+  // Accommodation bookend: title verb (return/freshen/check-in/...) — accept
+  // even on transport rows when title also names a hotel/brand (e.g.
+  // "Return to JW Marriott" with category=accommodation OR transport).
+  if (HOTEL_BOOKEND_TITLE_RE.test(title) && (ACCOM_CATS.has(cat) || isHotelLikeText(combined, hotelName))) {
+    return true;
+  }
 
-  // Transport bookend (e.g. "Travel to Hotel", "Shuttle to JW Marriott")
-  if (TRANSPORT_CATS.has(cat) && (title.includes('hotel') || locName.includes('hotel'))) return true;
+  // Transport bookend (e.g. "Walk to JW Marriott", "Shuttle to Cipriani") —
+  // brand-aware so real hotel names trigger the clamp, not just the literal
+  // word "hotel".
+  if (TRANSPORT_CATS.has(cat) && isHotelLikeText(combined, hotelName)) return true;
 
   return false;
 }
