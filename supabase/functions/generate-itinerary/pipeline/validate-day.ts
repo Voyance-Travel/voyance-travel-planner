@@ -337,6 +337,18 @@ function checkLabelLeaks(activities: StrictActivityMinimal[], results: Validatio
         autoRepairable: true,
       });
     }
+    // Title-side prompt-leak (Reservation Urgency: . in title/name/subtitle/reservationUrgency)
+    const titleHit = hasTitleLeak(activities[i] as any);
+    if (titleHit) {
+      results.push({
+        code: FAILURE_CODES.TITLE_LABEL_LEAK,
+        severity: 'warning',
+        message: `Activity "${title}" has prompt-template label leak in ${titleHit.field}`,
+        activityIndex: i,
+        field: titleHit.field,
+        autoRepairable: true,
+      });
+    }
   }
 }
 
