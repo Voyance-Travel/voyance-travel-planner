@@ -345,6 +345,15 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           console.warn(
             `[save-itinerary] 🍽️ MEAL GUARD: Day ${dayNumber} was missing [${result.injectedMeals.join(', ')}] — injected before save`
           );
+          console.warn(`[MEAL_AUDIT] day=${dayNumber} dest="${destination}" mode=${policy.dayMode} required=[${policy.requiredMeals.join(',')}] detected=[${detected.join(',')}] missing=[${missing.join(',')}] injected=[${result.injectedMeals.join(',')}] source="save-itinerary"`);
+          itineraryDays[i].metadata = itineraryDays[i].metadata || {};
+          itineraryDays[i].metadata.quality = itineraryDays[i].metadata.quality || {};
+          itineraryDays[i].metadata.quality.meal_audit = {
+            required: policy.requiredMeals, detected_pre: detected, missing_pre: missing,
+            injected: result.injectedMeals,
+            // detected_post is computed implicitly by callers; skip here to keep payload small.
+            source: 'save-itinerary',
+          };
         }
       }
 
