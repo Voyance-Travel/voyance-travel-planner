@@ -108,6 +108,10 @@ export interface ResolveCanonicalArgs {
   liveActivities: CanonicalLiveActivity[];
   includeHotel: boolean;
   includeFlight: boolean;
+  /** Optional: trip_payments rows. When provided, manual hotel/flight/other
+   *  fold-in is computed inside the resolver so snapshot + payable items
+   *  cannot diverge. */
+  manualPayments?: CanonicalManualPayment[];
 }
 
 export function resolveCanonicalCostRows({
@@ -115,6 +119,7 @@ export function resolveCanonicalCostRows({
   liveActivities,
   includeHotel,
   includeFlight,
+  manualPayments,
 }: ResolveCanonicalArgs): ResolveResult {
   const liveById = new Map<string, CanonicalLiveActivity>();
   const rescueByDayCat = new Map<string, CanonicalLiveActivity[]>();
