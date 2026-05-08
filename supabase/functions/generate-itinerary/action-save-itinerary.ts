@@ -118,70 +118,35 @@ function parseTimeToMinutes(t?: string): number {
  * Normalize all days: ensure dayNumber, date, sort activities by time.
  * This is the single canonical normalization that runs BEFORE persistence.
  */
-function normalizeDays(days: any[], tripStartDate: string | null): any[] {
+function normalizeDays(days: any[], tripStartDate: string | null, destination?: string): any[] {
   return days.map((day: any, idx: number) => {
     const dayNumber = idx + 1;
-    // Derive date from start_date if missing or blank
     let date = day.date;
     if (!date && tripStartDate) {
       date = deriveDateFromStartDate(tripStartDate, dayNumber);
     }
-    // Sort activities by startTime/start_time/time
     let activities = Array.isArray(day.activities) ? [...day.activities] : [];
     activities.sort((a: any, b: any) => {
       const ta = parseTimeToMinutes(a.startTime || a.start_time || a.time);
       const tb = parseTimeToMinutes(b.startTime || b.start_time || b.time);
       return ta - tb;
     });
-    // Final belt-and-braces: drop any pre-dawn hotel-return entries that the
-    // sort just hoisted to the top of the day. These are spillover/wraparound
-    // bugs, not real plans.
     stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
-    // Bookend clamp — never let a return/freshen-up/check-in row bleed past 23:59.
     clampAllBookends(activities, { dayNumber, label: 'SAVE' });
-    // Body-leak sweep — strip prompt-template labels ("Reservation Urgency: .")
-    // from description/tips/notes before the JSON snapshot lands in DB.
-    let _bodyLeakSwept = 0;
-    let _titleLeakSwept = 0;
-    let _mealSuffixSwept = 0;
-    let _sentenceFragSwept = 0;
+    // Unified scrub boundary — single entry point.
+    let dayOps: ScrubOps = { ...EMPTY_OPS } as ScrubOps;
     for (const a of activities) {
-      if (scrubBodyPromptLeaks(a).changed) _bodyLeakSwept++;
-      if (scrubTitleLeaks(a).changed) _titleLeakSwept++;
-      if (scrubSentenceFragmentsOnAct(a).changed) _sentenceFragSwept++;
-      // Strip "(Breakfast)/(Lunch)/(Dinner)" suffix from title/name/location.name
-      for (const k of ['title', 'name'] as const) {
-        if (typeof a?.[k] === 'string' && VENUE_MEAL_SUFFIX_RE.test(a[k])) {
-          a[k] = stripVenueMealSuffix(a[k]);
-          _mealSuffixSwept++;
-        }
-      }
-      const loc = (a as any)?.location;
-      if (loc && typeof loc === 'object' && typeof loc.name === 'string'
-          && VENUE_MEAL_SUFFIX_RE.test(loc.name)) {
-        loc.name = stripVenueMealSuffix(loc.name);
-        _mealSuffixSwept++;
-      }
+      dayOps = addOps(dayOps, scrubActivity(a, { destination }));
     }
-    // Save-time post-checkout coherence sweep — final safety net even if
-    // repair-day §14b was skipped or partial. See mem://constraints/itinerary/post-checkout-save-time-sweep
     const pruneResult = pruneNonLogisticsAfterCheckout(activities);
-    if (_bodyLeakSwept > 0) {
-      console.log(`[SAVE] body_prompt_leak_scrubbed day=${dayNumber} count=${_bodyLeakSwept}`);
-    }
-    if (_titleLeakSwept > 0) {
-      console.log(`[SAVE] title_prompt_leak_scrubbed day=${dayNumber} count=${_titleLeakSwept}`);
-    }
-    if (_mealSuffixSwept > 0) {
-      console.log(`[SAVE] venue_meal_suffix_stripped day=${dayNumber} count=${_mealSuffixSwept}`);
-    }
-    if (_sentenceFragSwept > 0) {
-      console.log(`[SAVE] sentence_fragment_scrubbed day=${dayNumber} count=${_sentenceFragSwept}`);
+    if (dayOps.titleLeak + dayOps.bodyLeak + dayOps.fragment + dayOps.mealSuffix
+        + dayOps.crossCity + dayOps.countryMismatch + dayOps.mealLabel > 0) {
+      console.log(`[SCRUB_ACTIVITY] day=${dayNumber} dest="${destination || 'unknown'}" ops=${formatOps(dayOps)} path=save-itinerary`);
     }
     if (pruneResult.prunedCount > 0) {
       console.log(`[POST_CHECKOUT_PRUNE] day=${dayNumber} count=${pruneResult.prunedCount} titles=${JSON.stringify(pruneResult.prunedTitles)} path=save-itinerary`);
     }
-    return { ...day, dayNumber, date, activities };
+    return { ...day, dayNumber, date, activities, _scrubOps: dayOps };
   });
 }
 
