@@ -15,6 +15,7 @@
  */
 
 import { proposeGapFiller } from '../_shared/fill-gap.ts';
+import { enforceTimingAndBuffers, type CascadeActivity } from '../_shared/timing-cascade.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -418,151 +419,114 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // 2. Timing overlap with next activity (including same-start-time conflicts)
+      // Collect transit estimates for display only (cascade handles buffer/overlap fixes).
       if (i < sorted.length - 1) {
         const next = sorted[i + 1];
-        const nextStart = patchedTimes.get(next.id)?.start ?? parseTime(next.startTime);
-        // Use cascaded end time if this activity was already shifted
-        const effectiveEnd = patchedTimes.get(act.id)?.end ?? endMin;
-        const currStartMin = patchedTimes.get(act.id)?.start ?? startMin;
+        const transit = estimateTransit(act, next);
+        if (transit) transitEstimates.push(transit);
+      }
+    }
 
-        // 2a. Same start time = always a conflict (catches 0-duration transit stubs)
-        const isSameStart = currStartMin !== null && nextStart !== null && currStartMin === nextStart;
-        // 2b. Standard overlap: current ends after next starts
-        const isOverlap = effectiveEnd !== null && nextStart !== null && effectiveEnd > nextStart;
+    // ─── Cascade timing/buffer/same-start fixes via the shared algorithm ─────
+    // Pair-by-pair patching previously emitted one shift per `next` without
+    // cascading downstream activities, so applying the patches generated NEW
+    // overlaps. The shared `enforceTimingAndBuffers` does a proper forward
+    // cascade and is the single source of truth across generator/repair/refresh.
+    {
+      // Build cascade input from post-operating-hours times. Locked ids cover
+      // anything the user pinned/extracted/manually added so cascade leaves them.
+      const lockedIds = new Set<string>(
+        sorted
+          .filter((a: any) => a.locked || a.userAdded || a.pinned || a.extracted || a.userOverride)
+          .map((a) => a.id)
+      );
 
-        if (isSameStart || isOverlap) {
-          const overlapLabel = isSameStart
-            ? `"${act.title}" and "${next.title}" both start at ${minutesToTime(currStartMin!)}.`
-            : `"${act.title}" ends at ${patchedTimes.has(act.id) ? minutesToTime(effectiveEnd!) : act.endTime} but "${next.title}" starts at ${patchedTimes.has(next.id) ? minutesToTime(nextStart!) : next.startTime}.`;
+      const cascadeInput: (CascadeActivity & { _origStart?: string; _origEnd?: string })[] =
+        sorted.map((a) => {
+          const patched = patchedTimes.get(a.id);
+          const origStart = a.startTime;
+          const origEnd = a.endTime;
+          return {
+            id: a.id,
+            title: a.title,
+            category: a.category,
+            startTime: patched ? minutesToTime(patched.start) : a.startTime,
+            endTime: patched ? minutesToTime(patched.end) : a.endTime,
+            durationMinutes: a.durationMinutes,
+            location: a.location,
+            _origStart: origStart,
+            _origEnd: origEnd,
+          };
+        });
 
-          // For same-start, compute a safe anchor: use effectiveEnd if available, else currStart + duration
-          const anchorEnd = isSameStart
-            ? (effectiveEnd ?? (currStartMin! + (act.durationMinutes || 30)))
-            : effectiveEnd!;
+      // Snapshot pre-cascade times so we can diff to detect every shift.
+      const beforeMap = new Map<string, { start?: string; end?: string }>();
+      for (const c of cascadeInput) beforeMap.set(c.id, { start: c.startTime, end: c.endTime });
 
+      const { activities: cascaded, repairs } = enforceTimingAndBuffers(
+        cascadeInput,
+        { lockedIds }
+      );
+
+      // Emit one issue per repair so the panel shows what was fixed.
+      for (const r of repairs) {
+        if (r.type === 'same_start_fix' || r.type === 'overlap_fix') {
           issues.push({
             type: 'timing_overlap',
-            activityId: act.id,
-            activityTitle: act.title,
+            activityId: r.activityId,
+            activityTitle: r.activityTitle || '',
             severity: 'error',
-            message: overlapLabel,
-            suggestion: `Move "${next.title}" to ${minutesToTime(anchorEnd + 5)} or later.`,
+            message: r.message,
+            suggestion: r.after,
           });
-
-          if (!changedIds.has(next.id)) {
-            const origNextStart = parseTime(next.startTime);
-            const nextDuration = next.durationMinutes || (parseTime(next.endTime) !== null && origNextStart !== null ? parseTime(next.endTime)! - origNextStart : 60);
-            const fixedStartMin = anchorEnd + 5;
-            const fixedEndMin = fixedStartMin + nextDuration;
-            const fixedStart = minutesToTime(fixedStartMin);
-            const fixedEnd = minutesToTime(fixedEndMin);
-
-            proposedChanges.push({
-              id: `change-${++changeCounter}`,
-              type: 'time_shift',
-              activityId: next.id,
-              activityTitle: next.title,
-              icon: 'alert-triangle',
-              description: `${next.title}: ${next.startTime} → ${fixedStart} (resolve overlap)`,
-              oldValue: `${next.startTime}–${next.endTime || '?'}`,
-              newValue: `${fixedStart}–${fixedEnd}`,
-              patch: { startTime: fixedStart, endTime: fixedEnd },
-            });
-            changedIds.add(next.id);
-            patchedTimes.set(next.id, { start: fixedStartMin, end: fixedEndMin });
-          }
+        } else if (r.type === 'buffer_fix') {
+          issues.push({
+            type: 'insufficient_buffer',
+            activityId: r.activityId,
+            activityTitle: r.activityTitle || '',
+            severity: 'warning',
+            message: r.message,
+            suggestion: r.after,
+          });
+        } else if (r.type === 'dropped_past_midnight') {
+          issues.push({
+            type: 'sequence_error',
+            activityId: r.activityId,
+            activityTitle: r.activityTitle || '',
+            severity: 'error',
+            message: r.message,
+          });
         }
+      }
 
-        // 3. Transit estimate between consecutive activities
-        const transit = estimateTransit(act, next);
-        if (transit) {
-          transitEstimates.push(transit);
+      // Diff cascade output vs input → one patch per shifted activity. This
+      // covers EVERY downstream card pushed by the cascade, not just the
+      // direct neighbor of an overlap.
+      for (const after of cascaded) {
+        if (lockedIds.has(after.id)) continue;
+        if (changedIds.has(after.id)) continue; // operating-hours patch wins
+        const before = beforeMap.get(after.id);
+        if (!before) continue;
+        if (before.start === after.startTime && before.end === after.endTime) continue;
 
-          // 4. Check if gap is sufficient for transit + buffer
-          const effectiveEndForBuffer = patchedTimes.get(act.id)?.end ?? endMin;
-          const effectiveNextStart = patchedTimes.get(next.id)?.start ?? parseTime(next.startTime);
-          if (effectiveEndForBuffer !== null && effectiveNextStart !== null) {
-            const gap = effectiveNextStart - effectiveEndForBuffer;
-            const minBuffer = getEffectiveMinBuffer(act, next);
-            const totalNeeded = transit.durationMinutes + minBuffer;
+        // Determine whether this was a pure buffer add or an overlap shift —
+        // best-effort by checking if the activity is the first repair target.
+        const ownRepair = repairs.find((r) => r.activityId === after.id);
+        const changeType: 'time_shift' | 'buffer_added' =
+          ownRepair?.type === 'buffer_fix' ? 'buffer_added' : 'time_shift';
 
-            if (gap < totalNeeded && gap >= 0) {
-              issues.push({
-                type: 'insufficient_buffer',
-                activityId: next.id,
-                activityTitle: next.title,
-                severity: gap < transit.durationMinutes ? 'error' : 'warning',
-                message: `Only ${gap} min gap between "${act.title}" and "${next.title}", but transit alone is ~${transit.durationMinutes} min ${transit.method} (${transit.distance}).`,
-                suggestion: `Delay "${next.title}" to ${minutesToTime(effectiveEndForBuffer + totalNeeded)} for a comfortable transition.`,
-              });
-
-              if (!changedIds.has(next.id)) {
-                const origNextStart = parseTime(next.startTime);
-                const nextDuration = next.durationMinutes || (parseTime(next.endTime) !== null && origNextStart !== null ? parseTime(next.endTime)! - origNextStart : 60);
-                const bufferedStartMin = effectiveEndForBuffer + totalNeeded;
-                const bufferedEndMin = bufferedStartMin + nextDuration;
-                const bufferedStart = minutesToTime(bufferedStartMin);
-                const bufferedEnd = minutesToTime(bufferedEndMin);
-
-                proposedChanges.push({
-                  id: `change-${++changeCounter}`,
-                  type: 'buffer_added',
-                  activityId: next.id,
-                  activityTitle: next.title,
-                  icon: 'timer',
-                  description: `Added ${totalNeeded - gap} min buffer before "${next.title}" (${transit.durationMinutes} min ${transit.method})`,
-                  oldValue: next.startTime,
-                  newValue: bufferedStart,
-                  patch: { startTime: bufferedStart, endTime: bufferedEnd },
-                });
-                changedIds.add(next.id);
-                patchedTimes.set(next.id, { start: bufferedStartMin, end: bufferedEndMin });
-              }
-            }
-          }
-        } else {
-          // No coordinates — still check time-based buffer
-          const effectiveEndForBuffer = patchedTimes.get(act.id)?.end ?? endMin;
-          const effectiveNextStart = patchedTimes.get(next.id)?.start ?? parseTime(next.startTime);
-          if (effectiveEndForBuffer !== null && effectiveNextStart !== null) {
-            const gap = effectiveNextStart - effectiveEndForBuffer;
-            const minBuffer = getEffectiveMinBuffer(act, next);
-            if (gap < minBuffer && gap >= 0 && minBuffer > 0) {
-              issues.push({
-                type: 'insufficient_buffer',
-                activityId: next.id,
-                activityTitle: next.title,
-                severity: 'warning',
-                message: `Only ${gap} min between "${act.title}" and "${next.title}" (${minBuffer} min buffer recommended).`,
-                suggestion: `Delay "${next.title}" to ${minutesToTime(effectiveEndForBuffer + minBuffer)}.`,
-              });
-
-              if (!changedIds.has(next.id)) {
-                const origNextStart = parseTime(next.startTime);
-                const nextDuration = next.durationMinutes || (parseTime(next.endTime) !== null && origNextStart !== null ? parseTime(next.endTime)! - origNextStart : 60);
-                const bufferedStartMin = effectiveEndForBuffer + minBuffer;
-                const bufferedEndMin = bufferedStartMin + nextDuration;
-                const bufferedStart = minutesToTime(bufferedStartMin);
-                const bufferedEnd = minutesToTime(bufferedEndMin);
-
-                proposedChanges.push({
-                  id: `change-${++changeCounter}`,
-                  type: 'buffer_added',
-                  activityId: next.id,
-                  activityTitle: next.title,
-                  icon: 'timer',
-                  description: `Added ${minBuffer - gap} min buffer before "${next.title}"`,
-                  oldValue: next.startTime,
-                  newValue: bufferedStart,
-                  patch: { startTime: bufferedStart, endTime: bufferedEnd },
-                });
-                changedIds.add(next.id);
-                patchedTimes.set(next.id, { start: bufferedStartMin, end: bufferedEndMin });
-              }
-            }
-          }
-        }
+        proposedChanges.push({
+          id: `change-${++changeCounter}`,
+          type: changeType,
+          activityId: after.id,
+          activityTitle: after.title || '',
+          icon: changeType === 'buffer_added' ? 'timer' : 'clock',
+          description: `${after.title}: ${before.start ?? '?'} → ${after.startTime ?? '?'}`,
+          oldValue: `${before.start ?? '?'}–${before.end ?? '?'}`,
+          newValue: `${after.startTime ?? '?'}–${after.endTime ?? '?'}`,
+          patch: { startTime: after.startTime, endTime: after.endTime },
+        });
+        changedIds.add(after.id);
       }
     }
 
