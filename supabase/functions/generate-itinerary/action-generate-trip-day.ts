@@ -1578,6 +1578,16 @@ async function _handleGenerateTripDayInner(
         console.log(`[generate-trip-day] 2nd-pass: filled ${filled2.inserted.length} dead gap(s) re-opened by post-processing on day ${dayNumber}`);
         dayResult.activities = filled2.activities;
       }
+      // Density observability — flag any remaining ≥3h afternoon gap so we can
+      // grep edge logs for the next regression.
+      const { reportRemainingAfternoonDeadGap } = await import('./pipeline/fill-dead-gaps.ts');
+      const remaining = reportRemainingAfternoonDeadGap(dayResult.activities);
+      if (remaining >= 180) {
+        console.warn(`[QUALITY] Day ${dayNumber} still has ${remaining}m unplanned 12:00-19:00 after all passes — gap-fill exhausted`);
+        dayResult.metadata = dayResult.metadata || {};
+        dayResult.metadata.quality = dayResult.metadata.quality || {};
+        dayResult.metadata.quality.unfilled_dead_gap_minutes = remaining;
+      }
     } catch (gapErr) {
       console.warn('[generate-trip-day] 2nd-pass dead-gap fill failed (non-blocking):', gapErr);
     }
