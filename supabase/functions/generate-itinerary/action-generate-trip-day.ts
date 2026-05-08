@@ -1555,6 +1555,34 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // ── SECOND-PASS DEAD-GAP FILL ─────────────────────────────────────────────
+  // Cross-day dedup (above) and universalQualityPass can re-open afternoon gaps
+  // by removing/shifting activities. Re-run fillAfternoonDeadGaps as the final
+  // pre-save step so the user never sees a 3h+ unplanned afternoon window.
+  if (dayResult?.activities?.length > 0) {
+    try {
+      const { fillAfternoonDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
+      const lockedIdSet = new Set<string>(lockedActivitiesForDay.map((l: any) => l.id));
+      const filled2 = await fillAfternoonDeadGaps(dayResult.activities, {
+        destination: cityInfo?.cityName || destination,
+        isFirstDay,
+        isLastDay,
+        isLastDayInCity,
+        archetype: (tripMeta?.travel_dna_primary as string | undefined) || undefined,
+        dietaryRestrictions: (tripMeta?.dietary_restrictions as string[] | undefined) || [],
+        budgetTier: (tripMeta?.budget_tier as string | undefined) || 'standard',
+        tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
+        lockedIds: lockedIdSet,
+      });
+      if (filled2.inserted.length > 0) {
+        console.log(`[generate-trip-day] 2nd-pass: filled ${filled2.inserted.length} dead gap(s) re-opened by post-processing on day ${dayNumber}`);
+        dayResult.activities = filled2.activities;
+      }
+    } catch (gapErr) {
+      console.warn('[generate-trip-day] 2nd-pass dead-gap fill failed (non-blocking):', gapErr);
+    }
+  }
+
   // NOTE: Minimum duration enforcement and timing overlap resolution are now
   // handled exclusively by pipeline/repair-day.ts to prevent cascading shifts.
   // The 68G inline blocks were removed to fix the AM/PM timing collapse bug.
