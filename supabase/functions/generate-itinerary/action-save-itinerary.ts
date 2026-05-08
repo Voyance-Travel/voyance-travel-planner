@@ -11,6 +11,7 @@ import { buildDayLedger, type DayLedger } from './day-ledger.ts';
 import { ledgerCheck } from './ledger-check.ts';
 import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
+import { clampAllBookends } from '../_shared/clamp-bookend.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
@@ -134,6 +135,8 @@ function normalizeDays(days: any[], tripStartDate: string | null): any[] {
     // sort just hoisted to the top of the day. These are spillover/wraparound
     // bugs, not real plans.
     stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
+    // Bookend clamp — never let a return/freshen-up/check-in row bleed past 23:59.
+    clampAllBookends(activities, { dayNumber, label: 'SAVE' });
     return { ...day, dayNumber, date, activities };
   });
 }

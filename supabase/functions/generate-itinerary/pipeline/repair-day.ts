@@ -33,6 +33,7 @@ import {
 import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-utils.ts';
 import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../fix-placeholders.ts';
 import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
+import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 
 // =============================================================================
@@ -2790,11 +2791,16 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       if (s !== null && s > cutoff) {
         const cat = (act.category || '').toLowerCase();
         const title = (act.title || '').toLowerCase();
-        // Exempt end-of-day structural bookend cards (hotel returns)
+        // Exempt end-of-day structural bookend cards (hotel returns) — but
+        // clamp their endTime first so they can't bleed past midnight.
         if (cat === 'accommodation' && (title.includes('return to') || title.includes('freshen up') || title.includes('check-in') || title.includes('check in'))) {
+          const r = clampBookendEndTime(act, { label: 'REPAIR_OVERLAP_CUTOFF' });
+          if (r.changed) repairs.push({ code: FAILURE_CODES.TIME_OVERLAP, action: 'bookend_clamped_post_overlap', before: act.title });
           return true;
         }
         if ((cat === 'transport' || cat === 'transportation') && (title.includes('hotel') || (act.location?.name || '').toLowerCase().includes('hotel'))) {
+          const r = clampBookendEndTime(act, { label: 'REPAIR_OVERLAP_CUTOFF' });
+          if (r.changed) repairs.push({ code: FAILURE_CODES.TIME_OVERLAP, action: 'bookend_clamped_post_overlap', before: act.title });
           return true;
         }
         repairs.push({
@@ -2890,11 +2896,16 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       if (s !== null && s > cutoff2) {
         const cat = (act.category || '').toLowerCase();
         const title = (act.title || '').toLowerCase();
-        // Exempt end-of-day structural bookend cards (hotel returns)
+        // Exempt end-of-day structural bookend cards (hotel returns) — but
+        // clamp endTime first so they cannot bleed into the next day.
         if (cat === 'accommodation' && (title.includes('return to') || title.includes('freshen up') || title.includes('check-in') || title.includes('check in'))) {
+          const r = clampBookendEndTime(act, { label: 'REPAIR_DURATION_CUTOFF' });
+          if (r.changed) repairs.push({ code: FAILURE_CODES.TIME_OVERLAP, action: 'bookend_clamped_post_duration', before: act.title });
           return true;
         }
         if ((cat === 'transport' || cat === 'transportation') && (title.includes('hotel') || (act.location?.name || '').toLowerCase().includes('hotel'))) {
+          const r = clampBookendEndTime(act, { label: 'REPAIR_DURATION_CUTOFF' });
+          if (r.changed) repairs.push({ code: FAILURE_CODES.TIME_OVERLAP, action: 'bookend_clamped_post_duration', before: act.title });
           return true;
         }
         repairs.push({ code: FAILURE_CODES.TIME_OVERLAP, action: 'dropped_past_midnight_post_duration', before: act.title });
@@ -3421,16 +3432,22 @@ function repairBookends(
     return `${String(Math.floor(capped / 60)).padStart(2, '0')}:${String(capped % 60).padStart(2, '0')}`;
   };
 
-  const makeAccomCard = (label: string, st: string, dur: number) => ({
-    id: `bookend-${label.replace(/\s/g, '-').toLowerCase()}-${dayNumber}-${Date.now()}`,
-    title: `${label} ${hotelName}`,
-    category: 'accommodation',
-    description: `Time at ${hotelName} to rest and refresh.`,
-    startTime: st, endTime: offset(st, dur), durationMinutes: dur,
-    location: { name: hotelName, address: '' },
-    cost: { amount: 0, currency: 'USD' }, isLocked: false,
-    tags: ['hotel', 'rest'], source: 'bookend-validator',
-  });
+  const makeAccomCard = (label: string, st: string, dur: number) => {
+    const card: any = {
+      id: `bookend-${label.replace(/\s/g, '-').toLowerCase()}-${dayNumber}-${Date.now()}`,
+      title: `${label} ${hotelName}`,
+      category: 'accommodation',
+      description: `Time at ${hotelName} to rest and refresh.`,
+      startTime: st, endTime: offset(st, dur), durationMinutes: dur,
+      location: { name: hotelName, address: '' },
+      cost: { amount: 0, currency: 'USD' }, isLocked: false,
+      tags: ['hotel', 'rest'], source: 'bookend-validator',
+    };
+    // Born-in-bounds: never let a bookend builder emit a card whose end
+    // crosses 23:59. Pulls start back if needed to preserve a 15-min window.
+    clampBookendEndTime(card, { label: 'BOOKEND_BUILDER' });
+    return card;
+  };
 
   /** Coordinate-aware transit card builder */
   const makeTransCard = (from: string, to: string, st: string, fromAct?: any, toAct?: any) => {

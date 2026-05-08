@@ -16,6 +16,7 @@
  */
 
 import { enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
+import { clampBookendEndTime } from '../_shared/clamp-bookend.ts';
 import { fixPlaceholdersForDay, nuclearPlaceholderSweep, nuclearWellnessSweep, nuclearCrossCitySweep } from './fix-placeholders.ts';
 import {
   checkAndApplyFreeVenue,
@@ -103,7 +104,7 @@ function runStep8(result: any[], dayIndex: number, hotelName?: string): void {
   const endMins = Math.min(sh * 60 + sm + 30, 23 * 60 + 59);
   const endTime24 = `${String(Math.floor(endMins / 60)).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
   const resolvedHotel = (hotelName && hotelName.trim()) || '';
-  result.push({
+  const card: any = {
     title: resolvedHotel ? `Return to ${resolvedHotel}` : 'Return to Your Hotel',
     venue_name: resolvedHotel || 'Your Hotel',
     category: 'accommodation',
@@ -117,7 +118,11 @@ function runStep8(result: any[], dayIndex: number, hotelName?: string): void {
     is_free: true,
     price_per_person: 0,
     skipEnrichment: true,
-  });
+  };
+  // Belt-and-braces: route through the shared bookend clamp so the 23:59 cap
+  // lives in exactly one place.
+  clampBookendEndTime(card, { label: 'STEP8' });
+  result.push(card);
   console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}`);
 }
 

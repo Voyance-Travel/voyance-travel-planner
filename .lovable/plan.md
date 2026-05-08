@@ -1,69 +1,87 @@
-# Day 3 missing lunch + 4h dead gap before checkout
+# Day 2 ghost return — bookend bleeds past midnight (23:45 → 12:44 AM)
 
 ## What the user sees
 
-Day 3 (departure day) of a 3-day Venice trip:
+Day 2 ends with:
 
 ```
-12:10  Scala Contarini del Bovolo
-[ ─── 4h 15m of nothing ─── ]
-16:25  Hotel Checkout
-~19:00 Departure
+…last activity ends 23:45
+23:45 → 12:44 AM   Return to JW Marriott Venice Resort & Spa   (59 min)
 ```
 
-No farewell lunch, no afternoon activity. Departure is mid-evening, so policy says lunch IS required — yet it never lands.
+The card starts in-bounds (23:45) but its `endTime` is past midnight, so the UI renders "12:44 AM" — a Day-3-territory bleed and the same shape of bug as the prior pre-dawn ghosts.
 
-## Root causes (4 confirmed in code)
+## Root cause (single hole, three exits)
 
-1. **Dead-gap fill is hard-disabled on the last day.** `pipeline/fill-dead-gaps.ts:62` returns early when `opts.isLastDay`. Both pre- and post-pass calls in `action-generate-trip-day.ts` honour this. Result: any afternoon hole on departure day survives untouched.
+There are three independent "drop past 23:30" passes, and **all three explicitly exempt hotel-return / freshen-up / check-in cards from the cutoff**:
 
-2. **Last-day meal-guard runs with an empty fallback pool.** `action-generate-trip-day.ts:1646` passes `[]` as `fallbackVenues` to `enforceRequiredMealsFinalGuard` for the per-day pass. On the last day this is the *only* call that can save us (cross-day loop runs later but with the same empty pool at line ~2042). When the AI omitted lunch and the upstream pool was exhausted, the guard has nothing to inject and silently no-ops.
+1. `supabase/functions/_shared/timing-cascade.ts:286-302` — `isEndOfDayBookend` exempts hotel-return from the past-midnight drop.
+2. `supabase/functions/generate-itinerary/pipeline/repair-day.ts:2786-2808` — same exemption (`'return to' / 'freshen up' / 'check-in'`).
+3. `supabase/functions/generate-itinerary/pipeline/repair-day.ts:2885-2904` — same exemption after duration enforcement.
 
-3. **`afternoon_departure` policy is correct but unenforced end-to-end.** `meal-policy.ts:175-177` correctly flags `breakfast + lunch` as required when departure ∈ [15:00, 18:00). But there's no save-time "did lunch actually ship?" assertion on departure days, so the missing meal slips past `[MEAL_AUDIT]` (which logs the no-op as compliant since the guard ran without finding anything to do).
+The exemption is correct in principle (we want a bookend even at 23:30+), but **none of these passes ever clamps the bookend's `endTime` to ≤ 23:59**. Combined with:
 
-4. **No observability for unfilled departure-day windows.** `reportRemainingAfternoonDeadGap` only fires when `fillAfternoonDeadGaps` runs — and it's skipped on last day. So the 4h dead window never shows up in `metadata.quality.unfilled_dead_gap_minutes`.
+- `runStep8` in `universal-quality-pass.ts` only caps end at 23:59 for cards *it* injects — not for cards already in the array.
+- `makeAccomCard` (`repair-day.ts:3424`) builds a return card with raw `offset(st, dur)` — no upper clamp on the result.
+- The minimum-duration cascade (`repair-day.ts:2811-2864`) skips `accommodation`, but the **buffer / overlap cascade** can still shift a bookend's `startTime` later, leaving the original `durationMinutes` intact and computing `endTime = start + dur` past midnight.
 
-## Fix — four-layer departure-day defense
+So a card that the AI emitted with `start=23:45, dur=59` (or one that got pushed from 23:00 → 23:45 by an earlier overlap cascade while keeping its 59-min duration) survives every cutoff and prints "12:44 AM".
 
-### Layer 1 — Enable bounded gap-fill on the last day
+The pre-dawn UI scrubber (`src/lib/itinerary/hideGhostActivities.ts`) doesn't catch this either — it only hides 00:00-04:59 *start times*, not late-night cards whose **end** crosses midnight.
 
-`pipeline/fill-dead-gaps.ts`:
-- Replace the blanket `if (opts.isLastDay) return …` with a bounded mode that:
-  - Keeps the 12:00 lower bound.
-  - Sets the upper bound to `min(AFTERNOON_END_MIN, departureTime - buffer, checkoutTime)`.
-  - Treats the gap-end neighbour (`checkout` / `airport transfer`) as a logistics anchor (still skip if neighbour is locked).
-- Add `latestUsableMins?: number` to `FillDeadGapsOptions` and thread it from both call sites in `action-generate-trip-day.ts` and `action-generate-day.ts` using the existing `savedDepTime24Hoisted` − buffer logic already computed for `_latestMins`.
-- Keep the 2-insert cap so we don't over-fill on a tight window.
+## Fix — clamp the bookend window everywhere it's exempted
 
-### Layer 2 — Real fallback pool for the per-day meal-guard
+Single shared helper + three call sites, plus a UI safety net that mirrors the existing pre-dawn scrubber.
 
-`action-generate-trip-day.ts` around line 1639-1648:
-- Replace the hard-coded `[]` with the same `verified_venues` lookup already used in `action-save-itinerary.ts` (`destination` column — fixed in the previous round). Cache the query inside a per-trip-day local so we don't refetch for each day in the loop.
-- Same change at the cross-day loop (~line 2042) so subsequent days also get a non-empty pool.
+### Layer 1 — Shared `clampBookendEndTime` helper (new)
 
-### Layer 3 — Departure-day "lunch must land" assertion
+New file `supabase/functions/_shared/clamp-bookend.ts`:
 
-In `action-generate-trip-day.ts` immediately after the per-day meal-guard at line 1670:
-- If `_isLastDay && _fmgPolicy.requiredMeals.includes('lunch')` and `detectMealSlots(dayResult.activities)` still lacks `'lunch'`, force-call `proposeGapFiller` (or directly insert from the fallback pool) targeting the 12:30–14:30 slot bounded by the morning activity end and checkout/cutoff. Mark with `metadata.quality.last_day_lunch_forced = true`.
-- Emit `[MEAL_AUDIT_LASTDAY] day=N forced_lunch=<venue>` so regressions are greppable.
+- `clampBookendEndTime(act, { latestEnd = '23:59' })`:
+  - Identifies hotel-return / freshen-up / check-in cards by the same regex/category set already used in the three exemption blocks.
+  - If `endTime > latestEnd`, sets `endTime = latestEnd`, recomputes `durationMinutes` from `(end - start)`, and if the new duration drops below 5 min, also pulls `startTime` back to `latestEnd - 15` (preserves a visible 15-min bookend).
+  - Returns a structured result so callers can log a single `[BOOKEND_CLAMP]` line for observability.
+- `clampAllBookends(activities, ctx)` — array helper that runs the above over an activity list and returns the count of clamps (for `metadata.quality.bookend_clamped_count`).
 
-### Layer 4 — Observability for last-day windows
+### Layer 2 — Wire into the three exemption sites
 
-`pipeline/fill-dead-gaps.ts`:
-- Make `reportRemainingAfternoonDeadGap` (or add a sibling `reportRemainingDepartureDayGap`) run for last-day windows too, using the bounded upper limit.
-- Persist `metadata.quality.unfilled_departure_day_gap_minutes` and log `[LAST_DAY_GAP] day=N gap=Xm window=HH:MM-HH:MM`.
+- `supabase/functions/_shared/timing-cascade.ts` — inside `isEndOfDayBookend`-exempt branch, call `clampBookendEndTime` before `return true`. Push a new repair `type: 'bookend_clamped'`.
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts:2786-2808` — same: clamp before the `return true` exemptions; push `repairs` entry `action: 'bookend_clamped_post_overlap'`.
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts:2885-2904` — same: clamp before exemption; push `action: 'bookend_clamped_post_duration'`.
+
+### Layer 3 — Clamp at the bookend builders
+
+- `repair-day.ts:3424 makeAccomCard` — wrap the computed `endTime` with the shared clamp so any newly-built return/freshen-up card is born in-bounds.
+- `universal-quality-pass.ts:runStep8` — already caps at 23:59, but route through the shared helper so the regex stays in one place.
+
+### Layer 4 — Final pre-persist sweep
+
+- `supabase/functions/generate-itinerary/pipeline/persist-day.ts` — right next to the existing `stripPreDawnHotelReturns` call, run `clampAllBookends(normalizedActivities, { dayNumber, label: 'PERSIST' })` and `clampAllBookends(generatedDay.activities, { … })`. Persist `metadata.quality.bookend_clamped_count` on the day row when > 0.
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — same sweep at JSON snapshot time so legacy data flowing through save also gets fixed.
+
+### Layer 5 — UI safety net (mirrors pre-dawn scrubber)
+
+- `src/lib/itinerary/hideGhostActivities.ts` — extend `isGhostActivity` with a "post-midnight bleed" check:
+  - If the card matches `HOTEL_RETURN_RE` AND its `endTime` parses past midnight (i.e. `endMins < startMins`, OR `endMins > 23*60+59`), treat as a ghost and hide.
+  - Same source/lock exemption rules as today (never hide `is_locked`, `user`, `manual`, `extracted`, `pinned`).
+- This mirrors the existing pre-dawn rule and means already-persisted trips heal on next render without a regen.
 
 ## Files to edit
 
-- `supabase/functions/generate-itinerary/pipeline/fill-dead-gaps.ts` — bounded last-day mode + last-day reporting.
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — pass `latestUsableMins`, real fallback pool, last-day lunch assertion.
-- `supabase/functions/generate-itinerary/action-generate-day.ts` — same `latestUsableMins` thread-through for chain-mode.
-- `supabase/functions/generate-itinerary/__tests__/fill-dead-gaps.lastday.test.ts` — new test: last-day with 4h gap between activity and checkout gets filled when window allows.
-- `supabase/functions/generate-itinerary/__tests__/last-day-lunch.test.ts` — new test: `afternoon_departure` policy + missing lunch + non-empty pool → lunch injected at correct time.
+- New: `supabase/functions/_shared/clamp-bookend.ts`
+- Edit: `supabase/functions/_shared/timing-cascade.ts` (exemption branch)
+- Edit: `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (two cutoff exemptions + `makeAccomCard`)
+- Edit: `supabase/functions/generate-itinerary/universal-quality-pass.ts` (`runStep8` routes through helper)
+- Edit: `supabase/functions/generate-itinerary/pipeline/persist-day.ts` (final sweep + metadata)
+- Edit: `supabase/functions/generate-itinerary/action-save-itinerary.ts` (snapshot-time sweep)
+- Edit: `src/lib/itinerary/hideGhostActivities.ts` (post-midnight bleed branch)
+- New tests:
+  - `supabase/functions/_shared/__tests__/clamp-bookend.test.ts` — start 23:45 + 59 min → end 23:59, dur 14 min; start 23:55 + 30 min → start pulled back to 23:44 to preserve a 15-min window; locked cards untouched.
+  - `supabase/functions/generate-itinerary/__tests__/bookend-clamp-cascade.test.ts` — overlap-cascade pushes return from 23:00 to 23:45 → final endTime ≤ 23:59, count appears in repairs.
 
 ## Memory
 
-Update `mem://constraints/itinerary/dinner-required-defer-hotel-return` (or add a sibling `mem://constraints/itinerary/last-day-lunch-and-gap`) noting:
-- Departure-day dead-gap fill must run with `latestUsableMins = depTime − buffer`.
-- `enforceRequiredMealsFinalGuard` must always receive a non-empty fallback pool on the last day, otherwise `afternoon_departure` lunch silently drops.
-- New `metadata.quality.unfilled_departure_day_gap_minutes` and `last_day_lunch_forced` fields are the regression sentinels.
+- Update `mem://constraints/itinerary/dinner-required-defer-hotel-return` (or add sibling `mem://constraints/itinerary/bookend-clamp-end-of-day`):
+  - Hotel-return / freshen-up / check-in cards are exempted from the 23:30 drop in three places — each exemption MUST run `clampBookendEndTime` so the card can never end past 23:59.
+  - `metadata.quality.bookend_clamped_count` and `repair.action='bookend_clamped_*'` are the regression sentinels.
+- Update `mem://index.md` Ghost Activity Filter line to mention the post-midnight-bleed branch alongside the existing pre-dawn rule.

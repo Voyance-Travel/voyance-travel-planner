@@ -38,9 +38,20 @@ export function isGhostActivity(a: any): boolean {
   if (WELLNESS_PLACEHOLDER_RE.test(title)) return true;
 
   if (HOTEL_RETURN_RE.test(title)) {
-    const mins =
+    const startMins =
       timeToMins(a.startTime) ?? timeToMins(a.start_time) ?? timeToMins(a.time);
-    if (mins !== null && mins < PRE_DAWN_MAX_MINS) return true;
+    if (startMins !== null && startMins < PRE_DAWN_MAX_MINS) return true;
+
+    // Post-midnight bleed: card starts in-bounds but its endTime crosses
+    // midnight (either > 23:59 or wrapped so end < start). Same shape as the
+    // pre-dawn ghost — hide until the next regen clamps it.
+    const endMins =
+      timeToMins(a.endTime) ?? timeToMins(a.end_time);
+    if (endMins !== null && startMins !== null) {
+      const wrapped = endMins < startMins;
+      const overflow = endMins > 23 * 60 + 59;
+      if (wrapped || overflow) return true;
+    }
   }
 
   return false;
