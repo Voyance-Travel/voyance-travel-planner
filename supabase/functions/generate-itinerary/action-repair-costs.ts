@@ -4,7 +4,7 @@
  */
 
 import { type ActionContext, verifyTripAccess, okJson, errorJson } from './action-types.ts';
-import { ALWAYS_FREE_VENUE_PATTERNS, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS, FINE_DINING_MIN_PRICE_DEFAULT, KNOWN_MICHELIN_HIGH, KNOWN_MICHELIN_MID, KNOWN_UPSCALE, MICHELIN_FLOOR, KNOWN_TICKETED_ATTRACTIONS } from './sanitization.ts';
+import { ALWAYS_FREE_VENUE_PATTERNS, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS, FINE_DINING_MIN_PRICE_DEFAULT, KNOWN_MICHELIN_HIGH, KNOWN_MICHELIN_MID, KNOWN_UPSCALE, MICHELIN_FLOOR, KNOWN_TICKETED_ATTRACTIONS, LUXURY_HOTEL_SIGNATURE_RE, RESTAURANT_LEAD_RE } from './sanitization.ts';
 import { isPlaceholderWellness } from './fix-placeholders.ts';
 import { isWalkingLeg } from '../_shared/walking-leg.ts';
 
@@ -399,6 +399,15 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Known Michelin-starred restaurant';
       } else if (michelinFloor < MICHELIN_FLOOR.upscale && KNOWN_UPSCALE.test(combinedText)) {
         michelinFloor = MICHELIN_FLOOR.upscale; michelinReason = 'Known upscale restaurant';
+      }
+
+      // Strategy 4: Luxury-hotel-dining heuristic — same defense-in-depth as
+      // sanitization.ts/enforceMichelinPriceFloor. Floors at upscale (€60/pp).
+      if (michelinFloor < MICHELIN_FLOOR.upscale &&
+          LUXURY_HOTEL_SIGNATURE_RE.test(combinedText) &&
+          RESTAURANT_LEAD_RE.test(combinedText)) {
+        michelinFloor = MICHELIN_FLOOR.upscale;
+        michelinReason = 'luxury_hotel_dining_heuristic';
       }
 
       if (michelinFloor > 0 && costPerPerson < michelinFloor) {

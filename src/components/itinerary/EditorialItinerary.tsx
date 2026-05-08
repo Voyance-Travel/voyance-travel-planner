@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { isWeakAddress } from '@/lib/address-quality';
 import { coerceDurationString } from '@/utils/plannerUtils';
 import { useLedgerCostOverrideMap, getLedgerOverride, warnOnceLedgerOverride } from '@/utils/ledgerCostOverride';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
@@ -11121,7 +11122,7 @@ function ActivityRow({
     };
     const rawLocationName = sanitizeActivityText(activity.location?.name?.trim());
     const dedupedLocationName = (rawLocationName && rawLocationName !== activityTitle && !isPlaceholderLocation(rawLocationName)) ? rawLocationName : '';
-    const locationText = dedupedLocationName || (activity.location?.address && !isPlaceholderLocation(activity.location.address) ? sanitizeActivityText(activity.location.address) : '');
+    const locationText = dedupedLocationName || (activity.location?.address && !isPlaceholderLocation(activity.location.address) && !isWeakAddress(activity.location.address) ? sanitizeActivityText(activity.location.address) : '');
 
     return (
       <div className="py-2">
@@ -11329,13 +11330,16 @@ function ActivityRow({
           {(() => {
             const locN = activity.location?.name?.trim();
             const dedupLocName = (locN && locN !== activityTitle) ? locN : '';
-            return (dedupLocName || activity.location?.address) ? (
+            const rawAddr = activity.location?.address;
+            const addrSafe = (rawAddr && !isWeakAddress(rawAddr)) ? rawAddr : '';
+            const display = dedupLocName || addrSafe;
+            return display ? (
             <div className={cn(
               "flex items-center gap-1.5 text-xs text-muted-foreground",
               !canViewPremium && "blur-sm pointer-events-none select-none"
             )}>
               <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
-              <span className="truncate">{dedupLocName || activity.location?.address}</span>
+              <span className="truncate">{display}</span>
             </div>
             ) : null;
           })()}

@@ -395,6 +395,50 @@ export const KNOWN_FINE_DINING_STARS: Record<string, number> = {
   'turk fatih tutak': 2,
   'mikla': 1,
   'neolokal': 1,
+
+  // === VENICE ===
+  'quadri': 1,
+  'ristorante quadri': 1,
+  'alajmo quadri': 1,
+  'glam': 1,
+  'glam enrico bartolini': 1,
+  'local': 1,
+  'local venezia': 1,
+  'oro': 2,
+  'oro restaurant': 2,
+  'oro belmond': 2,
+  'oro at belmond cipriani': 2,
+  'cipriani restaurant': 2,
+  'aman venice': 1,
+  'arva': 1,
+  'arva aman': 1,
+  'wisteria': 1,
+  'wistèria': 1,
+  'met': 1,
+  'met restaurant': 1,
+  'met hotel metropole': 1,
+  "antinoo's lounge": 1,
+  'antinoos lounge': 1,
+  'club del doge': 1,
+  'venissa': 1,
+
+  // === FLORENCE ===
+  'enoteca pinchiorri': 3,
+  'borgo san jacopo': 1,
+  'la leggenda dei frati': 1,
+  'il palagio': 1,
+  'il palagio four seasons': 1,
+  'sesto on arno': 1,
+  'la bottega del buon caffè': 1,
+
+  // === NAPLES / AMALFI ===
+  'palazzo petrucci': 1,
+  'george restaurant': 1,
+  'il comandante': 1,
+  'aria': 1,
+  'aria restaurant': 1,
+  'sud': 1,
+  "don alfonso 1890": 2,
 };
 
 /** Per-star price floors (EUR/pp) */
@@ -406,6 +450,17 @@ export const FINE_DINING_MIN_PRICE_BY_STARS: Record<number, number> = {
 
 /** Default floor for known fine dining without star info */
 export const FINE_DINING_MIN_PRICE_DEFAULT = 120;
+
+/**
+ * Luxury-hotel-dining heuristic — when an activity title/description names a
+ * top-tier hotel AND reads like a restaurant ("Restaurant", "Ristorante",
+ * "Dinner at …"), floor it at MICHELIN_FLOOR.upscale even if the venue isn't
+ * in KNOWN_FINE_DINING_STARS yet. Defends against the recurring "Quadri /
+ * Oro at Cipriani / La Pergola priced as a casual dinner" regression.
+ */
+export const LUXURY_HOTEL_SIGNATURE_RE = /\b(belmond|cipriani|aman|bvlgari|bulgari|four\s*seasons|gritti\s*palace|st\.?\s*regis|ritz[\-\s]?carlton|mandarin\s*oriental|park\s*hyatt|raffles|peninsula|rosewood|dorchester|connaught|claridge|savoy\s*hotel|setai|villa\s*d['’]?este|hassler|de\s*russie|principe\s*di\s*savoia|grand\s*hotel\s+(et\s+|de\s+)?[a-z]|hotel\s*metropole|hotel\s*danieli|gritti|aman\s*venice|aman\s*tokyo|the\s*peninsula)\b/i;
+
+export const RESTAURANT_LEAD_RE = /\b(restaurant|ristorante|restaurante|dinner\s+at|lunch\s+at|brunch\s+at|tasting\s+menu|chef'?s\s+table|signature\s+dining|fine\s*dining|haute\s*cuisine|gastronomic)\b/i;
 
 // =============================================================================
 // SHARED HELPER: enforceMichelinPriceFloor
@@ -515,6 +570,23 @@ export function enforceMichelinPriceFloor(activity: Record<string, any>, logPref
       }
       return false;
     }
+  }
+
+  // Strategy 4: Luxury-hotel-dining heuristic — defends against missing-entry
+  // regressions (Quadri / Oro at Cipriani / La Pergola pattern). If the text
+  // names a top-tier hotel AND reads like a restaurant, floor at upscale.
+  if (!matchedKey && LUXURY_HOTEL_SIGNATURE_RE.test(combined) && RESTAURANT_LEAD_RE.test(combined)) {
+    const minPrice = MICHELIN_FLOOR.upscale;
+    if (currentPrice > 0 && currentPrice < minPrice) {
+      console.warn(`MICHELIN PRICE FLOOR ENFORCED [${logPrefix}]: "${activity.title}" was €${currentPrice}/pp → raised to €${minPrice}/pp (luxury_hotel_dining_heuristic)`);
+      writePriceToAllFields(activity, minPrice);
+      try {
+        activity.metadata = activity.metadata || {};
+        activity.metadata.cost_floor_reason = 'luxury_hotel_dining_heuristic';
+      } catch { /* ignore metadata write failures */ }
+      return true;
+    }
+    return false;
   }
 
   if (!matchedKey) return false;
@@ -1467,6 +1539,15 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
           floor = MICHELIN_FLOOR.mid; reason = 'Known Michelin-starred restaurant';
         } else if (floor < MICHELIN_FLOOR.upscale && KNOWN_UPSCALE.test(combined)) {
           floor = MICHELIN_FLOOR.upscale; reason = 'Known upscale restaurant';
+        }
+
+        // Luxury-hotel-dining heuristic — defends against missing-entry
+        // regressions (Quadri / Oro at Cipriani / La Pergola pattern).
+        if (floor < MICHELIN_FLOOR.upscale &&
+            LUXURY_HOTEL_SIGNATURE_RE.test(combined) &&
+            RESTAURANT_LEAD_RE.test(combined)) {
+          floor = MICHELIN_FLOOR.upscale;
+          reason = 'luxury_hotel_dining_heuristic';
         }
 
         // Famous seafood

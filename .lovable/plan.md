@@ -1,64 +1,81 @@
-## Root cause
+## Problem
 
-Three independent leak paths let `(INTEREST_SLOT)` reach the user, despite the regex updates from the last fix:
+Two recurring class bugs surface together on Quadri (Venice, 1-Michelin star, Piazza San Marco):
 
-1. **UI render bypass.** Activity card titles render through `sanitizeActivityName` / `sanitizeActivityText` in `src/utils/activityNameSanitizer.ts` — **not** through `sanitizeText` (where I added the bare-ALLCAPS-with-underscore stripper last round). `activityNameSanitizer.ts` has no prompt-artifact stripping at all (grep confirms: only `Fulfills the … slot.` and a generic `USER_PREF_NOTE_RE`). So whatever survives to the DB renders raw.
+1. **Underpricing** — €26/pp for a Michelin-starred restaurant. Same shape as previous La Pergola / Oro at Belmond Cipriani regressions. Root cause: `KNOWN_FINE_DINING_STARS` in `supabase/functions/generate-itinerary/sanitization.ts` has **no Venice section at all** (Quadri, Glam Enrico Bartolini, Local, Met, Oro at Belmond Cipriani, Antinoo's Lounge / Aman Arva, Wistèria, Quadri's sister Caffè Florian — all missing). When a starred venue isn't in the map and the regex fallbacks (`KNOWN_MICHELIN_HIGH/MID/UPSCALE`) don't match, the name passes through and the LLM's casual `cost_mid_usd ≈ $25–30` (the "dinner" tier) sticks.
 
-2. **DB per-day trigger only DROPS, never STRIPS.** `itinerary_days_scrub_activities_trg` calls `scrub_itinerary_activities(jsonb)`, which uses the old narrow regex `\(\s*([A-Z][A-Z0-9 _-]{1,30}\s+)?(slot|placeholder)\s*\)`. `(INTEREST_SLOT)` and `(FLEX_WINDOW)` don't match (no trailing word "slot"/"placeholder", no required whitespace before SLOT — it's an underscore). So the row passes through with the dirty title intact. And even if it matched, this trigger drops the whole row instead of cleaning the title — wrong behavior for a forced interest activity we want to keep.
+2. **Address is just a sestiere/neighborhood** — "San Marco" instead of "Piazza San Marco 121, 30124 Venezia VE, Italy". The same gap exists for any venue whose address has no digits (street number) or comma-delimited postal segment. Wellness already has a `hasNumericAddress` gate in `fix-placeholders.ts` line 688; dining/sightseeing/culture do not.
 
-3. **Trip-level scrubber covers `trips.itinerary_data` but not `itinerary_days.activities` writes.** `_scrub_itinerary_prompt_artifacts` (updated last round, regex now correct) only runs on `trips`. The per-day row write path has no equivalent text-strip — only the row-drop trigger above.
+The user's directive — *"make sure the fix is universal"* — means we cannot just add Quadri. We need the static map to grow AND a defensive heuristic that catches the next missing entry before it reaches the user.
 
-Net: a forced "INTEREST SLOT" activity (from `personalization-enforcer.ts:797`) gets written into `itinerary_days.activities` with the model paraphrasing the label as `(INTEREST_SLOT)` in the title, survives both DB triggers, and renders through `sanitizeActivityName` untouched.
+## Universal fix — three layers
 
-## Fix scope (3 surgical changes — same regex everywhere)
+### Layer 1: Expand the known-stars map (data)
 
-Reuse the already-deployed pattern:
+Add a Venice section to `KNOWN_FINE_DINING_STARS` (and matching hotel-restaurant entries) so the explicit-name path catches them:
+
+- `'quadri'`: 1, `'ristorante quadri'`: 1, `'alajmo quadri'`: 1
+- `'glam'`: 1, `'glam enrico bartolini'`: 1
+- `'local'`: 1, `'local venezia'`: 1
+- `'oro'`: 2, `'oro restaurant'`: 2, `'oro belmond'`: 2 (Belmond Cipriani)
+- `'aman venice'`: 1, `'arva'`: 1, `'arva aman'`: 1
+- `'wistèria'`: 1, `'wisteria'`: 1
+- `'met'`: 1, `'met restaurant'`: 1, `'met hotel metropole'`: 1
+- `'antinoo's lounge'`: 1, `'antinoos lounge'`: 1 (Sina Centurion)
+- `'club del doge'`: 1 (Gritti Palace)
+
+Same migration also seeds a Florence and Naples micro-section (next likely victims):
+
+- Florence: `'enoteca pinchiorri'` (3), `'borgo san jacopo'` (1), `'la leggenda dei frati'` (1), `'il palagio'` (1, Four Seasons Florence), `'sesto on arno'` (1, Westin)
+- Naples: `'palazzo petrucci'` (1), `'george restaurant'` (1, Grand Hotel Parker's), `'il comandante'` (1, Romeo Hotel), `'aria'` (1)
+
+### Layer 2: Heuristic floor for "starred venue inside a luxury hotel" (defensive)
+
+Most missing-entry regressions follow one pattern: a Michelin-starred restaurant **inside a top-tier hotel**, where the LLM names the hotel and gives a casual price. Add a heuristic in `enforceMichelinPriceFloor` (universal-quality-pass.ts → calls into sanitization.ts):
+
+- If the activity's title or description contains a luxury-hotel signature word (`belmond|cipriani|aman|bvlgari|bulgari|four seasons|gritti palace|st\.? regis|ritz[\- ]carlton|mandarin oriental|park hyatt|raffles|peninsula|rosewood|dorchester|connaught|claridge|savoy|setai|borgo|villa d'?este|hassler|de russie|principe di savoia|grand hotel`) **AND** the title contains a "Ristorante|Restaurant|Dinner at" lead **AND** no `KNOWN_FINE_DINING_STARS` match fired, then floor it at `MICHELIN_FLOOR.upscale` (€60/pp) and tag `metadata.cost_floor_reason = 'luxury_hotel_dining_heuristic'`.
+
+This stops the bleeding for venues we haven't catalogued yet (the Cipriani/Quadri pattern). It's a *floor*, not a ceiling, so legitimate higher LLM prices stay.
+
+### Layer 3: Address-quality gate (universal, not just wellness)
+
+Promote the wellness-only `hasNumericAddress` rule from `fix-placeholders.ts` line 688 to a shared helper `isWeakAddress(address)` in `supabase/functions/_shared/address-quality.ts`:
+
+```text
+weak ⇔ address is null OR length < 8 OR no digit OR is a bare neighborhood
+       (matches /^(san marco|cannaregio|castello|dorsoduro|santa croce|
+                   san polo|trastevere|monti|chiado|alfama|le marais|
+                   soho|shibuya|gion|...)\s*$/i)
 ```
-\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)
-```
 
-### 1. UI safety net — `src/utils/activityNameSanitizer.ts`
-Add a top-of-pipeline strip in `sanitizeActivityName` (and `sanitizeActivityText` if it exists alongside) that removes prompt-artifact tokens from the input before any other processing. Two regexes — non-global for `.test()`, `/g` for `.replace()` — per the Stateful Regex Strip Bug memory. This fixes every already-saved trip on next render with zero data writes.
+Where it runs:
 
-### 2. New DB function `_strip_prompt_artifacts_in_activities(jsonb) → jsonb`
-Pure text-strip (mirror of `_scrub_itinerary_prompt_artifacts` but operating on a `jsonb` array of activities, not a full itinerary). Removes the artifact substring from each activity's `title`, `name`, `description`. Never drops rows.
+1. **Pre-save** (action-save-itinerary + persist-day-contract) — when a venue has `placeId` from Google Places but `isWeakAddress(location.address)`, re-fetch `formattedAddress` once via the existing `verifyVenueWithPlaces` cache; replace if returned address is stronger.
+2. **Render-time UI safety net** — `src/components/itinerary/ActivityCard.tsx` (or wherever address is rendered) hides the address line when `isWeakAddress` is true and the activity has no `placeId`, instead of showing a misleading sestiere. (Falls back to "Tap for details" / Google Maps deep-link by name+city.)
+3. **Backfill** — one-shot SQL UPDATE on `itinerary_days.activities` over the last 14 days, nulling out address strings that match the weak pattern so next render recovers via the UI gate.
 
-Wire it into the existing `itinerary_days_scrub_activities` trigger BEFORE the row-drop call, so the strip runs first and the drop only fires on truly broken rows:
-```
-NEW.activities := public._strip_prompt_artifacts_in_activities(NEW.activities);
-NEW.activities := public.scrub_itinerary_activities(NEW.activities);
-```
+Address line is *frontend/presentation* — no business-logic change there beyond hiding misleading data.
 
-### 3. One-shot backfill (same migration)
-UPDATE `itinerary_days.activities` AND `trips.itinerary_data` for rows updated in the last 14 days where the new regex hits. Run `_strip_prompt_artifacts_in_activities` / `_scrub_itinerary_prompt_artifacts` over them. Last round's backfill ran the old regex against `_scrub_itinerary_prompt_artifacts` after the regex update, so this re-run is just a safety pass that will also catch any trips written between now and the previous backfill.
+### Tests
 
-## Tests
+- `sanitization.test.ts` (or new `michelin-floor.test.ts`): Quadri / Glam / Oro / "Dinner at Belmond Cipriani Restaurant" all floor at ≥ €120 (1-star) or ≥ €60 (heuristic), never €26.
+- `address-quality.test.ts` (new): "San Marco", "Cannaregio", "" → weak; "Piazza San Marco 121, 30124 Venezia VE, Italy" → strong; "228 Rue de Rivoli" → strong.
 
-Add to `src/utils/__tests__/activityNameSanitizer.test.ts` (create if missing):
-- `sanitizeActivityName("Anniversary Wellness Ritual (INTEREST_SLOT)")` → `"Anniversary Wellness Ritual"`.
-- `sanitizeActivityName("Open Afternoon - Wander Castello (FLEX_WINDOW)")` → `"Open Afternoon - Wander Castello"`.
-- `sanitizeActivityName("Dinner (AESTHETIC slot)")` → `"Dinner"`.
-- `sanitizeActivityName("Visit MoMA (NYC)")` → unchanged.
+### Memory updates
 
-DB-side: in the migration, run a SELECT round-trip to assert `_strip_prompt_artifacts_in_activities` removes `(INTEREST_SLOT)` from a synthetic row but leaves `(NYC)` alone.
+Append to `mem://technical/finance/table-driven-cost-architecture` (or create a sibling rule `mem://constraints/itinerary/michelin-pricing-defense-in-depth`):
 
-## What this does NOT change
-
-- No prompt edits — the generator can keep emitting forced-interest descriptions; we just refuse to let the literal token survive to the user.
-- No locking, no cost logic, no cross-city sweep, no row-drop semantics for legitimately broken rows (still dropped by `scrub_itinerary_activities`).
+> Michelin/luxury-hotel dining priced as casual (€26 dinner tier) is a recurring data-gap regression (La Pergola → Oro Belmond → Quadri). Defense in depth required: (1) explicit `KNOWN_FINE_DINING_STARS` map, (2) luxury-hotel-name heuristic that floors at `MICHELIN_FLOOR.upscale` even with no map hit, (3) per-venue address-quality gate hides bare-sestiere strings ("San Marco") and forces Google Places re-enrichment when `placeId` exists.
 
 ## Files
 
-- Edit `src/utils/activityNameSanitizer.ts`
-- New `src/utils/__tests__/activityNameSanitizer.artifacts.test.ts` (or extend existing `activityNameSanitizer.test.ts`)
-- New migration:
-  - `CREATE OR REPLACE FUNCTION public._strip_prompt_artifacts_in_activities(jsonb)`
-  - `CREATE OR REPLACE FUNCTION public.itinerary_days_scrub_activities()` — call strip before drop
-  - 14-day backfill UPDATE on `itinerary_days` and `trips`
+- **Edit** `supabase/functions/generate-itinerary/sanitization.ts` — Venice/Florence/Naples entries in `KNOWN_FINE_DINING_STARS`, add `LUXURY_HOTEL_DINING_RE` constant + `isLuxuryHotelDiningHeuristic(activity)` helper.
+- **Edit** `supabase/functions/generate-itinerary/action-repair-costs.ts` and `universal-quality-pass.ts` — call the heuristic inside `enforceMichelinPriceFloor` when no explicit-star match found.
+- **New** `supabase/functions/_shared/address-quality.ts` — `isWeakAddress`, `WEAK_NEIGHBORHOOD_RE`.
+- **Edit** `supabase/functions/generate-itinerary/action-save-itinerary.ts` (or persist-day-contract) — re-enrich weak addresses when `placeId` present.
+- **Edit** UI activity-address render path (likely `src/components/itinerary/*Card*.tsx`) — hide weak address line.
+- **New** `supabase/functions/generate-itinerary/__tests__/michelin-floor.test.ts`, `supabase/functions/_shared/__tests__/address-quality.test.ts`.
+- **Migration** — 14-day backfill nulling weak addresses on `itinerary_days.activities`.
+- **Memory** — append/create the defense-in-depth rule above.
 
-## Memory update after fix
-
-Append to `mem://technical/itinerary/stateful-regex-strip-bug`:
-- Card title render goes through `sanitizeActivityName`, NOT `sanitizeText`. Prompt-artifact strip MUST live in BOTH.
-- DB trigger on `itinerary_days` must STRIP titles before it considers DROPPING rows — forced-interest activities are otherwise lost or rendered with the raw `(INTEREST_SLOT)` / `(FLEX_WINDOW)` token.
-- Layer count is now SIX, all using the same regex: browser contract, edge contract, edge title-strip, `sanitizeText`, `sanitizeActivityName`, DB trigger.
+No schema changes required (no new tables/columns).

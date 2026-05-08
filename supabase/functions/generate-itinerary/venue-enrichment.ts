@@ -8,6 +8,7 @@
 import type { StrictActivity, StrictDay, VenueVerification, CachedVenue, EnrichmentStats } from './generation-types.ts';
 import { normalizeVenueName, haversineDistanceKm } from './generation-utils.ts';
 import { googleGeocode, googlePlacesTextSearch } from '../_shared/google-api.ts';
+import { isWeakAddress } from '../_shared/address-quality.ts';
 
 // =============================================================================
 // HOTEL PROXIMITY GUARD — Tight radius for water-bound / car-free destinations
@@ -722,6 +723,14 @@ export async function enrichActivity(
         if (venueData.formattedAddress) {
           enriched.location.address = venueData.formattedAddress;
         }
+      } else if (venueData.formattedAddress && isWeakAddress(enriched.location?.address)) {
+        // No coords (low-confidence path), but the LLM-supplied address is weak
+        // ("San Marco" sestiere). Prefer Google's formattedAddress to avoid
+        // showing the user a misleading neighborhood-only address.
+        enriched.location = {
+          ...enriched.location,
+          address: venueData.formattedAddress,
+        };
       }
       if (venueData.rating) {
         enriched.rating = venueData.rating;
