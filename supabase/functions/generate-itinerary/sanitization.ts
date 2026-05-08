@@ -783,11 +783,11 @@ export function enforceTicketedAttractionPricing(activity: Record<string, any>, 
 // BAR / NIGHTCAP PRICE CAP
 // =============================================================================
 
-const BAR_KEYWORDS = /\b(nightcap|cocktail|aperitif|drinks?\s+at|wine\s+bar|rooftop\s+bar|hotel\s+bar|speakeasy)\b/i;
-const BAR_TITLE_BAR = /\bbar\b/i;
-const BAR_EXCLUDE = /\b(barbecue|barista|bar\s+restaurant|sushi\s+bar)\b/i;
-const MAX_BAR_PRICE = 55;
-const DEFAULT_BAR_PRICE = 35;
+export const BAR_KEYWORDS = /\b(nightcap|cocktail|aperitif|drinks?\s+at|wine\s+bar|rooftop\s+bar|hotel\s+bar|speakeasy)\b/i;
+export const BAR_TITLE_BAR = /\bbar\b/i;
+export const BAR_EXCLUDE = /\b(barbecue|barista|bar\s+restaurant|sushi\s+bar)\b/i;
+export const MAX_BAR_PRICE = 55;
+export const DEFAULT_BAR_PRICE = 35;
 
 /**
  * Explicit drinks/nightcap/café framing — when present in the title, the

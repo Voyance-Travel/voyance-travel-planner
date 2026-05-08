@@ -4,7 +4,7 @@
  */
 
 import { type ActionContext, verifyTripAccess, okJson, errorJson } from './action-types.ts';
-import { ALWAYS_FREE_VENUE_PATTERNS, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS, FINE_DINING_MIN_PRICE_DEFAULT, KNOWN_MICHELIN_HIGH, KNOWN_MICHELIN_MID, KNOWN_UPSCALE, MICHELIN_FLOOR, KNOWN_TICKETED_ATTRACTIONS, LUXURY_HOTEL_SIGNATURE_RE, RESTAURANT_LEAD_RE } from './sanitization.ts';
+import { ALWAYS_FREE_VENUE_PATTERNS, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS, FINE_DINING_MIN_PRICE_DEFAULT, KNOWN_MICHELIN_HIGH, KNOWN_MICHELIN_MID, KNOWN_UPSCALE, MICHELIN_FLOOR, KNOWN_TICKETED_ATTRACTIONS, LUXURY_HOTEL_SIGNATURE_RE, RESTAURANT_LEAD_RE, EXPLICIT_DRINKS_RE, BAR_KEYWORDS, BAR_TITLE_BAR, BAR_EXCLUDE, MAX_BAR_PRICE, DEFAULT_BAR_PRICE } from './sanitization.ts';
 import { isPlaceholderWellness } from './fix-placeholders.ts';
 import { isWalkingLeg } from '../_shared/walking-leg.ts';
 
@@ -360,54 +360,65 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
       const strippedTitle = title.toLowerCase().replace(/^(breakfast|lunch|dinner|brunch|meal)\s*(at|:|-|–)\s*/i, '').trim();
       const venueNameLower = (activity.venue_name || (activity as any).restaurant?.name || '').toLowerCase();
 
+      // Drinks/nightcap bypass — mirrors sanitization.ts/enforceMichelinPriceFloor.
+      // Defends against "Gran Caffè Quadri nightcap" being floored at Quadri's
+      // 1-star price ($206/pp). Skip Michelin floor entirely; bar-cap below.
+      const titleLower = title.toLowerCase();
+      const drinksFraming = EXPLICIT_DRINKS_RE.test(titleLower) &&
+        !/\b(dinner|lunch|tasting\s+menu|chef'?s\s+table)\b/i.test(titleLower);
+
       let michelinFloor = 0;
       let michelinReason = '';
 
-      // Strategy 1: Explicit star map lookup
-      for (const [key, stars] of Object.entries(KNOWN_FINE_DINING_STARS)) {
-        if (
-          title.toLowerCase().includes(key) ||
-          strippedTitle.includes(key) ||
-          venueNameLower.includes(key)
-        ) {
-          const starFloor = FINE_DINING_MIN_PRICE_BY_STARS[stars] || FINE_DINING_MIN_PRICE_DEFAULT;
-          if (starFloor > michelinFloor) {
-            michelinFloor = starFloor;
-            michelinReason = `Known ${stars}-star Michelin restaurant (${key})`;
+      if (drinksFraming) {
+        console.log(`[repair-trip-costs] MICHELIN FLOOR SKIP: "${title}" reads as drinks/nightcap/café — skipping fine-dining floor`);
+      } else {
+        // Strategy 1: Explicit star map lookup
+        for (const [key, stars] of Object.entries(KNOWN_FINE_DINING_STARS)) {
+          if (
+            title.toLowerCase().includes(key) ||
+            strippedTitle.includes(key) ||
+            venueNameLower.includes(key)
+          ) {
+            const starFloor = FINE_DINING_MIN_PRICE_BY_STARS[stars] || FINE_DINING_MIN_PRICE_DEFAULT;
+            if (starFloor > michelinFloor) {
+              michelinFloor = starFloor;
+              michelinReason = `Known ${stars}-star Michelin restaurant (${key})`;
+            }
+            break;
           }
-          break;
         }
-      }
 
-      // Strategy 2: Keyword-based star detection
-      if (michelinFloor === 0) {
-        if (/michelin\s*3|3[\s-]*star/i.test(combinedText)) {
-          michelinFloor = 250; michelinReason = 'Michelin 3-star';
-        } else if (/michelin\s*2|2[\s-]*star/i.test(combinedText)) {
-          michelinFloor = MICHELIN_FLOOR.high; michelinReason = 'Michelin 2-star';
-        } else if (/michelin\s*1|1[\s-]*star|michelin[\s-]*starred/i.test(combinedText)) {
-          michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Michelin 1-star';
-        } else if (/tasting menu|fine dining|haute cuisine|degustation|omakase/i.test(combinedText)) {
-          michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Fine dining / tasting menu';
+        // Strategy 2: Keyword-based star detection
+        if (michelinFloor === 0) {
+          if (/michelin\s*3|3[\s-]*star/i.test(combinedText)) {
+            michelinFloor = 250; michelinReason = 'Michelin 3-star';
+          } else if (/michelin\s*2|2[\s-]*star/i.test(combinedText)) {
+            michelinFloor = MICHELIN_FLOOR.high; michelinReason = 'Michelin 2-star';
+          } else if (/michelin\s*1|1[\s-]*star|michelin[\s-]*starred/i.test(combinedText)) {
+            michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Michelin 1-star';
+          } else if (/tasting menu|fine dining|haute cuisine|degustation|omakase/i.test(combinedText)) {
+            michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Fine dining / tasting menu';
+          }
         }
-      }
 
-      // Strategy 3: Regex bucket fallback
-      if (michelinFloor < MICHELIN_FLOOR.high && KNOWN_MICHELIN_HIGH.test(combinedText)) {
-        michelinFloor = MICHELIN_FLOOR.high; michelinReason = 'Known top-tier Michelin restaurant';
-      } else if (michelinFloor < MICHELIN_FLOOR.mid && KNOWN_MICHELIN_MID.test(combinedText)) {
-        michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Known Michelin-starred restaurant';
-      } else if (michelinFloor < MICHELIN_FLOOR.upscale && KNOWN_UPSCALE.test(combinedText)) {
-        michelinFloor = MICHELIN_FLOOR.upscale; michelinReason = 'Known upscale restaurant';
-      }
+        // Strategy 3: Regex bucket fallback
+        if (michelinFloor < MICHELIN_FLOOR.high && KNOWN_MICHELIN_HIGH.test(combinedText)) {
+          michelinFloor = MICHELIN_FLOOR.high; michelinReason = 'Known top-tier Michelin restaurant';
+        } else if (michelinFloor < MICHELIN_FLOOR.mid && KNOWN_MICHELIN_MID.test(combinedText)) {
+          michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Known Michelin-starred restaurant';
+        } else if (michelinFloor < MICHELIN_FLOOR.upscale && KNOWN_UPSCALE.test(combinedText)) {
+          michelinFloor = MICHELIN_FLOOR.upscale; michelinReason = 'Known upscale restaurant';
+        }
 
-      // Strategy 4: Luxury-hotel-dining heuristic — same defense-in-depth as
-      // sanitization.ts/enforceMichelinPriceFloor. Floors at upscale (€60/pp).
-      if (michelinFloor < MICHELIN_FLOOR.upscale &&
-          LUXURY_HOTEL_SIGNATURE_RE.test(combinedText) &&
-          RESTAURANT_LEAD_RE.test(combinedText)) {
-        michelinFloor = MICHELIN_FLOOR.upscale;
-        michelinReason = 'luxury_hotel_dining_heuristic';
+        // Strategy 4: Luxury-hotel-dining heuristic — same defense-in-depth as
+        // sanitization.ts/enforceMichelinPriceFloor. Floors at upscale (€60/pp).
+        if (michelinFloor < MICHELIN_FLOOR.upscale &&
+            LUXURY_HOTEL_SIGNATURE_RE.test(combinedText) &&
+            RESTAURANT_LEAD_RE.test(combinedText)) {
+          michelinFloor = MICHELIN_FLOOR.upscale;
+          michelinReason = 'luxury_hotel_dining_heuristic';
+        }
       }
 
       if (michelinFloor > 0 && costPerPerson < michelinFloor) {
@@ -417,6 +428,37 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         wasCorrected = true;
         corrected++;
       }
+
+      // ── Bar / nightcap price cap ──
+      // Mirrors sanitization.ts/enforceBarNightcapPriceCap. Closes the
+      // "Quadri nightcap = €206/pp" over-pricing direction at the snapshot
+      // layer; without this, a drinks card with a high AI-emitted price
+      // bypasses the JSONB cap and surfaces in activity_costs.
+      const combinedTitleVenue = `${titleLower} ${venueNameLower}`;
+      const isBarActivity =
+        BAR_KEYWORDS.test(combinedTitleVenue) ||
+        (BAR_TITLE_BAR.test(combinedTitleVenue) && !BAR_EXCLUDE.test(combinedTitleVenue));
+
+      if (isBarActivity) {
+        // Don't cap if venue is Michelin AND not framed as drinks (e.g. "Dinner at Quadri")
+        let michelinExempt = false;
+        if (!drinksFraming) {
+          for (const key of Object.keys(KNOWN_FINE_DINING_STARS)) {
+            if (titleLower.includes(key) || venueNameLower.includes(key)) {
+              michelinExempt = true;
+              break;
+            }
+          }
+        }
+        if (!michelinExempt && costPerPerson > MAX_BAR_PRICE) {
+          console.warn(`[repair-trip-costs] [BAR_CAP_REPAIR]: "${title}" was $${costPerPerson}/pp → capped at $${DEFAULT_BAR_PRICE}/pp (bar/cocktail activity)`);
+          costPerPerson = DEFAULT_BAR_PRICE;
+          source = 'bar_cap_repair';
+          wasCorrected = true;
+          corrected++;
+        }
+      }
+
 
       // Write-time guard: free venues and walking transport must be $0.
       // The DB trigger enforces this too, but normalizing here keeps the
@@ -585,7 +627,7 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
   let jsonbPatched = 0;
   const correctedById = new Map<string, { perPersonUsd: number; reason: string }>();
   for (const r of rows) {
-    if (r.source === 'michelin_floor' || r.source === 'ticketed_attraction_floor' || r.source === 'auto_corrected' || r.source === 'transit_cap_repair') {
+    if (r.source === 'michelin_floor' || r.source === 'ticketed_attraction_floor' || r.source === 'auto_corrected' || r.source === 'transit_cap_repair' || r.source === 'bar_cap_repair') {
       const pp = Math.round((r.cost_per_person_usd || 0) * 100) / 100;
       correctedById.set(r.activity_id, { perPersonUsd: pp, reason: r.source });
     }
