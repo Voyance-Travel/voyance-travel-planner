@@ -57,10 +57,29 @@ export interface ResolvedRow {
 
 export interface ResolveResult {
   rows: ResolvedRow[];
+  /** Pure canonical total from activity_costs (pre manual fold). */
   totalCents: number;
   hotelCents: number;       // committed (pre-toggle), for reserve math
   flightCents: number;      // committed (pre-toggle), for reserve math
   loggedMiscCents: number;  // for reserve math
+  /** Day-0 canonical hotel / flight cents (pre-toggle, pre-manual). */
+  canonicalDay0HotelCents: number;
+  canonicalDay0FlightCents: number;
+  /** Manual-payment fold (override-aware for hotel/flight, additive for others). */
+  manualHotelCents: number;
+  manualFlightCents: number;
+  manualOtherCents: number;
+  manualHotelDelta: number;   // (manualHotel - canonicalDay0Hotel) when canonical exists, else manualHotel
+  manualFlightDelta: number;  // ditto for flight
+  /** totalCents + manualHotelDelta(if includeHotel) + manualFlightDelta(if includeFlight) + manualOtherCents, clamped >=0. */
+  effectiveTotalCents: number;
+}
+
+export interface CanonicalManualPayment {
+  item_type: string;
+  item_id: string;
+  amount_cents: number;
+  quantity?: number | null;
 }
 
 const DINING_RE = /\b(breakfast|brunch|lunch|dinner|supper|cafe|café|coffee|bakery|tapas|cocktails?|nightcap|aperitif|drinks?)\b/i;
@@ -89,6 +108,10 @@ export interface ResolveCanonicalArgs {
   liveActivities: CanonicalLiveActivity[];
   includeHotel: boolean;
   includeFlight: boolean;
+  /** Optional: trip_payments rows. When provided, manual hotel/flight/other
+   *  fold-in is computed inside the resolver so snapshot + payable items
+   *  cannot diverge. */
+  manualPayments?: CanonicalManualPayment[];
 }
 
 export function resolveCanonicalCostRows({
@@ -96,6 +119,7 @@ export function resolveCanonicalCostRows({
   liveActivities,
   includeHotel,
   includeFlight,
+  manualPayments,
 }: ResolveCanonicalArgs): ResolveResult {
   const liveById = new Map<string, CanonicalLiveActivity>();
   const rescueByDayCat = new Map<string, CanonicalLiveActivity[]>();
@@ -227,5 +251,59 @@ export function resolveCanonicalCostRows({
     });
   }
 
-  return { rows: out, totalCents, hotelCents, flightCents, loggedMiscCents };
+  // Day-0 canonical hotel/flight (pre-toggle, pre-manual). Used both for
+  // override-vs-add manual delta math and exposed for downstream consumers.
+  let canonicalDay0HotelCents = 0;
+  let canonicalDay0FlightCents = 0;
+  for (const row of costs) {
+    if (row.day_number !== 0) continue;
+    const cat = (row.category || '').toLowerCase();
+    const rowCents = rowCentsFor(row);
+    if (cat === 'hotel') canonicalDay0HotelCents += rowCents;
+    else if (cat === 'flight') canonicalDay0FlightCents += rowCents;
+  }
+
+  // Manual-payment fold (override-aware for hotel/flight, additive otherwise).
+  // Mirrors the legacy useTripFinancialSnapshot logic but lives here so every
+  // consumer (snapshot + payable items) computes identical numbers.
+  const isManualId = (id: unknown): id is string =>
+    typeof id === 'string' && /^manual[-_]/i.test(id.trim());
+  let manualHotelCents = 0;
+  let manualFlightCents = 0;
+  let manualOtherCents = 0;
+  for (const p of manualPayments || []) {
+    if (!isManualId(p.item_id)) continue;
+    const cents = (p.amount_cents || 0) * (p.quantity || 1);
+    const t = (p.item_type || '').toLowerCase();
+    if (t === 'hotel') manualHotelCents += cents;
+    else if (t === 'flight' || t === 'flights') manualFlightCents += cents;
+    else manualOtherCents += cents;
+  }
+  const manualHotelDelta = canonicalDay0HotelCents > 0
+    ? (manualHotelCents - canonicalDay0HotelCents)
+    : manualHotelCents;
+  const manualFlightDelta = canonicalDay0FlightCents > 0
+    ? (manualFlightCents - canonicalDay0FlightCents)
+    : manualFlightCents;
+  let effectiveTotalCents = totalCents;
+  if (includeHotel) effectiveTotalCents += manualHotelDelta;
+  if (includeFlight) effectiveTotalCents += manualFlightDelta;
+  effectiveTotalCents += manualOtherCents;
+  effectiveTotalCents = Math.max(0, effectiveTotalCents);
+
+  return {
+    rows: out,
+    totalCents,
+    hotelCents,
+    flightCents,
+    loggedMiscCents,
+    canonicalDay0HotelCents,
+    canonicalDay0FlightCents,
+    manualHotelCents,
+    manualFlightCents,
+    manualOtherCents,
+    manualHotelDelta,
+    manualFlightDelta,
+    effectiveTotalCents,
+  };
 }

@@ -385,8 +385,11 @@ export function PaymentsTab({
     ? payableTotalCents
     : (financialSnapshot.tripTotalCents > 0 ? financialSnapshot.tripTotalCents : payableTotalCents);
   const estimatedTotal = Math.max(0, baseTotal);
-  // "Paid so far" reflects actual recorded payments from trip_payments
-  const paidAmount = totals.paid;
+  // "Paid so far" must follow the same orphan-aware logic as the snapshot —
+  // otherwise stale paid trip_payments rows from a regenerated trip inflate
+  // the headline and trigger a phantom "Overpaid" warning. Snapshot already
+  // filters orphans synchronously; trust it once it's loaded.
+  const paidAmount = financialSnapshot.loading ? totals.paid : financialSnapshot.paidCents;
   const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
   // Surface overpayment as an explicit anomaly instead of silently clamping
   // "Remaining to pay" at $0 (e.g. orphaned payments left over from a prior
@@ -397,13 +400,12 @@ export function PaymentsTab({
 
   // Travel Essentials = flights + hotels only. The misc/spending-money reserve
   // is surfaced as its own bucket below so users can see exactly where the
-  // headline total comes from (it used to be silently folded into Essentials,
-  // which made bucket sums lag the header on trips with manual non-logistics
-  // expenses or a non-zero reserve).
-  // Reserve only counts once the snapshot has actually returned a non-zero
-  // total — otherwise mid-fetch (snapshot total = 0, stale reserve > 0) the
-  // bucket leads the headline and we surface a phantom drift badge.
-  const reserveCents = financialSnapshot.tripTotalCents > 0
+  // headline total comes from.
+  // Reserve gating: only fold once the snapshot has FULLY loaded — using
+  // `tripTotalCents > 0` as a readiness proxy fails for hotel-only / empty
+  // trips (snapshot total = 0 with a non-zero reserve mid-fetch flips the
+  // bucket→header relationship and latches a phantom drift badge).
+  const reserveCents = !financialSnapshot.loading
     ? (financialSnapshot.miscReserveCents || 0)
     : 0;
   const essentialItemsWithReserve = essentialItems;
@@ -464,19 +466,35 @@ export function PaymentsTab({
     miscItems.reduce((s, i) => s + i.amountCents, 0);
   const snapshotReady =
     !financialSnapshot.loading && !loading && !activityCostsFetching;
-  if (
-    snapshotReady &&
-    estimatedTotal > 0 &&
-    Math.abs(bucketSumCents - estimatedTotal) > 200 &&
-    import.meta.env.DEV
-  ) {
-    // Dev-only assertion. Production users see one consistent number; if this
-    // ever fires it's a unification regression, not a "reconcile" prompt.
-    console.assert(
-      false,
-      '[PaymentsTab] canonical totals diverged',
-      { bucketSumCents, estimatedTotal, driftCents: bucketSumCents - estimatedTotal }
-    );
+  // Structured drift telemetry — fires once per (tripId, divergencePath) so we
+  // can attribute live drift reports without spamming the console. Classifies
+  // the mismatch as Path A (snapshot ≠ payable items header), Path B (bucket
+  // sum ≠ headline), or Path C (orphan paid drift).
+  const driftReportedRef = useRef<string | null>(null);
+  if (snapshotReady && estimatedTotal > 0) {
+    const bucketDrift = Math.abs(bucketSumCents - estimatedTotal);
+    const payableDrift = Math.abs(payableTotalCents - financialSnapshot.tripTotalCents);
+    const paidDrift = Math.abs((totals.paid || 0) - financialSnapshot.paidCents);
+    let path: 'A' | 'B' | 'C' | 'none' = 'none';
+    if (payableDrift > 200) path = 'A';
+    else if (bucketDrift > 200) path = 'B';
+    else if (paidDrift > 200) path = 'C';
+    if (path !== 'none') {
+      const fingerprint = `${tripId}|${path}|${estimatedTotal}|${bucketSumCents}|${paidAmount}`;
+      if (driftReportedRef.current !== fingerprint) {
+        driftReportedRef.current = fingerprint;
+        console.warn('[PaymentsTab] divergence', {
+          path,
+          snapshotTotal: financialSnapshot.tripTotalCents,
+          bucketSum: bucketSumCents,
+          payableTotal: payableTotalCents,
+          tripPaymentsPaidSum: totals.paid,
+          snapshotPaidCents: financialSnapshot.paidCents,
+          reserveCents,
+          tripId,
+        });
+      }
+    }
   }
 
   /**

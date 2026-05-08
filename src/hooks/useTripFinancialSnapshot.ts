@@ -221,26 +221,21 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       paidActivityIds.add(stripDaySuffix(p.item_id));
     }
 
-    // Canonical resolver: shared with usePayableItems so the row sum and
-    // the header total apply identical orphan-rescue + $0-JSON-rescue rules.
+    // Canonical resolver: shared with usePayableItems so the row sum, the
+    // header total, AND the manual-payment fold-in apply identical rules.
     const canonical = resolveCanonicalCostRows({
       costs: (costs || []) as any,
       liveActivities,
       includeHotel,
       includeFlight,
+      manualPayments: (allPayments || []) as any,
     });
-    totalCents = canonical.totalCents;
+    totalCents = canonical.effectiveTotalCents;
     committedHotelCents = canonical.hotelCents;
     committedFlightCents = canonical.flightCents;
     loggedMiscCents = canonical.loggedMiscCents;
-
-    // Day-0 canonical hotel/flight (used by manual-override delta below)
-    for (const row of costs || []) {
-      const cat = (row.category || '').toLowerCase();
-      const rowCents = Math.round(((row.cost_per_person_usd || 0) * (row.num_travelers || 1)) * 100);
-      if (row.day_number === 0 && cat === 'hotel') canonicalHotelCents += rowCents;
-      if (row.day_number === 0 && cat === 'flight') canonicalFlightCents += rowCents;
-    }
+    canonicalHotelCents = canonical.canonicalDay0HotelCents;
+    canonicalFlightCents = canonical.canonicalDay0FlightCents;
 
     // is_paid mirror — count rows whose activity is still live and not
     // already covered by a trip_payments paid row.
@@ -253,25 +248,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       paidTotal += Math.round(paidUsd * 100);
     }
 
-    // Manual payment delta — override-aware for hotel/flight, additive for others.
-    let manualHotelCents = 0;
-    let manualFlightCents = 0;
-    let manualOtherCents = 0;
-    for (const p of manualPayments || []) {
-      const cents = (p.amount_cents || 0) * (p.quantity || 1);
-      if (p.item_type === 'hotel') manualHotelCents += cents;
-      else if (p.item_type === 'flight') manualFlightCents += cents;
-      else manualOtherCents += cents;
-    }
-    const hotelDelta = canonicalHotelCents > 0
-      ? (manualHotelCents - canonicalHotelCents)
-      : manualHotelCents;
-    const flightDelta = canonicalFlightCents > 0
-      ? (manualFlightCents - canonicalFlightCents)
-      : manualFlightCents;
-    if (includeHotel) totalCents += hotelDelta;
-    if (includeFlight) totalCents += flightDelta;
-    totalCents += manualOtherCents;
+    // Manual hotel/flight/other fold is now handled inside the resolver.
+    // canonicalHotelCents / canonicalFlightCents are kept for reserve math below.
     totalCents = Math.max(0, totalCents);
 
     // Authoritative paid: sum every paid trip_payments row, honoring the

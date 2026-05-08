@@ -87,4 +87,60 @@ describe('resolveCanonicalCostRows', () => {
     expect(r.rows).toHaveLength(1);
     expect(r.rows[0].isLogisticsRow).toBe(false);
   });
+
+  describe('manual payment fold', () => {
+    it('manual hotel OVERRIDES canonical day-0 hotel (no double count)', () => {
+      const live: any[] = [];
+      const costs = [
+        { activity_id: null, day_number: 0, category: 'hotel', cost_per_person_usd: 750, num_travelers: 2, source: 'logistics-sync' },
+      ];
+      const manualPayments = [
+        { item_type: 'hotel', item_id: 'manual-hotel-1', amount_cents: 180000, quantity: 1 },
+      ];
+      const r = resolveCanonicalCostRows({
+        costs: costs as any, liveActivities: live, includeHotel: true, includeFlight: false, manualPayments,
+      });
+      // Canonical: 750*2 = $1500 = 150000c. Manual: $1800 = 180000c.
+      // Effective should equal manual ($1800), not $3300 (sum) or $1500 (canonical).
+      expect(r.canonicalDay0HotelCents).toBe(150000);
+      expect(r.manualHotelCents).toBe(180000);
+      expect(r.manualHotelDelta).toBe(30000);
+      expect(r.effectiveTotalCents).toBe(180000);
+    });
+
+    it('manual other expenses are additive on top of canonical total', () => {
+      const live = [
+        { id: 'a1', dayNumber: 1, name: 'Lunch', category: 'dining', jsonCost: 0 },
+      ];
+      const costs = [
+        { activity_id: 'a1', day_number: 1, category: 'dining', cost_per_person_usd: 30, num_travelers: 2 },
+      ];
+      const manualPayments = [
+        { item_type: 'other', item_id: 'manual-souvenir', amount_cents: 5000, quantity: 1 },
+        { item_type: 'shopping', item_id: 'manual-shop', amount_cents: 8000, quantity: 1 },
+      ];
+      const r = resolveCanonicalCostRows({
+        costs: costs as any, liveActivities: live, includeHotel: true, includeFlight: false, manualPayments,
+      });
+      expect(r.totalCents).toBe(6000);
+      expect(r.manualOtherCents).toBe(13000);
+      expect(r.effectiveTotalCents).toBe(19000);
+    });
+
+    it('hotel OFF toggle excludes manual hotel delta from effective total', () => {
+      const live: any[] = [];
+      const costs = [
+        { activity_id: null, day_number: 0, category: 'hotel', cost_per_person_usd: 750, num_travelers: 2, source: 'logistics-sync' },
+      ];
+      const manualPayments = [
+        { item_type: 'hotel', item_id: 'manual-hotel-1', amount_cents: 180000, quantity: 1 },
+      ];
+      const r = resolveCanonicalCostRows({
+        costs: costs as any, liveActivities: live, includeHotel: false, includeFlight: false, manualPayments,
+      });
+      // Hotel toggle off: canonical hotel excluded from totalCents AND manual hotel delta not added.
+      expect(r.totalCents).toBe(0);
+      expect(r.effectiveTotalCents).toBe(0);
+    });
+  });
 });
