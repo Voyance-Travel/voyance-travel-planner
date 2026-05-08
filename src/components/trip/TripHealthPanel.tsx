@@ -8,7 +8,7 @@
  * 4. Quick-fix suggestions for low scores
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle2, Circle, ChevronDown, AlertTriangle,
@@ -90,6 +90,14 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
     const TRANSIT_TITLE_RE = /^(walk|transfer|return|drive|taxi|metro|train|bus|tram|ride)\b/i;
     const isTransitLike = (cat?: string, title?: string) =>
       TRANSIT_CATS.includes((cat || '').toLowerCase()) || TRANSIT_TITLE_RE.test(title || '');
+
+    // Gate: skip timing checks if any non-transit activity is missing start/end.
+    // Prevents phantom overlap/buffer warnings from optimistic edits or partial hydration.
+    const allTimed = realActivities.every((a: any) => {
+      if (isTransitLike(a.category, a.name || a.title)) return true;
+      return !!a.startTime && !!a.endTime;
+    });
+    if (!allTimed) return;
 
     const timed = activities
       .filter((a: any) => a.startTime && a.endTime)
@@ -215,7 +223,7 @@ export function TripHealthPanel({
   const flightsDone = hasFlights || flightsBookedElsewhere;
   const hotelDone = hasHotel || hotelBookedElsewhere;
 
-  const { checklist, healthIssues, completionPct, healthScore, daysPlanned } = useMemo(() => {
+  const { checklist, rawHealthIssues, completionPct, daysPlanned } = useMemo(() => {
     // Count days with real activities
     const planned = days.filter((d: any) => {
       const acts = d.activities || [];
@@ -309,25 +317,82 @@ export function TripHealthPanel({
       (completionFactors.reduce((a, b) => a + b, 0) / completionFactors.length) * 100
     );
 
-    // Health score: start at 100, deduct for issues
+    // Compute completion %
+    return {
+      checklist: items,
+      rawHealthIssues: issues,
+      completionPct: completion,
+      daysPlanned: planned,
+    };
+  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere, refreshResultsByDay]);
+
+  // ── Stabilize warnings against transient/loading day data ────────────────
+  // Errors commit immediately (user-actionable). Warnings only commit after
+  // the same set of issue IDs has been observed for 600ms — eliminates
+  // phantom "1 issue" badges from optimistic edits and partial hydration.
+  const [stableIssues, setStableIssues] = useState<HealthIssue[]>(() =>
+    rawHealthIssues.filter((i) => i.severity === 'error'),
+  );
+  const soakTimerRef = useRef<number | null>(null);
+  const lastSignatureRef = useRef<string>('');
+
+  useEffect(() => {
+    const errors = rawHealthIssues.filter((i) => i.severity === 'error');
+    const warnings = rawHealthIssues.filter((i) => i.severity === 'warning');
+    const signature = rawHealthIssues.map((i) => i.id).sort().join('|');
+
+    if (signature === lastSignatureRef.current) return;
+    lastSignatureRef.current = signature;
+
+    if (soakTimerRef.current) {
+      window.clearTimeout(soakTimerRef.current);
+      soakTimerRef.current = null;
+    }
+
+    // Commit errors immediately, drop stale warnings while soak is pending
+    setStableIssues((prev) => {
+      const prevWarnings = prev.filter((i) => i.severity === 'warning');
+      return [...errors, ...prevWarnings];
+    });
+
+    if (warnings.length === 0) {
+      // Clear warnings instantly when none remain — no soak needed
+      setStableIssues(errors);
+      return;
+    }
+
+    soakTimerRef.current = window.setTimeout(() => {
+      setStableIssues([...errors, ...warnings]);
+      if (rawHealthIssues.length !== errors.length + warnings.length) {
+        // signature should always match here
+      }
+      // eslint-disable-next-line no-console
+      console.debug('[HEALTH_GHOST]', {
+        committed: errors.length + warnings.length,
+        warningsSoaked: warnings.length,
+      });
+    }, 600);
+
+    return () => {
+      if (soakTimerRef.current) {
+        window.clearTimeout(soakTimerRef.current);
+        soakTimerRef.current = null;
+      }
+    };
+  }, [rawHealthIssues]);
+
+  const healthIssues = stableIssues;
+
+  // Health score: start at 100, deduct for stable issues only
+  const healthScore = useMemo(() => {
     let health = 100;
-    issues.forEach(issue => {
-      // Timing issues are one-click fixable; weight them lighter so the score
-      // doesn't look alarming for a problem the user can resolve instantly.
+    healthIssues.forEach((issue) => {
       const isTiming = issue.fixAction === 'fix_timing';
       if (issue.severity === 'error') health -= isTiming ? 8 : 15;
       else health -= isTiming ? 3 : 5;
     });
-    health = Math.max(0, Math.min(100, health));
-
-    return {
-      checklist: items,
-      healthIssues: issues,
-      completionPct: completion,
-      healthScore: health,
-      daysPlanned: planned,
-    };
-  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere, refreshResultsByDay]);
+    return Math.max(0, Math.min(100, health));
+  }, [healthIssues]);
 
   const healthColor = healthScore >= 80 ? 'text-green-600' : healthScore >= 50 ? 'text-amber-500' : 'text-destructive';
   const healthBg = healthScore >= 80 ? 'bg-green-600' : healthScore >= 50 ? 'bg-amber-500' : 'bg-destructive';
@@ -377,7 +442,7 @@ export function TripHealthPanel({
                 <span className="text-[11px] text-muted-foreground">
                   {doneCount}/{totalChecklist} items ready
                 </span>
-                {healthIssues.length > 0 && (
+                {healthIssues.length > 0 && healthScore < 95 && (
                   <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0', healthColor, 'border-current')}>
                     {healthIssues.length} {healthIssues.length === 1 ? 'issue' : 'issues'}
                   </Badge>
