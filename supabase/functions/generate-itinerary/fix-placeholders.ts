@@ -897,33 +897,7 @@ export function nuclearCrossCitySweep(activities: any[], destination: string): n
   for (const a of activities) {
     const wrongCity = downgradeCrossCityActivity(a, destination);
     if (!wrongCity) continue;
-
-    // Convert to unverified sentinel — preserve start time / category / duration.
-    const startTimeStr = a.startTime || a.start_time || '12:00';
-    const mealType = parseMealType(startTimeStr);
-    const sentinel = unverifiedMealSentinel(destination, mealType);
-    const isMeal = cat === 'dining' || cat === 'restaurant' || cat === 'food'
-      || /^(breakfast|brunch|lunch|dinner|drinks)\b/i.test(a.title || '');
-
-    if (isMeal) {
-      applyFallbackToActivity(a, sentinel, mealType, new Set<string>(), undefined, destination);
-    } else {
-      // Non-meal (museum/spa/etc.) — strip the wrong-city venue, mark unverified.
-      const beforeTitle = a.title;
-      a.title = `${a.title || 'Activity'} — find a local option in ${destination}`;
-      a.name = a.title;
-      if (a.location) {
-        a.location.address = '';
-        a.location.name = '';
-      }
-      a.venue_name = '';
-      a.metadata = a.metadata || {};
-      a.metadata.unverified_venue = true;
-      a.metadata.needsVenuePick = true;
-      if (a.cost) { a.cost.amount = 0; a.cost.perPerson = 0; }
-      a.cost_per_person = 0;
-      console.warn(`[NUCLEAR CROSS-CITY] Stripped wrong-city venue from "${beforeTitle}" (was in ${wrongCity}, dest ${destination})`);
-    }
+    console.warn(`[NUCLEAR CROSS-CITY] Downgraded "${a.title}" (was in ${wrongCity}, dest ${destination})`);
     mutated++;
   }
   if (mutated > 0) {
