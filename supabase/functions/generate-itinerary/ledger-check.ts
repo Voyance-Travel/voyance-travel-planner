@@ -348,17 +348,65 @@ export async function ledgerCheck(
         const nextDinnerLocked = !!(nextDinner && (nextDinner.locked || nextDinner.isLocked || nextDinner.lockedSource));
 
         if (nextDinner && !nextDinnerLocked) {
-          // Replace tomorrow's splurge dinner with a casual-bistro placeholder.
-          nextDinner.title = 'Casual neighborhood dinner';
-          nextDinner.name = 'Casual neighborhood dinner';
-          nextDinner.description = 'Pacing break after a splurge dinner the night before. Pick a relaxed local bistro near the hotel.';
-          nextDinner.needsRecommendation = true;
-          nextDinner.placeholder = true;
-          if (nextDinner.cost) nextDinner.cost = { ...nextDinner.cost, amount: 0 };
+          const previousVenueLabel = nextDinner.venue_name || nextDinner.location?.name || nextDinner.title || 'splurge dinner';
+
+          // Strip every trace of the old (Michelin) venue identity so the card
+          // can't show "Casual neighborhood dinner" on top of "Da Ivo" data.
+          stripVenueIdentity(nextDinner);
+
+          // Try to resolve a real casual dinner from the city-keyed fallback DB.
+          let resolvedTo = '';
+          if (tripDestination) {
+            try {
+              const usedNames = new Set<string>();
+              for (const d of out) {
+                for (const a of (d.activities || [])) {
+                  const n = (a.venue_name || a.location?.name || a.name || '').toString().toLowerCase();
+                  if (n) usedNames.add(n);
+                }
+              }
+              const fallback = resolveAnyMealFallback(tripDestination, 'dinner', usedNames);
+              applyFallbackToActivity(nextDinner, fallback, 'dinner', usedNames, undefined, tripDestination);
+              nextDinner.description = 'Pacing break after a splurge dinner the night before — relaxed local choice near the hotel.';
+              nextDinner.metadata = nextDinner.metadata || {};
+              nextDinner.metadata.vibe_clash_downgrade = true;
+              if (fallback?.needsVenuePick) {
+                resolvedTo = 'unverified placeholder (no fallback available)';
+              } else {
+                resolvedTo = `"Dinner at ${fallback.name}"`;
+              }
+            } catch (e) {
+              console.warn('[VIBE_CLASH_DOWNGRADE] fallback resolve failed:', String(e));
+            }
+          }
+
+          // Worst case (no destination / resolver threw): leave a clean unverified slot.
+          if (!resolvedTo) {
+            nextDinner.title = 'Casual dinner near your hotel — find a venue';
+            nextDinner.name = nextDinner.title;
+            nextDinner.description = 'Pacing break after a splurge dinner the night before — pick a relaxed local bistro near the hotel.';
+            nextDinner.placeholder = true;
+            nextDinner.needsRecommendation = true;
+            nextDinner.metadata = nextDinner.metadata || {};
+            nextDinner.metadata.needsVenuePick = true;
+            nextDinner.metadata.unverified_venue = true;
+            nextDinner.metadata.vibe_clash_downgrade = true;
+            if (nextDinner.cost && typeof nextDinner.cost === 'object') {
+              nextDinner.cost.amount = 0;
+              nextDinner.cost.perPerson = 0;
+              nextDinner.cost.basis = 'unverified';
+            } else {
+              nextDinner.cost = { amount: 0, currency: 'USD', perPerson: 0, basis: 'unverified' };
+            }
+            nextDinner.cost_per_person = 0;
+            resolvedTo = 'unverified placeholder';
+          }
+
+          console.warn(`[VIBE_CLASH_DOWNGRADE] Day ${dayNum + 1}: "${previousVenueLabel}" → ${resolvedTo} (after splurge "${todaySplurge.title || todaySplurge.name}" on day ${dayNum})`);
           warnings.push({
             dayNumber: dayNum + 1,
             kind: 'vibe_clash',
-            detail: `Replaced "${tomorrowSplurge.title}" on day ${dayNum + 1} with a casual option to pace after "${todaySplurge.title || todaySplurge.name}" on day ${dayNum}.`,
+            detail: `Replaced "${previousVenueLabel}" on day ${dayNum + 1} with ${resolvedTo} to pace after "${todaySplurge.title || todaySplurge.name}" on day ${dayNum}.`,
           });
         } else {
           warnings.push({
