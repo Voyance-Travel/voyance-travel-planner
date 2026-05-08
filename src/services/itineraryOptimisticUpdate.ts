@@ -74,20 +74,19 @@ export async function saveItineraryOptimistic(
   // If we have no cached version, fall back to direct update
   // (backwards-compatible for edge functions / non-collaborative scenarios)
   if (expectedVersion === undefined) {
-    const { error } = await supabase
-      .from('trips')
-      .update({
-        itinerary_data: itineraryData as any,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', tripId);
+    // Route through safeUpdateItineraryData → save-itinerary edge action so
+    // prompt-artifact strip, persist-day contract, and cross-city sweep all
+    // run. Raw .update was a confirmed intermittent leak path.
+    const { safeUpdateItineraryData } = await import('./safeUpdateItineraryData');
+    const safeRes = await safeUpdateItineraryData(tripId, itineraryData as any);
 
-    if (error) {
-      console.error('[OptimisticUpdate] Fallback update failed:', error);
-      return { success: false, error: error.message };
+    if (safeRes?.error) {
+      console.error('[OptimisticUpdate] Fallback update failed:', safeRes.error);
+      const msg = (safeRes.error as any)?.message ?? String(safeRes.error);
+      return { success: false, error: msg };
     }
 
-    // Try to refresh the version cache after a direct write
+    // Refresh the version cache after the boundary write
     fetchAndCacheVersion(tripId).catch(() => {});
     return { success: true };
   }

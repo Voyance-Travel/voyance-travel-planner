@@ -595,6 +595,11 @@ export default function TripDetail() {
       setIsSyncingTrip(true);
       console.log('[TripDetail] Syncing local trip to database:', localTrip.id);
 
+      // IMPORTANT: do NOT include `itinerary_data` in this upsert. Raw writes
+      // to that column bypass `persistTripItinerary` (prompt-artifact strip,
+      // persist-day contract, cross-city sweep) and were a confirmed
+      // intermittent leak path. Upsert non-itinerary columns first, then route
+      // any itinerary JSON through `safeUpdateItineraryData` separately.
       const tripData = {
         id: localTrip.id,
         user_id: user.id,
@@ -610,7 +615,6 @@ export default function TripDetail() {
         budget_tier: localTrip.budget_tier,
         flight_selection: localTrip.flight_selection,
         hotel_selection: localTrip.hotel_selection,
-        itinerary_data: localTrip.itinerary_data,
         metadata: localTrip.metadata,
       };
 
@@ -625,9 +629,22 @@ export default function TripDetail() {
         return false;
       }
 
+      // Route itinerary_data through the boundary so prompt-artifact strip,
+      // persist-day contract, and cross-city sweep all run server-side.
+      if (localTrip.itinerary_data) {
+        const safeRes = await safeUpdateItineraryData(
+          localTrip.id,
+          localTrip.itinerary_data as any,
+        );
+        if (safeRes?.error) {
+          console.error('[TripDetail] Failed to sync itinerary_data via boundary:', safeRes.error);
+          // Non-fatal: row exists; next save will retry.
+        }
+      }
+
       console.log('[TripDetail] Trip synced successfully:', data.id);
-      // Update local state with synced trip
-      setTrip(data);
+      // Preserve in-memory itinerary_data since the upsert excluded it.
+      setTrip({ ...data, itinerary_data: localTrip.itinerary_data } as any);
       return true;
     } catch (err) {
       console.error('[TripDetail] Sync error:', err);
@@ -2002,16 +2019,18 @@ export default function TripDetail() {
     } : null);
 
     try {
-      const { error } = await supabase
-        .from('trips')
-        .update({
+      // Route itinerary_data through the boundary; sibling columns ride along
+      // via extraFields so they're written in the same edge-action call.
+      const safeRes = await safeUpdateItineraryData(
+        tripId,
+        updatedItinerary as any,
+        {
           start_date: newStartDate,
           end_date: newEndDate,
-          itinerary_data: updatedItinerary as any,
           hotel_selection: updatedHotelSelection as any,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', tripId);
+        },
+      );
+      const error = safeRes?.error;
 
       if (error) {
         console.error('[TripDetail] Failed to save date change:', error);
@@ -2082,18 +2101,30 @@ export default function TripDetail() {
 
     // Persist to DB
     try {
-      const updatePayload: Record<string, unknown> = {
+      const extraFields: Record<string, unknown> = {
         start_date: startDate,
         end_date: endDate,
-        updated_at: new Date().toISOString(),
       };
-      if (itineraryData) updatePayload.itinerary_data = itineraryData;
-      if (hotelSelection !== undefined) updatePayload.hotel_selection = hotelSelection;
+      if (hotelSelection !== undefined) extraFields.hotel_selection = hotelSelection;
 
-      const { error } = await supabase
-        .from('trips')
-        .update(updatePayload as any)
-        .eq('id', tripId);
+      let error: any = null;
+      if (itineraryData) {
+        // Route through the boundary so prompt-artifact strip + cross-city
+        // sweep run on restored snapshots too.
+        const safeRes = await safeUpdateItineraryData(
+          tripId,
+          itineraryData as any,
+          extraFields,
+        );
+        error = safeRes?.error ?? null;
+      } else {
+        // No itinerary in snapshot — sibling columns only, raw write OK.
+        const res = await supabase
+          .from('trips')
+          .update({ ...extraFields, updated_at: new Date().toISOString() } as any)
+          .eq('id', tripId);
+        error = res.error;
+      }
 
       if (error) {
         console.error('[TripDetail] Failed to undo date change:', error);
