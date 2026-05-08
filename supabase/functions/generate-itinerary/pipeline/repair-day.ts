@@ -3243,6 +3243,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       }
     }
   }
+  // --- 15. FINAL TRANSPORT COHERENCE PASS ---
   // After all repairs (including time-sort), transport cards may no longer
   // bridge their actual neighbors. Rewrite destinations and merge duplicates.
   {
