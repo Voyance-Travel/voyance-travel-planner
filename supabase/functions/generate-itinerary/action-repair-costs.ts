@@ -401,6 +401,15 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         michelinFloor = MICHELIN_FLOOR.upscale; michelinReason = 'Known upscale restaurant';
       }
 
+      // Strategy 4: Luxury-hotel-dining heuristic — same defense-in-depth as
+      // sanitization.ts/enforceMichelinPriceFloor. Floors at upscale (€60/pp).
+      if (michelinFloor < MICHELIN_FLOOR.upscale &&
+          LUXURY_HOTEL_SIGNATURE_RE.test(combinedText) &&
+          RESTAURANT_LEAD_RE.test(combinedText)) {
+        michelinFloor = MICHELIN_FLOOR.upscale;
+        michelinReason = 'luxury_hotel_dining_heuristic';
+      }
+
       if (michelinFloor > 0 && costPerPerson < michelinFloor) {
         console.warn(`[repair-trip-costs] MICHELIN PRICE FLOOR: "${title}" at €${costPerPerson} → raised to €${michelinFloor} (${michelinReason})`);
         costPerPerson = michelinFloor;
