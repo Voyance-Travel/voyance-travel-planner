@@ -1607,7 +1607,68 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  // NOTE: Minimum duration enforcement and timing overlap resolution are now
+  // ── FINAL PER-DAY MEAL-GUARD PASS ─────────────────────────────────────────
+  // Belt-and-braces: re-run the meal-guard for THIS day right after the
+  // second-pass dead-gap fill. Catches the case where universalQualityPass,
+  // cross-day dedup, transport-collapse, or the gap-fill itself silently
+  // dropped a required meal (e.g., dinner) that should have been present.
+  // The multi-day finalization loop later in the function still runs the
+  // guard across all days, but this per-day re-check ensures we never ship
+  // a day without its required meals even when chain-mode partial returns
+  // skip the multi-day loop.
+  if (dayResult?.activities?.length > 0) {
+    try {
+      const _fmgPolicy = (await import('./meal-policy.ts')).deriveMealPolicy({
+        dayNumber, totalDays,
+        isFirstDay: _isFirstDay, isLastDay: _isLastDay,
+        arrivalTime24: _isFirstDay ? savedArrTime24Hoisted : undefined,
+        departureTime24: _isLastDay ? savedDepTime24Hoisted : undefined,
+      });
+      if (_fmgPolicy.requiredMeals.length > 0) {
+        const _detectedPre = detectMealSlots(dayResult.activities);
+        const _missingPre = _fmgPolicy.requiredMeals.filter((m) => !_detectedPre.includes(m));
+        if (_missingPre.length > 0) {
+          const _earliestMins = _isFirstDay && savedArrTime24Hoisted
+            ? (() => { const m = savedArrTime24Hoisted.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : undefined; })()
+            : undefined;
+          const _isTrainFmg = departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(departureTransportType);
+          const _depBufFmg = _isTrainFmg ? 120 : 180;
+          const _latestMins = _isLastDay && savedDepTime24Hoisted
+            ? (() => { const m = savedDepTime24Hoisted.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) - _depBufFmg : undefined; })()
+            : undefined;
+          const _fmgResult = enforceRequiredMealsFinalGuard(
+            dayResult.activities,
+            _fmgPolicy.requiredMeals,
+            dayNumber,
+            cityInfo?.cityName || destination || 'the destination',
+            'USD',
+            _fmgPolicy.dayMode,
+            [], // pool already exhausted upstream — falls through to fallback DB / emergency
+            { earliestTimeMins: _earliestMins, latestTimeMins: _latestMins, blockedRestaurants: tripBlockedRestaurants },
+          );
+          if (!_fmgResult.alreadyCompliant) {
+            dayResult.activities = _fmgResult.activities as any;
+            console.warn(`[MEAL_AUDIT] day=${dayNumber} dest="${cityInfo?.cityName || destination}" mode=${_fmgPolicy.dayMode} required=[${_fmgPolicy.requiredMeals.join(',')}] detected=[${_detectedPre.join(',')}] missing=[${_missingPre.join(',')}] injected=[${_fmgResult.injectedMeals.join(',')}] source="generate-trip-day:final-per-day"`);
+            dayResult.metadata = dayResult.metadata || {};
+            dayResult.metadata.quality = dayResult.metadata.quality || {};
+            dayResult.metadata.quality.meal_audit = {
+              required: _fmgPolicy.requiredMeals,
+              detected_pre: _detectedPre,
+              missing_pre: _missingPre,
+              injected: _fmgResult.injectedMeals,
+              detected_post: detectMealSlots(dayResult.activities),
+              source: 'generate-trip-day:final-per-day',
+            };
+          } else {
+            console.log(`[MEAL_AUDIT] day=${dayNumber} required=[${_fmgPolicy.requiredMeals.join(',')}] detected=[${_detectedPre.join(',')}] missing=[] source="generate-trip-day:final-per-day" (no-op)`);
+          }
+        }
+      }
+    } catch (mealErr) {
+      console.warn('[generate-trip-day] final per-day meal-guard pass failed (non-blocking):', mealErr);
+    }
+  }
+
   // handled exclusively by pipeline/repair-day.ts to prevent cascading shifts.
   // The 68G inline blocks were removed to fix the AM/PM timing collapse bug.
 
