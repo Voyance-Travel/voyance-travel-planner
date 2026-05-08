@@ -196,15 +196,19 @@ export function reportRemainingAfternoonDeadGap(activities: any[], latestUsableM
     const sb = parseTime(b?.startTime) ?? 0;
     return sa - sb;
   });
+  const upperBound = latestUsableMins !== undefined
+    ? Math.min(AFTERNOON_END_MIN, latestUsableMins)
+    : AFTERNOON_END_MIN;
   let largest = 0;
   for (let i = 0; i < sorted.length - 1; i++) {
     const currEnd = parseTime(sorted[i]?.endTime) ?? parseTime(sorted[i]?.startTime);
     const nextStart = parseTime(sorted[i + 1]?.startTime);
     if (currEnd === null || nextStart === null) continue;
-    const gap = nextStart - currEnd;
+    const clampedNext = Math.min(nextStart, upperBound);
+    const gap = clampedNext - currEnd;
     if (gap < MIN_GAP_MIN) continue;
     const overlapStart = Math.max(currEnd, AFTERNOON_START_MIN);
-    const overlapEnd = Math.min(nextStart, AFTERNOON_END_MIN);
+    const overlapEnd = Math.min(clampedNext, upperBound);
     if (overlapEnd - overlapStart < MIN_USABLE_OVERLAP_MIN) continue;
     if (gap > largest) largest = gap;
   }
