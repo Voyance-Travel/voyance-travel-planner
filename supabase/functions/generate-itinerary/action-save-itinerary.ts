@@ -12,7 +12,8 @@ import { ledgerCheck } from './ledger-check.ts';
 import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
-import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../_shared/prompt-leak-scrub.ts';
+import { scrubBodyPromptLeaks, scrubTitleLeaks, scrubSentenceFragmentsOnAct } from '../_shared/prompt-leak-scrub.ts';
+import { pruneNonLogisticsAfterCheckout } from '../_shared/post-checkout-prune.ts';
 import { stripVenueMealSuffix, VENUE_MEAL_SUFFIX_RE } from '../_shared/venue-name.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
