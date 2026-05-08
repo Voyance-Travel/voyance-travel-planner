@@ -45,10 +45,16 @@ export const PLACEHOLDER_NAME_RE = new RegExp(
 
 // Prompt-artifact tokens — narrow set, NO bare (name)/(venue) which appear
 // in legitimate prose.
+// Two alternatives:
+//   (a) "(... slot)" / "(... placeholder)" — labelled prompt slot tokens.
+//   (b) "(ALLCAPS_WITH_UNDERSCORE)" — bare prompt-template tokens like
+//       "(FLEX_WINDOW)", "(NARRATIVE_MOOD)", "(DEEP_CONTEXT)". The required
+//       underscore is what distinguishes them from legit acronyms like
+//       "(USA)" / "(NYC)" which must NOT be stripped.
 const PROMPT_ARTIFACT_TEST_RE =
-  /\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)\s*\)/i;
+  /\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)/i;
 const PROMPT_ARTIFACT_REPLACE_RE =
-  /\s*\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)\s*\)/gi;
+  /\s*\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)/gi;
 
 const HOTEL_RETURN_RE =
   /(?:return\s+to|back\s+(?:to|at)|head\s+back\s+to|head\s+to|wind\s+down\s+at)\s+(?:your\s+|the\s+|our\s+)?[^,.\n]{0,60}hotel|hotel\s+(?:check[-\s]?in|settle\s+in|wind[-\s]?down|nightcap)/i;
