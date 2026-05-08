@@ -12,7 +12,8 @@ import { ledgerCheck } from './ledger-check.ts';
 import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
-import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../_shared/prompt-leak-scrub.ts';
+import { scrubBodyPromptLeaks, scrubTitleLeaks, scrubSentenceFragmentsOnAct } from '../_shared/prompt-leak-scrub.ts';
+import { pruneNonLogisticsAfterCheckout } from '../_shared/post-checkout-prune.ts';
 import { stripVenueMealSuffix, VENUE_MEAL_SUFFIX_RE } from '../_shared/venue-name.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
@@ -144,9 +145,11 @@ function normalizeDays(days: any[], tripStartDate: string | null): any[] {
     let _bodyLeakSwept = 0;
     let _titleLeakSwept = 0;
     let _mealSuffixSwept = 0;
+    let _sentenceFragSwept = 0;
     for (const a of activities) {
       if (scrubBodyPromptLeaks(a).changed) _bodyLeakSwept++;
       if (scrubTitleLeaks(a).changed) _titleLeakSwept++;
+      if (scrubSentenceFragmentsOnAct(a).changed) _sentenceFragSwept++;
       // Strip "(Breakfast)/(Lunch)/(Dinner)" suffix from title/name/location.name
       for (const k of ['title', 'name'] as const) {
         if (typeof a?.[k] === 'string' && VENUE_MEAL_SUFFIX_RE.test(a[k])) {
@@ -161,6 +164,9 @@ function normalizeDays(days: any[], tripStartDate: string | null): any[] {
         _mealSuffixSwept++;
       }
     }
+    // Save-time post-checkout coherence sweep — final safety net even if
+    // repair-day §14b was skipped or partial. See mem://constraints/itinerary/post-checkout-save-time-sweep
+    const pruneResult = pruneNonLogisticsAfterCheckout(activities);
     if (_bodyLeakSwept > 0) {
       console.log(`[SAVE] body_prompt_leak_scrubbed day=${dayNumber} count=${_bodyLeakSwept}`);
     }
@@ -169,6 +175,12 @@ function normalizeDays(days: any[], tripStartDate: string | null): any[] {
     }
     if (_mealSuffixSwept > 0) {
       console.log(`[SAVE] venue_meal_suffix_stripped day=${dayNumber} count=${_mealSuffixSwept}`);
+    }
+    if (_sentenceFragSwept > 0) {
+      console.log(`[SAVE] sentence_fragment_scrubbed day=${dayNumber} count=${_sentenceFragSwept}`);
+    }
+    if (pruneResult.prunedCount > 0) {
+      console.log(`[POST_CHECKOUT_PRUNE] day=${dayNumber} count=${pruneResult.prunedCount} titles=${JSON.stringify(pruneResult.prunedTitles)} path=save-itinerary`);
     }
     return { ...day, dayNumber, date, activities };
   });

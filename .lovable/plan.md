@@ -1,89 +1,83 @@
-## Problem
+## Reality check
 
-"Fix Timing" (Trip Health → "Fix timing" button → `EditorialItinerary.fixTimingRequest` effect) calls `refresh-day` once, applies the time-only patches, and re-runs validation. On Rome it resolved the originally reported issues but produced 7 new errors / 2 warnings and pushed Payments into a "Reconciling…" loop.
+The €2,272 trip was generated **before** the last batch of fixes deployed (Reservation Urgency title leak, Quadri nightcap drinks bypass, Da Ivo vibe-clash strip, repair-cost JSONB parity). Three of the six "confirmed live" bugs are already resolved in code — they're frozen into that trip's `itinerary_data` and `activity_costs` snapshot. **No new code is needed for those three; they need a one-shot repair pass over the existing trip.**
 
-## Root Cause
+That leaves four genuine workstreams.
 
-### 1. `refresh-day/index.ts` patches are non-cascading
+## Step 1 — One-shot repair pass for the stale €2,272 trip (no new code)
 
-Inside the validation loop (`supabase/functions/refresh-day/index.ts` ~lines 315–567):
+Run the existing pipeline against the current trip so the new sanitizers/floors apply:
 
-- Each adjacent pair `(act, next)` may emit at most one patch for `next.id` (`changedIds.add(next.id)` gate).
-- When `next` is shifted forward to clear an overlap or buffer deficit, **the activities after `next` are not shifted**. Their `patchedTimes` is never written.
-- Subsequent iterations only consult `patchedTimes` for pair endpoints they recompute; they never push the cascade through the rest of the day.
+1. Call `action-save-itinerary` with the trip's existing `itinerary_data` (re-save path) — this triggers `scrubTitleLeaks`, `scrubBodyPromptLeaks`, vibe-clash downgrade with full identity strip, and meal-suffix scrub.
+2. Call `action-repair-costs` for the trip — applies `EXPLICIT_DRINKS_RE` skip + `MAX_BAR_PRICE` cap with JSONB writeback (Quadri €206 → €35 cap).
+3. Verify in UI: `reservationUrgency: .` gone from descriptions, "Casual neighborhood dinner" no longer attached to Da Ivo, Quadri nightcap snapshot ≤ €35.
 
-Result: applying the returned `time_shift` / `buffer_added` patches in `EditorialItinerary.handleApplyRefreshChanges` moves card N forward, which now overlaps cards N+1, N+2 — manifesting as fresh `timing_overlap` / `insufficient_buffer` errors on the very next re-check. The shared `enforceTimingAndBuffers` (`supabase/functions/_shared/timing-cascade.ts`) already does the cascade correctly and is used by the generator + repair-day, but `refresh-day` predates it and was never migrated.
+If any survives, that becomes a real bug and we patch it; otherwise close those three.
 
-### 2. Fix-Timing path fires duplicate `booking-changed` events
+## Step 2 — "spot for together" sentence-fragment guard
 
-In `EditorialItinerary.tsx`:
+### Diagnosis
+Originates in `trip-type-modifiers.ts` archetype-blending strings — e.g. `"… discovering spots together."` is a complete clause, but the blender concatenates two archetype phrases mid-sentence (`urban_nomad: "… discovering spots together."` joined with another snippet) and a downstream truncation strips the prefix. The visible artifact "spot for together" is the tail of `"romantic spot for two — sunset together"` after a join+truncate. No existing guard catches sentence integrity; only label leaks are scrubbed.
 
-- `handleApplyRefreshChanges` dispatches `booking-changed` (line ~2672).
-- The fix-timing effect then schedules another `handleRefreshDay` 100 ms later (line ~2620), and the autosave triggered by `setHasChanges(true)` runs in parallel.
-- `PaymentsTab` listens for `booking-changed`, debounces a refetch at 600 ms, but every wave re-arms the timer; combined with the cascade-induced *new* errors creating a follow-up Refresh, the "Reconciling…" badge never clears.
+### Fix
+1. Add `assertSentenceIntegrity(text)` to `_shared/prompt-leak-scrub.ts`:
+   - Detect patterns: `\bfor\s+(together|two|both)\b` without a preceding noun, dangling prepositions at end of sentence (`for\.|with\.|to\.`), and `< 4 words` "sentences" delimited by periods.
+   - When detected, drop just the broken sentence (split on `. `, filter, rejoin) — never the whole field.
+2. Wire it into the same four call sites the existing scrubbers use: `validate-day` post-AI, `repair-day` step 10b, `action-save-itinerary` final scrub, UI `sanitizeActivityText`.
+3. Add tests in `_shared/__tests__/prompt-leak-scrub.test.ts` covering "spot for together", "perfect for two together.", "ideal with for both.", and a clean control.
 
-The Payments loop is therefore a downstream symptom of the cascade bug — once the patch set is correct in one pass, the duplicate refetch wave goes away on its own.
+## Step 3 — Day 3 post-checkout sequencing collapse
 
-## Plan
+### Diagnosis
+The `Departure Day Graceful Finish` guard (§8b drop + §14b POST-CHECKOUT COHERENCE PRUNE in `repair-day.ts`) exists but only fires inside `repair-day`. The Rome trip slipped past because: (a) the trip has `flightOut` data on a different field key than the guard reads, OR (b) the post-checkout prune runs *before* a later step re-introduces leisure cards. Need to trace which.
 
-### Step 1 — Migrate `refresh-day` to the shared cascade
+### Fix
+1. Read the actual `flightOut`/`departureFlight` shape persisted on the €2,272 trip and confirm `repairDepartureSequence` is reading the right field (audit `repair-day.ts` §8b key access).
+2. Add a **save-time** post-checkout coherence sweep in `action-save-itinerary` (mirroring the §14b logic) — single source of truth, runs even when repair-day was skipped or partial.
+3. Add sentinel log `[POST_CHECKOUT_PRUNE]` with before/after card titles + the trigger path (repair-day vs save-time).
+4. Test: feed a fixture with `[breakfast → checkout 11:00 → spa 12:00 → flight 16:00]` through save-itinerary; assert spa is dropped, sequence is `breakfast → checkout → transfer → flight`.
 
-In `supabase/functions/refresh-day/index.ts`:
+## Step 4 — Health score 97→100 ghost reading on expand
 
-1. Keep the operating-hours pass and the checkout/airport sequence check as-is — they already produce correct patches.
-2. After the operating-hours patches are computed, build the `CascadeActivity[]` list from the **post-operating-hours** times (not the originals), call `enforceTimingAndBuffers(...)` with `lockedIds` containing every `act.id` flagged as locked / pinned / extracted (read from `act.locked`, `act.userAdded`, `act.pinned`, `act.extracted` if present on the input).
-3. Convert the cascade `repairs[]` into `proposedChanges`:
-   - `same_start_fix` / `overlap_fix` → `type: 'time_shift'` with the new `startTime`/`endTime` from the cascaded array.
-   - `buffer_fix` → `type: 'buffer_added'`.
-   - `dropped_past_midnight` → new `proposedChange` `type: 'drop'` (or surface as an error issue without a patch — keep minimal: add an `issue` and skip patch so the existing UI doesn't auto-drop).
-4. Issues array: emit one `timing_overlap` / `insufficient_buffer` per repair (so the panel shows what was fixed) using the `before` strings the cascade returns.
-5. Preserve dedup: only one patch per `activityId`. If both operating-hours and cascade want to patch the same id, keep the operating-hours patch and re-run cascade with that id pre-shifted (already covered because we feed cascade the post-hours times).
-6. Remove the bespoke pair-by-pair patch emission lines that conflict with the cascade output.
+### Diagnosis
+Last turn shipped `stableIssues` soak (600ms) + raised badge threshold (`< 95`). The 97→100 jump means the **collapsed** computation differs from the **expanded** computation. Likely cause: collapsed view computes `healthScore` from `rawHealthIssues` (pre-soak), expanded view triggers a rerender that commits the soak. Both should read the same `stableIssues`.
 
-### Step 2 — Stable application in the editor
+### Fix
+1. Audit `TripHealthPanel.tsx` — confirm `healthScore` is derived from `stableIssues`, not `rawHealthIssues`. (Last turn pointed `healthIssues` at `stableIssues` but didn't necessarily redirect score derivation.)
+2. Single source of truth: derive `{ healthScore, healthIssues }` from a single `useMemo(stableIssues)` so collapsed/expanded see identical values.
+3. Visual stability: don't recompute on `isExpanded` toggle — confirm no `useEffect` keys on `isExpanded`.
+4. Test: existing `TripHealthPanel.analyzeHealth.test.ts` extended with a soak fixture asserting score+issues are identical between collapsed and expanded states.
 
-In `src/components/itinerary/EditorialItinerary.tsx`:
+## Step 5 — Cross-city + prompt-artifact telemetry (no rewrite)
 
-1. In the fix-timing effect (~line 2528), pass `lockedIds` data when constructing the activity payload so the server cascade respects them.
-2. In `handleApplyRefreshChanges` (~line 2626), after applying the patches, run a **client-side** `enforceTimingAndBuffers` pass over the patched day as a safety net. (Import the same algorithm into `src/utils/itinerary/timingCascade.ts` if it isn't already exported there; reuse the existing module.) This guarantees that even if the server returns partial patches, the local commit is internally consistent.
-3. Coalesce the post-fix re-check: replace the unconditional `setTimeout(handleRefreshDay, 100)` (line ~2620) with a guard that only re-runs `handleRefreshDay` when `nonTimingIssues.length > 0`. When the cascade already produced a clean day there's no point re-validating, and skipping it removes the second `booking-changed` wave.
+User confirmed these aren't reproduced on recent generations. Don't blindly rewrite the prompt. Instead, add telemetry so we'll know if/when they fire again:
 
-### Step 3 — Suppress the Payments re-arm loop
+1. In `action-save-itinerary` final scrub, increment counters in `metadata.quality`:
+   - `cross_city_strip_count` (already in some paths — make it universal)
+   - `prompt_artifact_strip_count` (new — count regex-matched scrubs)
+   - `sentence_integrity_drop_count` (new — from Step 2)
+2. Surface these in the existing repair-log sentinel block so we can grep edge logs after each generation.
+3. Add a lightweight admin view (or just a query snippet in memory) to track these counts across the next 10 generations.
+4. Only if telemetry shows >0 hits in fresh generations → open a separate plan to harden the specific surviving leak path.
 
-In `src/components/itinerary/EditorialItinerary.tsx` `handleApplyRefreshChanges`:
+## Out of scope
 
-- Tag the `booking-changed` event with `detail.reason: 'fix_timing'` and `detail.coalesceMs: 1200`.
+- Rewriting the generation prompt template (no evidence it's broken on current runs).
+- Adding more cross-city / artifact guards before telemetry confirms a real leak.
+- Touching the 3 already-fixed bugs unless Step 1 repair pass fails to clear them.
 
-In `src/components/itinerary/PaymentsTab.tsx` (~line 293 effect):
+## Files touched
 
-- Read `detail.coalesceMs` (default 600) and **do not** re-arm the trailing timer if one is already pending — replace the `clearTimeout` + `setTimeout` pattern with a "leading edge fired, trailing edge fires once" guard. This stops the loop where every back-to-back event resets the 600 ms window.
+- `supabase/functions/_shared/prompt-leak-scrub.ts` (sentence integrity)
+- `supabase/functions/_shared/__tests__/prompt-leak-scrub.test.ts` (new fixtures)
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (audit §8b key access)
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (post-checkout sweep + telemetry counters + sentence-integrity scrub call)
+- `src/components/trip/TripHealthPanel.tsx` (single-source healthScore derivation)
+- `src/components/trip/__tests__/TripHealthPanel.analyzeHealth.test.ts` (collapsed=expanded test)
+- `mem://constraints/itinerary/sentence-integrity-guard.md` (new)
+- `mem://constraints/itinerary/post-checkout-save-time-sweep.md` (new)
+- `mem://index.md` (two new entries + telemetry counter list)
 
-### Step 4 — Tests
+## Operational note
 
-1. Extend `supabase/functions/_shared/timing-cascade.test.ts` with a Rome-style fixture (5–6 cards, two same-start conflicts + one buffer deficit) and assert that one cascade pass leaves zero residual conflicts when re-fed into the validator.
-2. Add a `refresh-day` integration test (or a small unit harness) that feeds the same fixture into the new code path and asserts the returned `proposedChanges`, when applied, produce zero new `timing_overlap` / `insufficient_buffer` issues on a second call.
-
-### Step 5 — Memory
-
-Add `mem://constraints/itinerary/fix-timing-cascade-parity.md`:
-- Refresh-day MUST delegate timing patch generation to `enforceTimingAndBuffers`. No bespoke pair-by-pair patch emission.
-- Fix Timing must not emit a follow-up `handleRefreshDay` when the cascade returned no non-timing issues.
-- Payments `booking-changed` handler is leading-edge + single trailing-edge; never re-arm.
-
-Update `mem://index.md` Core to reference the new constraint.
-
-## Out of Scope
-
-- No changes to the Trip Health analyzer (`TripHealthPanel.tsx`) — it already filters and soaks correctly.
-- No changes to AI prompts or the generator pipeline; the cascade module is shared and unchanged.
-- No changes to the Payments reconciliation contract — only the event-coalescing window.
-
-## Files Touched
-
-- `supabase/functions/refresh-day/index.ts` (rewrite §2/3/4 of the validation loop)
-- `src/components/itinerary/EditorialItinerary.tsx` (fix-timing effect + `handleApplyRefreshChanges`)
-- `src/components/itinerary/PaymentsTab.tsx` (event handler debounce)
-- `src/utils/itinerary/timingCascade.ts` (export shared helper if needed)
-- `supabase/functions/_shared/timing-cascade.test.ts` (Rome fixture)
-- `mem://constraints/itinerary/fix-timing-cascade-parity.md` (new)
-- `mem://index.md` (index entry)
+Step 1 is a **runtime action**, not a code change. After Steps 2–4 ship, I'll re-run Step 1 on the €2,272 trip so the new sanitizers also apply to it.

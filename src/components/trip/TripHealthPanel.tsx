@@ -381,7 +381,14 @@ export function TripHealthPanel({
     };
   }, [rawHealthIssues]);
 
-  const healthIssues = stableIssues;
+  // Drop any stable issue that no longer exists in the current raw set —
+  // prevents the "97 → 100 on expand" ghost where a recheck cleared a warning
+  // but the soak hadn't refired (signature unchanged path). Single source of
+  // truth: collapsed and expanded views always read the same derived set.
+  const healthIssues = useMemo(() => {
+    const liveIds = new Set(rawHealthIssues.map((i) => i.id));
+    return stableIssues.filter((i) => liveIds.has(i.id));
+  }, [stableIssues, rawHealthIssues]);
 
   // Health score: start at 100, deduct for stable issues only
   const healthScore = useMemo(() => {

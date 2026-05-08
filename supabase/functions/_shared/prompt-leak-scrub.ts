@@ -137,6 +137,91 @@ export function scrubTitleLeaks(act: any): BodyLeakScrubResult {
   return { changed: fields.length > 0, fields };
 }
 
+// ─── Sentence integrity (fragment guard) ────────────────────────────────────
+//
+// Catches AI-generated sentence fragments that survived the label scrubs:
+//   - "spot for together"  → dangling preposition + pronoun, no subject
+//   - "perfect for two together."
+//   - "ideal with for both."
+//   - "Good for ."  → trailing preposition before period
+//
+// We only DROP the broken sentence within a multi-sentence string. Single-
+// sentence fields are left alone if dropping would blank them — fragments are
+// cosmetic, not safety-critical, and an empty description is worse UX than
+// a slightly-off one. (`hasSentenceFragment` still reports them so telemetry
+// can surface a count.)
+//
+// Conservative patterns — only match clear fragments, never legitimate prose.
+const FRAGMENT_PATTERNS: RegExp[] = [
+  // dangling "<prep> together/two/both" with no preceding noun anchor
+  /\b(?:for|with|to|of|on|at|in)\s+(?:together|two|both)\b(?!\s+\w{3,})/i,
+  // "<prep> <prep>"  (e.g. "for with", "ideal with for both")
+  /\b(?:for|with|to|on|at|in|of)\s+(?:for|with|to|on|at|in|of)\b/i,
+  // sentence-end dangling preposition before period: "perfect for ."
+  /\b(?:for|with|to|on|at|in|of|by)\s*[.!?]/i,
+];
+
+function isFragmentSentence(sentence: string): boolean {
+  const trimmed = sentence.trim();
+  if (!trimmed) return false;
+  // Whitelist: ≥6 words AND starts with capital → almost certainly real prose
+  const words = trimmed.split(/\s+/);
+  if (words.length >= 6 && /^[A-Z]/.test(trimmed)) {
+    // Still flag if a fragment pattern matches outright
+    return FRAGMENT_PATTERNS.some((re) => re.test(trimmed));
+  }
+  // Short fragments OR non-capitalized starts → check patterns
+  return FRAGMENT_PATTERNS.some((re) => re.test(trimmed));
+}
+
+/**
+ * Drop fragment sentences from a string. Returns null if unchanged. Never
+ * returns an empty string — if every sentence looks broken, returns null
+ * (caller keeps the original; we'd rather show suspicious prose than nothing).
+ */
+export function scrubSentenceFragments(s: unknown): string | null {
+  if (typeof s !== 'string' || !s) return null;
+  // Split on sentence boundaries while preserving punctuation
+  const parts = s.split(/(?<=[.!?])\s+/);
+  if (parts.length < 2) {
+    // Single-sentence: only flag, don't strip (would blank the field)
+    return null;
+  }
+  const kept = parts.filter((p) => !isFragmentSentence(p));
+  if (kept.length === parts.length) return null;
+  if (kept.length === 0) return null;
+  const rebuilt = kept.join(' ').replace(/\s{2,}/g, ' ').replace(/\s+\./g, '.').trim();
+  return rebuilt === s ? null : rebuilt;
+}
+
+/**
+ * In-place scrub of fragment sentences across body + title fields. Returns
+ * which fields changed.
+ */
+export function scrubSentenceFragmentsOnAct(act: any): BodyLeakScrubResult {
+  if (!act || typeof act !== 'object') return { changed: false, fields: [] };
+  const fields: string[] = [];
+  for (const key of [...BODY_FIELDS, ...TITLE_FIELDS]) {
+    const next = scrubSentenceFragments(act[key]);
+    if (next !== null) {
+      act[key] = next;
+      fields.push(key);
+    }
+  }
+  return { changed: fields.length > 0, fields };
+}
+
+export function hasSentenceFragment(act: any): { field: string } | null {
+  if (!act || typeof act !== 'object') return null;
+  for (const key of [...BODY_FIELDS, ...TITLE_FIELDS]) {
+    const v = act[key];
+    if (typeof v !== 'string' || !v) continue;
+    const parts = v.split(/(?<=[.!?])\s+/);
+    if (parts.some(isFragmentSentence)) return { field: key };
+  }
+  return null;
+}
+
 export function hasTitleLeak(act: any): { field: string } | null {
   if (!act || typeof act !== 'object') return null;
   for (const key of TITLE_FIELDS) {
