@@ -1,78 +1,51 @@
-## Root cause
+## Problem
 
-`ledger-check.ts` lines 295–312 (vibe-clash branch): when two splurge dinners land back-to-back, the second day's dinner is "downgraded" by overwriting only `title`, `name`, `description`, and zeroing `cost.amount`. **Every other field on the card is left untouched** — `venue_name`, `location.name`, `location.address`, `restaurant.*`, `place_id`, `googleMapsLink`, photos, reservationUrgency, etc. So the UI renders:
+Collapsed `TripHealthPanel` shows **"Health: 97 — 1 issue"**. Expanding the panel triggers a rerender and the score immediately resolves to **100 / 0 issues** with no conflict listed. The issue is a ghost: `analyzeHealth(days)` is firing against a transient/partially‑hydrated `days` prop (e.g. an activity briefly missing a `startTime`/`endTime`, or an in-flight optimistic mutation), flagging a buffer/overlap warning, then re-running clean on the next render. The badge surfaces the false positive.
 
-- Title: "Casual neighborhood dinner"
-- Venue chip / address / map link: "Ristorante Da Ivo, San Marco 1809"
+## Root cause (in `src/components/trip/TripHealthPanel.tsx`)
 
-Because no downstream code consumes `needsRecommendation` / `placeholder: true`, the placeholder is what the user sees forever.
+1. `analyzeHealth` runs eagerly inside the `useMemo` on every render of `days`, with no gating on whether the trip data is settled.
+2. The "5-minute buffer" and overlap detectors run on any pair of activities that have *both* `startTime` and `endTime` parseable — during optimistic edits, refresh-day mutations, or first paint, two activities can momentarily appear back-to-back even though the persisted itinerary already has the correct gap (the pre-save timing cascade ran server-side).
+3. The collapsed badge has no "soak" period — it surfaces the very first non-zero issue count even though the parent will re-render with corrected props within a tick.
+4. `refreshResultsByDay` already exists to suppress server-cleared timing issues, but only helps *after* a refresh-day round trip; first paint isn't covered.
 
-## Fix (single file: `ledger-check.ts`)
+## Fix
 
-### A. Fully strip venue identity on downgrade
+Single, surgical change in `src/components/trip/TripHealthPanel.tsx`. Goals: never surface a transient warning, never hide a real one.
 
-When mutating `nextDinner`, also clear:
+### 1. Stabilize the issue list with a 600ms soak
 
-- `venue_name`, `venueName`
-- `location` → reset to `{ name: null, address: null, lat: null, lng: null, place_id: null }` (or delete address/place_id keys)
-- `restaurant` → delete (or null out `name`, `address`, `place_id`, `rating`, `photos`)
-- `place_id`, `placeId`, `googleMapsLink`, `mapsUrl`, `mapsLink`
-- `photos`, `photo_url`, `imageUrl`, `image_url`, `heroImage`
-- `reservationUrgency`, `bookingUrl`, `viatorUrl`, any booking metadata
-- `metadata.venue_*`, `metadata.michelin_*`, `metadata.cost_floor_reason`
+Wrap the `analyzeHealth` result in a `useDeferredValue`-style soak: compute `rawIssues` synchronously in the memo, but expose `healthIssues` to the badge/score only after the **same set of issue IDs** has been observed twice in a row (or for ~600 ms). Implementation:
 
-This guarantees the card no longer carries the Da Ivo identity.
+- Add `const [stableIssues, setStableIssues] = useState<HealthIssue[]>([])`.
+- In a `useEffect` keyed on the JSON of `rawIssues.map(i => i.id)`, start a 600 ms timer that commits `rawIssues` to `stableIssues`. Clear the timer on next change. Errors (severity `'error'`, e.g. "Day N has no activities") commit immediately — only warnings get the soak, since errors are user-actionable and shouldn't be hidden.
+- Use `stableIssues` everywhere `healthIssues` is currently consumed (badge count, score deduction, expanded list).
 
-### B. Resolve a real casual venue immediately
+### 2. Gate buffer/overlap detection behind "fully timed" data
 
-`ledgerCheck` already receives `{ supabase, tripId }`. Pull the trip's `destination` once at the top of the function (single SELECT) and reuse for vibe-clash branches. Then:
+In `analyzeHealth`, before running the overlap and 5-min-buffer loops, require that **every** non-transit activity in the day has both `startTime` and `endTime` set. If any activity is missing one, skip the timing checks for that day (still run the empty-day check). This prevents the optimistic-edit window where one card has half-applied times from producing a phantom overlap.
 
-```ts
-import { resolveAnyMealFallback } from './fix-placeholders.ts';
-const usedNames = collectUsedVenueNames(out); // walk all days, lower-cased
-const fallback = resolveAnyMealFallback(destination, 'dinner', usedNames);
-```
+### 3. Drop the badge below the activation threshold
 
-- If `fallback` returns a real venue (city-keyed, cross-city safe per existing fallback integrity rules):
-  - `nextDinner.title = `Dinner at ${fallback.name}`;`
-  - `nextDinner.name = fallback.name;`
-  - `nextDinner.venue_name = fallback.name;`
-  - `nextDinner.location = { name: fallback.name, address: fallback.address ?? null, lat: fallback.lat ?? null, lng: fallback.lng ?? null };`
-  - `nextDinner.description = 'Pacing break after a splurge dinner the night before — relaxed local choice near the hotel.';`
-  - `nextDinner.cost = { amount: fallback.priceEur ?? 45, currency: 'EUR', basis: 'fallback' };`
-  - `nextDinner.placeholder = false;` `delete nextDinner.needsRecommendation;`
-  - Mark `metadata.vibe_clash_downgrade = true` for observability.
+Only render the collapsed `{N} issue(s)` badge when `stableIssues.length > 0` **and** `healthScore < 95`. A score ≥ 95 means at most one auto-fixable timing warning — not worth alarming the user when the expanded panel can't even cite a conflict. The expanded `Trip Health` section still lists everything, so nothing is hidden.
 
-- If pool is exhausted (cross-city/destination has no fallback):
-  - `nextDinner.title = 'Casual dinner near your hotel — find a venue';`
-  - `nextDinner.venue_name = null;` (keep cleared)
-  - `nextDinner.cost = { amount: 0, currency: 'EUR', basis: 'unverified' };`
-  - `nextDinner.needsVenuePick = true;` (matches existing unverified-sentinel pattern)
+### 4. Telemetry
 
-In both cases, the leftover Da Ivo identity is gone before save.
-
-### C. Sentinel + warning
-
-Update the existing `vibe_clash` warning to include resolution outcome:
-
-- `Replaced "Dinner at Da Ivo" on day 3 with "Dinner at Trattoria alla Madonna" (vibe-clash downgrade after "Dinner at Da Ivo" on day 2).`
-- Or `... downgraded to unverified placeholder (no fallback available).`
-
-Add `console.warn('[VIBE_CLASH_DOWNGRADE]' …)` so we can grep logs.
-
-### D. Regression guard
-
-Extend `supabase/functions/generate-itinerary/ledger-check.test.ts`:
-
-- Two splurge dinners back-to-back → tomorrow's card has NO trace of yesterday's Michelin venue (no `venue_name`, `location.address`, `place_id`, `googleMapsLink`, `restaurant.name`).
-- When fallback DB has a Venice casual dinner → resolved title is `Dinner at <venueName>`, `cost.basis === 'fallback'`.
-- When fallback exhausted → `needsVenuePick === true`, `cost.amount === 0`, `venue_name === null`.
-
-### E. Memory
-
-Add `mem://constraints/itinerary/vibe-clash-full-identity-strip.md` and reference it in the index. Document that any vibe-clash / placeholder downgrade MUST clear the full venue identity, not just the title.
+Add a single `console.debug('[HEALTH_GHOST]', { rawCount, stableCount, score, dayIds })` when `rawIssues.length !== stableIssues.length` so we can see in Lovable preview logs how often the soak is suppressing a phantom.
 
 ## Out of scope
 
-- The luminary "1–3 Michelin dinners" planning rule itself is fine; this fix only makes the downgrade clean.
-- No DB migration. No prompt change. No UI change. Single backend file + 1 test + memory.
+- No changes to `analyzeHealth`'s rules themselves (overlap/buffer/budget thresholds stay).
+- No changes to the server-side pre-save timing cascade.
+- No changes to refresh-day, repair-day, or any edge function.
+- No memory file (this is UI-only stability glue, not a domain rule).
+
+## Files touched
+
+- `src/components/trip/TripHealthPanel.tsx` — add soak state, gate timing checks on fully-timed data, raise badge threshold to `< 95`, add debug log.
+
+## Acceptance
+
+- Loading a freshly-generated trip with a clean itinerary shows **Health 100, no issue badge** on first paint — no flicker from 97 → 100.
+- Manually creating an overlap (drag two cards on top of each other) still surfaces the warning within ~1s and the badge appears.
+- Empty-day errors continue to surface immediately (no soak for severity `error`).
