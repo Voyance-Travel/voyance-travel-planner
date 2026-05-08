@@ -1499,10 +1499,24 @@ async function _handleGenerateTripDayInner(
         }
         usedNorm.add(extractRestaurantVenueName(replacementName));
       } else {
-        // ZERO-TOLERANCE: No replacement available — but NEVER remove primary meals
-        const isPrimaryMeal = /\b(?:breakfast|lunch|dinner|brunch)\b/i.test(act.title || '');
+        // ZERO-TOLERANCE: No replacement available — but NEVER remove primary meals.
+        // Widened guard: protect any dining-category activity OR any activity scheduled
+        // in the canonical lunch (12:00-14:30) or dinner (18:00-22:00) windows, even if
+        // the title doesn't carry the literal "Lunch at"/"Dinner at" prefix (e.g.
+        // "Cicchetti at All'Arco" at 13:00 is still a primary meal).
+        const titleHasPrefix = /\b(?:breakfast|lunch|dinner|brunch)\b/i.test(act.title || '');
+        const startMin = (() => {
+          const m = String(act.startTime || '').match(/(\d{1,2}):(\d{2})/);
+          return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
+        })();
+        const inMealWindow =
+          startMin !== null &&
+          ((startMin >= 12 * 60 && startMin <= 14 * 60 + 30) ||
+           (startMin >= 18 * 60 && startMin <= 22 * 60));
+        const isDiningCat = (act.category || '').toLowerCase() === 'dining';
+        const isPrimaryMeal = titleHasPrefix || isDiningCat || inMealWindow;
         if (isPrimaryMeal) {
-          console.warn(`[generate-trip-day] ⚠️ CROSS-DAY DEDUP: "${act.title}" repeats but is PRIMARY MEAL — KEEPING (duplicate > missing meal)`);
+          console.warn(`[generate-trip-day] ⚠️ CROSS-DAY DEDUP: "${act.title}" repeats but is PRIMARY MEAL (cat=${act.category}, time=${act.startTime}) — KEEPING (duplicate > missing meal)`);
         } else {
           console.warn(`[generate-trip-day] 🚫 CROSS-DAY DEDUP: "${act.title}" repeats with no replacement — REMOVING`);
           dayResult.activities[i] = null; // Mark for removal
