@@ -60,6 +60,28 @@ describe('client persistDayContract mirror', () => {
     expect(cleaned[0].title).toBe('Dinner at Osteria');
   });
 
+  it('strips bare ALLCAPS-with-underscore tokens like (FLEX_WINDOW)', () => {
+    const acts = [
+      { title: 'Open Afternoon - Wander Castello (FLEX_WINDOW)', startTime: '14:00', category: 'activity' },
+      { title: 'Stroll San Marco (NARRATIVE_MOOD)', startTime: '17:00', category: 'activity' },
+    ];
+    const cleaned = cleanActivitiesForPersist(acts);
+    expect(cleaned).toHaveLength(2);
+    expect(cleaned[0].title).toBe('Open Afternoon - Wander Castello');
+    expect(cleaned[1].title).toBe('Stroll San Marco');
+  });
+
+  it('does NOT strip legit acronyms in parens like (NYC) / (USA)', () => {
+    const acts = [
+      { title: 'Visit MoMA (NYC)', startTime: '11:00', category: 'museum' },
+      { title: 'Photo stop (USA)', startTime: '12:00', category: 'sightseeing' },
+    ];
+    const cleaned = cleanActivitiesForPersist(acts);
+    expect(cleaned).toHaveLength(2);
+    expect(cleaned[0].title).toBe('Visit MoMA (NYC)');
+    expect(cleaned[1].title).toBe('Photo stop (USA)');
+  });
+
   it('PLACEHOLDER_NAME_RE matches all known leak patterns', () => {
     const cases = [
       'Spa Time — find a venue',

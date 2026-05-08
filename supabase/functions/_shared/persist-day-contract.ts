@@ -44,8 +44,11 @@ export const PLACEHOLDER_NAME_RE = new RegExp(
 
 // Prompt-artifact tokens. Narrow — does NOT include bare `(name)` /
 // `(venue)` which routinely appear in legitimate description prose.
+// Also matches bare ALLCAPS-with-underscore tokens like "(FLEX_WINDOW)" /
+// "(NARRATIVE_MOOD)" / "(DEEP_CONTEXT)". Underscore requirement keeps it
+// from matching legit acronyms like "(USA)" / "(NYC)".
 export const PROMPT_ARTIFACT_RE =
-  /\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)\s*\)/i;
+  /\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)/i;
 
 const GHOST_CATEGORIES = new Set([
   'accommodation', 'hotel', 'lodging', 'stay',

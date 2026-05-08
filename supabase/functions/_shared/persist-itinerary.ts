@@ -27,9 +27,9 @@ import { enforceContractOnDays } from './persist-day-contract.ts';
 // the first match in a run. That is the root cause of the "intermittent"
 // prompt-artifact leak users keep seeing on fresh generations.
 const PROMPT_ARTIFACT_TEST_RE =
-  /\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder|name|venue)\s*\)/i;
+  /\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder|name|venue)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)/i;
 const PROMPT_ARTIFACT_REPLACE_RE =
-  /\s*\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder|name|venue)\s*\)/gi;
+  /\s*\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder|name|venue)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)/gi;
 
 export function stripPromptArtifactsInTitles(days: any[]): number {
   if (!Array.isArray(days)) return 0;

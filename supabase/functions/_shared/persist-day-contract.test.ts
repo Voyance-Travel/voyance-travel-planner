@@ -25,6 +25,18 @@ Deno.test('drops prompt artifact "(AESTHETIC slot)"', () => {
   assertEquals(drops[0].reason, 'prompt-artifact');
 });
 
+Deno.test('drops bare ALLCAPS-with-underscore token "(FLEX_WINDOW)"', () => {
+  const acts = [{ title: 'Open Afternoon - Wander Castello (FLEX_WINDOW)', startTime: '14:00', category: 'activity' }];
+  const { activities, drops } = enforcePersistDayContract(acts);
+  assertEquals(activities.length, 0);
+  assertEquals(drops[0].reason, 'prompt-artifact');
+});
+
+Deno.test('does NOT drop legit acronyms in parens like (NYC)', () => {
+  const acts = [{ title: 'Visit MoMA (NYC)', startTime: '11:00', category: 'museum' }];
+  const { activities } = enforcePersistDayContract(acts);
+  assertEquals(activities.length, 1);
+
 Deno.test('drops "find a local spot"', () => {
   const acts = [{ title: 'Lunch — find a local spot', startTime: '12:30', category: 'dining' }];
   const { activities, drops } = enforcePersistDayContract(acts);
