@@ -1,69 +1,64 @@
 ## Root cause
 
-The model is leaking another prompt token — `(FLEX_WINDOW)` — into activity titles (Day 1 "Open Afternoon - Wander Castello (FLEX_WINDOW)"). It comes from the spontaneous-planning section of `archetype-constraints.ts` (lines 2271–2275: "Required FLEX WINDOW format"). Same class of bug as `(slot)` and `(AESTHETIC slot)`.
+Three independent leak paths let `(INTEREST_SLOT)` reach the user, despite the regex updates from the last fix:
 
-The current artifact strippers don't catch it:
+1. **UI render bypass.** Activity card titles render through `sanitizeActivityName` / `sanitizeActivityText` in `src/utils/activityNameSanitizer.ts` — **not** through `sanitizeText` (where I added the bare-ALLCAPS-with-underscore stripper last round). `activityNameSanitizer.ts` has no prompt-artifact stripping at all (grep confirms: only `Fulfills the … slot.` and a generic `USER_PREF_NOTE_RE`). So whatever survives to the DB renders raw.
 
-- `PROMPT_ARTIFACT_RE` in `src/lib/itinerary/persistDayContract.ts` and `supabase/functions/_shared/persist-day-contract.ts` only matches `(... slot|placeholder)` — requires the literal trailing word `slot` or `placeholder`.
-- `_scrub_itinerary_prompt_artifacts` DB trigger uses the same narrow pattern.
-- `src/utils/textSanitizer.ts` line 31 only matches a hard-coded label list (`AESTHETIC|NARRATIVE|MOOD|...`) — `FLEX_WINDOW` isn't in it, and the list never matches tokens with underscores.
+2. **DB per-day trigger only DROPS, never STRIPS.** `itinerary_days_scrub_activities_trg` calls `scrub_itinerary_activities(jsonb)`, which uses the old narrow regex `\(\s*([A-Z][A-Z0-9 _-]{1,30}\s+)?(slot|placeholder)\s*\)`. `(INTEREST_SLOT)` and `(FLEX_WINDOW)` don't match (no trailing word "slot"/"placeholder", no required whitespace before SLOT — it's an underscore). So the row passes through with the dirty title intact. And even if it matched, this trigger drops the whole row instead of cleaning the title — wrong behavior for a forced interest activity we want to keep.
 
-`(FLEX_WINDOW)` slips past all four layers and renders straight into the card title.
+3. **Trip-level scrubber covers `trips.itinerary_data` but not `itinerary_days.activities` writes.** `_scrub_itinerary_prompt_artifacts` (updated last round, regex now correct) only runs on `trips`. The per-day row write path has no equivalent text-strip — only the row-drop trigger above.
 
-## Fix scope (4 surgical regex updates — no behavior change)
+Net: a forced "INTEREST SLOT" activity (from `personalization-enforcer.ts:797`) gets written into `itinerary_days.activities` with the model paraphrasing the label as `(INTEREST_SLOT)` in the title, survives both DB triggers, and renders through `sanitizeActivityName` untouched.
 
-Add a second alternative that catches **bare ALL-CAPS tokens containing an underscore** (the prompt-template convention) — e.g. `(FLEX_WINDOW)`, `(NARRATIVE_MOOD)`, `(DEEP_CONTEXT)`. The underscore requirement keeps it from matching legit acronyms like `(USA)`, `(UK)`, `(NYC)`.
+## Fix scope (3 surgical changes — same regex everywhere)
 
-New combined pattern:
+Reuse the already-deployed pattern:
 ```
-\(\s*(?:
-  (?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)   // existing
-  |
-  [A-Z][A-Z0-9]*_[A-Z0-9_]+                            // NEW: ALLCAPS_WITH_UNDERSCORE
-)\s*\)
+\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)
 ```
 
-Apply in:
+### 1. UI safety net — `src/utils/activityNameSanitizer.ts`
+Add a top-of-pipeline strip in `sanitizeActivityName` (and `sanitizeActivityText` if it exists alongside) that removes prompt-artifact tokens from the input before any other processing. Two regexes — non-global for `.test()`, `/g` for `.replace()` — per the Stateful Regex Strip Bug memory. This fixes every already-saved trip on next render with zero data writes.
 
-1. `src/lib/itinerary/persistDayContract.ts` — update `PROMPT_ARTIFACT_TEST_RE` and `PROMPT_ARTIFACT_REPLACE_RE` (browser strip + drop pass).
-2. `supabase/functions/_shared/persist-day-contract.ts` — update `PROMPT_ARTIFACT_RE` (edge save-itinerary contract).
-3. `supabase/functions/_shared/persist-itinerary.ts` — update its mirror artifact strip regex.
-4. `src/utils/textSanitizer.ts` — add the bare-ALLCAPS-underscore alternative so already-saved trips render cleanly without re-save.
+### 2. New DB function `_strip_prompt_artifacts_in_activities(jsonb) → jsonb`
+Pure text-strip (mirror of `_scrub_itinerary_prompt_artifacts` but operating on a `jsonb` array of activities, not a full itinerary). Removes the artifact substring from each activity's `title`, `name`, `description`. Never drops rows.
 
-DB migration:
-5. Tighten `_scrub_itinerary_prompt_artifacts` PL/pgSQL function: extend its regex with the same bare-ALLCAPS-underscore alternative, so future inserts/updates strip `(FLEX_WINDOW)` from `title`/`name` and the snapshot at the DB boundary.
+Wire it into the existing `itinerary_days_scrub_activities` trigger BEFORE the row-drop call, so the strip runs first and the drop only fires on truly broken rows:
+```
+NEW.activities := public._strip_prompt_artifacts_in_activities(NEW.activities);
+NEW.activities := public.scrub_itinerary_activities(NEW.activities);
+```
 
-One-shot data repair (same migration): UPDATE existing `itinerary_days` and `trips.itinerary_data` rows where `title`/`name` matches the new pattern, scrubbing the token in place. Limited to last 14 days to avoid touching ancient data.
+### 3. One-shot backfill (same migration)
+UPDATE `itinerary_days.activities` AND `trips.itinerary_data` for rows updated in the last 14 days where the new regex hits. Run `_strip_prompt_artifacts_in_activities` / `_scrub_itinerary_prompt_artifacts` over them. Last round's backfill ran the old regex against `_scrub_itinerary_prompt_artifacts` after the regex update, so this re-run is just a safety pass that will also catch any trips written between now and the previous backfill.
 
 ## Tests
 
-Add cases to `src/lib/itinerary/__tests__/persistDayContract.test.ts` and `supabase/functions/_shared/persist-day-contract.test.ts`:
-- Title `"Open Afternoon - Wander Castello (FLEX_WINDOW)"` → artifact stripped, activity kept, title becomes `"Open Afternoon - Wander Castello"`.
-- Title `"Stroll San Marco (NARRATIVE_MOOD)"` → stripped.
-- Title `"Visit MoMA (NYC)"` → **NOT stripped** (no underscore, legit acronym).
-- Title `"Photo stop (USA)"` → **NOT stripped**.
-- Existing `(slot)` / `(AESTHETIC slot)` cases continue to pass.
+Add to `src/utils/__tests__/activityNameSanitizer.test.ts` (create if missing):
+- `sanitizeActivityName("Anniversary Wellness Ritual (INTEREST_SLOT)")` → `"Anniversary Wellness Ritual"`.
+- `sanitizeActivityName("Open Afternoon - Wander Castello (FLEX_WINDOW)")` → `"Open Afternoon - Wander Castello"`.
+- `sanitizeActivityName("Dinner (AESTHETIC slot)")` → `"Dinner"`.
+- `sanitizeActivityName("Visit MoMA (NYC)")` → unchanged.
 
-Add to `src/utils/__tests__/textSanitizer.artifacts.test.ts`:
-- `sanitizeText("Wander Castello (FLEX_WINDOW)")` → `"Wander Castello"`.
+DB-side: in the migration, run a SELECT round-trip to assert `_strip_prompt_artifacts_in_activities` removes `(INTEREST_SLOT)` from a synthetic row but leaves `(NYC)` alone.
 
 ## What this does NOT change
 
-- No prompt edits (the generator can keep the FLEX WINDOW guidance — we just refuse to let the literal token survive to the user).
-- No business logic, no scoring, no costs, no locking, no cross-city sweep.
-- Bare-acronym parens in legit prose still pass through.
+- No prompt edits — the generator can keep emitting forced-interest descriptions; we just refuse to let the literal token survive to the user.
+- No locking, no cost logic, no cross-city sweep, no row-drop semantics for legitimately broken rows (still dropped by `scrub_itinerary_activities`).
 
 ## Files
 
-- Edit `src/lib/itinerary/persistDayContract.ts`
-- Edit `supabase/functions/_shared/persist-day-contract.ts`
-- Edit `supabase/functions/_shared/persist-itinerary.ts`
-- Edit `src/utils/textSanitizer.ts`
-- Edit `src/lib/itinerary/__tests__/persistDayContract.test.ts`
-- Edit `supabase/functions/_shared/persist-day-contract.test.ts`
-- Edit `src/utils/__tests__/textSanitizer.artifacts.test.ts`
-- New migration: tighten `_scrub_itinerary_prompt_artifacts` + 14-day backfill scrub of `itinerary_days` + `trips.itinerary_data`.
+- Edit `src/utils/activityNameSanitizer.ts`
+- New `src/utils/__tests__/activityNameSanitizer.artifacts.test.ts` (or extend existing `activityNameSanitizer.test.ts`)
+- New migration:
+  - `CREATE OR REPLACE FUNCTION public._strip_prompt_artifacts_in_activities(jsonb)`
+  - `CREATE OR REPLACE FUNCTION public.itinerary_days_scrub_activities()` — call strip before drop
+  - 14-day backfill UPDATE on `itinerary_days` and `trips`
 
 ## Memory update after fix
 
-Append to `mem://technical/itinerary/stateful-regex-strip-bug`: prompt-artifact pattern set must cover `(slot)`/`(placeholder)` AND bare ALL-CAPS-with-underscore tokens like `(FLEX_WINDOW)`, `(NARRATIVE_MOOD)`, `(DEEP_CONTEXT)`. Hard-coded label allow-lists are fragile — the underscore convention is the durable signal.
+Append to `mem://technical/itinerary/stateful-regex-strip-bug`:
+- Card title render goes through `sanitizeActivityName`, NOT `sanitizeText`. Prompt-artifact strip MUST live in BOTH.
+- DB trigger on `itinerary_days` must STRIP titles before it considers DROPPING rows — forced-interest activities are otherwise lost or rendered with the raw `(INTEREST_SLOT)` / `(FLEX_WINDOW)` token.
+- Layer count is now SIX, all using the same regex: browser contract, edge contract, edge title-strip, `sanitizeText`, `sanitizeActivityName`, DB trigger.

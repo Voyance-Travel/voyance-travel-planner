@@ -9638,6 +9638,10 @@ export type Database = {
         Args: { p_itin: Json }
         Returns: Json
       }
+      _strip_prompt_artifacts_in_activities: {
+        Args: { acts: Json }
+        Returns: Json
+      }
       accept_trip_invite: { Args: { p_token: string }; Returns: Json }
       archive_orphan_trip_payments: {
         Args: { p_trip_id: string }
