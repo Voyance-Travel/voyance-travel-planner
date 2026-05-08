@@ -1431,6 +1431,15 @@ async function _handleGenerateTripDayInner(
       try {
         const { fillAfternoonDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
         const lockedIdSet = new Set<string>(lockedActivitiesForDay.map((l: any) => l.id));
+        // Last-day upper bound: departure − buffer (180m flight / 120m train)
+        const _gapLatestMins = isLastDay && savedDepTime24Hoisted
+          ? (() => {
+              const m = savedDepTime24Hoisted.match(/(\d{1,2}):(\d{2})/);
+              if (!m) return undefined;
+              const isTrain = departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(departureTransportType);
+              return parseInt(m[1]) * 60 + parseInt(m[2]) - (isTrain ? 120 : 180);
+            })()
+          : undefined;
         const filled = await fillAfternoonDeadGaps(dayResult.activities, {
           destination: cityInfo?.cityName || destination,
           isFirstDay,
@@ -1441,9 +1450,10 @@ async function _handleGenerateTripDayInner(
           budgetTier: (tripMeta?.budget_tier as string | undefined) || 'standard',
           tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
           lockedIds: lockedIdSet,
+          latestUsableMins: _gapLatestMins,
         });
         if (filled.inserted.length > 0) {
-          console.log(`[generate-trip-day] Auto-filled ${filled.inserted.length} afternoon dead gap(s) on day ${dayNumber}`);
+          console.log(`[generate-trip-day] Auto-filled ${filled.inserted.length} afternoon dead gap(s) on day ${dayNumber}${isLastDay ? ' (last-day mode)' : ''}`);
           dayResult.activities = filled.activities;
         }
       } catch (gapErr) {
