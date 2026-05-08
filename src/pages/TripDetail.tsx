@@ -2101,18 +2101,30 @@ export default function TripDetail() {
 
     // Persist to DB
     try {
-      const updatePayload: Record<string, unknown> = {
+      const extraFields: Record<string, unknown> = {
         start_date: startDate,
         end_date: endDate,
-        updated_at: new Date().toISOString(),
       };
-      if (itineraryData) updatePayload.itinerary_data = itineraryData;
-      if (hotelSelection !== undefined) updatePayload.hotel_selection = hotelSelection;
+      if (hotelSelection !== undefined) extraFields.hotel_selection = hotelSelection;
 
-      const { error } = await supabase
-        .from('trips')
-        .update(updatePayload as any)
-        .eq('id', tripId);
+      let error: any = null;
+      if (itineraryData) {
+        // Route through the boundary so prompt-artifact strip + cross-city
+        // sweep run on restored snapshots too.
+        const safeRes = await safeUpdateItineraryData(
+          tripId,
+          itineraryData as any,
+          extraFields,
+        );
+        error = safeRes?.error ?? null;
+      } else {
+        // No itinerary in snapshot — sibling columns only, raw write OK.
+        const res = await supabase
+          .from('trips')
+          .update({ ...extraFields, updated_at: new Date().toISOString() } as any)
+          .eq('id', tripId);
+        error = res.error;
+      }
 
       if (error) {
         console.error('[TripDetail] Failed to undo date change:', error);
