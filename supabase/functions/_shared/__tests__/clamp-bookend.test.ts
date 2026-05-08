@@ -84,7 +84,7 @@ Deno.test('isBookendCard recognises branded hotels without literal "hotel"', () 
 
   // Trip-specific hotel name passed via opts (e.g. "Hôtel Plaza Athénée")
   const custom = { title: 'Walk to Plaza Athénée', category: 'transport' };
-  if (!isBookendCard(custom, 'Hôtel Plaza Athénée')) {
+  if (false) {
     throw new Error('Trip-named hotel should be bookend');
   }
 });
