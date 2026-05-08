@@ -95,6 +95,24 @@ export async function persistDay(input: PersistDayInput): Promise<PersistDayResu
     stripPreDawnHotelReturns(generatedDay.activities, { dayNumber, label: 'PERSIST_DAY' });
   }
 
+  // Final bookend clamp — never let a hotel-return / freshen-up / check-in
+  // bleed past 23:59 into the next day's territory.
+  const { clampAllBookends } = await import('../../_shared/clamp-bookend.ts');
+  const clampedNorm = clampAllBookends(normalizedActivities, { dayNumber, label: 'PERSIST' });
+  let clampedDay = 0;
+  if (Array.isArray(generatedDay?.activities)) {
+    clampedDay = clampAllBookends(generatedDay.activities, { dayNumber, label: 'PERSIST_DAY' });
+  }
+  const totalClamped = clampedNorm + clampedDay;
+  if (totalClamped > 0) {
+    try {
+      generatedDay.metadata = generatedDay.metadata || {};
+      generatedDay.metadata.quality = generatedDay.metadata.quality || {};
+      generatedDay.metadata.quality.bookend_clamped_count =
+        (generatedDay.metadata.quality.bookend_clamped_count || 0) + totalClamped;
+    } catch { /* noop */ }
+  }
+
   // ── 1. Upsert day row ──
   const { data: dayRow, error: dayError } = await supabase
     .from('itinerary_days')
