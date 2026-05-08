@@ -1269,6 +1269,105 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 5a-post-2. STRENUOUS_NIGHT_SWAP ---
+  // Strenuous outdoor activities (kayak, SUP, cycling tour, hike, run, climb,
+  // surf, jet-ski, windsurf, kitesurf, wakeboard, rafting) must NOT start
+  // late-night. Hard cap 21:00 general / 20:00 luxury+luminary tier.
+  // See mem://constraints/itinerary/no-strenuous-after-dinner
+  {
+    const STRENUOUS_RE = /\b(?:kayak(?:ing)?|paddle\s?board(?:ing)?|\bSUP\b|canoe(?:ing)?|cycling(?:\s+tour)?|bike\s+(?:tour|ride|rental)|e-?bike(?:\s+tour)?|hik(?:e|ing)|trek(?:king)?|run(?:ning)?|jog(?:ging)?|climb(?:ing)?|bouldering|surf(?:ing)?|jet[\s-]?ski(?:ing)?|wakeboard(?:ing)?|windsurf(?:ing)?|kitesurf(?:ing)?|rafting|scuba|free.?div(?:e|ing)|snorkel(?:ing)?)\b/i;
+    const tierLower = String((input as any).budgetTier || '').toLowerCase();
+    const isLuxuryTier = tierLower === 'luxury' || tierLower === 'luminary';
+    const cutoffMins = isLuxuryTier ? 20 * 60 : 21 * 60;
+    const TARGET_SLOT_MINS = 16 * 60; // 16:00 preferred destination slot
+
+    for (let i = 0; i < activities.length; i++) {
+      const act = activities[i];
+      if (!act || lockedIds.has(act.id)) continue;
+      // Universal-locking exemptions
+      if (act.isLocked || act.manualEdit || act.isUserAdded || act.extracted || act.pinned) continue;
+
+      const title = String(act.title || '');
+      const description = String(act.description || '');
+      const cat = String(act.category || '').toLowerCase();
+      const startTime = String(act.startTime || act.start_time || '');
+      const m = startTime.match(/(\d{1,2}):(\d{2})/);
+      if (!m) continue;
+      const startMin = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+      if (startMin < cutoffMins) continue;
+
+      // Category guard — never re-time these (have their own rules)
+      if (cat === 'dining' || cat === 'food' || cat === 'restaurant' || cat === 'museum' || cat === 'gallery' || cat === 'shopping' || cat === 'accommodation' || cat === 'transport' || cat === 'transportation') continue;
+
+      const titleHit = STRENUOUS_RE.test(title);
+      const descHit = STRENUOUS_RE.test(description);
+      if (!titleHit && !descHit) continue;
+
+      // Compute duration to preserve
+      const endTime = String(act.endTime || act.end_time || '');
+      const em = endTime.match(/(\d{1,2}):(\d{2})/);
+      let durationMin = 60;
+      if (em) {
+        const endMin = parseInt(em[1], 10) * 60 + parseInt(em[2], 10);
+        const diff = endMin - startMin;
+        if (diff > 0 && diff < 360) durationMin = diff;
+      }
+
+      // Find the dinner start so the swap doesn't collide.
+      let dinnerStartMin: number | null = null;
+      for (const other of activities) {
+        if (!other || other === act) continue;
+        const oTitle = String(other.title || '').toLowerCase();
+        const oCat = String(other.category || '').toLowerCase();
+        const oStart = String(other.startTime || other.start_time || '');
+        const om = oStart.match(/(\d{1,2}):(\d{2})/);
+        if (!om) continue;
+        const isDinner = /\bdinner\b/.test(oTitle) && (oCat.includes('dining') || oCat.includes('food') || oCat.includes('restaurant'));
+        if (!isDinner) continue;
+        dinnerStartMin = parseInt(om[1], 10) * 60 + parseInt(om[2], 10);
+        break;
+      }
+
+      // Place ending at min(dinnerStart−60, 18:30). Floor start at 13:30.
+      const latestEnd = dinnerStartMin != null ? Math.min(dinnerStartMin - 60, 18 * 60 + 30) : 18 * 60 + 30;
+      let newEnd = Math.max(latestEnd, 14 * 60 + 30);
+      let newStart = newEnd - durationMin;
+      if (newStart < 13 * 60 + 30) {
+        newStart = 13 * 60 + 30;
+        newEnd = newStart + durationMin;
+      }
+      // Prefer the 16:00 slot when room allows
+      if (newStart > TARGET_SLOT_MINS && TARGET_SLOT_MINS + durationMin <= latestEnd) {
+        newStart = TARGET_SLOT_MINS;
+        newEnd = newStart + durationMin;
+      }
+
+      const fmt = (mm: number) => `${String(Math.floor(mm / 60)).padStart(2, '0')}:${String(mm % 60).padStart(2, '0')}`;
+      const oldStart = startTime;
+      const oldEnd = endTime || '?';
+      act.startTime = fmt(newStart);
+      act.start_time = act.startTime;
+      act.endTime = fmt(newEnd);
+      act.end_time = act.endTime;
+
+      console.log(`[Repair] STRENUOUS_NIGHT_SWAP: "${title}" ${oldStart}-${oldEnd} → ${act.startTime}-${act.endTime} (tier=${tierLower || 'default'}, cutoff=${cutoffMins / 60}:00)`);
+      repairs.push({
+        code: FAILURE_CODES.MISSING_SLOT,
+        action: 'strenuous_moved_or_replaced',
+        before: `${title} @ ${oldStart}`,
+        after: `${title} @ ${act.startTime}`,
+      });
+    }
+
+    // Resort the day chronologically so downstream passes see the moved card in order.
+    activities.sort((a: any, b: any) => {
+      const ta = parseTimeToMinutes(a.startTime || a.start_time || '00:00') ?? 99999;
+      const tb = parseTimeToMinutes(b.startTime || b.start_time || '00:00') ?? 99999;
+      return ta - tb;
+    });
+  }
+
+
   // --- 5b. MEAL_DUPLICATE: remove or relabel duplicate same-meal activities ---
   if (byCode.has(FAILURE_CODES.MEAL_DUPLICATE)) {
     const dupeResults = byCode.get(FAILURE_CODES.MEAL_DUPLICATE) || [];
