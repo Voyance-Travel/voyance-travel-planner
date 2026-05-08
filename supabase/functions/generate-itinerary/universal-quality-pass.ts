@@ -80,6 +80,7 @@ export async function universalQualityPass(
     city, country, dnaTier, dnaArchetype, dayIndex, totalDays,
     usedVenueNames, arrivalTime, departureTime, departureTransportType,
     dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants, hotelName,
+    requiredMeals,
   } = options;
 
   // Compute DNA-aware dining config internally
