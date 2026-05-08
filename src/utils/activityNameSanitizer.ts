@@ -27,6 +27,13 @@ const TRAILING_OR_QUALIFIER_RE = /\s+or\s+(?:high.end|similar|equivalent|compara
 // Strip "slot: " prefix from descriptions
 const SLOT_PREFIX_RE = /^slot:\s*/i;
 
+// Strip trailing meal-type suffix on venue/activity names (e.g.
+// "Sagra Rooftop Restaurant (Breakfast)" → "Sagra Rooftop Restaurant").
+// Mirrors supabase/functions/_shared/venue-name.ts. Only meal-type words
+// are removed; legit parentheticals like "(closed Sundays)" are preserved.
+// See mem://constraints/itinerary/venue-meal-suffix-strip
+const VENUE_MEAL_SUFFIX_RE = /\s*\((?:breakfast|lunch|dinner|brunch)\)\s*$/i;
+
 // Strip "Fulfills the ... slot/requirement." sentences
 const FULFILLS_RE = /\.?\s*Fulfills the\s+[^.]*?(?:slot|requirement|block)\.\s*/gi;
 
