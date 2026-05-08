@@ -223,7 +223,7 @@ export function TripHealthPanel({
   const flightsDone = hasFlights || flightsBookedElsewhere;
   const hotelDone = hasHotel || hotelBookedElsewhere;
 
-  const { checklist, healthIssues, completionPct, healthScore, daysPlanned } = useMemo(() => {
+  const { checklist, rawHealthIssues, completionPct, daysPlanned } = useMemo(() => {
     // Count days with real activities
     const planned = days.filter((d: any) => {
       const acts = d.activities || [];
