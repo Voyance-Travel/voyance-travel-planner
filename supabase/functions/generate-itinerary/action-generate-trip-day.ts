@@ -1663,6 +1663,51 @@ async function _handleGenerateTripDayInner(
           const _latestMins = _isLastDay && savedDepTime24Hoisted
             ? (() => { const m = savedDepTime24Hoisted.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) - _depBufFmg : undefined; })()
             : undefined;
+
+          // ── Build a real fallback pool for this per-day pass ───────────
+          // PRIORITY 1: restaurant pool (curated, real venues)
+          // PRIORITY 2: verified_venues for the destination
+          // Fixes the bug where this guard always passed [] and silently
+          // no-op'd on departure days when the AI omitted lunch.
+          const _perDayPool: Array<{ name: string; address: string; mealType: string }> = [];
+          try {
+            const { extractRestaurantVenueName: _extract } = await import('./generation-utils.ts');
+            const _usedSet = new Set((usedRestaurants || []).map((n: string) => _extract(n)));
+            for (const r of (restaurantPool || [])) {
+              if (!_usedSet.has(_extract(r.name || ''))) {
+                _perDayPool.push({ name: r.name, address: r.address || r.neighborhood || (cityInfo?.cityName || destination || ''), mealType: r.mealType || 'any' });
+              }
+            }
+          } catch (_e) { /* non-blocking */ }
+          if (_perDayPool.length < 5) {
+            try {
+              const _destQuery = cityInfo?.cityName || destination || '';
+              if (_destQuery) {
+                let { data: _venues } = await supabase
+                  .from('verified_venues')
+                  .select('name, address, category')
+                  .ilike('destination', `%${_destQuery}%`)
+                  .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
+                  .limit(20);
+                if ((!_venues || _venues.length === 0) && _destQuery.includes(',')) {
+                  const _cityOnly = _destQuery.split(',')[0].trim();
+                  const _broader = await supabase
+                    .from('verified_venues')
+                    .select('name, address, category')
+                    .ilike('destination', `%${_cityOnly}%`)
+                    .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
+                    .limit(20);
+                  _venues = _broader.data;
+                }
+                if (_venues && _venues.length > 0) {
+                  for (const v of _venues) {
+                    _perDayPool.push({ name: v.name, address: v.address || _destQuery, mealType: 'any' });
+                  }
+                }
+              }
+            } catch (_e) { /* non-blocking */ }
+          }
+
           const _fmgResult = enforceRequiredMealsFinalGuard(
             dayResult.activities,
             _fmgPolicy.requiredMeals,
@@ -1670,12 +1715,12 @@ async function _handleGenerateTripDayInner(
             cityInfo?.cityName || destination || 'the destination',
             'USD',
             _fmgPolicy.dayMode,
-            [], // pool already exhausted upstream — falls through to fallback DB / emergency
+            _perDayPool,
             { earliestTimeMins: _earliestMins, latestTimeMins: _latestMins, blockedRestaurants: usedRestaurants || [] },
           );
           if (!_fmgResult.alreadyCompliant) {
             dayResult.activities = _fmgResult.activities as any;
-            console.warn(`[MEAL_AUDIT] day=${dayNumber} dest="${cityInfo?.cityName || destination}" mode=${_fmgPolicy.dayMode} required=[${_fmgPolicy.requiredMeals.join(',')}] detected=[${_detectedPre.join(',')}] missing=[${_missingPre.join(',')}] injected=[${_fmgResult.injectedMeals.join(',')}] source="generate-trip-day:final-per-day"`);
+            console.warn(`[MEAL_AUDIT] day=${dayNumber} dest="${cityInfo?.cityName || destination}" mode=${_fmgPolicy.dayMode} required=[${_fmgPolicy.requiredMeals.join(',')}] detected=[${_detectedPre.join(',')}] missing=[${_missingPre.join(',')}] injected=[${_fmgResult.injectedMeals.join(',')}] pool=${_perDayPool.length} source="generate-trip-day:final-per-day"`);
             dayResult.metadata = dayResult.metadata || {};
             dayResult.metadata.quality = dayResult.metadata.quality || {};
             dayResult.metadata.quality.meal_audit = {
@@ -1684,10 +1729,83 @@ async function _handleGenerateTripDayInner(
               missing_pre: _missingPre,
               injected: _fmgResult.injectedMeals,
               detected_post: detectMealSlots(dayResult.activities),
+              pool_size: _perDayPool.length,
               source: 'generate-trip-day:final-per-day',
             };
           } else {
-            console.log(`[MEAL_AUDIT] day=${dayNumber} required=[${_fmgPolicy.requiredMeals.join(',')}] detected=[${_detectedPre.join(',')}] missing=[] source="generate-trip-day:final-per-day" (no-op)`);
+            console.log(`[MEAL_AUDIT] day=${dayNumber} required=[${_fmgPolicy.requiredMeals.join(',')}] detected=[${_detectedPre.join(',')}] missing=[] pool=${_perDayPool.length} source="generate-trip-day:final-per-day" (no-op)`);
+          }
+
+          // ── LAST-DAY LUNCH ASSERTION ──────────────────────────────────
+          // Belt-and-braces: if departure-day policy required lunch and it
+          // STILL isn't present after the guard, force-fill via gap-filler
+          // bounded by the morning anchor and checkout/cutoff.
+          if (_isLastDay && _fmgPolicy.requiredMeals.includes('lunch' as any)) {
+            const _detectedFinal = detectMealSlots(dayResult.activities);
+            if (!_detectedFinal.includes('lunch' as any)) {
+              try {
+                const { proposeGapFiller } = await import('../_shared/fill-gap.ts');
+                // Find anchors: last activity ending before 12:30, first
+                // activity starting after 12:30 (or checkout).
+                const _sorted = [...dayResult.activities].sort((a: any, b: any) => {
+                  const sa = (() => { const m = String(a?.startTime || '').match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0; })();
+                  const sb = (() => { const m = String(b?.startTime || '').match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0; })();
+                  return sa - sb;
+                });
+                let _morning: any = null;
+                let _afternoon: any = null;
+                for (const a of _sorted) {
+                  const sm = (() => { const m = String(a?.startTime || '').match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null; })();
+                  if (sm === null) continue;
+                  if (sm < 12 * 60 + 30) _morning = a;
+                  else if (!_afternoon) _afternoon = a;
+                }
+                const _gapStart = _morning?.endTime || _morning?.startTime || '11:30';
+                const _gapEnd = (() => {
+                  if (_afternoon?.startTime) return _afternoon.startTime;
+                  if (_latestMins !== undefined) {
+                    const h = Math.floor(_latestMins / 60);
+                    const m = _latestMins % 60;
+                    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+                  }
+                  return '14:30';
+                })();
+                const _proposed = await proposeGapFiller({
+                  activities: _sorted.map((a: any) => ({ id: a.id, title: a.title, startTime: a.startTime, endTime: a.endTime })),
+                  destination: cityInfo?.cityName || destination || '',
+                  gapStartTime: _gapStart,
+                  gapEndTime: _gapEnd,
+                  beforeId: _morning?.id,
+                  afterId: _afternoon?.id,
+                  archetype: (tripMeta?.travel_dna_primary as string | undefined) || undefined,
+                  dietaryRestrictions: (tripMeta?.dietary_restrictions as string[] | undefined) || [],
+                  budgetTier: (tripMeta?.budget_tier as string | undefined) || 'standard',
+                  tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
+                  // Bias toward a real lunch venue
+                  prompt: 'A farewell lunch at a real, named restaurant in the city. Must be a sit-down meal, not a coffee or snack.',
+                }, { source: 'lastday-lunch-assertion' });
+                if (_proposed) {
+                  // Force category=dining + lunch label so detectMealSlots picks it up
+                  _proposed.category = 'dining';
+                  if (!/\blunch\b/i.test(_proposed.title || '')) {
+                    _proposed.title = `Lunch at ${_proposed.title}`;
+                  }
+                  dayResult.activities = [...dayResult.activities, _proposed].sort((a: any, b: any) => {
+                    const sa = (() => { const m = String(a?.startTime || '').match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0; })();
+                    const sb = (() => { const m = String(b?.startTime || '').match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0; })();
+                    return sa - sb;
+                  });
+                  dayResult.metadata = dayResult.metadata || {};
+                  dayResult.metadata.quality = dayResult.metadata.quality || {};
+                  dayResult.metadata.quality.last_day_lunch_forced = true;
+                  console.warn(`[MEAL_AUDIT_LASTDAY] day=${dayNumber} forced_lunch="${_proposed.title}" (${_proposed.startTime}-${_proposed.endTime}) window=${_gapStart}-${_gapEnd}`);
+                } else {
+                  console.warn(`[MEAL_AUDIT_LASTDAY] day=${dayNumber} lunch missing AND gap-filler returned no proposal — last-day lunch not injected`);
+                }
+              } catch (_lunchErr) {
+                console.warn('[generate-trip-day] last-day lunch assertion failed (non-blocking):', _lunchErr);
+              }
+            }
           }
         }
       }
