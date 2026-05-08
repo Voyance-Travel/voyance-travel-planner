@@ -1,64 +1,63 @@
 ## Bug
 
-Card descriptions on Day 3 contain the literal field name:
+Day 3 (departure day) sequence:
 
-> "...comply with the basilica's strict dress code. **reservationUrgency: .**"
+```
+17:50  Checkout from JW Marriott
+~      Transfer to Airport      ← no time
+19:35  Secluded Garden          ← post-checkout sightseeing
+21:30  Farewell Stroll @ JW Marriott   ← back to a hotel they checked out of
+22:15  Taxi to Airport
+```
 
-The internal JSON key (camelCase, no space) is being echoed by the model into `description` / `tips`, then rendered to users.
+Two compounding failures: (1) a phantom untimed early "Transfer to Airport" card slips past the untimed-transport drop, and (2) post-checkout activities at a hotel the user has already left are not pruned.
 
 ## Root cause
 
-Every existing scrub layer matches only the spaced, capitalized prompt label `Reservation Urgency:` — none of them match the camelCase JSON key `reservationUrgency:`.
+**`supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-- `supabase/functions/_shared/prompt-leak-scrub.ts` → `RESERVATION_LABEL_LEAK_RE = /\b(?:Reservation|Booking)\s+(?:Urgency|Window|Lead\s*Time)…/` requires whitespace between the two words.
-- `src/utils/activityNameSanitizer.ts` → identical regex, same gap.
-- `ORPHAN_EMPTY_LABEL_RE` requires the label to start with an uppercase letter (`[A-Z]`), so `reservationUrgency` (lowercase `r`) is also missed.
-- DB trigger `scrub_itinerary_prompt_artifacts` (migration `20260508193734…`) doesn't list this label at all.
+- **§8b** drops untimed departure-transport cards only when *both* `startTime` and `endTime` fail `^\d{1,2}:\d{2}$`. If the model emits a transfer card with a startTime but no endTime (or where end == start), it survives. The card then sets the "first transport" anchor for §11, which slides checkout to ~5:50 PM right before it.
+- **§14** prunes only activities *after* the **last** departure card. With two departure-transport cards (early phantom + late real taxi), Garden + Stroll fall **between** them, so §14 leaves them in place.
+- **No "post-checkout coherence" gate**: nothing enforces "after a hotel checkout, only logistics may follow" — and nothing detects that the 21:30 Stroll references the same hotel that was already checked out at 17:50.
 
-So a generation that emits `reservationUrgency: .` slips past validate-day, repair-day §10b, action-save-itinerary, the UI sanitizer, and the DB trigger — all five gates.
+The generator prompt's GRACEFUL FINISH directive caps activities at 90min ≤ transfer startTime but says nothing about checkout being the post-cap anchor when departure is in the evening.
 
 ## Fix (plan)
 
-### 1. Extend the shared regex to cover camelCase + snake_case keys
-In `supabase/functions/_shared/prompt-leak-scrub.ts`, broaden `RESERVATION_LABEL_LEAK_RE` so it matches all four shapes in one alternation:
+### 1. Tighten §8b untimed-transport drop
+- Drop a departure-transport row when **any** of: missing startTime, missing endTime, end ≤ start, or start is more than `flightBufferMin + 60` minutes before `returnDepartureTime24` (i.e. an obviously-too-early transfer).
+- Keeps the existing locked/userAdded/extracted exemptions.
+- Sentinel: existing `DEPARTURE_TRANSPORT_UNTIMED` log; extend with reason (`untimed | inverted | too_early`).
 
-- `Reservation Urgency:` / `Booking Urgency:` / `Booking Window:` / `Lead Time:` (existing)
-- `reservationUrgency:` / `bookingUrgency:` / `bookingWindow:` / `leadTime:` (camelCase, **new**)
-- `reservation_urgency:` / `booking_window:` / `lead_time:` (snake_case, **new**)
+### 2. New §14b — POST-CHECKOUT COHERENCE PRUNE
+After §14 runs, walk activities once more on departure days:
+- Find the **last** `accommodation` row whose title matches `checkout|check-out|check out` → `checkoutIdx`.
+- For every activity at index > `checkoutIdx`:
+  - **Keep** if classified as `flight | airport-transport | airport-security` (reuse §14 `classifyDep`).
+  - **Keep** if `isLocked || userAdded || userEdited || extracted || pinned || isManual`.
+  - **Drop otherwise**, with `repairs.push({ code: LOGISTICS_SEQUENCE, action: 'pruned_post_checkout_non_logistics', before: act.title })`.
+- Special case: any kept logistics card whose `location.name` or title references the **just-checked-out hotel name** (case-insensitive substring) is acceptable for an airport transfer pickup, but a `Stroll | Walk around | Visit | Garden | Spa | Drinks` at that hotel is dropped (covered by the non-logistics rule above).
 
-Pattern sketch (case-insensitive, anchored on word boundary, value tolerates empty / `.` / any non-period text up to next sentence):
+### 3. Re-run §11 swap after the new prune
+After §14b, re-call `repairDepartureSequence(...)` so checkout snaps back to immediately precede the **real** departure transport (the late taxi), not the phantom early transfer that no longer exists.
 
-```
-/\b(?:reservation[_\s]?urgency|booking[_\s]?(?:urgency|window)|lead[_\s]?time)\s*:\s*[^.\n]*\.?/gi
-```
+### 4. Generator-side prompt directive
+In `compile-prompt.ts`'s GRACEFUL FINISH section, append a hard rule:
 
-Apply the same pattern to:
-- `src/utils/activityNameSanitizer.ts` (`RESERVATION_LABEL_LEAK_RE` constant — keep the two copies in sync)
-- The DB trigger in a new migration (add this regex to the body/title scrub list inside `scrub_itinerary_prompt_artifacts`).
+> "On the final day of any city, hotel checkout is the last non-logistics activity. After checkout you may only emit airport/station transport, security/boarding, or the flight itself. Never schedule sightseeing, wellness, dining, or hotel-grounds activities after a checkout — even if there is time before departure. If the gap before departure is large, place checkout LATER (close to the departure-buffer window), not earlier."
 
-### 2. Loosen ORPHAN_EMPTY_LABEL_RE to accept camelCase keys
-Change the leading character class from `[A-Z][A-Za-z]` to `[A-Za-z][A-Za-z]`, so `reservationUrgency: .` and similar lowercase-first JSON keys are stripped as orphan empty labels too. Mirror in both shared file and `activityNameSanitizer.ts`.
+This shifts model behavior so checkout naturally falls at `depTime − buffer − 30min` rather than mid-afternoon, and prevents the Garden/Stroll injection in the first place.
 
-### 3. Detector + JSON field cleanup
-- Update `hasBodyPromptLeak` / `hasTitleLeak` automatically (they reuse the same regexes).
-- `scrubTitleLeaks` already deletes empty/leak-shaped `reservationUrgency` JSON values; extend the leak-shape check to also match the camelCase form (`/^reservation[_]?urgency\s*:/i`).
-
-### 4. Tests
-Add cases to `supabase/functions/_shared/__tests__/prompt-leak-scrub.test.ts`:
-- `description: 'Wear waterproof footwear. reservationUrgency: .'` → stripped
-- `tips: 'Cover shoulders. reservationUrgency:.'` → stripped
-- `description: 'Book ahead. booking_window: .'` → stripped
-- Regression: `'Reservation: required for brunch.'` still preserved.
-
-Add the same camelCase case to `src/utils/__tests__/activityNameSanitizer.artifacts.test.ts`.
-
-### 5. One-shot DB cleanup
-The new migration also runs a single `UPDATE trips SET itinerary_data = scrub_itinerary_prompt_artifacts_payload(itinerary_data)` (or equivalent inline `jsonb_set` walk) so existing trips with the leak — including the live Day 3 example — are fixed without requiring regeneration.
+### 5. Tests
+Add Deno test cases to `supabase/functions/generate-itinerary/pipeline/__tests__/repair-day.test.ts` (or create if missing — fall back to a focused `__tests__/post-checkout-prune.test.ts`):
+- Two departure-transport cards (early untimed + late real) with Garden between → after repair: only late taxi remains, Garden pruned, checkout snapped before late taxi.
+- Locked sightseeing card after checkout → preserved.
+- Real flight day with proper single transfer → no spurious prune.
 
 ## Files touched
-- `supabase/functions/_shared/prompt-leak-scrub.ts`
-- `src/utils/activityNameSanitizer.ts`
-- `supabase/functions/_shared/__tests__/prompt-leak-scrub.test.ts`
-- `src/utils/__tests__/activityNameSanitizer.artifacts.test.ts`
-- New migration: extend `scrub_itinerary_prompt_artifacts` regex list + one-shot backfill UPDATE
-- `mem://constraints/itinerary/reservation-urgency-prompt-leak` (note camelCase variant added)
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (§8b tighten, §14b new, re-run §11, log sentinels)
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` (GRACEFUL FINISH directive)
+- `supabase/functions/generate-itinerary/pipeline/__tests__/post-checkout-prune.test.ts` (new tests)
+- `mem://constraints/itinerary/departure-day-graceful-finish` (extend with post-checkout coherence rule)
+
+No DB migration needed — affected trips will fix on next refresh-day or regeneration.
