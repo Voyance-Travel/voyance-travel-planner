@@ -1905,20 +1905,36 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     };
     const isValidHHMM = (s: any) => typeof s === 'string' && /^\d{1,2}:\d{2}$/.test(s);
 
-    // Drop any departure-transport rows missing valid times — guarantee path will reinject them.
+    // Drop any departure-transport rows that are untimed, inverted, or scheduled
+    // far earlier than the actual flight buffer would imply (phantom early transfer).
+    // The guarantee path will reinject the real one with correct times.
     let droppedUntimed = 0;
+    const depMinsForDrop = returnDepartureTime24 ? (parseTimeToMinutes(returnDepartureTime24) ?? null) : null;
+    const FLIGHT_BUFFER_MIN = 180;
+    const TOO_EARLY_SLACK = 60; // 60min beyond the standard buffer = obviously too early
     for (let i = activities.length - 1; i >= 0; i--) {
       const a = activities[i];
       if (!isDepartureTransportRow(a)) continue;
       if (a.isLocked || a.userAdded || a.userEdited || a.extracted || a.pinned || a.isManual) continue;
+      let dropReason: string | null = null;
       if (!isValidHHMM(a.startTime) || !isValidHHMM(a.endTime)) {
+        dropReason = 'untimed';
+      } else {
+        const s = parseTimeToMinutes(a.startTime) ?? 0;
+        const e = parseTimeToMinutes(a.endTime) ?? 0;
+        if (e <= s) dropReason = 'inverted';
+        else if (depMinsForDrop !== null && s < depMinsForDrop - (FLIGHT_BUFFER_MIN + TOO_EARLY_SLACK)) {
+          dropReason = 'too_early';
+        }
+      }
+      if (dropReason) {
         activities.splice(i, 1);
         droppedUntimed++;
+        console.log(`[Repair §8b] Dropped departure-transport "${a.title}" (reason=${dropReason}, start=${a.startTime}, end=${a.endTime}, dep=${returnDepartureTime24})`);
       }
     }
     if (droppedUntimed > 0) {
       repairs.push({ code: FAILURE_CODES.DEPARTURE_TRANSPORT_UNTIMED, action: 'fixed_untimed_departure_transport', count: droppedUntimed } as any);
-      console.log(`[Repair §8b] Dropped ${droppedUntimed} untimed departure-transport row(s); guarantee will reinject with explicit times`);
     }
 
     const hasDepartureTransport = activities.some(isDepartureTransportRow);
@@ -3160,6 +3176,73 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 14b. POST-CHECKOUT COHERENCE PRUNE (departure days) ---
+  // After checkout, only logistics (airport transport, security, flight) may follow.
+  // Sightseeing / wellness / dining / hotel-grounds activities scheduled after the
+  // checkout card are incoherent (the user has already left the hotel).
+  if (isDepartureDay && activities.length > 1) {
+    const DEPARTURE_ROLES_14b = new Set(['flight', 'airport-transport', 'airport-security']);
+    const classifyDep14b = (a: any): string => {
+      const t = (a.title || '').toLowerCase();
+      const cat = (a.category || '').toLowerCase();
+      if (cat === 'flight' || t.includes('flight departure') || t.includes('departure flight')) return 'flight';
+      if (t.includes('airport departure') || t.includes('airport security') || t.includes('security and boarding') ||
+          t.includes('departure and security')) return 'airport-security';
+      if ((cat === 'transport' || cat === 'transit' || cat === 'logistics') &&
+          (t.includes('airport') || t.includes('transfer to the airport') || t.includes('departure transfer') ||
+           t.includes('head to airport') || t.includes('taxi to airport') ||
+           (t.includes('transfer to') && (t.includes('airport') || t.includes('station') || t.includes('terminal'))))) return 'airport-transport';
+      if ((cat === 'transport' || cat === 'transit') &&
+          (t.includes('departure') || t.includes('heading home'))) return 'airport-transport';
+      return 'other';
+    };
+
+    // Find the LAST checkout row (accommodation + checkout title)
+    let checkoutIdx14b = -1;
+    for (let i = activities.length - 1; i >= 0; i--) {
+      const a = activities[i];
+      const t = (a.title || a.name || '').toLowerCase();
+      const cat = (a.category || '').toLowerCase();
+      if (cat === 'accommodation' && (t.includes('check-out') || t.includes('check out') || t.includes('checkout'))) {
+        checkoutIdx14b = i;
+        break;
+      }
+    }
+
+    if (checkoutIdx14b !== -1) {
+      const toRemove14b: any[] = [];
+      for (let i = checkoutIdx14b + 1; i < activities.length; i++) {
+        const a = activities[i];
+        if (a.isLocked || a.userAdded || a.userEdited || a.extracted || a.pinned || a.isManual) continue;
+        const role = classifyDep14b(a);
+        if (DEPARTURE_ROLES_14b.has(role)) continue;
+        toRemove14b.push(a);
+      }
+      for (const act of toRemove14b) {
+        const idx = activities.indexOf(act);
+        if (idx !== -1) {
+          activities.splice(idx, 1);
+          repairs.push({
+            code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+            action: 'pruned_post_checkout_non_logistics',
+            before: act.title,
+          });
+          console.log(`[Repair §14b] Pruned post-checkout "${act.title}" (start=${act.startTime}, category=${act.category})`);
+        }
+      }
+
+      // Re-run departure-sequence repair so checkout snaps before the real (late) transfer
+      if (toRemove14b.length > 0) {
+        const seqRepairs14b = repairDepartureSequence(activities, returnDepartureTime24, hotelName, lockedIds);
+        repairs.push(...seqRepairs14b);
+        activities.sort((a: any, b: any) => {
+          const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+          const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+          return ta - tb;
+        });
+      }
+    }
+  }
   // --- 15. FINAL TRANSPORT COHERENCE PASS ---
   // After all repairs (including time-sort), transport cards may no longer
   // bridge their actual neighbors. Rewrite destinations and merge duplicates.
