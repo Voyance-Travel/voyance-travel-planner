@@ -74,7 +74,6 @@ export async function proposeGapFiller(
   } = input;
 
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!apiKey) return null;
 
   const startMin = (parseTime(gapStartTime) ?? 0) + 15;
   const endMin = (parseTime(gapEndTime) ?? 0) - 15;
@@ -86,6 +85,14 @@ export async function proposeGapFiller(
   const existingTitles = activities.map(a => a.title).filter(Boolean) as string[];
   const avoidList = [...existingTitles, ...avoidIds].join(', ');
   const dietary = dietaryRestrictions.length ? dietaryRestrictions.join(', ') : 'none';
+
+  // If no AI key, jump straight to curated fallback
+  if (!apiKey) {
+    return await curatedFallback({
+      destination, startMin, endMin, existingTitles, avoidIds,
+      tripCurrency, opts,
+    });
+  }
 
   const systemPrompt = `You are a local concierge in ${destination} suggesting ONE real activity to fill an unplanned window in a traveler's day.
 
