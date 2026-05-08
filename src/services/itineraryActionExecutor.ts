@@ -860,19 +860,12 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
     });
 
     if (saveError) {
-      console.error('[ActionExecutor] Backend save failed, falling back to direct update:', saveError);
-      // Fallback: direct update
-      const { error: updateError } = await supabase
-        .from('trips')
-        .update({
-          itinerary_data: itineraryPayload as any,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', tripId);
-
-      if (updateError) {
-        console.error('[ActionExecutor] Direct update also failed:', updateError);
-      }
+      // IMPORTANT: do NOT fall back to a raw `trips.update({ itinerary_data })`
+      // here. The raw write bypasses the persist-day contract (ghost rows,
+      // placeholder names, prompt artifacts, cross-city venues). Surface the
+      // error so the caller (UI layer) can re-render or retry instead of
+      // silently persisting dirty data.
+      console.error('[ActionExecutor] Backend save failed (no raw fallback):', saveError);
     } else {
       console.log('[ActionExecutor] Trip itinerary saved via backend (normalized + meal-guarded)');
     }
