@@ -1531,6 +1531,19 @@ async function _handleGenerateTripDayInner(
   if (dayResult?.activities?.length > 0) {
     const { universalQualityPass } = await import('./universal-quality-pass.ts');
     const usedVenueSet = new Set(usedVenues.map(v => v.toLowerCase()));
+    // Compute meal policy once for this day so universalQualityPass can defer
+    // its hotel-return injection (Step 8) when dinner is required-but-missing.
+    let _qpRequiredMeals: Array<'breakfast'|'lunch'|'dinner'> | undefined;
+    try {
+      const { deriveMealPolicy: _qpDerive } = await import('./meal-policy.ts');
+      const _qpPolicy = _qpDerive({
+        dayNumber, totalDays,
+        isFirstDay: _isFirstDay, isLastDay: _isLastDay,
+        arrivalTime24: _isFirstDay ? savedArrTime24Hoisted : undefined,
+        departureTime24: _isLastDay ? savedDepTime24Hoisted : undefined,
+      });
+      _qpRequiredMeals = _qpPolicy.requiredMeals;
+    } catch (_e) { /* non-blocking */ }
     dayResult.activities = await universalQualityPass(dayResult.activities, {
       city: cityInfo?.cityName || destination,
       country: destinationCountry || '',
@@ -1548,6 +1561,7 @@ async function _handleGenerateTripDayInner(
       lockedActivities: lockedActivitiesForDay,
       usedRestaurants: usedRestaurants,
       hotelName: cityInfo?.hotelName || tripHotelName || undefined,
+      requiredMeals: _qpRequiredMeals,
     });
     // Sync usedVenues back from the Set for subsequent days
     for (const v of usedVenueSet) {
