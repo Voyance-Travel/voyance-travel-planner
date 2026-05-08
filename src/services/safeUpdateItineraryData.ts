@@ -35,25 +35,17 @@ export async function safeUpdateItineraryData(
         extraUpdate: { ...extraFields, updated_at: new Date().toISOString() },
       },
     });
-    if (!error) return { error: null };
-    console.warn('[safeUpdateItineraryData] backend save failed, falling back:', error);
-
-    return await supabase
-      .from('trips')
-      .update({
-        itinerary_data: merged as any,
-        updated_at: new Date().toISOString(),
-        ...extraFields,
-      })
-      .eq('id', tripId);
+    if (error) {
+      // IMPORTANT: do NOT fall back to a raw `trips.update({ itinerary_data })`
+      // here. The raw write bypasses the persist-day contract (ghost rows,
+      // placeholder names, prompt artifacts, cross-city venues) and was a
+      // confirmed leak path. Surface the error so the caller can retry.
+      console.error('[safeUpdateItineraryData] backend save failed (no raw fallback):', error);
+      return { error };
+    }
+    return { error: null };
   } catch (err) {
-    console.error('[safeUpdateItineraryData] failed, falling back to raw write:', err);
-    return await supabase
-      .from('trips')
-      .update({
-        itinerary_data: nextItinerary as any,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', tripId);
+    console.error('[safeUpdateItineraryData] failed:', err);
+    return { error: err };
   }
 }

@@ -252,20 +252,20 @@ export function PaymentsTab({
     fetchPayments();
   }, [fetchPayments]);
 
-  // One-shot clear of legacy "payments_drift_*" localStorage keys. The
-  // server-side fingerprint logic was removed; any leftover keys can latch
-  // a stale "Totals differ" state in the UI on first mount of older sessions.
+  // Always-on cleanup of legacy "payments_drift_*" localStorage keys. The
+  // server-side fingerprint logic was removed; any leftover keys (or new ones
+  // a stale tab might write) can latch a stale "Totals differ" badge in the
+  // UI. Run on every mount to be defensive — it's a cheap O(localStorage.length)
+  // scan and prevents the bug from recurring after the one-shot flag flips.
   useEffect(() => {
     try {
-      const flagKey = 'payments_drift_legacy_cleared_v1';
-      if (typeof window === 'undefined' || localStorage.getItem(flagKey)) return;
+      if (typeof window === 'undefined') return;
       const drop: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (k && k.startsWith('payments_drift_')) drop.push(k);
       }
       drop.forEach(k => localStorage.removeItem(k));
-      localStorage.setItem(flagKey, '1');
     } catch {
       // non-fatal
     }

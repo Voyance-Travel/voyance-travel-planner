@@ -20,7 +20,15 @@
 
 import { enforceContractOnDays } from './persist-day-contract.ts';
 
-const PROMPT_ARTIFACT_RE =
+// IMPORTANT: keep two separate regexes — a non-global one for `.test()` and a
+// global one for `.replace()`. Sharing a single `/g` regex across `.test()`
+// calls (the previous bug) leaves `lastIndex` set between calls, which made
+// `(AESTHETIC slot)` / `(slot)` strips intermittently no-op on titles after
+// the first match in a run. That is the root cause of the "intermittent"
+// prompt-artifact leak users keep seeing on fresh generations.
+const PROMPT_ARTIFACT_TEST_RE =
+  /\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder|name|venue)\s*\)/i;
+const PROMPT_ARTIFACT_REPLACE_RE =
   /\s*\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder|name|venue)\s*\)/gi;
 
 export function stripPromptArtifactsInTitles(days: any[]): number {
@@ -33,8 +41,8 @@ export function stripPromptArtifactsInTitles(days: any[]): number {
       for (const key of ['title', 'name', 'description']) {
         const v = a[key];
         if (typeof v !== 'string' || !v) continue;
-        if (!PROMPT_ARTIFACT_RE.test(v)) continue;
-        const cleaned = v.replace(PROMPT_ARTIFACT_RE, '').replace(/\s{2,}/g, ' ').trim();
+        if (!PROMPT_ARTIFACT_TEST_RE.test(v)) continue;
+        const cleaned = v.replace(PROMPT_ARTIFACT_REPLACE_RE, '').replace(/\s{2,}/g, ' ').trim();
         // If the strip empties the title, leave it — the contract will drop
         // the row as a placeholder/prompt-artifact in the next step.
         if (cleaned) {

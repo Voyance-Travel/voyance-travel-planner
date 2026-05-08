@@ -9634,6 +9634,10 @@ export type Database = {
       }
     }
     Functions: {
+      _scrub_itinerary_prompt_artifacts: {
+        Args: { p_itin: Json }
+        Returns: Json
+      }
       accept_trip_invite: { Args: { p_token: string }; Returns: Json }
       archive_orphan_trip_payments: {
         Args: { p_trip_id: string }
