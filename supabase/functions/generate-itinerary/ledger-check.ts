@@ -15,6 +15,44 @@
 
 import type { DayLedger, LedgerUserIntent } from './day-ledger.ts';
 import { canonicalActivityVenueName, venueNamesMatch } from './generation-utils.ts';
+import { resolveAnyMealFallback, applyFallbackToActivity } from './fix-placeholders.ts';
+
+/**
+ * Strip every field that carries the original venue's identity, so the card
+ * becomes a true blank-slate placeholder that downstream resolvers (or
+ * applyFallbackToActivity) can re-populate without leaving any trace of the
+ * previous venue (address, photos, place_id, booking links, Michelin stars…).
+ */
+function stripVenueIdentity(a: any): void {
+  a.venue_name = null;
+  a.venueName = null;
+  a.place_id = null;
+  a.placeId = null;
+  a.googleMapsLink = null;
+  a.mapsUrl = null;
+  a.mapsLink = null;
+  a.bookingUrl = null;
+  a.viatorUrl = null;
+  a.reservationUrgency = null;
+  a.photos = null;
+  a.photo_url = null;
+  a.imageUrl = null;
+  a.image_url = null;
+  a.heroImage = null;
+  if (a.location && typeof a.location === 'object') {
+    a.location = { name: null, address: null, lat: null, lng: null, place_id: null };
+  } else {
+    a.location = null;
+  }
+  if (a.restaurant && typeof a.restaurant === 'object') {
+    a.restaurant = null;
+  }
+  if (a.metadata && typeof a.metadata === 'object') {
+    for (const k of Object.keys(a.metadata)) {
+      if (/^(venue_|michelin_|cost_floor_reason)/.test(k)) delete a.metadata[k];
+    }
+  }
+}
 
 export interface LedgerCheckWarning {
   dayNumber: number;
