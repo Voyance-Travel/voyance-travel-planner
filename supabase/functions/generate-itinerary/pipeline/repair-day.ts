@@ -34,7 +34,7 @@ import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-u
 import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../fix-placeholders.ts';
 import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
 import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
-import { scrubBodyPromptLeaks } from '../../_shared/prompt-leak-scrub.ts';
+import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../../_shared/prompt-leak-scrub.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 
 // =============================================================================
