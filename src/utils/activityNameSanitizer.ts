@@ -105,6 +105,12 @@ export function sanitizeActivityName(
   
   // Strip stray CJK characters injected by AI models (e.g. 旋)
   let sanitized = name.replace(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/g, '').trim();
+
+  // Strip prompt-artifact tokens like "(INTEREST_SLOT)" / "(FLEX_WINDOW)" /
+  // "(AESTHETIC slot)" before any other processing. Card titles render through
+  // here (NOT through sanitizeText), so this is the UI safety net for tokens
+  // that survived the edge/DB scrubbers.
+  sanitized = stripPromptArtifacts(sanitized);
   
   // Strip any system prefixes
   for (const prefix of SYSTEM_PREFIXES) {
