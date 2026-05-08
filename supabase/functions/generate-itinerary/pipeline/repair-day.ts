@@ -1895,14 +1895,33 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // Ensure every departure day has a transport card to the airport/station.
   const isDepartureDay = isLastDay || (isLastDayInCity && !isTransitionDay);
   if (isDepartureDay && activities.length > 0) {
-    const hasDepartureTransport = activities.some((a: any) => {
-      const t = (a.title || '').toLowerCase();
-      const cat = (a.category || '').toLowerCase();
+    const isDepartureTransportRow = (a: any): boolean => {
+      const t = (a?.title || '').toLowerCase();
+      const cat = (a?.category || '').toLowerCase();
       return (cat === 'transport' || cat === 'transit' || cat === 'logistics') && (
         t.includes('airport') || t.includes('transfer to') || t.includes('head to') ||
         t.includes('taxi to') || t.includes('station') || t.includes('departure transfer')
       );
-    });
+    };
+    const isValidHHMM = (s: any) => typeof s === 'string' && /^\d{1,2}:\d{2}$/.test(s);
+
+    // Drop any departure-transport rows missing valid times — guarantee path will reinject them.
+    let droppedUntimed = 0;
+    for (let i = activities.length - 1; i >= 0; i--) {
+      const a = activities[i];
+      if (!isDepartureTransportRow(a)) continue;
+      if (a.isLocked || a.userAdded || a.userEdited || a.extracted || a.pinned || a.isManual) continue;
+      if (!isValidHHMM(a.startTime) || !isValidHHMM(a.endTime)) {
+        activities.splice(i, 1);
+        droppedUntimed++;
+      }
+    }
+    if (droppedUntimed > 0) {
+      repairs.push({ code: FAILURE_CODES.DEPARTURE_TRANSPORT_UNTIMED, action: 'fixed_untimed_departure_transport', count: droppedUntimed } as any);
+      console.log(`[Repair §8b] Dropped ${droppedUntimed} untimed departure-transport row(s); guarantee will reinject with explicit times`);
+    }
+
+    const hasDepartureTransport = activities.some(isDepartureTransportRow);
 
     if (!hasDepartureTransport) {
       let transportTitle: string;
