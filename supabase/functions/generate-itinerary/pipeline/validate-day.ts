@@ -16,7 +16,7 @@ import {
   type StrictDayMinimal,
 } from '../day-validation.ts';
 import type { RequiredMeal } from '../meal-policy.ts';
-import { hasBodyPromptLeak } from '../../_shared/prompt-leak-scrub.ts';
+import { hasBodyPromptLeak, hasTitleLeak } from '../../_shared/prompt-leak-scrub.ts';
 
 // =============================================================================
 // GENERIC VENUE PATTERNS — placeholders the AI sometimes generates
