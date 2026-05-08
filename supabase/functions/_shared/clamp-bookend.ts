@@ -98,7 +98,7 @@ export function isBookendCard(act: any, hotelName?: string | null): boolean {
  * Clamp a single bookend card's window to ≤ latestEnd. Mutates `act`.
  */
 export function clampBookendEndTime(act: any, opts: ClampBookendOptions = {}): ClampBookendResult {
-  if (!isBookendCard(act)) return { changed: false, reason: 'noop_not_bookend' };
+  if (!isBookendCard(act, opts.hotelName)) return { changed: false, reason: 'noop_not_bookend' };
 
   const latestEnd = opts.latestEndMins ?? LATEST_END_DEFAULT_MINS;
 
