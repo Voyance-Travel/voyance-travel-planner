@@ -130,7 +130,8 @@ export async function fillAfternoonDeadGaps(
     // Effective gap end clamped to the day's usable upper bound.
     const clampedNextStart = Math.min(nextStart, effectiveAfternoonEnd);
     const gap = clampedNextStart - currEnd;
-    if (gap < MIN_GAP_MIN) {
+    const minGap = opts.isLastDay ? LAST_DAY_MIN_GAP_MIN : MIN_GAP_MIN;
+    if (gap < minGap) {
       i++;
       continue;
     }
