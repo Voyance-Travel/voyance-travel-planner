@@ -385,8 +385,11 @@ export function PaymentsTab({
     ? payableTotalCents
     : (financialSnapshot.tripTotalCents > 0 ? financialSnapshot.tripTotalCents : payableTotalCents);
   const estimatedTotal = Math.max(0, baseTotal);
-  // "Paid so far" reflects actual recorded payments from trip_payments
-  const paidAmount = totals.paid;
+  // "Paid so far" must follow the same orphan-aware logic as the snapshot —
+  // otherwise stale paid trip_payments rows from a regenerated trip inflate
+  // the headline and trigger a phantom "Overpaid" warning. Snapshot already
+  // filters orphans synchronously; trust it once it's loaded.
+  const paidAmount = financialSnapshot.loading ? totals.paid : financialSnapshot.paidCents;
   const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
   // Surface overpayment as an explicit anomaly instead of silently clamping
   // "Remaining to pay" at $0 (e.g. orphaned payments left over from a prior
@@ -397,13 +400,12 @@ export function PaymentsTab({
 
   // Travel Essentials = flights + hotels only. The misc/spending-money reserve
   // is surfaced as its own bucket below so users can see exactly where the
-  // headline total comes from (it used to be silently folded into Essentials,
-  // which made bucket sums lag the header on trips with manual non-logistics
-  // expenses or a non-zero reserve).
-  // Reserve only counts once the snapshot has actually returned a non-zero
-  // total — otherwise mid-fetch (snapshot total = 0, stale reserve > 0) the
-  // bucket leads the headline and we surface a phantom drift badge.
-  const reserveCents = financialSnapshot.tripTotalCents > 0
+  // headline total comes from.
+  // Reserve gating: only fold once the snapshot has FULLY loaded — using
+  // `tripTotalCents > 0` as a readiness proxy fails for hotel-only / empty
+  // trips (snapshot total = 0 with a non-zero reserve mid-fetch flips the
+  // bucket→header relationship and latches a phantom drift badge).
+  const reserveCents = !financialSnapshot.loading
     ? (financialSnapshot.miscReserveCents || 0)
     : 0;
   const essentialItemsWithReserve = essentialItems;
