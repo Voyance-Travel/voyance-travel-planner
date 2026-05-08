@@ -2794,6 +2794,19 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         after: 'cleaned',
       });
     }
+    // Title-side scrub — same prompt-template label leak, different surface.
+    // Catches "Reservation Urgency: ." in title/name/subtitle and the
+    // matching reservationUrgency JSON field. See plan.md §2.
+    const t = scrubTitleLeaks(act);
+    if (t.changed) {
+      repairs.push({
+        code: FAILURE_CODES.TITLE_LABEL_LEAK,
+        activityIndex: i,
+        action: 'scrubbed_title_prompt_leak',
+        before: t.fields.join(','),
+        after: 'cleaned',
+      });
+    }
   }
 
   // --- 12. NON-FLIGHT DEPARTURE: strip airport activities ---
