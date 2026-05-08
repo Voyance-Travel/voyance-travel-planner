@@ -1,47 +1,78 @@
 ## Root cause
 
-"Gran Caffè Quadri nightcap" inherits a Michelin 1-star floor (€120+) and the AI seeds it at the same €206/pp as the Da Ivo dinner because:
+`ledger-check.ts` lines 295–312 (vibe-clash branch): when two splurge dinners land back-to-back, the second day's dinner is "downgraded" by overwriting only `title`, `name`, `description`, and zeroing `cost.amount`. **Every other field on the card is left untouched** — `venue_name`, `location.name`, `location.address`, `restaurant.*`, `place_id`, `googleMapsLink`, photos, reservationUrgency, etc. So the UI renders:
 
-1. `enforceBarNightcapPriceCap` (sanitization.ts:790) detects "nightcap" → would cap at €35, **but** it then loops over `KNOWN_FINE_DINING_STARS` and finds `'quadri'` → returns false (no cap applied). The exemption was designed to protect the Michelin restaurant Quadri, but it also exempts the café/bar at the same address.
-2. `enforceMichelinPriceFloor` doesn't actively raise it (price already high), but if it did, "Gran Caffè Quadri" + "nightcap" would still be matched as Quadri/1-star and floored at €120.
-3. Net effect: the nightcap card carries restaurant-grade pricing.
+- Title: "Casual neighborhood dinner"
+- Venue chip / address / map link: "Ristorante Da Ivo, San Marco 1809"
 
-## Fix (sanitization only — no schema changes)
+Because no downstream code consumes `needsRecommendation` / `placeholder: true`, the placeholder is what the user sees forever.
 
-### A. `enforceBarNightcapPriceCap` — narrow the Michelin exemption
+## Fix (single file: `ledger-check.ts`)
 
-The exemption should only apply when the activity is genuinely a meal at a Michelin-starred restaurant, not when the title/description explicitly frames the visit as drinks/nightcap/aperitif/cocktails.
+### A. Fully strip venue identity on downgrade
 
-- Define `EXPLICIT_DRINKS_RE = /\b(nightcap|cocktails?|aperitif|aperitivo|digestif|drinks?\s+at|wine\s+bar|after[-\s]?dinner\s+drinks?|caffè|caffe|café|cafe)\b/i` for the disqualifying signal.
-- If the title matches `EXPLICIT_DRINKS_RE`, **skip** the `KNOWN_FINE_DINING_STARS` exemption and apply the bar cap (€35 default, €55 ceiling) regardless.
-- Keep the existing exemption for ambiguous "bar" matches (e.g., "Bar at Quadri Restaurant" where the dinner intent is real).
+When mutating `nextDinner`, also clear:
 
-### B. `enforceMichelinPriceFloor` — add a drinks/nightcap skip
+- `venue_name`, `venueName`
+- `location` → reset to `{ name: null, address: null, lat: null, lng: null, place_id: null }` (or delete address/place_id keys)
+- `restaurant` → delete (or null out `name`, `address`, `place_id`, `rating`, `photos`)
+- `place_id`, `placeId`, `googleMapsLink`, `mapsUrl`, `mapsLink`
+- `photos`, `photo_url`, `imageUrl`, `image_url`, `heroImage`
+- `reservationUrgency`, `bookingUrl`, `viatorUrl`, any booking metadata
+- `metadata.venue_*`, `metadata.michelin_*`, `metadata.cost_floor_reason`
 
-At the top of the function (after the `KNOWN_CASUAL_VENUES` guard), add:
+This guarantees the card no longer carries the Da Ivo identity.
+
+### B. Resolve a real casual venue immediately
+
+`ledgerCheck` already receives `{ supabase, tripId }`. Pull the trip's `destination` once at the top of the function (single SELECT) and reuse for vibe-clash branches. Then:
 
 ```ts
-if (EXPLICIT_DRINKS_RE.test(title) && !/\b(dinner|lunch|tasting\s+menu|chef'?s\s+table)\b/i.test(title)) {
-  console.log(`MICHELIN FLOOR SKIP [${logPrefix}]: "${activity.title}" reads as drinks/nightcap, not a meal — skipping fine-dining floor`);
-  return false;
-}
+import { resolveAnyMealFallback } from './fix-placeholders.ts';
+const usedNames = collectUsedVenueNames(out); // walk all days, lower-cased
+const fallback = resolveAnyMealFallback(destination, 'dinner', usedNames);
 ```
 
-This prevents the Michelin floor (and the luxury-hotel-dining heuristic at line 578) from re-inflating a nightcap that names a Michelin-starred venue or top-tier hotel.
+- If `fallback` returns a real venue (city-keyed, cross-city safe per existing fallback integrity rules):
+  - `nextDinner.title = `Dinner at ${fallback.name}`;`
+  - `nextDinner.name = fallback.name;`
+  - `nextDinner.venue_name = fallback.name;`
+  - `nextDinner.location = { name: fallback.name, address: fallback.address ?? null, lat: fallback.lat ?? null, lng: fallback.lng ?? null };`
+  - `nextDinner.description = 'Pacing break after a splurge dinner the night before — relaxed local choice near the hotel.';`
+  - `nextDinner.cost = { amount: fallback.priceEur ?? 45, currency: 'EUR', basis: 'fallback' };`
+  - `nextDinner.placeholder = false;` `delete nextDinner.needsRecommendation;`
+  - Mark `metadata.vibe_clash_downgrade = true` for observability.
 
-### C. Order of operations
+- If pool is exhausted (cross-city/destination has no fallback):
+  - `nextDinner.title = 'Casual dinner near your hotel — find a venue';`
+  - `nextDinner.venue_name = null;` (keep cleared)
+  - `nextDinner.cost = { amount: 0, currency: 'EUR', basis: 'unverified' };`
+  - `nextDinner.needsVenuePick = true;` (matches existing unverified-sentinel pattern)
 
-`enforceBarNightcapPriceCap` already runs in `universal-quality-pass.ts:262` and inside `action-generate-trip-day.ts`. After fix A, it will overwrite the AI-supplied €206 with €35 before the Michelin floor sees it. Fix B is the belt-and-suspenders so the floor never re-raises it.
+In both cases, the leftover Da Ivo identity is gone before save.
 
-### D. Sentinel + memory
+### C. Sentinel + warning
 
-- Add a log tag `[BAR_CAP_DRINKS_OVERRIDE]` when the Michelin exemption is bypassed due to explicit drinks language.
-- Add memory: `mem://constraints/itinerary/nightcap-michelin-exemption-bypass` documenting that explicit drinks/nightcap/café framing disqualifies the Michelin exemption in the bar cap.
+Update the existing `vibe_clash` warning to include resolution outcome:
 
-## Files touched
+- `Replaced "Dinner at Da Ivo" on day 3 with "Dinner at Trattoria alla Madonna" (vibe-clash downgrade after "Dinner at Da Ivo" on day 2).`
+- Or `... downgraded to unverified placeholder (no fallback available).`
 
-- `supabase/functions/generate-itinerary/sanitization.ts` (fixes A + B, share `EXPLICIT_DRINKS_RE` constant)
-- `supabase/functions/generate-itinerary/__tests__/` — add unit test: "Gran Caffè Quadri nightcap" at €206 → capped to €35; "Dinner at Ristorante Quadri" at €80 → floored to €120 (regression guard).
-- `mem://constraints/itinerary/nightcap-michelin-exemption-bypass.md` + index update.
+Add `console.warn('[VIBE_CLASH_DOWNGRADE]' …)` so we can grep logs.
 
-No DB migration. No frontend changes. No prompt changes (cap is post-gen).
+### D. Regression guard
+
+Extend `supabase/functions/generate-itinerary/ledger-check.test.ts`:
+
+- Two splurge dinners back-to-back → tomorrow's card has NO trace of yesterday's Michelin venue (no `venue_name`, `location.address`, `place_id`, `googleMapsLink`, `restaurant.name`).
+- When fallback DB has a Venice casual dinner → resolved title is `Dinner at <venueName>`, `cost.basis === 'fallback'`.
+- When fallback exhausted → `needsVenuePick === true`, `cost.amount === 0`, `venue_name === null`.
+
+### E. Memory
+
+Add `mem://constraints/itinerary/vibe-clash-full-identity-strip.md` and reference it in the index. Document that any vibe-clash / placeholder downgrade MUST clear the full venue identity, not just the title.
+
+## Out of scope
+
+- The luminary "1–3 Michelin dinners" planning rule itself is fine; this fix only makes the downgrade clean.
+- No DB migration. No prompt change. No UI change. Single backend file + 1 test + memory.
