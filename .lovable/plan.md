@@ -1,51 +1,68 @@
 ## Problem
 
-Collapsed `TripHealthPanel` shows **"Health: 97 — 1 issue"**. Expanding the panel triggers a rerender and the score immediately resolves to **100 / 0 issues** with no conflict listed. The issue is a ghost: `analyzeHealth(days)` is firing against a transient/partially‑hydrated `days` prop (e.g. an activity briefly missing a `startTime`/`endTime`, or an in-flight optimistic mutation), flagging a buffer/overlap warning, then re-running clean on the next render. The badge surfaces the false positive.
+Michelin/luxury venue pricing has **two confirmed failure directions**, both caused by the same root issue: the cost-snapshot/repair pipeline (`action-repair-costs.ts`) implements its own copy of the Michelin floor — **without** the recent drinks/nightcap guards or the bar-price cap that already exist in `sanitization.ts`. The two layers drift, so corrections made at one layer get clobbered (or never made) at the other.
 
-## Root cause (in `src/components/trip/TripHealthPanel.tsx`)
+| Direction | What user sees | Root cause |
+|---|---|---|
+| **Over-pricing** ("Quadri nightcap = €206/pp") | A bar/café visit at a Michelin venue gets the Michelin floor applied | `enforceMichelinPriceFloor` in `sanitization.ts` skips drinks (recent fix), but the **parallel floor logic in `action-repair-costs.ts` (lines ~340-411) has no `EXPLICIT_DRINKS_RE` bypass**. Repair re-floors the nightcap and writes JSONB back via the parity path → display now shows €206. |
+| **Under-pricing** ("card €26/pp, budget $500") | Card displays the AI's low estimate, while `activity_costs` snapshot has the true Michelin floor | Same divergence in reverse: floor was applied at the snapshot but JSONB writeback either didn't run (older trips before the parity fix) or the activity didn't match `michelin_floor`/`auto_corrected` source so it was excluded from the writeback set. |
 
-1. `analyzeHealth` runs eagerly inside the `useMemo` on every render of `days`, with no gating on whether the trip data is settled.
-2. The "5-minute buffer" and overlap detectors run on any pair of activities that have *both* `startTime` and `endTime` parseable — during optimistic edits, refresh-day mutations, or first paint, two activities can momentarily appear back-to-back even though the persisted itinerary already has the correct gap (the pre-save timing cascade ran server-side).
-3. The collapsed badge has no "soak" period — it surfaces the very first non-zero issue count even though the parent will re-render with corrected props within a tick.
-4. `refreshResultsByDay` already exists to suppress server-cleared timing issues, but only helps *after* a refresh-day round trip; first paint isn't covered.
+There is also no **bar/nightcap cap** at all in `action-repair-costs.ts`. So even if AI emits €80 for a "Cocktails at the rooftop" card, sanitization caps it to €35 in JSONB but repair writes $80 to `activity_costs` from the AI-supplied seed → fresh divergence.
 
-## Fix
+## Fix — single source of truth for fine-dining/bar pricing rules
 
-Single, surgical change in `src/components/trip/TripHealthPanel.tsx`. Goals: never surface a transient warning, never hide a real one.
+### 1. Extract shared classifier `_shared/fine-dining-classifier.ts`
 
-### 1. Stabilize the issue list with a 600ms soak
+A pure function that takes `{ title, venueName, description, restaurantName, currentPrice }` and returns a tagged decision:
 
-Wrap the `analyzeHealth` result in a `useDeferredValue`-style soak: compute `rawIssues` synchronously in the memo, but expose `healthIssues` to the badge/score only after the **same set of issue IDs** has been observed twice in a row (or for ~600 ms). Implementation:
+```ts
+type Decision =
+  | { kind: 'skip'; reason: string }                                          // not dining-related
+  | { kind: 'cap_bar'; floorPrice: number; reason: string }                   // drinks/nightcap → cap at €35
+  | { kind: 'apply_floor'; floorPrice: number; stars: number; reason: string }
+  | { kind: 'noop' };
+```
 
-- Add `const [stableIssues, setStableIssues] = useState<HealthIssue[]>([])`.
-- In a `useEffect` keyed on the JSON of `rawIssues.map(i => i.id)`, start a 600 ms timer that commits `rawIssues` to `stableIssues`. Clear the timer on next change. Errors (severity `'error'`, e.g. "Day N has no activities") commit immediately — only warnings get the soak, since errors are user-actionable and shouldn't be hidden.
-- Use `stableIssues` everywhere `healthIssues` is currently consumed (badge count, score deduction, expanded list).
+It encapsulates **all** of: `KNOWN_FINE_DINING_STARS`, `KNOWN_CASUAL_VENUES`, `EXPLICIT_DRINKS_RE`, `LUXURY_HOTEL_SIGNATURE_RE`, `RESTAURANT_LEAD_RE`, `KNOWN_MICHELIN_HIGH/MID`, `KNOWN_UPSCALE`, `BAR_KEYWORDS`, the casual-type guard, the meal-keyword guard for drinks, and the `MICHELIN_FLOOR.{upscale,mid,high}` thresholds.
 
-### 2. Gate buffer/overlap detection behind "fully timed" data
+### 2. Refactor both consumers to call the classifier
 
-In `analyzeHealth`, before running the overlap and 5-min-buffer loops, require that **every** non-transit activity in the day has both `startTime` and `endTime` set. If any activity is missing one, skip the timing checks for that day (still run the empty-day check). This prevents the optimistic-edit window where one card has half-applied times from producing a phantom overlap.
+- **`sanitization.ts`** — `enforceMichelinPriceFloor` and `enforceBarNightcapPriceCap` keep their public signatures but delegate the rule logic to the classifier; they retain only the field-write side-effects (`writePriceToAllFields`, log emission). Behavior unchanged.
+- **`action-repair-costs.ts`** — Replace the inline Strategy 1-4 block (lines ~340-411) with a single classifier call. Add **a new bar-cap branch**: if the classifier returns `cap_bar`, set `costPerPerson = MAX_BAR_PRICE` (35 EUR equivalent in USD), set `source = 'bar_cap_repair'`, log `[BAR_CAP_REPAIR]`. Include `'bar_cap_repair'` in the `correctedById` set so it participates in the existing JSONB parity writeback (lines 587-646).
 
-### 3. Drop the badge below the activation threshold
+### 3. Currency note
 
-Only render the collapsed `{N} issue(s)` badge when `stableIssues.length > 0` **and** `healthScore < 95`. A score ≥ 95 means at most one auto-fixable timing warning — not worth alarming the user when the expanded panel can't even cite a conflict. The expanded `Trip Health` section still lists everything, so nothing is hidden.
+`MICHELIN_FLOOR.*` and `MAX_BAR_PRICE` constants are nominal-EUR thresholds; `cost_per_person_usd` in `activity_costs` is USD. Use the existing `usdFromEur` helper if present, else add a one-line constant `EUR_TO_USD_FLOOR = 1.08` (matches what `sanitization.ts` uses today). Centralize in the classifier so both sites round identically.
 
-### 4. Telemetry
+### 4. Tests
 
-Add a single `console.debug('[HEALTH_GHOST]', { rawCount, stableCount, score, dayIds })` when `rawIssues.length !== stableIssues.length` so we can see in Lovable preview logs how often the soak is suppressing a phantom.
+- Extend `__tests__/michelin-floor.test.ts`:
+  - `repair-costs path: "Gran Caffè Quadri nightcap" at $206 → capped to ~$38 with source 'bar_cap_repair'`
+  - `repair-costs path: "Dinner at Ristorante Quadri" at $30 → raised to $65 (1-star floor) with source 'michelin_floor'`
+  - `repair-costs path: "Cocktails at Aman Venice rooftop" at $90 → capped (luxury hotel signature does NOT override drinks framing)`
+- Add a parity test asserting `sanitization.enforceMichelinPriceFloor` and `repair-costs` decision converge on the same fixture set (10 inputs, both must produce the same final per-person price).
+
+### 5. Memory
+
+Update `mem://constraints/itinerary/michelin-pricing-defense-in-depth.md` to note the now-unified classifier and add `mem://constraints/itinerary/repair-costs-bar-cap-parity.md` documenting that `action-repair-costs.ts` MUST never apply a Michelin floor without first checking `EXPLICIT_DRINKS_RE`, and MUST apply the bar cap when the classifier returns `cap_bar`.
 
 ## Out of scope
 
-- No changes to `analyzeHealth`'s rules themselves (overlap/buffer/budget thresholds stay).
-- No changes to the server-side pre-save timing cascade.
-- No changes to refresh-day, repair-day, or any edge function.
-- No memory file (this is UI-only stability glue, not a domain rule).
+- UI rendering changes (card chip already pulls from snapshot/JSONB in correct order per `Table-Driven Cost Architecture`).
+- DB migration — `activity_costs` schema unchanged; `source` enum already accepts free-form strings.
+- Generation prompt changes.
 
 ## Files touched
 
-- `src/components/trip/TripHealthPanel.tsx` — add soak state, gate timing checks on fully-timed data, raise badge threshold to `< 95`, add debug log.
+- **New**: `supabase/functions/_shared/fine-dining-classifier.ts`
+- **New**: `mem://constraints/itinerary/repair-costs-bar-cap-parity.md`, updated `mem://index.md` + `mem://constraints/itinerary/michelin-pricing-defense-in-depth.md`
+- **Edited**: `supabase/functions/generate-itinerary/sanitization.ts` (delegate to classifier, keep field writers)
+- **Edited**: `supabase/functions/generate-itinerary/action-repair-costs.ts` (delegate to classifier; add `cap_bar` branch + JSONB writeback inclusion)
+- **Edited**: `supabase/functions/generate-itinerary/__tests__/michelin-floor.test.ts` (new repair-path + parity tests)
 
 ## Acceptance
 
-- Loading a freshly-generated trip with a clean itinerary shows **Health 100, no issue badge** on first paint — no flicker from 97 → 100.
-- Manually creating an overlap (drag two cards on top of each other) still surfaces the warning within ~1s and the badge appears.
-- Empty-day errors continue to surface immediately (no soak for severity `error`).
+- A "Gran Caffè Quadri nightcap" emitted at €206 by AI is capped to ~€35 in BOTH `activity_costs.cost_per_person_usd` AND `trips.itinerary_data.days[*].activities[*].cost.amount` after a single repair pass.
+- "Dinner at Ristorante Quadri" emitted at €30 is floored to €65 in BOTH locations.
+- A legacy trip with `card €26 / budget $500` resolves to a single floored value in both fields after running `action-repair-costs`.
+- `[BAR_CAP_REPAIR]` and `PARITY OK` appear in repair logs.
