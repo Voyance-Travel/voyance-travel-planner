@@ -222,7 +222,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // Ensure dayNumber, date (derived from start_date), activity sort order
   let itineraryDays: any[] = Array.isArray((itinerary as any)?.days) ? (itinerary as any).days : [];
   if (itineraryDays.length > 0) {
-    itineraryDays = normalizeDays(itineraryDays, tripStartDate);
+    itineraryDays = normalizeDays(itineraryDays, tripStartDate, (currentTrip as any)?.destination || (trip as any)?.destination);
     // Preserve server-repaired Michelin/ticketed/reference floors that the
     // client copy may have re-serialized from a stale render snapshot.
     const { days: preservedDays, preserved } = preserveLedgerCosts(existingJsonDays as any[], itineraryDays);
