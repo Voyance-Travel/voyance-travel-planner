@@ -2052,6 +2052,14 @@ async function _handleGenerateTripDayInner(
       if (!result.alreadyCompliant) {
         updatedDays[i] = { ...d, activities: result.activities };
         console.warn(`[generate-trip-day] 🍽️ MEAL GUARD: Day ${dn} missing [${result.injectedMeals.join(', ')}] — injected before chain save`);
+        console.warn(`[MEAL_AUDIT] day=${dn} dest="${dest}" mode=${policy.dayMode} required=[${policy.requiredMeals.join(',')}] detected=[${detected.join(',')}] missing=[${missing.join(',')}] injected=[${result.injectedMeals.join(',')}] source="generate-trip-day:multi-day-loop"`);
+        updatedDays[i].metadata = updatedDays[i].metadata || {};
+        updatedDays[i].metadata.quality = updatedDays[i].metadata.quality || {};
+        updatedDays[i].metadata.quality.meal_audit = {
+          required: policy.requiredMeals, detected_pre: detected, missing_pre: missing,
+          injected: result.injectedMeals, detected_post: detectMealSlots(updatedDays[i].activities),
+          source: 'generate-trip-day:multi-day-loop',
+        };
       }
     }
 
