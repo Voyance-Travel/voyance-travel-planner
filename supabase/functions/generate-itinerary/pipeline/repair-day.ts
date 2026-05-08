@@ -2796,31 +2796,19 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       }
   }
 
-  // --- 10b. BODY_LABEL_LEAK (strip prompt-template labels from description/tips) ---
-  // e.g. "Reservation Urgency: ." / "Booking Window: 1 week."
-  // See mem://constraints/itinerary/reservation-urgency-prompt-leak
+  // --- 10b. UNIFIED OUTPUT VALIDATION (single boundary) ---
+  // Routes title/body/fragment scrubs + meal-suffix strip + cross-city/country
+  // downgrade through one entry point. See plan.md (Unified LLM Output Validation Layer).
   for (let i = 0; i < activities.length; i++) {
     const act: any = activities[i];
-    const r = scrubBodyPromptLeaks(act);
-    if (r.changed) {
+    if (lockedIds.has(act.id)) continue;
+    const ops = scrubActivity(act, { destination: resolvedDestination });
+    if (opsHadChange(ops)) {
       repairs.push({
         code: FAILURE_CODES.TITLE_LABEL_LEAK,
         activityIndex: i,
-        action: 'scrubbed_body_prompt_leak',
-        before: r.fields.join(','),
-        after: 'cleaned',
-      });
-    }
-    // Title-side scrub — same prompt-template label leak, different surface.
-    // Catches "Reservation Urgency: ." in title/name/subtitle and the
-    // matching reservationUrgency JSON field. See plan.md §2.
-    const t = scrubTitleLeaks(act);
-    if (t.changed) {
-      repairs.push({
-        code: FAILURE_CODES.TITLE_LABEL_LEAK,
-        activityIndex: i,
-        action: 'scrubbed_title_prompt_leak',
-        before: t.fields.join(','),
+        action: 'scrub_activity',
+        before: formatOps(ops),
         after: 'cleaned',
       });
     }
