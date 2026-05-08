@@ -76,3 +76,36 @@ Deno.test('hasTitleLeak detects leaks in title and reservationUrgency', () => {
   const ru = hasTitleLeak({ title: 'Dinner', reservationUrgency: '.' });
   if (!ru || ru.field !== 'reservationUrgency') throw new Error('expected ru leak');
 });
+
+Deno.test('strips camelCase "reservationUrgency: ." from description', () => {
+  const act: any = { description: 'Wear waterproof footwear. reservationUrgency: .' };
+  const r = scrubBodyPromptLeaks(act);
+  if (!r.changed) throw new Error('expected change');
+  if (/reservationUrgency/i.test(act.description)) throw new Error(`still leaks: ${act.description}`);
+});
+
+Deno.test('strips camelCase "reservationUrgency:." (no space) from tips', () => {
+  const act: any = { tips: 'Cover shoulders. reservationUrgency:.' };
+  const r = scrubBodyPromptLeaks(act);
+  if (!r.changed) throw new Error('expected change');
+  if (/reservationUrgency/i.test(act.tips)) throw new Error(`still leaks: ${act.tips}`);
+});
+
+Deno.test('strips snake_case "booking_window: ." from notes', () => {
+  const act: any = { notes: 'Book ahead. booking_window: . Bring sunscreen.' };
+  scrubBodyPromptLeaks(act);
+  if (/booking_window/i.test(act.notes)) throw new Error(`still leaks: ${act.notes}`);
+});
+
+Deno.test('preserves real "Reservation: required for brunch."', () => {
+  const original = 'Reservation: required for brunch.';
+  const act: any = { description: original };
+  const r = scrubBodyPromptLeaks(act);
+  if (r.changed) throw new Error('should not have changed');
+});
+
+Deno.test('drops camelCase-shaped reservationUrgency JSON value', () => {
+  const a: any = { title: 'Dinner', reservationUrgency: 'reservationUrgency: .' };
+  scrubTitleLeaks(a);
+  if ('reservationUrgency' in a) throw new Error('expected reservationUrgency removed');
+});
