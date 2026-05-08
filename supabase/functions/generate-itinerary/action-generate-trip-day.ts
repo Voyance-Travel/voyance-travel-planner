@@ -1587,6 +1587,14 @@ async function _handleGenerateTripDayInner(
     try {
       const { fillAfternoonDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
       const lockedIdSet = new Set<string>(lockedActivitiesForDay.map((l: any) => l.id));
+      const _gapLatestMins2 = _isLastDay && savedDepTime24Hoisted
+        ? (() => {
+            const m = savedDepTime24Hoisted.match(/(\d{1,2}):(\d{2})/);
+            if (!m) return undefined;
+            const isTrain = departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(departureTransportType);
+            return parseInt(m[1]) * 60 + parseInt(m[2]) - (isTrain ? 120 : 180);
+          })()
+        : undefined;
       const filled2 = await fillAfternoonDeadGaps(dayResult.activities, {
         destination: cityInfo?.cityName || destination,
         isFirstDay,
@@ -1597,20 +1605,29 @@ async function _handleGenerateTripDayInner(
         budgetTier: (tripMeta?.budget_tier as string | undefined) || 'standard',
         tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
         lockedIds: lockedIdSet,
+        latestUsableMins: _gapLatestMins2,
       });
       if (filled2.inserted.length > 0) {
-        console.log(`[generate-trip-day] 2nd-pass: filled ${filled2.inserted.length} dead gap(s) re-opened by post-processing on day ${dayNumber}`);
+        console.log(`[generate-trip-day] 2nd-pass: filled ${filled2.inserted.length} dead gap(s) re-opened by post-processing on day ${dayNumber}${_isLastDay ? ' (last-day mode)' : ''}`);
         dayResult.activities = filled2.activities;
       }
       // Density observability — flag any remaining ≥3h afternoon gap so we can
-      // grep edge logs for the next regression.
+      // grep edge logs for the next regression. Clamp upper bound on last day
+      // so we report against the actual usable departure window.
       const { reportRemainingAfternoonDeadGap } = await import('./pipeline/fill-dead-gaps.ts');
-      const remaining = reportRemainingAfternoonDeadGap(dayResult.activities);
+      const remaining = reportRemainingAfternoonDeadGap(dayResult.activities, _gapLatestMins2);
       if (remaining >= 180) {
-        console.warn(`[QUALITY] Day ${dayNumber} still has ${remaining}m unplanned 12:00-19:00 after all passes — gap-fill exhausted`);
-        dayResult.metadata = dayResult.metadata || {};
-        dayResult.metadata.quality = dayResult.metadata.quality || {};
-        dayResult.metadata.quality.unfilled_dead_gap_minutes = remaining;
+        if (_isLastDay) {
+          console.warn(`[LAST_DAY_GAP] day=${dayNumber} gap=${remaining}m bound=${_gapLatestMins2 ?? 'none'} — gap-fill exhausted before departure window`);
+          dayResult.metadata = dayResult.metadata || {};
+          dayResult.metadata.quality = dayResult.metadata.quality || {};
+          dayResult.metadata.quality.unfilled_departure_day_gap_minutes = remaining;
+        } else {
+          console.warn(`[QUALITY] Day ${dayNumber} still has ${remaining}m unplanned 12:00-19:00 after all passes — gap-fill exhausted`);
+          dayResult.metadata = dayResult.metadata || {};
+          dayResult.metadata.quality = dayResult.metadata.quality || {};
+          dayResult.metadata.quality.unfilled_dead_gap_minutes = remaining;
+        }
       }
     } catch (gapErr) {
       console.warn('[generate-trip-day] 2nd-pass dead-gap fill failed (non-blocking):', gapErr);
