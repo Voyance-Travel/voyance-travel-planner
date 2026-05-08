@@ -119,6 +119,9 @@ export function sanitizeActivityName(
   // that survived the edge/DB scrubbers.
   sanitized = stripPromptArtifacts(sanitized);
 
+  // Strip trailing meal-type suffix baked into legacy venue names.
+  sanitized = sanitized.replace(VENUE_MEAL_SUFFIX_RE, '').trim();
+
   // Strip prompt-template label leaks ("Reservation Urgency: .", "Booking Window: 1 week.")
   // when they end up in card titles. Mirrors the server-side scrubTitleLeaks.
   // RESERVATION_LABEL_LEAK_RE / ORPHAN_EMPTY_LABEL_RE are defined below.
