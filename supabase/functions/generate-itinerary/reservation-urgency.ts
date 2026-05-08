@@ -174,6 +174,10 @@ Include "reservationUrgency" field with one of:
 
 If bookingUrl is known, include it. Otherwise suggest search terms.
 
+IMPORTANT: Do NOT include the words "Reservation Urgency", "Booking Urgency",
+"Booking Window", or "Lead Time" anywhere in user-facing description, tips,
+or notes. These belong ONLY in the JSON "reservationUrgency" field.
+
 ═══════════════════════════════════════════════════════════════════════════
 `;
 }
