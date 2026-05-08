@@ -595,6 +595,11 @@ export default function TripDetail() {
       setIsSyncingTrip(true);
       console.log('[TripDetail] Syncing local trip to database:', localTrip.id);
 
+      // IMPORTANT: do NOT include `itinerary_data` in this upsert. Raw writes
+      // to that column bypass `persistTripItinerary` (prompt-artifact strip,
+      // persist-day contract, cross-city sweep) and were a confirmed
+      // intermittent leak path. Upsert non-itinerary columns first, then route
+      // any itinerary JSON through `safeUpdateItineraryData` separately.
       const tripData = {
         id: localTrip.id,
         user_id: user.id,
@@ -610,7 +615,6 @@ export default function TripDetail() {
         budget_tier: localTrip.budget_tier,
         flight_selection: localTrip.flight_selection,
         hotel_selection: localTrip.hotel_selection,
-        itinerary_data: localTrip.itinerary_data,
         metadata: localTrip.metadata,
       };
 
@@ -625,9 +629,22 @@ export default function TripDetail() {
         return false;
       }
 
+      // Route itinerary_data through the boundary so prompt-artifact strip,
+      // persist-day contract, and cross-city sweep all run server-side.
+      if (localTrip.itinerary_data) {
+        const safeRes = await safeUpdateItineraryData(
+          localTrip.id,
+          localTrip.itinerary_data as any,
+        );
+        if (safeRes?.error) {
+          console.error('[TripDetail] Failed to sync itinerary_data via boundary:', safeRes.error);
+          // Non-fatal: row exists; next save will retry.
+        }
+      }
+
       console.log('[TripDetail] Trip synced successfully:', data.id);
-      // Update local state with synced trip
-      setTrip(data);
+      // Preserve in-memory itinerary_data since the upsert excluded it.
+      setTrip({ ...data, itinerary_data: localTrip.itinerary_data } as any);
       return true;
     } catch (err) {
       console.error('[TripDetail] Sync error:', err);
