@@ -1644,7 +1644,7 @@ async function _handleGenerateTripDayInner(
             'USD',
             _fmgPolicy.dayMode,
             [], // pool already exhausted upstream — falls through to fallback DB / emergency
-            { earliestTimeMins: _earliestMins, latestTimeMins: _latestMins, blockedRestaurants: tripBlockedRestaurants },
+            { earliestTimeMins: _earliestMins, latestTimeMins: _latestMins, blockedRestaurants: usedRestaurants || [] },
           );
           if (!_fmgResult.alreadyCompliant) {
             dayResult.activities = _fmgResult.activities as any;
