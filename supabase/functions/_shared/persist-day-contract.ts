@@ -24,20 +24,28 @@
  * (universal locking protocol).
  */
 
+// Placeholder PROSE patterns. Tested ONLY against IDENTIFIER fields
+// (title/name/venue_name/venue.name/restaurant.name/location.name) — never
+// against `description`. Scanning descriptions matches legitimate prose
+// like "find a cafe nearby" / "pick a restaurant" and was the cause of
+// the 2026-05-08 "generation failed" outage.
 export const PLACEHOLDER_NAME_RE = new RegExp(
   [
     'find\\s+(?:a\\s+)?(?:venue|local\\s+spot|restaurant|cafe|café|bar|spot)',
-    'find\\s+a\\s+local\\s+spot\\s+in\\s+(?:the\\s+)?(?:destination|city|area|[a-z][a-z\\s]{1,40})',
     'pick\\s+(?:a\\s+)?(?:venue|local\\s+spot|restaurant|cafe|café|bar|spot)',
     '\\bplaceholder\\b',
     '\\bneeds\\s*venue\\b',
     'needsvenuepick',
     'spa\\s+time\\s*(?:[—\\-:]\\s*find)',
-    'tbd|t\\.b\\.d\\.',
-    '\\(\\s*(?:slot|aesthetic\\s+slot|placeholder|name|venue)\\s*\\)',
+    '\\btbd\\b|t\\.b\\.d\\.',
   ].join('|'),
   'i',
 );
+
+// Prompt-artifact tokens. Narrow — does NOT include bare `(name)` /
+// `(venue)` which routinely appear in legitimate description prose.
+export const PROMPT_ARTIFACT_RE =
+  /\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)\s*\)/i;
 
 const GHOST_CATEGORIES = new Set([
   'accommodation', 'hotel', 'lodging', 'stay',

@@ -6,9 +6,30 @@
  * per-day upsert in itineraryAPI.ts during live progress rendering) so the
  * UI never reads dirty rows before the backend save lands.
  *
+ * IMPORTANT — placeholder/artifact field scope (2026-05-08 outage fix):
+ *  - PLACEHOLDER_NAME_RE matches placeholder *prose* ("find a venue",
+ *    "find a local spot in <city>", "Spa Time — find a venue", "TBD",
+ *    "needsVenuePick"). It is ONLY tested against IDENTIFIER fields:
+ *    title, name, venue_name, venue.name, restaurant.name, location.name.
+ *    It is NEVER tested against `description` — descriptions routinely
+ *    contain phrases like "find a cafe nearby" or "pick a restaurant"
+ *    that are legitimate travel prose. Scanning descriptions caused
+ *    every generation to be marked `failed` (see plan.md / outage notes).
+ *
+ *  - PROMPT_ARTIFACT_RE matches template tokens that leaked from the
+ *    generator prompt: `(slot)`, `(AESTHETIC slot)`, `(<TAG> slot)`,
+ *    `(placeholder)`. It does NOT match bare `(name)` / `(venue)` —
+ *    those occur in normal prose like "the (venue) listed above".
+ *    Artifacts ARE scanned in description (where prompt tokens leak),
+ *    but the strip pass cleans them in identifier fields without
+ *    dropping the activity unless the field becomes empty.
+ *
  * Keep this in sync with the Deno version. Pure JS, no Deno deps.
  */
 
+// Placeholder PROSE patterns for IDENTIFIER fields only.
+// Each alternative is a substring pattern that, when found anywhere in
+// title/name/venue_name, indicates the field is a placeholder.
 export const PLACEHOLDER_NAME_RE = new RegExp(
   [
     'find\\s+(?:a\\s+)?(?:venue|local\\s+spot|restaurant|cafe|café|bar|spot)',
@@ -18,15 +39,16 @@ export const PLACEHOLDER_NAME_RE = new RegExp(
     'needsvenuepick',
     'spa\\s+time\\s*(?:[—\\-:]\\s*find)',
     '\\btbd\\b|t\\.b\\.d\\.',
-    '\\(\\s*(?:[A-Z][A-Z0-9 _-]{1,30}\\s+)?(?:slot|aesthetic\\s+slot|placeholder|name|venue)\\s*\\)',
   ].join('|'),
   'i',
 );
 
+// Prompt-artifact tokens — narrow set, NO bare (name)/(venue) which appear
+// in legitimate prose.
 const PROMPT_ARTIFACT_TEST_RE =
-  /\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder|name|venue)\s*\)/i;
+  /\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)\s*\)/i;
 const PROMPT_ARTIFACT_REPLACE_RE =
-  /\s*\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder|name|venue)\s*\)/gi;
+  /\s*\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)\s*\)/gi;
 
 const HOTEL_RETURN_RE =
   /(?:return\s+to|back\s+(?:to|at)|head\s+back\s+to|head\s+to|wind\s+down\s+at)\s+(?:your\s+|the\s+|our\s+)?[^,.\n]{0,60}hotel|hotel\s+(?:check[-\s]?in|settle\s+in|wind[-\s]?down|nightcap)/i;
@@ -131,10 +153,17 @@ export function enforcePersistDayContract<T = any>(
     if (!a) continue;
     const aa = a as any;
     const title = String(aa.title || aa.name || '');
-    const placeholderBlob = [
-      aa.title, aa.name, aa.venue_name, aa.description,
+
+    // IDENTIFIER fields only — never description.
+    const idBlob = [
+      aa.title, aa.name, aa.venue_name,
       aa.venue?.name, aa.restaurant?.name, aa.location?.name,
     ].filter(Boolean).join(' | ');
+
+    // FULL blob (incl. description) only used for prompt-artifact detection,
+    // since prompt tokens like "(AESTHETIC slot)" do leak into descriptions.
+    const fullBlob = [idBlob, aa.description].filter(Boolean).join(' | ');
+
     const cat = String(aa.category || aa.type || '').toLowerCase();
 
     if (isLockedRow(a)) {
@@ -142,6 +171,7 @@ export function enforcePersistDayContract<T = any>(
       continue;
     }
 
+    // 1. Ghost rows (pre-dawn hotel/wellness)
     const startMins =
       timeToMins(aa.startTime) ??
       timeToMins(aa.start_time) ??
@@ -152,11 +182,15 @@ export function enforcePersistDayContract<T = any>(
       continue;
     }
 
-    if (PLACEHOLDER_NAME_RE.test(placeholderBlob)) {
-      const reason: ContractViolation = /\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|aesthetic\s+slot|placeholder|name|venue)\s*\)/i.test(placeholderBlob)
-        ? 'prompt-artifact'
-        : 'placeholder-name';
-      drops.push({ dayNumber: ctx.dayNumber, title, reason });
+    // 2. Prompt artifacts — scanned in identifier fields AND description.
+    if (PROMPT_ARTIFACT_TEST_RE.test(fullBlob)) {
+      drops.push({ dayNumber: ctx.dayNumber, title, reason: 'prompt-artifact' });
+      continue;
+    }
+
+    // 3. Placeholder PROSE — identifier fields ONLY.
+    if (PLACEHOLDER_NAME_RE.test(idBlob)) {
+      drops.push({ dayNumber: ctx.dayNumber, title, reason: 'placeholder-name' });
       continue;
     }
 
@@ -168,15 +202,13 @@ export function enforcePersistDayContract<T = any>(
 
 /**
  * Full client-side cleanup pipeline matching backend persistTripItinerary.
- * Returns the cleaned activities array. Mutates inputs are NOT returned —
- * caller should replace the day's activities with the result.
+ * Returns the cleaned activities array.
  */
 export function cleanActivitiesForPersist(
   activities: any[],
   ctx: { dayNumber?: number } = {},
 ): any[] {
   if (!Array.isArray(activities)) return [];
-  // Clone shallowly so we don't mutate caller's objects.
   const copy = activities.map(a => (a && typeof a === 'object' ? { ...a } : a));
   stripPromptArtifactsInActivities(copy);
   stripPreDawnHotelReturns(copy);
