@@ -442,7 +442,7 @@ export function TripHealthPanel({
                 <span className="text-[11px] text-muted-foreground">
                   {doneCount}/{totalChecklist} items ready
                 </span>
-                {healthIssues.length > 0 && (
+                {healthIssues.length > 0 && healthScore < 95 && (
                   <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0', healthColor, 'border-current')}>
                     {healthIssues.length} {healthIssues.length === 1 ? 'issue' : 'issues'}
                   </Badge>
