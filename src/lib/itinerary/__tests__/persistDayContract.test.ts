@@ -82,6 +82,7 @@ describe('client persistDayContract mirror', () => {
     expect(cleaned[1].title).toBe('Photo stop (USA)');
   });
 
+  it('PLACEHOLDER_NAME_RE matches all known leak patterns', () => {
     const cases = [
       'Spa Time — find a venue',
       'Lunch — find a local spot',
