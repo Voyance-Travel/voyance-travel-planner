@@ -28,4 +28,19 @@ describe('sanitizeActivityName / sanitizeActivityText – prompt-artifact stripp
     expect(sanitizeActivityText('Open afternoon (FLEX_WINDOW) for wandering'))
       .toBe('Open afternoon for wandering');
   });
+
+  it('strips orphan "Reservation Urgency: ." prompt-template label leak', () => {
+    expect(sanitizeActivityText('Soothing massage. Reservation Urgency: .'))
+      .toBe('Soothing massage.');
+  });
+
+  it('strips value-bearing "Reservation Urgency: book_soon." segment', () => {
+    expect(sanitizeActivityText('Reservation Urgency: book_soon. Spa with hammam.'))
+      .toBe('Spa with hammam.');
+  });
+
+  it('preserves legit "Reservation: required for Sunday brunch." (singular Reservation:)', () => {
+    expect(sanitizeActivityText('Reservation: required for Sunday brunch.'))
+      .toBe('Reservation: required for Sunday brunch.');
+  });
 });
