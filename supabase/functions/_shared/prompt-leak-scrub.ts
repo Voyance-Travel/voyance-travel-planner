@@ -127,7 +127,7 @@ export function scrubTitleLeaks(act: any): BodyLeakScrubResult {
   const ru = act.reservationUrgency ?? act.reservation_urgency;
   if (typeof ru === 'string') {
     const trimmed = ru.trim();
-    const looksLikeLeak = /^reservation\s+urgency\s*:/i.test(trimmed) || trimmed === '.' || trimmed === '';
+    const looksLikeLeak = /^reservation[_\s]?urgency\s*:/i.test(trimmed) || trimmed === '.' || trimmed === '';
     if (looksLikeLeak) {
       delete act.reservationUrgency;
       delete act.reservation_urgency;
@@ -151,7 +151,7 @@ export function hasTitleLeak(act: any): { field: string } | null {
   const ru = act.reservationUrgency ?? act.reservation_urgency;
   if (typeof ru === 'string') {
     const t = ru.trim();
-    if (/^reservation\s+urgency\s*:/i.test(t) || t === '.') return { field: 'reservationUrgency' };
+    if (/^reservation[_\s]?urgency\s*:/i.test(t) || t === '.') return { field: 'reservationUrgency' };
   }
   return null;
 }
