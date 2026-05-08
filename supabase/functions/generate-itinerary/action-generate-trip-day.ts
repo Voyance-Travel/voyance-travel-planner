@@ -1782,7 +1782,8 @@ async function _handleGenerateTripDayInner(
                   budgetTier: (tripMeta?.budget_tier as string | undefined) || 'standard',
                   tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
                   // Bias toward a real lunch venue
-                  prompt: 'A farewell lunch at a real, named restaurant in the city. Must be a sit-down meal, not a coffee or snack.',
+                  // proposeGapFiller will request a real venue via its system prompt;
+                  // we coerce title/category to "Lunch" below so detectMealSlots picks it up.
                 }, { source: 'lastday-lunch-assertion' });
                 if (_proposed) {
                   // Force category=dining + lunch label so detectMealSlots picks it up
