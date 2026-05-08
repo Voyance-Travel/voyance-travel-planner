@@ -24,15 +24,17 @@
 // up to the next sentence boundary (or end of string).
 // - Tolerates value being empty, a lone period, or any non-period text.
 // - Case-insensitive, global.
+// Covers spaced label form ("Reservation Urgency:"), camelCase JSON key
+// ("reservationUrgency:"), and snake_case ("reservation_urgency:").
 export const RESERVATION_LABEL_LEAK_RE =
-  /\b(?:(?:Reservation|Booking)\s+(?:Urgency|Window|Lead\s*Time)|Lead\s*Time)\s*:\s*[^.\n]*\.?/gi;
+  /\b(?:reservation[_\s]?urgency|booking[_\s]?(?:urgency|window)|lead[_\s]?time)\s*:\s*[^.\n]*\.?/gi;
 
 // Orphan key:value with an empty / dot-only value occupying its own segment.
 // We only strip when the value is empty or a lone punctuation mark so we do
-// not eat real "Note: closed Mondays." content.
-// Matches either a full-line "Label: ." or an inline ". Label: ." segment.
+// not eat real "Note: closed Mondays." content. Accepts camelCase JSON keys
+// (lowercase first letter) too — that's the `reservationUrgency: .` shape.
 export const ORPHAN_EMPTY_LABEL_RE =
-  /(?:^|(?<=[.!?]\s)|\n)\s*[A-Z][A-Za-z][A-Za-z ]{1,40}\s*:\s*[.\u2026]?\s*(?=$|\n|[.!?]\s|[A-Z])/g;
+  /(?:^|(?<=[.!?]\s)|\n)\s*[A-Za-z][A-Za-z][A-Za-z ]{1,40}\s*:\s*[.\u2026]?\s*(?=$|\n|[.!?]\s|[A-Z])/g;
 
 const BODY_FIELDS = [
   'description',
@@ -125,7 +127,7 @@ export function scrubTitleLeaks(act: any): BodyLeakScrubResult {
   const ru = act.reservationUrgency ?? act.reservation_urgency;
   if (typeof ru === 'string') {
     const trimmed = ru.trim();
-    const looksLikeLeak = /^reservation\s+urgency\s*:/i.test(trimmed) || trimmed === '.' || trimmed === '';
+    const looksLikeLeak = /^reservation[_\s]?urgency\s*:/i.test(trimmed) || trimmed === '.' || trimmed === '';
     if (looksLikeLeak) {
       delete act.reservationUrgency;
       delete act.reservation_urgency;
@@ -149,7 +151,7 @@ export function hasTitleLeak(act: any): { field: string } | null {
   const ru = act.reservationUrgency ?? act.reservation_urgency;
   if (typeof ru === 'string') {
     const t = ru.trim();
-    if (/^reservation\s+urgency\s*:/i.test(t) || t === '.') return { field: 'reservationUrgency' };
+    if (/^reservation[_\s]?urgency\s*:/i.test(t) || t === '.') return { field: 'reservationUrgency' };
   }
   return null;
 }
