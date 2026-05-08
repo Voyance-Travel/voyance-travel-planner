@@ -506,8 +506,14 @@ export function enforceMichelinPriceFloor(activity: Record<string, any>, logPref
   for (const key of Object.keys(KNOWN_CASUAL_VENUES)) {
     if (title.includes(key) || venueName.includes(key)) {
       console.log(`MICHELIN FLOOR SKIP [${logPrefix}]: "${activity.title}" is in KNOWN_CASUAL_VENUES — skipping Michelin floor`);
-      return false;
     }
+  }
+
+  // Guard: explicit drinks/nightcap/café framing → not a meal, never apply Michelin floor.
+  // Defends against "Gran Caffè Quadri nightcap" being floored at Quadri 1-star price.
+  if (EXPLICIT_DRINKS_RE.test(title) && !/\b(dinner|lunch|tasting\s+menu|chef'?s\s+table)\b/i.test(title)) {
+    console.log(`MICHELIN FLOOR SKIP [${logPrefix}]: "${activity.title}" reads as drinks/nightcap/café, not a meal — skipping fine-dining floor`);
+    return false;
   }
 
   const combined = [title, venueName, (activity.description || '').toLowerCase(), (activity.restaurant?.description || '').toLowerCase()].join(' ');
@@ -784,6 +790,14 @@ const MAX_BAR_PRICE = 55;
 const DEFAULT_BAR_PRICE = 35;
 
 /**
+ * Explicit drinks/nightcap/café framing — when present in the title, the
+ * activity is a drinks visit, NOT a meal, even if the venue is a Michelin
+ * restaurant (e.g. "Gran Caffè Quadri nightcap" at Quadri). This disqualifies
+ * the Michelin exemption in the bar cap and the fine-dining floor.
+ */
+export const EXPLICIT_DRINKS_RE = /\b(nightcap|cocktails?|aperitif|aperitivo|digestif|drinks?\s+at|wine\s+bar|after[-\s]?dinner\s+drinks?|caff[eè]|caf[eé])\b/i;
+
+/**
  * Cap bar/nightcap activities to a sensible price ceiling.
  * Skips activities that match KNOWN_FINE_DINING_STARS (e.g. a hotel with a Michelin restaurant).
  */
@@ -798,9 +812,21 @@ export function enforceBarNightcapPriceCap(activity: Record<string, any>, logPre
 
   if (!isBarActivity) return false;
 
-  // Don't cap if venue is a known Michelin restaurant
-  for (const key of Object.keys(KNOWN_FINE_DINING_STARS)) {
-    if (title.includes(key) || venueName.includes(key)) return false;
+  // Don't cap if venue is a known Michelin restaurant — UNLESS the title explicitly
+  // frames the visit as drinks/nightcap/café (e.g. "Gran Caffè Quadri nightcap" at
+  // the Michelin Quadri). In that case the bar cap MUST apply.
+  const drinksFraming = EXPLICIT_DRINKS_RE.test(combined);
+  if (!drinksFraming) {
+    for (const key of Object.keys(KNOWN_FINE_DINING_STARS)) {
+      if (title.includes(key) || venueName.includes(key)) return false;
+    }
+  } else {
+    for (const key of Object.keys(KNOWN_FINE_DINING_STARS)) {
+      if (title.includes(key) || venueName.includes(key)) {
+        console.warn(`[BAR_CAP_DRINKS_OVERRIDE] [${logPrefix}]: "${activity.title}" matched Michelin key "${key}" but title reads as drinks/nightcap — bypassing exemption, applying bar cap`);
+        break;
+      }
+    }
   }
 
   const currentPrice = resolveActivityPrice(activity);

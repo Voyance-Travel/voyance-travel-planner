@@ -1,66 +1,47 @@
-## Bug
-
-Day 1 card titled **"Lunch at Sagra Rooftop Restaurant"** but venue label reads **"Sagra Rooftop Restaurant (Breakfast)"**. The `(Breakfast)` suffix contradicts the lunch slot the venue was assigned to.
-
 ## Root cause
 
-The `verified_venues` table contains 9 rows whose `name` column has a meal-type suffix baked into the venue name itself:
+"Gran Caffè Quadri nightcap" inherits a Michelin 1-star floor (€120+) and the AI seeds it at the same €206/pp as the Da Ivo dinner because:
 
+1. `enforceBarNightcapPriceCap` (sanitization.ts:790) detects "nightcap" → would cap at €35, **but** it then loops over `KNOWN_FINE_DINING_STARS` and finds `'quadri'` → returns false (no cap applied). The exemption was designed to protect the Michelin restaurant Quadri, but it also exempts the café/bar at the same address.
+2. `enforceMichelinPriceFloor` doesn't actively raise it (price already high), but if it did, "Gran Caffè Quadri" + "nightcap" would still be matched as Quadri/1-star and floored at €120.
+3. Net effect: the nightcap card carries restaurant-grade pricing.
+
+## Fix (sanitization only — no schema changes)
+
+### A. `enforceBarNightcapPriceCap` — narrow the Michelin exemption
+
+The exemption should only apply when the activity is genuinely a meal at a Michelin-starred restaurant, not when the title/description explicitly frames the visit as drinks/nightcap/aperitif/cocktails.
+
+- Define `EXPLICIT_DRINKS_RE = /\b(nightcap|cocktails?|aperitif|aperitivo|digestif|drinks?\s+at|wine\s+bar|after[-\s]?dinner\s+drinks?|caffè|caffe|café|cafe)\b/i` for the disqualifying signal.
+- If the title matches `EXPLICIT_DRINKS_RE`, **skip** the `KNOWN_FINE_DINING_STARS` exemption and apply the bar cap (€35 default, €55 ceiling) regardless.
+- Keep the existing exemption for ambiguous "bar" matches (e.g., "Bar at Quadri Restaurant" where the dinner intent is real).
+
+### B. `enforceMichelinPriceFloor` — add a drinks/nightcap skip
+
+At the top of the function (after the `KNOWN_CASUAL_VENUES` guard), add:
+
+```ts
+if (EXPLICIT_DRINKS_RE.test(title) && !/\b(dinner|lunch|tasting\s+menu|chef'?s\s+table)\b/i.test(title)) {
+  console.log(`MICHELIN FLOOR SKIP [${logPrefix}]: "${activity.title}" reads as drinks/nightcap, not a meal — skipping fine-dining floor`);
+  return false;
+}
 ```
-Sagra Rooftop Restaurant (Breakfast)
-The Ivy-Market Grill (Breakfast)
-Balikçi Sabahattin (Lunch)
-Mikla Restaurant (Dinner)
-Le Comptoir de la Gastronomie (Breakfast)
-Granger & Co. Marylebone (Breakfast)
-Mojito Restaurant & Bar (Breakfast)
-La Terrazza Rooftop Bar (Breakfast)
-Ciao Bella (Breakfast)
-```
 
-When the meal-pool picker reuses one of these venues for a different slot (Sagra Rooftop reused for lunch), the activity-title generator correctly emits "Lunch at Sagra Rooftop Restaurant" (it strips the parenthetical for the title), but `activity.location.name` is copied verbatim from the DB row, so the venue card label keeps `(Breakfast)`. No code path strips the suffix on read or render.
+This prevents the Michelin floor (and the luxury-hotel-dining heuristic at line 578) from re-inflating a nightcap that names a Michelin-starred venue or top-tier hotel.
 
-## Fix
+### C. Order of operations
 
-### 1. Shared sanitizer (`supabase/functions/_shared/venue-name.ts` — new)
-Export `stripVenueMealSuffix(name)` matching `/\s*\((breakfast|lunch|dinner|brunch)\)\s*$/i` and returning the trimmed name.
+`enforceBarNightcapPriceCap` already runs in `universal-quality-pass.ts:262` and inside `action-generate-trip-day.ts`. After fix A, it will overwrite the AI-supplied €206 with €35 before the Michelin floor sees it. Fix B is the belt-and-suspenders so the floor never re-raises it.
 
-### 2. Strip on every venue read
-Apply `stripVenueMealSuffix` to `name` immediately after fetching from `verified_venues` in:
-- `supabase/functions/_shared/venue-cache.ts` (3 query sites)
-- `supabase/functions/_shared/fill-gap.ts`
-- `supabase/functions/_shared/verified-venues-filter.ts`
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (lookup at line ~338)
-- `supabase/functions/generate-itinerary/action-generate-day.ts` (~1476/1484)
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (~1687/1695)
-- `src/utils/mealGuard.ts` (client-side fetch at line ~139)
+### D. Sentinel + memory
 
-### 3. Strip on save (last server gate)
-In `action-save-itinerary.ts`, walk `itinerary_data.days[].activities[]` and clean both `activity.title`/`name` and `activity.location.name` via `stripVenueMealSuffix`.
-
-### 4. Strip on UI render (last client gate)
-In `src/utils/activityNameSanitizer.ts` add the same regex to both `sanitizeActivityName` and the lighter `sanitizeActivityText` chain so legacy stored data is cleaned at render time.
-
-### 5. DB migration
-- One-shot `UPDATE verified_venues SET name = regexp_replace(name, '\s*\((breakfast|lunch|dinner|brunch)\)\s*$', '', 'i') WHERE name ~* '\((breakfast|lunch|dinner|brunch)\)\s*$';` (9 rows).
-- Handle dedup: if stripped name collides with an existing row in same city, keep the older row and delete the suffixed one (none expected for these 9, but include defensive `ON CONFLICT DO NOTHING` pattern).
-- Add a `CHECK` constraint or `BEFORE INSERT/UPDATE` trigger that rejects names matching the suffix regex, so seeders can't reintroduce the bug.
-
-### 6. One-shot trip-data backfill
-`UPDATE trips SET itinerary_data = itinerary_data WHERE itinerary_data::text ~* '\((breakfast|lunch|dinner|brunch)\)'` to fire the existing `trips_scrub_prompt_artifacts` trigger — but extend that trigger first to also call the meal-suffix strip on all `title`/`name` text fields in the JSONB. Sentinel: `repair.action='stripped_venue_meal_suffix'` count in logs.
-
-### 7. Tests
-Add Deno test cases in `supabase/functions/_shared/__tests__/venue-name.test.ts`:
-- `stripVenueMealSuffix("Sagra Rooftop Restaurant (Breakfast)") === "Sagra Rooftop Restaurant"`
-- preserves `"Bar Canete (closed Sundays)"` and `"Sagrada Família (Exterior)"` (only strips meal labels, not arbitrary parentheticals)
-- whitespace, mixed case, brunch variant
+- Add a log tag `[BAR_CAP_DRINKS_OVERRIDE]` when the Michelin exemption is bypassed due to explicit drinks language.
+- Add memory: `mem://constraints/itinerary/nightcap-michelin-exemption-bypass` documenting that explicit drinks/nightcap/café framing disqualifies the Michelin exemption in the bar cap.
 
 ## Files touched
-- `supabase/functions/_shared/venue-name.ts` (new)
-- `supabase/functions/_shared/venue-cache.ts`, `fill-gap.ts`, `verified-venues-filter.ts`
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts`, `action-generate-day.ts`, `action-generate-trip-day.ts`
-- `src/utils/mealGuard.ts`
-- `src/utils/activityNameSanitizer.ts`
-- new migration: clean 9 rows + insert/update guard trigger + extend `scrub_itinerary_prompt_artifacts` to strip meal suffix from JSONB + one-shot backfill
-- `supabase/functions/_shared/__tests__/venue-name.test.ts` (new)
-- `mem://constraints/itinerary/venue-meal-suffix-strip` (new memory)
+
+- `supabase/functions/generate-itinerary/sanitization.ts` (fixes A + B, share `EXPLICIT_DRINKS_RE` constant)
+- `supabase/functions/generate-itinerary/__tests__/` — add unit test: "Gran Caffè Quadri nightcap" at €206 → capped to €35; "Dinner at Ristorante Quadri" at €80 → floored to €120 (regression guard).
+- `mem://constraints/itinerary/nightcap-michelin-exemption-bypass.md` + index update.
+
+No DB migration. No frontend changes. No prompt changes (cap is post-gen).

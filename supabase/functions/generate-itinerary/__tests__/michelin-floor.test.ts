@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { enforceMichelinPriceFloor } from '../sanitization';
+import { enforceMichelinPriceFloor, enforceBarNightcapPriceCap } from '../sanitization';
 
 const make = (title: string, price: number, extra: Record<string, any> = {}) => ({
   title,
@@ -44,5 +44,40 @@ describe('enforceMichelinPriceFloor — universal coverage', () => {
     const a = make('Lunch at a casual trattoria', 25);
     enforceMichelinPriceFloor(a);
     expect(a.cost.amount).toBe(25);
+  });
+
+  it('does NOT floor "Gran Caffè Quadri nightcap" as Michelin (drinks framing)', () => {
+    const a = make('Gran Caffè Quadri nightcap', 206);
+    enforceMichelinPriceFloor(a);
+    // floor skipped — price untouched by floor
+    expect(a.cost.amount).toBe(206);
+  });
+});
+
+describe('enforceBarNightcapPriceCap — drinks override', () => {
+  const make = (title: string, price: number) => ({
+    title,
+    category: 'DINING',
+    cost: { amount: price, currency: 'EUR' },
+  });
+
+  it('caps "Gran Caffè Quadri nightcap" at €35 even though Quadri is Michelin', () => {
+    const a = make('Gran Caffè Quadri nightcap', 206);
+    const changed = enforceBarNightcapPriceCap(a);
+    expect(changed).toBe(true);
+    expect(a.cost.amount).toBe(35);
+  });
+
+  it('still exempts "Dinner at Ristorante Quadri" from the bar cap (no drinks framing)', () => {
+    const a = make('Dinner at Ristorante Quadri', 200);
+    const changed = enforceBarNightcapPriceCap(a);
+    expect(changed).toBe(false);
+    expect(a.cost.amount).toBe(200);
+  });
+
+  it('caps generic "Cocktails at the rooftop bar" at €35', () => {
+    const a = make('Cocktails at the rooftop bar', 80);
+    enforceBarNightcapPriceCap(a);
+    expect(a.cost.amount).toBe(35);
   });
 });
