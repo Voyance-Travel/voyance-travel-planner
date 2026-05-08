@@ -342,6 +342,27 @@ const RESERVATION_LABEL_LEAK_RE =
 const ORPHAN_EMPTY_LABEL_RE =
   /(?:^|(?<=[.!?]\s)|\n)\s*[A-Za-z][A-Za-z][A-Za-z ]{1,40}\s*:\s*[.\u2026]?\s*(?=$|\n|[.!?]\s|[A-Z])/g;
 
+// Sentence-fragment patterns — twin of supabase/functions/_shared/prompt-leak-scrub.ts
+// Catches "spot for together", "ideal with for both.", "perfect for ." that
+// survive the label scrubs. We DROP the matching sentence within a multi-
+// sentence string; single-sentence fields are left alone (avoid blanking).
+const FRAGMENT_PATTERNS_UI: RegExp[] = [
+  /\b(?:for|with|to|of|on|at|in)\s+(?:together|two|both)\b(?!\s+\w{3,})/i,
+  /\b(?:for|with|to|on|at|in|of)\s+(?:for|with|to|on|at|in|of)\b/i,
+  /\b(?:for|with|to|on|at|in|of|by)\s*[.!?]/i,
+];
+function scrubSentenceFragmentsUI(text: string): string {
+  const parts = text.split(/(?<=[.!?])\s+/);
+  if (parts.length < 2) return text;
+  const kept = parts.filter((p) => {
+    const trimmed = p.trim();
+    if (!trimmed) return false;
+    return !FRAGMENT_PATTERNS_UI.some((re) => re.test(trimmed));
+  });
+  if (kept.length === 0 || kept.length === parts.length) return text;
+  return kept.join(' ');
+}
+
 export function sanitizeActivityText(text: string | undefined | null): string {
   if (!text) return '';
   return text
