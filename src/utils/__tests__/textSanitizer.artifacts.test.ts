@@ -24,4 +24,16 @@ describe('sanitizeText – AI prompt artifact stripping', () => {
     const out = sanitizeText('Reserve a time slot for the tour.');
     expect(out).toMatch(/time slot/);
   });
+
+  it('strips bare ALLCAPS-with-underscore tokens like (FLEX_WINDOW)', () => {
+    expect(sanitizeText('Open Afternoon - Wander Castello (FLEX_WINDOW)').trim())
+      .toBe('Open Afternoon - Wander Castello');
+    expect(sanitizeText('Stroll San Marco (NARRATIVE_MOOD)').trim())
+      .toBe('Stroll San Marco');
+  });
+
+  it('preserves legit acronyms in parens like (USA) / (NYC)', () => {
+    expect(sanitizeText('Visit MoMA (NYC)')).toMatch(/\(NYC\)/);
+    expect(sanitizeText('Photo stop (USA)')).toMatch(/\(USA\)/);
+  });
 });
