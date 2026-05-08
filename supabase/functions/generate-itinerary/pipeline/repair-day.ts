@@ -1905,20 +1905,36 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     };
     const isValidHHMM = (s: any) => typeof s === 'string' && /^\d{1,2}:\d{2}$/.test(s);
 
-    // Drop any departure-transport rows missing valid times — guarantee path will reinject them.
+    // Drop any departure-transport rows that are untimed, inverted, or scheduled
+    // far earlier than the actual flight buffer would imply (phantom early transfer).
+    // The guarantee path will reinject the real one with correct times.
     let droppedUntimed = 0;
+    const depMinsForDrop = returnDepartureTime24 ? (parseTimeToMinutes(returnDepartureTime24) ?? null) : null;
+    const FLIGHT_BUFFER_MIN = 180;
+    const TOO_EARLY_SLACK = 60; // 60min beyond the standard buffer = obviously too early
     for (let i = activities.length - 1; i >= 0; i--) {
       const a = activities[i];
       if (!isDepartureTransportRow(a)) continue;
       if (a.isLocked || a.userAdded || a.userEdited || a.extracted || a.pinned || a.isManual) continue;
+      let dropReason: string | null = null;
       if (!isValidHHMM(a.startTime) || !isValidHHMM(a.endTime)) {
+        dropReason = 'untimed';
+      } else {
+        const s = parseTimeToMinutes(a.startTime) ?? 0;
+        const e = parseTimeToMinutes(a.endTime) ?? 0;
+        if (e <= s) dropReason = 'inverted';
+        else if (depMinsForDrop !== null && s < depMinsForDrop - (FLIGHT_BUFFER_MIN + TOO_EARLY_SLACK)) {
+          dropReason = 'too_early';
+        }
+      }
+      if (dropReason) {
         activities.splice(i, 1);
         droppedUntimed++;
+        console.log(`[Repair §8b] Dropped departure-transport "${a.title}" (reason=${dropReason}, start=${a.startTime}, end=${a.endTime}, dep=${returnDepartureTime24})`);
       }
     }
     if (droppedUntimed > 0) {
       repairs.push({ code: FAILURE_CODES.DEPARTURE_TRANSPORT_UNTIMED, action: 'fixed_untimed_departure_transport', count: droppedUntimed } as any);
-      console.log(`[Repair §8b] Dropped ${droppedUntimed} untimed departure-transport row(s); guarantee will reinject with explicit times`);
     }
 
     const hasDepartureTransport = activities.some(isDepartureTransportRow);
