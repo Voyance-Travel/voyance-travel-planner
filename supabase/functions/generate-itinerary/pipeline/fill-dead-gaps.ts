@@ -12,6 +12,11 @@ import { proposeGapFiller } from '../../_shared/fill-gap.ts';
 const AFTERNOON_START_MIN = 12 * 60;
 const AFTERNOON_END_MIN = 19 * 60;
 const MIN_GAP_MIN = 180;
+// Departure-day "graceful finish" threshold: a 75-120min window between the
+// last leisure beat and (departure − buffer)/checkout deserves a low-key
+// closing moment (espresso, hotel terrace, short stroll) instead of dying
+// abruptly at checkout. Smaller than MIN_GAP_MIN to catch the thin-finish case.
+const LAST_DAY_MIN_GAP_MIN = 75;
 const MIN_USABLE_OVERLAP_MIN = 60;
 
 const LOGISTICS_KEYWORDS = ['check-in', 'check in', 'checkin', 'check-out', 'check out', 'checkout', 'arrival', 'departure', 'flight', 'airport', 'transfer to', 'transfer from', 'luggage drop', 'freshen up', 'return to', 'settle in'];
