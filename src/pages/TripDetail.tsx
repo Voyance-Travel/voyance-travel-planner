@@ -2019,16 +2019,18 @@ export default function TripDetail() {
     } : null);
 
     try {
-      const { error } = await supabase
-        .from('trips')
-        .update({
+      // Route itinerary_data through the boundary; sibling columns ride along
+      // via extraFields so they're written in the same edge-action call.
+      const safeRes = await safeUpdateItineraryData(
+        tripId,
+        updatedItinerary as any,
+        {
           start_date: newStartDate,
           end_date: newEndDate,
-          itinerary_data: updatedItinerary as any,
           hotel_selection: updatedHotelSelection as any,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', tripId);
+        },
+      );
+      const error = safeRes?.error;
 
       if (error) {
         console.error('[TripDetail] Failed to save date change:', error);
