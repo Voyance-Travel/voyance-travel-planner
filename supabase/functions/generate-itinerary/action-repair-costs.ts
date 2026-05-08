@@ -576,16 +576,18 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
   // but the trips.itinerary_data JSONB is rendered directly by the UI for cost
   // chips on activity cards. If we corrected a Michelin floor in activity_costs
   // without also patching the JSONB, the user sees the wrong (low) price in the
-  // itinerary view. Write the corrected per-activity cost (cost_per_person_usd
-  // × num_travelers) back into JSONB.cost.amount and JSONB.estimatedCost.amount.
+  // itinerary view (the recurring "€26/pp on card vs $500 in budget" bug — see plan.md §3).
+  //
+  // Cards display PER-PERSON values from a variety of fields (cost.amount,
+  // estimatedCost.amount, price_per_person, estimated_price_per_person, …).
+  // Write the per-person USD value to every shape, preserving the floored
+  // currency context.
   let jsonbPatched = 0;
-  const correctedById = new Map<string, { totalUsd: number; reason: string }>();
+  const correctedById = new Map<string, { perPersonUsd: number; reason: string }>();
   for (const r of rows) {
     if (r.source === 'michelin_floor' || r.source === 'ticketed_attraction_floor' || r.source === 'auto_corrected' || r.source === 'transit_cap_repair') {
-      correctedById.set(r.activity_id, {
-        totalUsd: Math.round((r.cost_per_person_usd || 0) * (r.num_travelers || 1)),
-        reason: r.source,
-      });
+      const pp = Math.round((r.cost_per_person_usd || 0) * 100) / 100;
+      correctedById.set(r.activity_id, { perPersonUsd: pp, reason: r.source });
     }
   }
   if (correctedById.size > 0) {
@@ -595,13 +597,21 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         const fix = correctedById.get(a.id);
         if (!fix) return a;
         jsonbPatched++;
-        return {
+        const pp = fix.perPersonUsd;
+        const next: any = {
           ...a,
-          cost: { amount: fix.totalUsd, currency: 'USD', basis: 'repair_floor', source: fix.reason },
-          estimatedCost: { amount: fix.totalUsd, currency: 'USD', basis: 'repair_floor', source: fix.reason },
+          cost: { amount: pp, currency: 'USD', basis: 'repair_floor', source: fix.reason },
+          estimatedCost: { amount: pp, currency: 'USD', basis: 'repair_floor', source: fix.reason },
           costBasis: 'repair_floor',
           costSource: fix.reason,
         };
+        // Mirror per-person price into every legacy field shape the UI may read.
+        if ('estimated_cost' in a) next.estimated_cost = pp;
+        if ('price_per_person' in a) next.price_per_person = pp;
+        if ('estimated_price_per_person' in a) next.estimated_price_per_person = pp;
+        if ('price' in a) next.price = pp;
+        if ('estimated_price' in a) next.estimated_price = pp;
+        return next;
       }),
     }));
     const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
@@ -613,7 +623,25 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
       console.error(`[repair-trip-costs] JSONB writeback error:`, writeErr);
       // Non-fatal: activity_costs is still corrected
     } else {
-      console.log(`[repair-trip-costs] JSONB writeback: ${jsonbPatched} activities patched in trips.itinerary_data`);
+      console.log(`[repair-trip-costs] JSONB writeback: ${jsonbPatched} activities patched in trips.itinerary_data (per-person USD)`);
+    }
+
+    // Parity check — assert each Michelin-floor activity now matches the snapshot.
+    let parityDrift = 0;
+    for (const r of rows) {
+      if (r.source !== 'michelin_floor') continue;
+      const fix = correctedById.get(r.activity_id);
+      if (!fix) continue;
+      const expected = Math.round(fix.perPersonUsd * 100);
+      // Snapshot cents = cost_per_person_usd * 100 (per-person basis used by activity_costs).
+      const snapshotCents = Math.round((r.cost_per_person_usd || 0) * 100);
+      if (expected !== snapshotCents) {
+        parityDrift++;
+        console.warn(`[REPAIR_PARITY_DRIFT] activity=${r.activity_id} jsonb_pp=${fix.perPersonUsd} snapshot_pp=${r.cost_per_person_usd}`);
+      }
+    }
+    if (parityDrift === 0) {
+      console.log(`[repair-trip-costs] PARITY OK: ${correctedById.size} floored activities match snapshot`);
     }
   }
 
