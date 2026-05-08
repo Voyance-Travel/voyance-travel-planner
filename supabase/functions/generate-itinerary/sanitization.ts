@@ -572,6 +572,23 @@ export function enforceMichelinPriceFloor(activity: Record<string, any>, logPref
     }
   }
 
+  // Strategy 4: Luxury-hotel-dining heuristic — defends against missing-entry
+  // regressions (Quadri / Oro at Cipriani / La Pergola pattern). If the text
+  // names a top-tier hotel AND reads like a restaurant, floor at upscale.
+  if (!matchedKey && LUXURY_HOTEL_SIGNATURE_RE.test(combined) && RESTAURANT_LEAD_RE.test(combined)) {
+    const minPrice = MICHELIN_FLOOR.upscale;
+    if (currentPrice > 0 && currentPrice < minPrice) {
+      console.warn(`MICHELIN PRICE FLOOR ENFORCED [${logPrefix}]: "${activity.title}" was €${currentPrice}/pp → raised to €${minPrice}/pp (luxury_hotel_dining_heuristic)`);
+      writePriceToAllFields(activity, minPrice);
+      try {
+        activity.metadata = activity.metadata || {};
+        activity.metadata.cost_floor_reason = 'luxury_hotel_dining_heuristic';
+      } catch { /* ignore metadata write failures */ }
+      return true;
+    }
+    return false;
+  }
+
   if (!matchedKey) return false;
 
   const minPrice = starRating > 0
