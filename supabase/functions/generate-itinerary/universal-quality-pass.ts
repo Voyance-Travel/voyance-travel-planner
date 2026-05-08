@@ -53,6 +53,14 @@ export interface UniversalQualityOptions {
   lockedActivities?: any[];
   usedRestaurants?: string[];
   hotelName?: string;
+  /**
+   * Required meals for this day (from deriveMealPolicy). When provided, Step 8
+   * (hotel-return injection) is DEFERRED if dinner is required but not yet
+   * present in `activities`. The meal-guard runs later and would otherwise
+   * inject dinner AFTER a 17:30 hotel-return card, masking the missing meal in
+   * the UI (the hotel-return reads as the day's terminal anchor).
+   */
+  requiredMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
 }
 
 // Categories to skip for cross-day venue dedup (these repeat legitimately)
