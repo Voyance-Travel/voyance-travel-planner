@@ -43,7 +43,10 @@ export function isGhostActivity(a: any): boolean {
 
   if (WELLNESS_PLACEHOLDER_RE.test(title)) return true;
 
-  if (HOTEL_RETURN_RE.test(title)) {
+  // Brand-aware bookend match: "Walk to JW Marriott", "Shuttle to Cipriani"
+  // — same midnight-bleed shape as the literal-hotel case.
+  const isBrandBookend = HOTEL_RETURN_VERB_RE.test(title) && HOTEL_BRAND_RE.test(title);
+  if (HOTEL_RETURN_RE.test(title) || isBrandBookend) {
     const startMins =
       timeToMins(a.startTime) ?? timeToMins(a.start_time) ?? timeToMins(a.time);
     if (startMins !== null && startMins < PRE_DAWN_MAX_MINS) return true;
