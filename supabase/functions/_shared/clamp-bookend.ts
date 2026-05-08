@@ -52,6 +52,8 @@ export interface ClampBookendOptions {
   /** Optional context for log lines. */
   dayNumber?: number;
   label?: string;
+  /** Trip-specific hotel name — enables matching even if no brand keyword. */
+  hotelName?: string | null;
 }
 
 function parseTimeMins(raw: unknown): number | null {
