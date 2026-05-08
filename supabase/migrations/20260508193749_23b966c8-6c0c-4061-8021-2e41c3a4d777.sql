@@ -1,0 +1,1 @@
+ALTER FUNCTION public.scrub_itinerary_prompt_artifacts() SET search_path = public, pg_temp;
