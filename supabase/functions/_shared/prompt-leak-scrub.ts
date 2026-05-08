@@ -25,7 +25,7 @@
 // - Tolerates value being empty, a lone period, or any non-period text.
 // - Case-insensitive, global.
 export const RESERVATION_LABEL_LEAK_RE =
-  /\b(?:Reservation|Booking)\s+(?:Urgency|Window|Lead\s*Time)\s*:\s*[^.\n]*\.?/gi;
+  /\b(?:(?:Reservation|Booking)\s+(?:Urgency|Window|Lead\s*Time)|Lead\s*Time)\s*:\s*[^.\n]*\.?/gi;
 
 // Orphan key:value with an empty / dot-only value occupying its own segment.
 // We only strip when the value is empty or a lone punctuation mark so we do
