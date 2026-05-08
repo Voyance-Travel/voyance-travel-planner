@@ -571,6 +571,7 @@ export async function handleGenerateDay(
         lockedActivities: lockedActivities,
         usedRestaurants: paramUsedRestaurants || [],
         hotelName: (flightContext as any)?.hotelName || paramHotelName || params.hotelOverride?.name || undefined,
+        requiredMeals: dayMealPolicy?.requiredMeals,
       });
     }
 
