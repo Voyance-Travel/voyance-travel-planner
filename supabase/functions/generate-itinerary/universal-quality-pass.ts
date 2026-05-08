@@ -72,6 +72,56 @@ const DEDUP_SKIP_CATS = new Set([
 // MAIN ORCHESTRATOR
 // =============================================================================
 
+/**
+ * Step 8 helper — inject "Return to {hotel}" right after the last late-evening
+ * activity (when last activity ends 17:00–23:59). Extracted so the orchestrator
+ * can defer this step (e.g., when dinner is required-but-missing).
+ */
+function runStep8(result: any[], dayIndex: number, hotelName?: string): void {
+  if (!result || result.length === 0) return;
+  const lastActivity = result[result.length - 1];
+  const lastCat = String(lastActivity?.category || '').toUpperCase();
+  const lastTitle = String(lastActivity?.title || '');
+  const alreadyReturn =
+    lastCat === 'STAY' ||
+    lastCat === 'ACCOMMODATION' ||
+    /return.*hotel|back.*hotel|return\s+to/i.test(lastTitle);
+  if (alreadyReturn) return;
+
+  const candidate = lastActivity?.end_time || lastActivity?.endTime || '';
+  const m = String(candidate).match(/(\d{1,2}):(\d{2})/);
+  let startTime24: string | null = null;
+  if (m) {
+    const h = parseInt(m[1], 10);
+    if (h >= 17 && h <= 23) startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
+  }
+  if (!startTime24) {
+    console.warn(`[QUALITY] Skipped hotel return injection on Day ${dayIndex + 1}: last activity ends at "${candidate}" (need 17:00–23:59)`);
+    return;
+  }
+  const [sh, sm] = startTime24.split(':').map((n) => parseInt(n, 10));
+  const endMins = Math.min(sh * 60 + sm + 30, 23 * 60 + 59);
+  const endTime24 = `${String(Math.floor(endMins / 60)).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
+  const resolvedHotel = (hotelName && hotelName.trim()) || '';
+  result.push({
+    title: resolvedHotel ? `Return to ${resolvedHotel}` : 'Return to Your Hotel',
+    venue_name: resolvedHotel || 'Your Hotel',
+    category: 'accommodation',
+    start_time: startTime24,
+    startTime: startTime24,
+    end_time: endTime24,
+    endTime: endTime24,
+    cost_per_person: 0,
+    cost: { amount: 0, currency: 'USD' },
+    description: 'Return to your hotel for a restful night.',
+    is_free: true,
+    price_per_person: 0,
+    skipEnrichment: true,
+  });
+  console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}`);
+}
+
+
 export async function universalQualityPass(
   activities: any[],
   options: UniversalQualityOptions,
