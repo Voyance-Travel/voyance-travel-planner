@@ -334,6 +334,7 @@ export function sanitizeActivityText(text: string | undefined | null): string {
     .replace(AI_QUALIFIER_RE, '')
     .replace(TRAILING_OR_QUALIFIER_RE, '')
     .replace(SLOT_PREFIX_RE, '')
+    .replace(PROMPT_ARTIFACT_REPLACE_RE, '')
     .replace(FULFILLS_RE, ' ')
     .replace(META_DISTANCE_COST_RE, '')
     .replace(INLINE_META_RE, '')
