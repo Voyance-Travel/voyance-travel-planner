@@ -326,10 +326,11 @@ const VOYANCE_PICK_RE = /\s*(?:Voyance\s+Pick|Hotel\s+Pick)\s*/gi;
 // never appear in user-facing description/tips. See
 // supabase/functions/_shared/prompt-leak-scrub.ts for the server-side twin.
 const RESERVATION_LABEL_LEAK_RE =
-  /\b(?:(?:Reservation|Booking)\s+(?:Urgency|Window|Lead\s*Time)|Lead\s*Time)\s*:\s*[^.\n]*\.?/gi;
+  /\b(?:reservation[_\s]?urgency|booking[_\s]?(?:urgency|window)|lead[_\s]?time)\s*:\s*[^.\n]*\.?/gi;
 // Orphan "Label: ." with empty/dot-only value occupying its own segment.
+// Accepts camelCase JSON keys (lowercase first letter) too.
 const ORPHAN_EMPTY_LABEL_RE =
-  /(?:^|(?<=[.!?]\s)|\n)\s*[A-Z][A-Za-z][A-Za-z ]{1,40}\s*:\s*[.\u2026]?\s*(?=$|\n|[.!?]\s|[A-Z])/g;
+  /(?:^|(?<=[.!?]\s)|\n)\s*[A-Za-z][A-Za-z][A-Za-z ]{1,40}\s*:\s*[.\u2026]?\s*(?=$|\n|[.!?]\s|[A-Z])/g;
 
 export function sanitizeActivityText(text: string | undefined | null): string {
   if (!text) return '';
