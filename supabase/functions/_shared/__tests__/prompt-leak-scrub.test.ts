@@ -48,3 +48,31 @@ Deno.test('hasBodyPromptLeak detects across fields', () => {
   assertEquals(hasBodyPromptLeak({ tips: 'Reservation Urgency: .' })?.field, 'tips');
   assertEquals(hasBodyPromptLeak({ description: 'All clean here.' }), null);
 });
+
+import { scrubTitleLeaks, hasTitleLeak } from '../prompt-leak-scrub.ts';
+
+Deno.test('scrubTitleLeaks strips "Reservation Urgency: ." from title', () => {
+  const a: any = { title: 'Spa Day Reservation Urgency: .' };
+  const r = scrubTitleLeaks(a);
+  if (!r.changed) throw new Error('expected change');
+  if (/Reservation\s+Urgency/i.test(a.title)) throw new Error(`title still leaks: ${a.title}`);
+});
+
+Deno.test('scrubTitleLeaks drops empty reservationUrgency value', () => {
+  const a: any = { title: 'Dinner', reservationUrgency: '.' };
+  scrubTitleLeaks(a);
+  if ('reservationUrgency' in a) throw new Error('expected reservationUrgency removed');
+});
+
+Deno.test('scrubTitleLeaks drops leaked label-shaped reservationUrgency', () => {
+  const a: any = { title: 'Dinner', reservationUrgency: 'Reservation Urgency: .' };
+  scrubTitleLeaks(a);
+  if ('reservationUrgency' in a) throw new Error('expected reservationUrgency removed');
+});
+
+Deno.test('hasTitleLeak detects leaks in title and reservationUrgency', () => {
+  const t = hasTitleLeak({ title: 'Foo Reservation Urgency: book_soon.' });
+  if (!t || t.field !== 'title') throw new Error('expected title leak');
+  const ru = hasTitleLeak({ title: 'Dinner', reservationUrgency: '.' });
+  if (!ru || ru.field !== 'reservationUrgency') throw new Error('expected ru leak');
+});

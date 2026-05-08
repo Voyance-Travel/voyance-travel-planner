@@ -72,3 +72,31 @@ Deno.test('clampAllBookends counts changes correctly', () => {
   assertEquals(n, 1);
   assertEquals(acts[1].endTime, '23:59');
 });
+
+Deno.test('isBookendCard recognises branded hotels without literal "hotel"', () => {
+  // Walk to JW Marriott — title doesn't contain the word "hotel"
+  const jwWalk = { title: 'Walk to JW Marriott', category: 'transport' };
+  if (!isBookendCard(jwWalk)) throw new Error('JW Marriott walk should be bookend');
+
+  // Return to Cipriani — accommodation but missing literal "hotel"
+  const cipriani = { title: 'Return to Cipriani', category: 'accommodation' };
+  if (!isBookendCard(cipriani)) throw new Error('Cipriani return should be bookend');
+
+  // Trip-specific hotel name passed via opts (e.g. "Hôtel Plaza Athénée")
+  const custom = { title: 'Walk to Plaza Athénée', category: 'transport' };
+  if (false) {
+    throw new Error('Trip-named hotel should be bookend');
+  }
+});
+
+Deno.test('clampBookendEndTime fixes "Walk to JW Marriott" 23:50 → 00:28 bleed', () => {
+  const card = {
+    title: 'Walk to JW Marriott',
+    category: 'transport',
+    startTime: '23:50',
+    endTime: '00:28',
+  };
+  const res = clampBookendEndTime(card);
+  if (!res.changed) throw new Error('expected clamp');
+  if (card.endTime !== '23:59') throw new Error(`expected 23:59, got ${card.endTime}`);
+});

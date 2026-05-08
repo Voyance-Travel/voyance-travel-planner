@@ -16,7 +16,7 @@ import {
   type StrictDayMinimal,
 } from '../day-validation.ts';
 import type { RequiredMeal } from '../meal-policy.ts';
-import { hasBodyPromptLeak } from '../../_shared/prompt-leak-scrub.ts';
+import { hasBodyPromptLeak, hasTitleLeak } from '../../_shared/prompt-leak-scrub.ts';
 
 // =============================================================================
 // GENERIC VENUE PATTERNS — placeholders the AI sometimes generates
@@ -334,6 +334,18 @@ function checkLabelLeaks(activities: StrictActivityMinimal[], results: Validatio
         message: `Activity "${title}" has prompt-template label leak in ${bodyHit.field}`,
         activityIndex: i,
         field: bodyHit.field,
+        autoRepairable: true,
+      });
+    }
+    // Title-side prompt-leak (Reservation Urgency: . in title/name/subtitle/reservationUrgency)
+    const titleHit = hasTitleLeak(activities[i] as any);
+    if (titleHit) {
+      results.push({
+        code: FAILURE_CODES.TITLE_LABEL_LEAK,
+        severity: 'warning',
+        message: `Activity "${title}" has prompt-template label leak in ${titleHit.field}`,
+        activityIndex: i,
+        field: titleHit.field,
         autoRepairable: true,
       });
     }

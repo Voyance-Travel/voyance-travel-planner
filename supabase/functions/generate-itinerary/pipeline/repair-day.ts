@@ -34,7 +34,7 @@ import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-u
 import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../fix-placeholders.ts';
 import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
 import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
-import { scrubBodyPromptLeaks } from '../../_shared/prompt-leak-scrub.ts';
+import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../../_shared/prompt-leak-scrub.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 
 // =============================================================================
@@ -2791,6 +2791,19 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         activityIndex: i,
         action: 'scrubbed_body_prompt_leak',
         before: r.fields.join(','),
+        after: 'cleaned',
+      });
+    }
+    // Title-side scrub — same prompt-template label leak, different surface.
+    // Catches "Reservation Urgency: ." in title/name/subtitle and the
+    // matching reservationUrgency JSON field. See plan.md §2.
+    const t = scrubTitleLeaks(act);
+    if (t.changed) {
+      repairs.push({
+        code: FAILURE_CODES.TITLE_LABEL_LEAK,
+        activityIndex: i,
+        action: 'scrubbed_title_prompt_leak',
+        before: t.fields.join(','),
         after: 'cleaned',
       });
     }

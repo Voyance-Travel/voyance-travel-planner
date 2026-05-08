@@ -99,3 +99,57 @@ export function hasBodyPromptLeak(act: any): { field: string } | null {
   }
   return null;
 }
+
+const TITLE_FIELDS = ['title', 'name', 'subtitle'] as const;
+
+/**
+ * Title-side scrub for the same prompt-template label leaks. Card titles
+ * occasionally include "Reservation Urgency: ." when the model misroutes the
+ * urgency value into the title slot. Also collapses an empty/dot-only
+ * `reservationUrgency` JSON field so the UI badge stops rendering "Reservation
+ * Urgency: ." See plan.md §2.
+ */
+export function scrubTitleLeaks(act: any): BodyLeakScrubResult {
+  if (!act || typeof act !== 'object') return { changed: false, fields: [] };
+  const fields: string[] = [];
+  for (const key of TITLE_FIELDS) {
+    const next = scrubString(act[key]);
+    if (next !== null) {
+      // Never blank a title — fall back to a safe placeholder
+      act[key] = next || (key === 'title' || key === 'name' ? 'Activity' : '');
+      fields.push(key);
+    }
+  }
+  // reservationUrgency value: drop if it's the leaked label string itself or
+  // collapses to empty / a lone period.
+  const ru = act.reservationUrgency ?? act.reservation_urgency;
+  if (typeof ru === 'string') {
+    const trimmed = ru.trim();
+    const looksLikeLeak = /^reservation\s+urgency\s*:/i.test(trimmed) || trimmed === '.' || trimmed === '';
+    if (looksLikeLeak) {
+      delete act.reservationUrgency;
+      delete act.reservation_urgency;
+      fields.push('reservationUrgency');
+    }
+  }
+  return { changed: fields.length > 0, fields };
+}
+
+export function hasTitleLeak(act: any): { field: string } | null {
+  if (!act || typeof act !== 'object') return null;
+  for (const key of TITLE_FIELDS) {
+    const v = act[key];
+    if (typeof v !== 'string' || !v) continue;
+    RESERVATION_LABEL_LEAK_RE.lastIndex = 0;
+    ORPHAN_EMPTY_LABEL_RE.lastIndex = 0;
+    if (RESERVATION_LABEL_LEAK_RE.test(v) || ORPHAN_EMPTY_LABEL_RE.test(v)) {
+      return { field: key };
+    }
+  }
+  const ru = act.reservationUrgency ?? act.reservation_urgency;
+  if (typeof ru === 'string') {
+    const t = ru.trim();
+    if (/^reservation\s+urgency\s*:/i.test(t) || t === '.') return { field: 'reservationUrgency' };
+  }
+  return null;
+}

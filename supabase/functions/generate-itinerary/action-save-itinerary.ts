@@ -12,7 +12,7 @@ import { ledgerCheck } from './ledger-check.ts';
 import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
-import { scrubBodyPromptLeaks } from '../_shared/prompt-leak-scrub.ts';
+import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../_shared/prompt-leak-scrub.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
@@ -141,11 +141,16 @@ function normalizeDays(days: any[], tripStartDate: string | null): any[] {
     // Body-leak sweep — strip prompt-template labels ("Reservation Urgency: .")
     // from description/tips/notes before the JSON snapshot lands in DB.
     let _bodyLeakSwept = 0;
+    let _titleLeakSwept = 0;
     for (const a of activities) {
       if (scrubBodyPromptLeaks(a).changed) _bodyLeakSwept++;
+      if (scrubTitleLeaks(a).changed) _titleLeakSwept++;
     }
     if (_bodyLeakSwept > 0) {
       console.log(`[SAVE] body_prompt_leak_scrubbed day=${dayNumber} count=${_bodyLeakSwept}`);
+    }
+    if (_titleLeakSwept > 0) {
+      console.log(`[SAVE] title_prompt_leak_scrubbed day=${dayNumber} count=${_titleLeakSwept}`);
     }
     return { ...day, dayNumber, date, activities };
   });

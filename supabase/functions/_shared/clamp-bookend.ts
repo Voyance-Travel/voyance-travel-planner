@@ -14,6 +14,22 @@
 const HOTEL_BOOKEND_TITLE_RE =
   /\b(?:return\s+to|back\s+to|freshen[- ]?up|check[- ]?in|nightcap|wind[- ]?down|settle\s+in|retire|end[- ]of[- ]day)\b/i;
 
+// Brand-aware hotel detection — catches "Walk to JW Marriott", "Shuttle to
+// Cipriani", "Return to Aman Venice" etc. The bare-word "hotel" check misses
+// every real branded hotel name. See plan.md §1.
+const HOTEL_BRAND_RE =
+  /\b(?:hotel|hostel|inn|resort|lodge|ryokan|riad|guesthouse|guest\s*house|b&b|jw\s*marriott|marriott|hilton|hyatt|park\s*hyatt|grand\s*hyatt|andaz|ritz[\-\s]?carlton|four\s*seasons|st\.?\s*regis|peninsula|aman|amanyara|amanjena|belmond|cipriani|gritti|danieli|metropole|bauer|kempinski|rosewood|mandarin\s*oriental|raffles|bvlgari|bulgari|conrad|edition|w\s+(?:hotel|venice|paris|rome|new\s*york)|sofitel|fairmont|shangri[\-\s]?la|intercontinental|le\s*meridien|westin|sheraton|nobu\s*hotel|nh\s*collection|melia|small\s*luxury|relais\s*&?\s*ch[âa]teaux)\b/i;
+
+function isHotelLikeText(text: string, hotelName?: string | null): boolean {
+  if (!text) return false;
+  if (HOTEL_BRAND_RE.test(text)) return true;
+  if (hotelName && hotelName.length >= 3) {
+    const needle = hotelName.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (needle && text.toLowerCase().includes(needle)) return true;
+  }
+  return false;
+}
+
 const ACCOM_CATS = new Set(['accommodation', 'stay', 'hotel']);
 const TRANSPORT_CATS = new Set(['transport', 'transportation']);
 
@@ -36,6 +52,8 @@ export interface ClampBookendOptions {
   /** Optional context for log lines. */
   dayNumber?: number;
   label?: string;
+  /** Trip-specific hotel name — enables matching even if no brand keyword. */
+  hotelName?: string | null;
 }
 
 function parseTimeMins(raw: unknown): number | null {
@@ -54,16 +72,24 @@ function minsToHHMM(mins: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-export function isBookendCard(act: any): boolean {
+export function isBookendCard(act: any, hotelName?: string | null): boolean {
   if (!act) return false;
   const cat = String(act.category || '').toLowerCase();
   const title = String(act.title || act.name || '').toLowerCase();
   const locName = String(act.location?.name || '').toLowerCase();
+  const combined = `${title} ${locName}`;
 
-  if (ACCOM_CATS.has(cat) && HOTEL_BOOKEND_TITLE_RE.test(title)) return true;
+  // Accommodation bookend: title verb (return/freshen/check-in/...) — accept
+  // even on transport rows when title also names a hotel/brand (e.g.
+  // "Return to JW Marriott" with category=accommodation OR transport).
+  if (HOTEL_BOOKEND_TITLE_RE.test(title) && (ACCOM_CATS.has(cat) || isHotelLikeText(combined, hotelName))) {
+    return true;
+  }
 
-  // Transport bookend (e.g. "Travel to Hotel", "Shuttle to JW Marriott")
-  if (TRANSPORT_CATS.has(cat) && (title.includes('hotel') || locName.includes('hotel'))) return true;
+  // Transport bookend (e.g. "Walk to JW Marriott", "Shuttle to Cipriani") —
+  // brand-aware so real hotel names trigger the clamp, not just the literal
+  // word "hotel".
+  if (TRANSPORT_CATS.has(cat) && isHotelLikeText(combined, hotelName)) return true;
 
   return false;
 }
@@ -72,7 +98,7 @@ export function isBookendCard(act: any): boolean {
  * Clamp a single bookend card's window to ≤ latestEnd. Mutates `act`.
  */
 export function clampBookendEndTime(act: any, opts: ClampBookendOptions = {}): ClampBookendResult {
-  if (!isBookendCard(act)) return { changed: false, reason: 'noop_not_bookend' };
+  if (!isBookendCard(act, opts.hotelName)) return { changed: false, reason: 'noop_not_bookend' };
 
   const latestEnd = opts.latestEndMins ?? LATEST_END_DEFAULT_MINS;
 

@@ -111,6 +111,16 @@ export function sanitizeActivityName(
   // here (NOT through sanitizeText), so this is the UI safety net for tokens
   // that survived the edge/DB scrubbers.
   sanitized = stripPromptArtifacts(sanitized);
+
+  // Strip prompt-template label leaks ("Reservation Urgency: .", "Booking Window: 1 week.")
+  // when they end up in card titles. Mirrors the server-side scrubTitleLeaks.
+  // RESERVATION_LABEL_LEAK_RE / ORPHAN_EMPTY_LABEL_RE are defined below.
+  sanitized = sanitized
+    .replace(RESERVATION_LABEL_LEAK_RE, '')
+    .replace(ORPHAN_EMPTY_LABEL_RE, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  if (!sanitized) sanitized = 'Activity';
   
   // Strip any system prefixes
   for (const prefix of SYSTEM_PREFIXES) {
