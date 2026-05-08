@@ -34,6 +34,7 @@ import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-u
 import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../fix-placeholders.ts';
 import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
 import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
+import { scrubBodyPromptLeaks } from '../../_shared/prompt-leak-scrub.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 
 // =============================================================================
@@ -2658,8 +2659,24 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'transit_label_realign_rewrite', before: oldTitle, after: transport.title });
         }
       }
-    }
+  }
 
+  // --- 10b. BODY_LABEL_LEAK (strip prompt-template labels from description/tips) ---
+  // e.g. "Reservation Urgency: ." / "Booking Window: 1 week."
+  // See mem://constraints/itinerary/reservation-urgency-prompt-leak
+  for (let i = 0; i < activities.length; i++) {
+    const act: any = activities[i];
+    const r = scrubBodyPromptLeaks(act);
+    if (r.changed) {
+      repairs.push({
+        code: FAILURE_CODES.TITLE_LABEL_LEAK,
+        activityIndex: i,
+        action: 'scrubbed_body_prompt_leak',
+        before: r.fields.join(','),
+        after: 'cleaned',
+      });
+    }
+  }
 
   // --- 12. NON-FLIGHT DEPARTURE: strip airport activities ---
   if (isLastDayInCity && !isLastDay && nextLegTransport && nextLegTransport !== 'flight') {
