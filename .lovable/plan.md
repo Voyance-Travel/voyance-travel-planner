@@ -1,68 +1,89 @@
 ## Problem
 
-Michelin/luxury venue pricing has **two confirmed failure directions**, both caused by the same root issue: the cost-snapshot/repair pipeline (`action-repair-costs.ts`) implements its own copy of the Michelin floor — **without** the recent drinks/nightcap guards or the bar-price cap that already exist in `sanitization.ts`. The two layers drift, so corrections made at one layer get clobbered (or never made) at the other.
+"Fix Timing" (Trip Health → "Fix timing" button → `EditorialItinerary.fixTimingRequest` effect) calls `refresh-day` once, applies the time-only patches, and re-runs validation. On Rome it resolved the originally reported issues but produced 7 new errors / 2 warnings and pushed Payments into a "Reconciling…" loop.
 
-| Direction | What user sees | Root cause |
-|---|---|---|
-| **Over-pricing** ("Quadri nightcap = €206/pp") | A bar/café visit at a Michelin venue gets the Michelin floor applied | `enforceMichelinPriceFloor` in `sanitization.ts` skips drinks (recent fix), but the **parallel floor logic in `action-repair-costs.ts` (lines ~340-411) has no `EXPLICIT_DRINKS_RE` bypass**. Repair re-floors the nightcap and writes JSONB back via the parity path → display now shows €206. |
-| **Under-pricing** ("card €26/pp, budget $500") | Card displays the AI's low estimate, while `activity_costs` snapshot has the true Michelin floor | Same divergence in reverse: floor was applied at the snapshot but JSONB writeback either didn't run (older trips before the parity fix) or the activity didn't match `michelin_floor`/`auto_corrected` source so it was excluded from the writeback set. |
+## Root Cause
 
-There is also no **bar/nightcap cap** at all in `action-repair-costs.ts`. So even if AI emits €80 for a "Cocktails at the rooftop" card, sanitization caps it to €35 in JSONB but repair writes $80 to `activity_costs` from the AI-supplied seed → fresh divergence.
+### 1. `refresh-day/index.ts` patches are non-cascading
 
-## Fix — single source of truth for fine-dining/bar pricing rules
+Inside the validation loop (`supabase/functions/refresh-day/index.ts` ~lines 315–567):
 
-### 1. Extract shared classifier `_shared/fine-dining-classifier.ts`
+- Each adjacent pair `(act, next)` may emit at most one patch for `next.id` (`changedIds.add(next.id)` gate).
+- When `next` is shifted forward to clear an overlap or buffer deficit, **the activities after `next` are not shifted**. Their `patchedTimes` is never written.
+- Subsequent iterations only consult `patchedTimes` for pair endpoints they recompute; they never push the cascade through the rest of the day.
 
-A pure function that takes `{ title, venueName, description, restaurantName, currentPrice }` and returns a tagged decision:
+Result: applying the returned `time_shift` / `buffer_added` patches in `EditorialItinerary.handleApplyRefreshChanges` moves card N forward, which now overlaps cards N+1, N+2 — manifesting as fresh `timing_overlap` / `insufficient_buffer` errors on the very next re-check. The shared `enforceTimingAndBuffers` (`supabase/functions/_shared/timing-cascade.ts`) already does the cascade correctly and is used by the generator + repair-day, but `refresh-day` predates it and was never migrated.
 
-```ts
-type Decision =
-  | { kind: 'skip'; reason: string }                                          // not dining-related
-  | { kind: 'cap_bar'; floorPrice: number; reason: string }                   // drinks/nightcap → cap at €35
-  | { kind: 'apply_floor'; floorPrice: number; stars: number; reason: string }
-  | { kind: 'noop' };
-```
+### 2. Fix-Timing path fires duplicate `booking-changed` events
 
-It encapsulates **all** of: `KNOWN_FINE_DINING_STARS`, `KNOWN_CASUAL_VENUES`, `EXPLICIT_DRINKS_RE`, `LUXURY_HOTEL_SIGNATURE_RE`, `RESTAURANT_LEAD_RE`, `KNOWN_MICHELIN_HIGH/MID`, `KNOWN_UPSCALE`, `BAR_KEYWORDS`, the casual-type guard, the meal-keyword guard for drinks, and the `MICHELIN_FLOOR.{upscale,mid,high}` thresholds.
+In `EditorialItinerary.tsx`:
 
-### 2. Refactor both consumers to call the classifier
+- `handleApplyRefreshChanges` dispatches `booking-changed` (line ~2672).
+- The fix-timing effect then schedules another `handleRefreshDay` 100 ms later (line ~2620), and the autosave triggered by `setHasChanges(true)` runs in parallel.
+- `PaymentsTab` listens for `booking-changed`, debounces a refetch at 600 ms, but every wave re-arms the timer; combined with the cascade-induced *new* errors creating a follow-up Refresh, the "Reconciling…" badge never clears.
 
-- **`sanitization.ts`** — `enforceMichelinPriceFloor` and `enforceBarNightcapPriceCap` keep their public signatures but delegate the rule logic to the classifier; they retain only the field-write side-effects (`writePriceToAllFields`, log emission). Behavior unchanged.
-- **`action-repair-costs.ts`** — Replace the inline Strategy 1-4 block (lines ~340-411) with a single classifier call. Add **a new bar-cap branch**: if the classifier returns `cap_bar`, set `costPerPerson = MAX_BAR_PRICE` (35 EUR equivalent in USD), set `source = 'bar_cap_repair'`, log `[BAR_CAP_REPAIR]`. Include `'bar_cap_repair'` in the `correctedById` set so it participates in the existing JSONB parity writeback (lines 587-646).
+The Payments loop is therefore a downstream symptom of the cascade bug — once the patch set is correct in one pass, the duplicate refetch wave goes away on its own.
 
-### 3. Currency note
+## Plan
 
-`MICHELIN_FLOOR.*` and `MAX_BAR_PRICE` constants are nominal-EUR thresholds; `cost_per_person_usd` in `activity_costs` is USD. Use the existing `usdFromEur` helper if present, else add a one-line constant `EUR_TO_USD_FLOOR = 1.08` (matches what `sanitization.ts` uses today). Centralize in the classifier so both sites round identically.
+### Step 1 — Migrate `refresh-day` to the shared cascade
 
-### 4. Tests
+In `supabase/functions/refresh-day/index.ts`:
 
-- Extend `__tests__/michelin-floor.test.ts`:
-  - `repair-costs path: "Gran Caffè Quadri nightcap" at $206 → capped to ~$38 with source 'bar_cap_repair'`
-  - `repair-costs path: "Dinner at Ristorante Quadri" at $30 → raised to $65 (1-star floor) with source 'michelin_floor'`
-  - `repair-costs path: "Cocktails at Aman Venice rooftop" at $90 → capped (luxury hotel signature does NOT override drinks framing)`
-- Add a parity test asserting `sanitization.enforceMichelinPriceFloor` and `repair-costs` decision converge on the same fixture set (10 inputs, both must produce the same final per-person price).
+1. Keep the operating-hours pass and the checkout/airport sequence check as-is — they already produce correct patches.
+2. After the operating-hours patches are computed, build the `CascadeActivity[]` list from the **post-operating-hours** times (not the originals), call `enforceTimingAndBuffers(...)` with `lockedIds` containing every `act.id` flagged as locked / pinned / extracted (read from `act.locked`, `act.userAdded`, `act.pinned`, `act.extracted` if present on the input).
+3. Convert the cascade `repairs[]` into `proposedChanges`:
+   - `same_start_fix` / `overlap_fix` → `type: 'time_shift'` with the new `startTime`/`endTime` from the cascaded array.
+   - `buffer_fix` → `type: 'buffer_added'`.
+   - `dropped_past_midnight` → new `proposedChange` `type: 'drop'` (or surface as an error issue without a patch — keep minimal: add an `issue` and skip patch so the existing UI doesn't auto-drop).
+4. Issues array: emit one `timing_overlap` / `insufficient_buffer` per repair (so the panel shows what was fixed) using the `before` strings the cascade returns.
+5. Preserve dedup: only one patch per `activityId`. If both operating-hours and cascade want to patch the same id, keep the operating-hours patch and re-run cascade with that id pre-shifted (already covered because we feed cascade the post-hours times).
+6. Remove the bespoke pair-by-pair patch emission lines that conflict with the cascade output.
 
-### 5. Memory
+### Step 2 — Stable application in the editor
 
-Update `mem://constraints/itinerary/michelin-pricing-defense-in-depth.md` to note the now-unified classifier and add `mem://constraints/itinerary/repair-costs-bar-cap-parity.md` documenting that `action-repair-costs.ts` MUST never apply a Michelin floor without first checking `EXPLICIT_DRINKS_RE`, and MUST apply the bar cap when the classifier returns `cap_bar`.
+In `src/components/itinerary/EditorialItinerary.tsx`:
 
-## Out of scope
+1. In the fix-timing effect (~line 2528), pass `lockedIds` data when constructing the activity payload so the server cascade respects them.
+2. In `handleApplyRefreshChanges` (~line 2626), after applying the patches, run a **client-side** `enforceTimingAndBuffers` pass over the patched day as a safety net. (Import the same algorithm into `src/utils/itinerary/timingCascade.ts` if it isn't already exported there; reuse the existing module.) This guarantees that even if the server returns partial patches, the local commit is internally consistent.
+3. Coalesce the post-fix re-check: replace the unconditional `setTimeout(handleRefreshDay, 100)` (line ~2620) with a guard that only re-runs `handleRefreshDay` when `nonTimingIssues.length > 0`. When the cascade already produced a clean day there's no point re-validating, and skipping it removes the second `booking-changed` wave.
 
-- UI rendering changes (card chip already pulls from snapshot/JSONB in correct order per `Table-Driven Cost Architecture`).
-- DB migration — `activity_costs` schema unchanged; `source` enum already accepts free-form strings.
-- Generation prompt changes.
+### Step 3 — Suppress the Payments re-arm loop
 
-## Files touched
+In `src/components/itinerary/EditorialItinerary.tsx` `handleApplyRefreshChanges`:
 
-- **New**: `supabase/functions/_shared/fine-dining-classifier.ts`
-- **New**: `mem://constraints/itinerary/repair-costs-bar-cap-parity.md`, updated `mem://index.md` + `mem://constraints/itinerary/michelin-pricing-defense-in-depth.md`
-- **Edited**: `supabase/functions/generate-itinerary/sanitization.ts` (delegate to classifier, keep field writers)
-- **Edited**: `supabase/functions/generate-itinerary/action-repair-costs.ts` (delegate to classifier; add `cap_bar` branch + JSONB writeback inclusion)
-- **Edited**: `supabase/functions/generate-itinerary/__tests__/michelin-floor.test.ts` (new repair-path + parity tests)
+- Tag the `booking-changed` event with `detail.reason: 'fix_timing'` and `detail.coalesceMs: 1200`.
 
-## Acceptance
+In `src/components/itinerary/PaymentsTab.tsx` (~line 293 effect):
 
-- A "Gran Caffè Quadri nightcap" emitted at €206 by AI is capped to ~€35 in BOTH `activity_costs.cost_per_person_usd` AND `trips.itinerary_data.days[*].activities[*].cost.amount` after a single repair pass.
-- "Dinner at Ristorante Quadri" emitted at €30 is floored to €65 in BOTH locations.
-- A legacy trip with `card €26 / budget $500` resolves to a single floored value in both fields after running `action-repair-costs`.
-- `[BAR_CAP_REPAIR]` and `PARITY OK` appear in repair logs.
+- Read `detail.coalesceMs` (default 600) and **do not** re-arm the trailing timer if one is already pending — replace the `clearTimeout` + `setTimeout` pattern with a "leading edge fired, trailing edge fires once" guard. This stops the loop where every back-to-back event resets the 600 ms window.
+
+### Step 4 — Tests
+
+1. Extend `supabase/functions/_shared/timing-cascade.test.ts` with a Rome-style fixture (5–6 cards, two same-start conflicts + one buffer deficit) and assert that one cascade pass leaves zero residual conflicts when re-fed into the validator.
+2. Add a `refresh-day` integration test (or a small unit harness) that feeds the same fixture into the new code path and asserts the returned `proposedChanges`, when applied, produce zero new `timing_overlap` / `insufficient_buffer` issues on a second call.
+
+### Step 5 — Memory
+
+Add `mem://constraints/itinerary/fix-timing-cascade-parity.md`:
+- Refresh-day MUST delegate timing patch generation to `enforceTimingAndBuffers`. No bespoke pair-by-pair patch emission.
+- Fix Timing must not emit a follow-up `handleRefreshDay` when the cascade returned no non-timing issues.
+- Payments `booking-changed` handler is leading-edge + single trailing-edge; never re-arm.
+
+Update `mem://index.md` Core to reference the new constraint.
+
+## Out of Scope
+
+- No changes to the Trip Health analyzer (`TripHealthPanel.tsx`) — it already filters and soaks correctly.
+- No changes to AI prompts or the generator pipeline; the cascade module is shared and unchanged.
+- No changes to the Payments reconciliation contract — only the event-coalescing window.
+
+## Files Touched
+
+- `supabase/functions/refresh-day/index.ts` (rewrite §2/3/4 of the validation loop)
+- `src/components/itinerary/EditorialItinerary.tsx` (fix-timing effect + `handleApplyRefreshChanges`)
+- `src/components/itinerary/PaymentsTab.tsx` (event handler debounce)
+- `src/utils/itinerary/timingCascade.ts` (export shared helper if needed)
+- `supabase/functions/_shared/timing-cascade.test.ts` (Rome fixture)
+- `mem://constraints/itinerary/fix-timing-cascade-parity.md` (new)
+- `mem://index.md` (index entry)
