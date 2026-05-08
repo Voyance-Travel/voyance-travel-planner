@@ -1541,6 +1541,15 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
           floor = MICHELIN_FLOOR.upscale; reason = 'Known upscale restaurant';
         }
 
+        // Luxury-hotel-dining heuristic — defends against missing-entry
+        // regressions (Quadri / Oro at Cipriani / La Pergola pattern).
+        if (floor < MICHELIN_FLOOR.upscale &&
+            LUXURY_HOTEL_SIGNATURE_RE.test(combined) &&
+            RESTAURANT_LEAD_RE.test(combined)) {
+          floor = MICHELIN_FLOOR.upscale;
+          reason = 'luxury_hotel_dining_heuristic';
+        }
+
         // Famous seafood
         if (floor < 40 && /\b(cervejaria|marisqueira|marisquer[ií]a|seafood house)\b/i.test(combined)) {
           floor = 40; reason = 'Famous seafood restaurant';
