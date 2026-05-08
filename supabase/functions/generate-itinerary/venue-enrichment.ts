@@ -8,6 +8,7 @@
 import type { StrictActivity, StrictDay, VenueVerification, CachedVenue, EnrichmentStats } from './generation-types.ts';
 import { normalizeVenueName, haversineDistanceKm } from './generation-utils.ts';
 import { googleGeocode, googlePlacesTextSearch } from '../_shared/google-api.ts';
+import { isWeakAddress } from '../_shared/address-quality.ts';
 
 // =============================================================================
 // HOTEL PROXIMITY GUARD — Tight radius for water-bound / car-free destinations
