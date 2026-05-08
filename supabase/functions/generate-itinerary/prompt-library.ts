@@ -1328,6 +1328,17 @@ export function buildRegularDayPrompt(
   }
   lines.push('');
 
+  lines.push(`   EVENING PACING (HARD RULE):`);
+  lines.push(`   - After dinner / past 21:00, ONLY low-intensity activities: bars, lounges, opera,`);
+  lines.push(`     gondola/cruise, jazz club, walking promenade, dessert spot.`);
+  lines.push(`   - NEVER schedule kayak, SUP, paddleboard, cycling/bike tour, hiking, running,`);
+  lines.push(`     climbing, surf, jet-ski, windsurf, kitesurf, wakeboard, rafting, scuba,`);
+  lines.push(`     snorkel, or any other strenuous outdoor activity after 21:00.`);
+  lines.push(`   - Luxury / Luminary tier: tighten the cutoff to 20:00. Late-night returns from`);
+  lines.push(`     island or water-access hotels (Venice, lakeside resorts) MUST use a private`);
+  lines.push(`     water taxi or hotel shuttle — never a 30+ minute walk after 22:00.`);
+  lines.push('');
+
   lines.push(`   PRACTICAL TIPS (inline on activities):`);
   lines.push(`   - "Book tickets online in advance to skip queue"`);
   lines.push(`   - "Closed on Mondays" / "Free entry first Sunday of month"`);

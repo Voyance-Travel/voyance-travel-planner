@@ -1,86 +1,93 @@
-# "Reservation Urgency: ." trailing-period leak in activity body
+# Late-night strenuous-activity guard (10:50 PM Kayak → 38m walk to JW Marriott)
 
 ## What the user sees
 
-A Wellness Session card on Day 1 renders a line:
+Day shows:
+- Dinner ends ~22:00
+- **Kayak 22:50 → 23:35**
+- **Walk to JW Marriott 23:50 (38 min)**
 
-```
-Reservation Urgency: .
-```
-
-Trailing period, blank value — a classic prompt-template leak.
+Two problems stacked:
+1. A physically demanding outdoor activity scheduled after dinner, ending at 23:35.
+2. The hotel return is a 38-minute walk starting 23:50 — finishing well past midnight after exertion. For Venice + a JW Marriott (Isola delle Rose) guest, this is implausible (no bridge from the Lido / no late vaporetto path that fits) and clashes with the luxury tier.
 
 ## Root cause
 
-The generator wires `buildReservationUrgencyPrompt()` (`reservation-urgency.ts:132`) into the system prompt at two sites:
+There is **no pacing rule** in the pipeline that prevents strenuous physical activities (kayak, SUP, cycling, hiking, running, climbing, surf, jet-ski) from being scheduled after dinner or late at night:
 
-- `action-generate-trip.ts:332-340` (full-trip path)
-- `generation-core.ts:890` (per-day path), composed at `generation-core.ts:903`
+- `pipeline/repair-day.ts` has a `NIGHTCAP_SWAP` (lines 1236–1267) that only handles bars/cocktails/digestif — no concept of physical activities.
+- `universal-quality-pass.ts:runStep8` only injects the hotel-return card; it doesn't validate the previous activity's category/intensity, so a 22:50 kayak just slides through and the system happily appends "walk back to hotel."
+- The transit estimator picks "walk" because the haversine is under the 1200 m threshold or the calling site never asked for a transit upgrade for late-night legs (Venice JW Marriott specifically requires a hotel shuttle boat).
+- The generator prompt has no "no strenuous activities after 21:00" line, so the model freely schedules sunset/night kayak sessions.
 
-The prompt header reads `RESERVATION URGENCY REQUIREMENTS` and instructs the model to emit a JSON field `"reservationUrgency"`. It NEVER asks for the literal label "Reservation Urgency: " to appear in user-facing text. The model is bleeding the prompt label into the activity `description` / `tips` body — sometimes with a value, sometimes (as here) as a bare `Reservation Urgency: .` orphan.
+## Fix — three small, focused layers
 
-Why nothing strips it today:
+### Layer 1 — Repair-day: late-night strenuous swap
 
-1. **`pipeline/validate-day.ts:checkLabelLeaks`** only scans `title`, not `description` / `tips` / `notes`. So `TITLE_LABEL_LEAK` repair never fires for body leaks.
-2. **`src/utils/activityNameSanitizer.ts:sanitizeActivityText`** has a long strip list (`SYSTEM_LABEL_RE`, `SLOT_PREFIX_RE`, `PROMPT_ARTIFACT_REPLACE_RE`, etc.) but no pattern for `Reservation Urgency:` or other AI-echoed prompt headers (e.g. `Booking Urgency:`, `Reservation Window:`, `Booking Window:`).
-3. **No backend scrub on description/tips** — `repair-day.ts` only scrubs titles and times. The bad string is persisted to `itinerary_activities.description` / `.tips` and surfaces every render.
+In `supabase/functions/generate-itinerary/pipeline/repair-day.ts`, add a new step after the existing `NIGHTCAP_SWAP` (~line 1267):
 
-## Fix — defense in depth across the same surfaces we use for other prompt-leak bugs
+```text
+5a-post-2. STRENUOUS_NIGHT_SWAP
+  - Detect activity matching STRENUOUS_RE
+    (kayak|paddle ?board|SUP|canoe|cycling|bike (?:tour|ride)|hike|hiking|trek|run(?:ning)?|jog|climb(?:ing)?|surf|jet ?ski|wakeboard|windsurf|kitesurf|rafting)
+  - Trigger when startMins >= 21:00 (or after dinner end, whichever is earlier)
+    AND the activity is not user/manual/locked/extracted/pinned
+  - Action priority:
+      a. If a free daytime slot 14:00–18:30 exists with ≥ duration available: move it there.
+      b. Else: tag for replacement by terminal-pass with a non-strenuous evening alternative
+         (sunset cruise, gondola serenade, rooftop bar, opera, jazz lounge — drawn from
+         existing fallback pool used for nightcap / aperitivo).
+      c. Drop entirely if the trip's archetype is not "Adrenaline Architect" AND no
+         alternative is available; let the meal-guard / hotel-return path resume.
+  - Log `[Repair] STRENUOUS_NIGHT_SWAP` and push a `repairs.push({ action: 'strenuous_moved_or_replaced', ... })`.
+```
 
-### Layer 1 — UI sanitizer (immediate heal for already-persisted data)
+### Layer 2 — Hotel-return injection sanity check
 
-`src/utils/activityNameSanitizer.ts:sanitizeActivityText`:
+In `universal-quality-pass.ts:runStep8` (line 81), before injecting the return card:
 
-- Add `RESERVATION_LABEL_LEAK_RE` matching the bare prompt label (with optional value):
-  - `\b(?:Reservation|Booking)\s+(?:Urgency|Window|Lead\s*Time)\s*:\s*[^.\n]*\.?` — strips the entire `Label: …` segment up to the next sentence boundary.
-- Add an **orphan key:value scrubber** that catches any line/segment shaped `^\s*[A-Z][A-Za-z ]{2,40}\s*:\s*\.?\s*$` (label followed by nothing or just a period). Conservative whitelist — only when the value is empty or a lone punctuation mark — so we never eat real `"Note: closed Mondays."` content.
-- Wire both into the existing `.replace(...)` chain right after `PROMPT_ARTIFACT_REPLACE_RE` and before the whitespace squash.
-- Update `src/utils/__tests__/activityNameSanitizer.artifacts.test.ts` with three cases:
-  - `"Soothing massage. Reservation Urgency: ."` → `"Soothing massage."`
-  - `"Reservation Urgency: book_soon. Spa with hammam."` → `"Spa with hammam."`
-  - Real content `"Reservation: required for Sunday brunch."` is preserved (singular `Reservation:` ≠ template label).
+- If `lastActivity.endTime > 22:30` AND the hotel is on an island/water-access location
+  (detect via known luxury-Venice hotel allowlist: JW Marriott Venice Resort & Spa,
+  Cipriani, San Clemente, Kempinski Isola delle Rose) OR the haversine to hotel
+  exceeds the existing walk threshold → set the return card's `transport_mode` to
+  `taxi` / `water_taxi` (Venice) / `taxi` (default) and label it
+  `"Private water taxi to {hotel}"` instead of `"Walk to {hotel}"`.
+- Use the existing transit estimator's "force motorized" path so duration recomputes (15–25 min for Venice water taxi vs 38-min walk).
+- Sentinel log: `[QUALITY] Late-night return upgraded to {mode} for {hotel}`.
 
-### Layer 2 — Backend pre-persist scrub (kill at the source)
+### Layer 3 — Prompt rule
 
-`supabase/functions/generate-itinerary/pipeline/repair-day.ts`:
+In `supabase/functions/generate-itinerary/believable-human-day.ts` (or wherever pacing rules live — the same file that holds the "midday freshen up" rule):
 
-- Add a small `scrubBodyPromptLeaks(act)` helper near the existing `TITLE_LABEL_LEAK` block (~line 2499) that strips the same `RESERVATION_LABEL_LEAK_RE` plus the orphan-key:value pattern from `description`, `tips`, `insiderTip`, `notes`, `details`. Use the same regexes shared with the UI to keep behavior aligned (extract to `_shared/prompt-leak-scrub.ts`).
-- Run it inside the existing day repair loop, push a repair entry `action: 'scrubbed_body_prompt_leak'` for observability.
+- Add: `EVENING PACING: After dinner (post-21:00), only low-intensity activities are allowed — bars, lounges, opera, gondola/cruise, walking promenade. NEVER schedule kayak, SUP, cycling tours, hiking, running, climbing, or other strenuous outdoor activities after 21:00.`
+- For luxury / luminary tiers (`budgetTier in {luxury, luminary}`), tighten to 20:00 and add: `Late-night returns must use private/water taxi when applicable (Venice, lakeside resorts, island hotels) — never schedule a 30+ minute walk after 22:00.`
 
-`supabase/functions/generate-itinerary/action-save-itinerary.ts`:
+### Files to edit
 
-- Apply the same shared scrub at JSON snapshot time (next to the existing pre-dawn / bookend sweeps), so legacy days flowing through save also self-heal.
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add `STRENUOUS_NIGHT_SWAP` after `NIGHTCAP_SWAP`. Define `STRENUOUS_RE`. Reuse existing `lockedIds` set + repairs sink.
+- `supabase/functions/generate-itinerary/universal-quality-pass.ts` — extend `runStep8` to choose transport mode based on hotel location + last-activity end time. Small allowlist of Venice island resorts + a generic "long walk after late activity" upgrade rule.
+- `supabase/functions/generate-itinerary/believable-human-day.ts` (or the pacing-prompt builder) — add the post-21:00 / luxury post-20:00 evening pacing line; add the late-walk transit rule.
+- New test: `supabase/functions/generate-itinerary/pipeline/__tests__/repair-day.strenuous-night.test.ts`
+  - 22:50 kayak with 14:00–17:00 free slot → moved to 14:00.
+  - 22:50 kayak with no daytime slot, archetype = Romance Curator → replaced by sunset/lounge fallback.
+  - 22:50 kayak that is `locked: true` / `manualEdit: true` → untouched (universal-locking).
+- New test: `supabase/functions/generate-itinerary/__tests__/runStep8.late-night-walk.test.ts`
+  - Last activity ends 23:35 + JW Marriott → return card uses `transport_mode: water_taxi`.
+  - Last activity ends 18:30 → unchanged (current walk path keeps working).
 
-### Layer 3 — Validator widening
+### Memory
 
-`supabase/functions/generate-itinerary/pipeline/validate-day.ts:checkLabelLeaks`:
+Add `mem://constraints/itinerary/no-strenuous-after-dinner`:
+- `STRENUOUS_RE` (kayak / SUP / cycling tour / hike / run / climb / surf / jet-ski / windsurf / kitesurf / wakeboard / rafting) MUST NOT start after 21:00 (general) or 20:00 (luxury/luminary).
+- Repair-day `STRENUOUS_NIGHT_SWAP` moves to 14:00–18:30 daytime slot, else replaces with low-intensity evening alternative, else drops.
+- Universal-quality-pass `runStep8` upgrades >22:30 hotel-return to taxi / water-taxi for island resorts (Venice JW Marriott, Cipriani, San Clemente, Kempinski Isola).
+- Sentinel: `repair.action='strenuous_moved_or_replaced'`, log `[QUALITY] Late-night return upgraded`.
 
-- Extend the loop to also scan `description`, `tips`, `notes` against a new `BODY_LABEL_LEAK_PATTERNS` set (same `RESERVATION_LABEL_LEAK_RE` + orphan-key:value).
-- When found, raise `FAILURE_CODES.TITLE_LABEL_LEAK` with the field name; the repair pass calls the shared scrub.
+Update `mem://index.md` Core with one-liner:
+"Evening Pacing: No strenuous outdoor (kayak/SUP/hike/cycling/run/climb/surf/jet-ski) after 21:00 (20:00 luxury). Late-night returns from island/water hotels upgrade to taxi/water-taxi via runStep8."
 
-### Layer 4 — (Optional, low-risk) Prompt hardening
+## Out of scope (intentionally not changing)
 
-`supabase/functions/generate-itinerary/reservation-urgency.ts:buildReservationUrgencyPrompt`:
-
-- Append one line: `IMPORTANT: Do NOT include the words "Reservation Urgency" or this section's labels anywhere in user-facing description, tips, or notes — only in the JSON "reservationUrgency" field.` Keeps future regressions less likely.
-
-## Files to edit
-
-- New: `supabase/functions/_shared/prompt-leak-scrub.ts` — shared regex + `scrubBodyPromptLeaks(act)` helper used by repair, save, and validator.
-- Edit: `src/utils/activityNameSanitizer.ts` — add reservation-label + orphan-key:value strip in `sanitizeActivityText`.
-- Edit: `src/utils/__tests__/activityNameSanitizer.artifacts.test.ts` — add the three scenarios above.
-- Edit: `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — call shared scrub in the body-leak repair step.
-- Edit: `supabase/functions/generate-itinerary/pipeline/validate-day.ts` — widen `checkLabelLeaks` to scan body fields.
-- Edit: `supabase/functions/generate-itinerary/action-save-itinerary.ts` — final body-leak sweep next to existing predawn/bookend sweeps.
-- Edit: `supabase/functions/generate-itinerary/reservation-urgency.ts` — one-line prompt hardening.
-- New tests:
-  - `supabase/functions/_shared/__tests__/prompt-leak-scrub.test.ts` — covers `Reservation Urgency: .` strip, value-bearing strip, false-positive guard for legit `"Reservation: required for X."`.
-
-## Memory
-
-Add `mem://constraints/itinerary/reservation-urgency-prompt-leak`:
-- Prompt label `Reservation Urgency:` (and siblings `Booking Urgency`, `Reservation Window`, `Booking Window`) MUST NEVER appear in user-facing description/tips. Stripped by shared `scrubBodyPromptLeaks` (server) + `sanitizeActivityText` (UI).
-- Orphan `Label: .` key:value patterns with empty/dot value are stripped at all 3 surfaces.
-- Sentinel: `repair.action='scrubbed_body_prompt_leak'`.
-
-Update `mem://index.md` Core to add a one-liner: "Prompt-template labels (`Reservation Urgency:` etc.) never live in description/tips — shared `scrubBodyPromptLeaks` enforces at validate / repair / save / UI."
+- The transit estimator's overall walk/transit thresholds — only the late-night + island-hotel branch gets upgraded; daytime walks remain as-is.
+- The kayak fallback pool composition — we reuse the existing nightcap/aperitivo/sunset-cruise pool already wired into the meal-guard.
+- User-locked / manual / extracted / pinned activities — universal-locking exemption applies (existing pattern).
