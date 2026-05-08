@@ -57,10 +57,29 @@ export interface ResolvedRow {
 
 export interface ResolveResult {
   rows: ResolvedRow[];
+  /** Pure canonical total from activity_costs (pre manual fold). */
   totalCents: number;
   hotelCents: number;       // committed (pre-toggle), for reserve math
   flightCents: number;      // committed (pre-toggle), for reserve math
   loggedMiscCents: number;  // for reserve math
+  /** Day-0 canonical hotel / flight cents (pre-toggle, pre-manual). */
+  canonicalDay0HotelCents: number;
+  canonicalDay0FlightCents: number;
+  /** Manual-payment fold (override-aware for hotel/flight, additive for others). */
+  manualHotelCents: number;
+  manualFlightCents: number;
+  manualOtherCents: number;
+  manualHotelDelta: number;   // (manualHotel - canonicalDay0Hotel) when canonical exists, else manualHotel
+  manualFlightDelta: number;  // ditto for flight
+  /** totalCents + manualHotelDelta(if includeHotel) + manualFlightDelta(if includeFlight) + manualOtherCents, clamped >=0. */
+  effectiveTotalCents: number;
+}
+
+export interface CanonicalManualPayment {
+  item_type: string;
+  item_id: string;
+  amount_cents: number;
+  quantity?: number | null;
 }
 
 const DINING_RE = /\b(breakfast|brunch|lunch|dinner|supper|cafe|café|coffee|bakery|tapas|cocktails?|nightcap|aperitif|drinks?)\b/i;
