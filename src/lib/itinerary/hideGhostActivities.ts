@@ -9,7 +9,13 @@
  *
  * NEVER hides locked or user-edited activities; those are the user's truth.
  */
-const HOTEL_RETURN_RE = /(?:return\s+to|back\s+(?:to|at)|head\s+back\s+to|head\s+to|wind\s+down\s+at)\s+(?:your\s+|the\s+|our\s+)?[^,.\n]{0,60}hotel|hotel\s+(?:check[-\s]?in|settle\s+in|wind[-\s]?down|nightcap)/i;
+const HOTEL_RETURN_VERB_RE = /\b(?:return\s+to|back\s+(?:to|at)|head\s+back\s+to|head\s+to|wind\s+down\s+at|walk\s+to|shuttle\s+to|taxi\s+to|transfer\s+to|drive\s+to)\b/i;
+const HOTEL_LITERAL_RE = /(?:return\s+to|back\s+(?:to|at)|head\s+back\s+to|head\s+to|wind\s+down\s+at)\s+(?:your\s+|the\s+|our\s+)?[^,.\n]{0,60}hotel|hotel\s+(?:check[-\s]?in|settle\s+in|wind[-\s]?down|nightcap)/i;
+// Brand-aware companion: catches "Walk to JW Marriott", "Return to Cipriani"
+// where the literal word "hotel" never appears.
+const HOTEL_BRAND_RE =
+  /\b(?:hotel|hostel|inn|resort|lodge|ryokan|riad|jw\s*marriott|marriott|hilton|hyatt|ritz[\-\s]?carlton|four\s*seasons|st\.?\s*regis|peninsula|aman(?:yara|jena)?|belmond|cipriani|gritti|danieli|metropole|bauer|kempinski|rosewood|mandarin\s*oriental|raffles|bvlgari|bulgari|conrad|edition|sofitel|fairmont|shangri[\-\s]?la|intercontinental|le\s*meridien|westin|sheraton|nobu\s*hotel)\b/i;
+const HOTEL_RETURN_RE = HOTEL_LITERAL_RE;
 const WELLNESS_PLACEHOLDER_RE = /find a venue\s*$/i;
 const PRE_DAWN_MAX_MINS = 5 * 60; // 05:00
 
