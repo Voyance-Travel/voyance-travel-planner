@@ -1457,7 +1457,7 @@ export async function handleGenerateDay(
             let { data: venues } = await supabase
               .from('verified_venues')
               .select('name, address, category')
-              .ilike('city', `%${destQuery}%`)
+              .ilike('destination', `%${destQuery}%`)
               .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
               .limit(30);
             if ((!venues || venues.length === 0) && destQuery.includes(',')) {
@@ -1465,7 +1465,7 @@ export async function handleGenerateDay(
               const broader = await supabase
                 .from('verified_venues')
                 .select('name, address, category')
-                .ilike('city', `%${cityOnly}%`)
+                .ilike('destination', `%${cityOnly}%`)
                 .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
                 .limit(30);
               venues = broader.data;
