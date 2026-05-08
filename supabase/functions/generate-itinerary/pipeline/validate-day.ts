@@ -16,6 +16,7 @@ import {
   type StrictDayMinimal,
 } from '../day-validation.ts';
 import type { RequiredMeal } from '../meal-policy.ts';
+import { hasBodyPromptLeak } from '../../_shared/prompt-leak-scrub.ts';
 
 // =============================================================================
 // GENERIC VENUE PATTERNS — placeholders the AI sometimes generates
@@ -321,6 +322,18 @@ function checkLabelLeaks(activities: StrictActivityMinimal[], results: Validatio
         message: `"${title}" contains an internal label that should not be user-facing`,
         activityIndex: i,
         field: 'title',
+        autoRepairable: true,
+      });
+    }
+    // Body-field prompt-leak (Reservation Urgency: ., Booking Window: ., etc.)
+    const bodyHit = hasBodyPromptLeak(activities[i] as any);
+    if (bodyHit) {
+      results.push({
+        code: FAILURE_CODES.TITLE_LABEL_LEAK,
+        severity: 'warning',
+        message: `Activity "${title}" has prompt-template label leak in ${bodyHit.field}`,
+        activityIndex: i,
+        field: bodyHit.field,
         autoRepairable: true,
       });
     }
