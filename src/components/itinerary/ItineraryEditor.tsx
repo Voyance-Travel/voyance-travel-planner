@@ -278,16 +278,14 @@ export function ItineraryEditor({
         overview: overview ? JSON.parse(JSON.stringify(overview)) : undefined
       };
 
-      const { error } = await supabase
-        .from('trips')
-        .update({
-          itinerary_data: itineraryData,
-          itinerary_status: 'ready',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', tripId);
-
-      if (error) throw error;
+      // Route through the boundary so prompt-artifact strip, persist-day
+      // contract, and cross-city sweep run server-side. Raw .update was a
+      // confirmed leak path for (FLEX_WINDOW)/cross-city restaurant bugs.
+      const { safeUpdateItineraryData } = await import('@/services/safeUpdateItineraryData');
+      const safeRes = await safeUpdateItineraryData(tripId, itineraryData as any, {
+        itinerary_status: 'ready',
+      });
+      if (safeRes?.error) throw safeRes.error;
 
       if (onSave) await onSave(days);
       
