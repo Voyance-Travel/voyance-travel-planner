@@ -43,6 +43,14 @@ export interface FillDeadGapsOptions {
   lockedIds?: Set<string>;
   /** Disable when in build-myself / manual mode */
   enabled?: boolean;
+  /**
+   * Last-day upper bound (HH:MM minutes-from-midnight).
+   * Typically `departureTime − buffer` (180m flight / 120m train) or hotel
+   * checkout. When set on a last day, dead-gap fill runs with the upper bound
+   * = min(AFTERNOON_END_MIN, latestUsableMins). When omitted on a last day,
+   * dead-gap fill is skipped (legacy behaviour).
+   */
+  latestUsableMins?: number;
 }
 
 export interface FillDeadGapsResult {
@@ -59,17 +67,21 @@ export async function fillAfternoonDeadGaps(
   opts: FillDeadGapsOptions,
 ): Promise<FillDeadGapsResult> {
   if (opts.enabled === false) return { activities: [...activities], inserted: [] };
-  if (opts.isFirstDay || opts.isLastDay) return { activities: [...activities], inserted: [] };
+  // Arrival day: skip (handled by dedicated arrival-day pacing).
+  if (opts.isFirstDay) return { activities: [...activities], inserted: [] };
+  // Departure day: only run when caller provided a usable upper bound,
+  // otherwise we don't know how late we can schedule activities.
+  if (opts.isLastDay && (opts.latestUsableMins === undefined || opts.latestUsableMins <= AFTERNOON_START_MIN)) {
+    return { activities: [...activities], inserted: [] };
+  }
   if (!Array.isArray(activities) || activities.length < 2) {
     return { activities: [...activities], inserted: [] };
   }
 
-  // Sort a copy by startTime for gap detection
-  const work = [...activities].sort((a, b) => {
-    const sa = parseTime(a?.startTime) ?? 0;
-    const sb = parseTime(b?.startTime) ?? 0;
-    return sa - sb;
-  });
+  // Effective upper bound for this day's afternoon window.
+  const effectiveAfternoonEnd = opts.isLastDay && opts.latestUsableMins !== undefined
+    ? Math.min(AFTERNOON_END_MIN, opts.latestUsableMins)
+    : AFTERNOON_END_MIN;
 
   const inserted: FillDeadGapsResult['inserted'] = [];
   const lockedIds = opts.lockedIds || new Set<string>();
