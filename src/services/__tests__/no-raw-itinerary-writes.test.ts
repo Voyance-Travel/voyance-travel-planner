@@ -53,8 +53,11 @@ describe('client never writes trips.itinerary_data raw', () => {
     for (const file of walk(SRC_ROOT)) {
       if (ALLOWED_FILES.has(file)) continue;
       const src = readFileSync(file, 'utf8');
-      // Strip block comments so we don't false-positive on documentation.
-      const stripped = src.replace(/\/\*[\s\S]*?\*\//g, '');
+      // Strip block + line comments so documentation referencing the
+      // forbidden pattern doesn't false-positive.
+      const stripped = src
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1');
       if (RAW_WRITE_RE.test(stripped)) {
         offenders.push(file.replace(SRC_ROOT, 'src'));
       }
