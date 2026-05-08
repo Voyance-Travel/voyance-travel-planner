@@ -1149,6 +1149,8 @@ export function buildDepartureDayPrompt(
   if (flight.hasReturnFlight && flight.departureTimeMins) {
     const transferTime = minutesToHHMM(flight.departureTimeMins - 150); // 2.5 hours before
     lines.push(`   2. "Transfer to Airport" at ${transferTime} (category: transport)`);
+    lines.push(`      ⚠️ MUST include explicit startTime AND endTime — never emit a transfer card without both fields.`);
+    lines.push(`      Compute: startTime = (flight departure − 150min), endTime = (flight departure − 90min).`);
     lines.push(`   3. "Departure from Airport" endTime: ${flight.departureTime24} (category: transport)`);
     lines.push('');
     lines.push(`   🚫 DO NOT generate any additional airport-related activities.`);
@@ -1156,6 +1158,16 @@ export function buildDepartureDayPrompt(
     lines.push(`   Do NOT add extra "Head to Airport", "Go to Airport", or duplicate transfer/departure entries.`);
   }
   lines.push('');
+
+  // Graceful finish rule — applies to all departure windows except early/morning
+  if (departureWindow !== 'early_morning' && departureWindow !== 'morning') {
+    lines.push(`✨ GRACEFUL FINISH (HARD RULE)`);
+    lines.push(`${'─'.repeat(40)}`);
+    lines.push(`   When the gap between the final meal end and (departure − airport-buffer) or hotel checkout exceeds 75 minutes,`);
+    lines.push(`   plan ONE low-key closing beat: espresso bar, hotel terrace/lounge, short passeggiata, last small gallery,`);
+    lines.push(`   or a final landmark stop near the hotel. Never end the day abruptly with checkout immediately after lunch.`);
+    lines.push(`   Cap duration at 90 minutes and clamp endTime ≤ (transfer-to-airport startTime).`);
+  }
   
   // Activity guidance
   lines.push(`⚡ ACTIVITY GUIDANCE`);

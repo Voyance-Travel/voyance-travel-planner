@@ -606,6 +606,22 @@ function checkLogisticsSequence(activities: StrictActivityMinimal[], depTime24: 
       });
     }
   }
+
+  // R5: Departure transport must have explicit startTime AND endTime
+  // (catches "Transfer to Airport" rows the model emits without timing).
+  const isValidHHMM = (s: any) => typeof s === 'string' && /^\d{1,2}:\d{2}$/.test(s);
+  for (const t of transports) {
+    const a: any = t.act;
+    if (!isValidHHMM(a?.startTime) || !isValidHHMM(a?.endTime)) {
+      results.push({
+        code: FAILURE_CODES.DEPARTURE_TRANSPORT_UNTIMED,
+        severity: 'error',
+        message: `Departure transport "${a?.title}" is missing startTime/endTime`,
+        activityIndex: t.idx,
+        autoRepairable: true,
+      });
+    }
+  }
 }
 
 function normalizeText(input: string): string {
