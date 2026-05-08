@@ -1,71 +1,116 @@
 ## Problem
 
-Day 2 of a luxury 3-day Venice trip ships with a **3h 40m unplanned window (12:10 → 15:50)** between "Rialto Bridge and Market Area Walk" and "Kinetic Lagoon Private Boat Adventure". The Density Protocol prohibits dead gaps > 90 m. The UI's amber "Fill the gap" nudge confirms it (DeadGapBanner) — but a generated luxury trip should never reach the user with that hole in the first place. The slot also straddles lunch (13:00), so either lunch was deduped away or the gap was created after meal injection ran.
+Day 2 of a 3-day Venice trip ends with the "Kinetic Lagoon Private Boat Adventure" (15:50–17:20) followed by "Return to JW Marriott via Shuttle Boat" — and **nothing else**. No dinner, no nightcap, no evening activity. For a luxury 3-day trip with no logistics constraints on day 2, this is a hard violation of the Meal Rules core ("3 meals/full day", "Exactly One Dinner (18:00+)").
 
-## Root cause — pipeline ordering
+## Root cause — multiple compounding failures
 
-`fillAfternoonDeadGaps` (the server-side gap filler) is called inside `action-generate-trip-day.ts` at line 1432, but **three later passes can re-open or widen gaps and never re-check**:
+There ARE three meal-guard call sites that should each have caught this independently:
+
+1. `supabase/functions/generate-itinerary/action-generate-trip-day.ts:1967` — multi-day finalization loop
+2. `supabase/functions/generate-itinerary/action-generate-day.ts:1509` — single-day refresh path
+3. `supabase/functions/generate-itinerary/action-save-itinerary.ts:332` — last-resort save guard
+
+Despite three layers, dinner still didn't reach the user. Audit findings:
+
+### Bug A — `universalQualityPass` injects "Return to Hotel" BEFORE the meal guard runs
+
+`universal-quality-pass.ts:255` (Step 8) injects "Return to {hotel}" immediately after the boat tour ends at 17:20, because the rule fires whenever the last activity ends in 17:00–23:59. This pass runs at `action-generate-trip-day.ts:1517`. The meal-guard runs much later at line 1967.
+
+When dinner is finally injected at 19:00 by the meal-guard, the activities are sorted by start time, producing the order: `Boat 15:50` → `Return to Hotel 17:20` → `Dinner 19:00`. The "Return to Hotel" card carries strong semantic finality in the UI, so even if dinner ships, the day reads as "ends at 5:20 PM" — and if the dinner injection ever fails (Bug B/C below), the user sees exactly the bug reported.
+
+### Bug B — save-time meal-guard fallback query uses wrong column
+
+`action-save-itinerary.ts:322` queries `verified_venues` with `.ilike('city', ...)` — but the column is named `destination` (confirmed against the live schema). The query throws and is silently swallowed by the surrounding `try/catch`, leaving `saveFallbackVenues = []`. The guard still injects via the emergency-fallback DB, but with no curated city-specific options. For Venice with a thin emergency pool, this means the safety net is materially weaker than intended.
+
+### Bug C — no observability on meal-guard outcomes per day
+
+There is no structured log line that captures "Day N: requiredMeals=[…], detected=[…], missing=[…], injected=[…]" in a greppable format, and no `metadata.quality.missing_meals` field on the day. So when this regression happens we cannot tell which guard ran, what it saw, or why dinner didn't survive.
+
+### Bug D — meal-guard runs against pre-finalized activities
+
+The meal-guard at `action-generate-trip-day.ts:1967` runs in the multi-day finalization loop. It runs AFTER `universalQualityPass` (which already injected "Return to Hotel"). But the meal-guard is the last meaningful pass — there is no follow-up that re-checks whether dinner survived later mutations (e.g., the recently-added second-pass dead-gap fill we just shipped, the cross-day dedup, transport-collapse safety net).
+
+## Fix — four targeted changes
+
+### Layer 1 — Defer "Return to Hotel" when dinner is required but missing
+
+In `supabase/functions/generate-itinerary/universal-quality-pass.ts` Step 8 (lines ~254–305), before injecting the hotel-return card:
 
 ```text
-Step A  pipeline repair-day                    (line 1418)
-Step B  fillAfternoonDeadGaps   ←— gap was filled here
-Step C  cross-day restaurant dedup  (line 1460)   ←— removes non-primary dining → new gap
-Step D  universalQualityPass         (line 1517)   ←— shifts timings, removes dupes → new/wider gap
-        (NO second gap check after C/D)
+if (dayIndex < totalDays - 1 && result.length > 0) {
+  // NEW: skip hotel-return injection if this is a full-exploration day
+  // and no dinner is present yet. Let the meal-guard inject dinner first;
+  // a later save-time pass will add the hotel-return after dinner.
+  if (dinnerIsRequiredAndMissing(result, dayContext)) {
+     return result;  // skip Step 8 — meal-guard will fill dinner and a
+                     // subsequent terminal pass will append hotel-return.
+  }
+  ...existing logic...
+}
 ```
 
-Compounding factors:
+`dinnerIsRequiredAndMissing` calls `deriveMealPolicy` (or accepts the policy from the caller) and `detectMealSlots`; returns `true` only when the day requires dinner and none is present. Caller (`action-generate-trip-day.ts:1517`) already has `policy` available — pass it through `universalQualityPass` options.
 
-1. **Single-shot AI request, silent null** — `proposeGapFiller` (`supabase/functions/_shared/fill-gap.ts`) returns `null` on any of: AI fetch error, non-OK response, parse failure, generic-name guard, dedup hit, AI returning `{fallback:true}`. Caller leaves the gap and moves on. No retry, no fallback to a curated POI from `verified_venues` / fallback-restaurants table.
-2. **Cross-day dedup may remove lunch** — line 1507 `[CROSS-DAY DEDUP] "${act.title}" repeats with no replacement — REMOVING`. If lunch (e.g. "Lunch at All'Arco") gets removed and the title doesn't match the primary-meal regex (because the AI titled it "Cicchetti at All'Arco" instead of "Lunch at …"), the lunch is wiped without injection. That alone produces the 12:10 → 15:50 hole.
-3. **No final density assertion** — nothing logs/escalates when, after all passes, the day still has a > 180 m unplanned afternoon window. We rely entirely on the UI to surface it to the user.
+This turns the order into: `Boat 15:50 → Dinner 19:00 → Return to Hotel 20:30`. The day no longer reads as "ends at 5:20 PM" even before any guard fires.
 
-## Fix — three layers, mirrors the Michelin defense-in-depth pattern
+### Layer 2 — Fix `verified_venues` column name in save-time guard
 
-### Layer 1: Re-run the gap filler as the FINAL pre-save step
+In `action-save-itinerary.ts:322`:
 
-In both `action-generate-trip-day.ts` (line ~1517 area) and `action-generate-day.ts` (analogous spot), call `fillAfternoonDeadGaps` a **second time AFTER `universalQualityPass` and after cross-day dedup**, with the same options. This catches gaps newly-opened by Steps C and D. Same lockedIds, same isFirstDay/isLastDay guards apply, so locked Voyance picks and arrival/departure days are still respected.
+```ts
+.ilike('city', `%${destination.split(',')[0].trim()}%`)
+// →
+.ilike('destination', `%${destination.split(',')[0].trim()}%`)
+```
 
-### Layer 2: Make `proposeGapFiller` resilient
+Restores the curated venue pool for the last-resort save-time meal-guard, so when generation fails to inject dinner the save guard has real Venice (or any-city) options instead of the global emergency pool.
 
-Edit `supabase/functions/_shared/fill-gap.ts`:
+### Layer 3 — Add a final post-everything meal-guard pass
 
-- **Retry once** on `null` from the first AI attempt, this time with `temperature: 0.6` and an explicit instruction "Do NOT return fallback — pick the closest landmark/café/shop you know in this neighborhood."
-- **Curated fallback** — if both AI attempts fail, fall back to a real entry from `verified_venues` (Supabase) or `fallback-restaurants.ts` filtered by destination + neighborhood proximity (use `beforeAct.location.coordinates` if available). This guarantees a real, named insert instead of leaving a hole.
-- **Log the failure mode** when both AI + fallback yield nothing, so we can see the next regression in edge logs.
+In `action-generate-trip-day.ts`, immediately after the second-pass dead-gap fill (which we added in the previous turn at ~line 1558), add a final meal-guard pass that re-runs `enforceRequiredMealsFinalGuard` for the just-finalized day. This catches any meal that fell out of the day during cross-day dedup, universalQualityPass mutations, transport collapse, or the second-pass gap fill — i.e. it closes the same class of "downstream pass eats a meal" leak that the dead-gap second pass closes for unplanned windows.
 
-### Layer 3: Cross-day dedup must not silently delete a meal
+The existing meal-guard at line 1967 stays, but a per-day re-check at the end of the per-day pipeline gives us belt-and-braces coverage AND catches the case where a day is saved without going through the multi-day finalization loop (e.g., chain mode partial returns).
 
-In `action-generate-trip-day.ts` lines 1499-1510 (the `else` branch where no replacement is found), expand the "primary meal" preservation to detect meal-time-of-day rather than just the title regex:
+### Layer 4 — Observability
 
-- If `act.startTime` is in the canonical lunch (12:00-14:30) or dinner (18:00-22:00) window, **OR** the activity is `category === 'dining'`, treat it as a primary meal and **keep the duplicate** rather than removing it. The duplicate-detection memo already calls this out for the literal "Lunch at"/"Dinner at" prefix; we need to widen the time/category check so untitled meals (e.g. "Cicchetti at All'Arco" at 13:00) are also protected.
+In all three meal-guard call sites, emit a single greppable structured log per day:
 
-### Layer 4 (observability — non-blocking)
+```
+[MEAL_AUDIT] day=2 dest="Venice" mode=full_exploration required=[breakfast,lunch,dinner] detected=[breakfast,lunch] missing=[dinner] injected=[dinner] source="generate-trip-day"
+```
 
-After Layer 1's second `fillAfternoonDeadGaps` run, compute a final-day dead-gap report and:
+And persist on the day:
 
-- `console.warn('[QUALITY] Day N still has Xm unplanned 12:00-19:00 after all passes — gap-fill exhausted')` so we can grep edge logs for the next regression.
-- Persist a soft tag `metadata.quality.unfilled_dead_gap_minutes = X` on the day (no UI change required) so analytics can track frequency.
+```ts
+day.metadata = day.metadata || {};
+day.metadata.quality = day.metadata.quality || {};
+day.metadata.quality.meal_audit = {
+  required, detected_pre, missing_pre, injected, detected_post,
+  injected_at_hh_mm, source,
+};
+```
+
+No UI change required — this is purely diagnostic so the next regression is greppable in one query and analytics can track frequency.
 
 ### Tests
 
-- `pipeline/__tests__/fill-dead-gaps.second-pass.test.ts` — given a day where step C removes lunch, the second `fillAfternoonDeadGaps` call inserts a real activity into the resulting gap.
-- `_shared/__tests__/fill-gap.retry.test.ts` — when AI returns `{fallback:true}` once then a real venue, returns the real venue. When both attempts fail, a curated fallback is returned.
-- `action-generate-trip-day.dedup.test.ts` — a non-prefixed meal at 13:15 (`"Cicchetti at All'Arco"`, category `dining`) is preserved by cross-day dedup even with no replacement.
+- `meal-policy.test.ts` — extend with a Venice day-2 fixture: boat tour ending 17:20, no dinner. Run end-to-end pipeline harness; assert dinner is injected AND scheduled at 18:00–22:00 AND the "Return to Hotel" card (if any) is AFTER the dinner.
+- `universal-quality-pass.test.ts` — assert Step 8 skips hotel-return injection when `dinnerIsRequiredAndMissing` returns true; asserts it still injects when dinner is present.
+- `action-save-itinerary.fallback.test.ts` (new) — mock the `verified_venues` query, assert it's called with `destination` and not `city`.
 
 ### Memory
 
-Append to existing `mem://features/itinerary/auto-buffer-and-dead-gap`:
+Update `mem://constraints/itinerary/believable-human-pacing-principle` (or create a new memory `mem://constraints/itinerary/dinner-required-defer-hotel-return`) with:
 
-> Dead-gap auto-fill must run TWICE: once after repair-day and once again after cross-day dedup + universalQualityPass, because both later passes can re-open gaps. `proposeGapFiller` retries once with lower temperature and falls back to `verified_venues` / fallback-restaurants when AI declines. Cross-day dining dedup never removes a meal-time activity (12:00-14:30 or 18:00-22:00) without a replacement, even if the title lacks the literal "Lunch at" / "Dinner at" prefix.
+> **Hotel-return defers to dinner.** `universalQualityPass` Step 8 must NOT inject "Return to Hotel" when the day requires dinner and dinner is not yet present — the meal-guard runs later and the hotel-return card carries semantic finality that masks the missing dinner. Order MUST be `last activity → dinner → return to hotel`. Save-time meal-guard queries `verified_venues` by `destination` (not `city`).
 
 ## Files
 
-- **Edit** `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — second `fillAfternoonDeadGaps` call after universalQualityPass; widen primary-meal guard in cross-day dedup (lines ~1499–1510).
-- **Edit** `supabase/functions/generate-itinerary/action-generate-day.ts` — same second gap-fill call.
-- **Edit** `supabase/functions/_shared/fill-gap.ts` — retry-with-lower-temperature + curated fallback path.
-- **Edit** `supabase/functions/generate-itinerary/pipeline/fill-dead-gaps.ts` — emit final-pass density warning + write `metadata.quality.unfilled_dead_gap_minutes`.
-- **New tests** in `pipeline/__tests__/`, `_shared/__tests__/`, plus a dedup test.
-- **Memory** — append to `mem://features/itinerary/auto-buffer-and-dead-gap`.
+- **Edit** `supabase/functions/generate-itinerary/universal-quality-pass.ts` — Step 8 dinner-required guard; thread `mealPolicy` through options.
+- **Edit** `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — pass policy into universalQualityPass options; add final per-day meal-guard pass right after second-pass dead-gap fill; emit `[MEAL_AUDIT]` log.
+- **Edit** `supabase/functions/generate-itinerary/action-generate-day.ts` — pass policy into universalQualityPass options; emit `[MEAL_AUDIT]` log.
+- **Edit** `supabase/functions/generate-itinerary/action-save-itinerary.ts` — fix column name `city` → `destination`; emit `[MEAL_AUDIT]` log; persist `metadata.quality.meal_audit`.
+- **New tests** in `meal-policy.test.ts`, `universal-quality-pass.test.ts`, `action-save-itinerary.fallback.test.ts`.
+- **Memory** — new `mem://constraints/itinerary/dinner-required-defer-hotel-return` referenced from `mem://index.md` Memories.
 
-No DB schema changes. No UI changes (the existing DeadGapBanner remains as the user-visible safety net for days that still slip through).
+No DB schema changes. No UI changes.

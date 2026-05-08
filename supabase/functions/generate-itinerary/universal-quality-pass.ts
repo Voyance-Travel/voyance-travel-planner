@@ -53,6 +53,14 @@ export interface UniversalQualityOptions {
   lockedActivities?: any[];
   usedRestaurants?: string[];
   hotelName?: string;
+  /**
+   * Required meals for this day (from deriveMealPolicy). When provided, Step 8
+   * (hotel-return injection) is DEFERRED if dinner is required but not yet
+   * present in `activities`. The meal-guard runs later and would otherwise
+   * inject dinner AFTER a 17:30 hotel-return card, masking the missing meal in
+   * the UI (the hotel-return reads as the day's terminal anchor).
+   */
+  requiredMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
 }
 
 // Categories to skip for cross-day venue dedup (these repeat legitimately)
@@ -64,6 +72,56 @@ const DEDUP_SKIP_CATS = new Set([
 // MAIN ORCHESTRATOR
 // =============================================================================
 
+/**
+ * Step 8 helper — inject "Return to {hotel}" right after the last late-evening
+ * activity (when last activity ends 17:00–23:59). Extracted so the orchestrator
+ * can defer this step (e.g., when dinner is required-but-missing).
+ */
+function runStep8(result: any[], dayIndex: number, hotelName?: string): void {
+  if (!result || result.length === 0) return;
+  const lastActivity = result[result.length - 1];
+  const lastCat = String(lastActivity?.category || '').toUpperCase();
+  const lastTitle = String(lastActivity?.title || '');
+  const alreadyReturn =
+    lastCat === 'STAY' ||
+    lastCat === 'ACCOMMODATION' ||
+    /return.*hotel|back.*hotel|return\s+to/i.test(lastTitle);
+  if (alreadyReturn) return;
+
+  const candidate = lastActivity?.end_time || lastActivity?.endTime || '';
+  const m = String(candidate).match(/(\d{1,2}):(\d{2})/);
+  let startTime24: string | null = null;
+  if (m) {
+    const h = parseInt(m[1], 10);
+    if (h >= 17 && h <= 23) startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
+  }
+  if (!startTime24) {
+    console.warn(`[QUALITY] Skipped hotel return injection on Day ${dayIndex + 1}: last activity ends at "${candidate}" (need 17:00–23:59)`);
+    return;
+  }
+  const [sh, sm] = startTime24.split(':').map((n) => parseInt(n, 10));
+  const endMins = Math.min(sh * 60 + sm + 30, 23 * 60 + 59);
+  const endTime24 = `${String(Math.floor(endMins / 60)).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
+  const resolvedHotel = (hotelName && hotelName.trim()) || '';
+  result.push({
+    title: resolvedHotel ? `Return to ${resolvedHotel}` : 'Return to Your Hotel',
+    venue_name: resolvedHotel || 'Your Hotel',
+    category: 'accommodation',
+    start_time: startTime24,
+    startTime: startTime24,
+    end_time: endTime24,
+    endTime: endTime24,
+    cost_per_person: 0,
+    cost: { amount: 0, currency: 'USD' },
+    description: 'Return to your hotel for a restful night.',
+    is_free: true,
+    price_per_person: 0,
+    skipEnrichment: true,
+  });
+  console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}`);
+}
+
+
 export async function universalQualityPass(
   activities: any[],
   options: UniversalQualityOptions,
@@ -72,6 +130,7 @@ export async function universalQualityPass(
     city, country, dnaTier, dnaArchetype, dayIndex, totalDays,
     usedVenueNames, arrivalTime, departureTime, departureTransportType,
     dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants, hotelName,
+    requiredMeals,
   } = options;
 
   // Compute DNA-aware dining config internally
@@ -253,56 +312,39 @@ export async function universalQualityPass(
 
   // ── Step 8: Ensure hotel return at end of day (except departure day) ──
   if (dayIndex < totalDays - 1 && result.length > 0) {
-    const lastActivity = result[result.length - 1];
-    const lastCat = (lastActivity?.category || '').toUpperCase();
-    const lastTitle = String(lastActivity?.title || '');
-    const alreadyReturn =
-      lastCat === 'STAY' ||
-      lastCat === 'ACCOMMODATION' ||
-      /return.*hotel|back.*hotel|return\s+to/i.test(lastTitle);
-    if (!alreadyReturn) {
-      // Resolve a sane start time. Reject pre-dawn (00:00–04:59) inheritance —
-      // that's the wraparound that hoists the entry to the top of the day.
-      // Also reject before-17:00 — a hotel return at lunchtime is nonsense
-      // and means the day truly has no late activity to return from.
-      const candidate = lastActivity?.end_time || lastActivity?.endTime || '';
-      const m = String(candidate).match(/(\d{1,2}):(\d{2})/);
-      let startTime24: string | null = null;
-      if (m) {
-        const h = parseInt(m[1], 10);
-        if (h >= 17 && h <= 23) startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
-      }
-      // Skip injection if no late-evening anchor exists. Better to leave the
-      // day open than to plant a phantom hotel return at 09:00 or 00:30.
-      if (startTime24) {
-        // Clamp endTime to 23:59 — never wrap past midnight.
-        const [sh, sm] = startTime24.split(':').map((n) => parseInt(n, 10));
-        const endMins = Math.min(sh * 60 + sm + 30, 23 * 60 + 59);
-        const endTime24 = `${String(Math.floor(endMins / 60)).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
-        const resolvedHotel = (hotelName && hotelName.trim()) || '';
-        result.push({
-          title: resolvedHotel ? `Return to ${resolvedHotel}` : 'Return to Your Hotel',
-          venue_name: resolvedHotel || 'Your Hotel',
-          category: 'accommodation',
-          start_time: startTime24,
-          startTime: startTime24,
-          end_time: endTime24,
-          endTime: endTime24,
-          cost_per_person: 0,
-          cost: { amount: 0, currency: 'USD' },
-          description: 'Return to your hotel for a restful night.',
-          is_free: true,
-          price_per_person: 0,
-          // Mark so enrichment skips Google Places lookup (would otherwise
-          // pick the first matching "hotel" in the city — bug source).
-          skipEnrichment: true,
-        });
-        console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}`);
+    // DEFERRAL: If this day requires dinner and dinner is not yet present,
+    // SKIP hotel-return injection. The meal-guard runs later and will inject
+    // dinner; injecting "Return to Hotel" now would either (a) take the
+    // terminal slot and visually end the day at 17:30, or (b) sort BEFORE the
+    // 19:00 dinner and still read as "day ends after the boat tour" in the UI.
+    // A subsequent terminal cleanup / save-time pass will append the
+    // hotel-return card AFTER dinner.
+    const dinnerRequired = Array.isArray(requiredMeals) && requiredMeals.includes('dinner');
+    if (dinnerRequired) {
+      const DINNER_DRINKS_RE = /\b(cocktails?|nightcap|drinks?|bar|lounge|aperitifs?|speakeasy|aperitivo)\b/i;
+      const hasDinner = result.some((a: any) => {
+        const cat = String(a?.category || '').toLowerCase();
+        const title = String(a?.title || '').toLowerCase();
+        if (!cat.includes('dining') && !cat.includes('food') && !cat.includes('restaurant')) return false;
+        if (/\b(dinner|supper)\b/i.test(title)) return true;
+        const t = String(a?.startTime || a?.start_time || '');
+        const m = t.match(/(\d{1,2}):(\d{2})/);
+        if (!m) return false;
+        const mins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+        if (mins < 17 * 60 || mins > 22 * 60) return false;
+        return !DINNER_DRINKS_RE.test(title);
+      });
+      if (!hasDinner) {
+        console.log(`[QUALITY] Day ${dayIndex + 1}: deferring hotel-return injection — dinner is required but not yet present (meal-guard will fill it; terminal pass will append hotel-return after dinner)`);
+        // Skip Step 8 only — Step 8b (predawn strip) and Step 9 still run below.
       } else {
-        console.warn(`[QUALITY] Skipped hotel return injection on Day ${dayIndex + 1}: last activity ends at "${candidate}" (need 17:00–23:59)`);
+        runStep8(result, dayIndex, hotelName);
       }
+    } else {
+      runStep8(result, dayIndex, hotelName);
     }
   }
+
 
   // ── Step 8b: Strip any pre-dawn hotel-return entries that survived earlier passes ──
   stripPreDawnHotelReturns(result, { dayNumber: dayIndex + 1, label: 'QUALITY' });
