@@ -14,6 +14,22 @@
 const HOTEL_BOOKEND_TITLE_RE =
   /\b(?:return\s+to|back\s+to|freshen[- ]?up|check[- ]?in|nightcap|wind[- ]?down|settle\s+in|retire|end[- ]of[- ]day)\b/i;
 
+// Brand-aware hotel detection — catches "Walk to JW Marriott", "Shuttle to
+// Cipriani", "Return to Aman Venice" etc. The bare-word "hotel" check misses
+// every real branded hotel name. See plan.md §1.
+const HOTEL_BRAND_RE =
+  /\b(?:hotel|hostel|inn|resort|lodge|ryokan|riad|guesthouse|guest\s*house|b&b|jw\s*marriott|marriott|hilton|hyatt|park\s*hyatt|grand\s*hyatt|andaz|ritz[\-\s]?carlton|four\s*seasons|st\.?\s*regis|peninsula|aman|amanyara|amanjena|belmond|cipriani|gritti|danieli|metropole|bauer|kempinski|rosewood|mandarin\s*oriental|raffles|bvlgari|bulgari|conrad|edition|w\s+(?:hotel|venice|paris|rome|new\s*york)|sofitel|fairmont|shangri[\-\s]?la|intercontinental|le\s*meridien|westin|sheraton|nobu\s*hotel|nh\s*collection|melia|small\s*luxury|relais\s*&?\s*ch[âa]teaux)\b/i;
+
+function isHotelLikeText(text: string, hotelName?: string | null): boolean {
+  if (!text) return false;
+  if (HOTEL_BRAND_RE.test(text)) return true;
+  if (hotelName && hotelName.length >= 3) {
+    const needle = hotelName.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (needle && text.toLowerCase().includes(needle)) return true;
+  }
+  return false;
+}
+
 const ACCOM_CATS = new Set(['accommodation', 'stay', 'hotel']);
 const TRANSPORT_CATS = new Set(['transport', 'transportation']);
 
