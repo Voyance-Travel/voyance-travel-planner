@@ -12,7 +12,7 @@ import { ledgerCheck } from './ledger-check.ts';
 import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
-import { scrubBodyPromptLeaks } from '../_shared/prompt-leak-scrub.ts';
+import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../_shared/prompt-leak-scrub.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
