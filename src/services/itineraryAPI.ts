@@ -398,6 +398,20 @@ export async function generateItinerary(
     }
     
     if (data?.day) {
+      // Run the persist-day contract on the raw generator output BEFORE
+      // we upsert it into itinerary_days for live progress rendering.
+      // This is the one remaining client-side write path that bypasses
+      // the backend persistTripItinerary contract, and was the source of
+      // the "Day 2 12:15 AM hotel bleed", "find a local spot", "(slot)",
+      // and "Spa Time — find a venue" rows users saw live mid-generation.
+      try {
+        const { cleanActivitiesForPersist } = await import('@/lib/itinerary/persistDayContract');
+        if (Array.isArray(data.day.activities)) {
+          data.day.activities = cleanActivitiesForPersist(data.day.activities, { dayNumber });
+        }
+      } catch (e) {
+        console.warn('[ItineraryAPI] client persist-day contract failed (non-blocking):', e);
+      }
       // Tag the day with city info for the UI
       if (cityInfo) {
         data.day.city = cityInfo.cityName;

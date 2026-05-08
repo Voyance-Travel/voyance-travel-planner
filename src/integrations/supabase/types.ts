@@ -9844,6 +9844,7 @@ export type Database = {
         Args: { p_force_rotate?: boolean; p_trip_id: string }
         Returns: Json
       }
+      scrub_itinerary_activities: { Args: { acts: Json }; Returns: Json }
       submit_client_intake: {
         Args: {
           p_allergies?: string[]
