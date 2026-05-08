@@ -262,14 +262,39 @@ export async function universalQualityPass(
 
   // ── Step 8: Ensure hotel return at end of day (except departure day) ──
   if (dayIndex < totalDays - 1 && result.length > 0) {
-    const lastActivity = result[result.length - 1];
-    const lastCat = (lastActivity?.category || '').toUpperCase();
-    const lastTitle = String(lastActivity?.title || '');
-    const alreadyReturn =
-      lastCat === 'STAY' ||
-      lastCat === 'ACCOMMODATION' ||
-      /return.*hotel|back.*hotel|return\s+to/i.test(lastTitle);
-    if (!alreadyReturn) {
+    // DEFERRAL: If this day requires dinner and dinner is not yet present,
+    // SKIP hotel-return injection. The meal-guard runs later and will inject
+    // dinner; injecting "Return to Hotel" now would either (a) take the
+    // terminal slot and visually end the day at 17:30, or (b) sort BEFORE the
+    // 19:00 dinner and still read as "day ends after the boat tour" in the UI.
+    // A subsequent terminal cleanup / save-time pass will append the
+    // hotel-return card AFTER dinner.
+    const dinnerRequired = Array.isArray(requiredMeals) && requiredMeals.includes('dinner');
+    if (dinnerRequired) {
+      const DINNER_DRINKS_RE = /\b(cocktails?|nightcap|drinks?|bar|lounge|aperitifs?|speakeasy|aperitivo)\b/i;
+      const hasDinner = result.some((a: any) => {
+        const cat = String(a?.category || '').toLowerCase();
+        const title = String(a?.title || '').toLowerCase();
+        if (!cat.includes('dining') && !cat.includes('food') && !cat.includes('restaurant')) return false;
+        if (/\b(dinner|supper)\b/i.test(title)) return true;
+        const t = String(a?.startTime || a?.start_time || '');
+        const m = t.match(/(\d{1,2}):(\d{2})/);
+        if (!m) return false;
+        const mins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+        if (mins < 17 * 60 || mins > 22 * 60) return false;
+        return !DINNER_DRINKS_RE.test(title);
+      });
+      if (!hasDinner) {
+        console.log(`[QUALITY] Day ${dayIndex + 1}: deferring hotel-return injection — dinner is required but not yet present (meal-guard will fill it; terminal pass will append hotel-return after dinner)`);
+        // Skip Step 8 only — Step 8b (predawn strip) and Step 9 still run below.
+      } else {
+        runStep8(result, dayIndex, hotelName);
+      }
+    } else {
+      runStep8(result, dayIndex, hotelName);
+    }
+  }
+
       // Resolve a sane start time. Reject pre-dawn (00:00–04:59) inheritance —
       // that's the wraparound that hoists the entry to the top of the day.
       // Also reject before-17:00 — a hotel return at lunchtime is nonsense
