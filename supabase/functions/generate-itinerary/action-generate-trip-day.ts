@@ -1499,10 +1499,24 @@ async function _handleGenerateTripDayInner(
         }
         usedNorm.add(extractRestaurantVenueName(replacementName));
       } else {
-        // ZERO-TOLERANCE: No replacement available — but NEVER remove primary meals
-        const isPrimaryMeal = /\b(?:breakfast|lunch|dinner|brunch)\b/i.test(act.title || '');
+        // ZERO-TOLERANCE: No replacement available — but NEVER remove primary meals.
+        // Widened guard: protect any dining-category activity OR any activity scheduled
+        // in the canonical lunch (12:00-14:30) or dinner (18:00-22:00) windows, even if
+        // the title doesn't carry the literal "Lunch at"/"Dinner at" prefix (e.g.
+        // "Cicchetti at All'Arco" at 13:00 is still a primary meal).
+        const titleHasPrefix = /\b(?:breakfast|lunch|dinner|brunch)\b/i.test(act.title || '');
+        const startMin = (() => {
+          const m = String(act.startTime || '').match(/(\d{1,2}):(\d{2})/);
+          return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
+        })();
+        const inMealWindow =
+          startMin !== null &&
+          ((startMin >= 12 * 60 && startMin <= 14 * 60 + 30) ||
+           (startMin >= 18 * 60 && startMin <= 22 * 60));
+        const isDiningCat = (act.category || '').toLowerCase() === 'dining';
+        const isPrimaryMeal = titleHasPrefix || isDiningCat || inMealWindow;
         if (isPrimaryMeal) {
-          console.warn(`[generate-trip-day] ⚠️ CROSS-DAY DEDUP: "${act.title}" repeats but is PRIMARY MEAL — KEEPING (duplicate > missing meal)`);
+          console.warn(`[generate-trip-day] ⚠️ CROSS-DAY DEDUP: "${act.title}" repeats but is PRIMARY MEAL (cat=${act.category}, time=${act.startTime}) — KEEPING (duplicate > missing meal)`);
         } else {
           console.warn(`[generate-trip-day] 🚫 CROSS-DAY DEDUP: "${act.title}" repeats with no replacement — REMOVING`);
           dayResult.activities[i] = null; // Mark for removal
@@ -1538,6 +1552,44 @@ async function _handleGenerateTripDayInner(
     // Sync usedVenues back from the Set for subsequent days
     for (const v of usedVenueSet) {
       if (!usedVenues.includes(v)) usedVenues.push(v);
+    }
+  }
+
+  // ── SECOND-PASS DEAD-GAP FILL ─────────────────────────────────────────────
+  // Cross-day dedup (above) and universalQualityPass can re-open afternoon gaps
+  // by removing/shifting activities. Re-run fillAfternoonDeadGaps as the final
+  // pre-save step so the user never sees a 3h+ unplanned afternoon window.
+  if (dayResult?.activities?.length > 0) {
+    try {
+      const { fillAfternoonDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
+      const lockedIdSet = new Set<string>(lockedActivitiesForDay.map((l: any) => l.id));
+      const filled2 = await fillAfternoonDeadGaps(dayResult.activities, {
+        destination: cityInfo?.cityName || destination,
+        isFirstDay,
+        isLastDay,
+        isLastDayInCity,
+        archetype: (tripMeta?.travel_dna_primary as string | undefined) || undefined,
+        dietaryRestrictions: (tripMeta?.dietary_restrictions as string[] | undefined) || [],
+        budgetTier: (tripMeta?.budget_tier as string | undefined) || 'standard',
+        tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
+        lockedIds: lockedIdSet,
+      });
+      if (filled2.inserted.length > 0) {
+        console.log(`[generate-trip-day] 2nd-pass: filled ${filled2.inserted.length} dead gap(s) re-opened by post-processing on day ${dayNumber}`);
+        dayResult.activities = filled2.activities;
+      }
+      // Density observability — flag any remaining ≥3h afternoon gap so we can
+      // grep edge logs for the next regression.
+      const { reportRemainingAfternoonDeadGap } = await import('./pipeline/fill-dead-gaps.ts');
+      const remaining = reportRemainingAfternoonDeadGap(dayResult.activities);
+      if (remaining >= 180) {
+        console.warn(`[QUALITY] Day ${dayNumber} still has ${remaining}m unplanned 12:00-19:00 after all passes — gap-fill exhausted`);
+        dayResult.metadata = dayResult.metadata || {};
+        dayResult.metadata.quality = dayResult.metadata.quality || {};
+        dayResult.metadata.quality.unfilled_dead_gap_minutes = remaining;
+      }
+    } catch (gapErr) {
+      console.warn('[generate-trip-day] 2nd-pass dead-gap fill failed (non-blocking):', gapErr);
     }
   }
 

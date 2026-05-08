@@ -1257,6 +1257,15 @@ export async function handleGenerateDay(
             normalizedActivities = filled.activities;
             generatedDay.activities = normalizedActivities;
           }
+          // Density observability — flag any remaining ≥3h afternoon gap.
+          const { reportRemainingAfternoonDeadGap } = await import('./pipeline/fill-dead-gaps.ts');
+          const remaining = reportRemainingAfternoonDeadGap(normalizedActivities);
+          if (remaining >= 180) {
+            console.warn(`[QUALITY] Day ${dayNumber} still has ${remaining}m unplanned 12:00-19:00 after all passes — gap-fill exhausted`);
+            generatedDay.metadata = generatedDay.metadata || {};
+            generatedDay.metadata.quality = generatedDay.metadata.quality || {};
+            generatedDay.metadata.quality.unfilled_dead_gap_minutes = remaining;
+          }
         } catch (gapErr) {
           console.warn('[pipeline] Dead-gap auto-fill failed (non-blocking):', gapErr);
         }

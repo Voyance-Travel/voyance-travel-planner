@@ -147,3 +147,30 @@ export async function fillAfternoonDeadGaps(
 
   return { activities: work, inserted };
 }
+
+/**
+ * Inspect a finalized day for any remaining ≥180-min unplanned afternoon window.
+ * Returns the largest such gap in minutes (0 if none). Non-mutating.
+ */
+export function reportRemainingAfternoonDeadGap(activities: any[]): number {
+  if (!Array.isArray(activities) || activities.length < 2) return 0;
+  const sorted = [...activities].sort((a, b) => {
+    const sa = parseTime(a?.startTime) ?? 0;
+    const sb = parseTime(b?.startTime) ?? 0;
+    return sa - sb;
+  });
+  let largest = 0;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const currEnd = parseTime(sorted[i]?.endTime) ?? parseTime(sorted[i]?.startTime);
+    const nextStart = parseTime(sorted[i + 1]?.startTime);
+    if (currEnd === null || nextStart === null) continue;
+    const gap = nextStart - currEnd;
+    if (gap < MIN_GAP_MIN) continue;
+    const overlapStart = Math.max(currEnd, AFTERNOON_START_MIN);
+    const overlapEnd = Math.min(nextStart, AFTERNOON_END_MIN);
+    if (overlapEnd - overlapStart < MIN_USABLE_OVERLAP_MIN) continue;
+    if (gap > largest) largest = gap;
+  }
+  return largest;
+}
+
