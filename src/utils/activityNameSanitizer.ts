@@ -311,6 +311,16 @@ const META_COMMENTARY_RE = /(?:^|\.\s*)This\s+(?:focuses on|ensures|provides|cre
 const SYSTEM_TERM_RE = /(?:^|\.\s*)[^.]*\b(?:archetype|hard\s+block|soft\s+block|generation\s+rule|as per arche)\b[^.]*\.?/gi;
 const VOYANCE_PICK_RE = /\s*(?:Voyance\s+Pick|Hotel\s+Pick)\s*/gi;
 
+// Prompt-template label leaks: "Reservation Urgency: .", "Booking Window: 1 week.",
+// "Lead Time: 2-4 weeks." — labels echoed from the generator prompt that should
+// never appear in user-facing description/tips. See
+// supabase/functions/_shared/prompt-leak-scrub.ts for the server-side twin.
+const RESERVATION_LABEL_LEAK_RE =
+  /\b(?:(?:Reservation|Booking)\s+(?:Urgency|Window|Lead\s*Time)|Lead\s*Time)\s*:\s*[^.\n]*\.?/gi;
+// Orphan "Label: ." with empty/dot-only value occupying its own segment.
+const ORPHAN_EMPTY_LABEL_RE =
+  /(?:^|(?<=[.!?]\s)|\n)\s*[A-Z][A-Za-z][A-Za-z ]{1,40}\s*:\s*[.\u2026]?\s*(?=$|\n|[.!?]\s|[A-Z])/g;
+
 export function sanitizeActivityText(text: string | undefined | null): string {
   if (!text) return '';
   return text
