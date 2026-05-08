@@ -35,6 +35,7 @@ import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../f
 import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
 import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
 import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../../_shared/prompt-leak-scrub.ts';
+import { scrubActivity, formatOps, opsHadChange } from '../../_shared/scrub-activity.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 
 // =============================================================================
