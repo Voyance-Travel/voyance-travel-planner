@@ -2621,9 +2621,12 @@ export function EditorialItinerary({
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
 
-      // Single follow-up re-check so Trip Health updates to the new state.
-      // Scheduled after React commits so we read the patched activities.
-      setTimeout(() => { handleRefreshDay(idx); }, 100);
+      // Single follow-up re-check ONLY when non-timing issues remain. Skipping
+      // the re-check on a clean cascade prevents a second `booking-changed`
+      // wave that latches the Payments "Reconciling…" badge.
+      if (nonTimingIssues.length > 0) {
+        setTimeout(() => { handleRefreshDay(idx); }, 100);
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fixTimingRequest?.nonce]);
