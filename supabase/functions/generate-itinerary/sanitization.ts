@@ -806,9 +806,21 @@ export function enforceBarNightcapPriceCap(activity: Record<string, any>, logPre
 
   if (!isBarActivity) return false;
 
-  // Don't cap if venue is a known Michelin restaurant
-  for (const key of Object.keys(KNOWN_FINE_DINING_STARS)) {
-    if (title.includes(key) || venueName.includes(key)) return false;
+  // Don't cap if venue is a known Michelin restaurant — UNLESS the title explicitly
+  // frames the visit as drinks/nightcap/café (e.g. "Gran Caffè Quadri nightcap" at
+  // the Michelin Quadri). In that case the bar cap MUST apply.
+  const drinksFraming = EXPLICIT_DRINKS_RE.test(combined);
+  if (!drinksFraming) {
+    for (const key of Object.keys(KNOWN_FINE_DINING_STARS)) {
+      if (title.includes(key) || venueName.includes(key)) return false;
+    }
+  } else {
+    for (const key of Object.keys(KNOWN_FINE_DINING_STARS)) {
+      if (title.includes(key) || venueName.includes(key)) {
+        console.warn(`[BAR_CAP_DRINKS_OVERRIDE] [${logPrefix}]: "${activity.title}" matched Michelin key "${key}" but title reads as drinks/nightcap — bypassing exemption, applying bar cap`);
+        break;
+      }
+    }
   }
 
   const currentPrice = resolveActivityPrice(activity);
