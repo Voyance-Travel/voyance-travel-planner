@@ -1,76 +1,69 @@
 ## Root cause
 
-The "scrub" layer added in the last 2 fix passes (DB trigger + JS persist-day contract + edge contract) is dropping legitimate activities, which makes generation finish and then immediately flip `itinerary_status` to `failed` (because `emptyItineraryDetected` fires once the days collapse).
+The model is leaking another prompt token — `(FLEX_WINDOW)` — into activity titles (Day 1 "Open Afternoon - Wander Castello (FLEX_WINDOW)"). It comes from the spontaneous-planning section of `archetype-constraints.ts` (lines 2271–2275: "Required FLEX WINDOW format"). Same class of bug as `(slot)` and `(AESTHETIC slot)`.
 
-I confirmed it on the live DB:
+The current artifact strippers don't catch it:
 
-```sql
-select public.scrub_itinerary_activities('[
-  {"title":"Lunch at Pizzeria","description":"Find a local spot near the river"},
-  {"title":"Museum Visit","description":"Explore the (venue) at noon"},
-  {"title":"Coffee","description":"Pick a cafe nearby"},
-  {"title":"Real Activity","description":"A great time"}
-]'::jsonb);
--- → returns ONLY "Real Activity"
+- `PROMPT_ARTIFACT_RE` in `src/lib/itinerary/persistDayContract.ts` and `supabase/functions/_shared/persist-day-contract.ts` only matches `(... slot|placeholder)` — requires the literal trailing word `slot` or `placeholder`.
+- `_scrub_itinerary_prompt_artifacts` DB trigger uses the same narrow pattern.
+- `src/utils/textSanitizer.ts` line 31 only matches a hard-coded label list (`AESTHETIC|NARRATIVE|MOOD|...`) — `FLEX_WINDOW` isn't in it, and the list never matches tokens with underscores.
+
+`(FLEX_WINDOW)` slips past all four layers and renders straight into the card title.
+
+## Fix scope (4 surgical regex updates — no behavior change)
+
+Add a second alternative that catches **bare ALL-CAPS tokens containing an underscore** (the prompt-template convention) — e.g. `(FLEX_WINDOW)`, `(NARRATIVE_MOOD)`, `(DEEP_CONTEXT)`. The underscore requirement keeps it from matching legit acronyms like `(USA)`, `(UK)`, `(NYC)`.
+
+New combined pattern:
+```
+\(\s*(?:
+  (?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)   // existing
+  |
+  [A-Z][A-Z0-9]*_[A-Z0-9_]+                            // NEW: ALLCAPS_WITH_UNDERSCORE
+)\s*\)
 ```
 
-Three of four real activities get nuked because their **descriptions** contain phrases the AI uses constantly:
-- "find a local spot…", "find a cafe nearby"
-- "pick a restaurant", "pick a cafe"
-- parenthesised words like "(venue)" / "(name)" inside description prose
+Apply in:
 
-Same bug in `src/lib/itinerary/persistDayContract.ts` and `supabase/functions/_shared/persist-day-contract.ts` — they build a `placeholderBlob` that includes `description`, then run the union regex over the whole blob.
+1. `src/lib/itinerary/persistDayContract.ts` — update `PROMPT_ARTIFACT_TEST_RE` and `PROMPT_ARTIFACT_REPLACE_RE` (browser strip + drop pass).
+2. `supabase/functions/_shared/persist-day-contract.ts` — update `PROMPT_ARTIFACT_RE` (edge save-itinerary contract).
+3. `supabase/functions/_shared/persist-itinerary.ts` — update its mirror artifact strip regex.
+4. `src/utils/textSanitizer.ts` — add the bare-ALLCAPS-underscore alternative so already-saved trips render cleanly without re-save.
 
-Trip evidence (last 24h):
-- `38f81fab` — completed 3/3 days, `itinerary_status: failed`, `itinerary_data.days = 0` (save dropped them).
-- `5f095e65` — 1/5 days, also `failed`.
-- 6 hours with zero new `itinerary_days` writes after the trigger went live.
+DB migration:
+5. Tighten `_scrub_itinerary_prompt_artifacts` PL/pgSQL function: extend its regex with the same bare-ALLCAPS-underscore alternative, so future inserts/updates strip `(FLEX_WINDOW)` from `title`/`name` and the snapshot at the DB boundary.
 
-## Fix scope (3 surgical changes — no business logic touched)
-
-### 1. DB trigger (migration)
-Rewrite `public.scrub_itinerary_activities` so:
-- **Description is no longer scanned.** Only `title`, `name`, `venue_name`, `venue.name`, `restaurant.name`, `location.name` participate.
-- The placeholder regex only fires when the field **is** the placeholder, not when it merely contains the words. Use anchored matches like `^\s*find\s+(a\s+)?(venue|local\s+spot|restaurant|cafe|café|bar|spot)\s*(in\s+.+)?\s*$`.
-- Drop the lone `(name)` / `(venue)` alternatives. Keep only `(slot)`, `(aesthetic slot)`, `(placeholder)` and `(<UPPERCASE_TAG> slot)` patterns.
-- Pre-dawn ghost rule unchanged.
-
-### 2. JS contracts (frontend + edge shared)
-In both `src/lib/itinerary/persistDayContract.ts` and `supabase/functions/_shared/persist-day-contract.ts`:
-- Remove `description` from the `placeholderBlob`.
-- Switch `PLACEHOLDER_NAME_RE` to anchored / field-equality semantics matching the trigger.
-- Keep the cross-city sweep, ghost-row sweep, and locked-row exemption exactly as they are.
-
-### 3. One-shot data repair
-Migration step that re-saves every recently-failed trip's `itinerary_data.days` from the surviving `itinerary_days` rows, then resets `itinerary_status` from `failed` → `ready` for trips whose `itinerary_days` are non-empty (limited to trips updated in the last 48h to avoid disturbing legitimately failed older runs).
+One-shot data repair (same migration): UPDATE existing `itinerary_days` and `trips.itinerary_data` rows where `title`/`name` matches the new pattern, scrubbing the token in place. Limited to last 14 days to avoid touching ancient data.
 
 ## Tests
 
-Add cases to `persist-day-contract.test.ts` and `persistDayContract.test.ts`:
-- "Lunch at Pizzeria" with description "find a cafe nearby" → **kept**.
-- "Museum Visit" with description "(venue) info" → **kept**.
-- Title literally `"Find a venue"` → **dropped**.
-- Title `"Spa Time — find a venue"` → **dropped**.
-- Title `"Day 1 (AESTHETIC slot)"` → **dropped**.
-- Pre-dawn "Return to Hotel" at 00:30 → **dropped**.
+Add cases to `src/lib/itinerary/__tests__/persistDayContract.test.ts` and `supabase/functions/_shared/persist-day-contract.test.ts`:
+- Title `"Open Afternoon - Wander Castello (FLEX_WINDOW)"` → artifact stripped, activity kept, title becomes `"Open Afternoon - Wander Castello"`.
+- Title `"Stroll San Marco (NARRATIVE_MOOD)"` → stripped.
+- Title `"Visit MoMA (NYC)"` → **NOT stripped** (no underscore, legit acronym).
+- Title `"Photo stop (USA)"` → **NOT stripped**.
+- Existing `(slot)` / `(AESTHETIC slot)` cases continue to pass.
 
-DB-side: after migration, re-run the SELECT above and assert all 4 rows survive except the literal-placeholder ones.
+Add to `src/utils/__tests__/textSanitizer.artifacts.test.ts`:
+- `sanitizeText("Wander Castello (FLEX_WINDOW)")` → `"Wander Castello"`.
 
 ## What this does NOT change
 
-- Universal locking (locked / user / manual / extracted / pinned rows still bypass everything).
-- Pre-dawn hotel ghost stripping.
-- Cross-city venue guard.
-- Any generator prompts, costs, payments, or UI.
+- No prompt edits (the generator can keep the FLEX WINDOW guidance — we just refuse to let the literal token survive to the user).
+- No business logic, no scoring, no costs, no locking, no cross-city sweep.
+- Bare-acronym parens in legit prose still pass through.
 
 ## Files
 
-- New migration: tightened `scrub_itinerary_activities` + 48h backfill of `itinerary_data.days` and `itinerary_status`.
-- Edit `src/lib/itinerary/persistDayContract.ts`.
-- Edit `supabase/functions/_shared/persist-day-contract.ts`.
-- Edit `src/lib/itinerary/__tests__/persistDayContract.test.ts`.
-- Edit `supabase/functions/_shared/persist-day-contract.test.ts`.
+- Edit `src/lib/itinerary/persistDayContract.ts`
+- Edit `supabase/functions/_shared/persist-day-contract.ts`
+- Edit `supabase/functions/_shared/persist-itinerary.ts`
+- Edit `src/utils/textSanitizer.ts`
+- Edit `src/lib/itinerary/__tests__/persistDayContract.test.ts`
+- Edit `supabase/functions/_shared/persist-day-contract.test.ts`
+- Edit `src/utils/__tests__/textSanitizer.artifacts.test.ts`
+- New migration: tighten `_scrub_itinerary_prompt_artifacts` + 14-day backfill scrub of `itinerary_days` + `trips.itinerary_data`.
 
 ## Memory update after fix
 
-Add `mem://constraints/itinerary/placeholder-scrub-field-scope` recording: placeholder scrubbers must only inspect short identifier fields (title/name/venue.name), never description, and must use anchored equality — substring matches on prose were the cause of the 2026-05-08 "generation failed" outage.
+Append to `mem://technical/itinerary/stateful-regex-strip-bug`: prompt-artifact pattern set must cover `(slot)`/`(placeholder)` AND bare ALL-CAPS-with-underscore tokens like `(FLEX_WINDOW)`, `(NARRATIVE_MOOD)`, `(DEEP_CONTEXT)`. Hard-coded label allow-lists are fragile — the underscore convention is the durable signal.
