@@ -24,20 +24,28 @@
  * (universal locking protocol).
  */
 
+// Placeholder PROSE patterns. Tested ONLY against IDENTIFIER fields
+// (title/name/venue_name/venue.name/restaurant.name/location.name) — never
+// against `description`. Scanning descriptions matches legitimate prose
+// like "find a cafe nearby" / "pick a restaurant" and was the cause of
+// the 2026-05-08 "generation failed" outage.
 export const PLACEHOLDER_NAME_RE = new RegExp(
   [
     'find\\s+(?:a\\s+)?(?:venue|local\\s+spot|restaurant|cafe|café|bar|spot)',
-    'find\\s+a\\s+local\\s+spot\\s+in\\s+(?:the\\s+)?(?:destination|city|area|[a-z][a-z\\s]{1,40})',
     'pick\\s+(?:a\\s+)?(?:venue|local\\s+spot|restaurant|cafe|café|bar|spot)',
     '\\bplaceholder\\b',
     '\\bneeds\\s*venue\\b',
     'needsvenuepick',
     'spa\\s+time\\s*(?:[—\\-:]\\s*find)',
-    'tbd|t\\.b\\.d\\.',
-    '\\(\\s*(?:slot|aesthetic\\s+slot|placeholder|name|venue)\\s*\\)',
+    '\\btbd\\b|t\\.b\\.d\\.',
   ].join('|'),
   'i',
 );
+
+// Prompt-artifact tokens. Narrow — does NOT include bare `(name)` /
+// `(venue)` which routinely appear in legitimate description prose.
+export const PROMPT_ARTIFACT_RE =
+  /\(\s*(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder)\s*\)/i;
 
 const GHOST_CATEGORIES = new Set([
   'accommodation', 'hotel', 'lodging', 'stay',
@@ -99,12 +107,14 @@ export function enforcePersistDayContract<T = any>(
     if (!a) continue;
     const aa = a as any;
     const title = String(aa.title || aa.name || '');
-    // Combined text used for placeholder detection so leaks in name / venue /
-    // description fields don't slip past the contract when the title is clean.
-    const placeholderBlob = [
-      aa.title, aa.name, aa.venue_name, aa.description,
+    // IDENTIFIER fields only — never description. Description prose like
+    // "find a cafe nearby" must not trigger placeholder drops.
+    const idBlob = [
+      aa.title, aa.name, aa.venue_name,
       aa.venue?.name, aa.restaurant?.name, aa.location?.name,
     ].filter(Boolean).join(' | ');
+    // Description IS scanned, but only for prompt artifacts.
+    const fullBlob = [idBlob, aa.description].filter(Boolean).join(' | ');
     const cat = String(aa.category || aa.type || '').toLowerCase();
     const locked = isLockedRow(a);
 
@@ -125,14 +135,15 @@ export function enforcePersistDayContract<T = any>(
       continue;
     }
 
-    // 2. Placeholder names (covers wellness + meal + generic + prompt artifacts).
-    //    Check ALL venue-bearing fields, not just title — leaks have shown up
-    //    in name / venue_name / location.name on fresh generations.
-    if (PLACEHOLDER_NAME_RE.test(placeholderBlob)) {
-      const reason: ContractViolation = /\(\s*(?:slot|aesthetic\s+slot|placeholder|name|venue)\s*\)/i.test(placeholderBlob)
-        ? 'prompt-artifact'
-        : 'placeholder-name';
-      drops.push({ dayNumber: ctx.dayNumber, title, reason });
+    // 2. Prompt artifacts (identifier fields + description).
+    if (PROMPT_ARTIFACT_RE.test(fullBlob)) {
+      drops.push({ dayNumber: ctx.dayNumber, title, reason: 'prompt-artifact' });
+      continue;
+    }
+
+    // 3. Placeholder PROSE — identifier fields ONLY.
+    if (PLACEHOLDER_NAME_RE.test(idBlob)) {
+      drops.push({ dayNumber: ctx.dayNumber, title, reason: 'placeholder-name' });
       continue;
     }
 
