@@ -16,6 +16,7 @@
  */
 
 import { enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
+import { clampBookendEndTime } from '../_shared/clamp-bookend.ts';
 import { fixPlaceholdersForDay, nuclearPlaceholderSweep, nuclearWellnessSweep, nuclearCrossCitySweep } from './fix-placeholders.ts';
 import {
   checkAndApplyFreeVenue,
@@ -118,12 +119,9 @@ function runStep8(result: any[], dayIndex: number, hotelName?: string): void {
     price_per_person: 0,
     skipEnrichment: true,
   };
-  // Belt-and-braces: route through the shared bookend clamp so any future
-  // change to the cap (23:59) lives in one place.
-  // Imported lazily to avoid circular deps in test harnesses.
-  // deno-lint-ignore no-explicit-any
-  const { clampBookendEndTime } = require ? require('../_shared/clamp-bookend.ts') : { clampBookendEndTime: null };
-  if (typeof clampBookendEndTime === 'function') clampBookendEndTime(card, { label: 'STEP8' });
+  // Belt-and-braces: route through the shared bookend clamp so the 23:59 cap
+  // lives in exactly one place.
+  clampBookendEndTime(card, { label: 'STEP8' });
   result.push(card);
   console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}`);
 }
