@@ -2632,7 +2632,12 @@ export function EditorialItinerary({
   }, [fixTimingRequest?.nonce]);
 
   // Apply accepted refresh changes — patches activity startTime/endTime by ID
-  const handleApplyRefreshChanges = useCallback((dayIndex: number, changes: ProposedChange[]) => {
+  const handleApplyRefreshChanges = useCallback(async (dayIndex: number, changes: ProposedChange[]) => {
+    // Lazy-load the shared cascade to run a final consistency pass on the
+    // patched day. This guarantees the local commit is internally clean even
+    // if the server returned partial patches.
+    const { enforceTimingAndBuffers } = await import('@/utils/itinerary/timingCascade');
+
     setDays(prev => prev.map((day, dIdx) => {
       if (dIdx !== dayIndex) return day;
       const patchedActivities = day.activities.map(activity => {
@@ -2666,7 +2671,16 @@ export function EditorialItinerary({
         };
         return parseMin(a.startTime || a.time) - parseMin(b.startTime || b.time);
       });
-      return { ...day, activities: patchedActivities };
+
+      // Final cascade safety net — resolves any residual overlap/buffer drift
+      // produced by partial server patches. Locked rows stay put.
+      const lockedIds = new Set<string>(
+        (patchedActivities as any[])
+          .filter((a) => a?.locked === true || a?.isLocked === true || a?.lock_state === 'locked' || a?.userAdded === true || a?.pinned === true || a?.extracted === true)
+          .map((a) => String(a.id))
+      );
+      const cascade = enforceTimingAndBuffers(patchedActivities as any[], { lockedIds });
+      return { ...day, activities: cascade.activities as any };
     }));
     setHasChanges(true);
     // Clear refresh results for this day
@@ -2675,10 +2689,12 @@ export function EditorialItinerary({
       setRefreshResults(prev => { const next = { ...prev }; delete next[dayNum]; return next; });
     }
     // Notify Payments/Budget snapshots so their caches refetch in lockstep with
-    // the upcoming autosave + cost reprojection. Prevents a stale bucket sum
-    // from latching the "Reconciling…" badge on after Fix Timing.
+    // the upcoming autosave + cost reprojection. Tagged with reason+coalesceMs
+    // so PaymentsTab coalesces back-to-back Fix-Timing events into a single refetch.
     try {
-      window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
+      window.dispatchEvent(new CustomEvent('booking-changed', {
+        detail: { tripId, reason: 'fix_timing', coalesceMs: 1200 },
+      }));
     } catch {}
     toast.success(`Applied ${changes.length} change${changes.length !== 1 ? 's' : ''} to Day ${dayNum || dayIndex + 1}`);
   }, [days, tripId]);
