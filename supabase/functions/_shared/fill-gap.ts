@@ -121,42 +121,82 @@ OUTPUT (JSON only, no markdown):
   "rationale": "One short sentence (max 100 chars)."
 }`;
 
-  let aiResponse: Response;
-  try {
-    aiResponse = await fetch(LOVABLE_GATEWAY, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: 'Suggest one activity for the unplanned window.' },
-        ],
-        temperature: 0.85,
-        max_tokens: 400,
-      }),
-    });
-  } catch (e) {
-    console.error('[fill-gap] AI gateway fetch failed:', e);
-    return null;
-  }
+  // Two attempts: first creative, second tighter "must pick something" prompt.
+  const attempts: Array<{ temperature: number; suffix: string }> = [
+    { temperature: 0.85, suffix: '' },
+    {
+      temperature: 0.6,
+      suffix:
+        '\n\nIMPORTANT: Do NOT return {"fallback": true}. Even if uncertain, pick the closest well-known landmark, café, gelateria, gallery, or shop you know in this neighborhood. A real but mediocre choice beats an empty slot.',
+    },
+  ];
 
-  if (!aiResponse.ok) {
-    const txt = await aiResponse.text().catch(() => '');
-    console.warn('[fill-gap] AI gateway non-OK:', aiResponse.status, txt.slice(0, 200));
-    return null;
-  }
-
-  const aiData = await aiResponse.json();
-  const content: string = aiData?.choices?.[0]?.message?.content || '';
   let parsed: any = null;
-  try {
-    const m = content.match(/\{[\s\S]*\}/);
-    if (m) parsed = JSON.parse(m[0]);
-  } catch (e) {
-    console.warn('[fill-gap] parse failed:', e);
+  for (const attempt of attempts) {
+    let aiResponse: Response;
+    try {
+      aiResponse = await fetch(LOVABLE_GATEWAY, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: systemPrompt + attempt.suffix },
+            { role: 'user', content: 'Suggest one activity for the unplanned window.' },
+          ],
+          temperature: attempt.temperature,
+          max_tokens: 400,
+        }),
+      });
+    } catch (e) {
+      console.error('[fill-gap] AI gateway fetch failed (attempt):', e);
+      continue;
+    }
+
+    if (!aiResponse.ok) {
+      const txt = await aiResponse.text().catch(() => '');
+      console.warn('[fill-gap] AI gateway non-OK:', aiResponse.status, txt.slice(0, 200));
+      continue;
+    }
+
+    const aiData = await aiResponse.json();
+    const content: string = aiData?.choices?.[0]?.message?.content || '';
+    let candidate: any = null;
+    try {
+      const m = content.match(/\{[\s\S]*\}/);
+      if (m) candidate = JSON.parse(m[0]);
+    } catch (e) {
+      console.warn('[fill-gap] parse failed:', e);
+      continue;
+    }
+    if (!candidate || candidate.fallback) continue;
+
+    // Generic-name guard
+    const genericRe = /^(local|café|cafe|bistro|restaurant|bar|spa|museum|gallery|park|free time|afternoon|morning|evening|leisure|relax|explore)( |$)/i;
+    if (!candidate.title || genericRe.test(String(candidate.title).trim())) continue;
+
+    // Dedup against existing + avoid list (substring overlap)
+    const tLower = String(candidate.title).toLowerCase();
+    const dup = [...existingTitles, ...avoidIds].some(t => {
+      const tl = String(t).toLowerCase();
+      return tl === tLower
+        || (tl.length > 4 && tLower.includes(tl))
+        || (tLower.length > 4 && tl.includes(tLower));
+    });
+    if (dup) continue;
+
+    parsed = candidate;
+    break;
   }
-  if (!parsed || parsed.fallback) return null;
+
+  // Curated fallback when both AI attempts failed
+  if (!parsed) {
+    console.warn(`[fill-gap] AI exhausted both attempts for ${destination} (${gapStartTime}-${gapEndTime}); trying curated fallback`);
+    return await curatedFallback({
+      destination, startMin, endMin, existingTitles, avoidIds,
+      tripCurrency, opts,
+    });
+  }
 
   // Snap to window if AI returned out-of-window times
   const sMin = parseTime(parsed.startTime);
@@ -169,20 +209,6 @@ OUTPUT (JSON only, no markdown):
     parsed.startTime = minutesToTime(startMin);
     parsed.endTime = minutesToTime(startMin + dur);
   }
-
-  // Generic-name guard
-  const genericRe = /^(local|café|cafe|bistro|restaurant|bar|spa|museum|gallery|park|free time|afternoon|morning|evening|leisure|relax|explore)( |$)/i;
-  if (!parsed.title || genericRe.test(String(parsed.title).trim())) return null;
-
-  // Dedup against existing + avoid list (substring overlap)
-  const titleLower = String(parsed.title).toLowerCase();
-  const dup = [...existingTitles, ...avoidIds].some(t => {
-    const tl = String(t).toLowerCase();
-    return tl === titleLower
-      || (tl.length > 4 && titleLower.includes(tl))
-      || (titleLower.length > 4 && tl.includes(titleLower));
-  });
-  if (dup) return null;
 
   return {
     id: `gap-fill-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -198,3 +224,84 @@ OUTPUT (JSON only, no markdown):
     source: opts.source || 'fill_dead_gap',
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Curated fallback: query verified_venues for the destination as last resort.
+// Returns a real, named activity so we never leave a 3h+ hole in the day.
+// ─────────────────────────────────────────────────────────────────────────────
+interface CuratedFallbackArgs {
+  destination: string;
+  startMin: number;
+  endMin: number;
+  existingTitles: string[];
+  avoidIds: string[];
+  tripCurrency: string;
+  opts: { source?: string };
+}
+
+async function curatedFallback(args: CuratedFallbackArgs): Promise<FilledActivity | null> {
+  const { destination, startMin, endMin, existingTitles, avoidIds, tripCurrency, opts } = args;
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
+  const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    console.warn('[fill-gap] curated fallback unavailable: no service-role env');
+    return null;
+  }
+
+  try {
+    const { createClient } = await import('npm:@supabase/supabase-js@2.90.1');
+    const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+
+    const destNorm = destination.split(',')[0].trim();
+    const { data, error } = await supabase
+      .from('verified_venues')
+      .select('name, address, category, rating')
+      .ilike('destination', `%${destNorm}%`)
+      .in('category', ['museum', 'culture', 'gallery', 'shopping', 'cafe', 'café', 'activity', 'sightseeing', 'attraction'])
+      .order('rating', { ascending: false, nullsFirst: false })
+      .limit(20);
+
+    if (error || !data?.length) {
+      console.warn('[fill-gap] curated fallback: no verified_venues match for', destNorm, error?.message);
+      return null;
+    }
+
+    const avoidLower = new Set(
+      [...existingTitles, ...avoidIds].map(t => String(t).toLowerCase())
+    );
+    const pick = (data as any[]).find((v) => {
+      const nLower = String(v.name || '').toLowerCase();
+      if (!nLower) return false;
+      for (const a of avoidLower) {
+        if (a === nLower) return false;
+        if (a.length > 4 && nLower.includes(a)) return false;
+        if (nLower.length > 4 && a.includes(nLower)) return false;
+      }
+      return true;
+    });
+
+    if (!pick) {
+      console.warn('[fill-gap] curated fallback: all verified venues already used');
+      return null;
+    }
+
+    const dur = Math.min(90, endMin - startMin);
+    return {
+      id: `gap-fill-curated-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: pick.name,
+      description: `Visit ${pick.name} during your free afternoon window.`,
+      category: pick.category || 'activity',
+      startTime: minutesToTime(startMin),
+      endTime: minutesToTime(startMin + dur),
+      location: { name: pick.name, address: pick.address || '' },
+      cost: { amount: 0, currency: tripCurrency },
+      rationale: 'Curated fallback from verified venues.',
+      isLocked: false,
+      source: opts.source ? `${opts.source}_curated` : 'fill_dead_gap_curated',
+    };
+  } catch (e) {
+    console.error('[fill-gap] curated fallback threw:', e);
+    return null;
+  }
+}
+
