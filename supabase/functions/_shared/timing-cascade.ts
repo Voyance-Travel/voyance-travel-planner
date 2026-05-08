@@ -15,6 +15,8 @@
  * thread it through their own logging conventions.
  */
 
+import { clampBookendEndTime } from './clamp-bookend.ts';
+
 export interface CascadeActivity {
   id: string;
   title?: string;
@@ -28,7 +30,7 @@ export interface CascadeActivity {
 }
 
 export interface CascadeRepair {
-  type: 'same_start_fix' | 'overlap_fix' | 'buffer_fix' | 'dropped_past_midnight';
+  type: 'same_start_fix' | 'overlap_fix' | 'buffer_fix' | 'dropped_past_midnight' | 'bookend_clamped';
   activityId: string;
   activityTitle?: string;
   before?: string;
@@ -300,6 +302,26 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
     }
     return true;
   });
+
+  // Bookend cards survived the cutoff — clamp their endTime ≤ 23:59 so they
+  // never bleed into the next day.
+  for (const act of activities) {
+    if (!isEndOfDayBookend(act)) continue;
+    if (lockedIds.has(act.id)) continue;
+    const beforeStart = act.startTime;
+    const beforeEnd = act.endTime;
+    const res = clampBookendEndTime(act, { label: 'CASCADE_BOOKEND' });
+    if (res.changed) {
+      repairs.push({
+        type: 'bookend_clamped',
+        activityId: act.id,
+        activityTitle: act.title,
+        before: `${act.title} @ ${beforeStart}–${beforeEnd}`,
+        after: `${act.title} @ ${act.startTime}–${act.endTime}`,
+        message: `Clamped bookend "${act.title}" to end ≤ 23:59`,
+      });
+    }
+  }
 
   return { activities, repairs, droppedIds };
 }
