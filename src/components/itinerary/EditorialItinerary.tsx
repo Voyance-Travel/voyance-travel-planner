@@ -11122,7 +11122,7 @@ function ActivityRow({
     };
     const rawLocationName = sanitizeActivityText(activity.location?.name?.trim());
     const dedupedLocationName = (rawLocationName && rawLocationName !== activityTitle && !isPlaceholderLocation(rawLocationName)) ? rawLocationName : '';
-    const locationText = dedupedLocationName || (activity.location?.address && !isPlaceholderLocation(activity.location.address) ? sanitizeActivityText(activity.location.address) : '');
+    const locationText = dedupedLocationName || (activity.location?.address && !isPlaceholderLocation(activity.location.address) && !isWeakAddress(activity.location.address) ? sanitizeActivityText(activity.location.address) : '');
 
     return (
       <div className="py-2">
