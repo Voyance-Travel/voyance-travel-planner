@@ -784,6 +784,14 @@ const MAX_BAR_PRICE = 55;
 const DEFAULT_BAR_PRICE = 35;
 
 /**
+ * Explicit drinks/nightcap/café framing — when present in the title, the
+ * activity is a drinks visit, NOT a meal, even if the venue is a Michelin
+ * restaurant (e.g. "Gran Caffè Quadri nightcap" at Quadri). This disqualifies
+ * the Michelin exemption in the bar cap and the fine-dining floor.
+ */
+export const EXPLICIT_DRINKS_RE = /\b(nightcap|cocktails?|aperitif|aperitivo|digestif|drinks?\s+at|wine\s+bar|after[-\s]?dinner\s+drinks?|caff[eè]|caf[eé])\b/i;
+
+/**
  * Cap bar/nightcap activities to a sensible price ceiling.
  * Skips activities that match KNOWN_FINE_DINING_STARS (e.g. a hotel with a Michelin restaurant).
  */
