@@ -319,7 +319,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
             const { data: venues } = await supabase
               .from('verified_venues')
               .select('name, address, category')
-              .ilike('city', `%${destination.split(',')[0].trim()}%`)
+              .ilike('destination', `%${destination.split(',')[0].trim()}%`)
               .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
               .limit(20);
             if (venues && venues.length > 0) {
