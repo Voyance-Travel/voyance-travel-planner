@@ -1,119 +1,87 @@
-## Payments ↔ Itinerary Total Drift — Investigation & Fix Plan
+## Unified LLM Output Validation Layer
 
-The Payments total going out of sync with the Itinerary/Budget total is a **separate code area** from the four bugs handled in the previous plan. The architecture intends `resolveCanonicalCostRows` as the single source of truth shared by `useTripFinancialSnapshot` (header) and `usePayableItems` (Payments line items). In practice three divergence paths can still produce a drift, and the user has confirmed all three appear at different times.
+**Premise (yours, accepted):** every blocker — prompt artifacts, wrong-city venues, payment drift, fragment sentences, label/meal mismatches — is the same bug at different layers: raw LLM output is reaching the UI without a single, enforced validation pass. We have *pieces* of this (`scrubBodyPromptLeaks`, `scrubTitleLeaks`, `scrubSentenceFragments`, `detectCrossCityMention`, `verified-venues-filter`, `nuclearCrossCitySweep`, `clampBookendEndTime`, `pruneNonLogisticsAfterCheckout`, canonical cost resolver) but they're scattered across 4 pipelines (generate, repair, save, UI) and the address-to-destination guard is the missing one. This plan unifies them behind one boundary, with telemetry that proves coverage.
 
-### Three confirmed divergence paths
+### What this plan is NOT
+
+- Not a prompt rewrite. Prompts stay as-is.
+- Not a payments re-architecture (last loop already consolidated manual fold + reserve gating + orphan reconciliation in `resolveCanonicalCostRows`/`useTripFinancialSnapshot`/`PaymentsTab`). This plan does NOT re-touch payments — you said it's a separate area.
+- Not a regen-on-failure loop for venues (too costly). Failed venues get downgraded to fallback or stripped, with sentinels.
+
+### The four layers we lock down
 
 ```text
-            ┌────────────────────────────────────────────┐
- activity_  │     resolveCanonicalCostRows (shared)      │
-  costs ───►│  total + hotel + flight + miscLogged       │
-            └──────────┬─────────────────────────────────┘
-                       │
-        ┌──────────────┴───────────────┐
-        ▼                              ▼
-  useTripFinancial              usePayableItems
-  Snapshot                      (Payments line items)
-  + manual hotel/flight         + manual hotel/flight as
-    OVERRIDE delta                separate "manual-*" rows
-  + manual other ADD            + manual other rows
-  + miscReserveCents            + reserve as synthetic row
-                                  (only when reserveCents>0)
-
-       ▲                                ▲
-       │                                │
-   Header /                       Bucket sum
-   Trip Total      ◄── compared in PaymentsTab ──►   estimatedTotal
-   (estimatedTotal)                 (bucketSumCents)
+                    ┌──────────────────────────────────┐
+LLM raw JSON ─────► │  L1: parse + truncation guard    │  (extract-json, finish_reason check)
+                    └─────────────┬────────────────────┘
+                                  ▼
+                    ┌──────────────────────────────────┐
+                    │  L2: scrubActivity (PURE FN)     │  ← new single entry point
+                    │   • title leaks                  │
+                    │   • body leaks                   │
+                    │   • sentence fragments           │
+                    │   • meal-suffix strip            │
+                    │   • bookend clamp                │
+                    │   • walking-leg $0               │
+                    └─────────────┬────────────────────┘
+                                  ▼
+                    ┌──────────────────────────────────┐
+                    │  L3: validateActivity (NEW)      │  ← address-resolves-to-destination
+                    │   • cross-city venue detect      │     is the new piece
+                    │   • address city-resolve check   │
+                    │   • venue↔meal label coherence   │
+                    │   returns {ok, downgrade, drop}  │
+                    └─────────────┬────────────────────┘
+                                  ▼
+                    ┌──────────────────────────────────┐
+                    │  L4: persist + DB triggers       │  (last-gate, already in place)
+                    └──────────────────────────────────┘
 ```
 
-| # | Path | Why it drifts |
-|---|------|---------------|
-| A | Payments header ≠ Itinerary header / Budget total | Snapshot and Payments resolve the same canonical rows, but **manual hotel/flight** is treated as an OVERRIDE delta in `useTripFinancialSnapshot` and as ADD-ON `manual-*` rows in `usePayableItems`. When a manual hotel/flight exists alongside a canonical day-0 row, the two sides arrive at different totals. |
-| B | Bucket sum ≠ Trip Total within Payments | `essentialItemsWithReserve = essentialItems` (reserve not folded), but `miscItems` *does* fold reserve when `reserveCents > 0`. Snapshot total includes `miscReserveCents` regardless. Mid-fetch race (snapshot total = 0, reserve > 0, then snapshot lands) flips the bucket→header relationship and can latch a "Totals differ" badge for one render. |
-| C | trip_payments paid ≠ activity_costs estimated | Orphan archival is fire-and-forget RPC. Until the next refetch the snapshot has fewer "paid" rows than Payments, producing a transient overpayment / "Reconciling…" banner. Manual payments tagged with non-canonical `item_type` can also slip past the orphan filter on regenerated trips. |
+### Steps
 
-The €2,272 Rome trip in the DB has 12 activity_costs rows summing to ~$681 with no `trip_payments` rows. This confirms the divergence is happening **in the client-side computation pipeline**, not in stored ledger data — exactly the structural seams above.
+**Step 1 — Single entry point `scrubActivity(act, ctx)`** in `supabase/functions/_shared/scrub-activity.ts`. Composes existing helpers (`scrubTitleLeaks`, `scrubBodyPromptLeaks`, `scrubSentenceFragmentsOnAct`, meal-suffix strip, walking-leg $0, bookend clamp). Returns `{changed, ops: string[]}`. Mirror in `src/utils/scrubActivity.ts` with the same regexes (kept literal for the front bundle, like `activityNameSanitizer.ts` does today).
 
----
+**Step 2 — New `validateActivity(act, {destination, mealSlot})`** in same file. Three checks:
+1. `detectCrossCityMention` on title + venue + address + description.
+2. Address city-resolve: if `act.address` has a postal/region/country token that mismatches the destination city, flag.
+3. Meal/venue label coherence: if `mealSlot === 'lunch'` and venue name contains `(Dinner)`/`(Breakfast)` (post meal-suffix strip miss), flag.
 
-## Plan
+Returns `{verdict: 'ok' | 'downgrade' | 'drop', reason}`. `downgrade` → strip venue identity via existing `stripVenueIdentity` + `resolveAnyMealFallback`/`applyFallbackToActivity`. `drop` → mark `needsVenuePick` $0 sentinel. **No regen call** — costs zero credits.
 
-### Step 1 — Telemetry first (1 file, no behaviour change)
-**File:** `src/components/itinerary/PaymentsTab.tsx`
+**Step 3 — Wire single boundary at 4 sites (replace ad-hoc calls):**
+- `generate-itinerary/pipeline/validate-day.ts` (per-activity loop)
+- `generate-itinerary/pipeline/repair-day.ts` §10b (replace separate scrubs)
+- `generate-itinerary/action-save-itinerary.ts` per-day loop (replace 3 separate scrub calls)
+- `src/utils/activityNameSanitizer.ts` UI sanitizer chain (last-mile)
 
-Replace the dev-only `console.assert` at line ~475 with a structured `console.warn` that always fires (gated to once-per-mount) and includes:
-- `snapshotTotal`, `bucketSum`, `payableTotal`, `tripPaymentsPaidSum`
-- `manualHotelCents`, `manualFlightCents`, `manualOtherCents`
-- `canonicalHotelCents`, `canonicalFlightCents`
-- `reserveCents`, `orphanArchiveFingerprint`
-- `divergencePath: 'A' | 'B' | 'C' | 'none'` derived from which pair is mismatched
+Each site keeps its existing sentinels (`[POST_CHECKOUT_PRUNE]`, `[BOOKEND_CLAMP]`, etc.) but routes through `scrubActivity` so we cannot forget to add a new helper to one of four sites again.
 
-This lets us confirm which of A/B/C is firing on the next live drift report instead of guessing.
+**Step 4 — Address-to-destination guard (the missing piece you called out).** New file `supabase/functions/_shared/address-city-resolve.ts`. Lightweight: regex-based country/region tokens (`, Italy`, `, France`, `75001`, `30100`, `34xxx Florence`) checked against `destination`'s known country/postal-prefix from a small static map (we already have `INLINE_FALLBACK_*` city DBs — extend with country + postal prefix). When mismatch detected → `validateActivity` returns `downgrade`. No Google Geocoding call (Google API centralization rule + cost).
 
-### Step 2 — Fix Path A: Single contract for manual hotel/flight
-**Files:** `src/services/canonicalCostRows.ts`, `src/hooks/useTripFinancialSnapshot.ts`, `src/hooks/usePayableItems.ts`
+**Step 5 — Observability.** One structured log line per save: `[SCRUB_ACTIVITY] tripId=… day=… ops={titleLeak:N,bodyLeak:N,fragment:N,crossCity:N,addressMismatch:N,mealLabel:N,bookendClamp:N,walkingZero:N,downgraded:N,dropped:N}`. Persist last counters into `metadata.quality.scrub_ops` so we can grep `trips.itinerary_data->'metadata'->'quality'->'scrub_ops'` and prove a class of leak is at zero.
 
-Move the manual-payment fold-in **into the canonical resolver** so both consumers apply identical rules:
-- Add a new optional `manualPayments: Array<{ item_type, item_id, amount_cents, quantity }>` arg to `resolveCanonicalCostRows`.
-- Inside the resolver, derive `manualHotelDelta`, `manualFlightDelta`, `manualOtherCents` exactly once, applying the override-vs-add rule that `useTripFinancialSnapshot` already has.
-- Return `manualHotelCents`, `manualFlightCents`, `manualOtherCents` on `ResolveResult`.
-- `useTripFinancialSnapshot` stops doing the manual delta math itself and reads the resolver output.
-- `usePayableItems`:
-  - When a canonical hotel/flight day-0 row + manual hotel/flight both exist, render **one** row using the resolver's effective price (manual override wins), not two rows.
-  - Manual "other" rows still surface as their own line items but their cents come from the same resolver pass so the per-row sum can never exceed `manualOtherCents`.
+**Step 6 — Tests.** Extend `supabase/functions/_shared/__tests__/prompt-leak-scrub.test.ts` into `scrub-activity.test.ts` with regression fixtures for: (a) Tartine SF in Venice → downgrade, (b) `(FLEX_WINDOW)` in title → strip, (c) "spot for together" fragment → drop sentence, (d) `Reservation Urgency: .` → strip, (e) Da Ivo dinner relabeled as casual → identity stripped, (f) walking leg priced $30 → $0, (g) bookend 23:50→00:28 → clamped 23:59. Lint test in `_shared/__tests__/no-direct-scrub-call.test.ts` blocks new code from calling individual helpers outside `scrubActivity`.
 
-Net effect: bucket sum literally cannot diverge from snapshot total because they're computed from the same arithmetic.
+**Step 7 — Memory.** New `mem://constraints/itinerary/unified-output-validation-layer.md` documenting the contract + 4 wire sites + verdict semantics. Update `mem://index.md` Memories list.
 
-### Step 3 — Fix Path B: Reserve handling parity
-**Files:** `src/components/itinerary/PaymentsTab.tsx`, `src/hooks/useTripFinancialSnapshot.ts`
+### Files touched
 
-- Stop conditionally folding reserve into `miscItems`. Instead, always render reserve as a synthetic Misc row (or always exclude it from buckets and show as a separate banner row). Decision: keep it inside Misc but **also fold it into `essentialItemsWithReserve`-or-not consistently** — pick one home for reserve and keep it there.
-- Snapshot: only set `miscReserveCents > 0` once `data.loading === false`. Currently `tripTotalCents > 0` is a proxy for "ready" and fails for hotel-only trips with $0 itinerary.
-- Add a `reserveStable` boolean to the snapshot output; PaymentsTab only counts reserve when `reserveStable && snapshotReady`. Removes the mid-fetch race.
+- new: `supabase/functions/_shared/scrub-activity.ts`
+- new: `supabase/functions/_shared/address-city-resolve.ts`
+- new: `src/utils/scrubActivity.ts`
+- new: `supabase/functions/_shared/__tests__/scrub-activity.test.ts`
+- new: `supabase/functions/_shared/__tests__/no-direct-scrub-call.test.ts`
+- edit: `supabase/functions/generate-itinerary/pipeline/validate-day.ts`
+- edit: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
+- edit: `supabase/functions/generate-itinerary/action-save-itinerary.ts`
+- edit: `src/utils/activityNameSanitizer.ts`
+- new memory + index update
 
-### Step 4 — Fix Path C: Synchronous orphan reconciliation
-**File:** `src/hooks/useTripFinancialSnapshot.ts` + `archive_orphan_trip_payments` RPC
+### What you'll see after this ships
 
-- Today the orphan archival is a fire-and-forget RPC that requires a second refetch to settle. Change to:
-  1. Identify orphan payment ids in the snapshot pass.
-  2. **Subtract** their amounts from `paidFromTripPayments` *immediately* in the same render (don't wait for the RPC to complete).
-  3. Continue dispatching the archive RPC in the background for cleanup.
-- Result: the moment the snapshot lands, "paid so far" already reflects what the canonical view will show, and the booking-changed coalesce timer can't latch a stale overpayment.
+- `[SCRUB_ACTIVITY]` log on every save with per-class counters > 0 only when the LLM actually leaked something.
+- The four blockers either silently scrubbed (artifacts, fragments, label leaks, bookend bleed) or downgraded to neutral fallback (cross-city venues, address mismatches) — never raw to UI.
+- Adding a new sanitizer in the future = one place to add it (`scrubActivity`), enforced by lint test.
 
-### Step 5 — Lock the contract with tests
-**File:** `src/services/__tests__/canonicalCostRows.test.ts` (extend)
-
-Add three regression fixtures:
-1. Trip with canonical day-0 hotel ($1500) + manual hotel ($1800) → expect total uses $1800 once, no double-count.
-2. Trip with reserve $200 + 3 activity rows → snapshot total == bucket sum == sum of resolver rows + reserve, in both `loading` and `loaded` states.
-3. Trip with paid trip_payment whose `item_id` was regenerated → snapshot's `paidCents` excludes it on the same pass that surfaces the orphan, no second refetch needed.
-
-### Step 6 — Memory entry
-Add `mem://constraints/payments/single-resolver-manual-fold` documenting that **manual hotel/flight/other math lives only in `resolveCanonicalCostRows`**, that orphan trip_payments are subtracted synchronously, and that reserve has exactly one bucket home.
-
-Update `mem://index.md` Core entry on Payments to reference the consolidated rule.
-
----
-
-## Out of scope
-- Re-architecting `trip_payments` schema (the contract is fine; the leak is in client math).
-- Touching the four bugs from the previous plan (sentence fragments, post-checkout sweep, health score ghost, telemetry counters) — they're already deployed.
-- Server-side recomputation of payment intent amounts at checkout — already done via `book-activity` / `verify-payment`; the drift here is a *display* problem, not a Stripe pricing problem.
-
----
-
-## Files touched
-- `src/services/canonicalCostRows.ts` (extend with manual-fold)
-- `src/services/__tests__/canonicalCostRows.test.ts` (3 new fixtures)
-- `src/hooks/useTripFinancialSnapshot.ts` (delegate manual + synchronous orphan subtract)
-- `src/hooks/usePayableItems.ts` (use resolver manual output, dedupe canonical+manual hotel/flight)
-- `src/components/itinerary/PaymentsTab.tsx` (telemetry + reserve consistency)
-- `mem://constraints/payments/single-resolver-manual-fold.md` (new)
-- `mem://index.md` (one-line core update)
-
-## Validation
-1. Open the €2,272 Rome trip in preview → confirm `[PaymentsTab] divergence` warn is now `none`.
-2. Add a manual hotel expense larger than the canonical day-0 hotel → bucket sum and header still match.
-3. Run repair-day / Fix Timing → no "Reconciling…" loop, no transient "Totals differ".
-4. Regenerate the trip with a stale paid trip_payment → "Paid so far" drops to the canonical figure on the first snapshot, not the second.
+Approve and I'll implement.
