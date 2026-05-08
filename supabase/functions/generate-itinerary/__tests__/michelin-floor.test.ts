@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { enforceMichelinPriceFloor } from '../sanitization';
+import { enforceMichelinPriceFloor, enforceBarNightcapPriceCap } from '../sanitization';
 
 const make = (title: string, price: number, extra: Record<string, any> = {}) => ({
   title,
