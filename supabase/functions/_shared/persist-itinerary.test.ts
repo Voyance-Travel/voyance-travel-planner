@@ -26,6 +26,30 @@ Deno.test('stripPromptArtifactsInTitles leaves bare "(slot)" alone (contract dro
   assertEquals(days[0].activities[0].title, '(slot)');
 });
 
+// REGRESSION: a previous bug used a single `/gi` regex for both `.test()` and
+// `.replace()`. Because RegExp objects with the `g` flag persist `lastIndex`
+// across `.test()` calls, every other artifact-bearing title would silently
+// skip the strip — that was the "intermittent (slot) leak" from runs 5/etc.
+Deno.test('stripPromptArtifactsInTitles strips ALL titles (no stateful regex skip)', () => {
+  const days = [{
+    dayNumber: 1,
+    activities: [
+      { title: 'Dinner (AESTHETIC slot)' },
+      { title: 'Cicchetti tour (slot)' },
+      { title: 'Doge\'s Palace (slot)' },
+      { title: 'Walk to dinner (AESTHETIC slot)' },
+      { title: 'Nightcap (slot)' },
+    ],
+  }];
+  const touched = stripPromptArtifactsInTitles(days);
+  assertEquals(touched, 5);
+  for (const a of days[0].activities) {
+    if (/\(\s*(?:slot|aesthetic\s+slot)\s*\)/i.test(a.title)) {
+      throw new Error(`Artifact survived: ${a.title}`);
+    }
+  }
+});
+
 Deno.test('persistTripItinerary calls trips.update with cleaned days', async () => {
   let updated: any = null;
   const fakeSb = {
