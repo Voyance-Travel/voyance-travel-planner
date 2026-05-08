@@ -2562,6 +2562,12 @@ export function EditorialItinerary({
             operatingHours: a.operatingHours,
             durationMinutes: typeof dur === 'number' ? dur : a.durationMinutes,
             cost: a.cost,
+            // Pass lock flags so the server cascade respects them.
+            locked: a.locked === true || a.isLocked === true || a.lock_state === 'locked',
+            userAdded: a.userAdded === true,
+            pinned: a.pinned === true,
+            extracted: a.extracted === true,
+            userOverride: a.userOverride === true,
           };
         });
         firstResult = await refreshDay(activities, day.date || '', destination, day.dayNumber);
