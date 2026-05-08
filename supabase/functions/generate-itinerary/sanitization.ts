@@ -506,8 +506,14 @@ export function enforceMichelinPriceFloor(activity: Record<string, any>, logPref
   for (const key of Object.keys(KNOWN_CASUAL_VENUES)) {
     if (title.includes(key) || venueName.includes(key)) {
       console.log(`MICHELIN FLOOR SKIP [${logPrefix}]: "${activity.title}" is in KNOWN_CASUAL_VENUES — skipping Michelin floor`);
-      return false;
     }
+  }
+
+  // Guard: explicit drinks/nightcap/café framing → not a meal, never apply Michelin floor.
+  // Defends against "Gran Caffè Quadri nightcap" being floored at Quadri 1-star price.
+  if (EXPLICIT_DRINKS_RE.test(title) && !/\b(dinner|lunch|tasting\s+menu|chef'?s\s+table)\b/i.test(title)) {
+    console.log(`MICHELIN FLOOR SKIP [${logPrefix}]: "${activity.title}" reads as drinks/nightcap/café, not a meal — skipping fine-dining floor`);
+    return false;
   }
 
   const combined = [title, venueName, (activity.description || '').toLowerCase(), (activity.restaurant?.description || '').toLowerCase()].join(' ');
