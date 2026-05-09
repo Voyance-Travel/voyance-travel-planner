@@ -104,7 +104,23 @@ export async function submitActivityFeedback(input: CreateFeedbackInput): Promis
   if (data) {
     analyzeUserPreferences().catch(console.error);
   }
-  
+
+  // Mirror feedback presence onto the trip activity record so the UI can show
+  // "you rated this" without joining tables. Fire-and-forget; ledger insert is
+  // the source of truth.
+  if (data?.activity_id && data?.rating != null) {
+    void supabase
+      .from('trip_activities')
+      .update({
+        user_rating: data.rating,
+        user_feedback_at: new Date().toISOString(),
+      })
+      .eq('id', data.activity_id)
+      .then(({ error }) => {
+        if (error) console.warn('[activityFeedback] mirror to trip_activities failed:', error);
+      });
+  }
+
   return data as ActivityFeedback;
 }
 
