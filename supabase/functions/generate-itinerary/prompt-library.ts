@@ -1296,7 +1296,9 @@ export function buildRegularDayPrompt(
   lines.push(`   - Each meal = real restaurant/café name + walk time/distance + approximate price`);
   lines.push(`   - MUST BE DIFFERENT from any previous day's same-type meal`);
   lines.push(`   - Lunch and dinner: include 1 alternative option in tips field`);
-  lines.push(`   - Only include meals specified by the day's meal policy — do NOT add extras`);
+   lines.push(`   - Only include meals specified by the day's meal policy — do NOT add extras`);
+  lines.push(`   - Title prestige MUST match venue tier: NEVER label a Michelin / fine-dining venue as "casual" or "neighborhood"; NEVER label a café/bistro as "tasting menu" or "signature dinner"`);
+  lines.push(`   - Title formats: "Signature dinner at <Venue>" or "Tasting menu at <Venue>" for fine dining; "Dinner at <Venue>" for mid-tier; "Casual <meal> at <Venue>" only for genuinely casual venues`);
   lines.push('');
 
   lines.push(`   TRANSIT REQUIREMENTS (between EVERY consecutive activity):`);
@@ -1320,7 +1322,8 @@ export function buildRegularDayPrompt(
   lines.push(`   - After dinner, include at least 1 evening suggestion:`);
   lines.push(`     Jazz clubs, rooftop bars, night markets, shows, river cruises,`);
   lines.push(`     neighborhood walks at night, dessert spots, live music`);
-  lines.push(`   - Can be optional/skippable — note "optional" in description if so`);
+   lines.push(`   - Can be optional/skippable — note "optional" in description if so`);
+  lines.push(`   - Cap evening / nightcap / café / drinks-only stops at €30/person unless it is an explicit ticketed show or tasting experience. NEVER inherit dinner-tier pricing for a drinks stop`);
   lines.push('');
 
   lines.push(`   HOTEL BOOKENDS:`);
