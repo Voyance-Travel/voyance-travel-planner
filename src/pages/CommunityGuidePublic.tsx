@@ -284,6 +284,10 @@ export default function CommunityGuidePublic() {
               </div>
             </motion.div>
           ))
+        ) : typeof guide.content?.markdown === 'string' && guide.content.markdown.trim() ? (
+          <article className="prose prose-sm dark:prose-invert max-w-none">
+            <ReactMarkdown>{guide.content.markdown}</ReactMarkdown>
+          </article>
         ) : (
           <div className="text-center py-12 text-muted-foreground">
             <p className="text-sm">This guide doesn't have any activities yet.</p>
