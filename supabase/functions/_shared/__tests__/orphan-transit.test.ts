@@ -38,3 +38,13 @@ Deno.test('orphan target in middle still dropped (Case 2 unchanged)', () => {
   const removed = pruneOrphanTransits(acts);
   assertEquals(removed, 1);
 });
+
+Deno.test('end-of-day transit with transportation.kind=departure survives even without keyword', () => {
+  const acts = [
+    { id: '1', title: 'Last lunch', category: 'dining' },
+    { id: '2', title: 'Private car to flight', category: 'transport', transportation: { kind: 'departure' } },
+  ];
+  const removed = pruneOrphanTransits(acts);
+  assertEquals(removed, 0);
+  assertEquals(acts.length, 2);
+});

@@ -66,7 +66,9 @@ export function pruneOrphanTransits(activities: any[]): number {
     if (i === activities.length - 1) {
       const titleStr = String(act?.title || '');
       const checkBlob = `${target || ''} ${titleStr}`;
-      if (LOGISTICS_TARGET_RE.test(checkBlob)) continue;
+      const kind = String(act?.transportation?.kind || act?.transport?.kind || '').toLowerCase();
+      const isDepartureMeta = kind === 'departure' || kind === 'airport_transfer' || kind === 'flight_transfer';
+      if (LOGISTICS_TARGET_RE.test(checkBlob) || isDepartureMeta) continue;
       activities.splice(i, 1);
       removed++;
       console.warn(`[ORPHAN-TRANSIT] Dropped end-of-day transit: "${act.title}"`);
