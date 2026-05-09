@@ -117,6 +117,11 @@ serve(async (req) => {
       // Create Stripe Checkout session for this item
       const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
 
+      // Deterministic idempotency key — collapses duplicate clicks for the same item+amount
+      // within a 60-second window; later retries get a fresh key so users aren't locked out.
+      const minuteBucket = Math.floor(Date.now() / 60000);
+      const idempotencyKey = `book_activity:${user.id}:${tripId}:${itemId}:${amountCents}:${minuteBucket}`.slice(0, 255);
+
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         line_items: [
@@ -142,7 +147,7 @@ serve(async (req) => {
           userId: user.id,
           externalProvider: externalProvider || '',
         },
-      });
+      }, { idempotencyKey });
       stripeSessionId = session.id;
       log("Created Stripe checkout session", { sessionId: session.id });
 
