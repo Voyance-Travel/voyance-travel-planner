@@ -1,30 +1,42 @@
-## Fix 7.4 — send-contact-email opt-out preference check
+## Fix 8.1 — Atomic UPDATE for re-sending after decline
 
-Gate the user-confirmation email on `user_preferences.email_notifications`. The support-internal email keeps firing unconditionally.
+`src/services/supabase/friends.ts` has two delete+insert blocks (lines ~120-138 and ~191-209) for the "previously declined → resend" path. Both are non-atomic: a delete success followed by insert failure permanently loses the row.
 
-### Changes
+### Change
 
-**`supabase/functions/send-contact-email/index.ts`**
+In **both** blocks, replace the `delete()` + `insert()` pair with a single `update()` on the existing row id:
 
-1. Extend `ContactRequest` and the destructure to accept an optional `userId?: string`. Read it from `rawBody.userId` (UUID-validated; ignore if malformed).
-2. Reuse the existing `supabaseAdmin` pattern (currently created inside `isRateLimited`); lift a single admin client to the handler scope so we don't instantiate twice.
-3. Before the confirmation `sendEmail` (lines 178-197), insert the opt-out check:
-   - If `userId` present → `select('email_notifications').from('user_preferences').eq('user_id', userId).maybeSingle()`.
-   - If `prefs?.email_notifications === false` → set `userOptedOut = true`, log skip, do not send.
-   - Anonymous (no `userId`) → always send (explicit opt-in via form submission).
-4. Wrap the existing confirmation `sendEmail(...)` in `if (!userOptedOut) { ... }`. Keep the support email send untouched.
+```ts
+if (existing.status === 'declined') {
+  const { error: updateError } = await supabase
+    .from('friendships')
+    .update({
+      requester_id: currentUserId,
+      addressee_id: <targetProfile.id | targetUserId>,
+      status: 'pending',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', existing.id);
 
-**Caller (frontend):** Locate the `supabase.functions.invoke('send-contact-email', ...)` call site and pass `userId: session?.user?.id ?? null` in the body so authenticated submissions are gated. (Will grep for the caller during build.)
+  if (updateError) throw updateError;
+  return { success: true, status: 'pending' };
+}
+```
+
+- Block 1 (handle-based, ~line 120): uses `targetProfile.id`
+- Block 2 (id-based, ~line 191): uses `targetUserId`
+
+UPDATE rewrites both `requester_id` and `addressee_id` in one statement, so direction-flip (current user was previously the addressee) is handled atomically. UNIQUE constraint on the pair is preserved (in-place update).
 
 ### Verify
 
 ```
-grep -n "user_preferences\|email_notifications" supabase/functions/send-contact-email/index.ts
+grep -n "previously declined\|status === 'declined'" src/services/supabase/friends.ts
+grep -B1 -A12 "status === 'declined'" src/services/supabase/friends.ts | head -40
 ```
-Expected: 2+ hits.
+Expected: no `.delete()` + `.insert()` pair in either declined branch; only a single `.update({...}).eq('id', existing.id)`.
 
 ### Notes
 
-- No DB migration needed — `user_preferences.email_notifications` already exists from prior fixes.
-- No edge-function redeploy needed beyond standard Lovable auto-deploy.
-- Anonymous flow unchanged → no regression for logged-out contact form users.
+- No DB migration, no RLS change. Existing UPDATE policy on `friendships` already covers requester/addressee.
+- Comment updated to explain atomicity + direction-flip.
