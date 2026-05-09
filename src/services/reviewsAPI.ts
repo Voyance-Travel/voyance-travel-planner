@@ -153,6 +153,16 @@ const API_BASE = '/api/v1/reviews';
  * Create a new review
  */
 export async function createReview(input: CreateReviewInput): Promise<Review> {
+  // Auth gate: require a valid session before creating a review.
+  // The server (and DB RLS upstream) is the source of truth for identity —
+  // it derives userId from the JWT `sub`. This client-side guard prevents
+  // the request from leaving the browser at all and surfaces clearer copy
+  // than the generic apiRequest auth error.
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user?.id) {
+    throw new Error('Sign in required to leave a review.');
+  }
+
   const response = await apiRequest<{ status: string; review: Review }>(
     API_BASE,
     {
