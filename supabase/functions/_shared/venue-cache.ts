@@ -81,11 +81,9 @@ export async function checkVenueCache(
       return null;
     }
 
-    // Bump usage count (fire-and-forget)
+    // Atomic increment via RPC (fire-and-forget)
     supabase
-      .from('verified_venues')
-      .update({ usage_count: (row as any).usage_count + 1 || 1 })
-      .eq('place_id', row.place_id)
+      .rpc('bump_venue_usage', { p_place_id: row.place_id })
       .then(() => {});
 
     return {

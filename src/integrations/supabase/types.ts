@@ -9661,6 +9661,11 @@ export type Database = {
         Args: { p_stripe_session_id?: string; p_user_id: string }
         Returns: Json
       }
+      bump_archetype_guide_usage: {
+        Args: { p_archetype: string; p_destination_id: string }
+        Returns: undefined
+      }
+      bump_venue_usage: { Args: { p_place_id: string }; Returns: undefined }
       claim_first_trip_benefit: { Args: { p_user_id: string }; Returns: Json }
       cleanup_expired_search_cache: { Args: never; Returns: number }
       cleanup_expired_venues: { Args: never; Returns: number }
@@ -9813,6 +9818,15 @@ export type Database = {
       }
       increment_daily_usage: {
         Args: { p_action_type: string; p_usage_date: string; p_user_id: string }
+        Returns: number
+      }
+      increment_user_usage: {
+        Args: {
+          p_amount?: number
+          p_metric_key: string
+          p_period: string
+          p_user_id: string
+        }
         Returns: number
       }
       insert_audit_log: {

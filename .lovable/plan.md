@@ -1,40 +1,55 @@
-## Fix 8.2 — Defense-in-depth RLS on credit_purchases + group_unlocks
+# S6.1 — Atomic counter RPCs
 
-Both tables have SELECT (and one INSERT on `group_unlocks`) policies but no explicit deny for the other write ops. Service-role bypasses RLS today, so this is purely additive defense-in-depth — if a future RLS misconfiguration ever exposes either table to authenticated/anon, per-row policies still block.
+Three call sites do read-modify-write on counter columns from JS, which loses increments under concurrent calls (two requests both read N, both write N+1, true value should be N+2). Fix is one migration adding three `SECURITY DEFINER` RPCs that do the increment atomically inside Postgres, plus three small caller swaps.
 
-### Existing policies (verified)
+## 1. Migration
 
-- `credit_purchases`: SELECT (own + admin)
-- `group_unlocks`: SELECT (trip owner) + INSERT (`Users can purchase group unlock`) — keep both untouched
+`supabase/migrations/<timestamp>_atomic_counter_rpcs.sql` — three functions, all `SECURITY DEFINER`, `search_path = public`, `volatile`, granted to `authenticated` and `service_role`:
 
-### Migration
+### a. `increment_user_usage(p_user_id uuid, p_metric_key text, p_period text, p_amount int)` returns `int`
+```sql
+INSERT INTO public.user_usage (user_id, metric_key, period, count, updated_at)
+VALUES (p_user_id, p_metric_key, p_period, p_amount, now())
+ON CONFLICT (user_id, metric_key, period)
+DO UPDATE SET count = user_usage.count + EXCLUDED.count,
+              updated_at = now()
+RETURNING count;
+```
+Requires unique constraint on `(user_id, metric_key, period)` — verify it exists; add it in this migration if not.
 
-Create `supabase/migrations/<timestamp>_rls_defense_credit_purchases_group_unlocks.sql`:
+### b. `bump_venue_usage(p_place_id text)` returns `void`
+```sql
+UPDATE public.verified_venues
+SET usage_count = COALESCE(usage_count, 0) + 1,
+    updated_at = now()
+WHERE place_id = p_place_id;
+```
 
-- `credit_purchases`: deny INSERT/UPDATE/DELETE to `authenticated`; deny ALL to `anon`
-- `group_unlocks`: deny UPDATE/DELETE to `authenticated` (do NOT deny INSERT — would conflict with existing user-facing purchase policy); deny ALL to `anon`
+### c. `bump_archetype_guide_usage(p_archetype text, p_destination_id uuid)` returns `void`
+```sql
+UPDATE public.archetype_destination_guides
+SET usage_count = COALESCE(usage_count, 0) + 1
+WHERE archetype = p_archetype AND destination_id = p_destination_id;
+```
 
-PostgreSQL RLS is permissive-OR by default, so adding a deny policy alongside an allow policy still grants access via the allow. The deny policies only matter as a fallback if SELECT/INSERT allow policies are ever removed or roles change. To make these true blockers, we use `AS RESTRICTIVE` on the new policies — restrictive policies AND with permissive ones, so a `false` restrictive policy hard-blocks the role regardless of permissive policies. Since `anon` has no allow policies anywhere on these tables, the anon block is effectively a belt-and-suspenders.
+## 2. Caller swaps (no behaviour change)
 
-Wait — `AS RESTRICTIVE` would also block the existing `group_unlocks` INSERT for `authenticated`. So:
-- For `credit_purchases` (no user write policies exist): use `AS RESTRICTIVE` on INSERT/UPDATE/DELETE for `authenticated` — true defense-in-depth.
-- For `group_unlocks`: use `AS RESTRICTIVE` only for UPDATE/DELETE on `authenticated` (INSERT must remain allowed by the existing permissive policy).
-- For `anon` on both tables: use `AS RESTRICTIVE FOR ALL` — anon has zero allow policies so this is a hard wall.
+- `supabase/functions/consume-usage/index.ts` (lines 47–72): replace the `select → if existing then update else insert` block with a single `supabase.rpc('increment_user_usage', { p_user_id, p_metric_key, p_period: currentPeriod, p_amount: amount })`. Use returned `count` for the response.
+- `supabase/functions/generate-itinerary/attraction-matching.ts` (lines 189–200): replace the read/write with `supabase.rpc('bump_archetype_guide_usage', { p_archetype: archetype, p_destination_id: destinationId })`. Keep the try/catch (non-blocking).
+- `supabase/functions/_shared/venue-cache.ts` (line 87 fire-and-forget): replace the `.update({ usage_count: ... })` with `supabase.rpc('bump_venue_usage', { p_place_id: row.place_id })`. Keep fire-and-forget pattern.
 
-Service-role bypasses RLS entirely (including restrictive policies), so all edge functions continue working.
-
-Policy names are unique to this migration (verified `grep -n "deny authenticated\|deny anon" supabase/migrations/*.sql` → 0 hits).
-
-### Verify
+## 3. Verify
 
 ```
-ls supabase/migrations/ | grep rls_defense
-grep -rn "credit_purchases.*deny\|group_unlocks.*deny" supabase/migrations/ | head -10
-grep -n "deny authenticated\|deny anon" supabase/migrations/*.sql
+grep -nE "\.update\(\{[^}]*usage_count|user_usage'\)\s*\.(select|update|insert)" \
+  supabase/functions/consume-usage/index.ts \
+  supabase/functions/generate-itinerary/attraction-matching.ts \
+  supabase/functions/_shared/venue-cache.ts
 ```
-Expected: new migration exists; only the new file contains these policy names.
+Expected: 0 hits. All three sites now go through `supabase.rpc(...)`.
 
-### Notes
+## Notes
 
-- No app/edge-function code changes.
-- `AS RESTRICTIVE` is the correct primitive — without it, `WITH CHECK (false)` permissive policies are silently OR-ed with future allow policies and become useless.
+- Service-role bypasses RLS, so no policy changes needed; granting `EXECUTE` to `service_role` is belt-and-suspenders.
+- `user_usage` upsert needs the unique index — the migration will add `CREATE UNIQUE INDEX IF NOT EXISTS user_usage_user_metric_period_uidx ON public.user_usage (user_id, metric_key, period);` defensively.
+- No client-side / UI changes.
