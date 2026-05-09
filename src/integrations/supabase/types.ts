@@ -9996,6 +9996,16 @@ export type Database = {
         Returns: Json
       }
       reconcile_credit_balances: { Args: never; Returns: Json }
+      rescue_orphan_cost_row: {
+        Args: {
+          p_category: string
+          p_day_number: number
+          p_live_activity_ids: string[]
+          p_new_activity_id: string
+          p_trip_id: string
+        }
+        Returns: Json
+      }
       resolve_or_rotate_invite: {
         Args: { p_force_rotate?: boolean; p_trip_id: string }
         Returns: Json
