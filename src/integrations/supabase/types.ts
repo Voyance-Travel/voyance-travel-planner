@@ -7563,6 +7563,7 @@ export type Database = {
           scheduled_for: string | null
           sent: boolean | null
           sent_at: string | null
+          sent_date: string
           trip_id: string
           updated_at: string
           user_id: string
@@ -7576,6 +7577,7 @@ export type Database = {
           scheduled_for?: string | null
           sent?: boolean | null
           sent_at?: string | null
+          sent_date?: string
           trip_id: string
           updated_at?: string
           user_id: string
@@ -7589,6 +7591,7 @@ export type Database = {
           scheduled_for?: string | null
           sent?: boolean | null
           sent_at?: string | null
+          sent_date?: string
           trip_id?: string
           updated_at?: string
           user_id?: string
