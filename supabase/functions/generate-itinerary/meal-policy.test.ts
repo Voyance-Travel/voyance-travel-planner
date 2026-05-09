@@ -375,3 +375,35 @@ Deno.test('enforceRequiredMealsFinalGuard prefers real venues over type-based fa
     );
   }
 });
+
+Deno.test('enforceRequiredMealsFinalGuard prunes orphan transit after duplicate-meal strip', () => {
+  const activities = [
+    { id: 't1', title: 'Travel to Salsify at The Roundhouse', category: 'transport',
+      startTime: '18:30', endTime: '18:50',
+      transportation: { method: 'walk', duration: '20 min' } },
+    { id: 'd1', title: 'Dinner at Salsify', category: 'dining',
+      startTime: '19:00', endTime: '20:30',
+      location: { name: 'Salsify', address: 'The Roundhouse' } },
+    { id: 'd2', title: 'Dinner at La Colombe', category: 'dining',
+      startTime: '19:15', endTime: '20:45',
+      location: { name: 'La Colombe', address: 'Constantia' } },
+    { id: 'a1', title: 'Freshen up at hotel', category: 'accommodation',
+      startTime: '21:00', endTime: '21:30' },
+  ];
+
+  const result = enforceRequiredMealsFinalGuard(
+    activities as any, ['dinner'], 1, 'Cape Town', 'USD', 'full_exploration', [],
+  );
+
+  const titles = result.activities.map((a: any) => a.title);
+  const transitSurvived = titles.some((t: string) => /^Travel to Salsify/i.test(t));
+  const salsifySurvived = titles.some((t: string) => /Dinner at Salsify/i.test(t));
+
+  // Invariant: orphan transit only survives iff its target survives
+  if (transitSurvived) {
+    assertEquals(salsifySurvived, true, 'transit survived but its target was dropped');
+  }
+  // And dedup must have removed exactly one of the two dinners
+  const dinnerCount = titles.filter((t: string) => /^Dinner at/i.test(t)).length;
+  assertEquals(dinnerCount, 1, 'duplicate-meal strip should leave exactly one dinner');
+});

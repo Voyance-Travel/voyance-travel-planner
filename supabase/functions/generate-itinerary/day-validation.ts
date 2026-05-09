@@ -7,6 +7,7 @@ import type { RequiredMeal } from './meal-policy.ts';
 import { getRandomFallbackRestaurant, resolveAnyMealFallback } from './fix-placeholders.ts';
 import { detectCrossCityMention } from './cross-city-filter.ts';
 import { extractRestaurantVenueName, venueNamesMatch } from './generation-utils.ts';
+import { pruneOrphanTransits } from '../_shared/orphan-transit.ts';
 
 // =============================================================================
 // CHAIN RESTAURANT BLOCKLIST — prevents chain restaurants from appearing
@@ -888,6 +889,10 @@ export function enforceRequiredMealsFinalGuard(
     }
     if (before !== activities.length) {
       console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: removed ${before - activities.length} placeholder meal slot(s)`);
+      const orphans = pruneOrphanTransits(activities);
+      if (orphans > 0) {
+        console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: pruned ${orphans} orphan transit connector(s) after placeholder strip`);
+      }
     }
   }
 
@@ -1016,6 +1021,10 @@ export function enforceRequiredMealsFinalGuard(
       const removed = activities[idx];
       console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Removing duplicate meal "${removed?.title}"`);
       activities.splice(idx, 1);
+    }
+    const orphans = pruneOrphanTransits(activities);
+    if (orphans > 0) {
+      console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: pruned ${orphans} orphan transit connector(s) after duplicate-meal strip`);
     }
   }
 

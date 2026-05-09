@@ -12,6 +12,7 @@ import { parseTimeToMinutes, enforceArrivalTiming, enforceDepartureTiming } from
 import { GenerationTimer } from './generation-timer.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
+import { pruneOrphanTransits } from '../_shared/orphan-transit.ts';
 import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField, enforceMichelinPriceFloor, enforceTicketedAttractionPricing, enforceBarNightcapPriceCap, enforceCasualVenuePriceCap, enforceVenueTypePriceCap, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS } from './sanitization.ts';
 import { StageLogger } from './pipeline/stage-logger.ts';
 import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
@@ -1872,6 +1873,17 @@ async function _handleGenerateTripDayInner(
           dayResult.activities.splice(i, 1);
         }
       }
+    }
+  }
+
+  // === FINAL ORPHAN-TRANSIT SAFETY NET ===
+  // Catches transit cards left dangling by any drop performed after
+  // universalQualityPass (meal guard, consecutive transport collapse,
+  // duplicate hotel return). Idempotent — no-op if everything's clean.
+  if (Array.isArray(dayResult?.activities)) {
+    const orphans = pruneOrphanTransits(dayResult.activities);
+    if (orphans > 0) {
+      console.warn(`[generate-trip-day] Final orphan-transit sweep dropped ${orphans} connector(s) on day ${dayNumber}`);
     }
   }
 
