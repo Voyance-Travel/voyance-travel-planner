@@ -264,9 +264,12 @@ export default function CommunityGuidePublic() {
                     </Badge>
                   )}
                 </div>
-                {activity.description && (
-                  <p className="text-xs text-muted-foreground line-clamp-3">{activity.description}</p>
-                )}
+                {(() => {
+                  const desc = sanitizeActivityText(activity.description);
+                  return desc ? (
+                    <p className="text-xs text-muted-foreground line-clamp-3">{desc}</p>
+                  ) : null;
+                })()}
                 {activity.note && (
                   <p className="text-xs italic text-primary/80">"{activity.note}"</p>
                 )}
