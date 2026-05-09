@@ -138,48 +138,8 @@ serve(async (req) => {
     logStep("Currency resolved", { tripCurrency, activitiesCurrency });
 
     // =========================================================================
-    // SERVER-SIDE PRICE VALIDATION — prevent client-side price manipulation
+    // ACTIVITIES PRICE NORMALIZATION
     // =========================================================================
-    const PRICE_TOLERANCE_CENTS = 100; // $1 rounding tolerance
-
-    // Derive flight price from stored selection
-    let serverFlightTotal = 0;
-    if (trip.flight_selection) {
-      const fs = trip.flight_selection as any;
-      // Support multiple price shapes stored by Amadeus integration
-      serverFlightTotal = Number(fs.totalPrice ?? fs.total_price ?? fs.price ?? fs.grandTotal ?? fs.grand_total ?? 0);
-    }
-
-    // Derive hotel price from stored selection
-    let serverHotelTotal = 0;
-    if (trip.hotel_selection) {
-      const hs = trip.hotel_selection as any;
-      serverHotelTotal = Number(hs.totalPrice ?? hs.total_price ?? hs.price ?? hs.total ?? 0);
-    }
-
-    // Validate client-sent values against server-derived values
-    const clientFlightCents = Math.round((flightTotal || 0) * 100);
-    const clientHotelCents = Math.round((hotelTotal || 0) * 100);
-    const serverFlightCents = Math.round(serverFlightTotal * 100);
-    const serverHotelCents = Math.round(serverHotelTotal * 100);
-
-    if (serverFlightCents > 0 && Math.abs(clientFlightCents - serverFlightCents) > PRICE_TOLERANCE_CENTS) {
-      logStep("SECURITY: Flight price mismatch", { client: clientFlightCents, server: serverFlightCents });
-      return new Response(JSON.stringify({ error: "Flight price has changed. Please refresh and try again.", code: "PRICE_MISMATCH" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
-      });
-    }
-
-    if (serverHotelCents > 0 && Math.abs(clientHotelCents - serverHotelCents) > PRICE_TOLERANCE_CENTS) {
-      logStep("SECURITY: Hotel price mismatch", { client: clientHotelCents, server: serverHotelCents });
-      return new Response(JSON.stringify({ error: "Hotel price has changed. Please refresh and try again.", code: "PRICE_MISMATCH" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
-      });
-    }
-
-    // Use server-derived prices when available, fall back to client values only when no selection exists
-    const flightCents = serverFlightCents > 0 ? serverFlightCents : clientFlightCents;
-    const hotelCents = serverHotelCents > 0 ? serverHotelCents : clientHotelCents;
     const activitiesCents = Math.round((activitiesTotal || 0) * 100);
 
     // Hard-reject Viator/activities currency mismatch (R3.4)
@@ -189,16 +149,6 @@ serve(async (req) => {
         error: `Activity prices are quoted in ${activitiesCurrency.toUpperCase()} but trip currency is ${tripCurrency.toUpperCase()}. Refresh and retry.`,
         code: "CURRENCY_MISMATCH",
       }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // Soft warning if flight/hotel selections carry an explicit currency that differs.
-    const flightSelCurrency = String((trip.flight_selection as any)?.currency || '').toLowerCase();
-    if (flightCents > 0 && flightSelCurrency && flightSelCurrency !== tripCurrency) {
-      logStep("CURRENCY_MISMATCH flight (soft warn)", { flightSelCurrency, tripCurrency });
-    }
-    const hotelSelCurrency = String((trip.hotel_selection as any)?.currency || '').toLowerCase();
-    if (hotelCents > 0 && hotelSelCurrency && hotelSelCurrency !== tripCurrency) {
-      logStep("CURRENCY_MISMATCH hotel (soft warn)", { hotelSelCurrency, tripCurrency });
     }
 
     // Initialize Stripe
