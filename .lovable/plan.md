@@ -1,36 +1,32 @@
-## HC.2 — Unify `isTransitActivity`
+## HC.3 — Walk threshold robust to missing/string durations
 
-Create one shared helper and swap the three call sites listed in the request.
+Single targeted edit in `supabase/functions/generate-itinerary/pipeline/validate-day.ts`, inside `checkWalkOverThreshold` (around lines 1063–1065 of the post-HC.2 file).
 
-### 1. New file: `supabase/functions/_shared/transit-detect.ts`
+### Change
 
-Exports `TRANSIT_CATS`, `TRANSIT_TITLE_RE`, `isTransitActivity(act)` exactly as specified in the request — 8 categories (`transit`, `transport`, `transportation`, `travel`, `transfer`, `commute`, `taxi`, `walking`) plus title regex fallback for verbs (walk/travel/transfer/drive/ride/taxi/train/bus/metro/tram/ferry/boat/water taxi/vaporetto/return/return to/head back).
+Replace the brittle numeric parse:
 
-### 2. Swap call sites
+```ts
+const dur = Number(t.durationMinutes) || 0;
+const dist = Number(t.distanceMeters) || 0;
+if (dur <= WALK_HARD_DURATION_MINUTES && dist <= WALK_HARD_DISTANCE_METERS) continue;
+```
 
-**a. `supabase/functions/_shared/orphan-transit.ts`**
-- Delete local `TRANSIT_CATS` (line 16) and local `isTransitActivity` (lines 25–29).
-- `import { isTransitActivity } from './transit-detect.ts'`.
-- Existing usages at lines 59 and 85 keep working unchanged.
+…with a layered resolver, exactly as specified in the request:
 
-**b. `supabase/functions/generate-itinerary/sanitization.ts`**
-- Delete local `isTransitActivity` (line 854).
-- `import { isTransitActivity } from '../_shared/transit-detect.ts'`.
-- Usage at line 892 keeps working.
+1. Try numeric `t.durationMinutes` / `t.distanceMeters`.
+2. If duration not finite/positive, parse string forms `"1h 6m"`, `"66 min"`, `"1:06"` from `t.duration` / `act.duration` / `act.durationLabel`.
+3. If still missing, infer from `act.startTime` → `act.endTime`.
+4. Normalize negative/NaN distance to 0.
+5. If both still unknown, `continue` (conservative — no false positive).
+6. Otherwise apply the existing threshold check.
 
-**c. `supabase/functions/generate-itinerary/pipeline/validate-day.ts` → `checkWalkOverThreshold`**
-- At line 1059, replace `if (cat !== 'transport' && cat !== 'transit') continue;` with `if (!isTransitActivity(act)) continue;` (and drop the now-unused `cat` local if it was only used there).
-- Add import from `../../_shared/transit-detect.ts`.
+### Out of scope
 
-### Out of scope (intentionally not touched)
-
-The request names exactly these three call sites. Other locations also have local transit-cat sets but are **not** part of HC.2:
-- `refresh-day/index.ts` (lines 132/163) — own 7-cat list, used in distance/cost math.
-- `_shared/timing-cascade.ts` (line 116) — same 7-cat list, used in cascade logic.
-- `pipeline/repair-day.ts` (line 4330) — local `TRANSIT_CATS_FE` for a specific repair pass.
-
-Leaving them as-is keeps the diff minimal and matches the user's instructions verbatim. Can be unified in a follow-up if desired.
+- No changes to `WALK_HARD_*` thresholds.
+- No changes to repair-day's parallel walk-distance guard (`enforceTransitModeByDistance` already does its own coord-based check).
+- No changes to `isTransitActivity` gate (HC.2 unified that already).
 
 ### Expected result
 
-After the swap, walk-threshold validation in `validate-day.ts` catches `transportation` / `travel` / title-only transit cards uniformly — same as `orphan-transit` and `sanitization` already do once they import the shared helper.
+A walk card emitted with `duration: "1h 6m"` and no `transportation.durationMinutes` → parses to 66 min → exceeds `WALK_HARD_DURATION_MINUTES` (30) → fires `WALK_OVER_THRESHOLD` critical, so the validation gate / repair pipeline can act on it.

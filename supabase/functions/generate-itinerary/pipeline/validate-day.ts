@@ -1060,8 +1060,33 @@ function checkWalkOverThreshold(activities: StrictActivityMinimal[], results: Va
     const t = act?.transportation || {};
     const method = String(t.method || '').toLowerCase();
     if (method !== 'walk' && method !== 'walking') continue;
-    const dur = Number(t.durationMinutes) || 0;
-    const dist = Number(t.distanceMeters) || 0;
+    let dur = Number(t.durationMinutes);
+    let dist = Number(t.distanceMeters);
+    // Parse string durations like "1h 6m", "66 min", "1:06"
+    if (!Number.isFinite(dur) || dur <= 0) {
+      const durStr = String(t.duration || act.duration || act.durationLabel || '');
+      const hMatch = durStr.match(/(\d+)\s*h/i);
+      const mMatch = durStr.match(/(\d+)\s*m/i);
+      const colonMatch = durStr.match(/^(\d+):(\d+)$/);
+      if (hMatch || mMatch) {
+        dur = (hMatch ? parseInt(hMatch[1]) * 60 : 0) + (mMatch ? parseInt(mMatch[1]) : 0);
+      } else if (colonMatch) {
+        dur = parseInt(colonMatch[1]) * 60 + parseInt(colonMatch[2]);
+      }
+    }
+    // If still no duration, infer from start/end timestamps
+    if (!Number.isFinite(dur) || dur <= 0) {
+      const startMatch = String(act.startTime || '').match(/(\d{1,2}):(\d{2})/);
+      const endMatch = String(act.endTime || '').match(/(\d{1,2}):(\d{2})/);
+      if (startMatch && endMatch) {
+        const startMin = parseInt(startMatch[1]) * 60 + parseInt(startMatch[2]);
+        const endMin = parseInt(endMatch[1]) * 60 + parseInt(endMatch[2]);
+        if (endMin > startMin) dur = endMin - startMin;
+      }
+    }
+    if (!Number.isFinite(dist) || dist < 0) dist = 0;
+    // Both unknown — can't evaluate. Default to NOT firing (conservative).
+    if ((!Number.isFinite(dur) || dur <= 0) && dist <= 0) continue;
     if (dur <= WALK_HARD_DURATION_MINUTES && dist <= WALK_HARD_DISTANCE_METERS) continue;
     results.push({
       code: FAILURE_CODES.WALK_OVER_THRESHOLD,
