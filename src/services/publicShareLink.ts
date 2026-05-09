@@ -147,7 +147,12 @@ export function getPublicShareErrorMessage(reason?: string): string {
     case 'not_owner':
       return 'Only the trip owner can create a public link.';
     case 'trip_not_found':
-      return 'Trip not found.';
+    case 'token_not_found':
+      return 'This share link is invalid.';
+    case 'sharing_disabled':
+      return 'The trip owner turned off sharing for this link.';
+    case 'trip_unavailable':
+      return 'Trip is loading — try again in a moment.';
     case 'itinerary_not_ready':
       return 'Generate your itinerary first to share it.';
     case 'read_failed':
