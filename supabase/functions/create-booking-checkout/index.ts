@@ -44,18 +44,16 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const tripId = typeof body?.tripId === 'string' ? body.tripId.trim() : '';
-    const flightTotal = typeof body?.flightTotal === 'number' ? body.flightTotal : 0;
-    const hotelTotal = typeof body?.hotelTotal === 'number' ? body.hotelTotal : 0;
     const activitiesTotal = typeof body?.activitiesTotal === 'number' ? body.activitiesTotal : 0;
     const activitiesCurrencyInput = typeof body?.activitiesCurrency === 'string' ? body.activitiesCurrency.toLowerCase() : '';
-    logStep("Request body", { tripId, flightTotal, hotelTotal, activitiesTotal, activitiesCurrencyInput });
+    logStep("Request body", { tripId, activitiesTotal, activitiesCurrencyInput });
 
     if (!tripId || tripId.length > 200) {
       return new Response(JSON.stringify({ success: false, error: "Invalid tripId", code: "INVALID_INPUT" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
       });
     }
-    if (flightTotal < 0 || hotelTotal < 0 || activitiesTotal < 0 || flightTotal > 1000000 || hotelTotal > 1000000 || activitiesTotal > 1000000) {
+    if (activitiesTotal < 0 || activitiesTotal > 1000000) {
       return new Response(JSON.stringify({ success: false, error: "Invalid price values", code: "INVALID_INPUT" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
       });
