@@ -51,6 +51,8 @@ interface FullPreview {
   destination: string;
   country?: string;
   totalDays: number;
+  previewedDays?: number;
+  isPartialPreview?: boolean;
   totalActivities: number;
   days: PreviewDay[];
   tripSummary: {
@@ -316,6 +318,12 @@ export function FullPreviewItinerary({
           />
         ))}
       </div>
+
+      {preview.isPartialPreview && (
+        <p className="text-xs text-muted-foreground text-center">
+          Showing the first {preview.previewedDays} of {preview.totalDays} days. Unlock to see all {preview.totalDays}.
+        </p>
+      )}
 
       {/* Conversion CTA */}
       <div className="sticky bottom-4 z-10">

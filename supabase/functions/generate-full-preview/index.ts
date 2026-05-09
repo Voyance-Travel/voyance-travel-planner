@@ -145,7 +145,9 @@ serve(async (req) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    const cappedDays = Math.min(totalDays, 2); // Cap FREE preview at 2 days — user must unlock additional days with credits
+    const PREVIEW_DAY_CAP = 2;
+    const cappedDays = Math.min(totalDays, PREVIEW_DAY_CAP); // Cap FREE preview — user must unlock additional days with credits
+    const isPartialPreview = cappedDays < totalDays;
 
     costTracker.addMetadata('destination', destination);
     costTracker.addMetadata('days', cappedDays);
@@ -343,7 +345,9 @@ Respond in JSON format:
     const preview: FullPreview = {
       destination,
       country: destinationCountry,
-      totalDays: cappedDays,
+      totalDays,
+      previewedDays: cappedDays,
+      isPartialPreview,
       totalActivities: allActivities.length,
       days: previewData.days?.map((day: any, index: number) => ({
         dayNumber: index + 1,
@@ -395,7 +399,9 @@ Respond in JSON format:
         success: true,
         preview,
         conversionCopy: {
-          headline: `Your ${cappedDays}-Day ${destination} Itinerary is Ready`,
+          headline: isPartialPreview
+            ? `Your ${destination} Itinerary Preview — First ${cappedDays} of ${totalDays} Days`
+            : `Your ${totalDays}-Day ${destination} Itinerary is Ready`,
           subheadline: `${allActivities.length} curated experiences across ${neighborhoods.length} neighborhoods`,
           cta: "Get My Complete Itinerary",
           valueProps: [
