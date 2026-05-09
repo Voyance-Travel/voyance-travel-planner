@@ -522,7 +522,7 @@ serve(async (req) => {
           });
 
           log("Group pool credit purchase fulfilled", {
-            userId, tripId, creditsToAdd, newRemaining: budget.remaining_credits + creditsToAdd,
+            userId, tripId, creditsToAdd, newRemaining,
           });
         }
 
