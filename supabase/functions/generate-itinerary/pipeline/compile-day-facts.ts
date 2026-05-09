@@ -401,6 +401,8 @@ export async function compileDayFacts(
             location: a.location as { name?: string; address?: string },
             cost: a.cost as { amount: number; currency: string },
             isLocked: true,
+            locked: true,
+            is_locked: true,
           }));
           console.log(`[compile-day-facts] ${lockedActivities.length} locked activities from JSON for day ${dayNumber}`);
         }
