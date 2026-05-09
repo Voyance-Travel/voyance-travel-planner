@@ -318,7 +318,7 @@ export default function FullItinerary({
               </div>
               <div>
                 <span className="font-medium">Tips:</span>
-                <p className="text-muted-foreground">{destinationInfo.tips}</p>
+                <p className="text-muted-foreground">{sanitizeActivityText(destinationInfo.tips)}</p>
               </div>
             </div>
           </motion.div>
@@ -389,7 +389,7 @@ function DayCard({
               <span className="text-muted-foreground">{day.weather.high}°F</span>
             </div>
           </div>
-          <p className="text-sm text-muted-foreground">{day.description}</p>
+          <p className="text-sm text-muted-foreground">{sanitizeActivityText(day.description)}</p>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm font-medium">${day.totalCost}</span>

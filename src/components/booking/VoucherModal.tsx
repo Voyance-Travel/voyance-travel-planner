@@ -23,6 +23,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { BookableActivity, getStateLabel, getStateColor } from '@/services/bookingStateMachine';
 import { formatPrice } from '@/utils/bookingUtils';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 import { useState } from 'react';
@@ -205,7 +206,7 @@ export function VoucherModal({
                     Cancellation Policy
                   </p>
                   <p className="text-amber-700 dark:text-amber-500">
-                    {activity.cancellationPolicy.description}
+                    {sanitizeActivityText(activity.cancellationPolicy.description)}
                   </p>
                   {activity.cancellationPolicy.deadline && (
                     <p className="text-xs text-amber-600 mt-1">

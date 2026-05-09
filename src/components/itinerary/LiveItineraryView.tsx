@@ -633,7 +633,7 @@ export function LiveItineraryView({
               </div>
               {currentDay.description && (
                 <p className="text-sm text-muted-foreground mt-1 italic line-clamp-2">
-                  {currentDay.description}
+                  {sanitizeActivityText(currentDay.description)}
                 </p>
               )}
               {whatToWear && isTodaySelected && (
@@ -695,7 +695,7 @@ export function LiveItineraryView({
 
                       {currentActivity.description && (
                         <p className="mt-2 text-xs text-muted-foreground/80 border-l-2 border-primary/20 pl-2 italic line-clamp-2">
-                          {currentActivity.description}
+                          {sanitizeActivityText(currentActivity.description)}
                         </p>
                       )}
                     </div>
