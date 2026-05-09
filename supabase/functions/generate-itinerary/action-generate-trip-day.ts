@@ -1428,6 +1428,59 @@ async function _handleGenerateTripDayInner(
         dayResult.activities = repairedDay.activities;
       }
 
+      // ── VALIDATION GATE — re-validate after repair, force in-place downgrades for any
+      //    critical semantic failure that the deterministic repair pass didn't catch.
+      //    No regen; never raw to UI. Mirrors action-generate-day.ts:1242.
+      try {
+        const { applyValidationGate } = await import('./pipeline/validation-gate.ts');
+        const postRepairDayMinimal = {
+          ...dayMinimal,
+          activities: (dayResult.activities || []).map((a: any) => ({
+            id: a.id || '', title: a.title || a.name || '',
+            startTime: a.startTime || a.start_time || '', endTime: a.endTime || a.end_time || '',
+            category: a.category || 'activity',
+            location: a.location || { name: '', address: '' },
+            cost: a.cost || { amount: 0, currency: 'USD' },
+            description: a.description || '', tags: a.tags || [],
+            bookingRequired: a.bookingRequired || false,
+            transportation: a.transportation || { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+          })),
+        };
+        const postRepairValidation = validateDay({
+          day: postRepairDayMinimal as any,
+          dayNumber, isFirstDay, isLastDay, totalDays,
+          destination: cityInfo?.cityName || destination,
+          hasHotel: true,
+          hotelName: cityInfo?.hotelName || tripHotelName || undefined,
+          arrivalTime24: arrTime24,
+          returnDepartureTime24: depTime24,
+          requiredMeals: policy.requiredMeals || [],
+          previousDays: [],
+          isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
+          previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
+        });
+        const gate = applyValidationGate(
+          postRepairDayMinimal as any,
+          postRepairValidation,
+          { dayNumber, destination: cityInfo?.cityName || destination },
+        );
+        if (gate.verdict === 'persist_forced') {
+          // Re-apply gate-mutated activities back onto dayResult, preserving any
+          // fields not in StrictActivityMinimal by index-merging.
+          const gated = gate.day.activities as any[];
+          const merged = gated.map((g, i) => ({ ...(dayResult.activities[i] || {}), ...g }));
+          dayResult.activities = merged;
+          dayResult.metadata = dayResult.metadata || {};
+          dayResult.metadata.quality = dayResult.metadata.quality || {};
+          dayResult.metadata.quality.gate_forced_persist = true;
+        }
+        dayResult.metadata = dayResult.metadata || {};
+        dayResult.metadata.quality = dayResult.metadata.quality || {};
+        dayResult.metadata.quality.validation_gate = gate.counters;
+      } catch (gateErr) {
+        console.warn('[VALIDATION_GATE] failed (non-blocking):', gateErr);
+      }
+
       // Auto-fill any remaining ≥3h afternoon dead gaps
       try {
         const { fillAfternoonDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
