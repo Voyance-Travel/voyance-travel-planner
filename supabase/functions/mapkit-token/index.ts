@@ -1,5 +1,18 @@
 import { corsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from '../_shared/cors.ts';
 
+const ALLOWED_ORIGINS = (() => {
+  const raw = Deno.env.get('MAPKIT_ALLOWED_ORIGINS');
+  if (!raw) {
+    return [
+      // Sane defaults so prod doesn't break if env not set
+      'https://travelwithvoyance.com',
+      'https://www.travelwithvoyance.com',
+      'https://voyance-travel-planner.lovable.app',
+    ];
+  }
+  return raw.split(',').map((s) => s.trim()).filter(Boolean);
+})();
+
 Deno.serve(async (req) => {
   const corsResp = handleCorsPreflightRequest(req);
   if (corsResp) return corsResp;
@@ -36,11 +49,7 @@ Deno.serve(async (req) => {
       iss: teamId,
       iat: now,
       exp: now + 3600, // 1 hour
-      origin: [
-        'https://travelwithvoyance.com',
-        'https://voyance-travel-planner.lovable.app',
-        'https://id-preview--bbef7015-a2df-45af-893d-7d36d59f8dcd.lovable.app',
-      ],
+      origin: ALLOWED_ORIGINS,
     };
 
     // Base64url encode
