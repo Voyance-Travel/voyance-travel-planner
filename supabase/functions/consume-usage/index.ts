@@ -42,34 +42,15 @@ serve(async (req) => {
 
     const currentPeriod = new Date().toISOString().slice(0, 7); // YYYY-MM
 
-    // Upsert usage record
-    const { data: existing } = await supabaseClient
-      .from('user_usage')
-      .select('id, count')
-      .eq('user_id', user.id)
-      .eq('metric_key', metric_key)
-      .eq('period', currentPeriod)
-      .single();
-
-    let newCount: number;
-
-    if (existing) {
-      newCount = existing.count + amount;
-      await supabaseClient
-        .from('user_usage')
-        .update({ count: newCount, updated_at: new Date().toISOString() })
-        .eq('id', existing.id);
-    } else {
-      newCount = amount;
-      await supabaseClient
-        .from('user_usage')
-        .insert({
-          user_id: user.id,
-          metric_key,
-          period: currentPeriod,
-          count: newCount,
-        });
-    }
+    // Atomic upsert+increment via RPC (prevents lost updates under concurrent calls)
+    const { data: rpcCount, error: rpcError } = await supabaseClient.rpc('increment_user_usage', {
+      p_user_id: user.id,
+      p_metric_key: metric_key,
+      p_period: currentPeriod,
+      p_amount: amount,
+    });
+    if (rpcError) throw new Error(`increment_user_usage failed: ${rpcError.message}`);
+    const newCount: number = typeof rpcCount === 'number' ? rpcCount : Number(rpcCount ?? amount);
 
     logStep("Usage consumed", { metric_key, amount, newCount });
 
