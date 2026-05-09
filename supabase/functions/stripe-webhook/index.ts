@@ -283,11 +283,14 @@ serve(async (req) => {
           }).eq('stripe_checkout_session_id', session.id).select().single();
 
           if (!updateError && payment?.external_provider === 'viator' && metadata.itemType === 'activity') {
-            await supabaseAdmin.rpc('transition_booking_state', {
-              p_activity_id: metadata.itemId, p_new_state: 'payment_confirmed',
+            const { error: stateError } = await supabaseAdmin.rpc('transition_booking_state', {
+              p_activity_id: metadata.itemId, p_new_state: 'booked_confirmed',
               p_trigger_source: 'stripe_webhook', p_trigger_reference: session.id,
               p_metadata: { payment_id: payment.id, stripe_session_id: session.id },
             });
+            if (stateError) {
+              console.error('[stripe-webhook] transition_booking_state failed:', stateError, { activityId: metadata.itemId });
+            }
           }
         }
 
