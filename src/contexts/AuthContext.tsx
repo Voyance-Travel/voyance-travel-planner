@@ -566,7 +566,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const val = localStorage.getItem(key);
       if (val) savedTourState[key] = val;
     });
-    
+
+    // Delete this user's push tokens BEFORE signing out so RLS allows the delete.
+    // Prevents notifications meant for this user from reaching the next user
+    // who logs in on the same device.
+    if (user) {
+      try {
+        const { error: pushDelError } = await supabase
+          .from('push_tokens')
+          .delete()
+          .eq('user_id', user.id);
+        if (pushDelError) {
+          console.error('[Auth] Failed to delete push tokens on logout:', pushDelError);
+        }
+      } catch (pushErr) {
+        console.error('[Auth] Push token cleanup exception:', pushErr);
+      }
+    }
+
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('Logout error:', error);
