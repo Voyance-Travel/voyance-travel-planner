@@ -725,7 +725,7 @@ export async function recordCommittedExpense(
     category,
     entry_type: 'committed',
     amount_cents: amountCents,
-    currency: 'USD',
+    currency: (data as any)?.currency || 'USD',
     description,
     day_number: dayNumber || null,
     activity_id: activityId,
