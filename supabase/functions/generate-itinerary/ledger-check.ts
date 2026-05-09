@@ -39,6 +39,18 @@ function stripVenueIdentity(a: any): void {
   a.imageUrl = null;
   a.image_url = null;
   a.heroImage = null;
+  // Clear label fields — old prestige descriptor ("Casual neighborhood dinner")
+  // must NOT survive onto a new venue. applyFallbackToActivity rebuilds title
+  // from the resolved venue; worst-case branch sets explicit placeholder text.
+  a.title = null;
+  a.name = null;
+  // Clear price context — old venue's cost/floor must NOT pin the new venue.
+  a.cost = null;
+  a.cost_per_person = null;
+  a.price = null;
+  a.price_per_person = null;
+  a.estimatedCost = null;
+  a.estimated_price_per_person = null;
   if (a.location && typeof a.location === 'object') {
     a.location = { name: null, address: null, lat: null, lng: null, place_id: null };
   } else {
@@ -49,7 +61,7 @@ function stripVenueIdentity(a: any): void {
   }
   if (a.metadata && typeof a.metadata === 'object') {
     for (const k of Object.keys(a.metadata)) {
-      if (/^(venue_|michelin_|cost_floor_reason)/.test(k)) delete a.metadata[k];
+      if (/^(venue_|michelin_|cost_floor)/.test(k)) delete a.metadata[k];
     }
   }
 }
