@@ -1,73 +1,44 @@
-# L5 — Move scheduled notifications to a relational table (DEFERRED)
+## L6 — Distance parsing units guard
 
-**Status:** Deferred. Documented for the future; not to be implemented in this turn. Current JSONB approach is fine while trip volume is small. Trigger a migration when *any* of: trips table > ~5k rows with notifications, p95 `trips` row size approaches the 8KB toast threshold, or the cron sweep in `trip-notifications` exceeds ~2s.
+**File:** `supabase/functions/route-details/index.ts` (around line 199)
 
-## Current shape (for reference)
+**Change:** Add a defensive sanity check after parsing `leg.distanceMeters` from the Google Routes API. If a single leg's distance exceeds ~2,000,000 meters (2,000 km), log an error — Google's response shape likely changed (e.g. miles instead of meters). Non-fatal: log only, do not throw or alter the response.
 
-`supabase/functions/trip-notifications/index.ts` reads/writes `trips.metadata.scheduledNotifications: TripNotification[]` at five call sites:
+### Edit (single insertion at L199)
 
-- L195–199 — overwrite on schedule
-- L222–237 — cron sweep selects every active trip's full `metadata`
-- L261–283 — single-trip update on dismiss
-- L410–461 — list-for-user fetch
-
-Every write rewrites the entire `metadata` blob; the cron sweep deserializes JSONB for every active trip even when none are due.
-
-## Target schema
-
-```sql
-create table public.trip_notifications (
-  id uuid primary key default gen_random_uuid(),
-  trip_id uuid not null references public.trips(id) on delete cascade,
-  user_id uuid not null,
-  type text not null,                 -- 'pre_trip' | 'mid_trip' | 'post_trip' | 'feedback' | …
-  title text not null,
-  message text not null,
-  scheduled_for timestamptz not null,
-  delivered_at timestamptz,
-  dismissed_at timestamptz,
-  payload jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
-);
-
-create index trip_notifications_due_idx
-  on public.trip_notifications (scheduled_for)
-  where delivered_at is null and dismissed_at is null;
-
-create index trip_notifications_trip_idx on public.trip_notifications (trip_id);
-create index trip_notifications_user_idx on public.trip_notifications (user_id);
-
-alter table public.trip_notifications enable row level security;
-
-create policy "owner reads own notifications"
-  on public.trip_notifications for select
-  using (auth.uid() = user_id);
-
-create policy "owner dismisses own notifications"
-  on public.trip_notifications for update
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-
--- Inserts/scheduling done via service role from the edge function only.
+Replace:
+```ts
+// Parse total distance
+const distanceMeters = leg.distanceMeters || 0;
+const distanceMiles = (distanceMeters / 1609.34).toFixed(1);
 ```
 
-## Migration path (zero-downtime, three deploys)
+With:
+```ts
+// Parse total distance
+const distanceMeters = Number(leg.distanceMeters) || 0;
 
-1. **Deploy 1 — dual-write, single-read.** Add the table + RLS. In `trip-notifications/index.ts` keep reading from `metadata.scheduledNotifications` but additionally `upsert` into `trip_notifications` on every schedule/dismiss. No reader change yet.
-2. **Backfill.** One-shot job: for each trip with `metadata.scheduledNotifications`, insert any rows missing in `trip_notifications` (dedupe on `trip_id + type + scheduled_for`).
-3. **Deploy 2 — flip reads.** Cron sweep + user-list fetch query `trip_notifications` directly (`scheduled_for <= now() and delivered_at is null and dismissed_at is null`). Stop reading the JSONB blob. Keep dual-write briefly as a safety net.
-4. **Deploy 3 — drop JSONB.** Remove `metadata.scheduledNotifications` writes and run a migration to strip the key from existing rows: `update trips set metadata = metadata - 'scheduledNotifications'`. Update any frontend that still reads it.
+// Sanity-check: a single leg distance should never exceed ~2,000,000 meters
+// (2000 km). If it does, Google's response shape changed and we're parsing
+// the wrong unit. Fail loudly so we catch it in dev rather than silently
+// rendering "100 mi" as "160,934 m".
+if (Number.isFinite(distanceMeters) && distanceMeters > 2_000_000) {
+  console.error('[route-details] Implausible leg distance — possibly wrong unit:', {
+    distanceMeters, expected: 'meters',
+  });
+  // Don't fail the response — just log. Caller decides what to do with the value.
+}
 
-## Frontend impact
+const distanceMiles = (distanceMeters / 1609.34).toFixed(1);
+```
 
-Search hits for `scheduledNotifications` outside the edge function: zero. Frontend only consumes the function's response shape, which stays the same. No UI change required.
+Note: the loop in this file processes a single `leg` (no `i` index in scope), so the log payload omits `legIndex` from the spec snippet.
 
-## Out of scope
+### Verify
+```
+grep -c "Implausible leg distance\|2_000_000" supabase/functions/route-details/index.ts
+```
+Expect ≥ 1 (will be 2).
 
-- Push/email channel changes.
-- Cron job schedule.
-- Any work in this turn — this plan exists so we have it ready when the trigger conditions hit.
-
-## When to revisit
-
-Open this plan and execute Deploy 1 the moment a) `select count(*) from trips where jsonb_array_length(coalesce(metadata->'scheduledNotifications','[]'::jsonb)) > 0` exceeds ~5k, b) `pg_column_size(metadata)` p95 > 4KB on `trips`, or c) the `trip-notifications` cron run exceeds 2s.
+### Out of scope
+- No frontend changes, no behavior change for callers, no AI/billing impact.
