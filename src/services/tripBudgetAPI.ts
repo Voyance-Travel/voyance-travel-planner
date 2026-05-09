@@ -73,6 +73,8 @@ export interface BudgetSummary {
   totalActual: number;
   totalPaid: number;
   totalPending: number;
+  currency: string;
+  mixedCurrencyExpenseIds: string[];
   memberBalances: { memberId: string; name: string; owes: number; owed: number }[];
   settlements: TripSettlement[];
 }
