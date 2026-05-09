@@ -223,16 +223,20 @@ serve(async (req) => {
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
 
-    // Trip service fee (always required)
+    // Trip service fee (always required) — charged in trip currency, no FX
     lineItems.push({
-      price: SINGLE_TRIP_PRICE_ID,
+      price_data: {
+        currency: tripCurrency,
+        product_data: { name: 'Voyance Trip Service Fee' },
+        unit_amount: SERVICE_FEE_CENTS,
+      },
       quantity: 1,
     });
 
     if (flightCents > 0) {
       lineItems.push({
         price_data: {
-          currency: 'usd',
+          currency: tripCurrency,
           product_data: { name: 'Flight Booking', description: `Flights for trip to ${trip.destination}` },
           unit_amount: flightCents,
         },
@@ -243,7 +247,7 @@ serve(async (req) => {
     if (hotelCents > 0) {
       lineItems.push({
         price_data: {
-          currency: 'usd',
+          currency: tripCurrency,
           product_data: { name: 'Hotel Booking', description: `Accommodation in ${trip.destination}` },
           unit_amount: hotelCents,
         },
@@ -254,7 +258,7 @@ serve(async (req) => {
     if (activitiesCents > 0) {
       lineItems.push({
         price_data: {
-          currency: 'usd',
+          currency: tripCurrency,
           product_data: { name: 'Activities & Experiences', description: `Curated activities for your trip` },
           unit_amount: activitiesCents,
         },
