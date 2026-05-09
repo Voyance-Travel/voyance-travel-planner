@@ -28,6 +28,7 @@ import {
   enforceTicketedAttractionPricing,
   enforceMichelinPriceFloor,
   enforceHighCostBookingGuidance,
+  enforceTransitModeByDistance,
 } from './sanitization.ts';
 import { normalizeVenueName, venueNamesMatch } from './generation-utils.ts';
 import { getDiningConfig } from './dining-config.ts';
@@ -270,13 +271,15 @@ export async function universalQualityPass(
   }
 
   // ── Step 7: Universal price caps ──
-  for (const act of result) {
+  for (let i = 0; i < result.length; i++) {
+    const act = result[i];
     enforceBarNightcapPriceCap(act, label);
     enforceCasualVenuePriceCap(act, label);
     enforceVenueTypePriceCap(act, label);
     enforceTicketedAttractionPricing(act, label);
     enforceMichelinPriceFloor(act, label);
     enforceHighCostBookingGuidance(act, label);
+    enforceTransitModeByDistance(act, result[i - 1] || null, result[i + 1] || null, label);
   }
 
   // ── Step 7b: Day 1 dining tier mismatch (luxury food audiences) ──

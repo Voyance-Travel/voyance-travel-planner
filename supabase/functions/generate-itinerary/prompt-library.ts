@@ -1309,6 +1309,7 @@ export function buildRegularDayPrompt(
   lines.push(`   - In the description, include WHICH line/route for public transit`);
   lines.push(`   - Short walks (under 5 min) can be noted in the tips of the previous activity`);
   lines.push(`     instead of a separate transport entry, but 10+ min walks MUST be explicit`);
+  lines.push(`   - "transportation.method": use "walking" ONLY for segments under ~650 m on foot (<15 min walk). For any inter-district hop (e.g. botanical garden → city neighborhood, two venues in different parts of the city, anything 1+ km apart), use "uber"/"taxi" or "metro" — NEVER "walking".`);
   lines.push('');
 
   lines.push(`   ACTIVITY MIX REQUIREMENTS:`);
