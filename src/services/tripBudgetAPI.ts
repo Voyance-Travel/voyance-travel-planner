@@ -444,6 +444,12 @@ export async function createSettlement(input: {
   toMemberId: string;
   amount: number;
   notes?: string;
+  /**
+   * Optional list of expense_splits.id values that this settlement closes.
+   * When provided, markSettlementComplete will mark exactly these splits as
+   * paid_via_settlement instead of falling back to a heuristic by member.
+   */
+  settledSplitIds?: string[];
 }): Promise<TripSettlement> {
   const { data, error } = await supabase
     .from('trip_settlements')
@@ -453,7 +459,11 @@ export async function createSettlement(input: {
       to_member_id: input.toMemberId,
       amount: input.amount,
       notes: input.notes || null,
-    })
+      settled_split_ids:
+        Array.isArray(input.settledSplitIds) && input.settledSplitIds.length > 0
+          ? input.settledSplitIds
+          : null,
+    } as any)
     .select()
     .single();
 
@@ -473,15 +483,70 @@ export async function createSettlement(input: {
 }
 
 export async function markSettlementComplete(settlementId: string): Promise<void> {
-  const { error } = await supabase
+  // Look up the settlement to find which splits it closes.
+  const { data: settlement, error: selErr } = await supabase
+    .from('trip_settlements')
+    .select('id, trip_id, from_member_id, to_member_id, amount, currency, settled_split_ids')
+    .eq('id', settlementId)
+    .single();
+
+  if (selErr) throw new Error(selErr.message);
+  if (!settlement) throw new Error('Settlement not found');
+
+  // Mark settlement complete.
+  const { error: updErr } = await supabase
     .from('trip_settlements')
     .update({
       is_settled: true,
       settled_at: new Date().toISOString(),
     })
     .eq('id', settlementId);
+  if (updErr) throw new Error(updErr.message);
 
-  if (error) throw new Error(error.message);
+  // CRITICAL: also mark the underlying expense_splits as paid.
+  // Without this, calculateBudgetSummary keeps reading them as unpaid
+  // and the user sees "you still owe $X" forever after settling.
+  const tracked = (settlement as any).settled_split_ids as string[] | null;
+  const nowIso = new Date().toISOString();
+
+  if (Array.isArray(tracked) && tracked.length > 0) {
+    const { error: splitErr } = await supabase
+      .from('expense_splits')
+      .update({
+        is_paid: true,
+        paid_at: nowIso,
+        paid_via_settlement: settlementId,
+      } as any)
+      .in('id', tracked);
+    if (splitErr) throw new Error(splitErr.message);
+    return;
+  }
+
+  // Fallback: legacy settlements without tracked split IDs. Find every unpaid
+  // split where this trip's debtor (from_member_id) owes the creditor
+  // (to_member_id, who paid the parent expense) and close them.
+  const { data: legacyRows, error: legacyErr } = await supabase
+    .from('expense_splits')
+    .select('id, trip_expenses!inner(trip_id, paid_by_member_id)')
+    .eq('member_id', settlement.from_member_id)
+    .eq('is_paid', false)
+    .eq('trip_expenses.trip_id', settlement.trip_id)
+    .eq('trip_expenses.paid_by_member_id', settlement.to_member_id);
+
+  if (legacyErr) throw new Error(legacyErr.message);
+
+  const legacyIds = (legacyRows || []).map((r: any) => r.id).filter(Boolean);
+  if (legacyIds.length === 0) return;
+
+  const { error: legacyUpdErr } = await supabase
+    .from('expense_splits')
+    .update({
+      is_paid: true,
+      paid_at: nowIso,
+      paid_via_settlement: settlementId,
+    } as any)
+    .in('id', legacyIds);
+  if (legacyUpdErr) throw new Error(legacyUpdErr.message);
 }
 
 // ============================================================================

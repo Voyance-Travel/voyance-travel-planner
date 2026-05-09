@@ -1,45 +1,44 @@
-## RS.M.I4 — Mark `trip_day_intents` fulfilled on manual activity edits
+## RS.M.B1 — Settlement closes underlying expense_splits
 
-### Problem
-Manual edits land in `trips.itinerary_data` (via `safeUpdateItineraryData` → `save-itinerary`), but the parallel `trip_day_intents` table is left with status `active`/`pending`. The next `regenerate-day` re-applies those intents and stomps the user's edit.
-
-### Current edit paths
-- `src/services/itineraryAPI.ts` does not have a per-activity `updateActivity` — manual edits flow through `saveItinerary` (whole-itinerary save) and `safeUpdateItineraryData` (every client write).
-- `src/services/tripActivitiesAPI.ts::updateActivity` is a separate REST path (edge function `trip-activities`) used by some flows.
-- `src/components/itinerary/EditorialItinerary.tsx` is the actual call site for manual edits and calls these helpers directly after editing.
-
-A single per-activity hook does not exist; the cleanest fit is a shared helper called from both save boundaries.
+### Schema reality (adapted from spec)
+- `trip_settlements` uses `from_member_id` / `to_member_id` (trip_members.id), not user_id. No `settled_split_ids` column today.
+- `expense_splits` is keyed by `member_id` (the debtor), has `is_paid`/`paid_at`, no `paid_via_settlement`. The creditor lives on `trip_expenses.paid_by_member_id`.
+- `createSettlement` and `markSettlementComplete` exist in `src/services/tripBudgetAPI.ts`. `markSettlementComplete` currently just flips `is_settled`/`settled_at` and never closes the underlying splits — `calculateBudgetSummary` keeps reading them as unpaid, so users see "you still owe $X" forever after settling.
+- No UI currently calls `createSettlement`; only the mark-complete mutation is wired. Adding an optional `settledSplitIds` param is non-breaking.
 
 ### Plan
 
-1. **New helper** `src/services/tripDayIntents.ts`:
-   ```ts
-   export async function markIntentsFulfilledByActivities(
-     tripId: string,
-     dayNumber: number,
-     activities: Array<{ id?: string; title?: string; name?: string }>
-   ): Promise<number>
-   ```
-   - Loads `trip_day_intents` for `(trip_id, day_number)` where `status <> 'fulfilled'`.
-   - For each intent, fuzzy-match against any activity title via lowercase substring containment in either direction (the snippet's logic).
-   - Updates matched intents with `{ status: 'fulfilled', fulfilled_at: now, fulfilled_activity_id: activity.id ?? null }`.
-   - Logs `[manual-edit] Marked N intents as fulfilled`. Swallows errors (best-effort).
+**1. Migration** (additive, idempotent):
+```sql
+ALTER TABLE public.trip_settlements
+  ADD COLUMN IF NOT EXISTS settled_split_ids uuid[];
 
-2. **Wire into `src/services/itineraryAPI.ts::saveItinerary`** (whole-itinerary save path):
-   - After the successful `save-itinerary` invoke, walk `mergedItinerary.days` and call the helper per day with that day's activities. This is the "after the activity update succeeds" hook the spec asks for, applied to the actual save boundary that exists in this file.
+ALTER TABLE public.expense_splits
+  ADD COLUMN IF NOT EXISTS paid_via_settlement uuid
+  REFERENCES public.trip_settlements(id) ON DELETE SET NULL;
 
-3. **Wire into `src/services/tripActivitiesAPI.ts::updateActivity`** (per-activity REST path):
-   - After the PATCH succeeds and the response carries the updated activity + day context, call the helper with that single activity. If `dayNumber` isn't in the response, skip silently (no regression).
+CREATE INDEX IF NOT EXISTS idx_expense_splits_paid_via_settlement
+  ON public.expense_splits(paid_via_settlement);
+```
+No RLS changes — existing policies on both tables already cover the new columns.
 
-4. **Verification** (per spec):
-   - `grep -c "trip_day_intents.*update.*fulfilled\|fulfilled_at: new Date" src/services/itineraryAPI.ts` ≥ 1 — satisfied by the helper call site (we'll inline a comment referencing the table to keep the grep honest, or we'll do the update inline in `saveItinerary` rather than through the helper). **Decision: keep the update inline in `saveItinerary`** (matching the user's snippet verbatim against `tripId`/`dayNumber`/`activity`) and have `tripActivitiesAPI.ts` call the shared helper. That guarantees the grep passes without contortions.
+**2. `createSettlement(input)`** — accept optional `settledSplitIds?: string[]` and persist into the new `settled_split_ids` column when provided. Existing callers continue to work (no UI callers today).
+
+**3. `markSettlementComplete(settlementId)`** — rewrite to:
+   - Read `id, trip_id, from_member_id, to_member_id, amount, currency, settled_split_ids` from `trip_settlements`.
+   - Update settlement → `is_settled=true`, `settled_at=now`.
+   - **If `settled_split_ids` is a non-empty array**, update those `expense_splits` rows: `is_paid=true`, `paid_at=now`, `paid_via_settlement=settlementId`.
+   - **Fallback (legacy settlements with no tracked splits)**: select unpaid splits where `member_id = from_member_id` AND parent expense `trip_id = settlement.trip_id` AND `paid_by_member_id = to_member_id`, then mark those paid via the same settlement. Implemented as a fetch-then-update (`.in('id', ids)`) because PostgREST can't filter on parent table joins in a single update; the fetch uses an embedded select on `trip_expenses!inner(trip_id, paid_by_member_id)`.
+   - Throw on each Supabase error so the existing mutation toast surfaces failures.
+
+**4. Verify**:
+   `grep -c "settled_split_ids\|paid_via_settlement" src/services/tripBudgetAPI.ts` — expected ≥ 4 (createSettlement insert, markSettlementComplete read, primary update, fallback update).
 
 ### Files touched
-- New: `src/services/tripDayIntents.ts` (helper)
-- Edit: `src/services/itineraryAPI.ts` (inline fulfillment loop inside `saveItinerary`, after successful invoke)
-- Edit: `src/services/tripActivitiesAPI.ts` (call helper after `updateActivity` succeeds)
+- New migration: `supabase/migrations/<timestamp>_settlement_split_link.sql` (additive columns + index).
+- Edit: `src/services/tripBudgetAPI.ts` — `createSettlement` (+ optional `settledSplitIds`), `markSettlementComplete` (close underlying splits with primary + legacy fallback path).
 
 ### Out of scope
-- No DB migration: `fulfilled_at` and `status` columns already exist.
-- No changes to regeneration logic — fulfilled intents are already filtered upstream.
-- No changes to locked/extracted/manual locking semantics.
+- No UI changes. (`createSettlement` has no UI caller today; once a future "Settle up" UI is built, it will pass `settledSplitIds` from the simplification result.)
+- No change to `calculateBudgetSummary` — it already respects `is_paid`, so closing the splits is sufficient.
+- No change to `markSplitPaid` — manual per-split flow remains independent.
