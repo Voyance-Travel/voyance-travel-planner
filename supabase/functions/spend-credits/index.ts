@@ -549,6 +549,19 @@ serve(async (req) => {
 
     // ── Idempotency check: skip duplicate charges ──
     const idempotencyKey = metadata?.idempotencyKey as string | undefined;
+
+    // High-value actions MUST provide an idempotency key — protects against
+    // duplicate charges on retries for the four most expensive flows.
+    const HIGH_VALUE_ACTIONS_REQUIRING_KEY = ['trip_generation', 'smart_finish', 'hotel_optimization', 'regenerate_trip'];
+    if (HIGH_VALUE_ACTIONS_REQUIRING_KEY.includes(action) && !idempotencyKey) {
+      return errorResponse(
+        'metadata.idempotencyKey is required for high-value actions',
+        'MISSING_IDEMPOTENCY_KEY',
+        400,
+        { action, requiredFor: HIGH_VALUE_ACTIONS_REQUIRING_KEY }
+      );
+    }
+
     if (idempotencyKey && tripId) {
       const { data: existing } = await supabaseAdmin
         .from('credit_ledger')

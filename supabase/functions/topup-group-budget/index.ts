@@ -85,11 +85,14 @@ serve(async (req) => {
       throw new Error(`deduct_credits_fifo failed: ${msg}`);
     }
 
-    // Add to budget
-    await supabaseAdmin.from('group_budgets').update({
-      remaining_credits: budget.remaining_credits + credits,
-      updated_at: now.toISOString(),
-    }).eq('id', budget.id);
+    // Atomic add — single SQL UPDATE prevents lost-update under concurrent top-ups
+    const { error: addErr } = await supabaseAdmin.rpc('add_to_group_budget', {
+      p_budget_id: budget.id,
+      p_credits: credits,
+    });
+    if (addErr) {
+      throw new Error(`add_to_group_budget failed: ${addErr.message}`);
+    }
 
     // Log transaction
     await supabaseAdmin.from('group_budget_transactions').insert({

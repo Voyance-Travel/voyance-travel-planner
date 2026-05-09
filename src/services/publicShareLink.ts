@@ -148,6 +148,8 @@ export function getPublicShareErrorMessage(reason?: string): string {
       return 'Only the trip owner can create a public link.';
     case 'trip_not_found':
       return 'Trip not found.';
+    case 'itinerary_not_ready':
+      return 'Generate your itinerary first to share it.';
     case 'read_failed':
       return 'Could not load sharing settings. Please try again.';
     case 'toggle_failed':

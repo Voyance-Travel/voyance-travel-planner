@@ -82,6 +82,7 @@ export default function ConsumerTripShare() {
   const [trip, setTrip] = useState<SharedTripData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -95,15 +96,17 @@ export default function ConsumerTripShare() {
 
         if (rpcError) throw rpcError;
 
-        const result = data as unknown as SharedTripData & { error?: string };
+        const result = data as unknown as SharedTripData & { error?: string; error_code?: string };
         if (result.error) {
           setError(result.error);
+          setErrorCode(result.error_code ?? null);
         } else {
           setTrip(result);
         }
       } catch (e) {
         console.error('[ConsumerTripShare] fetch failed:', e);
         setError('Unable to load trip. The link may be invalid or sharing may be disabled.');
+        setErrorCode(null);
       } finally {
         setLoading(false);
       }
@@ -121,18 +124,26 @@ export default function ConsumerTripShare() {
   }
 
   if (error || !trip) {
+    const isPaused = errorCode === 'sharing_disabled';
+    const heading = isPaused ? 'Sharing Paused' : 'Trip Not Found';
+    const cta = isPaused ? 'Ask the trip owner for a new link' : 'Plan Your Own Trip';
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="max-w-md mx-4">
           <CardContent className="pt-6 text-center space-y-4">
             <Compass className="h-12 w-12 text-muted-foreground mx-auto" />
-            <h2 className="text-xl font-semibold">Trip Not Found</h2>
+            <h2 className="text-xl font-semibold">{heading}</h2>
             <p className="text-muted-foreground text-sm">
               {error || 'This trip link is invalid or sharing has been disabled.'}
             </p>
-            <Button asChild variant="outline">
-              <Link to="/">Plan Your Own Trip</Link>
-            </Button>
+            {!isPaused && (
+              <Button asChild variant="outline">
+                <Link to="/">{cta}</Link>
+              </Button>
+            )}
+            {isPaused && (
+              <p className="text-xs text-muted-foreground">{cta}</p>
+            )}
           </CardContent>
         </Card>
       </div>
