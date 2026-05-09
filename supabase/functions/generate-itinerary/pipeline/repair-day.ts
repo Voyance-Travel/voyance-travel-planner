@@ -37,6 +37,7 @@ import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-booke
 import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../../_shared/prompt-leak-scrub.ts';
 import { scrubActivity, formatOps, opsHadChange } from '../../_shared/scrub-activity.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
+import { pickTransitFallback } from '../../_shared/transit-mode.ts';
 
 // =============================================================================
 // INPUT TYPES
@@ -3346,6 +3347,48 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       }
       return true;
     });
+  }
+
+  // --- 15b. WALK_OVER_THRESHOLD — force walk→taxi/metro on >30min OR >1500m ---
+  if (byCode.has(FAILURE_CODES.WALK_OVER_THRESHOLD)) {
+    const indices = (byCode.get(FAILURE_CODES.WALK_OVER_THRESHOLD) || [])
+      .map(vr => vr.activityIndex)
+      .filter((i): i is number => i !== undefined);
+    for (const idx of indices) {
+      if (idx < 0 || idx >= activities.length) continue;
+      const act = activities[idx] as any;
+      if (lockedIds.has(act?.id)) continue;
+      const t = act.transportation || (act.transportation = {});
+      const distM = Number(t.distanceMeters) || 0;
+      const curDur = Number(t.durationMinutes) || 0;
+      const destName = (activities[idx + 1] as any)?.location?.name
+        || (act?.location?.name)
+        || '';
+      const before = { method: t.method, durationMinutes: curDur, distanceMeters: distM };
+      const tier = pickTransitFallback(distM > 0 ? distM : null, curDur, destName);
+      t.method = tier.method;
+      t.durationMinutes = tier.durationMinutes;
+      t.duration = `${tier.durationMinutes} min`;
+      const currency = t.estimatedCost?.currency || 'USD';
+      t.estimatedCost = { amount: tier.costAmount, currency };
+      if (act.cost && typeof act.cost === 'object') {
+        act.cost.amount = tier.costAmount;
+        if (!act.cost.currency) act.cost.currency = currency;
+      }
+      // Rewrite "Walk to X" → "Taxi to X" / "Metro to X"
+      if (typeof act.title === 'string') {
+        const verb = tier.method === 'metro' ? 'Metro' : 'Taxi';
+        act.title = act.title.replace(/^(?:Walk|Walking)\b/i, verb);
+      }
+      repairs.push({
+        code: FAILURE_CODES.WALK_OVER_THRESHOLD,
+        activityIndex: idx,
+        action: 'walk_to_taxi',
+        before,
+        after: { method: tier.method, durationMinutes: tier.durationMinutes, costAmount: tier.costAmount },
+      });
+      console.log(`[WALK_OVER_THRESHOLD] day=${dayNumber} idx=${idx} ${before.method} ${curDur}min/${distM}m → ${tier.method} ${tier.durationMinutes}min/$${tier.costAmount}`);
+    }
   }
 
   // --- 16. FINAL TIMING & TRANSIT-BUFFER PASS (shared with refresh-day) ---------
