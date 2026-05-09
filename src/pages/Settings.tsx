@@ -474,25 +474,6 @@ export default function Settings() {
                   
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <Label htmlFor="price-alerts" className="text-sm font-medium">
-                        Price alerts
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        Be notified when prices drop for saved destinations
-                      </p>
-                    </div>
-                    <Switch
-                      id="price-alerts"
-                      checked={priceAlerts}
-                      onCheckedChange={handlePriceAlerts}
-                      disabled={saving}
-                    />
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
                       <Label htmlFor="budget-alerts" className="text-sm font-medium">
                         Budget guidance
                       </Label>
