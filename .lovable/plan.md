@@ -1,47 +1,31 @@
-## Fix 3 — Gate post-signup redirect on quiz completion
+## Fix 4 — Await `updateUser` profile upsert
 
 ### Verified
-- `AuthContext.signup` returns `Promise<{ needsEmailConfirmation?: boolean }>` only — no `user`/`quizCompleted` exposed today.
-- `SignUpForm.onSubmit` (lines 113–140) currently routes: `needsEmailConfirmation` → confirmation card; else `pendingToken` → `/invite/:token`; else `queryRedirect || consumeReturnPath('/')`.
-- `ProtectedRoute` already enforces `!user.quizCompleted → ROUTES.QUIZ` for `requireQuiz` routes — so the gap is only "fresh signup lands on a non-protected page (e.g. `/`) and never hits the quiz".
-- Email-confirmation links land on `/` (with optional `?inviteToken=`); `OAuthReturnHandler` picks them up. Today the no-invite/no-returnPath fallback sends users to `/profile`, bypassing the quiz for unconfirmed signups.
+- `AuthContext.tsx:600` defines `updateUser` as a **synchronous** function (return type `void`, not `Promise<void>` as the brief claimed). Interface line 45: `updateUser: (updates: Partial<User>) => void;`
+- The Supabase upsert at lines 616–623 is a fire-and-forget `.then()` chain. Errors only `console.error`; no caller can react.
+- Only one in-app caller: `src/pages/ProfileEdit.tsx:31` — `updateUser({ name: data.name.trim() })` inside an already-`async` submit handler. (All other matches in the codebase are `supabase.auth.updateUser`, unrelated.)
+- `ProfileEdit` already persists name via `updateProfile()` (line 22) before calling `updateUser`, so the AuthContext upsert is a redundant DB write — but it should still surface failures rather than swallow them.
 
 ### Changes
 
-**1. `src/contexts/AuthContext.tsx` — extend `signup()` return shape**
+**1. `src/contexts/AuthContext.tsx` — make `updateUser` async and propagate errors**
 
-Change the return type to `Promise<{ needsEmailConfirmation?: boolean; quizCompleted?: boolean }>`.
-- Brand-new signups have not completed the quiz → return `quizCompleted: false` from BOTH the `needsEmailConfirmation` branch (line 524) AND the success branch (line 536).
-- No DB read needed; default-false is correct for any fresh signup.
+- Interface (line 45): change to `updateUser: (updates: Partial<User>) => Promise<void>;`
+- Implementation (lines 600–626): change signature to `const updateUser = async (updates: Partial<User>): Promise<void> => { … }`
+- Convert the `.then()` block to `await … upsert(…)`; on error, `console.error` AND `throw error` so the caller's catch can show a toast / surface UI feedback.
+- Keep early-`return`s for invalid name/email and the optimistic `setUser({ ...user, ...updates })` exactly as today — local state still updates immediately for snappy UI; only the DB sync becomes awaitable.
 
-**2. `src/components/auth/SignUpForm.tsx` — quiz redirect branch**
+**2. `src/pages/ProfileEdit.tsx` — await the call**
 
-In `onSubmit` after the invite-token check, add:
-```ts
-} else if (result?.quizCompleted === false) {
-  navigate(ROUTES.QUIZ, { replace: true });
-} else {
-  navigate(queryRedirect || consumeReturnPath('/'));
-}
-```
-Order stays: `needsEmailConfirmation` → invite → **quiz** → returnPath. Invite-acceptance still wins (the invite flow itself can route to quiz afterward if needed; we don't want to swallow an invite token).
-
-**3. `src/components/auth/OAuthReturnHandler.tsx` — quiz gate on the `/profile` fallback**
-
-Read `user` from `useAuth()` (already imported). In the **final fallback** (lines 69–73, the "authenticated on `/` with no return path and no invite" branch), redirect to `ROUTES.QUIZ` instead of `/profile` when `!user?.quizCompleted`. This covers:
-- Email-confirmation links landing on `/` for fresh signups (no invite, no returnPath).
-- OAuth signups that skip the email confirmation step.
-
-Do **not** add a quiz gate to the invite branches (priorities 1–3) — invite acceptance is critical and the invite page can route to the quiz afterward.
-Do **not** add a quiz gate to the explicit `returnPath` fallback (line 63) — existing users with intentional return paths (e.g. deep links) shouldn't be hijacked; `ProtectedRoute(requireQuiz)` already covers protected destinations.
+Line 31: `await updateUser({ name: data.name.trim() });`
+The handler is already `async`, so this is a one-token change. If the upsert throws, the existing `await updateProfile(...)` already succeeded (it's the canonical write), so propagating the error here mostly just blocks the `navigate` and lets any wrapping toast/error UI react. Acceptable — failure here implies a real auth/session problem worth surfacing.
 
 ### Out of scope
-- No schema changes, no new queries.
-- No change to `LoginForm` or social login (`SocialLoginButtons`) — sign-in users either already completed the quiz or are caught by `ProtectedRoute(requireQuiz)`.
+- No change to `updateProfile()` service or the `profiles` schema.
+- No new validation, no new fields written.
+- Other `supabase.auth.updateUser` call sites (Settings, ResetPassword, voyanceAuth, accountManagementAPI) are unrelated — they call the Supabase auth API directly, not our context method.
 
 ### Validation
-1. Fresh email signup with auto-confirm off → confirmation card. Click email link → lands on `/` → `OAuthReturnHandler` redirects to `/quiz` (not `/profile`).
-2. Fresh email signup with auto-confirm on → `SignUpForm` redirects to `/quiz` (not `/`).
-3. Signup with `?inviteToken=xyz` → still redirects to `/invite/xyz` (invite wins over quiz).
-4. Existing user signs up again with `?redirect=/some-page` → `needsEmailConfirmation` returns; after re-confirm + login they hit returnPath; if that page is `requireQuiz` and they're already completed, no redirect; if not completed, `ProtectedRoute` already routes them to `/quiz`.
-5. Login (not signup) for an existing quiz-completed user → no behavior change.
+1. Edit name in `/profile/edit` → save. Network tab shows `profiles` upsert completes before navigate. No regression.
+2. Simulate failure (offline / RLS denial) → `updateProfile` likely also fails first; if it succeeds but the AuthContext upsert fails, an error is now thrown and bubbles up rather than being silently swallowed.
+3. TypeScript: every other call site of `updateUser` in the codebase — there are none beyond `ProfileEdit.tsx` — so the interface change only requires the one `await`.

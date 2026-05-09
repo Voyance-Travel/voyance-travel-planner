@@ -28,7 +28,7 @@ export default function ProfileEdit() {
     });
 
     // Sync local auth context
-    updateUser({ name: data.name.trim() });
+    await updateUser({ name: data.name.trim() });
     navigate(ROUTES.PROFILE.VIEW);
   };
 
