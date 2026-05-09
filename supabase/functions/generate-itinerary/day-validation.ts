@@ -1022,6 +1022,10 @@ export function enforceRequiredMealsFinalGuard(
       console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Removing duplicate meal "${removed?.title}"`);
       activities.splice(idx, 1);
     }
+    const orphans = pruneOrphanTransits(activities);
+    if (orphans > 0) {
+      console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: pruned ${orphans} orphan transit connector(s) after duplicate-meal strip`);
+    }
   }
 
   // Re-detect after dedup
