@@ -9,6 +9,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import Stripe from "npm:stripe@18.5.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -191,7 +192,7 @@ serve(async (req) => {
 
     if (!response.ok) {
       log("Viator booking error", { status: response.status, data });
-      
+
       // Update payment record with failure
       await serviceSupabase
         .from("trip_payments")
@@ -206,12 +207,43 @@ serve(async (req) => {
         })
         .eq("id", paymentId);
 
+      // Auto-refund the Stripe charge so the user isn't left out of pocket.
+      let refundId: string | null = null;
+      let refundError: string | null = null;
+      if (payment.stripe_payment_intent_id) {
+        try {
+          const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2025-08-27.basil' });
+          const refund = await stripe.refunds.create(
+            {
+              payment_intent: payment.stripe_payment_intent_id,
+              reason: 'requested_by_customer',
+              metadata: {
+                activity_id: activityId,
+                viator_error_code: data.code || 'unknown',
+                auto_refund: 'viator_book_failure',
+              },
+            },
+            { idempotencyKey: `viator-fail:${paymentId}` }
+          );
+          refundId = refund.id;
+          log("Auto-refund issued", { refundId, amount: refund.amount });
+        } catch (refundErr) {
+          refundError = refundErr instanceof Error ? refundErr.message : String(refundErr);
+          log("Auto-refund FAILED", { error: refundError, paymentId });
+          // Don't throw — surface to user; ops handles manually.
+        }
+      } else {
+        log("Auto-refund skipped: no stripe_payment_intent_id on payment", { paymentId });
+      }
+
       return new Response(
         JSON.stringify({
           success: false,
           error: data.message || `Viator booking failed: ${response.status}`,
           code: data.code,
-          refundRequired: true, // Signal that Stripe refund may be needed
+          refundIssued: !!refundId,
+          refundId,
+          refundError,
         }),
         { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
