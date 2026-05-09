@@ -1,76 +1,81 @@
-# M12 — Quick preview validates first dining venue
+# M13 — Activity avoid-list filtering
 
 ## Context
 
-`supabase/functions/generate-quick-preview/index.ts` returns 3-day previews with this shape:
+Spec calls for filtering the `searchActivities` results in `src/services/activitiesAPI.ts` against `user_preferences.avoid_categories` and `user_preferences.avoid_venues`. **Neither column exists** today (only `food_dislikes TEXT[]` is present). User chose **Add columns + filter, no UI** — schema migration ships now; UI to populate the lists is tracked separately.
 
-```ts
-interface QuickPreviewDay { dayNumber: number; headline: string; description: string; }
+## Step 1 — Migration
+
+Add two `TEXT[]` columns to `public.user_preferences` with empty-array defaults so existing rows stay safe and filtering is a no-op until populated.
+
+```sql
+ALTER TABLE public.user_preferences
+  ADD COLUMN IF NOT EXISTS avoid_categories TEXT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS avoid_venues     TEXT[] NOT NULL DEFAULT '{}';
 ```
 
-There is **no** `activities[]`, `venueName`, or `title` on the day — the AI emits prose-style `headline` (5–8 words referencing a real place) and `description` (20–30 words with 2–3 real venues). The spec assumes an activities array, so we adapt the same intent (validate the first dining venue) to this preview shape.
+No RLS change — the table's existing per-user policies already cover the new columns.
 
-## Change
+After approval the Supabase types regenerate, so `avoid_categories` / `avoid_venues` become typed on the client.
 
-After the `Promise.all([...])` returns at lines 535–539 in the request handler, **before** assembling `result` at line 556, run one Places text-search against the first dining-flagged day.
+## Step 2 — Filter in `src/services/activitiesAPI.ts`
+
+Inside `searchActivities`, after the edge-function call returns and `data` is parsed, fetch the current user's avoid lists and filter the array before returning. Return shape stays `ActivitySearchResponse` (so `useActivitySearch` consumers don't break) — we filter the `activities` array in place and recompute `totalCount`.
 
 ```ts
-// ── First-dining venue validation — catches obvious AI hallucinations
-//    before showing the preview. One Places search per preview (~$0.017),
-//    cache-first via cachedGooglePlacesTextSearch.
-try {
-  const previewDays = aiResult.days || [];
-  const DINING_RE = /breakfast|brunch|lunch|dinner|cafe|café|restaurant|trattoria|osteria|izakaya|ramen|bistro|bakery|bar|pub/i;
-  const matchIdx = previewDays.findIndex((d: any) =>
-    DINING_RE.test(`${d?.headline || ''} ${d?.description || ''}`)
+// Apply user's avoid-list before returning.
+const { data: { user } } = await supabase.auth.getUser();
+let activities = (data as ActivitySearchResponse)?.activities || [];
+
+if (user) {
+  const { data: prefs } = await supabase
+    .from('user_preferences')
+    .select('avoid_categories, avoid_venues')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  const avoidCategories = new Set(
+    (prefs?.avoid_categories || []).map((c: string) => c.toLowerCase().trim()).filter(Boolean)
   );
-  if (matchIdx >= 0) {
-    const d = previewDays[matchIdx];
-    // Use the headline (concise, place-anchored) as the search query when it
-    // contains the dining keyword; otherwise fall back to the description.
-    const queryStr = DINING_RE.test(d.headline || '') ? d.headline : d.description;
-    if (queryStr && queryStr.trim().length > 0) {
-      const { cachedGooglePlacesTextSearch } = await import('../_shared/google-api.ts');
-      const validation = await cachedGooglePlacesTextSearch(
-        {
-          textQuery: `${queryStr} ${destination}`.slice(0, 240),
-          maxResultCount: 1,
-          languageCode: 'en',
-          fieldMask: 'places.id,places.displayName,places.formattedAddress',
-        },
-        { actionType: 'quick_preview_venue_validation', reason: `validate dining day ${d.dayNumber}` }
-      );
-      const found = validation.ok && (validation.data?.places?.length ?? 0) > 0;
-      if (!found) {
-        console.warn('[quick-preview] First dining venue not verified on Google Places:', {
-          query: queryStr, destination,
-        });
-        (previewDays[matchIdx] as any)._venueValidation = 'first_dining_unverified';
+  const avoidVenues = Array.from(
+    new Set((prefs?.avoid_venues || []).map((v: string) => v.toLowerCase().trim()).filter(Boolean))
+  );
+
+  if (avoidCategories.size > 0 || avoidVenues.length > 0) {
+    activities = activities.filter((a) => {
+      const cat = String(a.category || '').toLowerCase();
+      const title = String(a.title || '').toLowerCase();
+      if (avoidCategories.has(cat)) return false;
+      for (const v of avoidVenues) {
+        if (title.includes(v)) return false;
       }
-    }
+      return true;
+    });
   }
-} catch (valErr) {
-  console.warn('[quick-preview] Venue validation failed (non-blocking):', valErr);
 }
+
+return {
+  ...(data as ActivitySearchResponse),
+  activities,
+  totalCount: activities.length,
+};
 ```
 
-Then the existing `result.days = aiResult.days || []` already carries the `_venueValidation` flag through to the frontend.
+### Adjustments vs. spec
 
-## Adjustments vs. user spec
-
-- **No `activities[]` exists** in QuickPreviewDay. We instead match the dining regex against `headline + description` and use the matching string as the search query — this is the closest semantic equivalent. The spec's `firstDining.venueName || firstDining.title` is mapped to `headline || description`.
-- **Place stamp on the matched day**, not always `previewDays[0]` — if Day 2 is the first dining-flagged day, the warning attaches there.
-- **Truncate query to 240 chars** to avoid sending a long description as `textQuery`.
-- **Frontend copy** ("Preview venues are AI-generated; final itinerary uses verified venues") is out of scope here — backend just stamps the flag.
+- **Return shape preserved**: spec ends with `return filtered` (a bare array), but the function signature is `Promise<ActivitySearchResponse>` and `useActivitySearch` consumers expect `{ activities, totalCount, … }`. We return the response object with filtered `activities` and recomputed `totalCount`.
+- **`user` is fetched here**: spec assumes `user` already in scope; this function has no auth context, so we call `supabase.auth.getUser()`. Anonymous callers skip the filter (no prefs to apply).
+- **Title-only venue match**: `Activity` has no `name` field — only `title`. We match `title` (lowercased substring) against each venue keyword.
+- **Empty-list short-circuit** avoids the array scan when the user has no avoid entries (the common case until UI ships).
 
 ## Verification
 
-- `grep -c "quick_preview_venue_validation\|_venueValidation" supabase/functions/generate-quick-preview/index.ts` → ≥ 2
-- Deploy `generate-quick-preview`.
-- Spot-check `[quick-preview] First dining venue not verified` warning appears on a hallucinated preview; cache HIT log on a popular destination's second invocation.
+- `grep -c "avoid_categories\|avoid_venues" src/services/activitiesAPI.ts` → ≥ 2 (both column names referenced in select + variables).
+- Build passes.
+- Manual: with `avoid_categories = '{food}'` set on a test row, `searchActivities` returns no rows whose `category === 'food'`.
 
 ## Out of scope
 
-- Frontend banner reading `_venueValidation`.
-- Validating non-dining venues or more than the first day.
-- Type-extending `QuickPreviewDay` — the field is attached via `as any`, deliberately optional/loose so the frontend can ignore it.
+- UI to edit avoid lists (tracked separately).
+- Server-side filter inside the `activities` edge function (M13 keeps it client-side per spec).
+- Fuzzy / token matching for venues — substring only.

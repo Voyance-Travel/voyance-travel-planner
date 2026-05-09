@@ -8661,6 +8661,8 @@ export type Database = {
           agent_business_email: string | null
           agent_business_name: string | null
           airport_radius_miles: number | null
+          avoid_categories: string[]
+          avoid_venues: string[]
           budget_alerts: boolean | null
           budget_range: Json | null
           budget_tier: string | null
@@ -8742,6 +8744,8 @@ export type Database = {
           agent_business_email?: string | null
           agent_business_name?: string | null
           airport_radius_miles?: number | null
+          avoid_categories?: string[]
+          avoid_venues?: string[]
           budget_alerts?: boolean | null
           budget_range?: Json | null
           budget_tier?: string | null
@@ -8823,6 +8827,8 @@ export type Database = {
           agent_business_email?: string | null
           agent_business_name?: string | null
           airport_radius_miles?: number | null
+          avoid_categories?: string[]
+          avoid_venues?: string[]
           budget_alerts?: boolean | null
           budget_range?: Json | null
           budget_tier?: string | null
