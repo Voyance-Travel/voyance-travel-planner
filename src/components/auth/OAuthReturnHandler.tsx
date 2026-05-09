@@ -67,11 +67,15 @@ export function OAuthReturnHandler() {
     }
 
     // FALLBACK: Authenticated on root `/` with no return path (typical after OAuth sign-in
-    // from /signin without ?redirect= param). Navigate to profile instead of leaving user
-    // on the marketing homepage or a blank page.
+    // from /signin without ?redirect= param, or fresh email-confirmation landing).
+    // Send fresh signups through the quiz; otherwise land on profile.
     hasRedirected.current = true;
-    navigate('/profile', { replace: true });
-  }, [isAuthenticated, isLoading, location.pathname, navigate, searchParams]);
+    if (user && !user.quizCompleted) {
+      navigate('/quiz', { replace: true });
+    } else {
+      navigate('/profile', { replace: true });
+    }
+  }, [isAuthenticated, isLoading, location.pathname, navigate, searchParams, user]);
 
   return null;
 }
