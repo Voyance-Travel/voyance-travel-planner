@@ -1369,29 +1369,6 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
   }
 
-  // --- 10c. TRUNCATED_SENTENCE: trim to last sentence boundary ---
-  // Mirrors validate-day's checkSentenceCompleteness. We trim mid-sentence
-  // tails back to the last [.!?…] when a complete sentence (≥40 chars)
-  // remains; otherwise leave the fragment alone (better than blanking).
-  for (let i = 0; i < activities.length; i++) {
-    const act: any = activities[i];
-    if (lockedIds.has(act.id)) continue;
-    for (const field of ['description', 'tips', 'notes'] as const) {
-      const before = act[field];
-      const trimmed = trimToLastSentence(before);
-      if (trimmed != null && trimmed !== before) {
-        act[field] = trimmed;
-        repairs.push({
-          code: FAILURE_CODES.TRUNCATED_SENTENCE,
-          activityIndex: i,
-          field,
-          action: 'trim_to_last_sentence',
-          before,
-          after: trimmed,
-        });
-      }
-    }
-  }
 
   // --- 5b. MEAL_DUPLICATE: remove or relabel duplicate same-meal activities ---
   if (byCode.has(FAILURE_CODES.MEAL_DUPLICATE)) {
