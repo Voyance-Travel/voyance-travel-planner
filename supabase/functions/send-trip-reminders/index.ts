@@ -411,13 +411,26 @@ const handler = async (req: Request): Promise<Response> => {
 
     logStep("Found upcoming trips", { count: trips.length });
 
+    // Fetch preferences (incl. timezone) up-front so daysUntil is computed in user's local TZ.
+    const allUserIds = [...new Set(trips.map(t => t.user_id))];
+    const { data: preferences } = await supabase
+      .from("user_preferences")
+      .select("user_id, trip_reminders, timezone")
+      .in("user_id", allUserIds)
+      .eq("trip_reminders", true);
+
+    const tzByUser = new Map<string, string | null>(
+      (preferences ?? []).map(p => [p.user_id, (p as { timezone?: string | null }).timezone ?? null])
+    );
+    const usersWithReminders = new Set(tzByUser.keys());
+
     const tripsToRemind: Array<typeof trips[0] & { daysUntil: number; reminderType: "daily" | "weekly" | "monthly" }> = [];
-    
+
     for (const trip of trips) {
-      const startDate = new Date(trip.start_date);
-      startDate.setHours(0, 0, 0, 0);
-      const daysUntil = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      
+      if (!usersWithReminders.has(trip.user_id)) continue;
+      const userTz = tzByUser.get(trip.user_id) ?? null;
+      const daysUntil = computeDaysUntilLocal(trip.start_date, userTz);
+
       const reminderType = getReminderType(daysUntil);
       if (reminderType && shouldSendReminder(daysUntil, reminderType)) {
         tripsToRemind.push({ ...trip, daysUntil, reminderType });
@@ -433,25 +446,7 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    const userIds = [...new Set(tripsToRemind.map(t => t.user_id))];
-
-    const { data: preferences } = await supabase
-      .from("user_preferences")
-      .select("user_id, trip_reminders")
-      .in("user_id", userIds)
-      .eq("trip_reminders", true);
-
-    const usersWithReminders = new Set(preferences?.map(p => p.user_id) || []);
-    
-    const filteredTrips = tripsToRemind.filter(t => usersWithReminders.has(t.user_id));
-    
-    if (filteredTrips.length === 0) {
-      logStep("No users have reminders enabled");
-      return new Response(
-        JSON.stringify({ success: true, message: "No users with reminders enabled", sent: 0 }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const filteredTrips = tripsToRemind;
 
     const { data: profiles } = await supabase
       .from("profiles")
