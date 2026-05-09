@@ -7,6 +7,7 @@ import type { RequiredMeal } from './meal-policy.ts';
 import { getRandomFallbackRestaurant, resolveAnyMealFallback } from './fix-placeholders.ts';
 import { detectCrossCityMention } from './cross-city-filter.ts';
 import { extractRestaurantVenueName, venueNamesMatch } from './generation-utils.ts';
+import { pruneOrphanTransits } from '../_shared/orphan-transit.ts';
 
 // =============================================================================
 // CHAIN RESTAURANT BLOCKLIST — prevents chain restaurants from appearing
