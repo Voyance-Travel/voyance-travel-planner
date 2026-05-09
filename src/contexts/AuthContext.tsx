@@ -521,7 +521,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // Email confirmation required — return gracefully instead of throwing
     if (data.user && !data.session) {
-      return { needsEmailConfirmation: true };
+      return { needsEmailConfirmation: true, quizCompleted: false };
     }
     
     // Profile is created automatically via trigger
@@ -533,7 +533,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logSignup().catch(console.error);
     }
 
-    return {};
+    return { quizCompleted: false };
   };
 
   const logout = async () => {
