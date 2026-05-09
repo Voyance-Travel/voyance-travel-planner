@@ -66,7 +66,7 @@ function transformProfile(
     avatar: profile?.avatar_url || supabaseUser.user_metadata?.avatar_url,
     homeAirport: profile?.home_airport || preferences?.home_airport || undefined,
     createdAt: supabaseUser.created_at,
-    quizCompleted: profile?.quiz_completed || false,
+    quizCompleted: profile?.quiz_completed || preferences?.quiz_completed || false,
     travelAgentMode: preferences?.travel_agent_mode || false,
     preferences: preferences ? {
       style: preferences.accommodation_style,
