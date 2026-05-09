@@ -332,6 +332,22 @@ export async function removeTripCollaborator(collaboratorId: string): Promise<vo
     console.error('[TripCollaborators] Error removing from trip_members:', e);
   }
 
+  // Invalidate any pending invite tokens that this user accepted to join.
+  // Without this, the removed user could re-accept the same invite and rejoin.
+  try {
+    const { error: inviteError } = await supabase
+      .from('trip_invites')
+      .delete()
+      .eq('trip_id', collab.trip_id)
+      .eq('accepted_by', collab.user_id);
+
+    if (inviteError) {
+      console.error('[TripCollaborators] Error invalidating invite tokens:', inviteError);
+    }
+  } catch (e) {
+    console.error('[TripCollaborators] Invite token cleanup exception:', e);
+  }
+
   // GAP 5: Cascade removal to all journey legs
   try {
     const { data: tripData } = await supabase
