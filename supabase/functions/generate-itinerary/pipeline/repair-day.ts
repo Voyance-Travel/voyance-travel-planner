@@ -2846,8 +2846,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         repairs.push({
           code: FAILURE_CODES.TRUNCATED_SENTENCE,
           activityIndex: i,
-          field,
-          action: 'trim_to_last_sentence',
+          action: `trim_to_last_sentence:${field}`,
           before,
           after: trimmed,
         });
