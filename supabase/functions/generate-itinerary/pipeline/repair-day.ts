@@ -2854,6 +2854,32 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 10d. SUSPICIOUS_DUPLICATE_PRICE: clear AI-duplicated price tokens ---
+  // When two adjacent same-category activities share an identical non-zero cost
+  // and basis isn't user/booked/floor/cap, the LLM duplicated the price token.
+  // Blank the second card's cost so downstream snapshot picks up a real estimate.
+  for (const result of validationResults) {
+    if (result.code !== FAILURE_CODES.SUSPICIOUS_DUPLICATE_PRICE) continue;
+    const idx = result.activityIndex;
+    if (idx == null || idx < 0 || idx >= activities.length) continue;
+    const act: any = activities[idx];
+    if (lockedIds.has(act.id)) continue;
+    const beforeAmt = act?.cost?.amount ?? act?.estimatedCost?.amount ?? null;
+    if (beforeAmt == null) continue;
+    if (act.cost && typeof act.cost === 'object') act.cost.amount = 0;
+    if (act.estimatedCost && typeof act.estimatedCost === 'object') act.estimatedCost.amount = 0;
+    if (typeof act.price_per_person === 'number') act.price_per_person = 0;
+    if (typeof act.estimated_price_per_person === 'number') act.estimated_price_per_person = 0;
+    if (typeof act.price === 'number') act.price = 0;
+    repairs.push({
+      code: FAILURE_CODES.SUSPICIOUS_DUPLICATE_PRICE,
+      activityIndex: idx,
+      action: 'cleared_duplicate_price',
+      before: String(beforeAmt),
+      after: '0',
+    });
+  }
+
   // --- 12. NON-FLIGHT DEPARTURE: strip airport activities ---
   if (isLastDayInCity && !isLastDay && nextLegTransport && nextLegTransport !== 'flight') {
     const beforeCount = activities.length;

@@ -3352,7 +3352,11 @@ export function EditorialItinerary({
   const { skippedItems, isLoading: isLoadingSkipList } = useSkipList(destination);
   const valueStats = useMemo(() => calculateItineraryValueStats(days, skippedItems), [days, skippedItems]);
 
-  // Dynamic itinerary validation - detect skip list violations and other issues
+  // Dynamic itinerary validation - detect skip list violations and other issues.
+  // Note: celebration_misplaced / sequence_error / pricing_error currently have
+  // no UI affordance (no remediation button or panel). To avoid surfacing
+  // warnings users can't act on, those types are demoted to console.debug here.
+  // Only `skip_list` reaches the visible "Heads up" panel below.
   const validationIssues = useMemo<ValidationIssue[]>(() => {
     const result = validateItinerary(days, {
       destination,
@@ -3360,7 +3364,11 @@ export function EditorialItinerary({
       celebrationDay,
       totalDays: days.length
     });
-    return result.issues;
+    const silent = result.issues.filter(i => i.type !== 'skip_list');
+    if (silent.length > 0) {
+      console.debug('[itineraryValidator] silent (no-UI) issues:', silent);
+    }
+    return result.issues.filter(i => i.type === 'skip_list');
   }, [days, destination, tripType, celebrationDay]);
   
   // Get skip list violation IDs for highlighting in the UI

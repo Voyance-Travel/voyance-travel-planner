@@ -136,6 +136,19 @@ export function applyValidationGate(
         }
         break;
       }
+      case FAILURE_CODES.SUSPICIOUS_DUPLICATE_PRICE: {
+        // Final safety net mirroring repair-day §10d. The LLM duplicated a
+        // price token across adjacent same-category cards; blank cost on the
+        // offending activity so downstream snapshot estimates from cost_reference.
+        if (act?.cost && typeof act.cost === 'object') act.cost.amount = 0;
+        if (act?.estimatedCost && typeof act.estimatedCost === 'object') act.estimatedCost.amount = 0;
+        if (typeof act.price_per_person === 'number') act.price_per_person = 0;
+        if (typeof act.estimated_price_per_person === 'number') act.estimated_price_per_person = 0;
+        if (typeof act.price === 'number') act.price = 0;
+        counters.blankedFields++;
+        counters.forcedDowngrades++;
+        break;
+      }
       default: {
         // Unknown critical → blank the offending field if any, else drop.
         if (r.field && typeof act[r.field] === 'string') {

@@ -205,7 +205,7 @@ export function VoucherModal({
                     Cancellation Policy
                   </p>
                   <p className="text-amber-700 dark:text-amber-500">
-                    {activity.cancellationPolicy.description}
+                    {sanitizeActivityText(activity.cancellationPolicy.description)}
                   </p>
                   {activity.cancellationPolicy.deadline && (
                     <p className="text-xs text-amber-600 mt-1">

@@ -15,6 +15,12 @@
 
 const TRANSIT_CATS = new Set(['transport', 'transit']);
 const TRANSIT_TITLE_RE = /^\s*(?:walk|travel|transfer|drive|ride|taxi|train|bus|metro|tram|ferry|boat|water taxi|vaporetto)\s+to\s+(.+?)\s*$/i;
+/**
+ * Logistics destinations whose transit card legitimately ends the day —
+ * the actual flight/train card lives in trip metadata, not activities.
+ * Don't drop these as "orphaned end-of-day transit".
+ */
+const LOGISTICS_TARGET_RE = /\b(airport|station|terminal|port|cruise terminal|ferry terminal|train station|gare|stazione|hbf|hauptbahnhof)\b/i;
 
 export function isTransitActivity(act: any): boolean {
   if (!act) return false;
@@ -55,7 +61,12 @@ export function pruneOrphanTransits(activities: any[]): number {
     const target = extractTransitTarget(act);
 
     // Case 1: transit at end of day with no following card → orphaned.
+    // Exempt logistics targets (airport/station/port/etc.) — flight/train
+    // cards live in trip metadata, so the transfer legitimately ends the day.
     if (i === activities.length - 1) {
+      const titleStr = String(act?.title || '');
+      const checkBlob = `${target || ''} ${titleStr}`;
+      if (LOGISTICS_TARGET_RE.test(checkBlob)) continue;
       activities.splice(i, 1);
       removed++;
       console.warn(`[ORPHAN-TRANSIT] Dropped end-of-day transit: "${act.title}"`);

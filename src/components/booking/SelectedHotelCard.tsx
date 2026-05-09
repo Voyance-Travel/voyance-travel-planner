@@ -1,5 +1,6 @@
 import { Hotel, MapPin, Star } from 'lucide-react';
 import { useState } from 'react';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 interface HotelInfo {
   name: string;
@@ -118,7 +119,7 @@ export default function SelectedHotelCard({
                 {/* Description */}
                 {hotel.description && (
                   <p className="text-sm text-muted-foreground line-clamp-2">
-                    {hotel.description}
+                    {sanitizeActivityText(hotel.description)}
                   </p>
                 )}
               </div>
