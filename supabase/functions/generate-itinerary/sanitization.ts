@@ -1543,7 +1543,7 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
   }
 
   if (Array.isArray(day.activities)) {
-    day.activities = day.activities.map((act: any, idx: number) => {
+    day.activities = day.activities.map((act: any, idx: number, arr: any[]) => {
       if (!act || typeof act !== 'object') return act;
       const cleanActTitle = sanitizeAITextField(act.title, destination);
       const cleanActName = sanitizeAITextField(act.name, destination);
@@ -1587,6 +1587,8 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
           act.transportation.estimatedCost = { amount: 0, currency: act.transportation.estimatedCost?.currency || 'USD' };
         }
       }
+      // Distance-based mode override: convert "walking" → metro/uber when haversine > 650m.
+      enforceTransitModeByDistance(act, arr[idx - 1] || null, arr[idx + 1] || null, `day ${dayNumber}`);
       if (act.voyanceInsight) act.voyanceInsight = sanitizeAITextField(act.voyanceInsight, destination) || undefined;
       if (act.bestTime) act.bestTime = sanitizeAITextField(act.bestTime, destination) || undefined;
       if (act.personalization && typeof act.personalization === 'object') {
