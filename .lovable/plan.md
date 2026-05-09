@@ -1,31 +1,27 @@
-## Fix 4 — Await `updateUser` profile upsert
+## Fix 5 — Env-driven domain config in `auth-email-hook`
 
-### Verified
-- `AuthContext.tsx:600` defines `updateUser` as a **synchronous** function (return type `void`, not `Promise<void>` as the brief claimed). Interface line 45: `updateUser: (updates: Partial<User>) => void;`
-- The Supabase upsert at lines 616–623 is a fire-and-forget `.then()` chain. Errors only `console.error`; no caller can react.
-- Only one in-app caller: `src/pages/ProfileEdit.tsx:31` — `updateUser({ name: data.name.trim() })` inside an already-`async` submit handler. (All other matches in the codebase are `supabase.auth.updateUser`, unrelated.)
-- `ProfileEdit` already persists name via `updateProfile()` (line 22) before calling `updateUser`, so the AuthContext upsert is a redundant DB write — but it should still surface failures rather than swallow them.
+Replace the three hardcoded domain constants in `supabase/functions/auth-email-hook/index.ts` (lines 39–41) with env-var lookups that fall back to today's production values, so prod behavior is unchanged and staging/preview can override.
 
-### Changes
+### Change
 
-**1. `src/contexts/AuthContext.tsx` — make `updateUser` async and propagate errors**
+In `supabase/functions/auth-email-hook/index.ts`, replace lines 39–41:
 
-- Interface (line 45): change to `updateUser: (updates: Partial<User>) => Promise<void>;`
-- Implementation (lines 600–626): change signature to `const updateUser = async (updates: Partial<User>): Promise<void> => { … }`
-- Convert the `.then()` block to `await … upsert(…)`; on error, `console.error` AND `throw error` so the caller's catch can show a toast / surface UI feedback.
-- Keep early-`return`s for invalid name/email and the optimistic `setUser({ ...user, ...updates })` exactly as today — local state still updates immediately for snappy UI; only the DB sync becomes awaitable.
+```ts
+const ROOT_DOMAIN = Deno.env.get("SITE_DOMAIN") ?? "travelwithvoyance.com";
+const FROM_DOMAIN = Deno.env.get("FROM_DOMAIN") ?? ROOT_DOMAIN;
+const SENDER_DOMAIN = Deno.env.get("SENDER_DOMAIN") ?? `notify.${ROOT_DOMAIN}`;
+```
 
-**2. `src/pages/ProfileEdit.tsx` — await the call**
-
-Line 31: `await updateUser({ name: data.name.trim() });`
-The handler is already `async`, so this is a one-token change. If the upsert throws, the existing `await updateProfile(...)` already succeeded (it's the canonical write), so propagating the error here mostly just blocks the `navigate` and lets any wrapping toast/error UI react. Acceptable — failure here implies a real auth/session problem worth surfacing.
+Order matters: `ROOT_DOMAIN` must be declared before `FROM_DOMAIN`/`SENDER_DOMAIN` so the fallbacks resolve correctly.
 
 ### Out of scope
-- No change to `updateProfile()` service or the `profiles` schema.
-- No new validation, no new fields written.
-- Other `supabase.auth.updateUser` call sites (Settings, ResetPassword, voyanceAuth, accountManagementAPI) are unrelated — they call the Supabase auth API directly, not our context method.
 
-### Validation
-1. Edit name in `/profile/edit` → save. Network tab shows `profiles` upsert completes before navigate. No regression.
-2. Simulate failure (offline / RLS denial) → `updateProfile` likely also fails first; if it succeeds but the AuthContext upsert fails, an error is now thrown and bubbles up rather than being silently swallowed.
-3. TypeScript: every other call site of `updateUser` in the codebase — there are none beyond `ProfileEdit.tsx` — so the interface change only requires the one `await`.
+- No changes to `SITE_NAME`, sample data, or template rendering.
+- No new secrets created in prod (defaults preserve current behavior). Non-prod env vars are set by the operator, not by this change.
+- No frontend changes.
+
+### Verification
+
+- Typecheck / function builds clean.
+- Without env vars set: emits links at `travelwithvoyance.com` / `notify.travelwithvoyance.com` (unchanged).
+- With `SITE_DOMAIN=staging.example.com`: confirmation links point at `staging.example.com` and sender becomes `notify.staging.example.com`.
