@@ -89,4 +89,7 @@ if ('caches' in window) {
   });
 }
 
+// Register once at app startup.
+registerOAuthDeepLinkHandler();
+
 createRoot(document.getElementById("root")!).render(<App />);
