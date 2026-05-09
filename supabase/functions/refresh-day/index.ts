@@ -629,6 +629,36 @@ Deno.serve(async (req: Request) => {
         activities: [...sorted],
       };
 
+      // ── REPAIR-DAY — runs BEFORE validate + gate, mirroring action-generate-day.ts:1200-1238.
+      //    Strips orphan transits, normalizes venue names, applies pricing floors,
+      //    clamps bookends — all the deterministic cleanup the gate expects upstream.
+      try {
+        const { repairDay } = await import('../generate-itinerary/pipeline/repair-day.ts');
+        const { day: repairedDay, repairs } = repairDay({
+          day: dayMinimal as any,
+          validationResults: [],
+          dayNumber,
+          isFirstDay,
+          isLastDay,
+          arrivalTime24: undefined,
+          returnDepartureTime24: undefined,
+          hotelName: body.hotelName,
+          hotelAddress: '',
+          hasHotel: !!body.hotelName,
+          lockedActivities: [],
+          isTransitionDay: false,
+          isMultiCity: false,
+          isLastDayInCity: false,
+          resolvedDestination: destination,
+        } as any);
+        if (repairs.length > 0) {
+          console.log(`[refresh-day] repair-day applied ${repairs.length} fixes`);
+          dayMinimal.activities = repairedDay.activities;
+        }
+      } catch (repairErr) {
+        console.warn('[refresh-day] repair-day failed (non-blocking):', repairErr);
+      }
+
       const validationResults = validateDay({
         day: dayMinimal as any,
         dayNumber,
