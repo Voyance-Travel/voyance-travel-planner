@@ -1952,6 +1952,90 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // === FINAL VALIDATION GATE (post-everything safety net) ===
+  // First gate runs ~line 1462 right after repair-day. Several stages mutate
+  // the day after that (universalQualityPass, final meal guard, hotel-return
+  // dedup, orphan-transit sweep). This second pass catches any critical residue
+  // (PUNCTUATION_ONLY_FIELD, TRUNCATED_SENTENCE, CHECKOUT_HOTEL_LEAK,
+  // WALK_OVER_THRESHOLD, etc.) those late stages could have re-introduced.
+  if (Array.isArray(dayResult?.activities) && dayResult.activities.length > 0) {
+    try {
+      const { validateDay: _finalValidateDay } = await import('./pipeline/validate-day.ts');
+      const { applyValidationGate: _finalApplyGate } = await import('./pipeline/validation-gate.ts');
+      const finalPolicy = deriveMealPolicy({
+        dayNumber, totalDays,
+        isFirstDay: _isFirstDay, isLastDay: _isLastDay,
+        arrivalTime24: _isFirstDay ? savedArrTime24Hoisted : undefined,
+        departureTime24: _isLastDay ? savedDepTime24Hoisted : undefined,
+      });
+      const finalDayMinimal = {
+        dayNumber,
+        date: dayResult.date || '',
+        title: dayResult.title || '',
+        theme: dayResult.theme,
+        activities: (dayResult.activities || []).map((a: any) => ({
+          id: a.id || '',
+          title: a.title || a.name || '',
+          startTime: a.startTime || a.start_time || '',
+          endTime: a.endTime || a.end_time || '',
+          category: a.category || 'activity',
+          location: a.location || { name: '', address: '' },
+          cost: a.cost || { amount: 0, currency: 'USD' },
+          description: a.description || '',
+          tags: a.tags || [],
+          bookingRequired: a.bookingRequired || false,
+          transportation: a.transportation || { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+        })),
+      };
+      const finalResults = _finalValidateDay({
+        day: finalDayMinimal as any,
+        dayNumber, isFirstDay: _isFirstDay, isLastDay: _isLastDay, totalDays,
+        destination: cityInfo?.cityName || destination,
+        hasHotel: true,
+        hotelName: cityInfo?.hotelName || tripHotelName || undefined,
+        arrivalTime24: _isFirstDay ? savedArrTime24Hoisted : undefined,
+        returnDepartureTime24: _isLastDay ? savedDepTime24Hoisted : undefined,
+        requiredMeals: finalPolicy.requiredMeals || [],
+        previousDays: existingDays.filter((d: any) => d?.dayNumber !== dayNumber) as any,
+        isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
+        previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
+      });
+      const finalGate = _finalApplyGate(
+        finalDayMinimal as any,
+        finalResults,
+        { dayNumber, destination: cityInfo?.cityName || destination },
+      );
+      if (finalGate.verdict === 'persist_forced') {
+        // Drop-aware merge (mirrors first gate at line 1467–1484).
+        const gated = finalGate.day.activities as any[];
+        const survivingIds = new Set(gated.map((g: any) => g?.id).filter(Boolean));
+        const droppedAny = gated.length !== dayResult.activities.length;
+        if (droppedAny && survivingIds.size === gated.length) {
+          const filtered = (dayResult.activities as any[]).filter((a: any) => survivingIds.has(a?.id));
+          dayResult.activities = filtered.map((orig: any) => {
+            const g = gated.find((x: any) => x?.id === orig?.id) || {};
+            return { ...orig, ...g };
+          });
+        } else {
+          dayResult.activities = gated.map((g: any, i: number) => ({ ...(dayResult.activities[i] || {}), ...g }));
+        }
+        dayResult.metadata = dayResult.metadata || {};
+        dayResult.metadata.quality = dayResult.metadata.quality || {};
+        dayResult.metadata.quality.final_gate_forced_persist = true;
+        dayResult.metadata.quality.final_validation_gate = finalGate.counters;
+
+        // A late drop can re-orphan a transit. Re-sweep, idempotent if clean.
+        const reOrphans = pruneOrphanTransits(dayResult.activities);
+        if (reOrphans > 0) {
+          console.warn(`[generate-trip-day] Final-gate re-sweep dropped ${reOrphans} re-orphaned connector(s) on day ${dayNumber}`);
+        }
+        console.warn(`[FINAL_GATE] day=${dayNumber} forced persist; counters=${JSON.stringify(finalGate.counters)}`);
+      }
+    } catch (gateErr) {
+      console.warn('[generate-trip-day] Final validation gate failed (non-blocking):', gateErr);
+    }
+  }
+
   // Flush stage logger (non-blocking, non-fatal)
   try {
     await stageLogger.flush();
