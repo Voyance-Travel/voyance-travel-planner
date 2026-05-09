@@ -104,6 +104,9 @@ interface PushResult {
   success: boolean;
   error?: string;
   apnsId?: string;
+  // True when APNs signals the token is permanently invalid (410 / BadDeviceToken / Unregistered).
+  // The main handler will delete these from push_tokens.
+  shouldDeleteToken?: boolean;
 }
 
 async function sendApns(
@@ -153,7 +156,32 @@ async function sendApns(
 
     const errBody = await res.text();
     console.error(`[send-push] APNs error ${res.status}: ${errBody}`);
-    return { token: deviceToken, platform: 'ios', success: false, error: `APNs ${res.status}: ${errBody}` };
+
+    // APNs signals dead tokens via:
+    //   - HTTP 410 (any reason — token unregistered)
+    //   - HTTP 400 with reason "BadDeviceToken" or "Unregistered"
+    // In either case the token is permanently invalid and must be removed.
+    let shouldDeleteToken = false;
+    if (res.status === 410) {
+      shouldDeleteToken = true;
+    } else if (res.status === 400) {
+      try {
+        const parsed = JSON.parse(errBody);
+        if (parsed?.reason === 'BadDeviceToken' || parsed?.reason === 'Unregistered') {
+          shouldDeleteToken = true;
+        }
+      } catch {
+        // Body wasn't JSON — leave shouldDeleteToken as false.
+      }
+    }
+
+    return {
+      token: deviceToken,
+      platform: 'ios',
+      success: false,
+      error: `APNs ${res.status}: ${errBody}`,
+      shouldDeleteToken,
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[send-push] APNs request failed:`, msg);
