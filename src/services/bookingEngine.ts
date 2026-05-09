@@ -735,7 +735,7 @@ export async function confirmBooking(
 
 export function computeAllowedRefund(booking: Booking): number {
   const policy = booking.cancellationPolicy;
-  const total = booking.totalAmountCents ?? 0;
+  const total = booking.priceCents ?? 0;
   if (!policy) return 0;
   if (policy.deadline && new Date(policy.deadline) < new Date()) return 0;
   const pct = Math.max(0, Math.min(100, policy.refundPercentage ?? 0));
