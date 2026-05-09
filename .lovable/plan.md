@@ -1,32 +1,65 @@
-## Fix 1.2 — Auto-refund Stripe on Viator booking failure
+## Fix 1.3 — Cancel Viator booking on Stripe refund
 
-**Status: Already implemented.** No changes required.
+**Status: ~90% already implemented.** The Viator vendor-cancel call, idempotency stamp (`vendor_cancelled_at`), error metadata, and try/catch are all present at `supabase/functions/stripe-webhook/index.ts` lines 773–826. Only the **`activityId` fallback lookup** from the spec is missing.
+
+### What's already there ✅
+- `transition_booking_state` RPC call (line 767).
+- Viator `POST /partner/bookings/{ref}/cancel` with `exp-api-key`, `version=2.0`, `CUSTOMER_REQUESTED` reason.
+- Idempotency via `vendor_cancelled_at` check on existing metadata (line 785).
+- Failure metadata: `vendor_cancel_failed`, `vendor_cancel_status`, `vendor_cancel_error`, `vendor_cancel_attempted_at`.
+- try/catch that never throws (webhook always 200s).
+- Note: Existing impl reads vendor ref + writes cancel state on the **`trip_activities`** row (richer source — has `vendor_booking_id` column + metadata). Spec read it from `trip_payments`. Keep the existing `trip_activities` path; it's strictly better.
+
+### What's missing — single change
+
+Add the activityId fallback before line 766's `if (activityId)` guard. Currently if `originalEntry.metadata.activity_id` is absent we silently skip; spec requires looking it up by `stripe_charge_id`.
+
+**Edit** `supabase/functions/stripe-webhook/index.ts` lines 765 → replace:
+
+```ts
+const activityId = originalEntry.metadata?.activity_id;
+```
+
+with:
+
+```ts
+let activityId = originalEntry.metadata?.activity_id as string | undefined;
+
+// Fallback: if metadata didn't carry activity_id, look it up by charge id.
+if (!activityId) {
+  const { data: paymentRow } = await supabaseAdmin
+    .from('trip_payments')
+    .select('metadata')
+    .eq('stripe_charge_id', charge.id)
+    .maybeSingle();
+  const payMeta = (paymentRow?.metadata ?? {}) as Record<string, any>;
+  activityId = payMeta.activity_id || payMeta.itemId;
+  if (!activityId) {
+    logError('charge.refunded with no activity_id — manual review needed', {
+      chargeId: charge.id,
+      refundId: latestRefund?.id,
+    });
+  }
+}
+```
+
+(Uses existing `logError` helper instead of raw `console.warn` to match file conventions.)
 
 ### Verification
 
-`supabase/functions/viator-book/index.ts` lines 193–250 already contain the exact logic specified:
-
-- Top-of-file static import: `import Stripe from "npm:stripe@18.5.0";` (line 12) — using the file's existing import style, no dynamic `await import()` needed.
-- `trip_payments` row marked `status: 'failed'` with `viator_error` / `viator_error_code` metadata (lines 197–208).
-- Stripe refund created with:
-  - `payment_intent: payment.stripe_payment_intent_id`
-  - `reason: 'requested_by_customer'`
-  - `metadata: { activity_id, viator_error_code, auto_refund: 'viator_book_failure' }`
-  - `idempotencyKey: \`viator-fail:${paymentId}\`` — prevents double-refund on retry.
-- Skips cleanly when `stripe_payment_intent_id` is missing (logs and continues).
-- Catches refund errors, logs, surfaces `refundError` to caller without throwing.
-- Response includes `success: false`, `error`, `code`, `refundIssued`, `refundId`, `refundError`.
-
-Only nit vs. the spec text: API version pinned to `'2025-08-27.basil'` (project standard, per stripe-implementation guide) instead of `'2024-06-20'`. This matches the rest of the codebase and should be kept.
-
-### Verify command
-
-```
-grep -n "stripe.refunds.create" supabase/functions/viator-book/index.ts
+```bash
+grep -n "viator-bookings.*cancel\|/cancel\|vendor_cancelled_at" supabase/functions/stripe-webhook/index.ts
 ```
 
-Expected: 1 hit at line 216, inside the `!response.ok` branch. ✅ Confirmed.
+Expected: ≥3 hits inside `charge.refunded` block (cancel URL, two `vendor_cancelled_at` references). Currently passing — will stay passing after edit.
 
-### Action
+Also confirm:
+```bash
+grep -n "stripe_charge_id" supabase/functions/stripe-webhook/index.ts
+```
+Should now show the fallback lookup added.
 
-None — close ticket as already-done. Proceed to Fix 1.3 (`charge.refunded` webhook handler) which this fix is paired with.
+### Out of scope
+- Vendor-side state for non-Viator providers (existing code already short-circuits on missing ref).
+- Switching the cancel-state writeback from `trip_activities` to `trip_payments` (existing path is correct + richer).
+- Webhook-replay idempotency on `transition_booking_state` itself (covered by R3.8 already shipped).

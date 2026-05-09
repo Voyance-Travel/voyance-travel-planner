@@ -762,7 +762,25 @@ serve(async (req) => {
             metadata: { refund_reason: latestRefund?.reason, stripe_event_id: event.id, activity_id: originalEntry.metadata?.activity_id },
           });
 
-          const activityId = originalEntry.metadata?.activity_id;
+          let activityId = originalEntry.metadata?.activity_id as string | undefined;
+
+          // Fallback: if metadata didn't carry activity_id, look it up by charge id.
+          if (!activityId) {
+            const { data: paymentRow } = await supabaseAdmin
+              .from('trip_payments')
+              .select('metadata')
+              .eq('stripe_charge_id', charge.id)
+              .maybeSingle();
+            const payMeta = (paymentRow?.metadata ?? {}) as Record<string, any>;
+            activityId = payMeta.activity_id || payMeta.itemId;
+            if (!activityId) {
+              logError('charge.refunded with no activity_id — manual review needed', {
+                chargeId: charge.id,
+                refundId: latestRefund?.id,
+              });
+            }
+          }
+
           if (activityId) {
             await supabaseAdmin.rpc('transition_booking_state', {
               p_activity_id: activityId, p_new_state: 'refunded',
