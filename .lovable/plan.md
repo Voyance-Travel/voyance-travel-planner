@@ -1,58 +1,36 @@
-## HC.1 — Frontend health checks: meals, density, gaps
+## HC.2 — Unify `isTransitActivity`
 
-Extend `analyzeHealth` in `src/components/trip/TripHealthPanel.tsx` so the panel surfaces missing meals, thin days, and large gaps — matching what the server's meal-policy + density enforcement already requires. Today the panel only flags empty days, timing conflicts, and tiny buffers, so a Day 2 with 1 activity, 0 meals, and a 7-hour gap reads as 100/healthy.
+Create one shared helper and swap the three call sites listed in the request.
 
-### What ships
+### 1. New file: `supabase/functions/_shared/transit-detect.ts`
 
-Insert three new checks into `analyzeHealth` immediately **after** the empty-day early-return at line 86 and **before** the timing-conflict block at line 88. All three operate on the existing `realActivities` array and the existing `dayNum`.
+Exports `TRANSIT_CATS`, `TRANSIT_TITLE_RE`, `isTransitActivity(act)` exactly as specified in the request — 8 categories (`transit`, `transport`, `transportation`, `travel`, `transfer`, `commute`, `taxi`, `walking`) plus title regex fallback for verbs (walk/travel/transfer/drive/ride/taxi/train/bus/metro/tram/ferry/boat/water taxi/vaporetto/return/return to/head back).
 
-**1. Required-meal check** (mirrors server `deriveMealPolicy`)
-- Detect meals: scan `realActivities`, look at `category` (`dining`/`restaurant`/`food`) + `title` (`breakfast`/`brunch`/`lunch`/`dinner`/`supper`).
-- Resolve required meals from `day.metadata?.quality?.dayMode`:
+### 2. Swap call sites
 
-  | dayMode | required |
-  |---|---|
-  | `late_arrival`, `full_day_event` | `[]` |
-  | `early_departure` | `['breakfast']` |
-  | `midday_arrival` | `['lunch','dinner']` |
-  | `midday_departure`, `afternoon_departure` | `['breakfast','lunch']` |
-  | everything else (incl. undefined) | `['breakfast','lunch','dinner']` |
+**a. `supabase/functions/_shared/orphan-transit.ts`**
+- Delete local `TRANSIT_CATS` (line 16) and local `isTransitActivity` (lines 25–29).
+- `import { isTransitActivity } from './transit-detect.ts'`.
+- Existing usages at lines 59 and 85 keep working unchanged.
 
-- For each missing meal → push **one** issue per day:  
-  `id: missing-meals-${dayNum}`, severity `error`, message `"Day N missing breakfast, lunch, dinner"`, fixAction `refresh_day` (see "Action key" below), label `"Regenerate Day"`.
+**b. `supabase/functions/generate-itinerary/sanitization.ts`**
+- Delete local `isTransitActivity` (line 854).
+- `import { isTransitActivity } from '../_shared/transit-detect.ts'`.
+- Usage at line 892 keeps working.
 
-**2. Thin-day check**
-- Skip when `dayMode` ∈ {`late_arrival`, `early_departure`, `full_day_event`, `midday_departure`}.
-- If `realActivities.length < 3`:  
-  `id: thin-day-${dayNum}`, severity `error` (when 1) / `warning` (when 2), message `"Day N has only X activity/activities (light schedule)"`, fixAction `refresh_day`, label `"Add Activities"`.
+**c. `supabase/functions/generate-itinerary/pipeline/validate-day.ts` → `checkWalkOverThreshold`**
+- At line 1059, replace `if (cat !== 'transport' && cat !== 'transit') continue;` with `if (!isTransitActivity(act)) continue;` (and drop the now-unused `cat` local if it was only used there).
+- Add import from `../../_shared/transit-detect.ts`.
 
-**3. Large-gap check**
-- Sort `realActivities` by `startTime` (reuse existing `parseTime` — file already exports it at line 185, no need for a new `parseTimeToMinutes`).
-- Track `prevEnd`; for each next activity where `start - prevEnd ≥ 180` minutes:  
-  `id: gap-${dayNum}-${startMins}`, severity `warning`, message `"Day N has Xh gap before <title>"`, fixAction `refresh_day`, label `"Fill Gap"`.
-- Only update `prevEnd` when the new end is strictly greater (guards against zero-duration / inverted entries).
+### Out of scope (intentionally not touched)
 
-### Action key decision
+The request names exactly these three call sites. Other locations also have local transit-cat sets but are **not** part of HC.2:
+- `refresh-day/index.ts` (lines 132/163) — own 7-cat list, used in distance/cost math.
+- `_shared/timing-cascade.ts` (line 116) — same 7-cat list, used in cascade logic.
+- `pipeline/repair-day.ts` (line 4330) — local `TRANSIT_CATS_FE` for a specific repair pass.
 
-User spec uses two new fixAction names: `regenerate_day` and `fill_day`. Neither is wired in `TripDetail.tsx`'s two `onAction` handlers (lines 2912 and 3171). The existing `refresh_day` handler already does exactly what we want — calls `setRefreshDayRequest`, which triggers full server-side rebuild including meal policy, density, gap fill, and timing.
+Leaving them as-is keeps the diff minimal and matches the user's instructions verbatim. Can be unified in a follow-up if desired.
 
-**Recommendation:** map all three new issue types to `fixAction: 'refresh_day'` so no parent wiring changes are needed. The button labels (`Regenerate Day`, `Add Activities`, `Fill Gap`) still differ per issue — only the underlying action is shared. If the user wants distinct keys later (e.g. for analytics differentiation), we can split them then.
+### Expected result
 
-### Files touched
-
-- `src/components/trip/TripHealthPanel.tsx` — insert the three checks inside `analyzeHealth` after line 86, before line 88. Reuse the existing `parseTime` helper (already in the file).
-
-No changes to `TripDetail.tsx` (mapping to `refresh_day` reuses existing wiring).  
-No changes to types — the new issues fit `HealthIssue` as-is.
-
-### Verification
-
-- Existing test file `src/components/trip/__tests__/TripHealthPanel.analyzeHealth.test.ts` filters by `fixAction === 'fix_timing'` → unaffected; should still pass.
-- Berlin Day 2 example (1 activity, 7h gap, 0 meals, no `dayMode`) should now produce four issues: missing-meals (3 meals), thin-day (1 activity → error), and one gap warning. Health score drops out of 100 as intended.
-- Days with explicit `dayMode: 'late_arrival'` or `'full_day_event'` still produce zero new issues (correctly silent).
-
-### Out of scope
-
-- Server-side health checks (those exist in repair pipeline already).
-- Adding new analytics keys for `regenerate_day` / `fill_day`.
-- New unit tests — current coverage is minimal; happy to add a follow-up if desired.
+After the swap, walk-threshold validation in `validate-day.ts` catches `transportation` / `travel` / title-only transit cards uniformly — same as `orphan-transit` and `sanitization` already do once they import the shared helper.
