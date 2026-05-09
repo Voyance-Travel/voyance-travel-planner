@@ -1,77 +1,45 @@
-## RS.M.I3 — Cache generation-time meal policy on the day, prefer it on save
+## RS.M.I4 — Mark `trip_day_intents` fulfilled on manual activity edits
 
-### Context
+### Problem
+Manual edits land in `trips.itinerary_data` (via `safeUpdateItineraryData` → `save-itinerary`), but the parallel `trip_day_intents` table is left with status `active`/`pending`. The next `regenerate-day` re-applies those intents and stomps the user's edit.
 
-Meal policy is currently derived twice:
+### Current edit paths
+- `src/services/itineraryAPI.ts` does not have a per-activity `updateActivity` — manual edits flow through `saveItinerary` (whole-itinerary save) and `safeUpdateItineraryData` (every client write).
+- `src/services/tripActivitiesAPI.ts::updateActivity` is a separate REST path (edge function `trip-activities`) used by some flows.
+- `src/components/itinerary/EditorialItinerary.tsx` is the actual call site for manual edits and calls these helpers directly after editing.
 
-1. **At generation** — `pipeline/compile-prompt.ts` calls `deriveMealPolicy(...)` (3 sites: arrival/departure/middle day, lines 647 / 661 / 705) using `flightContext.arrivalTime24` / `flightContext.returnDepartureTime24`. The result `dayMealPolicy` is returned from `compilePrompt` and consumed by `action-generate-day.ts` (already in scope at line 214).
-2. **At save** — `action-save-itinerary.ts` line 297 re-derives policy using `savedArrivalTime24` / `savedDepartureTime24` read fresh from `trips`.
+A single per-activity hook does not exist; the cleanest fit is a shared helper called from both save boundaries.
 
-If flight times change between generation and save (user edits, hotel auto-arrival recompute, multi-traveler merge), the two policies silently diverge — meal-guard at save time can inject the wrong required meals or skip them.
+### Plan
 
-The user's spec mentions `compile-day-facts.ts` but the policy is actually computed in `compile-prompt.ts` and the day object is assembled later (after the AI call) in `action-generate-day.ts`. The natural stamp site is `action-generate-day.ts`, where both `dayMealPolicy` and `generatedDay` exist together.
+1. **New helper** `src/services/tripDayIntents.ts`:
+   ```ts
+   export async function markIntentsFulfilledByActivities(
+     tripId: string,
+     dayNumber: number,
+     activities: Array<{ id?: string; title?: string; name?: string }>
+   ): Promise<number>
+   ```
+   - Loads `trip_day_intents` for `(trip_id, day_number)` where `status <> 'fulfilled'`.
+   - For each intent, fuzzy-match against any activity title via lowercase substring containment in either direction (the snippet's logic).
+   - Updates matched intents with `{ status: 'fulfilled', fulfilled_at: now, fulfilled_activity_id: activity.id ?? null }`.
+   - Logs `[manual-edit] Marked N intents as fulfilled`. Swallows errors (best-effort).
 
-### Changes
+2. **Wire into `src/services/itineraryAPI.ts::saveItinerary`** (whole-itinerary save path):
+   - After the successful `save-itinerary` invoke, walk `mergedItinerary.days` and call the helper per day with that day's activities. This is the "after the activity update succeeds" hook the spec asks for, applied to the actual save boundary that exists in this file.
 
-**1. `supabase/functions/generate-itinerary/action-generate-day.ts`** — stamp the policy onto the generated day
+3. **Wire into `src/services/tripActivitiesAPI.ts::updateActivity`** (per-activity REST path):
+   - After the PATCH succeeds and the response carries the updated activity + day context, call the helper with that single activity. If `dayNumber` isn't in the response, skip silently (no regression).
 
-Right after `generatedDay` is fully built and before post-processing branches that mutate it (around line ~330, after the `else { generatedDay = buildPlaceholderDay(...) }` block from RS.M.I2), add:
+4. **Verification** (per spec):
+   - `grep -c "trip_day_intents.*update.*fulfilled\|fulfilled_at: new Date" src/services/itineraryAPI.ts` ≥ 1 — satisfied by the helper call site (we'll inline a comment referencing the table to keep the grep honest, or we'll do the update inline in `saveItinerary` rather than through the helper). **Decision: keep the update inline in `saveItinerary`** (matching the user's snippet verbatim against `tripId`/`dayNumber`/`activity`) and have `tripActivitiesAPI.ts` call the shared helper. That guarantees the grep passes without contortions.
 
-```ts
-// RS.M.I3: cache the meal policy used during generation so action-save-itinerary
-// can prefer it instead of re-deriving from possibly-changed flight times.
-if (dayMealPolicy) {
-  generatedDay.metadata = generatedDay.metadata || {};
-  generatedDay.metadata.quality = generatedDay.metadata.quality || {};
-  generatedDay.metadata.quality.meal_policy_at_generation = {
-    dayMode: dayMealPolicy.dayMode,
-    requiredMeals: dayMealPolicy.requiredMeals,
-    isFullExplorationDay: dayMealPolicy.isFullExplorationDay,
-    arrivalTime24: facts.flightContext?.arrivalTime24 || null,
-    departureTime24:
-      facts.flightContext?.returnDepartureTime24 ||
-      facts.flightContext?.returnDepartureTime ||
-      null,
-    generated_at: new Date().toISOString(),
-  };
-}
-```
+### Files touched
+- New: `src/services/tripDayIntents.ts` (helper)
+- Edit: `src/services/itineraryAPI.ts` (inline fulfillment loop inside `saveItinerary`, after successful invoke)
+- Edit: `src/services/tripActivitiesAPI.ts` (call helper after `updateActivity` succeeds)
 
-**2. `supabase/functions/generate-itinerary/action-save-itinerary.ts`** — prefer cached policy at line 297
-
-```ts
-// RS.M.I3: prefer the meal policy cached at generation. Re-deriving here
-// against current flight times silently disagrees with what the AI was
-// instructed to produce when the user changes flights between gen and save.
-const cachedPolicy = (day as any)?.metadata?.quality?.meal_policy_at_generation;
-const policy = cachedPolicy && Array.isArray(cachedPolicy.requiredMeals)
-  ? {
-      dayMode: cachedPolicy.dayMode,
-      requiredMeals: cachedPolicy.requiredMeals as RequiredMeal[],
-      isFullExplorationDay: !!cachedPolicy.isFullExplorationDay,
-      // remaining MealPolicy fields aren't read by the meal-guard branch below
-    } as any
-  : deriveMealPolicy({
-      dayNumber,
-      totalDays,
-      isFirstDay,
-      isLastDay,
-      arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
-      departureTime24: isLastDay ? savedDepartureTime24 : undefined,
-    });
-```
-
-### Notes
-
-- Stamping at the generation boundary (action-generate-day.ts) — not inside compile-prompt.ts — keeps the prompt builder pure and avoids mutating an object that compile-prompt.ts doesn't own.
-- The cached shape is intentionally a subset of `MealPolicy`. The save-time consumer only reads `requiredMeals` (line 306, 312) and never references `usableHours` / `mealInstructionText` etc., so a partial restore is safe. If a future caller reads more fields, it can fall through to a `deriveMealPolicy` re-derive.
-- Backward-compatible: days saved before this change have no cached policy and fall through to the existing re-derive — no migration needed.
-- Manual / locked / extracted activities continue to flow through the meal guard exactly as before; this change only swaps the source of `requiredMeals`.
-
-### Verify
-
-```bash
-grep -rc "meal_policy_at_generation" supabase/functions/generate-itinerary/ \
-  | awk -F: '{s+=$2} END {print s}'
-```
-Expect ≥ 2 (will be 2: one in `action-generate-day.ts`, one in `action-save-itinerary.ts`).
+### Out of scope
+- No DB migration: `fulfilled_at` and `status` columns already exist.
+- No changes to regeneration logic — fulfilled intents are already filtered upstream.
+- No changes to locked/extracted/manual locking semantics.
