@@ -1,35 +1,35 @@
-## Fix 5.2 — Invalidate invite tokens on collaborator removal
+## Fix 6.1 — Atomic counter increment RPCs
 
-**File:** `src/services/tripCollaboratorsAPI.ts` (function `removeTripCollaborator`, around line 300–371)
+**Goal:** Replace 3 read-modify-write counter patterns with atomic SQL RPCs to eliminate races under concurrent calls. Same shape as `add_to_group_budget` (S1.2 round).
 
-**Problem:** When an owner removes a collaborator, the `trip_invites` row that the user accepted to join stays in the table. The removed user can re-open the original invite link and rejoin without owner intervention — auth bypass.
+### 1. Migration: `<timestamp>_atomic_counter_rpcs.sql`
 
-**Change:** After the `trip_members` delete (line 333) and before the journey-legs cascade (line 335), add a best-effort delete on `trip_invites` filtered by `trip_id` + `accepted_by`:
+Three SECURITY DEFINER functions, service_role-only:
 
-```ts
-// Invalidate any pending invite tokens that this user accepted to join.
-// Without this, the removed user could re-accept the same invite and rejoin.
-try {
-  const { error: inviteError } = await supabase
-    .from('trip_invites')
-    .delete()
-    .eq('trip_id', collab.trip_id)
-    .eq('accepted_by', collab.user_id);
+- **`increment_user_usage(p_user_id uuid, p_metric_key text, p_period text, p_amount int) → int`** — `INSERT … ON CONFLICT (user_id, metric_key, period) DO UPDATE SET count = count + EXCLUDED.count, updated_at = now() RETURNING count`. Unique constraint `user_usage_user_id_metric_key_period_key` already exists (verified) — no `ALTER TABLE` needed.
+- **`increment_archetype_guide_usage(p_archetype text, p_destination_id uuid) → void`** — `UPDATE archetype_destination_guides SET usage_count = COALESCE(usage_count,0)+1 WHERE …`.
+- **`increment_verified_venue_usage(p_place_id text) → void`** — `UPDATE verified_venues SET usage_count = COALESCE(usage_count,0)+1 WHERE place_id = $1`.
 
-  if (inviteError) {
-    console.error('[TripCollaborators] Error invalidating invite tokens:', inviteError);
-  }
-} catch (e) {
-  console.error('[TripCollaborators] Invite token cleanup exception:', e);
-}
+Each: `REVOKE ALL … FROM PUBLIC; GRANT EXECUTE … TO service_role;`.
+
+### 2. Call site swaps
+
+**a) `supabase/functions/consume-usage/index.ts`** (~lines 70–98)
+Replace the `select id,count` + branching `update`/`insert` block with a single `supabaseClient.rpc('increment_user_usage', { p_user_id, p_metric_key, p_period, p_amount: amount })`. `supabaseClient` is already created with `SUPABASE_SERVICE_ROLE_KEY` — no new admin client needed. Use `rpcResult ?? amount` for `newCount`.
+
+**b) `supabase/functions/generate-itinerary/attraction-matching.ts`** (~lines 188–200)
+Replace `currentCount = cached.usage_count ?? 0; update({usage_count: currentCount+1})` with `supabase.rpc('increment_archetype_guide_usage', { p_archetype: archetype, p_destination_id: destinationId })`. Keep the existing try/catch + `console.warn` non-blocking shape. `supabase` here is the edge-function service-role client.
+
+**c) `supabase/functions/_shared/venue-cache.ts`** (~lines 84–89)
+Replace fire-and-forget `update({usage_count: row.usage_count+1 || 1})` with fire-and-forget `supabase.rpc('increment_verified_venue_usage', { p_place_id: row.place_id }).then(({error}) => { if (error) console.warn(...) })`. `getSupabase()` already uses `SUPABASE_SERVICE_ROLE_KEY`.
+
+### Verification
+
+```
+ls supabase/migrations/ | grep atomic_counter
+grep -n "increment_user_usage\b" supabase/functions/consume-usage/index.ts
+grep -n "increment_archetype_guide_usage\b" supabase/functions/generate-itinerary/attraction-matching.ts
+grep -n "increment_verified_venue_usage\b" supabase/functions/_shared/venue-cache.ts
 ```
 
-Confirmed `trip_invites` has both `trip_id` and `accepted_by` columns. Future invites issued by the owner have a fresh `id` with `accepted_by = NULL`, so they are unaffected.
-
-**Scope kept minimal:** Only the current `trip_id` is cleaned, matching the spec. Sibling-leg invite cleanup is not in scope here (collaborator-row cascade across legs already exists; invites are per-trip and owner can re-issue).
-
-**Verification:**
-- `grep -n "from('trip_invites').delete" src/services/tripCollaboratorsAPI.ts` → 1 hit inside `removeTripCollaborator`.
-- Smoke test: owner invites B → B accepts → owner removes B → B re-opens link → resolves to `invalid_token`.
-
-No DB migration, no other files touched.
+All four expected to return 1+ hit.
