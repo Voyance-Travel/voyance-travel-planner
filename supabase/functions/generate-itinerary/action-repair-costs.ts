@@ -363,7 +363,7 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
       // Drinks/nightcap bypass — mirrors sanitization.ts/enforceMichelinPriceFloor.
       // Defends against "Gran Caffè Quadri nightcap" being floored at Quadri's
       // 1-star price ($206/pp). Skip Michelin floor entirely; bar-cap below.
-      const titleLower = title.toLowerCase();
+      // (titleLower already declared above for the bar-cap check)
       const drinksFraming = EXPLICIT_DRINKS_RE.test(titleLower) &&
         !/\b(dinner|lunch|tasting\s+menu|chef'?s\s+table)\b/i.test(titleLower);
 
