@@ -75,7 +75,6 @@ const ALL_APP_ROUTES = {
   // Trip routes (require auth for most operations)
   trip: [
     '/planner/multi-city',
-    '/planner/flight',
     '/planner/hotel',
     '/planner/summary',
     '/planner/itinerary',
@@ -134,7 +133,6 @@ describe('Route Configuration Consistency', () => {
 
   it('should have consistent planner routes', () => {
     expect(ROUTES.PLANNER.ROOT).toBe('/planner');
-    expect(ROUTES.PLANNER.FLIGHT).toBe('/planner/flight');
     expect(ROUTES.PLANNER.HOTEL).toBe('/planner/hotel');
   });
 
@@ -443,7 +441,6 @@ describe('Navigation Link Safety', () => {
       '/onboard/conversation',
       '/trip/dashboard',
       '/planner/multi-city',
-      '/planner/flight',
       '/planner/hotel',
       '/planner/summary',
       '/planner/booking',

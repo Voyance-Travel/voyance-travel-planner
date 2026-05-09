@@ -235,7 +235,7 @@ export function rankFlightsClientSide(
 export async function getRankedFlights(
   params: FlightRankingQueryParams
 ): Promise<FlightRankingResponse> {
-  // Return empty - actual flight fetching and ranking happens in flightAPI
+  // Return empty - flight search has been removed; flights are entered manually
   return {
     flights: [],
     metadata: {

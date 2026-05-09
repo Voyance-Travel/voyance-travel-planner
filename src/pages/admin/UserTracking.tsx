@@ -55,7 +55,6 @@ const ALL_SITE_PAGES: Record<string, string> = {
   '/profile/edit': 'Profile Edit',
   '/profile/settings': 'Settings',
   '/planner/multi-city': 'Multi-City Planner',
-  '/planner/flight': 'Flight Search',
   '/planner/hotel': 'Hotel Search',
   '/planner/summary': 'Trip Summary',
   '/planner/itinerary': 'Planner Itinerary',
