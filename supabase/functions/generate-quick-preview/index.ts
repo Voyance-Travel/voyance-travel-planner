@@ -553,6 +553,42 @@ serve(async (req: Request) => {
       }
     }
 
+    // ── First-dining venue validation — catches obvious AI hallucinations
+    //    before showing the preview. One Places search per preview (~$0.017),
+    //    cache-first via cachedGooglePlacesTextSearch.
+    try {
+      const previewDays = aiResult.days || [];
+      const DINING_RE = /breakfast|brunch|lunch|dinner|cafe|café|restaurant|trattoria|osteria|izakaya|ramen|bistro|bakery|bar|pub/i;
+      const matchIdx = previewDays.findIndex((d: any) =>
+        DINING_RE.test(`${d?.headline || ''} ${d?.description || ''}`)
+      );
+      if (matchIdx >= 0) {
+        const d: any = previewDays[matchIdx];
+        const queryStr = DINING_RE.test(d.headline || '') ? d.headline : d.description;
+        if (queryStr && queryStr.trim().length > 0) {
+          const { cachedGooglePlacesTextSearch } = await import('../_shared/google-api.ts');
+          const validation = await cachedGooglePlacesTextSearch(
+            {
+              textQuery: `${queryStr} ${destination}`.slice(0, 240),
+              maxResultCount: 1,
+              languageCode: 'en',
+              fieldMask: 'places.id,places.displayName,places.formattedAddress',
+            },
+            { actionType: 'quick_preview_venue_validation', reason: `validate dining day ${d.dayNumber}` }
+          );
+          const found = validation.ok && (validation.data?.places?.length ?? 0) > 0;
+          if (!found) {
+            console.warn('[quick-preview] First dining venue not verified on Google Places:', {
+              query: queryStr, destination,
+            });
+            (previewDays[matchIdx] as any)._venueValidation = 'first_dining_unverified';
+          }
+        }
+      }
+    } catch (valErr) {
+      console.warn('[quick-preview] Venue validation failed (non-blocking):', valErr);
+    }
+
     const result: QuickPreviewResponse = {
       destination: destination,
       days: aiResult.days || [],
