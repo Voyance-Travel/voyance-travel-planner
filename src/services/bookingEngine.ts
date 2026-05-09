@@ -733,16 +733,57 @@ export async function confirmBooking(
   });
 }
 
+export function computeAllowedRefund(booking: Booking): number {
+  const policy = booking.cancellationPolicy;
+  const total = booking.priceCents ?? 0;
+  if (!policy) return 0;
+  if (policy.deadline && new Date(policy.deadline) < new Date()) return 0;
+  const pct = Math.max(0, Math.min(100, policy.refundPercentage ?? 0));
+  const fees = Math.max(0, policy.feesCents ?? 0);
+  return Math.max(0, Math.round((total * pct) / 100) - fees);
+}
+
 export async function cancelBooking(
-  bookingId: string, 
+  bookingId: string,
   reason: string,
   refundAmountCents?: number
 ): Promise<Booking> {
+  const booking = await getBookingById(bookingId);
+  if (!booking) throw new Error(`Booking ${bookingId} not found`);
+
+  const policy = booking.cancellationPolicy;
+  if (policy?.deadline && new Date(policy.deadline) < new Date()) {
+    throw new Error(`Cancellation window has passed (deadline: ${policy.deadline})`);
+  }
+
+  const allowedRefund = computeAllowedRefund(booking);
+  const requested = refundAmountCents ?? allowedRefund;
+  if (requested > allowedRefund) {
+    throw new Error(`Requested refund ${requested}¢ exceeds policy max ${allowedRefund}¢`);
+  }
+
+  // Stripe-backed: delegate to edge function. The charge.refunded webhook (R3.2)
+  // cancels the vendor booking and transitions booking_state to refunded.
+  if (booking.stripePaymentIntentId && requested > 0) {
+    const { error } = await supabase.functions.invoke('refund-booking', {
+      body: {
+        bookingId,
+        paymentIntentId: booking.stripePaymentIntentId,
+        amountCents: requested,
+        reason,
+      },
+    });
+    if (error) throw new Error(`Refund failed: ${error.message}`);
+    // Webhook completes the local transition asynchronously.
+    return booking;
+  }
+
+  // Free / non-Stripe-backed: cancel locally only.
   return updateBookingStatus(bookingId, 'cancelled', {
     cancelledAt: new Date().toISOString(),
     cancellationReason: reason,
-    refundAmountCents,
-    refundStatus: refundAmountCents ? 'pending' : undefined,
+    refundAmountCents: requested,
+    refundStatus: requested > 0 ? 'pending' : undefined,
   });
 }
 
