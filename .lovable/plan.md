@@ -1,43 +1,42 @@
-# R3.9 — Document the dead `changed` booking state
+# R3.10 — Explicit EXECUTE grants on `transition_booking_state`
 
-## Decision
+## Background
 
-Take option **(b)** from the report: keep the value, document it as reserved.
+`transition_booking_state(uuid, public.booking_item_state, text, text, jsonb)` currently relies on Postgres defaults: it works for `service_role` because `SECURITY DEFINER` runs as the function owner, and for `authenticated` because PUBLIC has EXECUTE by default on functions. There's no explicit grant, and `anon` is not blocked. Defense-in-depth: lock it down.
 
-Rationale (all three matter):
+## Migration
 
-- Postgres makes removing an enum value painful: there's no `DROP VALUE`. The only safe path is rename → create new enum → cast every column → drop old. For a value that costs nothing to leave, that's not a worthwhile migration.
-- The state isn't truly unsafe — it appears in the type, the `VALID_TRANSITIONS` map, the RPC's allowed-transition `CASE`, the label map, the badge color map, and a `case 'changed':` branch in the state machine. All of those handle it correctly; it's just never reached.
-- Future Viator/agency reschedule flows are the obvious caller — the report itself notes "reserved for future modification flow."
+Single migration, no schema or function-body changes. Belt-and-braces grants:
 
-## Change set
+```sql
+-- R3.10: Explicit privilege model for transition_booking_state.
+-- The function already enforces auth via auth.uid() + ownership/collaborator
+-- checks, but we want anon blocked at the GRANT layer too in case any future
+-- misconfiguration exposes the schema to the anon role.
 
-A single comment edit in `src/services/bookingStateMachine.ts` immediately above the `BookingItemState` union (around line 18). Wording:
+REVOKE ALL ON FUNCTION public.transition_booking_state(
+  uuid, public.booking_item_state, text, text, jsonb
+) FROM PUBLIC, anon;
 
-```ts
-// NOTE: 'changed' is reserved for the future booking-modification flow
-// (e.g. Viator/vendor reschedules, supplier-driven date or price changes).
-// Currently no caller transitions into 'changed' — the state, its label,
-// its badge color, and its allowed-transition row in VALID_TRANSITIONS
-// (also mirrored in the SQL booking_item_state enum and the
-// transition_booking_state RPC) are intentionally kept so adding the flow
-// later doesn't require an enum migration. Do not delete without a plan
-// for the corresponding Postgres enum-value removal.
+GRANT EXECUTE ON FUNCTION public.transition_booking_state(
+  uuid, public.booking_item_state, text, text, jsonb
+) TO authenticated, service_role;
 ```
 
-No code, type, RPC, or migration changes.
+`REVOKE FROM PUBLIC` is required because Postgres' default function privileges grant EXECUTE to PUBLIC (which includes anon) — a bare `REVOKE FROM anon` would be a no-op while PUBLIC still holds the privilege.
 
 ## Out of scope
 
-- Touching the SQL `booking_item_state` enum.
-- Removing the `case 'changed':` branches, label, or badge color — those are part of the contract this comment is preserving.
-- Any change to `transition_booking_state` (already correctly handles `changed → booked_confirmed/cancelled/refunded`).
+- The function body itself (already idempotent + auth-checked under R3.8).
+- Any other RPC's grants (only the one R3.10 calls out).
+- Renaming or signature changes.
 
 ## Verification
 
-- Comment compiles (it's a comment).
-- `rg "'changed'" src supabase/functions` still shows the same 6 references in `bookingStateMachine.ts` plus the RPC — no functional drift.
+- `\df+ public.transition_booking_state` shows the explicit ACL list with `authenticated=X` and `service_role=X`, no `=X/owner` PUBLIC entry.
+- Authenticated UI flows still call the RPC successfully (no behavior change).
+- A direct `anon`-key call now returns a permission-denied error instead of falling through to the in-function auth check.
 
 ## Memory
 
-Skip — too small and self-explanatory once the comment is in the file. The comment itself is the durable note.
+Skip — the migration is self-documenting and there's no recurring footgun to remember. Future `CREATE OR REPLACE FUNCTION` calls preserve grants, so this won't drift.
