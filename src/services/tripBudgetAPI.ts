@@ -489,11 +489,14 @@ export async function markSettlementComplete(settlementId: string): Promise<void
 // ============================================================================
 
 export async function calculateBudgetSummary(tripId: string): Promise<BudgetSummary> {
-  const [members, expenses, settlements] = await Promise.all([
+  const [members, expenses, settlements, tripRowResp] = await Promise.all([
     getTripMembers(tripId),
     getTripExpenses(tripId),
     getTripSettlements(tripId),
+    supabase.from('trips').select('budget_currency').eq('id', tripId).maybeSingle(),
   ]);
+
+  const tripCurrency = String(tripRowResp.data?.budget_currency || 'USD').toUpperCase();
 
   // Get all splits for all expenses
   const allSplits: ExpenseSplit[] = [];
@@ -502,11 +505,29 @@ export async function calculateBudgetSummary(tripId: string): Promise<BudgetSumm
     allSplits.push(...splits);
   }
 
-  const totalPlanned = expenses.reduce((sum, e) => sum + e.plannedAmount, 0);
-  const totalActual = expenses.reduce((sum, e) => sum + (e.actualAmount || e.plannedAmount), 0);
+  // Per-expense currency normalization. Mismatched currencies drop to 0 +
+  // surface in mixedCurrencyExpenseIds so the UI can flag "needs conversion".
+  // Truthful display > fake total; v1.x will add real FX.
+  const mixedCurrencyExpenseIds: string[] = [];
+  const normalize = (expense: TripExpense, raw: number): number => {
+    const expenseCurrency = (expense.currency || tripCurrency).toUpperCase();
+    if (expenseCurrency === tripCurrency) return raw;
+    if (!mixedCurrencyExpenseIds.includes(expense.id)) {
+      mixedCurrencyExpenseIds.push(expense.id);
+      console.warn('[budget] Mixed-currency expense not converted', {
+        expenseId: expense.id, expenseCurrency, tripCurrency, amount: raw,
+      });
+    }
+    return 0;
+  };
+
+  const expenseById = new Map(expenses.map(e => [e.id, e]));
+
+  const totalPlanned = expenses.reduce((sum, e) => sum + normalize(e, e.plannedAmount), 0);
+  const totalActual = expenses.reduce((sum, e) => sum + normalize(e, e.actualAmount ?? e.plannedAmount), 0);
   const totalPaid = expenses
     .filter(e => e.paymentStatus === 'paid')
-    .reduce((sum, e) => sum + (e.actualAmount || e.plannedAmount), 0);
+    .reduce((sum, e) => sum + normalize(e, e.actualAmount ?? e.plannedAmount), 0);
   const totalPending = totalActual - totalPaid;
 
   // Calculate member balances
@@ -514,13 +535,16 @@ export async function calculateBudgetSummary(tripId: string): Promise<BudgetSumm
     // What this member owes (their splits that aren't paid)
     const owes = allSplits
       .filter(s => s.memberId === member.id && !s.isPaid)
-      .reduce((sum, s) => sum + s.amount, 0);
+      .reduce((sum, s) => {
+        const parent = expenseById.get(s.expenseId);
+        return sum + (parent ? normalize(parent, s.amount) : 0);
+      }, 0);
 
     // What this member is owed (expenses they paid for others)
     const paidExpenses = expenses.filter(e => e.paidByMemberId === member.id);
     const owed = paidExpenses.reduce((sum, expense) => {
       const expenseSplits = allSplits.filter(s => s.expenseId === expense.id && s.memberId !== member.id && !s.isPaid);
-      return sum + expenseSplits.reduce((s, split) => s + split.amount, 0);
+      return sum + expenseSplits.reduce((s, split) => s + normalize(expense, split.amount), 0);
     }, 0);
 
     return {
@@ -536,6 +560,8 @@ export async function calculateBudgetSummary(tripId: string): Promise<BudgetSumm
     totalActual,
     totalPaid,
     totalPending,
+    currency: tripCurrency,
+    mixedCurrencyExpenseIds,
     memberBalances,
     settlements,
   };
