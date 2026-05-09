@@ -382,7 +382,7 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
       .maybeSingle(),
     supabase
       .from('trips')
-      .select('itinerary_data, hotel_selection, flight_selection')
+      .select('itinerary_data, hotel_selection, flight_selection, budget_currency')
       .eq('id', tripId)
       .maybeSingle(),
   ]);
@@ -436,6 +436,7 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
 
   const hotelSel: any = (tripResult.data as any)?.hotel_selection;
   const flightSel: any = (tripResult.data as any)?.flight_selection;
+  const tripCurrency: string = (tripResult.data as any)?.budget_currency || 'USD';
   const hotelName: string | undefined = hotelSel?.name || hotelSel?.hotel?.name;
   const flightAirline: string | undefined =
     flightSel?.outbound?.airline || flightSel?.legs?.[0]?.airline || flightSel?.airline;
@@ -537,7 +538,7 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
       category: toBudgetCategory(row.category),
       entry_type: (isPaid || isLogistics ? 'committed' : 'planned') as EntryType,
       amount_cents: totalCents,
-      currency: 'USD',
+      currency: (row as any).currency || tripCurrency,
       description,
       day_number: row.day_number,
       activity_id: row.activity_id,
@@ -724,7 +725,7 @@ export async function recordCommittedExpense(
     category,
     entry_type: 'committed',
     amount_cents: amountCents,
-    currency: 'USD',
+    currency: (data as any)?.currency || 'USD',
     description,
     day_number: dayNumber || null,
     activity_id: activityId,
