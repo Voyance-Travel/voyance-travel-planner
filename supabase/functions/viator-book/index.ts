@@ -283,6 +283,27 @@ serve(async (req) => {
       })
       .eq("id", paymentId);
 
+    // Persist voucher + confirmation to the activity row so VoucherModal can render it.
+    // Done before the state transition so any client refetch on the booking-changed signal
+    // sees a fully populated row.
+    const { error: activityUpdateErr } = await serviceSupabase
+      .from('trip_activities')
+      .update({
+        voucher_url: data.voucher?.url ?? null,
+        voucher_data: viatorConfirmation,
+        confirmation_number: data.viatorRef || data.bookingRef || null,
+        external_booking_id: data.bookingRef || null,
+        vendor_name: 'Viator',
+        vendor_booking_id: data.viatorRef || data.bookingRef || null,
+        cancellation_policy: data.cancellationPolicy ?? null,
+        booked_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', activityId);
+    if (activityUpdateErr) {
+      log('Failed to persist voucher to trip_activities', { error: activityUpdateErr.message, activityId });
+    }
+
     // Update activity booking state to confirmed
     await serviceSupabase.rpc('transition_booking_state', {
       p_activity_id: activityId,
