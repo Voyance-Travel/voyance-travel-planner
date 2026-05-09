@@ -1,46 +1,49 @@
-## M1 — Hotel ranking divergence
+## M2 — Activity feedback mirrors to trip_activities
 
-Replace the hardcoded "top 3" recommendation with a confidence-threshold + visible-count alignment so "Recommended only" filters render a stable subset.
+Mirror `activity_feedback` rows onto `trip_activities` so the UI can show "you rated this" without a join. Ledger row stays source of truth.
 
-### File
-`src/services/hotelRankingAPI.ts` (lines 276–280)
+### Type mismatch caught during exploration
 
-### Scale note
-`matchScore` in this file is on a **1–100 scale** (see `calculateMatchScore`, line 200, clamped to `Math.max(1, Math.min(100, matchScore))`), not 0–1. So the threshold needs to be `65`, not `0.65`. Otherwise the proposed snippet drops in unchanged.
+The proposed snippet writes `user_rating: data.rating`, but `rating` in this codebase is a **text enum** (`'loved' | 'liked' | 'neutral' | 'disliked'`), not numeric. The suggested `SMALLINT` column would reject every write. The plan stores `user_rating` as **TEXT** instead — no mapping layer needed, matches `activity_feedback.rating`.
 
-### Change
+### Step 1 — Migration
 
-Replace:
-```ts
-// Mark top 3 as recommended
-return scored.map((hotel, index) => ({
-  ...hotel,
-  isRecommended: index < 3,
-}));
+`trip_activities` currently has no `user_rating` / `user_feedback_at` columns (verified via information_schema). Add them:
+
+```sql
+ALTER TABLE public.trip_activities
+  ADD COLUMN IF NOT EXISTS user_rating TEXT,
+  ADD COLUMN IF NOT EXISTS user_feedback_at TIMESTAMPTZ;
 ```
 
-With:
+No RLS changes — existing trip_activities policies cover the new columns.
+
+### Step 2 — Edit `src/services/activityFeedbackAPI.ts`
+
+In `submitActivityFeedback`, after the existing successful upsert (after line 106's `analyzeUserPreferences()` call, before `return`), add:
+
 ```ts
-// Mark all hotels above a confidence threshold as recommended, OR top N if
-// scoring is ambiguous. Caller knows how many to display via .length.
-const RECOMMEND_SCORE_THRESHOLD = 65; // matchScore is 1–100
-const MIN_RECOMMENDED = 3;
-const MAX_RECOMMENDED = 8;
-
-const aboveThreshold = scored.filter(h => (h.matchScore ?? 0) >= RECOMMEND_SCORE_THRESHOLD);
-const recommendedCount = Math.min(
-  MAX_RECOMMENDED,
-  Math.max(MIN_RECOMMENDED, aboveThreshold.length),
-);
-
-return scored.map((hotel, idx) => ({
-  ...hotel,
-  isRecommended: idx < recommendedCount,
-}));
+// Mirror feedback presence onto the trip activity record so the UI can show
+// "you rated this" without joining tables. Fire-and-forget; ledger insert is
+// the source of truth.
+if (data?.activity_id && data?.rating != null) {
+  void supabase
+    .from('trip_activities')
+    .update({
+      user_rating: data.rating,
+      user_feedback_at: new Date().toISOString(),
+    })
+    .eq('id', data.activity_id)
+    .then(({ error }) => {
+      if (error) console.warn('[activityFeedback] mirror to trip_activities failed:', error);
+    });
+}
 ```
 
-`scored` is already sorted desc by `matchScore` at line 274, so no extra sort needed.
+Fire-and-forget (`void`) — never block the feedback submission on the mirror.
 
 ### Verify
-- `grep -n "RECOMMEND_SCORE_THRESHOLD\|recommendedCount" src/services/hotelRankingAPI.ts` → 3+ hits
-- Toggling "Recommended only" in the UI returns a deterministic subset across clicks.
+
+- `grep -n "mirror to trip_activities" src/services/activityFeedbackAPI.ts` → 1 hit
+- After submitting feedback in the UI, `select user_rating, user_feedback_at from trip_activities where id = '<activity_id>'` returns the rating + recent timestamp
+- Mirror failure logs `[activityFeedback] mirror to trip_activities failed` as a warn, not an error throw

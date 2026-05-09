@@ -6050,6 +6050,8 @@ export type Database = {
           trip_id: string | null
           type: string
           updated_at: string
+          user_feedback_at: string | null
+          user_rating: string | null
           vendor_booking_id: string | null
           vendor_name: string | null
           venue_id: string | null
@@ -6109,6 +6111,8 @@ export type Database = {
           trip_id?: string | null
           type?: string
           updated_at?: string
+          user_feedback_at?: string | null
+          user_rating?: string | null
           vendor_booking_id?: string | null
           vendor_name?: string | null
           venue_id?: string | null
@@ -6168,6 +6172,8 @@ export type Database = {
           trip_id?: string | null
           type?: string
           updated_at?: string
+          user_feedback_at?: string | null
+          user_rating?: string | null
           vendor_booking_id?: string | null
           vendor_name?: string | null
           venue_id?: string | null
