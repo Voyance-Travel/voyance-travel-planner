@@ -207,6 +207,9 @@ export function useGenerationGate() {
     // Attempt to deduct credits server-side
     // Track whether credits were actually spent so we can refund on unexpected errors
     let creditsSpent = 0;
+    // Generate keys up front so we can use them in the defensive refund path.
+    const idempotencyKey = `trip_generation:${params.tripId}:${params.days}:${params.cities.length}`;
+    const defensiveRefundKey = `defensive-refund-${idempotencyKey}-${Date.now()}`;
     try {
       const { data, error } = await supabase.functions.invoke('spend-credits', {
         body: {
@@ -218,14 +221,38 @@ export function useGenerationGate() {
             cities: params.cities.length,
             complexity: estimate.complexity.tier,
             multiplier: estimate.complexity.multiplier,
-            idempotencyKey: `trip_generation:${params.tripId}:${params.days}:${params.cities.length}`,
+            idempotencyKey,
+            defensiveRefundKey,
           },
         },
       });
 
       if (error) {
-        // Network error — if user can afford it, this is a transient failure, not "insufficient"
-        console.error('[GenerationGate] Spend error:', error);
+        // HTTP error from the edge gateway. The spend MAY have committed
+        // server-side (gateway timeout after deduction is the common case) —
+        // fire a defensive refund keyed on idempotencyKey. The server REFUND
+        // path is idempotent and returns originalNotFound:true if the spend
+        // never ran, so this is safe whether the spend committed or not.
+        console.error('[GenerationGate] spend-credits HTTP error — firing defensive refund', { error });
+        try {
+          await supabase.functions.invoke('spend-credits', {
+            body: {
+              action: 'REFUND',
+              tripId: params.tripId,
+              originalIdempotencyKey: idempotencyKey,
+              reason: 'gate_http_error_assumed_spend',
+              metadata: {
+                defensiveRefundKey,
+                originalAction: 'trip_generation',
+                reason: 'gate_http_error_assumed_spend',
+              },
+            },
+          });
+          console.log('[GenerationGate] Defensive refund fired for key', idempotencyKey);
+        } catch (refundErr) {
+          // Stale-pending sweep is the final safety net (5–10 min).
+          console.error('[GenerationGate] Defensive refund failed (will rely on stale-pending sweep):', refundErr);
+        }
         // Throw so ItineraryGenerator shows a generic error, NOT the "out of credits" modal
         throw new Error(`Credit spend failed: ${error.message || 'network error'}`);
       }

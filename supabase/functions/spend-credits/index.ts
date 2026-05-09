@@ -74,6 +74,10 @@ interface SpendRequest {
   dayIndex?: number;
   creditsAmount?: number;
   metadata?: Record<string, unknown>;
+  // Defensive-refund support: client passes the original spend's idempotencyKey
+  // when retrying a REFUND after a gateway timeout (no pendingChargeId yet).
+  originalIdempotencyKey?: string;
+  reason?: string;
 }
 
 /**
@@ -371,12 +375,54 @@ serve(async (req) => {
         hotel_optimization: 100,
       };
 
-      const originalAction = metadata?.originalAction as string | undefined;
-      const pendingChargeId = metadata?.pendingChargeId as string | undefined;
+      let originalAction = metadata?.originalAction as string | undefined;
+      let pendingChargeId = metadata?.pendingChargeId as string | undefined;
       // Support dynamic refund amounts (e.g. trip_generation) via creditsAmount param
       const fixedRefund = originalAction ? (REFUNDABLE_COSTS[originalAction] ?? 0) : 0;
       const dynamicRefund = (typeof creditsAmount === 'number' && creditsAmount > 0) ? creditsAmount : 0;
-      const refundAmount = dynamicRefund || fixedRefund;
+      let refundAmount = dynamicRefund || fixedRefund;
+
+      // ── Defensive-refund lookup: if client passed originalIdempotencyKey,
+      // find the original spend in the ledger and resolve its pendingChargeId.
+      // This handles the gateway-timeout case where the client never received
+      // the original spend response and so doesn't have the pendingChargeId. ──
+      const originalIdempotencyKey = body.originalIdempotencyKey;
+      if (!pendingChargeId && originalIdempotencyKey) {
+        const { data: originalSpend } = await supabaseAdmin
+          .from('credit_ledger')
+          .select('metadata, credits_delta, action_type')
+          .eq('user_id', user.id)
+          .contains('metadata', { idempotencyKey: originalIdempotencyKey })
+          .eq('transaction_type', 'spend')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (!originalSpend || originalSpend.length === 0) {
+          // The spend never committed — defensive refund is a no-op.
+          console.log('[spend-credits] Defensive refund: original spend not found for key', originalIdempotencyKey);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              action: 'REFUND',
+              defensive: true,
+              originalNotFound: true,
+              idempotent: true,
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        pendingChargeId = (originalSpend[0].metadata as Record<string, unknown> | null)?.pendingChargeId as string | undefined;
+        if (!refundAmount) {
+          refundAmount = Math.abs(Number(originalSpend[0].credits_delta) || 0);
+        }
+        if (!originalAction) {
+          originalAction = originalSpend[0].action_type as string | undefined;
+        }
+        if (!pendingChargeId) {
+          console.warn('[spend-credits] Defensive refund: original spend found but no pendingChargeId — refunding by ledger amount', { refundAmount, originalAction });
+        }
+      }
 
       if (refundAmount <= 0) {
         console.error('[spend-credits] REFUND: unknown or zero refund amount for action:', originalAction);
@@ -650,70 +696,99 @@ serve(async (req) => {
       throw err;
     }
 
-    // ── Credits deducted successfully — from here we MUST return 200 ──
-    // Wrap post-deduction work in try/catch so failures in ledger/sync
-    // never cause a non-2xx response (credits are already gone).
-    let balance = { total: 0, purchased: 0, free: 0 };
-    try {
-      // ── Ledger entry (write-ahead: BEFORE balance sync) ──
-      const { error: paidLedgerErr } = await supabaseAdmin
-        .from('credit_ledger')
-        .insert({
-          user_id: user.id,
-          transaction_type: 'spend',
-          credits_delta: -deductResult.deducted,
-          is_free_credit: false,
-          action_type: action,
-          trip_id: tripId || null,
-          activity_id: null,
-          notes: `${action.replace(/_/g, ' ')} - ${deductResult.deducted} credits`,
-          metadata: {
-            ...metadata,
-            day_index: dayIndex,
-            is_variable_cost: isVariable,
-            original_cost: cost,
-            fifo_deductions: deductResult.purchases,
-            activityId: activityId || null,
-          },
-        });
-      if (paidLedgerErr) {
-        console.error('[spend-credits] CRITICAL: Ledger insert failed after FIFO deduction.', paidLedgerErr);
-      }
+    // ── Credits deducted successfully — return 200 IMMEDIATELY. ──
+    // Housekeeping (ledger insert + cost tracking + balance cache sync) runs in
+    // the background via EdgeRuntime.waitUntil so the response isn't blocked by
+    // multi-second sync work. Previously this kept the connection open long
+    // enough for the gateway to time out and return non-2xx to the client even
+    // though the spend committed — leaving users with a phantom debit until the
+    // 5-min stale-pending sweep refunded them.
+    const idempotencyKeyForLedger = metadata?.idempotencyKey as string | undefined;
+    const defensiveRefundKey = metadata?.defensiveRefundKey as string | undefined;
 
-      // ── Cost tracking for hotel_search (for Unit Economics dashboard) ──
-      if (action === 'hotel_search' && tripId) {
-        const { error: costErr } = await supabaseAdmin
-          .from('trip_cost_tracking')
-          .insert({
-            user_id: user.id,
-            trip_id: tripId,
-            action_type: 'hotel_search',
-            cost_category: 'ai_generation',
-            estimated_cost_usd: 0.03,
-            input_tokens: 0,
-            output_tokens: 0,
-            model: 'credit-gated',
-          });
-        if (costErr) console.error('[spend-credits] Cost tracking insert failed:', costErr);
-      }
+    // Optimistic balance: client treats `balanceOptimistic: true` as a hint to
+    // refetch authoritative balance shortly. Sentinel -1 avoids showing 0.
+    const optimisticBalance = { total: -1, purchased: -1, free: -1 };
 
-      // ── Sync balance cache AFTER successful deduction + ledger ──
-      balance = await syncBalanceCache(supabaseAdmin, user.id);
-    } catch (postDeductErr) {
-      // Log but never fail the response — credits were already deducted
-      console.error('[spend-credits] Post-deduction error (credits already spent, returning 200):', postDeductErr);
-    }
-
-    return new Response(
+    const response = new Response(
       JSON.stringify({
         success: true,
         spent: deductResult.deducted,
         action,
         pendingChargeId,
-        newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
+        newBalance: optimisticBalance,
+        balanceOptimistic: true,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+
+    const housekeeping = async () => {
+      try {
+        // ── Ledger entry (write-ahead: BEFORE balance sync) ──
+        const { error: paidLedgerErr } = await supabaseAdmin
+          .from('credit_ledger')
+          .insert({
+            user_id: user.id,
+            transaction_type: 'spend',
+            credits_delta: -deductResult.deducted,
+            is_free_credit: false,
+            action_type: action,
+            trip_id: tripId || null,
+            activity_id: null,
+            notes: `${action.replace(/_/g, ' ')} - ${deductResult.deducted} credits`,
+            metadata: {
+              ...metadata,
+              idempotencyKey: idempotencyKeyForLedger,
+              defensiveRefundKey,
+              pendingChargeId,
+              day_index: dayIndex,
+              is_variable_cost: isVariable,
+              original_cost: cost,
+              fifo_deductions: deductResult.purchases,
+              activityId: activityId || null,
+            },
+          });
+        if (paidLedgerErr) {
+          console.error('[spend-credits] Background: CRITICAL ledger insert failed after FIFO deduction.', paidLedgerErr);
+        }
+
+        // ── Cost tracking for hotel_search (for Unit Economics dashboard) ──
+        if (action === 'hotel_search' && tripId) {
+          const { error: costErr } = await supabaseAdmin
+            .from('trip_cost_tracking')
+            .insert({
+              user_id: user.id,
+              trip_id: tripId,
+              action_type: 'hotel_search',
+              cost_category: 'ai_generation',
+              estimated_cost_usd: 0.03,
+              input_tokens: 0,
+              output_tokens: 0,
+              model: 'credit-gated',
+            });
+          if (costErr) console.error('[spend-credits] Background: cost tracking insert failed:', costErr);
+        }
+
+        // ── Sync balance cache AFTER successful deduction + ledger ──
+        await syncBalanceCache(supabaseAdmin, user.id);
+
+        console.log(`[spend-credits] Background housekeeping done for user ${user.id} action=${action}`);
+      } catch (bgErr) {
+        // Credits already deducted; ledger may be inconsistent. Stale-pending
+        // sweep will eventually reconcile via pending_credit_charges status.
+        console.error('[spend-credits] Background housekeeping FAILED:', bgErr);
+      }
+    };
+
+    const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+    if (edgeRuntime && typeof edgeRuntime.waitUntil === 'function') {
+      edgeRuntime.waitUntil(housekeeping());
+    } else {
+      // Dev / non-edge environment — block on the work so we don't lose it.
+      await housekeeping();
+    }
+
+    return response;
   } catch (error) {
     console.error('[spend-credits] Unexpected error:', error);
     return exceptionResponse(error);
