@@ -1465,11 +1465,23 @@ async function _handleGenerateTripDayInner(
           { dayNumber, destination: cityInfo?.cityName || destination },
         );
         if (gate.verdict === 'persist_forced') {
-          // Re-apply gate-mutated activities back onto dayResult, preserving any
-          // fields not in StrictActivityMinimal by index-merging.
+          // Drop-aware merge: filter dayResult.activities by surviving ids, then
+          // overlay gate-mutated strict fields. Falls back to index-merge when no
+          // ids are present (rare — strict activities should always carry id).
           const gated = gate.day.activities as any[];
-          const merged = gated.map((g, i) => ({ ...(dayResult.activities[i] || {}), ...g }));
-          dayResult.activities = merged;
+          const survivingIds = new Set(gated.map((g: any) => g?.id).filter(Boolean));
+          const droppedAny = gated.length !== dayResult.activities.length;
+          if (droppedAny && survivingIds.size === gated.length) {
+            const filtered = (dayResult.activities as any[]).filter((a: any) => survivingIds.has(a?.id));
+            const merged = filtered.map((orig: any) => {
+              const g = gated.find((x: any) => x?.id === orig?.id) || {};
+              return { ...orig, ...g };
+            });
+            dayResult.activities = merged;
+          } else {
+            const merged = gated.map((g: any, i: number) => ({ ...(dayResult.activities[i] || {}), ...g }));
+            dayResult.activities = merged;
+          }
           dayResult.metadata = dayResult.metadata || {};
           dayResult.metadata.quality = dayResult.metadata.quality || {};
           dayResult.metadata.quality.gate_forced_persist = true;
