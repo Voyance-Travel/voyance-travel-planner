@@ -788,21 +788,42 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   }
 
   // ── STEP 4: SYNC TO NORMALIZED TABLES ──────────────────────────
-  // Keep itinerary_days + itinerary_activities in sync with JSON snapshot
+  // RS.6 — Persistence atomicity: JSON in trips.itinerary_data is the source
+  // of truth (already saved above). Stamp itinerary_sync_status so the
+  // frontend can detect when itinerary_days / itinerary_activities are stale
+  // and fall back to JSON or trigger a re-sync.
+
+  // Phase 2: mark sync as pending
+  await supabase
+    .from('trips')
+    .update({ itinerary_sync_status: 'pending', itinerary_synced_at: null })
+    .eq('id', tripId);
+
+  // Phase 3: sync normalized tables (non-fatal — JSON is durable)
+  let syncSuccess = false;
   try {
     const syncCtx: ActionContext = { supabase, userId, params: { tripId } };
     const { handleSyncItineraryTables } = await import('./action-sync-tables.ts');
     const syncResult = await handleSyncItineraryTables(syncCtx);
     const syncBody = await syncResult.json().catch(() => null);
-    if (syncBody && !syncBody.success) {
+    if (syncBody && syncBody.success === false) {
       console.error('[save-itinerary] Table sync failed:', syncBody);
     } else {
-      console.log(`[save-itinerary] Table sync complete:`, syncBody);
+      syncSuccess = true;
+      console.log('[save-itinerary] Table sync complete:', syncBody);
     }
   } catch (syncErr) {
-    // Non-fatal: JSON snapshot is the source of truth
     console.error('[save-itinerary] Table sync error (non-fatal):', syncErr);
   }
+
+  // Phase 4: stamp final itinerary_sync_status
+  await supabase
+    .from('trips')
+    .update({
+      itinerary_sync_status: syncSuccess ? 'synced' : 'failed',
+      itinerary_synced_at: syncSuccess ? new Date().toISOString() : null,
+    })
+    .eq('id', tripId);
 
   // Trigger next journey leg if applicable
   await triggerNextJourneyLeg(supabase, tripId);
