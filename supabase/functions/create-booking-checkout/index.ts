@@ -239,40 +239,6 @@ serve(async (req) => {
       // Create pending payment records in trip_payments for each item
       const paymentRecords: any[] = [];
 
-      if (flightCents > 0 && trip.flight_selection) {
-        const flightData = trip.flight_selection as any;
-        paymentRecords.push({
-          trip_id: tripId,
-          user_id: userId,
-          item_type: 'flight',
-          item_id: flightData?.id || `flight-${tripId.slice(0, 8)}`,
-          item_name: `Flights to ${trip.destination}`,
-          amount_cents: flightCents,
-          currency: 'USD',
-          quantity: 1,
-          status: 'pending',
-          stripe_checkout_session_id: session.id,
-          external_provider: 'amadeus',
-        });
-      }
-
-      if (hotelCents > 0 && trip.hotel_selection) {
-        const hotelData = trip.hotel_selection as any;
-        paymentRecords.push({
-          trip_id: tripId,
-          user_id: userId,
-          item_type: 'hotel',
-          item_id: hotelData?.hotelId || hotelData?.id || `hotel-${tripId.slice(0, 8)}`,
-          item_name: hotelData?.name || `Hotel in ${trip.destination}`,
-          amount_cents: hotelCents,
-          currency: 'USD',
-          quantity: 1,
-          status: 'pending',
-          stripe_checkout_session_id: session.id,
-          external_provider: 'amadeus',
-        });
-      }
-
       if (activitiesCents > 0) {
         paymentRecords.push({
           trip_id: tripId,
