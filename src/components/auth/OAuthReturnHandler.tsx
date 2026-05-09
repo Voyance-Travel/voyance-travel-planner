@@ -15,7 +15,7 @@ import { consumePendingInviteToken, extractInviteTokenFromPath } from '@/utils/i
  * token keeps redirecting the user on every homepage visit.
  */
 export function OAuthReturnHandler() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
