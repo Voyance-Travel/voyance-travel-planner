@@ -51,6 +51,9 @@ export const FAILURE_CODES = {
   SUSPICIOUS_DUPLICATE_PRICE:'SUSPICIOUS_DUPLICATE_PRICE',
   CATEGORY_VENUE_MISMATCH:   'CATEGORY_VENUE_MISMATCH',
   CHECKOUT_HOTEL_LEAK:       'CHECKOUT_HOTEL_LEAK',
+
+  // Transit hard ceiling (validate-day → repair-day → validation-gate)
+  WALK_OVER_THRESHOLD:       'WALK_OVER_THRESHOLD',
 } as const;
 
 export type FailureCode = typeof FAILURE_CODES[keyof typeof FAILURE_CODES];
