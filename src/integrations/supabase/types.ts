@@ -9643,6 +9643,10 @@ export type Database = {
         Returns: Json
       }
       accept_trip_invite: { Args: { p_token: string }; Returns: Json }
+      add_to_group_budget: {
+        Args: { p_budget_id: string; p_credits: number }
+        Returns: number
+      }
       archive_orphan_trip_payments: {
         Args: { p_trip_id: string }
         Returns: Json
