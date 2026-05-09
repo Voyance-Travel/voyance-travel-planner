@@ -556,7 +556,47 @@ export async function saveItinerary(
   if (error) {
     throw new Error('Failed to save itinerary');
   }
-  
+
+  // Mark any active trip_day_intents that match a saved activity as fulfilled.
+  // Without this, the next regenerate-day sees the intent as still-active
+  // and may overwrite the user's manual edit.
+  try {
+    const days = (mergedItinerary?.days ?? []) as Array<any>;
+    for (const day of days) {
+      const dayNumber = Number(day?.dayNumber);
+      const activities = Array.isArray(day?.activities) ? day.activities : [];
+      if (!dayNumber || activities.length === 0) continue;
+
+      const { data: matchingIntents } = await supabase
+        .from('trip_day_intents')
+        .select('id, title')
+        .eq('trip_id', tripId)
+        .eq('day_number', dayNumber)
+        .neq('status', 'fulfilled');
+
+      if (!matchingIntents || matchingIntents.length === 0) continue;
+
+      const fulfilled = (matchingIntents || []).filter((intent) => {
+        const it = ((intent.title || '') as string).toLowerCase().trim();
+        if (!it) return false;
+        return activities.some((a: any) => {
+          const at = ((a?.title || a?.name || '') as string).toLowerCase().trim();
+          return at.length > 0 && (at.includes(it) || it.includes(at));
+        });
+      });
+
+      if (fulfilled.length > 0) {
+        await supabase
+          .from('trip_day_intents')
+          .update({ status: 'fulfilled', fulfilled_at: new Date().toISOString() })
+          .in('id', fulfilled.map((f) => f.id));
+        console.log('[manual-edit] Marked', fulfilled.length, 'intents as fulfilled by activity edit');
+      }
+    }
+  } catch (e) {
+    console.warn('[manual-edit] intent fulfillment sweep failed:', e);
+  }
+
   return { success: true, itinerary: mergedItinerary };
 }
 
