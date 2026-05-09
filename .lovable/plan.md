@@ -1,37 +1,45 @@
-## RS.7 — Locked activity flag preservation
+## RS.M.I1 — Explicit hotel-change instruction in `dayConstraints`
 
-Three different parts of the pipeline check three different spellings of the locked flag (`locked`, `isLocked`, `is_locked`). When only one is set, downstream sanitizers silently treat the activity as unlocked and regenerate over user pins. Fix by stamping all three spellings at every read/write boundary.
+### Context
 
-### Changes
+`supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` already contains rich hotel-change guidance, but it lives only inside the middle-day branch (around line 758, gated on `flightContext.hotelName`). The first-day and last-day branches (lines 636–663) build `timingInstructions` from the bare `dayConstraints` and never see any hotel-change directive. RS.M.I1 wants a single explicit hotel-change note that flows into every branch.
 
-**1. `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`** — three locked-load branches all need all three flag spellings:
+The cleanest place to inject it is right after `dayConstraints` is read from the schema (line 629), so all three branches (first / last / middle day) inherit the same explicit sequence.
 
-- Branch 1 (lines ~349–371): DB load from `itinerary_activities`. Add `locked: true, is_locked: true` alongside the existing `isLocked: true`.
-- Branch 2 (lines ~391–402): JSON fallback from `trips.itinerary_data`. Same triple stamp.
-- Branch 3 (lines ~413–430): legacy keepActivities fallback. Same triple stamp.
+### Change
 
-**2. `supabase/functions/generate-itinerary/action-save-itinerary.ts`** — add a "STEP 2.93: NORMALIZE LOCKED FLAGS" pass just before the existing timing-cascade sweep (~L737). Walks every day's activities; if any of `locked`, `isLocked`, or `is_locked` is truthy, sets all three to `true`. Preserves explicit unlocked state (no flag → no flag).
+**File:** `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
+
+At line 629, augment `dayConstraints`:
 
 ```ts
-for (const day of itineraryDays) {
-  if (!Array.isArray(day?.activities)) continue;
-  for (const act of day.activities as any[]) {
-    if (act?.locked || act?.isLocked || act?.is_locked) {
-      act.locked = true;
-      act.isLocked = true;
-      act.is_locked = true;
-    }
-  }
-}
+const baseDayConstraints = schema.dayConstraints;
+
+// RS.M.I1: explicit hotel-change directive — applies to every day branch
+// (first / last / middle) so the model always sees the required sequence.
+const hotelChangeNote = facts.resolvedIsHotelChange
+  ? `\n\n=== HOTEL CHANGE DAY ===\nYou are switching hotels today. Schedule:\n` +
+    `- Checkout from ${facts.resolvedPreviousHotelName || 'previous hotel'} (typically 11:00)\n` +
+    `- Travel to ${resolvedHotelOverride?.name || flightContext.hotelName || 'new hotel'} ` +
+      `(~30-45 min depending on distance)\n` +
+    `- Check-in at new hotel (typically 15:00)\n` +
+    `- Plan flexible activities BEFORE checkout and AFTER check-in. ` +
+      `No tight reservations during the gap.\n`
+  : '';
+
+const dayConstraints = `${baseDayConstraints}${hotelChangeNote}`;
 ```
 
-This guarantees the JSON snapshot persisted by `persistTripItinerary` AND the rows synced to `itinerary_activities` (via `action-sync-tables.ts` which already reads `a.isLocked || a.locked` at L140) carry consistent flags.
+### Notes
+
+- `facts.resolvedIsHotelChange` / `facts.resolvedPreviousHotelName` are already read elsewhere in the file via the `facts.` namespace; no destructure change needed.
+- This is additive — when `resolvedIsHotelChange` is false, `dayConstraints` is unchanged byte-for-byte.
+- The existing detailed mid-day block at line 758 stays as-is; the new note is a concise top-level summary that also reaches first/last day prompts.
 
 ### Verify
-- `grep -c "locked: true.*isLocked\|isLocked: true" supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts` → ≥ 1 (will be 3, one per branch).
-- `grep -c "act.locked = true\|act.isLocked = true\|act.is_locked = true" supabase/functions/generate-itinerary/action-save-itinerary.ts` → 3.
 
-### Notes / decisions
-- Spec assumed a single DB-load block; the actual file has three separate locked-load branches. Patching all three since they all feed the same `lockedActivities` array.
-- No DB schema change needed — `itinerary_activities.is_locked` already exists.
-- Keeping the change additive (sets when truthy, never clears) so it can't accidentally unlock anything.
+```bash
+grep -c "HOTEL CHANGE DAY\|resolvedIsHotelChange" \
+  supabase/functions/generate-itinerary/pipeline/compile-prompt.ts
+```
+Expect ≥ 2 (will increase by 2: the new `=== HOTEL CHANGE DAY ===` literal plus the new `facts.resolvedIsHotelChange` reference).
