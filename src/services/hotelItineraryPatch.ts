@@ -204,10 +204,17 @@ export async function patchItineraryWithMultipleHotels(
       const activities = day.activities as Array<Record<string, unknown>> | undefined;
       if (!activities?.length) continue;
 
-      // Find which hotel covers this day (exclusive upper bound)
-      // Prefer hotel whose checkInDate matches exactly (for boundary days)
-      const matchingHotel = hotels.find(h => isDayInRange(dayDate, h.checkInDate, h.checkOutDate));
-      
+      // Find which hotel covers this day.
+      // Pass 1: prefer the hotel whose check-in is exactly this day (arrival
+      // wins on same-day handover where Hotel A.checkOut === Hotel B.checkIn).
+      const dayKey = dayDate?.slice(0, 10);
+      const arrivingHotel = dayKey
+        ? hotels.find(h => h.checkInDate && h.checkInDate.slice(0, 10) === dayKey)
+        : undefined;
+      // Pass 2: otherwise, the hotel whose exclusive range covers this day.
+      const stayingHotel = hotels.find(h => isDayInRange(dayDate, h.checkInDate, h.checkOutDate));
+      const matchingHotel = arrivingHotel ?? stayingHotel;
+
       // Find hotel that is checking out on this day (for checkout activities)
       const departingHotel = hotels.find(h => isCheckoutDay(dayDate, h.checkOutDate));
 
