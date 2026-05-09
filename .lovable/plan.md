@@ -1,41 +1,25 @@
-## Fix 1.3 — Block share-enable on empty itineraries (RPC-side)
+## Fix 2.1 — Decide the fate of `purchase-smart-finish`
 
-### Goal
-Refuse to flip `share_enabled = true` when the trip has no itinerary, so callers never receive a token for a not-yet-generated trip and the public share page never has to handle a half-built payload.
+### Status check (already done)
+The `supabase/functions/purchase-smart-finish/` folder was deleted in an earlier turn. A repo-wide `rg` confirms:
 
-### Approach
-Take the recommended single-round-trip path: gate inside `toggle_consumer_trip_share`. No client-side fetch, no new return shape — existing `{success: false, reason: ...}` contract is reused with a new `reason: 'itinerary_not_ready'`, which `getPublicShareErrorMessage` already maps to "Generate your itinerary first to share it." (added in Fix 1.2). Callers in `TripShareModal.tsx` and `TripRecap.tsx` already toast `getPublicShareErrorMessage(result.reason)` on failure, so the message surfaces automatically.
+- No code in `src/` or `supabase/functions/` references `purchase-smart-finish`.
+- `stripe-webhook/index.ts` has zero `smart_finish` branches.
+- The Smart Finish purchase flow already runs end-to-end through credits: `SmartFinishBanner.tsx` deducts 50 credits via `pricing.ts:18` then directly sets `smart_finish_purchased = true` on the trip row (lines 300/323/365).
+- `enrich-manual-trip` is the only other writer of that flag, also via the credits path.
 
-### Changes
+So the recommended path **(b) delete** is effectively complete in the codebase. The single remaining loose end is the **deployed copy of the function still living in the Supabase project** — it's unreferenced source-side but may still be invokable.
 
-**1. New migration: redefine `public.toggle_consumer_trip_share`**
-After the owner check, add a readiness gate that runs only when `p_enabled = true`:
-
-```sql
-IF p_enabled IS TRUE THEN
-  IF v_trip.itinerary_data IS NULL
-     OR v_trip.itinerary_data->'days' IS NULL
-     OR jsonb_array_length(COALESCE(v_trip.itinerary_data->'days', '[]'::jsonb)) = 0 THEN
-    RETURN jsonb_build_object('success', false, 'reason', 'itinerary_not_ready');
-  END IF;
-END IF;
-```
-
-- Disabling sharing (`p_enabled = false`) is unaffected — owners can always pause.
-- Token generation logic, UPDATE, and success payload are unchanged.
-- Re-grant `EXECUTE … TO authenticated` (idempotent).
-
-**2. No client changes required**
-- `getOrCreatePublicTripShareLink` already returns `{success: false, reason: result.reason}` when the RPC fails (`publicShareLink.ts:92-97`).
-- `TripShareModal.tsx:168/176/199` and `TripRecap.tsx:117/410` already pipe `result.reason` through `getPublicShareErrorMessage`, which renders "Generate your itinerary first to share it." for `itinerary_not_ready`.
-- Existing optimistic UI (`TripShareModal` toggle switch) will revert on the failure toast — same path as `not_owner` / `trip_not_found` today.
+### Action
+1. Remove the orphan deployment by calling `supabase--delete_edge_functions` with `["purchase-smart-finish"]`. This guarantees the parallel paid-but-unfulfilled codepath is gone end-to-end (no surprise invocations from old clients, bookmarks, or stale `curl` scripts).
+2. Update `@security-memory` to record that the Smart Finish Stripe checkout function was intentionally removed and that any future claim of "Smart Finish needs its own Stripe session" must instead extend the existing credits flow.
 
 ### Out of scope
-- The cheaper-but-rejected client-side fetch alternative.
-- Any change to the success payload shape, token rotation, or the disable path.
-- A "share will become available once generation finishes" auto-enable flow — pause-only behaviour matches existing UX.
+- Re-introducing a Stripe path for Smart Finish (path (a)). The credits flow is the canonical purchase route — re-adding a Stripe checkout would split fulfillment again.
+- Touching `smart_finish_purchased` columns or `SmartFinishBanner.tsx` business logic.
+- Webhook changes — there's nothing to remove.
 
 ### Validation
-- Manual: on a brand-new trip with empty `itinerary_data`, click Share → toggle stays off, toast says "Generate your itinerary first to share it.", DB row keeps `share_enabled = false`.
-- Manual: on a fully generated trip, Share works as before; disabling still succeeds when itinerary is empty (e.g. user wiped days then disabled).
-- DB: `pg_proc` confirms `authenticated` retains EXECUTE; `anon` is intentionally not granted (toggle is owner-only).
+- After deletion, attempting `supabase.functions.invoke('purchase-smart-finish', ...)` returns 404 (expected).
+- `SmartFinishBanner` purchase flow continues to deduct 50 credits and flip `smart_finish_purchased` (no behavior change).
+- A grep for `purchase-smart-finish` returns zero hits anywhere.
