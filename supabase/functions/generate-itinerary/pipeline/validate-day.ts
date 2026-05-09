@@ -1042,7 +1042,7 @@ function checkPriceDuplication(activities: StrictActivityMinimal[], results: Val
       message: `Adjacent activities "${prev.title}" and "${curr.title}" have identical ${prevCur} ${prevAmt} cost (same category "${prevCat}")`,
       activityIndex: i,
       field: 'cost.amount',
-      autoRepairable: false,
+      autoRepairable: true,
     });
   }
 }

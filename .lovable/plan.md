@@ -1,71 +1,34 @@
-## Status: Bug #3 already shipped
+## Status: Bug #4 already shipped — only a stale flag remains
 
-The exemption requested in this bug report was implemented in the previous round (the same turn that wired `applyValidationGate` into the multi-day path). Verified in [orphan-transit.ts:63-74](supabase/functions/_shared/orphan-transit.ts:63):
+The repair + gate handlers requested by option (a) are already implemented and live, from the previous round (the same turn that wired `applyValidationGate` into the multi-day path).
 
-```ts
-// Case 1: transit at end of day with no following card → orphaned.
-// Exempt logistics targets (airport/station/port/etc.) — flight/train
-// cards live in trip metadata, so the transfer legitimately ends the day.
-if (i === activities.length - 1) {
-  const titleStr = String(act?.title || '');
-  const checkBlob = `${target || ''} ${titleStr}`;
-  if (LOGISTICS_TARGET_RE.test(checkBlob)) continue;
-  activities.splice(i, 1);
-  removed++;
-  console.warn(`[ORPHAN-TRANSIT] Dropped end-of-day transit: "${act.title}"`);
-  continue;
-}
-```
+### What's already in place
 
-`LOGISTICS_TARGET_RE` (line 23) covers: `airport | station | terminal | port | cruise terminal | ferry terminal | train station | gare | stazione | hbf | hauptbahnhof`.
+**[repair-day.ts §10d (lines 2857–2881)](supabase/functions/generate-itinerary/pipeline/repair-day.ts:2857)** — for each `SUSPICIOUS_DUPLICATE_PRICE` result, blanks the second card's `cost.amount`, `estimatedCost.amount`, `price_per_person`, `estimated_price_per_person`, and `price` to `0`, logging a `cleared_duplicate_price` repair entry. Locked IDs exempt. Downstream snapshot then re-prices from `cost_reference`.
 
-Test coverage already in [orphan-transit.test.ts](supabase/functions/_shared/__tests__/orphan-transit.test.ts):
-- ✅ "Transfer to JFK Airport" survives end-of-day
-- ✅ "Taxi to Stazione Santa Lucia" survives end-of-day
-- ✅ "Walk to Salsify at The Roundhouse" still dropped (no logistics keyword)
-- ✅ Case 2 mid-day orphan drop still works
+**[validation-gate.ts case (lines 139–151)](supabase/functions/generate-itinerary/pipeline/validation-gate.ts:139)** — final safety net mirroring §10d for any duplicate-price result that survives repair (e.g. a third occurrence in a triplet).
 
-## Proposed minor hardening (optional)
+**[validate-day.ts (line 1041)](supabase/functions/generate-itinerary/pipeline/validate-day.ts:1041)** — already `severity: 'critical'`, with the deterministic-source skip-list (`bar_cap_repair | fine_dining_floor | user | user_override | booked`) so genuine floor/cap matches don't false-positive.
 
-The current regex only catches title-keyword logistics. A transit card whose title is non-standard but whose `transportation.kind === 'departure'` flag is set would still be dropped. Add a metadata-based fallback to the exemption:
+### The single remaining defect
+
+[validate-day.ts:1045](supabase/functions/generate-itinerary/pipeline/validate-day.ts:1045) still reports `autoRepairable: false`. That's no longer true — repair-day §10d auto-repairs it. The stale flag misleads dashboards/telemetry into thinking these need human intervention.
 
 ### Change
 
-**[supabase/functions/_shared/orphan-transit.ts](supabase/functions/_shared/orphan-transit.ts)** — extend the Case 1 exemption:
+**[supabase/functions/generate-itinerary/pipeline/validate-day.ts](supabase/functions/generate-itinerary/pipeline/validate-day.ts)** — line 1045:
 
 ```ts
-if (i === activities.length - 1) {
-  const titleStr = String(act?.title || '');
-  const checkBlob = `${target || ''} ${titleStr}`;
-  const kind = String(act?.transportation?.kind || act?.transport?.kind || '').toLowerCase();
-  const isDepartureMeta = kind === 'departure' || kind === 'airport_transfer' || kind === 'flight_transfer';
-  if (LOGISTICS_TARGET_RE.test(checkBlob) || isDepartureMeta) continue;
-  activities.splice(i, 1);
-  removed++;
-  console.warn(`[ORPHAN-TRANSIT] Dropped end-of-day transit: "${act.title}"`);
-  continue;
-}
+autoRepairable: true,
 ```
 
-### Test
-
-Add one case to [orphan-transit.test.ts](supabase/functions/_shared/__tests__/orphan-transit.test.ts):
-
-```ts
-Deno.test('end-of-day transit with transportation.kind=departure survives even without keyword', () => {
-  const acts = [
-    { id: '1', title: 'Last lunch', category: 'dining' },
-    { id: '2', title: 'Private car to flight', category: 'transport', transportation: { kind: 'departure' } },
-  ];
-  const removed = pruneOrphanTransits(acts);
-  assertEquals(removed, 0);
-});
-```
+No other code or test changes. The existing repair + gate path already covers the runtime behavior; this just makes the metadata consistent.
 
 ## Verification
-- `cd supabase/functions && deno test --allow-all _shared/__tests__/orphan-transit.test.ts` — all 5 cases pass.
 - `npm run typecheck` — clean.
+- `cd supabase/functions && deno test --allow-all generate-itinerary/__tests__/` — no test relies on `autoRepairable: false` for this code; existing duplicate-price tests should keep passing.
+- Logs: `[VALIDATION_GATE]` and `[repair-day] cleared_duplicate_price` already fire. No log shape change.
 
-## Recommendation
-
-Ship the optional hardening — it's a 3-line change with one test, and it future-proofs against the rare case where the model emits a non-keyword departure title (e.g., "Private car to flight" / "Driver to gate") with proper `transportation.kind` metadata. Confirm before I proceed in build mode.
+## Out of scope
+- No new "halve the price" fallback (rejected — `cost_reference` re-snapshot is the right source of truth, and halving an already-suspect price compounds the error).
+- No demotion to `'info'` — the swap-path leak in audit reports is real enough that we want repair, not silence.
