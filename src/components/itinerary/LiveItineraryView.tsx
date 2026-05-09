@@ -17,7 +17,7 @@ import { FeedbackPromptOverlay } from '@/components/feedback/FeedbackPromptOverl
 import { ActivityFeedbackModal } from './ActivityFeedbackModal';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import SafeImage from '@/components/SafeImage';
-import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { openMapLocation } from '@/utils/mapNavigation';
 import type { ActivityContext } from '@/types/feedback';
 import { cn } from '@/lib/utils';
@@ -274,11 +274,9 @@ function TimelineActivityCard({
                   </div>
                 )}
 
-                {activity.description && !isSkipped && (
-                  <p className="mt-1.5 text-xs text-muted-foreground/80 line-clamp-2 border-l-2 border-primary/20 pl-2 italic">
-                    {activity.description}
-                  </p>
-                )}
+                {!isSkipped && (() => { const d = sanitizeActivityText(activity.description); return d ? (
+                  <p className="mt-1.5 text-xs text-muted-foreground/80 line-clamp-2 border-l-2 border-primary/20 pl-2 italic">{d}</p>
+                ) : null; })()}
               </div>
             </div>
 

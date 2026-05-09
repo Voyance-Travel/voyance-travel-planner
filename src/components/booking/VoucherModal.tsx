@@ -23,7 +23,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { BookableActivity, getStateLabel, getStateColor } from '@/services/bookingStateMachine';
 import { formatPrice } from '@/utils/bookingUtils';
-import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 import { useState } from 'react';
 
@@ -115,9 +115,9 @@ export function VoucherModal({
           <div className="space-y-3">
             <h4 className="font-medium">{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}</h4>
             
-            {activity.description && (
-              <p className="text-sm text-muted-foreground">{activity.description}</p>
-            )}
+            {(() => { const d = sanitizeActivityText(activity.description); return d ? (
+              <p className="text-sm text-muted-foreground">{d}</p>
+            ) : null; })()}
 
             <div className="grid grid-cols-2 gap-3 text-sm">
               {activity.startTime && (
