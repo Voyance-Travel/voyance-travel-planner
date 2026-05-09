@@ -1,65 +1,62 @@
-# M10 — MapKit token periodic refresh
+# M11 — refresh-day repairDay normalization (upstream of validation gate)
 
-No `useMapKitToken.ts` exists. The token flow lives in `src/utils/mapkit.ts`, where `loadMapKit()` fetches a JWT once inside the `initMapKit` global callback and closures it into `mapkit.init({ authorizationCallback })`. After ~60 minutes that token expires and tile/annotation requests start failing. Two changes:
+## Context
 
-## 1. Refactor `src/utils/mapkit.ts` — refresh on demand
+Fix #3 wired `applyValidationGate` into `supabase/functions/refresh-day/index.ts` at lines 606–664. The gate assumes deterministic cleanup (orphan-transit pruning, venue-name normalization, pricing floors, bookend clamping, prompt-leak scrubbing) has already run — but in `refresh-day` it hasn't. This adds the upstream `repairDay` step, mirroring `action-generate-day.ts:1200-1238`.
 
-MapKit's `authorizationCallback` is invoked by Apple every time auth is needed (initial load + on token expiry). Instead of capturing one token, fetch a fresh one each time MapKit asks, with a small in-memory cache to avoid hammering the edge function.
+## Change
 
-- Add module-level `cachedToken: string | null` and `cachedAt: number`.
-- `TOKEN_TTL_MS = 50 * 60 * 1000` (50 min — 10 min buffer under Apple's 60 min cap).
-- New helper `fetchMapKitToken()`: calls `supabase.functions.invoke('mapkit-token')`, returns `data.token`, throws on error.
-- New helper `getValidMapKitToken()`: returns cached token if `Date.now() - cachedAt < TOKEN_TTL_MS`, else refetches and updates cache.
-- In `initMapKit`:
-  - Call `getValidMapKitToken()` once for the initial seed.
-  - Pass `authorizationCallback: (done) => getValidMapKitToken().then(done).catch(err => { console.error('[MapKit] Token refresh failed:', err); done(cachedToken ?? ''); })` so each MapKit auth request gets a fresh-or-cached token.
-- Keep existing `loadMapKit` / `isMapKitLoaded` exports unchanged.
-
-## 2. Create `src/hooks/useMapKitToken.ts` — exact spec
-
-For future React consumers that want the raw token (e.g. token-aware SwiftUI-bridge components):
+In `supabase/functions/refresh-day/index.ts`, **inside the existing `try { … } catch (gateErr)` block at lines 611–664**, insert a `repairDay` call between the `dayMinimal` construction (line 625–630) and the `validateDay` call (line 632) so the gate validates the already-repaired set.
 
 ```ts
-import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-
-export function useMapKitToken() {
-  const [token, setToken] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    const fetchToken = async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke('mapkit-token');
-        if (error) throw error;
-        if (isMounted) setToken(data?.token || null);
-      } catch (err) {
-        console.error('[useMapKitToken] Failed to fetch token:', err);
-      }
-    };
-
-    fetchToken();
-    intervalId = setInterval(fetchToken, 50 * 60 * 1000);
-
-    return () => {
-      isMounted = false;
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, []);
-
-  return token;
+// ── REPAIR-DAY — runs BEFORE validate + gate, mirroring action-generate-day.ts:1200-1238.
+//    Strips orphan transits, normalizes venue names, applies pricing floors,
+//    clamps bookends — all the deterministic cleanup the gate expects upstream.
+try {
+  const { repairDay } = await import('../generate-itinerary/pipeline/repair-day.ts');
+  const { day: repairedDay, repairs } = repairDay({
+    day: dayMinimal as any,
+    validationResults: [],
+    dayNumber,
+    isFirstDay,
+    isLastDay,
+    arrivalTime24: undefined,
+    returnDepartureTime24: undefined,
+    hotelName: body.hotelName,
+    hotelAddress: '',
+    hasHotel: !!body.hotelName,
+    lockedActivities: [],
+    isTransitionDay: false,
+    isMultiCity: false,
+    isLastDayInCity: false,
+    resolvedDestination: destination,
+  });
+  if (repairs.length > 0) {
+    console.log(`[refresh-day] repair-day applied ${repairs.length} fixes`);
+    dayMinimal.activities = repairedDay.activities;
+  }
+} catch (repairErr) {
+  console.warn('[refresh-day] repair-day failed (non-blocking):', repairErr);
 }
+
+// (existing validateDay + applyValidationGate calls follow, now operating on repaired dayMinimal)
 ```
+
+## Adjustments vs. user spec
+
+- **Writeback target:** spec says `refreshedDay.activities = repairedDay.activities`, but no `refreshedDay` exists in this file. Writing to `dayMinimal.activities` is what makes the change actually flow into `validateDay` + `applyValidationGate` downstream. (The handler's eventual response is built from `sorted` / `proposedChanges`; `dayMinimal` is the gate's input surface, which is the contract being normalized.)
+- **`hotelName` / `hasHotel`:** sourced from `body.hotelName` (no `trip` object exists in this scope). Address omitted (`''`) — body doesn't carry it.
+- **`isFirstDay` / `isLastDay`:** reuse the locals already declared at lines 616–617 instead of recomputing from `dayNumber === 1` / `dayNumber === totalDays`.
+- **Placement:** spec says "just BEFORE that block" (the gate). Putting it inside the same try/catch, above `validateDay`, gives one cohesive normalization-then-gate flow and avoids duplicating the dynamic-import + `dayMinimal` setup.
 
 ## Verification
 
-- `grep -c "50 \* 60 \* 1000\|setInterval.*fetchToken" src/hooks/useMapKitToken.ts` → ≥ 1
-- `grep -c "TOKEN_TTL_MS\|getValidMapKitToken" src/utils/mapkit.ts` → ≥ 2
-- Existing call sites of `loadMapKit()` continue to work (signature unchanged).
+- `grep -c "repairDay" supabase/functions/refresh-day/index.ts` → ≥ 2 (import + call site)
+- Deploy `refresh-day`.
+- Spot-check log line `[refresh-day] repair-day applied N fixes` appears on a problem day.
 
 ## Out of scope
 
-- No changes to `mapkit-token` edge function.
-- No changes to existing MapKit consumers — they continue to import `loadMapKit` / `isMapKitLoaded`.
+- No prompt/template changes.
+- No new repair codes.
+- No change to the gate's behavior — it just sees cleaner input.
