@@ -481,7 +481,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signup = async (email: string, password: string, name?: { firstName: string; lastName: string }): Promise<{ needsEmailConfirmation?: boolean }> => {
+  const signup = async (email: string, password: string, name?: { firstName: string; lastName: string }): Promise<{ needsEmailConfirmation?: boolean; quizCompleted?: boolean }> => {
     const fullName = name ? `${name.firstName} ${name.lastName}` : undefined;
 
     // Build emailRedirectTo — include invite token so email confirmation
