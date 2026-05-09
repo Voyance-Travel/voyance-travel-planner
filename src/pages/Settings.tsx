@@ -68,7 +68,7 @@ export default function Settings() {
   const [pushNotifications, setPushNotifications] = useState(false);
   const [marketingEmails, setMarketingEmails] = useState(false);
   const [tripReminders, setTripReminders] = useState(true);
-  const [priceAlerts, setPriceAlerts] = useState(true);
+  
   const [budgetAlerts, setBudgetAlerts] = useState(true);
   
   // Travel Agent Mode
@@ -108,7 +108,7 @@ export default function Settings() {
         const [prefsResult, rolesResult] = await Promise.all([
           supabase
             .from('user_preferences')
-            .select('email_notifications, push_notifications, marketing_emails, trip_reminders, price_alerts, budget_alerts, phone_number, travel_agent_mode, agent_business_name')
+            .select('email_notifications, push_notifications, marketing_emails, trip_reminders, budget_alerts, phone_number, travel_agent_mode, agent_business_name')
             .eq('user_id', user.id)
             .maybeSingle(),
           supabase
@@ -128,7 +128,7 @@ export default function Settings() {
           setPushNotifications(prefsResult.data.push_notifications ?? false);
           setMarketingEmails(prefsResult.data.marketing_emails ?? false);
           setTripReminders(prefsResult.data.trip_reminders ?? true);
-          setPriceAlerts(prefsResult.data.price_alerts ?? true);
+          
           setBudgetAlerts(prefsResult.data.budget_alerts ?? true);
           setPhoneNumber(prefsResult.data.phone_number ?? '');
           setTravelAgentMode(prefsResult.data.travel_agent_mode ?? false);
@@ -191,10 +191,6 @@ export default function Settings() {
     savePreference('trip_reminders', checked);
   };
   
-  const handlePriceAlerts = (checked: boolean) => {
-    setPriceAlerts(checked);
-    savePreference('price_alerts', checked);
-  };
 
   // Save phone number
   const handleSavePhone = async () => {
@@ -466,25 +462,6 @@ export default function Settings() {
                       id="trip-reminders"
                       checked={tripReminders}
                       onCheckedChange={handleTripReminders}
-                      disabled={saving}
-                    />
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="price-alerts" className="text-sm font-medium">
-                        Price alerts
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        Be notified when prices drop for saved destinations
-                      </p>
-                    </div>
-                    <Switch
-                      id="price-alerts"
-                      checked={priceAlerts}
-                      onCheckedChange={handlePriceAlerts}
                       disabled={saving}
                     />
                   </div>
