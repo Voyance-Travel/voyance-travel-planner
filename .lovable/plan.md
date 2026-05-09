@@ -1,91 +1,73 @@
-## Semantic Validation Gate — block bad output, don't just classify it
+# Quiet "Backend API errors at page load"
 
-**Premise (yours, accepted):** `validate-day.ts` already detects failures and returns typed `ValidationResult[]`, but nothing in `action-generate-day.ts` treats that classification as a *gate*. Repair runs deterministic structural fixes; validation is purely informational. Semantic failures (dot-only fields, mid-sentence truncation, duplicate prices, vibe/category mismatches, cross-day checkout-then-hotel-activities) classify but ship. This plan adds the missing blocking layer + 4 new semantic checks + 1 cross-day fact, without touching prompts or repair-day's existing 12 deterministic rules.
+## What's actually happening
 
-### What this is NOT
+The four console errors are real fetch failures, but every call site already returns a safe fallback (empty list, cached balance). The reason they look like "errors" is that all four sites unconditionally `console.error(...)` on every failure — including transient/expected ones (anonymous user, RLS denial, Functions cold-start, brief network blip). Recent edge logs confirm `trip-notifications` and `get-entitlements` are healthy in production.
 
-- Not a prompt rewrite.
-- Not a re-architecture of `repair-day.ts` — its 12 rules stay as-is.
-- Not a new regen-on-every-failure loop. Regen is the **last** resort, gated on `critical` only, capped at 1 retry per day.
-- Not a payments touch, not a scrub-activity touch (last loop's work stands).
+So this is a **noise + resilience** problem, not a broken-feature problem. We will:
 
-### The four pieces
+1. Classify errors into *expected/transient* vs *unexpected*.
+2. Downgrade transient ones to `console.warn` (or silence) and only `console.error` for genuinely unexpected failures.
+3. Add a single retry with backoff to the 4 affected reads so brief blips self-heal.
+4. Keep the existing UI fallbacks (cached credits, empty notifications, empty friend requests) — no UX regressions.
+5. Stop firing `reportConnectionFailure()` on a single read miss (it currently inflates the recovery banner counter on every refresh).
 
-```text
-generate ─► sanitize ─► repair-day (structural) ─► scrubActivity (artifacts)
-                                                          │
-                                                          ▼
-                                               ┌──────────────────────┐
-                                               │  validateDay()       │  (already exists)
-                                               │  + 4 new checks      │  ← Step 2
-                                               │  + cross-day facts   │  ← Step 3
-                                               └──────────┬───────────┘
-                                                          ▼
-                                               ┌──────────────────────┐
-                                               │  GATE (NEW)          │  ← Step 1
-                                               │  critical → 1 regen  │
-                                               │  error  → re-repair  │
-                                               │  warn   → log only   │
-                                               └──────────┬───────────┘
-                                                          ▼
-                                                       persist
+No DB changes. No edge function changes. Frontend-only.
+
+## Files & changes
+
+### 1. `src/lib/backendError.ts` (new, ~40 lines)
+
+Single helper used by all four sites:
+
+```ts
+export function classifyBackendError(err: unknown): {
+  kind: 'transient' | 'auth' | 'rls' | 'unexpected';
+  shouldLog: boolean;       // true → console.warn; false → silent
+  shouldEscalate: boolean;  // true → console.error + reportConnectionFailure
+};
+export async function withRetry<T>(fn: () => Promise<T>, opts?: { tries?: number; delayMs?: number }): Promise<T>;
 ```
 
-### Step 1 — The Gate (the actual missing piece)
+Rules:
+- `FunctionsFetchError` / `TypeError: Failed to fetch` / status 0/502/503/504 → `transient`, warn-only, retry once.
+- 401 / `JWT expired` / `Auth session missing` → `auth`, silent (AuthContext handles).
+- Postgres `42501` / `PGRST301` → `rls`, silent (expected for anon).
+- Anything else → `unexpected`, escalate.
 
-New `pipeline/validation-gate.ts` exporting `applyValidationGate(day, validationResults, ctx)`. Called in `action-generate-day.ts` immediately after the existing `validateDay()` call (around line 1187, before the repair block at 1198).
+### 2. `src/services/tripNotificationsAPI.ts`
 
-Severity policy:
-- **`critical`** (new tier — see Step 2): block persist; trigger one targeted regen of the failing day. If retry still critical → downgrade offending activity via existing `downgradeCrossCityActivity` / `needsVenuePick` sentinel and persist with `metadata.quality.gate_forced_persist = true`.
-- **`error`**: re-run `repair-day` once with `validationResults` re-fed. If still present after second pass, persist + log `[GATE_ERROR_LEAK]`.
-- **`warning`**: persist, log only.
+- `getEdgeFunctionNotifications`: wrap invoke in `withRetry(..., { tries: 2, delayMs: 400 })`. Replace `console.error` with `classifyBackendError`-driven logging. Continue returning `[]` on failure (UI fallback unchanged).
+- `getDbNotifications`: same treatment; do NOT log when error code is `42501`/`PGRST301` (expected when not signed in).
 
-Retry budget tracked on the day: `metadata.quality.gate_retries`. Hard cap = 1 to keep credits bounded (per "charge-on-action" rule).
+### 3. `src/components/common/NotificationBell.tsx` (`usePendingFriendRequests`)
 
-Returns `{verdict: 'persist' | 'regen' | 'repair_again', forcedDowngrades: number, retries: number}` for the orchestrator.
+- Wrap the `friendships` select in `withRetry`. Use `classifyBackendError`. Keep `return []` fallback.
 
-### Step 2 — Four new semantic checks in `validate-day.ts`
+### 4. `src/hooks/useCredits.ts`
 
-All four are pure inspectors, ~20 lines each, slotted next to existing `checkLabelLeaks` / `checkChainRestaurants`:
+- In `fetchCredits`, wrap the parallel `Promise.all` in `withRetry` (single retry).
+- Only call `reportConnectionFailure()` when `classifyBackendError` returns `unexpected` (today it fires on every error → drives the recovery banner toward its threshold on a routine blip).
+- Replace `console.error` with classified logging.
 
-1. **`checkPunctuationOnlyFields`** — any string field on the activity (title, description, tips, notes, `reservationUrgency`, `bookingWindow`, etc.) matching `/^\s*[.\-:,;·•]+\s*$/` → `severity: 'critical'`, `code: PUNCTUATION_ONLY_FIELD`. Catches `Reservation Urgency: .` survivors that slipped past `scrubBodyPromptLeaks` because the label was already stripped, leaving the value field as just `.`.
+### 5. `src/hooks/useBonusCredits.ts`
 
-2. **`checkSentenceCompleteness`** — for `description` / `body` fields > 40 chars: trimmed value must end in `.!?…)"'` or close-quote. Mid-sentence cutoffs ("...ideal with for both") → `severity: 'error'`, `code: TRUNCATED_SENTENCE`. Skips bullet lists and known label fields. Fragment helper from `prompt-leak-scrub.ts` already has the regex shape; reuse it.
+- `fetchClaimedBonuses`: same pattern (retry once, classified logging, keep `[]` fallback).
 
-3. **`checkPriceDuplication`** — adjacent activities with identical non-zero `cost.amount` AND same currency AND same category → `severity: 'warning'`, `code: SUSPICIOUS_DUPLICATE_PRICE`. Warning only; this is a sniff test, not a hard fail. Skips $0 (walking, free) and skips when both are flagged `bar_cap_repair` / `fine_dining_floor` (deterministic overrides).
+### 6. Memory
 
-4. **`checkCategoryVenueCoherence`** — `category === 'dining'` + venue name matches existing `KNOWN_FINE_DINING_STARS` map + title contains `casual|neighborhood|trattoria|bistro` → `severity: 'error'`, `code: CATEGORY_VENUE_MISMATCH`. Mirrors the vibe-clash logic in `ledger-check.ts` but at the validation layer so it gates *before* persist instead of being post-hoc.
+Add a one-liner under Core in `mem://index.md` and a small note `mem://constraints/observability/backend-error-noise-policy.md`:
 
-Add `'critical'` to the severity union in `pipeline/types.ts` (currently `'error' | 'warning'`). Add the four new codes to `FAILURE_CODES`.
+> All page-load reads (notifications, friend requests, credits, bonuses) MUST go through `classifyBackendError` + `withRetry`. Only `unexpected` failures may `console.error` or call `reportConnectionFailure`. Transient/auth/RLS failures stay silent or `warn`.
 
-### Step 3 — Cross-day context for `repair-day.ts`
+## Out of scope
 
-The "Day 3 checkout 17:50 then Day 3 hotel-spa 19:30" bug is a per-day blind spot, not a missing rule. Fix in `compile-day-facts.ts`:
+- No edge-function changes; logs show they're healthy.
+- No changes to RLS, schema, or auth flow.
+- No UX changes — the user already sees correct fallback state; the goal is to stop leaking handled errors to the console and to stop those handled errors from inflating the connection-recovery banner counter.
 
-- Extend `DayFacts` with `previousDayLastEvent: { time24, kind: 'checkout' | 'flight_dep' | 'transit' | 'leisure', city }` and `nextDayFirstEvent` (mirror, for arrival-day checks).
-- `repair-day.ts` `checkLogisticsSequence` (already exists, line ~532 in validate-day) gets a new sub-check: if `previousDayLastEvent.kind === 'checkout'` and current day has hotel-bound activities (spa, hotel-restaurant, hotel-room) before any new check-in, flag `CHECKOUT_HOTEL_LEAK` → `critical`. Gate handles the regen.
+## Verification
 
-### Step 4 — Telemetry & Memory
-
-- Single log line per day: `[VALIDATION_GATE] day=N verdict=… critical=N error=N warning=N retries=N forcedDowngrades=N`.
-- Persist into `metadata.quality.validation_gate` so it's grep-able alongside existing `metadata.quality.scrub_ops`.
-- New `mem://constraints/itinerary/validation-gate-blocking-layer.md` documenting severity policy, retry budget, and the 4 new codes. Update `mem://index.md`.
-
-### Files touched
-
-- new: `supabase/functions/generate-itinerary/pipeline/validation-gate.ts`
-- edit: `supabase/functions/generate-itinerary/pipeline/types.ts` (add `'critical'` + 5 new `FAILURE_CODES`)
-- edit: `supabase/functions/generate-itinerary/pipeline/validate-day.ts` (4 new checkers + 1 cross-day check)
-- edit: `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts` (`previousDayLastEvent` / `nextDayFirstEvent`)
-- edit: `supabase/functions/generate-itinerary/action-generate-day.ts` (wire `applyValidationGate` between validate and repair, plus regen branch)
-- new: `supabase/functions/_shared/__tests__/validation-gate.test.ts` — fixtures for: dot-only `reservationUrgency`, "ideal with for both." truncation, duplicate €58 dinners, "Casual neighborhood dinner at Da Ivo", checkout-17:50 then spa-19:30
-- new memory + index update
-
-### What you'll see after this ships
-
-- `[VALIDATION_GATE]` log on every day with verdict + counts.
-- Critical semantic failures either regen once or downgrade to `needsVenuePick` $0 sentinels — never raw to UI.
-- `metadata.quality.validation_gate.critical` should sit at 0 across runs; non-zero is the new alarm.
-- Retry budget capped at 1/day so credit cost stays bounded.
-
-Approve and I'll implement.
+- Reload `/` while signed out → console clean (no red errors from these 4 sites).
+- Reload `/` while signed in → same; if the edge function genuinely fails twice, a single `console.warn` appears, UI still shows empty notifications.
+- Force a 503 on `trip-notifications` (DevTools network override) → one warn, one retry, then warn + empty list. No `reportConnectionFailure` fired.
