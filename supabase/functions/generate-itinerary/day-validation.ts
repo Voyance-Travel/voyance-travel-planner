@@ -889,6 +889,10 @@ export function enforceRequiredMealsFinalGuard(
     }
     if (before !== activities.length) {
       console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: removed ${before - activities.length} placeholder meal slot(s)`);
+      const orphans = pruneOrphanTransits(activities);
+      if (orphans > 0) {
+        console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: pruned ${orphans} orphan transit connector(s) after placeholder strip`);
+      }
     }
   }
 
