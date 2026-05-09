@@ -1,59 +1,65 @@
-## M9 — Reviews cache key invalidation in `useCreateReview`
+# M10 — MapKit token periodic refresh
 
-File: `src/services/reviewsAPI.ts`, lines 304–310 (the `onSuccess` of `useCreateReview`).
+No `useMapKitToken.ts` exists. The token flow lives in `src/utils/mapkit.ts`, where `loadMapKit()` fetches a JWT once inside the `initMapKit` global callback and closures it into `mapkit.init({ authorizationCallback })`. After ~60 minutes that token expires and tile/annotation requests start failing. Two changes:
 
-### Current behavior
+## 1. Refactor `src/utils/mapkit.ts` — refresh on demand
 
-```ts
-onSuccess: (review) => {
-  queryClient.invalidateQueries({ queryKey: reviewKeys.activity(review.activityId) });
-  queryClient.invalidateQueries({ queryKey: reviewKeys.stats(review.activityId) });
-  if (review.destinationId) {
-    queryClient.invalidateQueries({ queryKey: reviewKeys.destination(review.destinationId) });
-  }
-  toast.success('Review submitted successfully!');
-},
-```
+MapKit's `authorizationCallback` is invoked by Apple every time auth is needed (initial load + on token expiry). Instead of capturing one token, fetch a fresh one each time MapKit asks, with a small in-memory cache to avoid hammering the edge function.
 
-If `review.activityId` is null/undefined, the activity/stats keys become `[...all, 'activity', '']` — invalidating phantom keys and missing UI surfaces that read unfiltered review lists (e.g. `reviewKeys.list`, `reviewKeys.user`).
+- Add module-level `cachedToken: string | null` and `cachedAt: number`.
+- `TOKEN_TTL_MS = 50 * 60 * 1000` (50 min — 10 min buffer under Apple's 60 min cap).
+- New helper `fetchMapKitToken()`: calls `supabase.functions.invoke('mapkit-token')`, returns `data.token`, throws on error.
+- New helper `getValidMapKitToken()`: returns cached token if `Date.now() - cachedAt < TOKEN_TTL_MS`, else refetches and updates cache.
+- In `initMapKit`:
+  - Call `getValidMapKitToken()` once for the initial seed.
+  - Pass `authorizationCallback: (done) => getValidMapKitToken().then(done).catch(err => { console.error('[MapKit] Token refresh failed:', err); done(cachedToken ?? ''); })` so each MapKit auth request gets a fresh-or-cached token.
+- Keep existing `loadMapKit` / `isMapKitLoaded` exports unchanged.
 
-### Edit
+## 2. Create `src/hooks/useMapKitToken.ts` — exact spec
 
-Replace the `onSuccess` body with:
+For future React consumers that want the raw token (e.g. token-aware SwiftUI-bridge components):
 
 ```ts
-onSuccess: (review) => {
-  // Always invalidate the broad reviews key — catches null-activityId paths
-  // and any UI surface that reads reviews without filtering by activity.
-  queryClient.invalidateQueries({ queryKey: reviewKeys.all });
+import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
-  // Also invalidate the specific activity/stats keys when present, so
-  // per-activity panels refetch immediately.
-  if (review.activityId) {
-    queryClient.invalidateQueries({ queryKey: reviewKeys.activity(review.activityId) });
-    queryClient.invalidateQueries({ queryKey: reviewKeys.stats(review.activityId) });
-  }
-  if (review.destinationId) {
-    queryClient.invalidateQueries({ queryKey: reviewKeys.destination(review.destinationId) });
-  }
-  if (review.userId) {
-    queryClient.invalidateQueries({ queryKey: reviewKeys.user(review.userId) });
-  }
+export function useMapKitToken() {
+  const [token, setToken] = useState<string | null>(null);
 
-  toast.success('Review submitted successfully!');
-},
+  useEffect(() => {
+    let isMounted = true;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const fetchToken = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('mapkit-token');
+        if (error) throw error;
+        if (isMounted) setToken(data?.token || null);
+      } catch (err) {
+        console.error('[useMapKitToken] Failed to fetch token:', err);
+      }
+    };
+
+    fetchToken();
+    intervalId = setInterval(fetchToken, 50 * 60 * 1000);
+
+    return () => {
+      isMounted = false;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, []);
+
+  return token;
+}
 ```
 
-`reviewKeys.all` is the prefix of every other key, so the targeted invalidations after it are technically redundant — kept per spec for explicit per-surface refetch signaling and for the `userId` path the spec adds.
+## Verification
 
-### Note
+- `grep -c "50 \* 60 \* 1000\|setInterval.*fetchToken" src/hooks/useMapKitToken.ts` → ≥ 1
+- `grep -c "TOKEN_TTL_MS\|getValidMapKitToken" src/utils/mapkit.ts` → ≥ 2
+- Existing call sites of `loadMapKit()` continue to work (signature unchanged).
 
-User's snippet didn't include the existing `stats` and `destination` invalidations; preserved both so existing review-stats and destination panels still refresh.
+## Out of scope
 
-### Verification
-
-```bash
-grep -c "reviewKeys.all\|reviewKeys.user" src/services/reviewsAPI.ts   # ≥ 2 (was 3 already; will be ≥ 5)
-```
-
-No deploy needed (frontend-only change).
+- No changes to `mapkit-token` edge function.
+- No changes to existing MapKit consumers — they continue to import `loadMapKit` / `isMapKitLoaded`.
