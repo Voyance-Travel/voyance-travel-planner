@@ -47,7 +47,8 @@ serve(async (req) => {
     const flightTotal = typeof body?.flightTotal === 'number' ? body.flightTotal : 0;
     const hotelTotal = typeof body?.hotelTotal === 'number' ? body.hotelTotal : 0;
     const activitiesTotal = typeof body?.activitiesTotal === 'number' ? body.activitiesTotal : 0;
-    logStep("Request body", { tripId, flightTotal, hotelTotal, activitiesTotal });
+    const activitiesCurrencyInput = typeof body?.activitiesCurrency === 'string' ? body.activitiesCurrency.toLowerCase() : '';
+    logStep("Request body", { tripId, flightTotal, hotelTotal, activitiesTotal, activitiesCurrencyInput });
 
     if (!tripId || tripId.length > 200) {
       return new Response(JSON.stringify({ success: false, error: "Invalid tripId", code: "INVALID_INPUT" }), {
