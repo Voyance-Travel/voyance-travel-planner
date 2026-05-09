@@ -62,6 +62,7 @@ import { cn } from '@/lib/utils';
 import { parseActiveTripDays } from '@/utils/itineraryParser';
 import type { Tables } from '@/integrations/supabase/types';
 import type { ActivityContext } from '@/types/feedback';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 type Trip = Tables<'trips'>;
 
@@ -1270,11 +1271,15 @@ function TodayView({
                     {/* Tips — editorial pull-quote style */}
                     {activity.tips && activity.tips.length > 0 && (
                       <div className="mt-3 pl-3 border-l-2 border-primary/20 space-y-1">
-                        {activity.tips.slice(0, 2).map((tip, i) => (
-                          <p key={i} className="text-xs font-serif italic text-muted-foreground leading-relaxed">
-                            {tip}
-                          </p>
-                        ))}
+                        {activity.tips
+                          .slice(0, 2)
+                          .map(t => sanitizeActivityText(t))
+                          .filter((t): t is string => !!t)
+                          .map((tip, i) => (
+                            <p key={i} className="text-xs font-serif italic text-muted-foreground leading-relaxed">
+                              {tip}
+                            </p>
+                          ))}
                       </div>
                     )}
 

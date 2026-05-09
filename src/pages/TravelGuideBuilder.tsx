@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { generateTravelGuide } from '@/services/travelGuideService';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 interface Activity {
   id: string;
@@ -270,11 +271,12 @@ export default function TravelGuideBuilder() {
                           )}>
                             {activity.title}
                           </p>
-                          {activity.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                              {activity.description}
-                            </p>
-                          )}
+                          {(() => {
+                            const desc = sanitizeActivityText(activity.description);
+                            return desc ? (
+                              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{desc}</p>
+                            ) : null;
+                          })()}
                         </div>
                         {activity.start_time && (
                           <span className="text-xs text-muted-foreground shrink-0">

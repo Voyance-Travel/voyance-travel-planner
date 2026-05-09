@@ -965,9 +965,12 @@ function ActivityCard({
                   {location.name}
                 </p>
               )}
-              {activity.description && (
-                <p className="text-sm opacity-80 line-clamp-2">{activity.description}</p>
-              )}
+              {(() => {
+                const desc = sanitizeActivityText(activity.description);
+                return desc ? (
+                  <p className="text-sm opacity-80 line-clamp-2">{desc}</p>
+                ) : null;
+              })()}
               {activity.tags && activity.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {activity.tags.slice(0, 3).map((tag, i) => (

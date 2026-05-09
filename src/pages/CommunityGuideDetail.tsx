@@ -25,6 +25,7 @@ import MobileStickyShareBar from '@/components/guides/MobileStickyShareBar';
 import EditorialArticleSchema from '@/components/guides/EditorialArticleSchema';
 import type { EditorialContent } from '@/types/editorial';
 import { getAppUrl } from '@/utils/getAppUrl';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 const GuideTripMap = lazy(() => import('@/components/guides/GuideTripMap'));
 
@@ -604,14 +605,17 @@ function ActivityBlogCard({ activity }: { activity: Activity }) {
       )}
 
       {/* Description (AI-generated) shown only if no user experience */}
-      {!experience && activity.description && (
-        <div className="pl-3 border-l-2 border-primary/20">
-          <p className="text-xs text-muted-foreground italic">
-            <span className="font-medium text-primary/60">Voyance Tip:</span>{' '}
-            {activity.description}
-          </p>
-        </div>
-      )}
+      {!experience && (() => {
+        const desc = sanitizeActivityText(activity.description);
+        return desc ? (
+          <div className="pl-3 border-l-2 border-primary/20">
+            <p className="text-xs text-muted-foreground italic">
+              <span className="font-medium text-primary/60">Voyance Tip:</span>{' '}
+              {desc}
+            </p>
+          </div>
+        ) : null;
+      })()}
     </motion.div>
   );
 }

@@ -43,6 +43,7 @@ import { handleImageError } from '@/utils/imageFallback';
 import { useCachedDestinationImage } from '@/hooks/useCachedImage';
 import { useDestinationEnrichment } from '@/hooks/useDestinationEnrichment';
 import { Skeleton } from '@/components/ui/skeleton';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 export default function DestinationDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -728,9 +729,12 @@ export default function DestinationDetail() {
                           <h4 className="font-medium mb-1 group-hover:text-primary transition-colors">
                             {activity.title}
                           </h4>
-                          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                            {activity.description}
-                          </p>
+                          {(() => {
+                            const desc = sanitizeActivityText(activity.description);
+                            return desc ? (
+                              <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{desc}</p>
+                            ) : null;
+                          })()}
                           {activity.neighborhood && (
                             <p className="text-xs text-muted-foreground flex items-center gap-1">
                               <MapPin className="h-3 w-3" />
