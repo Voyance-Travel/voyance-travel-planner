@@ -1322,7 +1322,8 @@ export function buildRegularDayPrompt(
   lines.push(`   - After dinner, include at least 1 evening suggestion:`);
   lines.push(`     Jazz clubs, rooftop bars, night markets, shows, river cruises,`);
   lines.push(`     neighborhood walks at night, dessert spots, live music`);
-  lines.push(`   - Can be optional/skippable — note "optional" in description if so`);
+   lines.push(`   - Can be optional/skippable — note "optional" in description if so`);
+  lines.push(`   - Cap evening / nightcap / café / drinks-only stops at €30/person unless it is an explicit ticketed show or tasting experience. NEVER inherit dinner-tier pricing for a drinks stop`);
   lines.push('');
 
   lines.push(`   HOTEL BOOKENDS:`);
