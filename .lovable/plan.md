@@ -1,36 +1,30 @@
-## Fix 7.3 — Timezone-aware daysUntil in send-trip-reminders
+## Fix 7.4 — send-contact-email opt-out preference check
 
-### 1. Migration: `<ts>_user_timezone_preference.sql`
-```sql
-ALTER TABLE public.user_preferences
-  ADD COLUMN IF NOT EXISTS timezone text;
-```
-No backfill — null is treated as UTC at runtime.
+Gate the user-confirmation email on `user_preferences.email_notifications`. The support-internal email keeps firing unconditionally.
 
-### 2. `supabase/functions/send-trip-reminders/index.ts`
+### Changes
 
-**a. Add helper** (top of file, after imports):
-```ts
-function computeDaysUntilLocal(startDate: string, userTimezone: string | null): number {
-  const tz = userTimezone || 'UTC';
-  const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
-  const start = new Date(`${startDate}T00:00:00`);
-  const today = new Date(`${todayLocal}T00:00:00`);
-  return Math.floor((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-}
-```
+**`supabase/functions/send-contact-email/index.ts`**
 
-**b. Restructure the qualifying loop (lines ~405–414).** Currently `daysUntil` is computed in UTC before preferences are fetched. Move the preferences fetch earlier so the tz map is available, then compute per-user:
+1. Extend `ContactRequest` and the destructure to accept an optional `userId?: string`. Read it from `rawBody.userId` (UUID-validated; ignore if malformed).
+2. Reuse the existing `supabaseAdmin` pattern (currently created inside `isRateLimited`); lift a single admin client to the handler scope so we don't instantiate twice.
+3. Before the confirmation `sendEmail` (lines 178-197), insert the opt-out check:
+   - If `userId` present → `select('email_notifications').from('user_preferences').eq('user_id', userId).maybeSingle()`.
+   - If `prefs?.email_notifications === false` → set `userOptedOut = true`, log skip, do not send.
+   - Anonymous (no `userId`) → always send (explicit opt-in via form submission).
+4. Wrap the existing confirmation `sendEmail(...)` in `if (!userOptedOut) { ... }`. Keep the support email send untouched.
 
-1. After the `trips` query, collect `userIds = [...new Set(trips.map(t => t.user_id))]`.
-2. Fetch preferences once: `.select("user_id, trip_reminders, timezone").in("user_id", userIds).eq("trip_reminders", true)`.
-3. Build `tzByUser = new Map(preferences?.map(p => [p.user_id, p.timezone]) ?? [])` and `usersWithReminders = new Set(tzByUser.keys())`.
-4. In the qualifying loop, skip trips whose user isn't in `usersWithReminders`, then:
-   ```ts
-   const daysUntil = computeDaysUntilLocal(trip.start_date, tzByUser.get(trip.user_id) ?? null);
-   ```
-5. Drop the now-redundant later `preferences` fetch + `filteredTrips` filter (replaced by the upfront one).
+**Caller (frontend):** Locate the `supabase.functions.invoke('send-contact-email', ...)` call site and pass `userId: session?.user?.id ?? null` in the body so authenticated submissions are gated. (Will grep for the caller during build.)
 
 ### Verify
-- `grep -n "computeDaysUntilLocal\|timeZone\|tzByUser" supabase/functions/send-trip-reminders/index.ts` → 4+ hits
-- `grep "timezone" supabase/migrations/*user_timezone_preference*.sql` → 1 hit
+
+```
+grep -n "user_preferences\|email_notifications" supabase/functions/send-contact-email/index.ts
+```
+Expected: 2+ hits.
+
+### Notes
+
+- No DB migration needed — `user_preferences.email_notifications` already exists from prior fixes.
+- No edge-function redeploy needed beyond standard Lovable auto-deploy.
+- Anonymous flow unchanged → no regression for logged-out contact form users.
