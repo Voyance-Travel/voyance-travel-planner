@@ -374,6 +374,7 @@ function PerfectTripPreview({ preview }: { preview: string }) {
 export default function TravelDNAReveal({ userId, className, refreshKey }: TravelDNARevealProps & { refreshKey?: number }) {
   const [activeTab, setActiveTab] = useState('about');
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: dnaData = null, isLoading } = useQuery({
     queryKey: ['travelDNA', userId, refreshKey],
