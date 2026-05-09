@@ -22,7 +22,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO } from 'date-fns';
 import { safeFormatDate } from '@/utils/dateUtils';
-import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { mergeAccommodationActivities } from '@/utils/accommodationActivities';
 import type { GeneratedDay, GeneratedActivity, TripOverview } from '@/hooks/useItineraryGeneration';
 
