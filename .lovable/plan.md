@@ -1,23 +1,37 @@
-## Fix 2.2 — Clear invite token on logout
+## Fix 2.3a — Capacitor config: register `voyance` URL scheme
 
-### Status: Already shipped
+### Current state
+`capacitor.config.ts` already matches the spec on every field except the two new `scheme: 'voyance'` declarations under `ios` and `android`. Nothing else needs to change — `appId`, `webDir`, `server.url/cleartext/allowNavigation`, and `appendUserAgent` are all correct.
 
-`src/contexts/AuthContext.tsx` logout already calls `clearPendingInviteToken()` after the `legacyKeys.forEach` block (lines 582–583), via a dynamic `await import('@/utils/inviteTokenPersistence')`. Functionally identical to the spec's static import — both clear sessionStorage + localStorage on signout.
+### Change
 
-Verification: `grep -c "clearPendingInviteToken" src/contexts/AuthContext.tsx` → **2 hits** (the import + the call), matching the spec's expected output.
+Replace `capacitor.config.ts` with the spec-provided contents. Diff against current:
 
-### Optional polish (not required)
-
-The current dynamic import works but adds a tiny async hop. If you want to match the spec exactly and shave a microtask, promote it to a top-of-file static import:
-
-```ts
-import { clearPendingInviteToken } from '@/utils/inviteTokenPersistence';
+```diff
+   ios: {
+-    appendUserAgent: 'VoyanceApp'
++    appendUserAgent: 'VoyanceApp',
++    // Custom URL scheme for OAuth + magic-link returns. Must match
++    // CFBundleURLSchemes in Info.plist (see step 2.3c).
++    scheme: 'voyance'
+   },
+   android: {
+-    appendUserAgent: 'VoyanceApp'
++    appendUserAgent: 'VoyanceApp',
++    // Match for Android intent-filter (set in AndroidManifest.xml).
++    scheme: 'voyance'
+   }
 ```
 
-…and replace lines 582–583 with a direct `clearPendingInviteToken();` call.
+### Scope
 
-This is cosmetic — no behavioral change, no security delta. Recommend skipping unless you're cleaning up.
+This is **2.3a only** — the config edit. Steps 2.3b (web/native branching in OAuth code) and 2.3c (Info.plist / AndroidManifest scheme registration) are separate tickets and not in scope here.
 
-### Action
+### Verify
 
-Close Fix 2.2 as already-implemented. Proceed to next ticket.
+```bash
+grep -n "scheme: 'voyance'" capacitor.config.ts
+# Expected: 2 hits (ios + android)
+```
+
+After this lands, `npx cap sync` on the user's local machine will propagate the scheme into the native projects.
