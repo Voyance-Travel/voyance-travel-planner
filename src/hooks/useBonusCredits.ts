@@ -86,17 +86,21 @@ export const BONUS_INFO: Record<BonusType, {
 
 // Fetch claimed bonuses
 async function fetchClaimedBonuses(userId: string): Promise<BonusClaim[]> {
-  const { data, error } = await supabase
-    .from('user_credit_bonuses')
-    .select('*')
-    .eq('user_id', userId);
-
-  if (error) {
-    console.error('[useBonusCredits] Error fetching bonuses:', error);
+  const { withRetry, logBackendError } = await import('@/lib/backendError');
+  try {
+    const data = await withRetry(async () => {
+      const res = await supabase
+        .from('user_credit_bonuses')
+        .select('*')
+        .eq('user_id', userId);
+      if (res.error) throw res.error;
+      return res.data;
+    }, { tries: 2, delayMs: 400 });
+    return (data || []) as BonusClaim[];
+  } catch (err) {
+    logBackendError('[useBonusCredits] fetch failed:', err);
     return [];
   }
-
-  return data as BonusClaim[];
 }
 
 // Grant a bonus
