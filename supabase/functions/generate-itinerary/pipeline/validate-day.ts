@@ -1056,8 +1056,7 @@ function checkPriceDuplication(activities: StrictActivityMinimal[], results: Val
 function checkWalkOverThreshold(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
   for (let i = 0; i < activities.length; i++) {
     const act = activities[i] as any;
-    const cat = String(act?.category || '').toLowerCase();
-    if (cat !== 'transport' && cat !== 'transit') continue;
+    if (!isTransitActivity(act)) continue;
     const t = act?.transportation || {};
     const method = String(t.method || '').toLowerCase();
     if (method !== 'walk' && method !== 'walking') continue;
