@@ -52,20 +52,42 @@ async function fetchCredits(userId: string | undefined): Promise<Omit<CreditData
 
   if (!userId) return empty;
 
-  // Fetch balance cache and active purchases in parallel
-  const [balanceRes, purchasesRes] = await Promise.all([
-    supabase.from('credit_balances').select('*').eq('user_id', userId).maybeSingle(),
-    supabase.from('credit_purchases').select('id, credit_type, amount, remaining, expires_at, club_tier, created_at')
-      .eq('user_id', userId).gt('remaining', 0).order('expires_at', { ascending: true, nullsFirst: false }),
-  ]);
+  const { withRetry, classifyBackendError } = await import('@/lib/backendError');
+
+  // Fetch balance cache and active purchases in parallel (with one retry on transient failure)
+  let balanceRes: any;
+  let purchasesRes: any;
+  try {
+    [balanceRes, purchasesRes] = await withRetry(async () => Promise.all([
+      supabase.from('credit_balances').select('*').eq('user_id', userId).maybeSingle(),
+      supabase.from('credit_purchases').select('id, credit_type, amount, remaining, expires_at, club_tier, created_at')
+        .eq('user_id', userId).gt('remaining', 0).order('expires_at', { ascending: true, nullsFirst: false }),
+    ]), { tries: 2, delayMs: 400 });
+  } catch (err) {
+    const cls = classifyBackendError(err);
+    if (cls.shouldEscalate) {
+      console.error('[useCredits] Error:', err);
+      try {
+        const { reportConnectionFailure } = await import('@/components/common/ConnectionRecoveryBanner');
+        reportConnectionFailure();
+      } catch {}
+    } else if (cls.shouldLog) {
+      console.warn('[useCredits] transient fetch failure:', err);
+    }
+    throw err;
+  }
 
   if (balanceRes.error) {
-    console.error('[useCredits] Error:', balanceRes.error);
-    // Report connection failure so the recovery banner can detect cascade
-    try {
-      const { reportConnectionFailure } = await import('@/components/common/ConnectionRecoveryBanner');
-      reportConnectionFailure();
-    } catch {}
+    const cls = classifyBackendError(balanceRes.error);
+    if (cls.shouldEscalate) {
+      console.error('[useCredits] Error:', balanceRes.error);
+      try {
+        const { reportConnectionFailure } = await import('@/components/common/ConnectionRecoveryBanner');
+        reportConnectionFailure();
+      } catch {}
+    } else if (cls.shouldLog) {
+      console.warn('[useCredits] transient balance error:', balanceRes.error);
+    }
     throw balanceRes.error;
   }
 
