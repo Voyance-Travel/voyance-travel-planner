@@ -305,13 +305,33 @@ serve(async (req) => {
     }
 
     // Update activity booking state to confirmed
-    await serviceSupabase.rpc('transition_booking_state', {
+    const { error: stateError } = await serviceSupabase.rpc('transition_booking_state', {
       p_activity_id: activityId,
       p_new_state: 'booked_confirmed',
       p_trigger_source: 'viator_api',
       p_trigger_reference: data.viatorRef || data.bookingRef,
       p_metadata: viatorConfirmation,
     });
+
+    if (stateError) {
+      // Booking succeeded at Viator but local state didn't transition. Stamp
+      // the payment row so ops can reconcile manually; do NOT throw — the
+      // user's Viator booking is real and we already have the voucher.
+      console.error('[viator-book] transition_booking_state failed AFTER successful booking:', stateError, {
+        activityId,
+        viatorRef: data.viatorRef || data.bookingRef,
+      });
+      await serviceSupabase.from("trip_payments").update({
+        metadata: {
+          ...payment.metadata,
+          ...viatorConfirmation,
+          state_transition_failed: true,
+          state_transition_error: stateError.message,
+          state_transition_failed_at: new Date().toISOString(),
+        },
+        updated_at: new Date().toISOString(),
+      }).eq("id", paymentId);
+    }
 
     return new Response(
       JSON.stringify({
