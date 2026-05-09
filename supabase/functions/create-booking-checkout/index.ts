@@ -287,6 +287,7 @@ serve(async (req) => {
           user_id: userId,
           trip_id: tripId,
           trip_destination: trip.destination,
+          currency: tripCurrency,
         },
       }, { idempotencyKey });
       stripeSessionId = session.id;
