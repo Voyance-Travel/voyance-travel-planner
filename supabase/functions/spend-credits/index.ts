@@ -74,6 +74,10 @@ interface SpendRequest {
   dayIndex?: number;
   creditsAmount?: number;
   metadata?: Record<string, unknown>;
+  // Defensive-refund support: client passes the original spend's idempotencyKey
+  // when retrying a REFUND after a gateway timeout (no pendingChargeId yet).
+  originalIdempotencyKey?: string;
+  reason?: string;
 }
 
 /**
