@@ -270,30 +270,62 @@ export async function handleGenerateDay(
     const message = data.choices?.[0]?.message;
     const toolCall = message?.tool_calls?.[0];
 
-    let generatedDay;
+    let generatedDay: any;
+
+    // RS.M.I2: parse-fail fallback — synthesize a minimal valid day so the
+    // post-processing pipeline (meal-guard + dead-gap-fill) can populate it,
+    // rather than 500-ing the whole save.
+    const buildPlaceholderDay = (reason: string) => {
+      console.error('[action-generate-day] All retries exhausted, returning placeholder day', {
+        dayNumber,
+        destination: resolvedDestination || destination,
+        reason,
+      });
+      return {
+        dayNumber,
+        date: date || '',
+        title: `Day ${dayNumber} in ${resolvedDestination || destination || 'your destination'}`,
+        theme: 'Generation failed — retry recommended',
+        description:
+          'We had trouble generating this day. Tap regenerate to try again, or browse alternatives.',
+        activities: [],
+        metadata: {
+          quality: {
+            generation_failed: true,
+            generation_error: (reason || 'unknown').slice(0, 200),
+            generated_at: new Date().toISOString(),
+            retry_recommended: true,
+          },
+        },
+      };
+    };
+
     if (toolCall?.function?.arguments) {
-      // Standard tool call response
-      generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber, resolvedDestination, paramUsedRestaurants);
+      try {
+        generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber, resolvedDestination, paramUsedRestaurants);
+      } catch (parseErr) {
+        console.error('[generate-day] tool_call arguments not parseable:', parseErr);
+        generatedDay = buildPlaceholderDay(`tool_call parse failed: ${(parseErr as Error)?.message || 'unknown'}`);
+      }
     } else if (message?.content) {
       // Fallback: AI returned content instead of tool call
       console.log("[generate-day] AI returned content instead of tool_call, attempting to parse...");
       try {
-        // Try to extract JSON from the content
         const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
         const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber, resolvedDestination, paramUsedRestaurants);
         } else {
           console.error("[generate-day] No JSON found in content:", contentStr.substring(0, 500));
-          throw new Error("Invalid AI response format - no JSON in content");
+          generatedDay = buildPlaceholderDay('no JSON in content');
         }
       } catch (parseErr) {
         console.error("[generate-day] Failed to parse content as JSON:", parseErr);
-        throw new Error("Invalid AI response format - content not parseable");
+        generatedDay = buildPlaceholderDay(`content not parseable: ${(parseErr as Error)?.message || 'unknown'}`);
       }
     } else {
       console.error("[generate-day] Invalid AI response - no tool_calls or content:", JSON.stringify(data).substring(0, 1000));
-      throw new Error("Invalid AI response format");
+      generatedDay = buildPlaceholderDay('no tool_calls or content in AI response');
     }
 
     // End parse phase, start post-processing
