@@ -5140,6 +5140,7 @@ export type Database = {
           credits_amount: number
           id: string
           idempotency_key: string | null
+          metadata: Json
           refund_attempts: number
           resolution_note: string | null
           resolved_at: string | null
@@ -5153,6 +5154,7 @@ export type Database = {
           credits_amount: number
           id?: string
           idempotency_key?: string | null
+          metadata?: Json
           refund_attempts?: number
           resolution_note?: string | null
           resolved_at?: string | null
@@ -5166,6 +5168,7 @@ export type Database = {
           credits_amount?: number
           id?: string
           idempotency_key?: string | null
+          metadata?: Json
           refund_attempts?: number
           resolution_note?: string | null
           resolved_at?: string | null
@@ -7718,6 +7721,7 @@ export type Database = {
           item_id: string
           item_name: string
           item_type: string
+          metadata: Json
           paid_at: string | null
           quantity: number
           status: string
@@ -7741,6 +7745,7 @@ export type Database = {
           item_id: string
           item_name: string
           item_type: string
+          metadata?: Json
           paid_at?: string | null
           quantity?: number
           status?: string
@@ -7764,6 +7769,7 @@ export type Database = {
           item_id?: string
           item_name?: string
           item_type?: string
+          metadata?: Json
           paid_at?: string | null
           quantity?: number
           status?: string
