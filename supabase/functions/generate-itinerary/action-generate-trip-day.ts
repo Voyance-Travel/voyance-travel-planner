@@ -1876,6 +1876,17 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // === FINAL ORPHAN-TRANSIT SAFETY NET ===
+  // Catches transit cards left dangling by any drop performed after
+  // universalQualityPass (meal guard, consecutive transport collapse,
+  // duplicate hotel return). Idempotent — no-op if everything's clean.
+  if (Array.isArray(dayResult?.activities)) {
+    const orphans = pruneOrphanTransits(dayResult.activities);
+    if (orphans > 0) {
+      console.warn(`[generate-trip-day] Final orphan-transit sweep dropped ${orphans} connector(s) on day ${dayNumber}`);
+    }
+  }
+
   // Flush stage logger (non-blocking, non-fatal)
   try {
     await stageLogger.flush();
