@@ -1,48 +1,46 @@
-## Plan: Route `suggest-hotel-swaps` through Lovable AI Gateway
+## M1 — Hotel ranking divergence
 
-Replace the broken `lovable-ai.lovable.dev` call (using `SUPABASE_ANON_KEY` as bearer — wrong key + wrong endpoint) with the standard gateway pattern used by `mid-trip-dna` / `dna-feedback-chat`.
+Replace the hardcoded "top 3" recommendation with a confidence-threshold + visible-count alignment so "Recommended only" filters render a stable subset.
 
-### Change in `supabase/functions/suggest-hotel-swaps/index.ts`
+### File
+`src/services/hotelRankingAPI.ts` (lines 276–280)
 
-1. Drop the dead `apiKey` line (L105) — `GOOGLE_AI_API_KEY` / `GEMINI_API_KEY` aren't used downstream.
-2. Replace L107-122 with:
+### Scale note
+`matchScore` in this file is on a **1–100 scale** (see `calculateMatchScore`, line 200, clamped to `Math.max(1, Math.min(100, matchScore))`), not 0–1. So the threshold needs to be `65`, not `0.65`. Otherwise the proposed snippet drops in unchanged.
 
+### Change
+
+Replace:
 ```ts
-const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${Deno.env.get('LOVABLE_API_KEY')}`,
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    model: 'google/gemini-2.5-flash',
-    messages: [
-      { role: 'user', content: prompt },
-    ],
-    temperature: 0.3,
-  }),
-});
+// Mark top 3 as recommended
+return scored.map((hotel, index) => ({
+  ...hotel,
+  isRecommended: index < 3,
+}));
 ```
 
-Preserves: model (`google/gemini-2.5-flash`), single-user-message shape (the existing prompt is self-contained — no system split needed), and `temperature: 0.3` (intentionally lower than the 0.7 in the user's example because the function returns a strict JSON array; bumping creativity would hurt parse rate).
-
-3. Add 429/402 handling alongside the existing `!aiResponse.ok` branch so credit-exhaustion / rate-limit errors surface cleanly:
-
+With:
 ```ts
-if (aiResponse.status === 429) {
-  return new Response(JSON.stringify({ error: 'Rate limit exceeded, please try again shortly.' }),
-    { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-}
-if (aiResponse.status === 402) {
-  return new Response(JSON.stringify({ error: 'AI credits exhausted. Add credits in Workspace settings.' }),
-    { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-}
+// Mark all hotels above a confidence threshold as recommended, OR top N if
+// scoring is ambiguous. Caller knows how many to display via .length.
+const RECOMMEND_SCORE_THRESHOLD = 65; // matchScore is 1–100
+const MIN_RECOMMENDED = 3;
+const MAX_RECOMMENDED = 8;
+
+const aboveThreshold = scored.filter(h => (h.matchScore ?? 0) >= RECOMMEND_SCORE_THRESHOLD);
+const recommendedCount = Math.min(
+  MAX_RECOMMENDED,
+  Math.max(MIN_RECOMMENDED, aboveThreshold.length),
+);
+
+return scored.map((hotel, idx) => ({
+  ...hotel,
+  isRecommended: idx < recommendedCount,
+}));
 ```
 
-Response parsing (`aiData.choices?.[0]?.message?.content`) already matches the gateway's OpenAI-compatible shape — no changes needed below L130.
+`scored` is already sorted desc by `matchScore` at line 274, so no extra sort needed.
 
 ### Verify
-
-- `grep -n "lovable-ai.lovable.dev\|ai.gateway.lovable.dev" supabase/functions/suggest-hotel-swaps/index.ts` → only `ai.gateway.lovable.dev` remains.
-- `grep -n "SUPABASE_ANON_KEY\|SUPABASE_PROJECT_REF\|GOOGLE_AI_API_KEY\|GEMINI_API_KEY" supabase/functions/suggest-hotel-swaps/index.ts` → 0 hits.
-- Edge function auto-deploys; no client-side changes.
+- `grep -n "RECOMMEND_SCORE_THRESHOLD\|recommendedCount" src/services/hotelRankingAPI.ts` → 3+ hits
+- Toggling "Recommended only" in the UI returns a deterministic subset across clicks.

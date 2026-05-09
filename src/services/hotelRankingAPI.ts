@@ -273,10 +273,21 @@ export function rankHotelsClientSide(
   // Sort by match score
   scored.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
 
-  // Mark top 3 as recommended
-  return scored.map((hotel, index) => ({
+  // Mark all hotels above a confidence threshold as recommended, OR top N if
+  // scoring is ambiguous. Caller knows how many to display via .length.
+  const RECOMMEND_SCORE_THRESHOLD = 65; // matchScore is 1–100
+  const MIN_RECOMMENDED = 3;
+  const MAX_RECOMMENDED = 8;
+
+  const aboveThreshold = scored.filter(h => (h.matchScore ?? 0) >= RECOMMEND_SCORE_THRESHOLD);
+  const recommendedCount = Math.min(
+    MAX_RECOMMENDED,
+    Math.max(MIN_RECOMMENDED, aboveThreshold.length),
+  );
+
+  return scored.map((hotel, idx) => ({
     ...hotel,
-    isRecommended: index < 3,
+    isRecommended: idx < recommendedCount,
   }));
 }
 
