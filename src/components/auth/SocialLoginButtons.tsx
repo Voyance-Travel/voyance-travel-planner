@@ -67,7 +67,7 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
         }
       } else {
         const result = await lovable.auth.signInWithOAuth('apple', {
-          redirect_uri: window.location.origin,
+          redirect_uri: getAuthRedirectUrl(),
         });
         if (result.redirected) return;
         if (result.error) throw result.error;
