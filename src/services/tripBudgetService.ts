@@ -436,6 +436,7 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
 
   const hotelSel: any = (tripResult.data as any)?.hotel_selection;
   const flightSel: any = (tripResult.data as any)?.flight_selection;
+  const tripCurrency: string = (tripResult.data as any)?.budget_currency || 'USD';
   const hotelName: string | undefined = hotelSel?.name || hotelSel?.hotel?.name;
   const flightAirline: string | undefined =
     flightSel?.outbound?.airline || flightSel?.legs?.[0]?.airline || flightSel?.airline;
