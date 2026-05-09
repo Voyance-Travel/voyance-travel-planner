@@ -11,6 +11,7 @@ import {
   MAX_WALK_DISTANCE_METERS,
   MAX_WALK_DURATION_MINUTES,
 } from '../_shared/transit-mode.ts';
+import { isTransitActivity } from '../_shared/transit-detect.ts';
 
 // =============================================================================
 // ALWAYS-FREE VENUE PATTERNS — shared across sanitization, repair, and generation
