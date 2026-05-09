@@ -88,7 +88,7 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: window.location.origin,
+            redirectTo: getAuthRedirectUrl(),
             skipBrowserRedirect: true,
           },
         });
