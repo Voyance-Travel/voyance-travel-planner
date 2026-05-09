@@ -53,7 +53,7 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 function transformProfile(
   supabaseUser: SupabaseUser | null, 
   profile?: { display_name?: string; avatar_url?: string; quiz_completed?: boolean; travel_dna?: unknown; home_airport?: string } | null,
-  preferences?: { budget_tier?: string; travel_pace?: string; accommodation_style?: string; home_airport?: string; travel_agent_mode?: boolean } | null
+  preferences?: { budget_tier?: string; travel_pace?: string; accommodation_style?: string; home_airport?: string; travel_agent_mode?: boolean; quiz_completed?: boolean } | null
 ): User | null {
   if (!supabaseUser) return null;
   
@@ -66,7 +66,7 @@ function transformProfile(
     avatar: profile?.avatar_url || supabaseUser.user_metadata?.avatar_url,
     homeAirport: profile?.home_airport || preferences?.home_airport || undefined,
     createdAt: supabaseUser.created_at,
-    quizCompleted: profile?.quiz_completed || false,
+    quizCompleted: profile?.quiz_completed || preferences?.quiz_completed || false,
     travelAgentMode: preferences?.travel_agent_mode || false,
     preferences: preferences ? {
       style: preferences.accommodation_style,
