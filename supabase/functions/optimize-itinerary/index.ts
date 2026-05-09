@@ -1424,12 +1424,17 @@ async function getGoogleTransport(
 // TRANSPORT MODE CONSTANTS - Strict limits to prevent unreasonable suggestions
 // =============================================================================
 
-// Maximum walking distance: 0.4 miles = ~650 meters
-const MAX_WALK_DISTANCE_METERS = 650;
-// Maximum walking duration: 15 minutes
-const MAX_WALK_DURATION_MINUTES = 15;
+import { pickTransitTier as _pickTransitTier, MAX_WALK_DISTANCE_METERS as _MWD, MAX_WALK_DURATION_MINUTES as _MWM } from '../_shared/transit-mode.ts';
 
-// Fallback using Haversine distance estimation with STRICT walking limits
+// Maximum walking distance: 0.4 miles = ~650 meters
+const MAX_WALK_DISTANCE_METERS = _MWD;
+// Maximum walking duration: 15 minutes
+const MAX_WALK_DURATION_MINUTES = _MWM;
+
+// Fallback using Haversine distance estimation with STRICT walking limits.
+// Delegates the tier decision to the shared `pickTransitTier` helper so the
+// post-LLM sanitizer (`enforceTransitModeByDistance`) and this optimization
+// path can never disagree.
 function getHaversineTransport(
   origin: { lat: number; lng: number },
   destination: { lat: number; lng: number },
@@ -1438,48 +1443,18 @@ function getHaversineTransport(
   const distanceMeters = Math.round(getHaversineDistance(
     origin.lat, origin.lng, destination.lat, destination.lng
   ));
-
-  // Determine best mode based on STRICT distance thresholds
-  let method: string;
-  let durationMinutes: number;
-  let costAmount: number;
-  let instructions: string;
-
-  // Walking speed: ~5 km/h = 83m/min
-  const estimatedWalkMinutes = Math.round(distanceMeters / 83);
-
-  // STRICT: Only walk if under 650m AND under 15 minutes
-  if (distanceMeters <= MAX_WALK_DISTANCE_METERS && estimatedWalkMinutes <= MAX_WALK_DURATION_MINUTES) {
-    method = 'walk';
-    durationMinutes = estimatedWalkMinutes;
-    costAmount = 0;
-    instructions = `Walk ${Math.round(distanceMeters)}m to ${destinationName}`;
-  } else if (distanceMeters < 5000) {
-    // 650m-5km = metro/bus (~25 km/h + 5min wait)
-    method = 'metro';
-    durationMinutes = Math.round(distanceMeters / 417) + 5;
-    costAmount = 3;
-    instructions = `Take public transit ${(distanceMeters / 1000).toFixed(1)}km to ${destinationName}`;
-  } else {
-    // Over 5km = rideshare (~30 km/h + 3min pickup)
-    method = 'uber';
-    durationMinutes = Math.round(distanceMeters / 500) + 3;
-    costAmount = Math.round(3 + (distanceMeters / 1000) * 1.8);
-    instructions = `Take a rideshare ${(distanceMeters / 1000).toFixed(1)}km to ${destinationName}`;
-  }
-
-  const distanceText = distanceMeters < 1000 
-    ? `${distanceMeters}m` 
-    : `${(distanceMeters / 1000).toFixed(1)}km`;
-
+  const tier = _pickTransitTier(distanceMeters, destinationName);
+  const distanceText = tier.distanceMeters < 1000
+    ? `${tier.distanceMeters}m`
+    : `${(tier.distanceMeters / 1000).toFixed(1)}km`;
   return {
-    method: method,
-    duration: `${durationMinutes} min`,
-    durationMinutes,
+    method: tier.method,
+    duration: `${tier.durationMinutes} min`,
+    durationMinutes: tier.durationMinutes,
     distance: distanceText,
-    distanceMeters,
-    estimatedCost: { amount: costAmount, currency: 'USD' },
-    instructions,
+    distanceMeters: tier.distanceMeters,
+    estimatedCost: { amount: tier.costAmount, currency: 'USD' },
+    instructions: tier.instructions,
   };
 }
 
