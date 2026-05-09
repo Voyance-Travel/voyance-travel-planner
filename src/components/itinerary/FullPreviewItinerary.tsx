@@ -319,6 +319,12 @@ export function FullPreviewItinerary({
         ))}
       </div>
 
+      {preview.isPartialPreview && (
+        <p className="text-xs text-muted-foreground text-center">
+          Showing the first {preview.previewedDays} of {preview.totalDays} days. Unlock to see all {preview.totalDays}.
+        </p>
+      )}
+
       {/* Conversion CTA */}
       <div className="sticky bottom-4 z-10">
         <Card className="p-4 bg-card/95 backdrop-blur border-primary/30 shadow-lg">
