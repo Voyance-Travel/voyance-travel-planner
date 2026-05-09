@@ -812,7 +812,7 @@ ${itineraryDescription}
               raw: newIntent.raw,
             });
             if (structured) {
-              await upsertDayIntents(serviceSupabase, itineraryContext.tripId, user.id, [structured]);
+              await upsertDayIntents(serviceSupabase, itineraryContext.tripId, userId, [structured]);
             }
           } catch (structErr) {
             log('Failed to persist structured day intent (non-blocking)', { error: String(structErr) });
