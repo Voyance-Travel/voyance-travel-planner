@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { getCachedPlacesPhotoByResource } from "../_shared/photo-storage.ts";
 import { cacheVenueResult } from "../_shared/venue-cache.ts";
-import { googlePlacesTextSearch } from "../_shared/google-api.ts";
+import { cachedGooglePlacesTextSearch as googlePlacesTextSearch } from "../_shared/google-api.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
