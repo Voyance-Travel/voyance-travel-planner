@@ -14,7 +14,10 @@ interface ContactRequest {
   message: string;
   type?: "general" | "support" | "feedback" | "bug_report" | "feature_request";
   website?: string; // Honeypot field
+  userId?: string | null; // Optional auth user id; gates confirmation email on opt-out preference
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Database-backed rate limiting (survives cold starts)
 import { checkDbRateLimit } from "../_shared/db-rate-limiter.ts";
