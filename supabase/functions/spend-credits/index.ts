@@ -375,12 +375,54 @@ serve(async (req) => {
         hotel_optimization: 100,
       };
 
-      const originalAction = metadata?.originalAction as string | undefined;
-      const pendingChargeId = metadata?.pendingChargeId as string | undefined;
+      let originalAction = metadata?.originalAction as string | undefined;
+      let pendingChargeId = metadata?.pendingChargeId as string | undefined;
       // Support dynamic refund amounts (e.g. trip_generation) via creditsAmount param
       const fixedRefund = originalAction ? (REFUNDABLE_COSTS[originalAction] ?? 0) : 0;
       const dynamicRefund = (typeof creditsAmount === 'number' && creditsAmount > 0) ? creditsAmount : 0;
-      const refundAmount = dynamicRefund || fixedRefund;
+      let refundAmount = dynamicRefund || fixedRefund;
+
+      // ── Defensive-refund lookup: if client passed originalIdempotencyKey,
+      // find the original spend in the ledger and resolve its pendingChargeId.
+      // This handles the gateway-timeout case where the client never received
+      // the original spend response and so doesn't have the pendingChargeId. ──
+      const originalIdempotencyKey = body.originalIdempotencyKey;
+      if (!pendingChargeId && originalIdempotencyKey) {
+        const { data: originalSpend } = await supabaseAdmin
+          .from('credit_ledger')
+          .select('metadata, credits_delta, action_type')
+          .eq('user_id', user.id)
+          .contains('metadata', { idempotencyKey: originalIdempotencyKey })
+          .eq('transaction_type', 'spend')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (!originalSpend || originalSpend.length === 0) {
+          // The spend never committed — defensive refund is a no-op.
+          console.log('[spend-credits] Defensive refund: original spend not found for key', originalIdempotencyKey);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              action: 'REFUND',
+              defensive: true,
+              originalNotFound: true,
+              idempotent: true,
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        pendingChargeId = (originalSpend[0].metadata as Record<string, unknown> | null)?.pendingChargeId as string | undefined;
+        if (!refundAmount) {
+          refundAmount = Math.abs(Number(originalSpend[0].credits_delta) || 0);
+        }
+        if (!originalAction) {
+          originalAction = originalSpend[0].action_type as string | undefined;
+        }
+        if (!pendingChargeId) {
+          console.warn('[spend-credits] Defensive refund: original spend found but no pendingChargeId — refunding by ledger amount', { refundAmount, originalAction });
+        }
+      }
 
       if (refundAmount <= 0) {
         console.error('[spend-credits] REFUND: unknown or zero refund amount for action:', originalAction);
