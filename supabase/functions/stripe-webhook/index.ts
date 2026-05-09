@@ -837,6 +837,25 @@ serve(async (req) => {
               p_metadata: { refund_amount: charge.amount_refunded },
             });
 
+            // Zero the activity cost so the budget summary reflects the refund.
+            // Without this, trip budgets show the cost as still-spent forever.
+            const { error: costErr } = await supabaseAdmin
+              .from('activity_costs')
+              .update({
+                is_paid: false,
+                paid_amount_usd: 0,
+                paid_amount_local: 0,
+                refunded_at: new Date().toISOString(),
+                refund_amount_cents: charge.amount_refunded,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('activity_id', activityId);
+            if (costErr) {
+              logError('Failed to zero activity_costs on refund', { activityId, error: costErr });
+            } else {
+              log('activity_costs zeroed for refund', { activityId, refundAmount: charge.amount_refunded });
+            }
+
             // ── Vendor-side Viator cancellation ──
             try {
               const { data: activityRow } = await supabaseAdmin
