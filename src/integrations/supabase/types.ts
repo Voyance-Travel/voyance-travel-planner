@@ -217,6 +217,7 @@ export type Database = {
           cost_per_person_usd: number
           cost_reference_id: string | null
           created_at: string | null
+          currency: string | null
           day_number: number
           id: string
           is_paid: boolean | null
@@ -241,6 +242,7 @@ export type Database = {
           cost_per_person_usd: number
           cost_reference_id?: string | null
           created_at?: string | null
+          currency?: string | null
           day_number: number
           id?: string
           is_paid?: boolean | null
@@ -265,6 +267,7 @@ export type Database = {
           cost_per_person_usd?: number
           cost_reference_id?: string | null
           created_at?: string | null
+          currency?: string | null
           day_number?: number
           id?: string
           is_paid?: boolean | null
