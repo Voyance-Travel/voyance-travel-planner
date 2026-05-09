@@ -480,11 +480,51 @@ const handler = async (req: Request): Promise<Response> => {
         userName: profileMap.get(trip.user_id) || "",
       };
 
+      // Idempotency claim: insert before sending. Unique index on
+      // (trip_id, user_id, notification_type, sent_date) blocks same-day cron retries.
+      // notification_type includes daysUntil so the next-day reminder still fires.
+      const notificationType = `trip_reminder_${trip.reminderType}_d${trip.daysUntil}`;
+      const sentDate = new Date().toISOString().slice(0, 10);
+
+      const { error: claimError } = await supabase
+        .from("trip_notifications")
+        .insert({
+          trip_id: trip.id,
+          user_id: trip.user_id,
+          notification_type: notificationType,
+          sent_date: sentDate,
+          sent: false,
+        });
+
+      if (claimError) {
+        if ((claimError as { code?: string }).code === "23505") {
+          console.log(`[send-trip-reminders] Already sent ${notificationType} for trip ${trip.id} on ${sentDate}, skipping`);
+          results.push({ tripId: trip.id, reminderType: trip.reminderType, success: false, error: "duplicate_skipped" });
+          continue;
+        }
+        console.error("[send-trip-reminders] Failed to claim reminder slot:", claimError);
+        results.push({ tripId: trip.id, reminderType: trip.reminderType, success: false, error: "claim_failed" });
+        continue;
+      }
+
       const success = await sendReminderEmail(reminder);
       results.push({ tripId: trip.id, reminderType: trip.reminderType, success });
-      
+
       if (success) {
         sentCount++;
+        await supabase
+          .from("trip_notifications")
+          .update({ sent: true, sent_at: new Date().toISOString() })
+          .eq("trip_id", trip.id)
+          .eq("user_id", trip.user_id)
+          .eq("notification_type", notificationType)
+          .eq("sent_date", sentDate);
+        logStep("Reminder sent", { 
+          tripId: trip.id, 
+          destination: trip.destination, 
+          daysUntil: trip.daysUntil,
+          reminderType: trip.reminderType 
+        });
         logStep("Reminder sent", { 
           tripId: trip.id, 
           destination: trip.destination, 
