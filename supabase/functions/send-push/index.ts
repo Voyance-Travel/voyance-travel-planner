@@ -121,7 +121,7 @@ async function sendApns(
     ? 'https://api.push.apple.com'
     : 'https://api.sandbox.push.apple.com';
 
-  const bundleId = 'app.lovable.bbef7015a2df45af893d7d36d59f8dcd';
+  const bundleId = Deno.env.get('APNS_BUNDLE_ID') ?? 'app.lovable.bbef7015a2df45af893d7d36d59f8dcd';
 
   const payload = {
     aps: {
