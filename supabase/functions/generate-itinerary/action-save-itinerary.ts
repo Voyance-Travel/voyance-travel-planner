@@ -294,14 +294,24 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
 
-      const policy = deriveMealPolicy({
-        dayNumber,
-        totalDays,
-        isFirstDay,
-        isLastDay,
-        arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
-        departureTime24: isLastDay ? savedDepartureTime24 : undefined,
-      });
+      // RS.M.I3: prefer the meal policy cached at generation. Re-deriving here
+      // against current flight times silently disagrees with what the AI was
+      // instructed to produce when the user changes flights between gen and save.
+      const cachedPolicy = (day as any)?.metadata?.quality?.meal_policy_at_generation;
+      const policy = (cachedPolicy && Array.isArray(cachedPolicy.requiredMeals))
+        ? ({
+            dayMode: cachedPolicy.dayMode,
+            requiredMeals: cachedPolicy.requiredMeals as RequiredMeal[],
+            isFullExplorationDay: !!cachedPolicy.isFullExplorationDay,
+          } as any)
+        : deriveMealPolicy({
+            dayNumber,
+            totalDays,
+            isFirstDay,
+            isLastDay,
+            arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
+            departureTime24: isLastDay ? savedDepartureTime24 : undefined,
+          });
 
       if (policy.requiredMeals.length === 0) {
         _harvestSave(day.activities);
