@@ -17,10 +17,15 @@ const config: CapacitorConfig = {
     ]
   },
   ios: {
-    appendUserAgent: 'VoyanceApp'
+    appendUserAgent: 'VoyanceApp',
+    // Custom URL scheme for OAuth + magic-link returns. Must match
+    // CFBundleURLSchemes in Info.plist (see step 2.3c).
+    scheme: 'voyance'
   },
   android: {
-    appendUserAgent: 'VoyanceApp'
+    appendUserAgent: 'VoyanceApp',
+    // Match for Android intent-filter (set in AndroidManifest.xml).
+    scheme: 'voyance'
   }
 };
 
