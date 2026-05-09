@@ -853,8 +853,7 @@ async function ensurePersistentStorageUrl(
     : image.url;
 
   try {
-    const hashSeed = normalizedUrl.split('').reduce((acc, ch) => ((acc << 5) - acc + ch.charCodeAt(0)) | 0, 0);
-    const stableEntityId = `${entityKey}-${Math.abs(hashSeed).toString(36)}`
+    const stableEntityId = `${entityKey}-${(image.placeId || destination || 'global')}`
       .toLowerCase()
       .replace(/[^a-z0-9-]/g, '-')
       .slice(0, 80);
