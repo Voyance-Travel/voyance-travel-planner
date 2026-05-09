@@ -1,42 +1,32 @@
-# R3.10 — Explicit EXECUTE grants on `transition_booking_state`
+## Fix 1.2 — Auto-refund Stripe on Viator booking failure
 
-## Background
+**Status: Already implemented.** No changes required.
 
-`transition_booking_state(uuid, public.booking_item_state, text, text, jsonb)` currently relies on Postgres defaults: it works for `service_role` because `SECURITY DEFINER` runs as the function owner, and for `authenticated` because PUBLIC has EXECUTE by default on functions. There's no explicit grant, and `anon` is not blocked. Defense-in-depth: lock it down.
+### Verification
 
-## Migration
+`supabase/functions/viator-book/index.ts` lines 193–250 already contain the exact logic specified:
 
-Single migration, no schema or function-body changes. Belt-and-braces grants:
+- Top-of-file static import: `import Stripe from "npm:stripe@18.5.0";` (line 12) — using the file's existing import style, no dynamic `await import()` needed.
+- `trip_payments` row marked `status: 'failed'` with `viator_error` / `viator_error_code` metadata (lines 197–208).
+- Stripe refund created with:
+  - `payment_intent: payment.stripe_payment_intent_id`
+  - `reason: 'requested_by_customer'`
+  - `metadata: { activity_id, viator_error_code, auto_refund: 'viator_book_failure' }`
+  - `idempotencyKey: \`viator-fail:${paymentId}\`` — prevents double-refund on retry.
+- Skips cleanly when `stripe_payment_intent_id` is missing (logs and continues).
+- Catches refund errors, logs, surfaces `refundError` to caller without throwing.
+- Response includes `success: false`, `error`, `code`, `refundIssued`, `refundId`, `refundError`.
 
-```sql
--- R3.10: Explicit privilege model for transition_booking_state.
--- The function already enforces auth via auth.uid() + ownership/collaborator
--- checks, but we want anon blocked at the GRANT layer too in case any future
--- misconfiguration exposes the schema to the anon role.
+Only nit vs. the spec text: API version pinned to `'2025-08-27.basil'` (project standard, per stripe-implementation guide) instead of `'2024-06-20'`. This matches the rest of the codebase and should be kept.
 
-REVOKE ALL ON FUNCTION public.transition_booking_state(
-  uuid, public.booking_item_state, text, text, jsonb
-) FROM PUBLIC, anon;
+### Verify command
 
-GRANT EXECUTE ON FUNCTION public.transition_booking_state(
-  uuid, public.booking_item_state, text, text, jsonb
-) TO authenticated, service_role;
+```
+grep -n "stripe.refunds.create" supabase/functions/viator-book/index.ts
 ```
 
-`REVOKE FROM PUBLIC` is required because Postgres' default function privileges grant EXECUTE to PUBLIC (which includes anon) — a bare `REVOKE FROM anon` would be a no-op while PUBLIC still holds the privilege.
+Expected: 1 hit at line 216, inside the `!response.ok` branch. ✅ Confirmed.
 
-## Out of scope
+### Action
 
-- The function body itself (already idempotent + auth-checked under R3.8).
-- Any other RPC's grants (only the one R3.10 calls out).
-- Renaming or signature changes.
-
-## Verification
-
-- `\df+ public.transition_booking_state` shows the explicit ACL list with `authenticated=X` and `service_role=X`, no `=X/owner` PUBLIC entry.
-- Authenticated UI flows still call the RPC successfully (no behavior change).
-- A direct `anon`-key call now returns a permission-denied error instead of falling through to the in-function auth check.
-
-## Memory
-
-Skip — the migration is self-documenting and there's no recurring footgun to remember. Future `CREATE OR REPLACE FUNCTION` calls preserve grants, so this won't drift.
+None — close ticket as already-done. Proceed to Fix 1.3 (`charge.refunded` webhook handler) which this fix is paired with.
