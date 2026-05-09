@@ -280,8 +280,11 @@ Deno.serve(async (req: Request) => {
       dietaryRestrictions?: string[];
       budgetTier?: string;
       tripCurrency?: string;
+      totalDays?: number;
+      hotelName?: string;
     };
     const { activities, date, destination, dayNumber } = body;
+    const totalDays = body.totalDays && body.totalDays > 0 ? body.totalDays : dayNumber;
 
     if (!activities || !Array.isArray(activities)) {
       return new Response(JSON.stringify({ error: 'activities array required' }), {
