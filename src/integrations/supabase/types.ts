@@ -9853,6 +9853,10 @@ export type Database = {
         Returns: Json
       }
       scrub_itinerary_activities: { Args: { acts: Json }; Returns: Json }
+      spend_from_group_budget: {
+        Args: { p_budget_id: string; p_cost: number }
+        Returns: Json
+      }
       submit_client_intake: {
         Args: {
           p_allergies?: string[]
