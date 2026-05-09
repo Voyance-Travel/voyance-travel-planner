@@ -181,28 +181,6 @@ serve(async (req) => {
       quantity: 1,
     });
 
-    if (flightCents > 0) {
-      lineItems.push({
-        price_data: {
-          currency: tripCurrency,
-          product_data: { name: 'Flight Booking', description: `Flights for trip to ${trip.destination}` },
-          unit_amount: flightCents,
-        },
-        quantity: 1,
-      });
-    }
-
-    if (hotelCents > 0) {
-      lineItems.push({
-        price_data: {
-          currency: tripCurrency,
-          product_data: { name: 'Hotel Booking', description: `Accommodation in ${trip.destination}` },
-          unit_amount: hotelCents,
-        },
-        quantity: 1,
-      });
-    }
-
     if (activitiesCents > 0) {
       lineItems.push({
         price_data: {
