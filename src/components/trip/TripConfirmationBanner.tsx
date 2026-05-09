@@ -211,6 +211,9 @@ export function TripConfirmationBanner({
       await spendCredits.mutateAsync({
         action: 'HOTEL_OPTIMIZATION',
         tripId,
+        metadata: {
+          idempotencyKey: `hotel_optimization:${tripId}:${Date.now()}`,
+        },
       });
 
       onApplySwaps(approvedSwaps);

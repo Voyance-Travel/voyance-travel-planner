@@ -1,48 +1,55 @@
-## Fix 2.3: Idempotency keys on Stripe checkout creation
+## Fix 2.4: Require idempotency key for high-value spend-credits
 
 ### Current state (verified)
-Already pass `idempotencyKey`:
-- `create-checkout/index.ts:151` — `checkout:${userId}:${priceId}:${mode}:${days}:${returnPath}`
-- `add-credits/index.ts:108` — `credit_topup:${userId}:${amount_cents}:${minuteBucket}`
-- `purchase-trip-pass/index.ts:127` — `trip_pass:${userId}:${trip_id}`
+- **Server already enforces it.** `supabase/functions/spend-credits/index.ts:555-563` rejects with HTTP 400 + `MISSING_IDEMPOTENCY_KEY` whenever `action ∈ {trip_generation, smart_finish, hotel_optimization, regenerate_trip}` and `metadata.idempotencyKey` is missing.
+- **`pending_credit_charges` insert at line 593-605 is gated by the same action set** — so the "high-value path" check the user describes already maps 1:1.
+- **Frontend gaps that will break under this rule** (audited via `rg`):
+  1. `src/components/itinerary/SmartFinishBanner.tsx:314-318` — retry SMART_FINISH, no key
+  2. `src/components/itinerary/SmartFinishBanner.tsx:356-360` — purchase SMART_FINISH, no key
+  3. `src/components/trip/TripConfirmationBanner.tsx:211-214` — HOTEL_OPTIMIZATION, no key
+  4. `src/components/itinerary/EditorialItinerary.tsx:4167-4172` — REGENERATE_TRIP, no key
+- **Already passing keys** (no change): `useGenerationGate.ts:221`, `ItineraryGenerator.tsx:651`, `useUnlockDay.ts:86-92`.
+- **`src/services/iapService.ts`** — never calls `spend-credits` (it's a Capacitor / iOS link-out helper). No work needed.
 
-Missing `idempotencyKey` (the actual gaps):
-- `create-embedded-checkout/index.ts:142` — same shape as `create-checkout` but no key passed
-- `create-booking-checkout/index.ts:234` — booking checkout, no key
-- `book-activity/index.ts:120` — per-item booking, no key
-- `purchase-smart-finish` — N/A (deleted in Fix 2.1)
+### Changes (frontend only)
 
-### Changes
-
-**1. `create-embedded-checkout/index.ts`** (line 142–150)
-Add a deterministic key built the same way as `create-checkout` (which already handles the equivalent flows). Insert before the call:
+**1. `SmartFinishBanner.tsx`**
+At top of `handleRetryEnrichment` and `handlePurchase`, generate one stable key per flow attempt and pass it via `metadata`:
 ```ts
-const idempotencyKey = `embedded:${userId}:${priceId}:${mode}:${groupTripId ?? ''}:${returnPath ?? ''}`.slice(0, 255);
+const idempotencyKey = `smart_finish:${tripId}:${Date.now()}`;
+await spendCredits.mutateAsync({
+  action: 'SMART_FINISH', tripId,
+  metadata: { source: 'smart_finish_banner', idempotencyKey },
+});
 ```
-and pass `{ idempotencyKey }` as the second arg to `stripe.checkout.sessions.create(...)`.
+Use a separate `Date.now()` per click so a deliberate retry after a failure can re-charge (matches existing `unlock_day_..._${Date.now()}` pattern in `useUnlockDay.ts`). The user's "stable retry-safe key" guidance — for SMART_FINISH the retry path is invoked explicitly via `handleRetryEnrichment` which already runs after a refund, so a fresh key per click is correct.
 
-**2. `create-booking-checkout/index.ts`** (line 234)
-Trip-scoped key — one outstanding booking checkout per trip + total amount. Use a 60-second bucket so a deliberate retry after a minute can still create a fresh session if the user genuinely retries (matches `add-credits` pattern, avoids permanent lock-out if first session expires unpaid):
+**2. `TripConfirmationBanner.tsx:211`**
 ```ts
-const totalCents = (flightCents | 0) + (hotelCents | 0) + (activitiesCents | 0);
-const minuteBucket = Math.floor(Date.now() / 60000);
-const idempotencyKey = `booking:${userId}:${tripId}:${totalCents}:${minuteBucket}`.slice(0, 255);
+await spendCredits.mutateAsync({
+  action: 'HOTEL_OPTIMIZATION', tripId,
+  metadata: { idempotencyKey: `hotel_optimization:${tripId}:${Date.now()}` },
+});
 ```
-Pass `{ idempotencyKey }` to the create call.
 
-**3. `book-activity/index.ts`** (line 120)
-Per-item key — one outstanding session per (user, trip, item, amount), 60-second bucket:
+**3. `EditorialItinerary.tsx:4167`**
+Extend the existing metadata object:
 ```ts
-const minuteBucket = Math.floor(Date.now() / 60000);
-const idempotencyKey = `book_activity:${user.id}:${tripId}:${itemId}:${amountCents}:${minuteBucket}`.slice(0, 255);
+metadata: {
+  dayCount: totalDays,
+  idempotencyKey: `regenerate_trip:${tripId}:${totalDays}:${Date.now()}`,
+},
 ```
-Pass `{ idempotencyKey }` to the create call.
 
-### Notes
-- All keys stay under Stripe's 255-char limit via `.slice(0, 255)`.
-- Minute-bucket strategy on booking flows (vs the permanent key used for `purchase-trip-pass`) is deliberate: a one-shot trip-pass must never duplicate, but bookings need to allow a second attempt after the cancellation window without manual cleanup.
-- No frontend changes; no DB changes; no new functions.
+### Out of scope
+- No server changes — `spend-credits/index.ts` already implements the gate exactly as described.
+- No edits to low-value action callers (add_activity, swap_activity, etc.) — they remain optional per spec.
+- No changes to `useSpendCredits.ts` plumbing — it already forwards `metadata` verbatim.
+- `iapService.ts` audit closed: not a `spend-credits` caller.
 
 ### Validation
-- Spot-check each function's logs after a single invocation: confirm a `sessionId` is returned and the existing `logStep("Checkout session created", ...)` line still fires.
-- Manual: double-click each "Pay" / "Book" button in preview within 1s; only one Stripe session should appear in the dashboard.
+- Trigger Smart Finish purchase → confirm successful charge + no 400 in console.
+- Trigger Smart Finish twice rapidly via double-click → second call returns the cached idempotent hit (look for `[spend-credits] Idempotent hit` server log) and balance only drops once.
+- Trigger Hotel Optimization confirmation → same.
+- Trigger trip regeneration → same.
+- `rg "action: 'SMART_FINISH'|'HOTEL_OPTIMIZATION'|'REGENERATE_TRIP'|'TRIP_GENERATION'" src` and confirm every match has an `idempotencyKey` in the same `metadata`.
