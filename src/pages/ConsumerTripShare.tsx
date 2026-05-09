@@ -124,26 +124,46 @@ export default function ConsumerTripShare() {
   }
 
   if (error || !trip) {
-    const isPaused = errorCode === 'sharing_disabled';
-    const heading = isPaused ? 'Sharing Paused' : 'Trip Not Found';
-    const cta = isPaused ? 'Ask the trip owner for a new link' : 'Plan Your Own Trip';
+    let heading = 'Trip Not Found';
+    let body = 'This share link is invalid.';
+    let action: React.ReactNode = (
+      <Button asChild variant="outline">
+        <Link to="/">Plan Your Own Trip</Link>
+      </Button>
+    );
+
+    if (errorCode === 'sharing_disabled') {
+      heading = 'Sharing Paused';
+      body = 'The trip owner turned off sharing for this link.';
+      action = (
+        <p className="text-xs text-muted-foreground">
+          Ask the trip owner for a new link
+        </p>
+      );
+    } else if (errorCode === 'trip_unavailable') {
+      heading = 'Almost Ready';
+      body = 'Trip is loading — try again in a moment.';
+      action = (
+        <Button variant="outline" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
+      );
+    } else if (errorCode === 'token_not_found') {
+      heading = 'Trip Not Found';
+      body = 'This share link is invalid.';
+    } else if (error) {
+      // Network / RPC failure — keep generic copy
+      body = error;
+    }
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="max-w-md mx-4">
           <CardContent className="pt-6 text-center space-y-4">
             <Compass className="h-12 w-12 text-muted-foreground mx-auto" />
             <h2 className="text-xl font-semibold">{heading}</h2>
-            <p className="text-muted-foreground text-sm">
-              {error || 'This trip link is invalid or sharing has been disabled.'}
-            </p>
-            {!isPaused && (
-              <Button asChild variant="outline">
-                <Link to="/">{cta}</Link>
-              </Button>
-            )}
-            {isPaused && (
-              <p className="text-xs text-muted-foreground">{cta}</p>
-            )}
+            <p className="text-muted-foreground text-sm">{body}</p>
+            {action}
           </CardContent>
         </Card>
       </div>
