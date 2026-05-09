@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { getAppUrl } from '@/utils/getAppUrl';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, 
@@ -374,6 +374,7 @@ function PerfectTripPreview({ preview }: { preview: string }) {
 export default function TravelDNAReveal({ userId, className, refreshKey }: TravelDNARevealProps & { refreshKey?: number }) {
   const [activeTab, setActiveTab] = useState('about');
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: dnaData = null, isLoading } = useQuery({
     queryKey: ['travelDNA', userId, refreshKey],
@@ -671,7 +672,14 @@ export default function TravelDNAReveal({ userId, className, refreshKey }: Trave
               >
                 <TravelDNATransparency dnaData={dnaData.travel_dna_v2 as any} />
                 <DNAAccuracyFeedback userId={userId} />
-                <DNAFeedbackChat userId={userId} />
+                <DNAFeedbackChat
+                  userId={userId}
+                  onFeedbackApplied={() => {
+                    queryClient.invalidateQueries({ queryKey: ['travelDNA', userId] });
+                    queryClient.invalidateQueries({ queryKey: ['profile', userId] });
+                    queryClient.invalidateQueries({ queryKey: ['profile'] });
+                  }}
+                />
                 <div className="pt-4 border-t border-border">
                   <AchievementsPanel />
                 </div>
