@@ -734,6 +734,22 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // generator's per-day repair didn't handle (and that any non-generator save
   // path — manual paste, assistant tool edit — wouldn't have run at all).
   // Without this, refresh-day flags conflicts the user has to fix manually.
+  // ── STEP 2.93: NORMALIZE LOCKED FLAGS ─────────────────────────────
+  // RS.7 — Different parts of the pipeline read `locked`, `isLocked`, or
+  // `is_locked`. If only one is set, downstream sanitizers silently treat
+  // the activity as unlocked and regenerate over user pins. Stamp all
+  // three spellings whenever any of them is truthy.
+  for (const day of itineraryDays) {
+    if (!Array.isArray(day?.activities)) continue;
+    for (const act of day.activities as any[]) {
+      if (act?.locked || act?.isLocked || act?.is_locked) {
+        act.locked = true;
+        act.isLocked = true;
+        act.is_locked = true;
+      }
+    }
+  }
+
   try {
     const { enforceTimingAndBuffers } = await import('../_shared/timing-cascade.ts');
     let totalFixed = 0;
