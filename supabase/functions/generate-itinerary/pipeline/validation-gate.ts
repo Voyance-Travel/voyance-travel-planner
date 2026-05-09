@@ -22,6 +22,7 @@
 import { FAILURE_CODES, type ValidationResult } from './types.ts';
 import type { StrictDayMinimal, StrictActivityMinimal } from '../day-validation.ts';
 import { pickTransitFallback } from '../../_shared/transit-mode.ts';
+import { trimToLastSentence } from './repair-day.ts';
 
 export interface GateCounters {
   critical: number;
