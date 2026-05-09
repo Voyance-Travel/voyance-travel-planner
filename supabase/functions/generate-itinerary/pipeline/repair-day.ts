@@ -2815,6 +2815,30 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 10c. TRUNCATED_SENTENCE: trim to last sentence boundary ---
+  // Mirrors validate-day's checkSentenceCompleteness. Trim mid-sentence tails
+  // back to the last [.!?…] when ≥40 chars of complete sentence remain;
+  // otherwise leave the fragment alone (ship fragment > blank field).
+  for (let i = 0; i < activities.length; i++) {
+    const act: any = activities[i];
+    if (lockedIds.has(act.id)) continue;
+    for (const field of ['description', 'tips', 'notes'] as const) {
+      const before = (act as any)[field];
+      const trimmed = trimToLastSentence(before);
+      if (trimmed != null && trimmed !== before) {
+        (act as any)[field] = trimmed;
+        repairs.push({
+          code: FAILURE_CODES.TRUNCATED_SENTENCE,
+          activityIndex: i,
+          field,
+          action: 'trim_to_last_sentence',
+          before,
+          after: trimmed,
+        });
+      }
+    }
+  }
+
   // --- 12. NON-FLIGHT DEPARTURE: strip airport activities ---
   if (isLastDayInCity && !isLastDay && nextLegTransport && nextLegTransport !== 'flight') {
     const beforeCount = activities.length;
