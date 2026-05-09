@@ -38,7 +38,7 @@ Deno.test("validation gate: TRUNCATED_SENTENCE trims field on critical", () => {
       {
         id: "a1",
         title: "Wander Cannaregio",
-        description: "Wander Cannaregio at golden hour. The light through the canals",
+        description: "Wander Cannaregio at golden hour and watch the canals shimmer. The light through the",
       },
     ],
   };
