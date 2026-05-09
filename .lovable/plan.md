@@ -1,22 +1,26 @@
-## Fix 1b — Defensive `quizCompleted` fallback in `transformProfile`
+## Fix 2 — Clear invite token on logout
 
 ### Verified
-- `AuthContext.tsx:69` reads `quizCompleted` solely from `profile?.quiz_completed`.
-- `loadUserData` (lines 117–131) already fetches both `profile` and `preferences` in parallel and returns both — no extra query.
-- `user_preferences.quiz_completed` is set by both `OnboardConversation` (line ~165 region) and `setPreferences` (line 632), so reading it as a fallback closes the sync-gap class regardless of which writer ran first.
+- `src/utils/inviteTokenPersistence.ts:42` exports `clearPendingInviteToken()` — zeros both `sessionStorage` and the durable `localStorage` entry.
+- `src/contexts/AuthContext.tsx` `logout()` (~lines 538–588) already does ordered cleanup: save tour keys → `supabase.auth.signOut()` → wipe `legacyKeys` → wipe `voyance_quiz_*` → restore tour keys → null state.
 
 ### Change
 
-In `src/contexts/AuthContext.tsx`, line 69 only:
+In `src/contexts/AuthContext.tsx`:
 
-```ts
-quizCompleted: profile?.quiz_completed || preferences?.quiz_completed || false,
-```
+1. Add import alongside other utils:
+   ```ts
+   import { clearPendingInviteToken } from '@/utils/inviteTokenPersistence';
+   ```
+2. Inside `logout()`, immediately after the `legacyKeys.forEach(... removeItem)` line and before the `voyance_quiz_*` sweep, call:
+   ```ts
+   clearPendingInviteToken();
+   ```
 
 ### Out of scope
-- No signature change to `transformProfile` (it already accepts `preferences`).
-- No new query, no schema change, no caller change.
+- No change to login, invite-consumption flow, or `OnboardConversation`.
+- Tour-key preservation block is untouched (invite tokens are intentionally cross-user-sensitive, unlike tour state).
 
 ### Validation
-- A user whose `profiles.quiz_completed = false` but `user_preferences.quiz_completed = true` (the legacy/sync-gap state) now gets `user.quizCompleted = true` on next session and skips the onboarding gate.
-- A fresh user with neither flag set still resolves to `false`.
+- Sign in as user A with a `?invite=…` URL → confirm `pendingInviteToken` exists in `sessionStorage` and `localStorage`. Log out. Both keys gone. Sign in as user B on same device → no invite auto-consumed.
+- Logout while no invite token present → no error, behavior unchanged.
