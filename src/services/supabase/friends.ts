@@ -188,22 +188,22 @@ export async function sendFriendRequestByEmail(email: string): Promise<{ success
       if (error) throw error;
       return { success: true, status: 'accepted' };
     }
-    // If previously declined, delete the old row and create a fresh request
+    // If previously declined, flip the row back to pending. UPDATE is atomic
+    // (single statement) so we can't end up with a half-deleted state if the
+    // network drops mid-operation. Also handles direction-flip: if the previously-
+    // declined row had the OPPOSITE direction (current user was the addressee),
+    // we update both fields to reflect the new requester.
     if (existing.status === 'declined') {
-      const { error: deleteError } = await supabase
+      const { error: updateError } = await supabase
         .from('friendships')
-        .delete()
-        .eq('id', existing.id);
-      if (deleteError) throw deleteError;
-      
-      const { error: insertError } = await supabase
-        .from('friendships')
-        .insert({
+        .update({
           requester_id: currentUserId,
           addressee_id: targetUserId,
           status: 'pending',
-        });
-      if (insertError) throw insertError;
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+      if (updateError) throw updateError;
       return { success: true, status: 'pending' };
     }
   }
