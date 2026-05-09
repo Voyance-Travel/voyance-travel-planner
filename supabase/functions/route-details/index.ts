@@ -196,7 +196,19 @@ serve(async (req) => {
       : `${durationMins} min`;
 
     // Parse total distance
-    const distanceMeters = leg.distanceMeters || 0;
+    const distanceMeters = Number(leg.distanceMeters) || 0;
+
+    // Sanity-check: a single leg distance should never exceed ~2,000,000 meters
+    // (2000 km). If it does, Google's response shape changed and we're parsing
+    // the wrong unit. Fail loudly so we catch it in dev rather than silently
+    // rendering "100 mi" as "160,934 m".
+    if (Number.isFinite(distanceMeters) && distanceMeters > 2_000_000) {
+      console.error('[route-details] Implausible leg distance — possibly wrong unit:', {
+        distanceMeters, expected: 'meters',
+      });
+      // Don't fail the response — just log. Caller decides what to do with the value.
+    }
+
     const distanceMiles = (distanceMeters / 1609.34).toFixed(1);
     const totalDistance = distanceMeters >= 1609 ? `${distanceMiles} mi` : `${distanceMeters} m`;
 
