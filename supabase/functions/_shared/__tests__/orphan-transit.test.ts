@@ -38,6 +38,7 @@ Deno.test('end-of-day "Travel to <restaurant>" dropped (generic verb, no logisti
   const removed = pruneOrphanTransits(acts);
   assertEquals(removed, 1);
   assertEquals(acts.length, 1);
+});
 
 Deno.test('orphan target in middle still dropped (Case 2 unchanged)', () => {
   const acts = [
