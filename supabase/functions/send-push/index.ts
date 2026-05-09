@@ -272,10 +272,34 @@ serve(async (req) => {
     const sent = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;
 
-    console.log(`[send-push] Sent: ${sent}, Failed: ${failed}`);
+    // Cleanup: remove dead tokens flagged by APNs as unregistered/invalid.
+    // Idempotent — running this twice with the same dead tokens is a no-op.
+    const deadTokens = results.filter(r => r.shouldDeleteToken).map(r => r.token);
+    let deleted = 0;
+    if (deadTokens.length > 0) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        const { error: delError, count } = await supabase
+          .from('push_tokens')
+          .delete({ count: 'exact' })
+          .in('token', deadTokens);
+        if (delError) {
+          console.error('[send-push] Failed to delete dead tokens:', delError);
+        } else {
+          deleted = count || 0;
+          console.log(`[send-push] Deleted ${deleted} dead tokens`);
+        }
+      } catch (cleanupErr) {
+        console.error('[send-push] Token cleanup exception:', cleanupErr);
+      }
+    }
+
+    console.log(`[send-push] Sent: ${sent}, Failed: ${failed}, DeadTokensDeleted: ${deleted}`);
 
     return new Response(
-      JSON.stringify({ success: true, sent, failed, results }),
+      JSON.stringify({ success: true, sent, failed, deleted, results }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
