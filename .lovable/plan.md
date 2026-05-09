@@ -1,28 +1,23 @@
-## Fix 2.1 — Quiz flag sync
+## Fix 2.2 — Clear invite token on logout
 
-### Status: Already shipped in code
+### Status: Already shipped
 
-Verified in `src/contexts/AuthContext.tsx`:
+`src/contexts/AuthContext.tsx` logout already calls `clearPendingInviteToken()` after the `legacyKeys.forEach` block (lines 582–583), via a dynamic `await import('@/utils/inviteTokenPersistence')`. Functionally identical to the spec's static import — both clear sessionStorage + localStorage on signout.
 
-- **Line 69** — `transformProfile` already does the defensive double-read:
-  ```ts
-  quizCompleted: profile?.quiz_completed || preferences?.quiz_completed || false,
-  ```
-- **Lines 670–676** — `setPreferences` already mirrors `quiz_completed` onto `profiles` after the `user_preferences` upsert, with best-effort error handling (logs, doesn't throw).
+Verification: `grep -c "clearPendingInviteToken" src/contexts/AuthContext.tsx` → **2 hits** (the import + the call), matching the spec's expected output.
 
-Both `grep` checks from the spec pass. No code changes needed.
+### Optional polish (not required)
 
-### Backfill: not needed
+The current dynamic import works but adds a tiny async hop. If you want to match the spec exactly and shave a microtask, promote it to a top-of-file static import:
 
-Ran the diagnostic against the live DB:
-```sql
-SELECT COUNT(*) FROM profiles p
-JOIN user_preferences up ON up.user_id = p.id
-WHERE up.quiz_completed = true AND p.quiz_completed IS NOT TRUE;
--- → 0
+```ts
+import { clearPendingInviteToken } from '@/utils/inviteTokenPersistence';
 ```
-Zero users are currently stuck, so the backfill `UPDATE` is a no-op. Skipping the migration to avoid unnecessary churn.
+
+…and replace lines 582–583 with a direct `clearPendingInviteToken();` call.
+
+This is cosmetic — no behavioral change, no security delta. Recommend skipping unless you're cleaning up.
 
 ### Action
 
-Close Fix 2.1 as already-implemented and move to the next ticket. No files modified, no migration run.
+Close Fix 2.2 as already-implemented. Proceed to next ticket.
