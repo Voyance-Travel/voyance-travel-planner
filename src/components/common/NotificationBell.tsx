@@ -97,18 +97,24 @@ function usePendingFriendRequests(userId: string | null) {
     queryKey: ['pending-friend-requests', userId],
     queryFn: async (): Promise<FriendRequest[]> => {
       if (!userId) return [];
-      
-      const { data, error } = await supabase
-        .from('friendships')
-        .select('id, requester_id, created_at')
-        .eq('addressee_id', userId)
-        .eq('status', 'pending');
-      
-      if (error) {
-        console.error('Failed to fetch friend requests:', error);
+
+      const { withRetry, logBackendError } = await import('@/lib/backendError');
+      let data: Array<{ id: string; requester_id: string; created_at: string }> | null = null;
+      try {
+        data = await withRetry(async () => {
+          const res = await supabase
+            .from('friendships')
+            .select('id, requester_id, created_at')
+            .eq('addressee_id', userId)
+            .eq('status', 'pending');
+          if (res.error) throw res.error;
+          return res.data;
+        }, { tries: 2, delayMs: 400 });
+      } catch (err) {
+        logBackendError('[friends] pending requests fetch failed:', err);
         return [];
       }
-      
+
       if (!data || data.length === 0) return [];
       
       const requesterIds = data.map(r => r.requester_id);
