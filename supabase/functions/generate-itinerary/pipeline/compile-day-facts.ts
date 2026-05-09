@@ -358,6 +358,8 @@ export async function compileDayFacts(
           location: a.location as { name?: string; address?: string } || { name: '', address: '' },
           cost: a.cost as { amount: number; currency: string } || { amount: 0, currency: 'USD' },
           isLocked: true,
+          locked: true,
+          is_locked: true,
           tags: a.tags || [],
           bookingRequired: a.booking_required || false,
           tips: a.tips || undefined,
@@ -399,6 +401,8 @@ export async function compileDayFacts(
             location: a.location as { name?: string; address?: string },
             cost: a.cost as { amount: number; currency: string },
             isLocked: true,
+            locked: true,
+            is_locked: true,
           }));
           console.log(`[compile-day-facts] ${lockedActivities.length} locked activities from JSON for day ${dayNumber}`);
         }
@@ -422,6 +426,8 @@ export async function compileDayFacts(
           location: act.location,
           cost: act.cost || act.estimatedCost,
           isLocked: true,
+          locked: true,
+          is_locked: true,
           tags: act.tags,
           bookingRequired: act.bookingRequired,
           tips: act.tips,
