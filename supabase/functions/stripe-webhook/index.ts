@@ -943,7 +943,24 @@ serve(async (req) => {
                 .maybeSingle();
 
               if (!existingClawback) {
-                // Zero out all credit_purchases rows for this session
+                // 1) Compute already-spent credits from this pack via the ledger
+                const { data: spentForSession } = await supabaseAdmin
+                  .from('credit_ledger')
+                  .select('credits_delta')
+                  .eq('stripe_session_id', checkoutSession.id)
+                  .eq('transaction_type', 'spend');
+                const totalSpentFromThisPack = (spentForSession || [])
+                  .reduce((sum, row) => sum + Math.abs(Number(row.credits_delta) || 0), 0);
+
+                // 2) Pack totals (granted vs remaining) for audit
+                const { data: purchaseRows } = await supabaseAdmin
+                  .from('credit_purchases')
+                  .select('id, remaining, amount')
+                  .eq('stripe_session_id', checkoutSession.id);
+                const totalGranted   = (purchaseRows || []).reduce((s, r) => s + Number(r.amount    || 0), 0);
+                const totalRemaining = (purchaseRows || []).reduce((s, r) => s + Number(r.remaining || 0), 0);
+
+                // 3) Zero remaining on every credit_purchases row for this session
                 for (const row of creditRows) {
                   totalClawed += row.remaining;
                   await supabaseAdmin
@@ -952,20 +969,54 @@ serve(async (req) => {
                     .eq('id', row.id);
                 }
 
-                // Audit trail
-                await supabaseAdmin.from('credit_ledger').insert({
-                  user_id: refundUserId,
-                  transaction_type: 'refund',
-                  action_type: 'stripe_refund',
-                  credits_delta: -totalClawed,
-                  is_free_credit: false,
-                  stripe_session_id: checkoutSession.id,
-                  notes: `Stripe refund clawback: ${totalClawed} credits (refund ${refundRef})`,
-                });
+                // 4) Single ledger audit row — branch on partial-spend
+                if (totalSpentFromThisPack > 0) {
+                  // Policy (a): forgive already-spent credits; only the unspent portion is clawed.
+                  // Already-spent credits are not reversed — we eat the loss rather than push the
+                  // user's free-tier balance negative.
+                  console.warn('[stripe-webhook] Refund on partially-spent pack — clawing back unspent only', {
+                    userId: refundUserId,
+                    sessionId: checkoutSession.id,
+                    totalGranted,
+                    totalRemaining,
+                    totalSpent: totalSpentFromThisPack,
+                  });
+                  await supabaseAdmin.from('credit_ledger').insert({
+                    user_id: refundUserId,
+                    transaction_type: 'refund',
+                    action_type: 'stripe_refund_partial_spent',
+                    credits_delta: -totalRemaining,
+                    is_free_credit: false,
+                    stripe_session_id: checkoutSession.id,
+                    notes: `Stripe refund on partially-spent pack. Clawed: ${totalRemaining}, already spent: ${totalSpentFromThisPack}, total granted: ${totalGranted}`,
+                    metadata: {
+                      total_granted: totalGranted,
+                      total_spent: totalSpentFromThisPack,
+                      total_clawed: totalRemaining,
+                      refund_id: refundRef,
+                    },
+                  });
+                } else {
+                  // Full claw-back, original ledger shape
+                  await supabaseAdmin.from('credit_ledger').insert({
+                    user_id: refundUserId,
+                    transaction_type: 'refund',
+                    action_type: 'stripe_refund',
+                    credits_delta: -totalClawed,
+                    is_free_credit: false,
+                    stripe_session_id: checkoutSession.id,
+                    notes: `Stripe refund clawback: ${totalClawed} credits (refund ${refundRef})`,
+                  });
+                }
 
-                // Sync balance cache
+                // 5) Sync balance cache
                 await syncBalanceCache(supabaseAdmin, refundUserId);
-                log("Consumer credit clawback complete", { userId: refundUserId, creditsClawed: totalClawed, refundId: refundRef });
+                log("Consumer credit clawback complete", {
+                  userId: refundUserId,
+                  creditsClawed: totalClawed,
+                  alreadySpent: totalSpentFromThisPack,
+                  refundId: refundRef,
+                });
               } else {
                 log("Duplicate consumer credit clawback, skipping", { sessionId: checkoutSession.id });
               }
