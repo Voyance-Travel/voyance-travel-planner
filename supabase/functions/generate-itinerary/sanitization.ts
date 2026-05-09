@@ -845,6 +845,116 @@ export function enforceBarNightcapPriceCap(activity: Record<string, any>, logPre
 }
 
 // =============================================================================
+// TRANSIT MODE BY DISTANCE — overrides LLM-emitted "walking" on long hops
+// =============================================================================
+
+const TRANSIT_TITLE_RE_FOR_GUARD = /^(?:Travel|Taxi|Walk|Walking|Bus|Metro|Tram|Train|Drive|Ride|Ferry|Uber|Rideshare)\s+(?:to|from|along|through)\s+/i;
+const WALK_METHODS = new Set(['walk', 'walking', 'on foot', 'foot']);
+
+function isTransitActivity(activity: any): boolean {
+  if (!activity || typeof activity !== 'object') return false;
+  const cat = String(activity.category || activity.type || '').toLowerCase();
+  if (cat === 'transit' || cat === 'transport' || cat === 'transportation' || cat === 'travel') return true;
+  const title = String(activity.title || activity.name || '');
+  return TRANSIT_TITLE_RE_FOR_GUARD.test(title);
+}
+
+function formatDurationMin(min: number): string {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60); const m = min % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+function rewriteTransitTitle(title: string, method: string): string {
+  if (!title) return title;
+  const verb = method === 'uber' ? 'Taxi' : method === 'metro' ? 'Metro' : 'Walk';
+  return title.replace(
+    /^(?:Travel|Taxi|Walk|Walking|Bus|Metro|Tram|Train|Drive|Ride|Ferry|Uber|Rideshare)\s+(to|from|along|through)\s+/i,
+    `${verb} $1 `,
+  );
+}
+
+/**
+ * Override `transportation.method = walking` when the haversine distance between
+ * origin and destination clearly exceeds walking range. Mirrors the existing
+ * `enforceBarNightcapPriceCap` pattern: pure post-LLM guard, no false positives
+ * (returns false when coords can't be resolved).
+ *
+ * Returns true if the activity was mutated.
+ */
+export function enforceTransitModeByDistance(
+  activity: Record<string, any>,
+  prevActivity: Record<string, any> | null,
+  nextActivity: Record<string, any> | null,
+  logPrefix = 'SANITIZE',
+): boolean {
+  if (!activity || typeof activity !== 'object') return false;
+  if (!isTransitActivity(activity)) return false;
+
+  const t = activity.transportation;
+  // We only act when the LLM (or anything upstream) has marked this as walking.
+  const currentMethod = String((t && t.method) || '').toLowerCase().trim();
+  const titleStartsWalk = /^(?:walk|walking)\s+/i.test(activity.title || activity.name || '');
+  if (!WALK_METHODS.has(currentMethod) && !titleStartsWalk) return false;
+
+  // Resolve origin coords.
+  const originCoords =
+    extractCoords(t?.from) ||
+    extractCoords(activity.from) ||
+    extractCoords(prevActivity || {});
+  const destCoords =
+    extractCoords(t?.to) ||
+    extractCoords(activity.to) ||
+    extractCoords(activity) ||
+    extractCoords(nextActivity || {});
+
+  if (!originCoords || !destCoords) return false;
+
+  const distanceMeters = haversineMeters(
+    originCoords.lat, originCoords.lng,
+    destCoords.lat, destCoords.lng,
+  );
+  if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) return false;
+
+  const walkMinutes = Math.round(distanceMeters / 83);
+  if (distanceMeters <= MAX_WALK_DISTANCE_METERS && walkMinutes <= MAX_WALK_DURATION_MINUTES) {
+    return false;
+  }
+
+  const destName =
+    (activity.title || '').replace(/^(?:Walk|Walking|Travel|Taxi|Bus|Metro|Tram|Train|Drive|Ride|Ferry|Uber|Rideshare)\s+(?:to|from|along|through)\s+/i, '').trim()
+    || activity?.location?.name
+    || (nextActivity as any)?.title
+    || 'destination';
+
+  const tier = pickTransitTier(distanceMeters, destName);
+  if (tier.method === 'walk') return false; // shouldn't happen with the gate above
+
+  const oldMethod = currentMethod || 'walking';
+  const newT = {
+    ...(t || {}),
+    method: tier.method,
+    duration: formatDurationMin(tier.durationMinutes),
+    durationMinutes: tier.durationMinutes,
+    distanceMeters: tier.distanceMeters,
+    estimatedCost: { amount: tier.costAmount, currency: t?.estimatedCost?.currency || 'USD' },
+    instructions: tier.instructions,
+  };
+  activity.transportation = newT;
+
+  // Mirror duration onto common top-level fields if present.
+  if (typeof activity.durationMinutes === 'number') activity.durationMinutes = tier.durationMinutes;
+  if (typeof activity.duration_minutes === 'number') activity.duration_minutes = tier.durationMinutes;
+  if (typeof activity.duration === 'string') activity.duration = formatDurationMin(tier.durationMinutes);
+
+  if (typeof activity.title === 'string') activity.title = rewriteTransitTitle(activity.title, tier.method);
+  if (typeof activity.name === 'string') activity.name = rewriteTransitTitle(activity.name, tier.method);
+
+  console.warn(`[TRANSIT_MODE_OVERRIDE] [${logPrefix}]: "${activity.title}" "${oldMethod}"→"${tier.method}" dist=${distanceMeters}m dur=${tier.durationMinutes}m cost=${tier.costAmount}`);
+  return true;
+}
+
+// =============================================================================
 // CASUAL / STREET FOOD VENUE PRICE CAP
 // =============================================================================
 
