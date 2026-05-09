@@ -184,6 +184,25 @@ serve(async (req) => {
     const hotelCents = serverHotelCents > 0 ? serverHotelCents : clientHotelCents;
     const activitiesCents = Math.round((activitiesTotal || 0) * 100);
 
+    // Hard-reject Viator/activities currency mismatch (R3.4)
+    if (activitiesCents > 0 && activitiesCurrency !== tripCurrency) {
+      logStep("CURRENCY_MISMATCH activities", { activitiesCurrency, tripCurrency });
+      return new Response(JSON.stringify({
+        error: `Activity prices are quoted in ${activitiesCurrency.toUpperCase()} but trip currency is ${tripCurrency.toUpperCase()}. Refresh and retry.`,
+        code: "CURRENCY_MISMATCH",
+      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Soft warning if flight/hotel selections carry an explicit currency that differs.
+    const flightSelCurrency = String((trip.flight_selection as any)?.currency || '').toLowerCase();
+    if (flightCents > 0 && flightSelCurrency && flightSelCurrency !== tripCurrency) {
+      logStep("CURRENCY_MISMATCH flight (soft warn)", { flightSelCurrency, tripCurrency });
+    }
+    const hotelSelCurrency = String((trip.hotel_selection as any)?.currency || '').toLowerCase();
+    if (hotelCents > 0 && hotelSelCurrency && hotelSelCurrency !== tripCurrency) {
+      logStep("CURRENCY_MISMATCH hotel (soft warn)", { hotelSelCurrency, tripCurrency });
+    }
+
     // Initialize Stripe
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not configured");
