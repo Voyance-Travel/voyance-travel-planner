@@ -953,3 +953,167 @@ function checkWrongCityDemonym(
     }
   }
 }
+
+// =============================================================================
+// SEMANTIC GATE CHECKS — 4 new pure inspectors for the validation gate
+// =============================================================================
+
+const PUNCT_ONLY_RE = /^\s*[.\-:,;·•…]+\s*$/;
+/** Fields whose value should never be just punctuation. */
+const SCALAR_TEXT_FIELDS = [
+  'title', 'name', 'description', 'tips', 'notes',
+  'reservationUrgency', 'bookingWindow', 'leadTime', 'bookingUrgency',
+  'subtitle', 'summary', 'whyItFits',
+] as const;
+
+function checkPunctuationOnlyFields(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  activities.forEach((act, i) => {
+    for (const field of SCALAR_TEXT_FIELDS) {
+      const v = (act as any)?.[field];
+      if (typeof v === 'string' && v.length > 0 && PUNCT_ONLY_RE.test(v)) {
+        results.push({
+          code: FAILURE_CODES.PUNCTUATION_ONLY_FIELD,
+          severity: 'critical',
+          message: `Activity "${act.title}" has punctuation-only ${field}: ${JSON.stringify(v)}`,
+          activityIndex: i,
+          field,
+          autoRepairable: true,
+        });
+      }
+    }
+  });
+}
+
+const SENTENCE_END_RE = /[.!?…)"'’”\]]\s*$/;
+const BULLET_RE = /^\s*[-•*]/m;
+
+function checkSentenceCompleteness(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  activities.forEach((act, i) => {
+    for (const field of ['description', 'tips', 'notes'] as const) {
+      const raw = (act as any)?.[field];
+      if (typeof raw !== 'string') continue;
+      const v = raw.trim();
+      if (v.length < 40) continue;
+      if (BULLET_RE.test(v)) continue; // skip bullet lists
+      if (SENTENCE_END_RE.test(v)) continue;
+      // Last 80 chars for log preview
+      const tail = v.slice(-80);
+      results.push({
+        code: FAILURE_CODES.TRUNCATED_SENTENCE,
+        severity: 'error',
+        message: `Activity "${act.title}" ${field} appears truncated mid-sentence: "…${tail}"`,
+        activityIndex: i,
+        field,
+        autoRepairable: true,
+      });
+    }
+  });
+}
+
+function getActivityCostAmount(act: any): number | null {
+  const c = act?.cost ?? act?.estimatedCost;
+  if (!c || typeof c !== 'object') return null;
+  const amt = Number(c.amount);
+  return Number.isFinite(amt) && amt > 0 ? amt : null;
+}
+
+function checkPriceDuplication(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  for (let i = 1; i < activities.length; i++) {
+    const prev = activities[i - 1] as any;
+    const curr = activities[i] as any;
+    const prevAmt = getActivityCostAmount(prev);
+    const currAmt = getActivityCostAmount(curr);
+    if (prevAmt === null || currAmt === null || prevAmt !== currAmt) continue;
+    const prevCur = prev?.cost?.currency || prev?.estimatedCost?.currency;
+    const currCur = curr?.cost?.currency || curr?.estimatedCost?.currency;
+    if (prevCur !== currCur) continue;
+    const prevCat = String(prev?.category || '').toLowerCase();
+    const currCat = String(curr?.category || '').toLowerCase();
+    if (!prevCat || prevCat !== currCat) continue;
+    // Skip deterministic overrides
+    const prevSrc = String(prev?.cost?.source || prev?.cost?.basis || '');
+    const currSrc = String(curr?.cost?.source || curr?.cost?.basis || '');
+    if (/bar_cap_repair|fine_dining_floor|user|user_override|booked/i.test(prevSrc + currSrc)) continue;
+    results.push({
+      code: FAILURE_CODES.SUSPICIOUS_DUPLICATE_PRICE,
+      severity: 'warning',
+      message: `Adjacent activities "${prev.title}" and "${curr.title}" have identical ${prevCur} ${prevAmt} cost (same category "${prevCat}")`,
+      activityIndex: i,
+      field: 'cost.amount',
+      autoRepairable: false,
+    });
+  }
+}
+
+const CASUAL_VIBE_RE = /\b(casual|neighborhood|trattoria|bistro|hole[- ]in[- ]the[- ]wall|laid[- ]back)\b/i;
+let _fineDiningMap: Record<string, number> | null = null;
+async function getFineDiningMap(): Promise<Record<string, number>> {
+  if (_fineDiningMap) return _fineDiningMap;
+  try {
+    const mod = await import('../sanitization.ts');
+    _fineDiningMap = (mod as any).KNOWN_FINE_DINING_STARS || {};
+  } catch {
+    _fineDiningMap = {};
+  }
+  return _fineDiningMap!;
+}
+
+// Cheap synchronous lookup using cached map (populated lazily; first call may miss).
+function checkCategoryVenueCoherence(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  // Kick off load (no-await) so subsequent calls have the map ready.
+  if (!_fineDiningMap) { void getFineDiningMap(); return; }
+  const map = _fineDiningMap;
+  const keys = Object.keys(map);
+  if (keys.length === 0) return;
+  activities.forEach((act, i) => {
+    const cat = String(act?.category || '').toLowerCase();
+    if (cat !== 'dining' && cat !== 'restaurant' && cat !== 'food') return;
+    const title = String(act.title || '');
+    if (!CASUAL_VIBE_RE.test(title)) return;
+    const venue = String(act?.location?.name || '').toLowerCase();
+    if (!venue) return;
+    const matched = keys.find(k => venue.includes(k));
+    if (!matched) return;
+    results.push({
+      code: FAILURE_CODES.CATEGORY_VENUE_MISMATCH,
+      severity: 'error',
+      message: `Activity "${title}" labels venue "${venue}" (${map[matched]}-star fine dining) as casual`,
+      activityIndex: i,
+      field: 'title',
+      autoRepairable: true,
+    });
+  });
+}
+
+const CHECKOUT_RE = /\b(check\s*-?\s*out|checkout|departure|fly home|return flight|train home)\b/i;
+const HOTEL_BOUND_RE = /\b(hotel\s+spa|hotel\s+restaurant|in[- ]room|room\s+service|hotel\s+bar|hotel\s+gym|hotel\s+pool|spa\s+at\s+(the\s+)?hotel)\b/i;
+
+function checkCrossDayCheckoutHotelLeak(
+  activities: StrictActivityMinimal[],
+  prevDay: StrictDayMinimal,
+  results: ValidationResult[],
+): void {
+  const prevActs = prevDay?.activities || [];
+  if (prevActs.length === 0) return;
+  // Find the LAST event of previous day
+  const last = prevActs[prevActs.length - 1] as any;
+  const lastTitle = String(last?.title || '');
+  const lastCat = String(last?.category || '').toLowerCase();
+  const isCheckout = lastCat === 'accommodation' && CHECKOUT_RE.test(lastTitle);
+  if (!isCheckout) return;
+
+  activities.forEach((act, i) => {
+    const title = String(act.title || '');
+    const venue = String(act?.location?.name || '');
+    if (HOTEL_BOUND_RE.test(title) || HOTEL_BOUND_RE.test(venue)) {
+      results.push({
+        code: FAILURE_CODES.CHECKOUT_HOTEL_LEAK,
+        severity: 'critical',
+        message: `Activity "${title}" is hotel-bound but previous day ended with checkout "${lastTitle}"`,
+        activityIndex: i,
+        field: 'title',
+        autoRepairable: true,
+      });
+    }
+  });
+}
