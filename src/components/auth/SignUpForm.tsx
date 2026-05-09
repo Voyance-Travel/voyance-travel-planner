@@ -128,6 +128,9 @@ export function SignUpForm() {
       const pendingToken = consumePendingInviteToken();
       if (pendingToken) {
         navigate(`/invite/${pendingToken}`, { replace: true });
+      } else if (result?.quizCompleted === false) {
+        // Fresh signup — send through the quiz before any generic landing
+        navigate(ROUTES.QUIZ, { replace: true });
       } else {
         navigate(queryRedirect || consumeReturnPath('/'));
       }
