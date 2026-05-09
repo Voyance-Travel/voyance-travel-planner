@@ -603,6 +603,66 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ── VALIDATION GATE — mirrors action-generate-day.ts:1245-1267 (adapted for diagnostic shape).
+    //    Surfaces critical semantic failures (reservationUrgency leak, walk-over-threshold,
+    //    truncated descriptions, punctuation-only fields) the deterministic checks above miss.
+    let gateCounters: any = null;
+    let gateForcedActivities: any[] | null = null;
+    try {
+      const { validateDay } = await import('../generate-itinerary/pipeline/validate-day.ts');
+      const { applyValidationGate } = await import('../generate-itinerary/pipeline/validation-gate.ts');
+      const { deriveMealPolicy } = await import('../generate-itinerary/meal-policy.ts');
+
+      const isFirstDay = dayNumber === 1;
+      const isLastDay = dayNumber === totalDays;
+      const policy = deriveMealPolicy({
+        dayNumber, totalDays,
+        isFirstDay, isLastDay,
+        arrivalTime24: undefined,
+        departureTime24: undefined,
+      });
+
+      const dayMinimal = {
+        dayNumber,
+        date: date || '',
+        title: '',
+        activities: [...sorted],
+      };
+
+      const validationResults = validateDay({
+        day: dayMinimal as any,
+        dayNumber,
+        isFirstDay,
+        isLastDay,
+        totalDays,
+        destination,
+        hasHotel: true,
+        hotelName: body.hotelName,
+        requiredMeals: policy.requiredMeals || [],
+        previousDays: [],
+      });
+
+      const gate = applyValidationGate(
+        dayMinimal as any,
+        validationResults,
+        { dayNumber, destination },
+      );
+
+      gateCounters = gate.counters;
+      if (gate.verdict === 'persist_forced') {
+        gateForcedActivities = gate.day.activities;
+        issues.push({
+          type: 'validation_gate',
+          activityId: 'day',
+          activityTitle: `Day ${dayNumber}`,
+          severity: 'error',
+          message: `Validation gate forced ${gate.counters.forcedDowngrades} downgrade(s): ${gate.counters.blankedFields} blanked field(s), ${gate.counters.droppedActivities} dropped activity(ies).`,
+        } as any);
+      }
+    } catch (gateErr) {
+      console.warn('[refresh-day] Validation gate failed (non-blocking):', gateErr);
+    }
+
     return new Response(JSON.stringify({
       issues,
       proposedChanges,
@@ -611,6 +671,8 @@ Deno.serve(async (req: Request) => {
       totalCost,
       activitiesValidated: sorted.length,
       dayNumber,
+      gateCounters,
+      gateForcedActivities,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
