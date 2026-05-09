@@ -345,7 +345,9 @@ Respond in JSON format:
     const preview: FullPreview = {
       destination,
       country: destinationCountry,
-      totalDays: cappedDays,
+      totalDays,
+      previewedDays: cappedDays,
+      isPartialPreview,
       totalActivities: allActivities.length,
       days: previewData.days?.map((day: any, index: number) => ({
         dayNumber: index + 1,
