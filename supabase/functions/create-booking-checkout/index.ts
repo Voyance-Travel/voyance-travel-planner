@@ -30,8 +30,9 @@ async function checkRateLimit(supabaseAdmin: any, userId: string): Promise<{ all
   return { allowed: result.allowed, remaining: result.remaining };
 }
 
-// Single Trip Unlock price
-const SINGLE_TRIP_PRICE_ID = 'price_1RpYXMFYxIg9jcJUxDiyEFp5'; // $29.99 one-time
+// Service-fee amount (charged in trip currency, no FX conversion)
+const SERVICE_FEE_CENTS = 2999; // $29.99 / €29.99 / £29.99 etc.
+const SUPPORTED_CURRENCIES = new Set(['usd','eur','gbp','cad','aud','chf','jpy','sek','nok','dkk','nzd']);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
