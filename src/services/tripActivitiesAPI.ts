@@ -147,15 +147,33 @@ async function activitiesApiRequest<T>(
 
 /**
  * Update an activity
+ *
+ * If `context` (tripId + dayNumber) is provided, any matching active
+ * trip_day_intents will be marked fulfilled so the next regenerate-day
+ * doesn't overwrite the manual edit. Best-effort, never throws.
  */
 export async function updateActivity(
   activityId: string,
-  input: UpdateActivityInput
+  input: UpdateActivityInput,
+  context?: { tripId: string; dayNumber: number }
 ): Promise<ActivityUpdateResponse> {
-  return activitiesApiRequest<ActivityUpdateResponse>(`/${activityId}`, {
+  const res = await activitiesApiRequest<ActivityUpdateResponse>(`/${activityId}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   });
+
+  if (context?.tripId && context?.dayNumber) {
+    try {
+      const { markIntentsFulfilledByActivities } = await import('./tripDayIntents');
+      await markIntentsFulfilledByActivities(context.tripId, context.dayNumber, [
+        { id: res?.activity?.id, title: res?.activity?.title || input.title },
+      ]);
+    } catch (e) {
+      console.warn('[manual-edit] intent fulfillment after updateActivity failed:', e);
+    }
+  }
+
+  return res;
 }
 
 /**
