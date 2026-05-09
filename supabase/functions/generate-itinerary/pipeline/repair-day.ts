@@ -310,6 +310,22 @@ const FALLBACK_RESTAURANTS: Record<string, Record<string, FallbackVenue[]>> = {
   },
 };
 
+const SENTENCE_TERMINATOR_RE = /[.!?…)"'’”\]]\s*$/;
+/**
+ * Trim a mid-sentence string back to the last sentence boundary.
+ * Returns the trimmed string when ≥40 chars of complete sentence remain;
+ * returns null otherwise (caller should leave field unchanged).
+ */
+export function trimToLastSentence(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (v.length < 40) return null;
+  if (SENTENCE_TERMINATOR_RE.test(v)) return null; // already terminated
+  const m = v.match(/^(.*[.!?…])\s*[^.!?…]*$/s);
+  if (m && m[1].length >= 40) return m[1].trim();
+  return null;
+}
+
 export function getCityTier(city?: string): CityTransitTier {
   if (!city) return TRANSIT_TIERS.default;
   const lower = city.toLowerCase().trim();
