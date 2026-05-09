@@ -43,10 +43,17 @@ function isCheckoutActivity(title: string): boolean {
  * This matches the generation pipeline convention where checkout day
  * belongs to the NEXT hotel.
  */
-function isDayInRange(dayDate: string | undefined, checkInDate?: string, checkOutDate?: string): boolean {
+function isDayInRange(
+  dayDate: string | undefined,
+  checkInDate?: string,
+  checkOutDate?: string,
+  isInclusive = false,
+): boolean {
   if (!checkInDate || !checkOutDate || !dayDate) return true; // No dates = patch all days
   const d = dayDate.slice(0, 10);
-  return d >= checkInDate.slice(0, 10) && d < checkOutDate.slice(0, 10);
+  const ci = checkInDate.slice(0, 10);
+  const co = checkOutDate.slice(0, 10);
+  return isInclusive ? (d >= ci && d <= co) : (d >= ci && d < co);
 }
 
 /**
