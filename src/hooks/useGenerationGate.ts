@@ -218,6 +218,7 @@ export function useGenerationGate() {
             cities: params.cities.length,
             complexity: estimate.complexity.tier,
             multiplier: estimate.complexity.multiplier,
+            idempotencyKey: `trip_generation:${params.tripId}:${params.days}:${params.cities.length}`,
           },
         },
       });

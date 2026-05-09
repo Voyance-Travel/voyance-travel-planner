@@ -648,6 +648,7 @@ export function ItineraryGenerator({
               days: overrideDays,
               totalDays,
               mode: 'partial',
+              idempotencyKey: `trip_generation:${tripId}:partial:${overrideDays}`,
             },
           },
         });
