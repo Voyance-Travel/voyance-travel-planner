@@ -1,12 +1,28 @@
-## Fix 4.1 — IAP receipt validation network retry
+## Fix 4.2 — Push token cleanup on logout
 
-`supabase/functions/validate-iap-receipt/index.ts`:
+**File:** `src/contexts/AuthContext.tsx`
 
-1. Add `fetchWithRetry(url, init, maxAttempts=3)` helper near the top (after imports, before `serve`). Retries on 5xx and thrown network errors with 250ms / 750ms / 2250ms backoff. Apple status-code responses (HTTP 200 + status field) pass through untouched.
-2. Replace prod `fetch(appleVerifyUrl, …)` (lines 76–84) with `fetchWithRetry(...)`.
-3. Replace sandbox-fallback `fetch('https://sandbox.itunes.apple.com/verifyReceipt', …)` (lines 90–98) with `fetchWithRetry(...)`.
+Insert a push-token delete block immediately **before** `await supabase.auth.signOut();` at line 570 (after the `TOUR_KEYS.forEach` save loop ending line 568).
 
-### Verify
+```ts
+// Delete this user's push tokens BEFORE signing out so RLS allows the delete.
+// Prevents notifications meant for this user from reaching the next user
+// who logs in on the same device.
+if (user) {
+  try {
+    const { error: pushDelError } = await supabase
+      .from('push_tokens')
+      .delete()
+      .eq('user_id', user.id);
+    if (pushDelError) {
+      console.error('[Auth] Failed to delete push tokens on logout:', pushDelError);
+    }
+  } catch (pushErr) {
+    console.error('[Auth] Push token cleanup exception:', pushErr);
+  }
+}
 ```
-grep -n "fetchWithRetry" supabase/functions/validate-iap-receipt/index.ts   # 3 hits
-```
+
+Guarded by `if (user)` so already-signed-out logouts don't error. Errors are logged, not thrown — cleanup failure must not block logout.
+
+**Verify:** `grep -n "from('push_tokens').delete" src/contexts/AuthContext.tsx` → 1 hit in logout flow.
