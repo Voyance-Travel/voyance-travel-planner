@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { normalizeUnsplashUrl, PLACEHOLDER_TRAVEL_SRC } from "./utils/unsplash";
+import { registerOAuthDeepLinkHandler } from "@/lib/native/oauthDeepLink";
 
 function installUnsplashSrcNormalizer() {
   const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
@@ -87,5 +88,8 @@ if ('caches' in window) {
     names.forEach(name => caches.delete(name));
   });
 }
+
+// Register once at app startup.
+registerOAuthDeepLinkHandler();
 
 createRoot(document.getElementById("root")!).render(<App />);
