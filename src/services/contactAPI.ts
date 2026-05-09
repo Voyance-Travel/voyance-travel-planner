@@ -53,7 +53,10 @@ export async function submitSimpleContact(data: SimpleContactInput): Promise<Con
   try {
     // Validate input
     const validated = SimpleContactSchema.parse(data);
-    
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id ?? null;
+
     const { data: response, error } = await supabase.functions.invoke('send-contact-email', {
       body: {
         name: validated.name,
@@ -61,6 +64,7 @@ export async function submitSimpleContact(data: SimpleContactInput): Promise<Con
         message: validated.message,
         subject: `Contact from ${validated.name}`,
         type: 'general',
+        userId,
       },
     });
     
@@ -97,7 +101,10 @@ export async function submitContactForm(data: ContactFormInput): Promise<Contact
   try {
     // Validate input
     const validated = ContactFormSchema.parse(data);
-    
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id ?? null;
+
     const { data: response, error } = await supabase.functions.invoke('send-contact-email', {
       body: {
         name: validated.name,
@@ -105,6 +112,7 @@ export async function submitContactForm(data: ContactFormInput): Promise<Contact
         subject: validated.subject,
         message: validated.message,
         type: validated.type,
+        userId,
       },
     });
     

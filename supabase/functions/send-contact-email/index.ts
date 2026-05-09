@@ -14,7 +14,10 @@ interface ContactRequest {
   message: string;
   type?: "general" | "support" | "feedback" | "bug_report" | "feature_request";
   website?: string; // Honeypot field
+  userId?: string | null; // Optional auth user id; gates confirmation email on opt-out preference
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Database-backed rate limiting (survives cold starts)
 import { checkDbRateLimit } from "../_shared/db-rate-limiter.ts";
@@ -85,6 +88,9 @@ const handler = async (req: Request): Promise<Response> => {
     const type = ['general', 'support', 'feedback', 'bug_report', 'feature_request'].includes(rawBody.type) 
       ? rawBody.type 
       : 'general';
+    const userId: string | null = typeof rawBody.userId === 'string' && UUID_RE.test(rawBody.userId)
+      ? rawBody.userId
+      : null;
 
     if (!name || !email || !message) {
       return new Response(
@@ -174,26 +180,48 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Failed to send email to support");
     }
 
-    // Send confirmation to user
-    const confirmationResult = await sendEmail({
-      to: email,
-      subject: "We received your message!",
-      fromName: "Voyance",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #1a1a1a;">Thank you for reaching out, ${safeName}!</h2>
-          <p>We've received your message and will get back to you as soon as possible, typically within 24-48 hours.</p>
-          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="margin-top: 0;">Your message:</h3>
-            <p style="white-space: pre-wrap; color: #666;">${safeMessage}</p>
-          </div>
-          <p>Best regards,<br>The Voyance Team</p>
-        </div>
-      `,
-    });
+    // Send confirmation to user — only if they haven't opted out of emails.
+    // Note: contact-form confirmations are transactional, so we check email_notifications
+    // (the master switch), not marketing_emails.
+    let userOptedOut = false;
+    if (userId) {
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+        { auth: { persistSession: false } },
+      );
+      const { data: prefs } = await supabaseAdmin
+        .from('user_preferences')
+        .select('email_notifications')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (prefs && prefs.email_notifications === false) {
+        userOptedOut = true;
+        console.log(`[send-contact-email] User ${userId} opted out — skipping confirmation`);
+      }
+    }
 
-    if (!confirmationResult.success) {
-      console.warn("Failed to send confirmation email to user");
+    if (!userOptedOut) {
+      const confirmationResult = await sendEmail({
+        to: email,
+        subject: "We received your message!",
+        fromName: "Voyance",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1a1a1a;">Thank you for reaching out, ${safeName}!</h2>
+            <p>We've received your message and will get back to you as soon as possible, typically within 24-48 hours.</p>
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin-top: 0;">Your message:</h3>
+              <p style="white-space: pre-wrap; color: #666;">${safeMessage}</p>
+            </div>
+            <p>Best regards,<br>The Voyance Team</p>
+          </div>
+        `,
+      });
+
+      if (!confirmationResult.success) {
+        console.warn("Failed to send confirmation email to user");
+      }
     }
 
     console.log("Contact email sent successfully");
