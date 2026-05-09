@@ -3254,6 +3254,7 @@ export type Database = {
           is_paid: boolean
           member_id: string
           paid_at: string | null
+          paid_via_settlement: string | null
           percentage: number | null
           updated_at: string
         }
@@ -3265,6 +3266,7 @@ export type Database = {
           is_paid?: boolean
           member_id: string
           paid_at?: string | null
+          paid_via_settlement?: string | null
           percentage?: number | null
           updated_at?: string
         }
@@ -3276,6 +3278,7 @@ export type Database = {
           is_paid?: boolean
           member_id?: string
           paid_at?: string | null
+          paid_via_settlement?: string | null
           percentage?: number | null
           updated_at?: string
         }
@@ -3299,6 +3302,13 @@ export type Database = {
             columns: ["member_id"]
             isOneToOne: false
             referencedRelation: "trip_members_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_splits_paid_via_settlement_fkey"
+            columns: ["paid_via_settlement"]
+            isOneToOne: false
+            referencedRelation: "trip_settlements"
             referencedColumns: ["id"]
           },
         ]
@@ -8082,6 +8092,7 @@ export type Database = {
           is_settled: boolean
           notes: string | null
           settled_at: string | null
+          settled_split_ids: string[] | null
           to_member_id: string
           trip_id: string
           updated_at: string
@@ -8095,6 +8106,7 @@ export type Database = {
           is_settled?: boolean
           notes?: string | null
           settled_at?: string | null
+          settled_split_ids?: string[] | null
           to_member_id: string
           trip_id: string
           updated_at?: string
@@ -8108,6 +8120,7 @@ export type Database = {
           is_settled?: boolean
           notes?: string | null
           settled_at?: string | null
+          settled_split_ids?: string[] | null
           to_member_id?: string
           trip_id?: string
           updated_at?: string
