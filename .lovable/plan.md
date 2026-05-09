@@ -1,39 +1,49 @@
-### Problem
-`viator-book/index.ts` writes Viator confirmation only to `trip_payments.metadata`. `VoucherModal` reads from the activity row (`activity.voucherUrl`, `voucherData`, `confirmationNumber`, `vendorName`, `vendorBookingId`, `cancellationPolicy`, `bookedAt`), so vouchers never appear in the UI.
+# R3.8 — Idempotency for booking-state transitions
 
-### Schema verified
-`public.trip_activities` already has: `voucher_url text`, `voucher_data jsonb`, `confirmation_number text`, `vendor_name text`, `vendor_booking_id text`, `cancellation_policy jsonb`, `booked_at timestamptz`, `external_booking_id text`. **No migration needed.**
+## Background
 
-### Change — `supabase/functions/viator-book/index.ts`
-After the existing `trip_payments` update (line ~284) and **before** the `transition_booking_state` RPC call (line 287), insert a direct update to `trip_activities`:
+The original report assumed duplicate Stripe webhooks could write duplicate rows to `booking_state_logs`. Investigation shows:
 
-```ts
-await serviceSupabase
-  .from('trip_activities')
-  .update({
-    voucher_url: data.voucher?.url ?? null,
-    voucher_data: viatorConfirmation,
-    confirmation_number: data.viatorRef || data.bookingRef || null,
-    external_booking_id: data.bookingRef || null,
-    vendor_name: 'Viator',
-    vendor_booking_id: data.viatorRef || data.bookingRef || null,
-    cancellation_policy: data.cancellationPolicy ?? null,
-    booked_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  })
-  .eq('id', activityId);
-```
+- The table referenced by the RPC (`public.booking_state_log`) was **deliberately dropped** in migration `20260125212256` along with other legacy booking tables.
+- `transition_booking_state` still ends with `INSERT INTO booking_state_log (...)`. That INSERT errors on every call, aborting the transition transaction. This is a latent bug that almost certainly caused state transitions to silently fail in production.
+- The real audit trail today is the `state_history` JSONB array appended to `trip_activities` earlier in the same RPC.
 
-Order matters: write voucher fields first so any client refetch triggered by the state-transition signal sees the populated row.
+So R3.8 has two pieces: make the JSONB append idempotent on `trigger_reference`, and remove the dead INSERT that's been swallowing every transition.
 
-### Out of scope
-- No schema migration (columns already exist).
-- No changes to `transition_booking_state` RPC — it continues to manage `booking_state` + `state_history`.
-- No changes to the failure path; refund logic stays as-is.
-- `VoucherModal` already maps these columns via the activity-loader; no UI change.
+## Migration: rewrite `transition_booking_state`
 
-### Verification
-After a successful Viator booking:
-1. `trip_activities` row for `activityId` shows `voucher_url`, `voucher_data`, `confirmation_number`, `vendor_booking_id`, `booked_at` populated.
-2. Opening `VoucherModal` shows confirmation number, Download Voucher button, and cancellation policy without a manual refresh.
-3. Idempotency: repeat call overwrites with identical values (no constraint violation).
+Single migration that `CREATE OR REPLACE FUNCTION`s the RPC. Behavior changes:
+
+1. **Remove** the trailing `INSERT INTO booking_state_log (...) VALUES (...)` block entirely. The table no longer exists.
+2. **Idempotency short-circuit**: before the `UPDATE trip_activities`, when `p_trigger_reference IS NOT NULL`, check whether the most recent element of `state_history` already matches both `new_state = p_new_state` and `trigger_reference = p_trigger_reference`. If so, return early:
+   ```json
+   { "success": true, "idempotent": true, "previous_state": ..., "new_state": ... }
+   ```
+   No state mutation, no duplicate history entry. Webhook callers treat this as success.
+3. **Persist `trigger_reference` in the JSONB entry**. Today the appended `state_history` element only stores `{from, to, at, by}`. Extend it to also include `trigger_source` and `trigger_reference` so the idempotency check has something to look at and the audit trail actually records the Stripe session/charge id.
+4. Everything else (auth check, allowed-transition matrix, `booking_state` / `booked_at` / `cancelled_at` / `refunded_at` writes) stays exactly as-is.
+
+Detection logic uses `jsonb_path_exists` against the array (or `state_history -> -1 ->> 'trigger_reference'` if we only want to dedupe the immediately-previous transition — same outcome for the webhook double-fire case).
+
+## Webhook side
+
+No code change in `stripe-webhook/index.ts` is required. Both call sites (lines 286 and 767) already pass `p_trigger_reference` (Stripe session/charge id). The new `idempotent: true` field is additive — existing error handling continues to work.
+
+Optional follow-up note (not in this change): the `if (!stateError)` branches will start succeeding on duplicates instead of erroring. That's the intended behavior for an idempotent endpoint.
+
+## Out of scope
+
+- Re-creating the `booking_state_log` table. The team retired it; we're not bringing it back.
+- Changing the trigger_reference values the webhook sends.
+- Backfilling historical `state_history` entries with trigger_reference (only forward-looking transitions get the new fields).
+- Any change to `trip_payments` UNIQUE constraints (already handles payment-row dedup correctly).
+
+## Verification
+
+1. Replay the same Stripe webhook twice against a test trip → first call returns `success: true, idempotent: false`, second returns `success: true, idempotent: true`. `state_history` array length grows by exactly 1.
+2. Call the RPC normally from any other code path with a fresh `p_trigger_reference` → state transitions and history grows as before.
+3. Confirm in logs that `transition_booking_state failed` warnings (from the dead INSERT) stop appearing for fresh transitions.
+
+## Memory
+
+Add a Core entry under "Stuck Pending Payment Recovery" referencing the new idempotency contract so future webhook handlers know they can rely on it.
