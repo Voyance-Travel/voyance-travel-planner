@@ -1,30 +1,35 @@
-## Fix 5.1 — INSERT (and DELETE) policy for edit collaborators on `trip_activities`
+## Fix 5.2 — Invalidate invite tokens on collaborator removal
 
-**Problem:** Migration `20260302124656` granted edit collaborators SELECT + UPDATE on `trip_activities` but omitted INSERT/DELETE — so collaborators with edit permission can't add or remove activities on a shared trip.
+**File:** `src/services/tripCollaboratorsAPI.ts` (function `removeTripCollaborator`, around line 300–371)
 
-**Helper verified** (migration `20260119182913`): `is_trip_collaborator(trip_id, auth.uid(), true)` requires `accepted_at IS NOT NULL` AND `permission ∈ {'edit','admin'}` — view-only collaborators stay blocked.
+**Problem:** When an owner removes a collaborator, the `trip_invites` row that the user accepted to join stays in the table. The removed user can re-open the original invite link and rejoin without owner intervention — auth bypass.
 
-**New migration** adds two policies (Postgres OR's policies, so this composes with the existing owner INSERT policy from `20260118135000`):
+**Change:** After the `trip_members` delete (line 333) and before the journey-legs cascade (line 335), add a best-effort delete on `trip_invites` filtered by `trip_id` + `accepted_by`:
 
-```sql
-CREATE POLICY "Collaborators with edit can insert trip activities"
-ON public.trip_activities
-FOR INSERT
-TO authenticated
-WITH CHECK (
-  public.is_trip_collaborator(trip_id, auth.uid(), true)
-);
+```ts
+// Invalidate any pending invite tokens that this user accepted to join.
+// Without this, the removed user could re-accept the same invite and rejoin.
+try {
+  const { error: inviteError } = await supabase
+    .from('trip_invites')
+    .delete()
+    .eq('trip_id', collab.trip_id)
+    .eq('accepted_by', collab.user_id);
 
-CREATE POLICY "Collaborators with edit can delete trip activities"
-ON public.trip_activities
-FOR DELETE
-TO authenticated
-USING (
-  public.is_trip_collaborator(trip_id, auth.uid(), true)
-);
+  if (inviteError) {
+    console.error('[TripCollaborators] Error invalidating invite tokens:', inviteError);
+  }
+} catch (e) {
+  console.error('[TripCollaborators] Invite token cleanup exception:', e);
+}
 ```
 
+Confirmed `trip_invites` has both `trip_id` and `accepted_by` columns. Future invites issued by the owner have a fresh `id` with `accepted_by = NULL`, so they are unaffected.
+
+**Scope kept minimal:** Only the current `trip_id` is cleaned, matching the spec. Sibling-leg invite cleanup is not in scope here (collaborator-row cascade across legs already exists; invites are per-trip and owner can re-issue).
+
 **Verification:**
-- `ls supabase/migrations/ | grep collaborator_insert_delete` → new file exists
-- `grep -rn "Collaborators with edit can (insert|delete) trip activities" supabase/migrations/` → both policies present
-- Manual: sign in as edit collaborator on a shared trip → "Add activity" succeeds (previously failed with permission denied).
+- `grep -n "from('trip_invites').delete" src/services/tripCollaboratorsAPI.ts` → 1 hit inside `removeTripCollaborator`.
+- Smoke test: owner invites B → B accepts → owner removes B → B re-opens link → resolves to `invalid_token`.
+
+No DB migration, no other files touched.
