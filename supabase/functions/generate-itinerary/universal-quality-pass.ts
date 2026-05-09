@@ -17,7 +17,8 @@
 
 import { enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
 import { clampBookendEndTime } from '../_shared/clamp-bookend.ts';
-import { fixPlaceholdersForDay, nuclearPlaceholderSweep, nuclearWellnessSweep, nuclearCrossCitySweep } from './fix-placeholders.ts';
+import { fixPlaceholdersForDay, nuclearPlaceholderSweep, nuclearWellnessSweep, nuclearCrossCitySweep, nuclearDiningStrip } from './fix-placeholders.ts';
+import { pruneOrphanTransits } from '../_shared/orphan-transit.ts';
 import {
   checkAndApplyFreeVenue,
   enforceMarketDiningCap,
