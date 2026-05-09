@@ -769,6 +769,61 @@ serve(async (req) => {
               p_trigger_source: 'stripe_webhook', p_trigger_reference: latestRefund?.id,
               p_metadata: { refund_amount: charge.amount_refunded },
             });
+
+            // ── Vendor-side Viator cancellation ──
+            try {
+              const { data: activityRow } = await supabaseAdmin
+                .from('trip_activities')
+                .select('id, metadata, vendor_booking_id')
+                .eq('id', activityId)
+                .maybeSingle();
+
+              const meta = (activityRow?.metadata ?? {}) as Record<string, any>;
+              const viatorBookingRef: string | undefined =
+                meta.bookingRef || meta.viator_booking_ref || activityRow?.vendor_booking_id || undefined;
+
+              if (viatorBookingRef && !meta.vendor_cancelled_at) {
+                const apiKey = Deno.env.get('VIATOR_API_KEY');
+                if (!apiKey) {
+                  logError('VIATOR_API_KEY not set; cannot cancel vendor booking', { activityId, viatorBookingRef });
+                } else {
+                  const resp = await fetch(
+                    `https://api.viator.com/partner/bookings/${encodeURIComponent(viatorBookingRef)}/cancel`,
+                    {
+                      method: 'POST',
+                      headers: {
+                        'Accept': 'application/json;version=2.0',
+                        'Content-Type': 'application/json',
+                        'exp-api-key': apiKey,
+                      },
+                      body: JSON.stringify({ reason: 'CUSTOMER_REQUESTED' }),
+                    },
+                  );
+                  const bodyText = await resp.text();
+                  const nextMeta = {
+                    ...meta,
+                    ...(resp.ok
+                      ? { vendor_cancelled_at: new Date().toISOString(), vendor_cancel_response: bodyText.slice(0, 500) }
+                      : {
+                          vendor_cancel_failed: true,
+                          vendor_cancel_status: resp.status,
+                          vendor_cancel_error: bodyText.slice(0, 500),
+                          vendor_cancel_attempted_at: new Date().toISOString(),
+                        }),
+                  };
+                  await supabaseAdmin.from('trip_activities').update({ metadata: nextMeta }).eq('id', activityId);
+                  if (resp.ok) log('Viator vendor cancellation succeeded', { activityId, viatorBookingRef });
+                  else logError('Viator vendor cancellation failed', { activityId, viatorBookingRef, status: resp.status });
+                }
+              } else if (!viatorBookingRef) {
+                log('charge.refunded: no Viator booking ref on activity, skipping vendor cancel', { activityId });
+              } else {
+                log('charge.refunded: vendor already cancelled, skipping', { activityId, vendor_cancelled_at: meta.vendor_cancelled_at });
+              }
+            } catch (cancelErr) {
+              logError('Viator cancel exception', { activityId, error: cancelErr instanceof Error ? cancelErr.message : String(cancelErr) });
+              // Never throw — webhook must still 200 to Stripe.
+            }
           }
         }
 
