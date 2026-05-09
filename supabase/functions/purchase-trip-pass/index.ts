@@ -102,6 +102,9 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
 
+    // Deterministic idempotency key — one trip pass per (user, trip)
+    const idempotencyKey = `trip_pass:${userId}:${trip_id}`.slice(0, 255);
+
     // Create checkout session for Trip Pass
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -121,7 +124,7 @@ serve(async (req) => {
         type: 'trip_pass',
         destination: trip.destination,
       },
-    });
+    }, { idempotencyKey });
 
     logStep("Checkout session created", { sessionId: session.id, tripId: trip_id });
 

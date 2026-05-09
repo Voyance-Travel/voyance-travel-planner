@@ -75,6 +75,11 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
 
+    // Deterministic idempotency key — collapses duplicate clicks within the same minute,
+    // but lets a deliberate later top-up of the same amount go through.
+    const minuteBucket = Math.floor(Date.now() / 60000);
+    const idempotencyKey = `credit_topup:${userId}:${amount_cents}:${minuteBucket}`.slice(0, 255);
+
     // Create a one-time payment session for credits
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -100,7 +105,7 @@ serve(async (req) => {
         type: 'credit_topup',
         amount_cents: amount_cents.toString(),
       },
-    });
+    }, { idempotencyKey });
 
     logStep("Checkout session created", { sessionId: session.id, amount: amount_cents });
 

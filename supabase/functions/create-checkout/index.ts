@@ -131,6 +131,9 @@ serve(async (req) => {
       if (productName) sessionMetadata.product_name = productName;
     }
 
+    // Deterministic idempotency key — same logical purchase intent reuses the same Stripe session
+    const idempotencyKey = `checkout:${userId}:${priceId}:${mode}:${days ?? ''}:${returnPath ?? ''}`.slice(0, 255);
+
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -145,7 +148,7 @@ serve(async (req) => {
       success_url: `${origin}${successPath}`,
       cancel_url: `${origin}${cancelPath}`,
       metadata: sessionMetadata,
-    });
+    }, { idempotencyKey });
 
     logStep("Checkout session created", { sessionId: session.id });
 
