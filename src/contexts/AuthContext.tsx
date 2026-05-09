@@ -597,7 +597,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  const updateUser = (updates: Partial<User>) => {
+  const updateUser = async (updates: Partial<User>): Promise<void> => {
     if (user) {
       // Validate name and email before saving
       if (updates.name !== undefined && !updates.name.trim()) {
@@ -610,17 +610,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setUser({ ...user, ...updates });
-      
-      // Sync to Supabase using upsert to prevent "0 rows updated" failures
+
+      // Sync to Supabase using upsert to prevent "0 rows updated" failures.
+      // Awaited + thrown so callers can react to failures (toast, retry, etc.).
       if (session?.user) {
-        supabase.from('profiles').upsert({
+        const { error } = await supabase.from('profiles').upsert({
           id: session.user.id,
           display_name: updates.name,
           avatar_url: updates.avatar,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' }).then(({ error }) => {
-          if (error) console.error('[Auth] Error updating profile:', error);
-        });
+        }, { onConflict: 'id' });
+        if (error) {
+          console.error('[Auth] Error updating profile:', error);
+          throw error;
+        }
       }
     }
   };
