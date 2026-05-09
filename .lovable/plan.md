@@ -1,41 +1,55 @@
-## Root cause
+## Diagnosis
 
-The `generate-itinerary` edge function is failing to boot:
+Your two-layer scrub system is correct, but I found a **concrete UI leak path** that contradicts part of your analysis:
 
-```
-worker boot error: Uncaught SyntaxError: Identifier 'titleLower' has already been declared
-  at action-repair-costs.ts:386:13
-```
+1. **No frontend code reads `activity.reservationUrgency` as JSX.** A repo-wide search for `reservationUrgency` / `reservation_urgency` in `src/` returned **zero hits**. Path #2 (unconditional render of the JSON field) is not the cause.
 
-Because the function never starts, every browser request fails the CORS preflight (the OPTIONS response never returns), which is what produces:
+2. **`src/components/itinerary/ItineraryEditor.tsx` line 1146 renders `extActivity.tips` raw — no `sanitizeActivityText()` wrapper.** This is the only activity-card render of `tips` in the codebase that bypasses the sanitizer. `EditorialItinerary.tsx` correctly wraps every `activity.tips` read in `sanitizeActivityText(...)`. So when an extracted activity (manual paste / external import / saved-before-scrubber-existed) carries `"Reservation Urgency: ."` in its `tips` field, it renders verbatim from this single component.
 
-- `CORS policy: Response to preflight request doesn't pass access control check`
-- `FunctionsFetchError: Failed to send a request to the Edge Function`
-- `[EditorialItinerary] Backend save failed`
-
-The `[Itinerary reconcile] Day totals exceed trip total` warning is downstream noise from the failed save.
-
-## Source of the duplicate
-
-In `supabase/functions/generate-itinerary/action-repair-costs.ts`, inside the same activity-loop scope:
-
-- Line 304: `const titleLower = title.toLowerCase();` (used by the bar-cap / drinks check)
-- Line 366: `const titleLower = title.toLowerCase();` (re-declared for the Michelin drinks bypass — added in the recent "Repair-Costs Bar Cap & Drinks Bypass Parity" change)
-
-Two `const` declarations of the same identifier in the same block = boot-time `SyntaxError`, so the function never deploys cleanly.
+3. Backend `scrubActivity` runs at save (`action-save-itinerary.ts:139`) and in `repair-day` §10b — fillers from `fill-dead-gaps.ts` flow through save, so their bodies do get scrubbed. Already-persisted trips (saved before the scrubber regexes were added, or imported via the manual paste path) keep the leaked text in DB, and the UI sanitizer is the only thing standing between DB and screen.
 
 ## Fix
 
-Remove the second `const titleLower = title.toLowerCase();` at line 366 and rely on the one already declared at line 304. The drinksFraming line below it keeps working unchanged because `titleLower` is still in scope.
+Wrap the one unsanitized site so the existing UI scrubber (which already covers this exact pattern at `activityNameSanitizer.ts:387–388`) actually runs:
 
-After the edit, redeploy `generate-itinerary` and verify:
+```text
+src/components/itinerary/ItineraryEditor.tsx (line 1141-1149)
+─────────────────────────────────────────────────────────────
+Replace direct {extActivity.tips} render with:
 
-1. `supabase--edge_function_logs generate-itinerary` shows a clean boot (no `BootFailure`).
-2. A test call via `supabase--curl_edge_functions` returns 200 / proper JSON instead of failing CORS.
-3. In the preview, an itinerary save no longer logs `FunctionsFetchError` or the CORS error.
+  {(() => {
+    const t = sanitizeActivityText(extActivity.tips);
+    return t ? (
+      <div className="...">
+        <Sparkles ... />
+        <div>
+          <span ...>Insider Tip</span>
+          <p ...>{t}</p>
+        </div>
+      </div>
+    ) : null;
+  })()}
+
+The outer `{extActivity.tips && (...)}` becomes redundant —
+sanitized empty string already gates the render via the IIFE.
+Add: import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
+(if not already imported in this file).
+```
+
+That's the only change. No backend edit, no regex change, no scrubActivity wiring change — the sanitizer regexes already match `Reservation Urgency: .` / `reservationUrgency: .` / camelCase / snake_case / orphan-empty-label shapes.
+
+## Why not also add a render gate on `reservationUrgency` JSON?
+
+Because nothing reads it. Adding a guard for a field no component renders is dead code. If the field is ever surfaced in the UI later, the existing `scrubTitleLeaks()` already deletes leaked values from the activity object at save, and a future component should call `sanitizeActivityText` (or a new typed helper) like every other text field.
+
+## Verification
+
+After the edit, the existing test suites cover the regex behavior:
+- `supabase/functions/_shared/__tests__/prompt-leak-scrub.test.ts`
+- `src/utils/__tests__/activityNameSanitizer.test.ts` (extend with one render-gate case if you want a regression lock)
+
+No edge function redeploy needed — UI-only change.
 
 ## Files touched
 
-- `supabase/functions/generate-itinerary/action-repair-costs.ts` — delete one line (the duplicate `const titleLower` at ~366).
-
-No other files, no schema changes, no UI changes.
+- `src/components/itinerary/ItineraryEditor.tsx` — wrap `extActivity.tips` render in `sanitizeActivityText`.
