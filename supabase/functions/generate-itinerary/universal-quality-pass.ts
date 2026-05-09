@@ -248,6 +248,17 @@ export async function universalQualityPass(
     console.warn(`[QUALITY] Wellness nuclear sweep mutated/removed ${wellnessSweepCount} placeholder(s) in Day ${dayIndex + 1}`);
   }
 
+  // ── Step 4d: Nuclear DINING STRIP — splice survivors that even the late
+  // fallback can't fix, then prune orphan transit connectors. ──
+  const diningStripCount = nuclearDiningStrip(result, city, diningConfig);
+  if (diningStripCount > 0) {
+    console.warn(`[QUALITY] Dining nuclear strip removed ${diningStripCount} unfillable placeholder(s) in Day ${dayIndex + 1}`);
+  }
+  const orphanCount = pruneOrphanTransits(result);
+  if (orphanCount > 0) {
+    console.warn(`[QUALITY] Orphan-transit cleanup removed ${orphanCount} connector(s) in Day ${dayIndex + 1}`);
+  }
+
   // ── Step 5: Free venue pricing ──
   for (const act of result) {
     checkAndApplyFreeVenue(act, label);
