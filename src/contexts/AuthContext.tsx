@@ -486,12 +486,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Build emailRedirectTo — include invite token so email confirmation
     // lands on /?inviteToken=xyz and OAuthReturnHandler picks it up
-    let redirectUrl = `${window.location.origin}/`;
+    const { Capacitor } = await import('@capacitor/core');
+    const baseUrl = Capacitor.isNativePlatform()
+      ? 'voyance://auth/callback'
+      : `${window.location.origin}/`;
+
+    let redirectUrl = baseUrl;
     try {
       const { peekPendingInviteToken } = await import('@/utils/inviteTokenPersistence');
       const pendingToken = peekPendingInviteToken();
       if (pendingToken) {
-        redirectUrl = `${window.location.origin}/?inviteToken=${encodeURIComponent(pendingToken)}`;
+        const sep = baseUrl.includes('?') ? '&' : '?';
+        redirectUrl = `${baseUrl}${sep}inviteToken=${encodeURIComponent(pendingToken)}`;
       }
     } catch { /* ignore */ }
 

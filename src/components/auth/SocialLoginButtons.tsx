@@ -7,6 +7,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { saveReturnPath } from '@/utils/authReturnPath';
 import { savePendingInviteToken, extractInviteTokenFromPath } from '@/utils/inviteTokenPersistence';
 import { toast } from 'sonner';
+import { Capacitor } from '@capacitor/core';
+
+function getAuthRedirectUrl(): string {
+  if (Capacitor.isNativePlatform()) {
+    // Native (iOS/Android): use the registered scheme so the OS routes the
+    // OAuth callback back to our app via App.addListener('appUrlOpen', ...).
+    return 'voyance://auth/callback';
+  }
+  // Web: use the current origin.
+  return `${window.location.origin}/auth/callback`;
+}
 
 const isCustomDomain = () =>
   !window.location.hostname.includes('lovable.app') &&
@@ -45,7 +56,7 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'apple',
           options: {
-            redirectTo: window.location.origin,
+            redirectTo: getAuthRedirectUrl(),
             skipBrowserRedirect: true,
           },
         });
@@ -56,7 +67,7 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
         }
       } else {
         const result = await lovable.auth.signInWithOAuth('apple', {
-          redirect_uri: window.location.origin,
+          redirect_uri: getAuthRedirectUrl(),
         });
         if (result.redirected) return;
         if (result.error) throw result.error;
@@ -77,7 +88,7 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: window.location.origin,
+            redirectTo: getAuthRedirectUrl(),
             skipBrowserRedirect: true,
           },
         });
@@ -88,7 +99,7 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
         }
       } else {
         const result = await lovable.auth.signInWithOAuth('google', {
-          redirect_uri: window.location.origin,
+          redirect_uri: getAuthRedirectUrl(),
         });
         if (result.redirected) return;
         if (result.error) throw result.error;
