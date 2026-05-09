@@ -17,6 +17,7 @@ import {
 } from '../day-validation.ts';
 import type { RequiredMeal } from '../meal-policy.ts';
 import { hasBodyPromptLeak, hasTitleLeak } from '../../_shared/prompt-leak-scrub.ts';
+import { WALK_HARD_DISTANCE_METERS, WALK_HARD_DURATION_MINUTES } from '../../_shared/transit-mode.ts';
 
 // =============================================================================
 // GENERIC VENUE PATTERNS — placeholders the AI sometimes generates
@@ -167,6 +168,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkPunctuationOnlyFields(activities, results);
   checkSentenceCompleteness(activities, results);
   checkPriceDuplication(activities, results);
+  checkWalkOverThreshold(activities, results);
   checkCategoryVenueCoherence(activities, results);
 
   // --- CROSS-DAY: previous day ended with checkout, this day has hotel-bound activities ---
@@ -1045,7 +1047,32 @@ function checkPriceDuplication(activities: StrictActivityMinimal[], results: Val
   }
 }
 
-const CASUAL_VIBE_RE = /\b(casual|neighborhood|trattoria|bistro|hole[- ]in[- ]the[- ]wall|laid[- ]back)\b/i;
+/**
+ * WALK_OVER_THRESHOLD — any transit card with method=walk/walking that
+ * exceeds 30 min OR 1500 m. Critical so validation-gate fires even if
+ * repair-day is bypassed.
+ */
+function checkWalkOverThreshold(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  for (let i = 0; i < activities.length; i++) {
+    const act = activities[i] as any;
+    const cat = String(act?.category || '').toLowerCase();
+    if (cat !== 'transport' && cat !== 'transit') continue;
+    const t = act?.transportation || {};
+    const method = String(t.method || '').toLowerCase();
+    if (method !== 'walk' && method !== 'walking') continue;
+    const dur = Number(t.durationMinutes) || 0;
+    const dist = Number(t.distanceMeters) || 0;
+    if (dur <= WALK_HARD_DURATION_MINUTES && dist <= WALK_HARD_DISTANCE_METERS) continue;
+    results.push({
+      code: FAILURE_CODES.WALK_OVER_THRESHOLD,
+      severity: 'critical',
+      message: `Transit "${act.title}" is walk for ${dur}min / ${dist}m — exceeds ${WALK_HARD_DURATION_MINUTES}min/${WALK_HARD_DISTANCE_METERS}m threshold`,
+      activityIndex: i,
+      field: 'transportation',
+      autoRepairable: true,
+    });
+  }
+}
 let _fineDiningMap: Record<string, number> | null = null;
 async function getFineDiningMap(): Promise<Record<string, number>> {
   if (_fineDiningMap) return _fineDiningMap;
