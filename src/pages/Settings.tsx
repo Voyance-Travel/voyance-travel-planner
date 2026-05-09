@@ -128,7 +128,7 @@ export default function Settings() {
           setPushNotifications(prefsResult.data.push_notifications ?? false);
           setMarketingEmails(prefsResult.data.marketing_emails ?? false);
           setTripReminders(prefsResult.data.trip_reminders ?? true);
-          setPriceAlerts(prefsResult.data.price_alerts ?? true);
+          
           setBudgetAlerts(prefsResult.data.budget_alerts ?? true);
           setPhoneNumber(prefsResult.data.phone_number ?? '');
           setTravelAgentMode(prefsResult.data.travel_agent_mode ?? false);
