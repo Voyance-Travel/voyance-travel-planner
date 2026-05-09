@@ -163,6 +163,17 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
     checkWrongCityDemonym(day, destination, results);
   }
 
+  // --- SEMANTIC GATE CHECKS (validation-gate companion) ---
+  checkPunctuationOnlyFields(activities, results);
+  checkSentenceCompleteness(activities, results);
+  checkPriceDuplication(activities, results);
+  checkCategoryVenueCoherence(activities, results);
+
+  // --- CROSS-DAY: previous day ended with checkout, this day has hotel-bound activities ---
+  if (previousDays.length > 0 && !isFirstDay) {
+    checkCrossDayCheckoutHotelLeak(activities, previousDays[previousDays.length - 1], results);
+  }
+
   return results;
 }
 
