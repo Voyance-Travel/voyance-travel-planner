@@ -341,7 +341,8 @@ export async function syncActivitiesToCostTable(
     numTravelers?: number;
     source?: string;
     costReferenceId?: string | null;
-  }>
+  }>,
+  liveActivityIds?: string[]
 ): Promise<number> {
   // activity_id is now TEXT — accept all IDs
   const validActivities = activities.filter((a) => a.id);
@@ -357,6 +358,45 @@ export async function syncActivitiesToCostTable(
     source: a.source || 'reference',
     cost_reference_id: a.costReferenceId || null,
   }));
+
+  // ─── ORPHAN-RESCUE PRE-PASS (RS.M.B2) ─────────────────────────────────
+  // For incoming rows whose activity_id has no existing activity_costs row,
+  // attempt to migrate paid state from a stale same-(day, category) orphan
+  // before the upsert/cleanup pair runs. The RPC uses FOR UPDATE SKIP LOCKED
+  // so concurrent rescuers (two tabs, assistant + manual edit) cannot both
+  // grab the same target row.
+  try {
+    const { data: existingPairs } = await supabase
+      .from('activity_costs')
+      .select('activity_id')
+      .eq('trip_id', tripId);
+    const existingIds = new Set((existingPairs || []).map((r: { activity_id: string }) => r.activity_id));
+    const liveIds = liveActivityIds && liveActivityIds.length
+      ? liveActivityIds
+      : rows.map((r) => r.activity_id);
+    const toRescue = rows.filter((r) => !existingIds.has(r.activity_id));
+    let rescued = 0;
+    for (const r of toRescue) {
+      try {
+        // Type assertion: RPC signature not yet in generated types until next regen.
+        const { data, error } = await (supabase as any).rpc('rescue_orphan_cost_row', {
+          p_trip_id: tripId,
+          p_day_number: r.day_number,
+          p_category: r.category,
+          p_new_activity_id: r.activity_id,
+          p_live_activity_ids: liveIds,
+        });
+        if (!error && data && (data as { success?: boolean }).success) rescued++;
+      } catch (rpcEx) {
+        console.warn('[syncActivitiesToCostTable] rescue rpc failed (best-effort):', rpcEx);
+      }
+    }
+    if (rescued > 0) {
+      console.log(`[syncActivitiesToCostTable] Rescued ${rescued} orphan cost rows for trip ${tripId}`);
+    }
+  } catch (rescueEx) {
+    console.warn('[syncActivitiesToCostTable] orphan-rescue pre-pass failed (best-effort):', rescueEx);
+  }
 
   // Split into chunks of 20 to prevent single-batch failures
   const CHUNK_SIZE = 20;
