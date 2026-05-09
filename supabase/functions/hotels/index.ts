@@ -501,7 +501,7 @@ async function searchHotels(params: HotelSearchParams & { skipCache?: boolean })
           pricePerNight,
           totalPrice: pricePerNight * nights,
           price: pricePerNight * nights,
-          currency: 'USD',
+          currency: (params.currency || 'usd').toUpperCase(),
           roomType: 'Standard Room',
           bedType: 1,
           description: `Comfortable stay at ${hotelName} in ${neighborhood}, ${cityName}`,
@@ -571,7 +571,7 @@ function generateFallbackHotels(params: HotelSearchParams, destination: string):
     pricePerNight: 120 + (index * 25),
     totalPrice: (120 + (index * 25)) * nights,
     price: (120 + (index * 25)) * nights,
-    currency: 'USD',
+    currency: (params.currency || 'usd').toUpperCase(),
     roomType: ['Standard Room', 'Deluxe Room', 'Suite'][index % 3],
     bedType: 1,
     description: `A comfortable stay in the heart of ${destination}`,
@@ -1068,6 +1068,33 @@ serve(async (req) => {
     const body = await req.json();
     console.log('[Hotels] Request:', body.action || 'search');
     if (body.tripId) costTracker.setTripId(body.tripId);
+
+    // ============= CURRENCY RESOLUTION =============
+    const SUPPORTED_CURRENCIES = new Set([
+      'usd','eur','gbp','cad','aud','chf','jpy','sek','nok','dkk','nzd',
+    ]);
+    let tripCurrency = String(body?.currency || '').toLowerCase();
+    if (!tripCurrency && body?.tripId) {
+      try {
+        const admin = getSupabaseAdmin();
+        const { data: trip } = await admin
+          .from('trips')
+          .select('budget_currency')
+          .eq('id', body.tripId)
+          .maybeSingle();
+        if (trip?.budget_currency) tripCurrency = String(trip.budget_currency).toLowerCase();
+      } catch (e) {
+        console.warn('[Hotels] trip currency lookup failed:', e);
+      }
+    }
+    if (!tripCurrency) tripCurrency = 'usd';
+    if (!SUPPORTED_CURRENCIES.has(tripCurrency)) {
+      return new Response(
+        JSON.stringify({ error: `Unsupported currency: ${tripCurrency.toUpperCase()}`, code: 'UNSUPPORTED_CURRENCY' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    body.currency = tripCurrency;
 
     // Hotel booking action
     if (body.action === 'book') {
