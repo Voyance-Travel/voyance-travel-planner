@@ -538,7 +538,7 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
       category: toBudgetCategory(row.category),
       entry_type: (isPaid || isLogistics ? 'committed' : 'planned') as EntryType,
       amount_cents: totalCents,
-      currency: 'USD',
+      currency: (row as any).currency || tripCurrency,
       description,
       day_number: row.day_number,
       activity_id: row.activity_id,
