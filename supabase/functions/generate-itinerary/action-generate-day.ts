@@ -328,6 +328,24 @@ export async function handleGenerateDay(
       generatedDay = buildPlaceholderDay('no tool_calls or content in AI response');
     }
 
+    // RS.M.I3: cache the meal policy used during generation so action-save-itinerary
+    // can prefer it instead of re-deriving from possibly-changed flight times.
+    if (dayMealPolicy && generatedDay) {
+      generatedDay.metadata = generatedDay.metadata || {};
+      generatedDay.metadata.quality = generatedDay.metadata.quality || {};
+      generatedDay.metadata.quality.meal_policy_at_generation = {
+        dayMode: dayMealPolicy.dayMode,
+        requiredMeals: dayMealPolicy.requiredMeals,
+        isFullExplorationDay: dayMealPolicy.isFullExplorationDay,
+        arrivalTime24: (facts as any)?.flightContext?.arrivalTime24 || null,
+        departureTime24:
+          (facts as any)?.flightContext?.returnDepartureTime24 ||
+          (facts as any)?.flightContext?.returnDepartureTime ||
+          null,
+        generated_at: new Date().toISOString(),
+      };
+    }
+
     // End parse phase, start post-processing
     if (innerTimer) {
       innerTimer.endPhase(`parse_response_day_${dayNumber}`);
