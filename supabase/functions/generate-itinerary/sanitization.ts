@@ -11,6 +11,7 @@ import {
   MAX_WALK_DISTANCE_METERS,
   MAX_WALK_DURATION_MINUTES,
 } from '../_shared/transit-mode.ts';
+import { isTransitActivity } from '../_shared/transit-detect.ts';
 
 // =============================================================================
 // ALWAYS-FREE VENUE PATTERNS — shared across sanitization, repair, and generation
@@ -850,14 +851,6 @@ export function enforceBarNightcapPriceCap(activity: Record<string, any>, logPre
 
 const TRANSIT_TITLE_RE_FOR_GUARD = /^(?:Travel|Taxi|Walk|Walking|Bus|Metro|Tram|Train|Drive|Ride|Ferry|Uber|Rideshare)\s+(?:to|from|along|through)\s+/i;
 const WALK_METHODS = new Set(['walk', 'walking', 'on foot', 'foot']);
-
-function isTransitActivity(activity: any): boolean {
-  if (!activity || typeof activity !== 'object') return false;
-  const cat = String(activity.category || activity.type || '').toLowerCase();
-  if (cat === 'transit' || cat === 'transport' || cat === 'transportation' || cat === 'travel') return true;
-  const title = String(activity.title || activity.name || '');
-  return TRANSIT_TITLE_RE_FOR_GUARD.test(title);
-}
 
 function formatDurationMin(min: number): string {
   if (min < 60) return `${min} min`;

@@ -13,8 +13,11 @@
  *      following activity's title or venue name.
  */
 
-const TRANSIT_CATS = new Set(['transport', 'transit']);
-const TRANSIT_TITLE_RE = /^\s*(?:walk|travel|transfer|drive|ride|taxi|train|bus|metro|tram|ferry|boat|water taxi|vaporetto)\s+to\s+(.+?)\s*$/i;
+import { isTransitActivity } from './transit-detect.ts';
+export { isTransitActivity };
+
+// Local regex for extractTransitTarget — needs the "to <X>" capture group.
+const TRANSIT_TO_TARGET_RE = /^\s*(?:walk|travel|transfer|drive|ride|taxi|train|bus|metro|tram|ferry|boat|water taxi|vaporetto)\s+to\s+(.+?)\s*$/i;
 /**
  * Logistics destinations whose transit card legitimately ends the day —
  * the actual flight/train card lives in trip metadata, not activities.
@@ -22,18 +25,10 @@ const TRANSIT_TITLE_RE = /^\s*(?:walk|travel|transfer|drive|ride|taxi|train|bus|
  */
 const LOGISTICS_TARGET_RE = /\b(airport|station|terminal|port|cruise terminal|ferry terminal|train station|gare|stazione|hbf|hauptbahnhof)\b/i;
 
-export function isTransitActivity(act: any): boolean {
-  if (!act) return false;
-  const cat = String(act.category || '').toLowerCase();
-  if (TRANSIT_CATS.has(cat)) return true;
-  const title = String(act.title || '');
-  return TRANSIT_TITLE_RE.test(title);
-}
-
 /** Extract the "to <X>" destination name from a transit card title. Returns null when not present. */
 export function extractTransitTarget(act: any): string | null {
   const title = String(act?.title || '');
-  const m = title.match(TRANSIT_TITLE_RE);
+  const m = title.match(TRANSIT_TO_TARGET_RE);
   if (!m) return null;
   return m[1].trim().toLowerCase();
 }

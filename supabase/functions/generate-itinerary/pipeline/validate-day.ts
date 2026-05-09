@@ -18,6 +18,7 @@ import {
 import type { RequiredMeal } from '../meal-policy.ts';
 import { hasBodyPromptLeak, hasTitleLeak } from '../../_shared/prompt-leak-scrub.ts';
 import { WALK_HARD_DISTANCE_METERS, WALK_HARD_DURATION_MINUTES } from '../../_shared/transit-mode.ts';
+import { isTransitActivity } from '../../_shared/transit-detect.ts';
 
 // =============================================================================
 // GENERIC VENUE PATTERNS — placeholders the AI sometimes generates
@@ -1055,8 +1056,7 @@ function checkPriceDuplication(activities: StrictActivityMinimal[], results: Val
 function checkWalkOverThreshold(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
   for (let i = 0; i < activities.length; i++) {
     const act = activities[i] as any;
-    const cat = String(act?.category || '').toLowerCase();
-    if (cat !== 'transport' && cat !== 'transit') continue;
+    if (!isTransitActivity(act)) continue;
     const t = act?.transportation || {};
     const method = String(t.method || '').toLowerCase();
     if (method !== 'walk' && method !== 'walking') continue;
