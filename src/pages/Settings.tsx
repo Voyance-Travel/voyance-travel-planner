@@ -191,10 +191,6 @@ export default function Settings() {
     savePreference('trip_reminders', checked);
   };
   
-  const handlePriceAlerts = (checked: boolean) => {
-    setPriceAlerts(checked);
-    savePreference('price_alerts', checked);
-  };
 
   // Save phone number
   const handleSavePhone = async () => {
