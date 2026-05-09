@@ -930,12 +930,35 @@ ${itineraryDescription}
       }
     }
 
+    const responsePayload = {
+      message: textContent,
+      actions,
+      capturedPreferences,
+    };
+
+    // Cache for replay protection (5-min TTL).
+    if (!stream) {
+      try {
+        const idemSupabase = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+        );
+        await idemSupabase.from('chat_idempotency_cache').upsert({
+          idempotency_key: idempotencyKey,
+          conversation_id: conversationId || null,
+          user_id: userId,
+          trip_id: itineraryContext.tripId || null,
+          input_hash: inputHash,
+          response_data: responsePayload,
+          expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        }, { onConflict: 'idempotency_key', ignoreDuplicates: true });
+      } catch (idemWriteErr) {
+        console.warn('[itinerary-chat] Idempotency cache write failed (non-blocking):', idemWriteErr);
+      }
+    }
+
     return new Response(
-      JSON.stringify({
-        message: textContent,
-        actions,
-        capturedPreferences,
-      }),
+      JSON.stringify(responsePayload),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
