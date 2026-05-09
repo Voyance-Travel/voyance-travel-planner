@@ -73,6 +73,7 @@ import { compileDayFacts } from './pipeline/compile-day-facts.ts';
 import type { LockedActivity } from './pipeline/types.ts';
 import { validateDay, type ValidateDayInput } from './pipeline/validate-day.ts';
 import { repairDay, type RepairDayInput } from './pipeline/repair-day.ts';
+import { applyValidationGate } from './pipeline/validation-gate.ts';
 import { compilePrompt, type LockedCard } from './pipeline/compile-prompt.ts';
 import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { persistDay } from './pipeline/persist-day.ts';
@@ -1237,6 +1238,33 @@ export async function handleGenerateDay(
         // Apply repaired activities back
         generatedDay.activities = repairedDay.activities;
         normalizedActivities = generatedDay.activities;
+
+        // ── VALIDATION GATE — re-validate after repair, force in-place downgrades for any
+        //    critical semantic failure (punctuation-only fields, cross-day checkout-hotel leaks)
+        //    that the deterministic repair pass didn't catch. No regen; never raw to UI.
+        try {
+          const postRepairValidation = validateDay({
+            ...validationInput,
+            day: { ...currentDayMinimal, activities: normalizedActivities as any },
+          });
+          const gate = applyValidationGate(
+            { ...currentDayMinimal, activities: normalizedActivities as any },
+            postRepairValidation,
+            { dayNumber, destination: validationInput.destination },
+          );
+          if (gate.verdict === 'persist_forced') {
+            normalizedActivities = gate.day.activities as any;
+            generatedDay.activities = normalizedActivities;
+            generatedDay.metadata = generatedDay.metadata || {};
+            generatedDay.metadata.quality = generatedDay.metadata.quality || {};
+            generatedDay.metadata.quality.gate_forced_persist = true;
+          }
+          generatedDay.metadata = generatedDay.metadata || {};
+          generatedDay.metadata.quality = generatedDay.metadata.quality || {};
+          generatedDay.metadata.quality.validation_gate = gate.counters;
+        } catch (gateErr) {
+          console.warn('[VALIDATION_GATE] failed (non-blocking):', gateErr);
+        }
 
         // Auto-fill any remaining ≥3h afternoon dead gaps
         try {

@@ -1,87 +1,91 @@
-## Unified LLM Output Validation Layer
+## Semantic Validation Gate — block bad output, don't just classify it
 
-**Premise (yours, accepted):** every blocker — prompt artifacts, wrong-city venues, payment drift, fragment sentences, label/meal mismatches — is the same bug at different layers: raw LLM output is reaching the UI without a single, enforced validation pass. We have *pieces* of this (`scrubBodyPromptLeaks`, `scrubTitleLeaks`, `scrubSentenceFragments`, `detectCrossCityMention`, `verified-venues-filter`, `nuclearCrossCitySweep`, `clampBookendEndTime`, `pruneNonLogisticsAfterCheckout`, canonical cost resolver) but they're scattered across 4 pipelines (generate, repair, save, UI) and the address-to-destination guard is the missing one. This plan unifies them behind one boundary, with telemetry that proves coverage.
+**Premise (yours, accepted):** `validate-day.ts` already detects failures and returns typed `ValidationResult[]`, but nothing in `action-generate-day.ts` treats that classification as a *gate*. Repair runs deterministic structural fixes; validation is purely informational. Semantic failures (dot-only fields, mid-sentence truncation, duplicate prices, vibe/category mismatches, cross-day checkout-then-hotel-activities) classify but ship. This plan adds the missing blocking layer + 4 new semantic checks + 1 cross-day fact, without touching prompts or repair-day's existing 12 deterministic rules.
 
-### What this plan is NOT
+### What this is NOT
 
-- Not a prompt rewrite. Prompts stay as-is.
-- Not a payments re-architecture (last loop already consolidated manual fold + reserve gating + orphan reconciliation in `resolveCanonicalCostRows`/`useTripFinancialSnapshot`/`PaymentsTab`). This plan does NOT re-touch payments — you said it's a separate area.
-- Not a regen-on-failure loop for venues (too costly). Failed venues get downgraded to fallback or stripped, with sentinels.
+- Not a prompt rewrite.
+- Not a re-architecture of `repair-day.ts` — its 12 rules stay as-is.
+- Not a new regen-on-every-failure loop. Regen is the **last** resort, gated on `critical` only, capped at 1 retry per day.
+- Not a payments touch, not a scrub-activity touch (last loop's work stands).
 
-### The four layers we lock down
+### The four pieces
 
 ```text
-                    ┌──────────────────────────────────┐
-LLM raw JSON ─────► │  L1: parse + truncation guard    │  (extract-json, finish_reason check)
-                    └─────────────┬────────────────────┘
-                                  ▼
-                    ┌──────────────────────────────────┐
-                    │  L2: scrubActivity (PURE FN)     │  ← new single entry point
-                    │   • title leaks                  │
-                    │   • body leaks                   │
-                    │   • sentence fragments           │
-                    │   • meal-suffix strip            │
-                    │   • bookend clamp                │
-                    │   • walking-leg $0               │
-                    └─────────────┬────────────────────┘
-                                  ▼
-                    ┌──────────────────────────────────┐
-                    │  L3: validateActivity (NEW)      │  ← address-resolves-to-destination
-                    │   • cross-city venue detect      │     is the new piece
-                    │   • address city-resolve check   │
-                    │   • venue↔meal label coherence   │
-                    │   returns {ok, downgrade, drop}  │
-                    └─────────────┬────────────────────┘
-                                  ▼
-                    ┌──────────────────────────────────┐
-                    │  L4: persist + DB triggers       │  (last-gate, already in place)
-                    └──────────────────────────────────┘
+generate ─► sanitize ─► repair-day (structural) ─► scrubActivity (artifacts)
+                                                          │
+                                                          ▼
+                                               ┌──────────────────────┐
+                                               │  validateDay()       │  (already exists)
+                                               │  + 4 new checks      │  ← Step 2
+                                               │  + cross-day facts   │  ← Step 3
+                                               └──────────┬───────────┘
+                                                          ▼
+                                               ┌──────────────────────┐
+                                               │  GATE (NEW)          │  ← Step 1
+                                               │  critical → 1 regen  │
+                                               │  error  → re-repair  │
+                                               │  warn   → log only   │
+                                               └──────────┬───────────┘
+                                                          ▼
+                                                       persist
 ```
 
-### Steps
+### Step 1 — The Gate (the actual missing piece)
 
-**Step 1 — Single entry point `scrubActivity(act, ctx)`** in `supabase/functions/_shared/scrub-activity.ts`. Composes existing helpers (`scrubTitleLeaks`, `scrubBodyPromptLeaks`, `scrubSentenceFragmentsOnAct`, meal-suffix strip, walking-leg $0, bookend clamp). Returns `{changed, ops: string[]}`. Mirror in `src/utils/scrubActivity.ts` with the same regexes (kept literal for the front bundle, like `activityNameSanitizer.ts` does today).
+New `pipeline/validation-gate.ts` exporting `applyValidationGate(day, validationResults, ctx)`. Called in `action-generate-day.ts` immediately after the existing `validateDay()` call (around line 1187, before the repair block at 1198).
 
-**Step 2 — New `validateActivity(act, {destination, mealSlot})`** in same file. Three checks:
-1. `detectCrossCityMention` on title + venue + address + description.
-2. Address city-resolve: if `act.address` has a postal/region/country token that mismatches the destination city, flag.
-3. Meal/venue label coherence: if `mealSlot === 'lunch'` and venue name contains `(Dinner)`/`(Breakfast)` (post meal-suffix strip miss), flag.
+Severity policy:
+- **`critical`** (new tier — see Step 2): block persist; trigger one targeted regen of the failing day. If retry still critical → downgrade offending activity via existing `downgradeCrossCityActivity` / `needsVenuePick` sentinel and persist with `metadata.quality.gate_forced_persist = true`.
+- **`error`**: re-run `repair-day` once with `validationResults` re-fed. If still present after second pass, persist + log `[GATE_ERROR_LEAK]`.
+- **`warning`**: persist, log only.
 
-Returns `{verdict: 'ok' | 'downgrade' | 'drop', reason}`. `downgrade` → strip venue identity via existing `stripVenueIdentity` + `resolveAnyMealFallback`/`applyFallbackToActivity`. `drop` → mark `needsVenuePick` $0 sentinel. **No regen call** — costs zero credits.
+Retry budget tracked on the day: `metadata.quality.gate_retries`. Hard cap = 1 to keep credits bounded (per "charge-on-action" rule).
 
-**Step 3 — Wire single boundary at 4 sites (replace ad-hoc calls):**
-- `generate-itinerary/pipeline/validate-day.ts` (per-activity loop)
-- `generate-itinerary/pipeline/repair-day.ts` §10b (replace separate scrubs)
-- `generate-itinerary/action-save-itinerary.ts` per-day loop (replace 3 separate scrub calls)
-- `src/utils/activityNameSanitizer.ts` UI sanitizer chain (last-mile)
+Returns `{verdict: 'persist' | 'regen' | 'repair_again', forcedDowngrades: number, retries: number}` for the orchestrator.
 
-Each site keeps its existing sentinels (`[POST_CHECKOUT_PRUNE]`, `[BOOKEND_CLAMP]`, etc.) but routes through `scrubActivity` so we cannot forget to add a new helper to one of four sites again.
+### Step 2 — Four new semantic checks in `validate-day.ts`
 
-**Step 4 — Address-to-destination guard (the missing piece you called out).** New file `supabase/functions/_shared/address-city-resolve.ts`. Lightweight: regex-based country/region tokens (`, Italy`, `, France`, `75001`, `30100`, `34xxx Florence`) checked against `destination`'s known country/postal-prefix from a small static map (we already have `INLINE_FALLBACK_*` city DBs — extend with country + postal prefix). When mismatch detected → `validateActivity` returns `downgrade`. No Google Geocoding call (Google API centralization rule + cost).
+All four are pure inspectors, ~20 lines each, slotted next to existing `checkLabelLeaks` / `checkChainRestaurants`:
 
-**Step 5 — Observability.** One structured log line per save: `[SCRUB_ACTIVITY] tripId=… day=… ops={titleLeak:N,bodyLeak:N,fragment:N,crossCity:N,addressMismatch:N,mealLabel:N,bookendClamp:N,walkingZero:N,downgraded:N,dropped:N}`. Persist last counters into `metadata.quality.scrub_ops` so we can grep `trips.itinerary_data->'metadata'->'quality'->'scrub_ops'` and prove a class of leak is at zero.
+1. **`checkPunctuationOnlyFields`** — any string field on the activity (title, description, tips, notes, `reservationUrgency`, `bookingWindow`, etc.) matching `/^\s*[.\-:,;·•]+\s*$/` → `severity: 'critical'`, `code: PUNCTUATION_ONLY_FIELD`. Catches `Reservation Urgency: .` survivors that slipped past `scrubBodyPromptLeaks` because the label was already stripped, leaving the value field as just `.`.
 
-**Step 6 — Tests.** Extend `supabase/functions/_shared/__tests__/prompt-leak-scrub.test.ts` into `scrub-activity.test.ts` with regression fixtures for: (a) Tartine SF in Venice → downgrade, (b) `(FLEX_WINDOW)` in title → strip, (c) "spot for together" fragment → drop sentence, (d) `Reservation Urgency: .` → strip, (e) Da Ivo dinner relabeled as casual → identity stripped, (f) walking leg priced $30 → $0, (g) bookend 23:50→00:28 → clamped 23:59. Lint test in `_shared/__tests__/no-direct-scrub-call.test.ts` blocks new code from calling individual helpers outside `scrubActivity`.
+2. **`checkSentenceCompleteness`** — for `description` / `body` fields > 40 chars: trimmed value must end in `.!?…)"'` or close-quote. Mid-sentence cutoffs ("...ideal with for both") → `severity: 'error'`, `code: TRUNCATED_SENTENCE`. Skips bullet lists and known label fields. Fragment helper from `prompt-leak-scrub.ts` already has the regex shape; reuse it.
 
-**Step 7 — Memory.** New `mem://constraints/itinerary/unified-output-validation-layer.md` documenting the contract + 4 wire sites + verdict semantics. Update `mem://index.md` Memories list.
+3. **`checkPriceDuplication`** — adjacent activities with identical non-zero `cost.amount` AND same currency AND same category → `severity: 'warning'`, `code: SUSPICIOUS_DUPLICATE_PRICE`. Warning only; this is a sniff test, not a hard fail. Skips $0 (walking, free) and skips when both are flagged `bar_cap_repair` / `fine_dining_floor` (deterministic overrides).
+
+4. **`checkCategoryVenueCoherence`** — `category === 'dining'` + venue name matches existing `KNOWN_FINE_DINING_STARS` map + title contains `casual|neighborhood|trattoria|bistro` → `severity: 'error'`, `code: CATEGORY_VENUE_MISMATCH`. Mirrors the vibe-clash logic in `ledger-check.ts` but at the validation layer so it gates *before* persist instead of being post-hoc.
+
+Add `'critical'` to the severity union in `pipeline/types.ts` (currently `'error' | 'warning'`). Add the four new codes to `FAILURE_CODES`.
+
+### Step 3 — Cross-day context for `repair-day.ts`
+
+The "Day 3 checkout 17:50 then Day 3 hotel-spa 19:30" bug is a per-day blind spot, not a missing rule. Fix in `compile-day-facts.ts`:
+
+- Extend `DayFacts` with `previousDayLastEvent: { time24, kind: 'checkout' | 'flight_dep' | 'transit' | 'leisure', city }` and `nextDayFirstEvent` (mirror, for arrival-day checks).
+- `repair-day.ts` `checkLogisticsSequence` (already exists, line ~532 in validate-day) gets a new sub-check: if `previousDayLastEvent.kind === 'checkout'` and current day has hotel-bound activities (spa, hotel-restaurant, hotel-room) before any new check-in, flag `CHECKOUT_HOTEL_LEAK` → `critical`. Gate handles the regen.
+
+### Step 4 — Telemetry & Memory
+
+- Single log line per day: `[VALIDATION_GATE] day=N verdict=… critical=N error=N warning=N retries=N forcedDowngrades=N`.
+- Persist into `metadata.quality.validation_gate` so it's grep-able alongside existing `metadata.quality.scrub_ops`.
+- New `mem://constraints/itinerary/validation-gate-blocking-layer.md` documenting severity policy, retry budget, and the 4 new codes. Update `mem://index.md`.
 
 ### Files touched
 
-- new: `supabase/functions/_shared/scrub-activity.ts`
-- new: `supabase/functions/_shared/address-city-resolve.ts`
-- new: `src/utils/scrubActivity.ts`
-- new: `supabase/functions/_shared/__tests__/scrub-activity.test.ts`
-- new: `supabase/functions/_shared/__tests__/no-direct-scrub-call.test.ts`
-- edit: `supabase/functions/generate-itinerary/pipeline/validate-day.ts`
-- edit: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
-- edit: `supabase/functions/generate-itinerary/action-save-itinerary.ts`
-- edit: `src/utils/activityNameSanitizer.ts`
+- new: `supabase/functions/generate-itinerary/pipeline/validation-gate.ts`
+- edit: `supabase/functions/generate-itinerary/pipeline/types.ts` (add `'critical'` + 5 new `FAILURE_CODES`)
+- edit: `supabase/functions/generate-itinerary/pipeline/validate-day.ts` (4 new checkers + 1 cross-day check)
+- edit: `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts` (`previousDayLastEvent` / `nextDayFirstEvent`)
+- edit: `supabase/functions/generate-itinerary/action-generate-day.ts` (wire `applyValidationGate` between validate and repair, plus regen branch)
+- new: `supabase/functions/_shared/__tests__/validation-gate.test.ts` — fixtures for: dot-only `reservationUrgency`, "ideal with for both." truncation, duplicate €58 dinners, "Casual neighborhood dinner at Da Ivo", checkout-17:50 then spa-19:30
 - new memory + index update
 
 ### What you'll see after this ships
 
-- `[SCRUB_ACTIVITY]` log on every save with per-class counters > 0 only when the LLM actually leaked something.
-- The four blockers either silently scrubbed (artifacts, fragments, label leaks, bookend bleed) or downgraded to neutral fallback (cross-city venues, address mismatches) — never raw to UI.
-- Adding a new sanitizer in the future = one place to add it (`scrubActivity`), enforced by lint test.
+- `[VALIDATION_GATE]` log on every day with verdict + counts.
+- Critical semantic failures either regen once or downgrade to `needsVenuePick` $0 sentinels — never raw to UI.
+- `metadata.quality.validation_gate.critical` should sit at 0 across runs; non-zero is the new alarm.
+- Retry budget capped at 1/day so credit cost stays bounded.
 
 Approve and I'll implement.
