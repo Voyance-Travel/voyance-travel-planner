@@ -1038,7 +1038,7 @@ function checkPriceDuplication(activities: StrictActivityMinimal[], results: Val
     if (/bar_cap_repair|fine_dining_floor|user|user_override|booked/i.test(prevSrc + currSrc)) continue;
     results.push({
       code: FAILURE_CODES.SUSPICIOUS_DUPLICATE_PRICE,
-      severity: 'warning',
+      severity: 'error',
       message: `Adjacent activities "${prev.title}" and "${curr.title}" have identical ${prevCur} ${prevAmt} cost (same category "${prevCat}")`,
       activityIndex: i,
       field: 'cost.amount',
