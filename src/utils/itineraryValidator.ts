@@ -199,7 +199,7 @@ export function validateItinerary(
           activityId: activity.id,
           activityTitle: activity.title,
           message: `This activity matches our skip list: "${skipMatch.matchedItem}". Consider replacing it.`,
-          severity: 'warning'
+          severity: 'info'
         });
       }
       
@@ -213,7 +213,7 @@ export function validateItinerary(
             activityId: activity.id,
             activityTitle: activity.title,
             message: `Celebration activity on Day ${day.dayNumber}, but celebration day is Day ${celebrationDay}.`,
-            severity: 'warning'
+            severity: 'info'
           });
         }
       }
@@ -305,10 +305,11 @@ export function getValidationSummary(result: ValidationResult): string | null {
   
   const errorCount = result.issues.filter(i => i.severity === 'error').length;
   const warningCount = result.issues.filter(i => i.severity === 'warning').length;
-  
+
   const parts: string[] = [];
   if (errorCount > 0) parts.push(`${errorCount} error${errorCount > 1 ? 's' : ''}`);
   if (warningCount > 0) parts.push(`${warningCount} warning${warningCount > 1 ? 's' : ''}`);
-  
+
+  if (parts.length === 0) return null;
   return `Itinerary has ${parts.join(' and ')}`;
 }
