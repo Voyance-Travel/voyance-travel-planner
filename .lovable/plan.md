@@ -1,60 +1,104 @@
-## RS.2 — Refund propagation to `activity_costs`
+## RS.3 — `payment_intent.payment_failed` + `payment_intent.canceled` handlers
 
-**File:** `supabase/functions/stripe-webhook/index.ts` — `charge.refunded` handler
+**File:** `supabase/functions/stripe-webhook/index.ts` — insert two new cases before `default:` (line 1168).
 
-Today, when Stripe fires `charge.refunded`, we transition booking state and trigger Viator cancellation, but the `activity_costs` row stays with `is_paid=true` / `paid_amount_usd=<original>`. The Payments tab + budget summary keep showing the activity as paid forever.
+### Schema gap
 
-### Schema migration
+Neither `trip_payments` nor `pending_credit_charges` currently has a `metadata jsonb` column, but the spec writes to `payment.metadata` on both and filters `pending_credit_charges.metadata->>stripe_payment_intent_id`. Without the column the handler would 500.
 
-`activity_costs` already has `is_paid`, `paid_amount_usd`, `paid_at`. Missing the columns the spec writes to. Migration:
+`trip_payments.status` check-constraint already permits `'failed'` and `'cancelled'`. ✅
+`pending_credit_charges.status` check-constraint already permits `'failed'`. ✅
+
+### Migration
 
 ```sql
-ALTER TABLE public.activity_costs
-  ADD COLUMN IF NOT EXISTS paid_amount_local numeric(10,2),
-  ADD COLUMN IF NOT EXISTS refunded_at timestamptz,
-  ADD COLUMN IF NOT EXISTS refund_amount_cents integer;
+ALTER TABLE public.trip_payments
+  ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE public.pending_credit_charges
+  ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE INDEX IF NOT EXISTS idx_pending_credit_charges_pi
+  ON public.pending_credit_charges ((metadata->>'stripe_payment_intent_id'))
+  WHERE metadata ? 'stripe_payment_intent_id';
 ```
 
-No data backfill, no RLS changes (existing service-role + trip-owner policies cover the new columns).
+No RLS changes (existing policies cover new columns). The partial index keeps the `.filter('metadata->>stripe_payment_intent_id', 'eq', pi.id)` lookup cheap once charge-creation flows start writing the PI id into metadata. (Populating it at write time is out of scope here; current charges won't match the filter, which is the safe no-op.)
 
 ### Code change
 
-`supabase/functions/stripe-webhook/index.ts`, inside the `case "charge.refunded"` branch, immediately after the `transition_booking_state` RPC call at L834–L838 and before the Viator vendor-cancel `try` block at L840:
+`supabase/functions/stripe-webhook/index.ts`, immediately before `default:` at L1168:
 
 ```ts
-// Zero the activity cost so the budget summary reflects the refund.
-// Without this, trip budgets show the cost as still-spent forever.
-const { error: costErr } = await supabaseAdmin
-  .from('activity_costs')
-  .update({
-    is_paid: false,
-    paid_amount_usd: 0,
-    paid_amount_local: 0,
-    refunded_at: new Date().toISOString(),
-    refund_amount_cents: charge.amount_refunded,
-    updated_at: new Date().toISOString(),
-  })
-  .eq('activity_id', activityId);
+case "payment_intent.payment_failed": {
+  const pi = event.data.object as Stripe.PaymentIntent;
+  const lastErr = pi.last_payment_error;
+  log('payment_intent.payment_failed', {
+    paymentIntentId: pi.id,
+    code: lastErr?.code,
+    declineCode: lastErr?.decline_code,
+    message: lastErr?.message,
+  });
 
-if (costErr) {
-  logError('Failed to zero activity_costs on refund', { activityId, error: costErr });
-} else {
-  log('activity_costs zeroed for refund', { activityId, refundAmount: charge.amount_refunded });
+  const { data: payment } = await supabaseAdmin
+    .from('trip_payments')
+    .select('id, metadata')
+    .eq('stripe_payment_intent_id', pi.id)
+    .maybeSingle();
+
+  if (payment) {
+    await supabaseAdmin.from('trip_payments').update({
+      status: 'failed',
+      metadata: {
+        ...(payment.metadata || {}),
+        stripe_failure_code: lastErr?.code,
+        stripe_failure_decline_code: lastErr?.decline_code,
+        stripe_failure_message: lastErr?.message,
+        failed_at: new Date().toISOString(),
+      },
+      updated_at: new Date().toISOString(),
+    }).eq('id', payment.id);
+  }
+
+  const userId = (pi.metadata?.user_id || pi.metadata?.userId) as string | undefined;
+  if (userId) {
+    await supabaseAdmin.from('pending_credit_charges')
+      .update({
+        status: 'failed',
+        resolved_at: new Date().toISOString(),
+        resolution_note: `Stripe payment failed: ${lastErr?.code || 'unknown'}`,
+      })
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .filter('metadata->>stripe_payment_intent_id', 'eq', pi.id);
+  }
+  break;
+}
+
+case "payment_intent.canceled": {
+  const pi = event.data.object as Stripe.PaymentIntent;
+  log('payment_intent.canceled', { paymentIntentId: pi.id, reason: pi.cancellation_reason });
+  await supabaseAdmin.from('trip_payments').update({
+    status: 'cancelled',
+    metadata: {
+      cancellation_reason: pi.cancellation_reason,
+      cancelled_at: new Date().toISOString(),
+    },
+    updated_at: new Date().toISOString(),
+  }).eq('stripe_payment_intent_id', pi.id);
+  break;
 }
 ```
 
-The existing `if (activityId)` guard (L833) already wraps this region, so no extra null check needed. Uses existing `log` / `logError` helpers for consistency with the rest of the handler.
-
-Note: `activity_id` is a `text` column and the unique index is `(trip_id, activity_id)`. There's a tiny theoretical risk an activity_id collides across trips, but in practice the same Stripe charge maps to one trip's activity row. Spec says `.eq('activity_id', activityId)`; we keep that.
+Note on `payment_intent.canceled`: spec overwrites `metadata` instead of merging. Keeping spec verbatim — cancellation is terminal so prior metadata loss is acceptable; if you'd rather merge, easy follow-up.
 
 ### Verify
 
 ```
-grep -c "from('activity_costs').update.*is_paid: false" supabase/functions/stripe-webhook/index.ts
+grep -c "payment_intent.payment_failed\|payment_intent.canceled" supabase/functions/stripe-webhook/index.ts
 ```
-Expect ≥ 1.
+Expect ≥ 2.
 
 ### Out of scope
-- Partial refunds (`amount_refunded < amount`) — spec zeroes regardless; matches the "zero the activity cost" comment. Future work could compute `paid_amount_usd = (amount - amount_refunded) / 100`.
-- Frontend display of `refunded_at` badge — DB write only; UI consumes `is_paid=false` already.
-- `trip_payments` row updates — already handled by existing webhook code paths and `transition_booking_state`.
+- Frontend polling/realtime listener for `trip_payments.status='failed'` to surface "card declined" toast — spec mentions it, but that's a separate UI task.
+- Backfilling `metadata.stripe_payment_intent_id` into `pending_credit_charges` at charge-creation time (book-activity / create-booking-checkout) — needed for the PI-filter lookup to actually match rows. Can be a follow-up; today's handler is a safe no-op until then.
