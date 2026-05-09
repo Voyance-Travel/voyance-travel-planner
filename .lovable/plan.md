@@ -1,43 +1,41 @@
-## Fix 1.2 — Differentiate share-lookup error states
+## Fix 1.3 — Block share-enable on empty itineraries (RPC-side)
 
 ### Goal
-Replace the single opaque `"Trip not found or sharing is disabled"` response from `get_consumer_shared_trip` with three typed reasons, and render distinct copy for each on the public share page.
+Refuse to flip `share_enabled = true` when the trip has no itinerary, so callers never receive a token for a not-yet-generated trip and the public share page never has to handle a half-built payload.
 
-### Reasons returned
-
-| `error_code`        | When                                                                                  | UI copy                                                  |
-|---------------------|---------------------------------------------------------------------------------------|----------------------------------------------------------|
-| `token_not_found`   | No `trips` row matches `share_token = p_share_token`                                  | "This share link is invalid."                            |
-| `sharing_disabled`  | Row matches the token but `share_enabled = false`                                     | "The trip owner turned off sharing for this link."       |
-| `trip_unavailable`  | Row matches and is enabled, but `itinerary_data->'days'` is null/empty (race window)  | "Trip is loading — try again in a moment."               |
+### Approach
+Take the recommended single-round-trip path: gate inside `toggle_consumer_trip_share`. No client-side fetch, no new return shape — existing `{success: false, reason: ...}` contract is reused with a new `reason: 'itinerary_not_ready'`, which `getPublicShareErrorMessage` already maps to "Generate your itinerary first to share it." (added in Fix 1.2). Callers in `TripShareModal.tsx` and `TripRecap.tsx` already toast `getPublicShareErrorMessage(result.reason)` on failure, so the message surfaces automatically.
 
 ### Changes
 
-**1. New migration: redefine `public.get_consumer_shared_trip`**
-- Split the lookup into two queries:
-  - `SELECT … WHERE share_token = p_share_token` → if no row, return `{error_code: 'token_not_found', error: 'This share link is invalid'}`.
-  - Then check `share_enabled` → if false, return `{error_code: 'sharing_disabled', error: 'Sharing has been turned off for this link'}`.
-- After sanitizing days, if the resulting array is empty AND the trip has no `itinerary_data->'days'`, return `{error_code: 'trip_unavailable', error: 'Trip is still being prepared'}`.
-- Successful payloads are unchanged (no `error`/`error_code` keys).
-- Re-grant `EXECUTE … TO anon, authenticated` (idempotent — preserves anon access).
+**1. New migration: redefine `public.toggle_consumer_trip_share`**
+After the owner check, add a readiness gate that runs only when `p_enabled = true`:
 
-**2. `src/pages/ConsumerTripShare.tsx` (lines 86–151)**
-- Keep existing `errorCode` state.
-- In the error render block, replace the current 2-way `isPaused` branch with a 3-way switch on `errorCode`:
-  - `token_not_found` → heading "Trip Not Found", copy "This share link is invalid.", CTA "Plan Your Own Trip" → `/`.
-  - `sharing_disabled` → heading "Sharing Paused", copy "The trip owner turned off sharing for this link.", no CTA, hint "Ask the trip owner for a new link".
-  - `trip_unavailable` → heading "Almost Ready", copy "Trip is loading — try again in a moment.", CTA "Retry" that re-runs `fetchTrip()`.
-  - Default (network/RPC throw) → current generic fallback.
-- Catch-block fallback keeps `errorCode = null` → falls into default branch.
+```sql
+IF p_enabled IS TRUE THEN
+  IF v_trip.itinerary_data IS NULL
+     OR v_trip.itinerary_data->'days' IS NULL
+     OR jsonb_array_length(COALESCE(v_trip.itinerary_data->'days', '[]'::jsonb)) = 0 THEN
+    RETURN jsonb_build_object('success', false, 'reason', 'itinerary_not_ready');
+  END IF;
+END IF;
+```
 
-**3. `src/services/publicShareLink.ts`**
-- Extend `getPublicShareErrorMessage` with the three new cases (`token_not_found`, `sharing_disabled`, `trip_unavailable`) so any other caller using this helper renders consistent copy.
+- Disabling sharing (`p_enabled = false`) is unaffected — owners can always pause.
+- Token generation logic, UPDATE, and success payload are unchanged.
+- Re-grant `EXECUTE … TO authenticated` (idempotent).
+
+**2. No client changes required**
+- `getOrCreatePublicTripShareLink` already returns `{success: false, reason: result.reason}` when the RPC fails (`publicShareLink.ts:92-97`).
+- `TripShareModal.tsx:168/176/199` and `TripRecap.tsx:117/410` already pipe `result.reason` through `getPublicShareErrorMessage`, which renders "Generate your itinerary first to share it." for `itinerary_not_ready`.
+- Existing optimistic UI (`TripShareModal` toggle switch) will revert on the failure toast — same path as `not_owner` / `trip_not_found` today.
 
 ### Out of scope
-- Toggle-side readiness check (Fix 1.3) — separate plan item.
-- Changing the sanitization whitelist or success payload shape.
-- Editing the original `20260406115126` migration (new migration only, per instruction).
+- The cheaper-but-rejected client-side fetch alternative.
+- Any change to the success payload shape, token rotation, or the disable path.
+- A "share will become available once generation finishes" auto-enable flow — pause-only behaviour matches existing UX.
 
 ### Validation
-- Manual: hit `/trip-share/<bogus>` → "invalid"; toggle off + revisit → "paused"; brand-new trip with empty `itinerary_data` shared → "loading, retry"; valid enabled trip → renders normally.
-- DB: confirm `anon` retains `EXECUTE` on the redefined function (`pg_proc` + `pg_acl`).
+- Manual: on a brand-new trip with empty `itinerary_data`, click Share → toggle stays off, toast says "Generate your itinerary first to share it.", DB row keeps `share_enabled = false`.
+- Manual: on a fully generated trip, Share works as before; disabling still succeeds when itinerary is empty (e.g. user wiped days then disabled).
+- DB: `pg_proc` confirms `authenticated` retains EXECUTE; `anon` is intentionally not granted (toggle is owner-only).
