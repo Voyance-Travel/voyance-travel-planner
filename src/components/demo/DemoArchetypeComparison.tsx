@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 // ============================================================================
 // ARCHETYPE COMPARISON DATA
@@ -350,9 +351,9 @@ export function DemoArchetypeComparison() {
                               </div>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                            {activity.description}
-                          </p>
+                          {(() => { const d = sanitizeActivityText(activity.description); return d ? (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{d}</p>
+                          ) : null; })()}
                           <div className="flex items-center gap-2 mt-2">
                             <Badge 
                               variant="outline" 

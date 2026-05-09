@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Activity } from '@/lib/destinations';
 import { handleImageError } from '@/utils/imageFallback';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 interface ActivityModalProps {
   activity: Activity | null;
@@ -99,9 +100,9 @@ export function ActivityModal({
           </div>
 
           {/* Description */}
-          <p className="text-muted-foreground mb-6 leading-relaxed">
-            {activity.description}
-          </p>
+          {(() => { const d = sanitizeActivityText(activity.description); return d ? (
+            <p className="text-muted-foreground mb-6 leading-relaxed">{d}</p>
+          ) : null; })()}
 
           {/* What to know */}
           <div className="bg-secondary/50 rounded-lg p-4 mb-4">

@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { ActivityFeedbackModal } from './ActivityFeedbackModal';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { useActivityFeedback, type FeedbackRating } from '@/services/activityFeedbackAPI';
-import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 
 type ActivityStatus = 'upcoming' | 'current' | 'completed' | 'skipped';
@@ -172,11 +172,9 @@ export function LiveActivityCard({
               {sanitizeActivityName(activity.name, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}
             </h4>
             
-            {activity.description?.trim() && (
-              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                {activity.description}
-              </p>
-            )}
+            {(() => { const d = sanitizeActivityText(activity.description); return d ? (
+              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{d}</p>
+            ) : null; })()}
 
             {activity.location && (
               <div className="flex items-center gap-1 mt-2 text-sm text-muted-foreground">

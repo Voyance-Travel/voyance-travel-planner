@@ -21,7 +21,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 import {
   BookableActivity,
@@ -263,11 +263,9 @@ export function BookableItemCard({
                 )}
               </div>
               <h3 className="font-semibold text-foreground">{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}</h3>
-              {activity.description && (
-                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                  {activity.description}
-                </p>
-              )}
+              {(() => { const d = sanitizeActivityText(activity.description); return d ? (
+                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{d}</p>
+              ) : null; })()}
             </div>
             <PriceDisplay />
           </div>

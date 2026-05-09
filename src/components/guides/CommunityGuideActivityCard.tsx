@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { MapPin, ExternalLink, Utensils, Camera, Music, ShoppingBag, Landmark, Waves, TreePine, Youtube, Instagram, Globe } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { GuideContentLink } from '@/services/guideContentLinksAPI';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 interface Activity {
   id?: string;
@@ -85,9 +86,9 @@ export default function CommunityGuideActivityCard({ activity, index, contentLin
           </div>
         </div>
 
-        {activity.description && (
-          <p className="text-xs text-muted-foreground line-clamp-3">{activity.description}</p>
-        )}
+        {(() => { const d = sanitizeActivityText(activity.description); return d ? (
+          <p className="text-xs text-muted-foreground line-clamp-3">{d}</p>
+        ) : null; })()}
 
         {activity.note && (
           <p className="text-xs italic text-primary/80">"{activity.note}"</p>
