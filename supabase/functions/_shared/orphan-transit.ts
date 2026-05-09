@@ -28,7 +28,7 @@ const LOGISTICS_TARGET_RE = /\b(airport|station|terminal|port|cruise terminal|fe
 /** Extract the "to <X>" destination name from a transit card title. Returns null when not present. */
 export function extractTransitTarget(act: any): string | null {
   const title = String(act?.title || '');
-  const m = title.match(TRANSIT_TITLE_RE);
+  const m = title.match(TRANSIT_TO_TARGET_RE);
   if (!m) return null;
   return m[1].trim().toLowerCase();
 }
