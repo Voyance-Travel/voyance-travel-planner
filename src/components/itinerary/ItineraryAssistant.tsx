@@ -511,7 +511,7 @@ export function ItineraryAssistant({
 
             // Upsert current activities
             if (activitiesForCostTable.length > 0) {
-              syncActivitiesToCostTable(tripId, activitiesForCostTable)
+              syncActivitiesToCostTable(tripId, activitiesForCostTable, allActivityIds)
                 .catch(err => console.error('[ItineraryAssistant] Activity cost sync failed:', err));
             }
             // Remove orphaned cost rows for swapped/removed activities
