@@ -68,7 +68,7 @@ export default function Settings() {
   const [pushNotifications, setPushNotifications] = useState(false);
   const [marketingEmails, setMarketingEmails] = useState(false);
   const [tripReminders, setTripReminders] = useState(true);
-  const [priceAlerts, setPriceAlerts] = useState(true);
+  
   const [budgetAlerts, setBudgetAlerts] = useState(true);
   
   // Travel Agent Mode
