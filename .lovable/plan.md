@@ -1,77 +1,58 @@
-## CL.3 — Dispose of flight search
+## HC.1 — Frontend health checks: meals, density, gaps
 
-### State of play (verified)
+Extend `analyzeHealth` in `src/components/trip/TripHealthPanel.tsx` so the panel surfaces missing meals, thin days, and large gaps — matching what the server's meal-policy + density enforcement already requires. Today the panel only flags empty days, timing conflicts, and tiny buffers, so a Day 2 with 1 activity, 0 meals, and a 7-hour gap reads as 100/healthy.
 
-`searchFlights`/`useFlightSearch` are **still wired** in two pages, but those pages are **route-orphaned** — `/planner/flight` is registered in `App.tsx` and `routes.ts` but **nothing in the live UI navigates to it**. Direct-URL only. So this is Path 2b (UI present), but the UI is already detached from the user flow.
+### What ships
 
-Surface area to remove:
-- 2 pages: `src/pages/planner/PlannerFlight.tsx`, `src/pages/planner/PlannerFlightEnhanced.tsx`
-- 2 components used only by those pages: `src/components/planner/flight/EnhancedFlightCard.tsx`, `src/components/planner/flight/FlightFilters.tsx`
-- 1 route + 1 route constant + 1 admin tracking entry
-- Search-related exports in `src/services/flightAPI.ts`
-- The entire `supabase/functions/flights/` edge function
+Insert three new checks into `analyzeHealth` immediately **after** the empty-day early-return at line 86 and **before** the timing-conflict block at line 88. All three operate on the existing `realActivities` array and the existing `dayNum`.
 
-Surface area to **keep**:
-- `supabase/functions/flight-status/` — used by `FlightStatusTracker.tsx` for post-booking tracking. Different feature.
-- `src/components/planner/flight/MultiLegFlightEditor.tsx` — used by `src/pages/Start.tsx` for **manual** flight entry. Keep.
-- `src/services/flightItineraryPatch.ts` and `src/services/flightRankingAPI.ts` — manual entry parsing/ranking. Keep.
+**1. Required-meal check** (mirrors server `deriveMealPolicy`)
+- Detect meals: scan `realActivities`, look at `category` (`dining`/`restaurant`/`food`) + `title` (`breakfast`/`brunch`/`lunch`/`dinner`/`supper`).
+- Resolve required meals from `day.metadata?.quality?.dayMode`:
 
-### Step 1 — Delete UI files
+  | dayMode | required |
+  |---|---|
+  | `late_arrival`, `full_day_event` | `[]` |
+  | `early_departure` | `['breakfast']` |
+  | `midday_arrival` | `['lunch','dinner']` |
+  | `midday_departure`, `afternoon_departure` | `['breakfast','lunch']` |
+  | everything else (incl. undefined) | `['breakfast','lunch','dinner']` |
 
-```
-src/pages/planner/PlannerFlight.tsx
-src/pages/planner/PlannerFlightEnhanced.tsx
-src/components/planner/flight/EnhancedFlightCard.tsx
-src/components/planner/flight/FlightFilters.tsx
-```
+- For each missing meal → push **one** issue per day:  
+  `id: missing-meals-${dayNum}`, severity `error`, message `"Day N missing breakfast, lunch, dinner"`, fixAction `refresh_day` (see "Action key" below), label `"Regenerate Day"`.
 
-`MultiLegFlightEditor.tsx` stays — `Start.tsx` still uses it.
+**2. Thin-day check**
+- Skip when `dayMode` ∈ {`late_arrival`, `early_departure`, `full_day_event`, `midday_departure`}.
+- If `realActivities.length < 3`:  
+  `id: thin-day-${dayNum}`, severity `error` (when 1) / `warning` (when 2), message `"Day N has only X activity/activities (light schedule)"`, fixAction `refresh_day`, label `"Add Activities"`.
 
-### Step 2 — Remove route + constants
+**3. Large-gap check**
+- Sort `realActivities` by `startTime` (reuse existing `parseTime` — file already exports it at line 185, no need for a new `parseTimeToMinutes`).
+- Track `prevEnd`; for each next activity where `start - prevEnd ≥ 180` minutes:  
+  `id: gap-${dayNum}-${startMins}`, severity `warning`, message `"Day N has Xh gap before <title>"`, fixAction `refresh_day`, label `"Fill Gap"`.
+- Only update `prevEnd` when the new end is strictly greater (guards against zero-duration / inverted entries).
 
-- `src/App.tsx`: remove the `import PlannerFlight from "./pages/planner/PlannerFlightEnhanced";` line and the `<Route path="/planner/flight" …>` line.
-- `src/config/routes.ts`: remove `FLIGHT: '/planner/flight'` from `ROUTES.PLANNER`.
-- `src/pages/admin/UserTracking.tsx`: remove the `'/planner/flight': 'Flight Search'` map entry.
-- `src/test/navigation.test.ts`: remove the three `/planner/flight` lines (lines 78, 137, 446) so the test no longer asserts the dead route exists.
+### Action key decision
 
-### Step 3 — Trim `src/services/flightAPI.ts`
+User spec uses two new fixAction names: `regenerate_day` and `fill_day`. Neither is wired in `TripDetail.tsx`'s two `onAction` handlers (lines 2912 and 3171). The existing `refresh_day` handler already does exactly what we want — calls `setRefreshDayRequest`, which triggers full server-side rebuild including meal policy, density, gap fill, and timing.
 
-The file mixes search (going away) with hold/details/amadeus helpers (only consumed by the two pages above, so also dead). Remove all of:
+**Recommendation:** map all three new issue types to `fixAction: 'refresh_day'` so no parent wiring changes are needed. The button labels (`Regenerate Day`, `Add Activities`, `Fill Gap`) still differ per issue — only the underlying action is shared. If the user wants distinct keys later (e.g. for analytics differentiation), we can split them then.
 
-- `searchFlights`, `searchRoundtripFlights`
-- `useFlightSearch`, `useRoundtripFlightSearch`, `useFlightDetails`, `useCreateFlightHold`, `useReleaseFlightHold`, `useAmadeusConfig`
-- `getFlightDetails`, `createFlightHold`, `releaseFlightHold`, `getAmadeusConfig`
-- `generateMockFlights` (only used by `searchFlights`)
-- `RoundtripFlightResults`, `FlightHoldInput`, `FlightHoldResponse` interfaces
-- The bottom `export const flightAPI = { … }` aggregate
+### Files touched
 
-Keep the data-shape interfaces (`FlightSegment`, `FlightPassengers`, `FlightPrice`, `FlightBaggage`, `FlightPriceLock`, `FlightOption`, `FlightSearchResponse`) since `flightItineraryPatch.ts`/`flightRankingAPI.ts` and the manual-entry editor may import them — verify with a grep before pruning.
+- `src/components/trip/TripHealthPanel.tsx` — insert the three checks inside `analyzeHealth` after line 86, before line 88. Reuse the existing `parseTime` helper (already in the file).
 
-If after pruning the file is empty of runtime code, delete it entirely. Otherwise keep it as a types module.
+No changes to `TripDetail.tsx` (mapping to `refresh_day` reuses existing wiring).  
+No changes to types — the new issues fit `HealthIssue` as-is.
 
-### Step 4 — Delete the edge function
+### Verification
 
-```
-supabase/functions/flights/
-```
-
-Then call `delete_edge_functions` for `["flights"]` to remove the deployed copy.
-
-### Step 5 — Verify
-
-- `grep -rn "searchFlights\|useFlightSearch\|FlightSearchParams" src --include="*.ts" --include="*.tsx"` → 0 hits
-- `grep -rn "/planner/flight" src --include="*.ts" --include="*.tsx"` → 0 hits
-- `ls supabase/functions/flights` → not found
-- `ls supabase/functions/flight-status` → still exists
-- Build/type-check passes (the harness runs it automatically)
-- `MultiLegFlightEditor` and `flight-status` paths unchanged
+- Existing test file `src/components/trip/__tests__/TripHealthPanel.analyzeHealth.test.ts` filters by `fixAction === 'fix_timing'` → unaffected; should still pass.
+- Berlin Day 2 example (1 activity, 7h gap, 0 meals, no `dayMode`) should now produce four issues: missing-meals (3 meals), thin-day (1 activity → error), and one gap warning. Health score drops out of 100 as intended.
+- Days with explicit `dayMode: 'late_arrival'` or `'full_day_event'` still produce zero new issues (correctly silent).
 
 ### Out of scope
 
-- No data migration: there's no user-generated flight-search history table to clean up; results were always live.
-- The dead `'flights'` query-key on `releaseFlightHold` invalidation goes away with the hook itself, so no orphan cache state.
-- `flightRankingAPI.ts` line 238 comment ("actual flight fetching … happens in flightAPI") is stale once we land this. Will update the comment to reflect manual-only flow.
-
-### Risk
-
-Very low. The route is already orphaned from the live UI, so deleting it removes a direct-URL escape hatch but no user-visible flow. The only way someone reaches it today is by typing `/planner/flight` manually, and after Step 2 they'll get the 404 page — which is the intended end state.
+- Server-side health checks (those exist in repair pipeline already).
+- Adding new analytics keys for `regenerate_day` / `fill_day`.
+- New unit tests — current coverage is minimal; happy to add a follow-up if desired.
