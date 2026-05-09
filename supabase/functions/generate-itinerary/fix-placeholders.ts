@@ -474,11 +474,18 @@ export function applyFallbackToActivity(
       price = Math.max(pr[0], Math.min(pr[1], price));
     }
   }
-  if (price && activity.cost) {
-    activity.cost.amount = price;
-  }
   if (price) {
+    // Write to all canonical price fields — caller may have stripped cost to null,
+    // and downstream readers consult cost.amount, cost.perPerson, cost_per_person,
+    // and price_per_person independently. Keep them all in lockstep.
+    if (activity.cost && typeof activity.cost === 'object') {
+      activity.cost.amount = price;
+      activity.cost.perPerson = price;
+    } else {
+      activity.cost = { amount: price, currency: 'USD', perPerson: price };
+    }
     activity.cost_per_person = price;
+    activity.price_per_person = price;
   }
 
   usedVenueNamesInDay.add(fallback.name.toLowerCase());
