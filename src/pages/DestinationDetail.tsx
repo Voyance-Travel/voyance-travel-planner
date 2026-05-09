@@ -43,6 +43,7 @@ import { handleImageError } from '@/utils/imageFallback';
 import { useCachedDestinationImage } from '@/hooks/useCachedImage';
 import { useDestinationEnrichment } from '@/hooks/useDestinationEnrichment';
 import { Skeleton } from '@/components/ui/skeleton';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 export default function DestinationDetail() {
   const { slug } = useParams<{ slug: string }>();

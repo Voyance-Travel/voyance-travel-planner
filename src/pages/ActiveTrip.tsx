@@ -62,6 +62,7 @@ import { cn } from '@/lib/utils';
 import { parseActiveTripDays } from '@/utils/itineraryParser';
 import type { Tables } from '@/integrations/supabase/types';
 import type { ActivityContext } from '@/types/feedback';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 type Trip = Tables<'trips'>;
 

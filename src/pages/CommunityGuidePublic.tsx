@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Loader2 } from 'lucide-react';
 import { useGuideFollow } from '@/hooks/useGuideFollow';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 interface CommunityGuideDetail {
   id: string;

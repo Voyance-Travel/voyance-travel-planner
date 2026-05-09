@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { generateTravelGuide } from '@/services/travelGuideService';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 interface Activity {
   id: string;

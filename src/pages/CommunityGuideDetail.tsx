@@ -25,6 +25,7 @@ import MobileStickyShareBar from '@/components/guides/MobileStickyShareBar';
 import EditorialArticleSchema from '@/components/guides/EditorialArticleSchema';
 import type { EditorialContent } from '@/types/editorial';
 import { getAppUrl } from '@/utils/getAppUrl';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 
 const GuideTripMap = lazy(() => import('@/components/guides/GuideTripMap'));
 
