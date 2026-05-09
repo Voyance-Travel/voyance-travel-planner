@@ -1,51 +1,56 @@
-## M6 — Reviews moderation guard (client-side auth gate)
+## M7 — Activities API broken first call
 
-**File:** `src/services/reviewsAPI.ts` (lines 155–163)
+**File:** `src/services/activitiesAPI.ts` (lines 76–101)
 
-### Reality check vs spec
+### Problem
 
-The user's snippet assumes `CreateReviewInput` carries a `userId` field and that `createReview` calls `fetch` directly. The actual code (lines 86–97, 155–164) differs:
+`searchActivities` makes two `supabase.functions.invoke('activities', …)` calls:
 
-- `CreateReviewInput` has **no `userId` field** — the server derives it from the JWT `sub`. So the spec's `input = { ...input, userId: session.user.id }` override is a no-op against the real type and would introduce an untyped property. **Skip that line.**
-- `createReview` doesn't call `fetch` directly; it goes through `apiRequest`, which already pulls the access token via `getAuthToken()` and throws `'Authentication required. Please sign in.'` when no token is present (lines 27–31).
+1. **Line 84–90** — `method: 'GET'` with `body: null` and no query string. The edge function reads from `url.searchParams` (verified at `supabase/functions/activities/index.ts:170-174`), so this call has no `destination`/`destinationId` and returns a 400 (`'Destination or destinationId is required'`). The result is then **discarded** (`data`, `error` are shadowed by the second call's destructure but never read or thrown).
+2. **Line 93** — invokes `activities?<query>` and uses its result.
 
-So the only meaningful gap vs the spec is a **friendlier, review-specific error message and an explicit early gate** (so callers don't see the generic auth error and so the bad request never even forms the headers). The DB-side enforcement and the server-side JWT verification are out of scope for this codebase, as the spec already notes.
+The first call is a wasted network round-trip + a silent server error in logs every time a user searches activities.
 
 ### Plan
 
-1. **Add an explicit session gate at the top of `createReview`** (before `apiRequest`). Use `supabase.auth.getSession()`, throw a review-specific message:
+Replace the dual-invoke block with a single GET that includes the query string. Param names already match the edge function (`destination`, `destinationId`, `category`, `limit`) — verified, no rename needed.
 
-   ```ts
-   export async function createReview(input: CreateReviewInput): Promise<Review> {
-     // Auth gate: require a valid session before creating a review.
-     // The server (and DB RLS upstream) is the source of truth for identity —
-     // it derives userId from the JWT `sub`. This client-side guard prevents
-     // the request from leaving the browser at all and surfaces a clearer
-     // copy than the generic apiRequest auth error.
-     const { data: { session } } = await supabase.auth.getSession();
-     if (!session?.user?.id) {
-       throw new Error('Sign in required to leave a review.');
-     }
+```ts
+export async function searchActivities(params: ActivitySearchParams): Promise<ActivitySearchResponse> {
+  const queryParams = new URLSearchParams();
+  if (params.destination) queryParams.set('destination', params.destination);
+  if (params.destinationId) queryParams.set('destinationId', params.destinationId);
+  if (params.category) queryParams.set('category', params.category);
+  if (params.limit) queryParams.set('limit', params.limit.toString());
 
-     const response = await apiRequest<{ status: string; review: Review }>(
-       API_BASE,
-       { method: 'POST', body: JSON.stringify(input) },
-     );
-     return response.review;
-   }
-   ```
+  // Single GET with query params (the shape the edge function expects).
+  // Removed the buggy body-on-GET first call that always 400'd silently.
+  const { data, error } = await supabase.functions.invoke(
+    `activities?${queryParams.toString()}`,
+    { method: 'GET' },
+  );
 
-2. **Do NOT** add `userId` to `CreateReviewInput` or override it in the body. The server reads identity from the JWT — adding `userId` to the POST body would either be ignored (best case) or open a trust-the-client surface (worst case). Trust-the-JWT is already the contract.
+  if (error) {
+    console.error('[Activities] Edge function error:', error);
+    throw new Error(error.message || 'Failed to search activities');
+  }
 
-3. **No changes** to `getReviews`, `voteReview`, `updateReview`, `deleteReview`, `getReviewStats`, hooks, or types.
+  return data as ActivitySearchResponse;
+}
+```
 
-4. **Out of scope** (server-side, as the user's spec acknowledges):
-   - JWT verification on `api.voyance.travel` / `voyance-backend.railway.app`.
-   - Rejecting any client-supplied `userId` in the body.
+Notes vs the user's snippet:
+- **Keep `throw`, not `return []`.** Existing callers (`useActivitySearch` / React Query) rely on thrown errors to populate `query.error` and trigger retry/error UI. Returning `[]` would silently mask real failures and break the typed `ActivitySearchResponse` return contract.
+- **Keep `params.destinationId`** in the query (the user's spec snippet omitted it, but it's a real param the edge function reads and the hook gates `enabled` on).
+- **No method override needed** beyond `method: 'GET'`; supabase-js default is POST, so we explicitly set GET to match the edge handler.
 
 ### Verification
 
-- A signed-out user clicking "Submit review" → toast/error reads "Sign in required to leave a review." (instead of the generic "Authentication required. Please sign in.").
-- A signed-in user → unchanged behavior; one extra `getSession()` call (already cached by the supabase client).
-- `grep -n "Sign in required to leave a review" src/services/reviewsAPI.ts` → 1 hit.
-- Type check: `CreateReviewInput` unchanged → no downstream type breaks.
+- `grep -c "supabase.functions.invoke('activities'" src/services/activitiesAPI.ts` → 0 (the bare-name invoke is gone).
+- `grep -n "activities?" src/services/activitiesAPI.ts` → 1 hit.
+- A search with `destination: 'Venice'` triggers a single network call to `…/functions/v1/activities?destination=Venice`, returns activities, no 400 in logs.
+- `useActivitySearch` error path still surfaces failures.
+
+### Out of scope
+
+- The duplicate `Content-Type` header (supabase-js sets it). Not changing other call sites.

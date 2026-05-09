@@ -81,23 +81,19 @@ export async function searchActivities(params: ActivitySearchParams): Promise<Ac
   if (params.category) queryParams.set('category', params.category);
   if (params.limit) queryParams.set('limit', params.limit.toString());
 
-  const { data, error } = await supabase.functions.invoke('activities', {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: null,
-  });
+  // Single GET with query params (the shape the edge function expects).
+  // Removed the buggy body-on-GET first call that always 400'd silently.
+  const { data, error } = await supabase.functions.invoke(
+    `activities?${queryParams.toString()}`,
+    { method: 'GET' },
+  );
 
-  // Edge functions with GET need query params in URL - use POST instead
-  const { data: result, error: invokeError } = await supabase.functions.invoke(`activities?${queryParams.toString()}`);
-
-  if (invokeError) {
-    console.error('[Activities] Edge function error:', invokeError);
-    throw new Error(invokeError.message || 'Failed to search activities');
+  if (error) {
+    console.error('[Activities] Edge function error:', error);
+    throw new Error(error.message || 'Failed to search activities');
   }
 
-  return result as ActivitySearchResponse;
+  return data as ActivitySearchResponse;
 }
 
 /**
