@@ -1,63 +1,56 @@
-## DC.5 — Strip hotel + flight line items from `create-booking-checkout`
+## M8 — Weighted rating null guard in `mergePlaceDetails`
 
-File: `supabase/functions/create-booking-checkout/index.ts` (413 lines). Hotel and flight booking are both dead after DC.1–DC.4. Activities + service fee are the only live charge surfaces.
+File: `supabase/functions/fetch-reviews/index.ts`, lines 788–807.
 
-### Edits (top-to-bottom)
+The existing inline loop already filters `p.rating > 0 && p.totalReviews > 0`, so weight distortion is already prevented. The **behavioral gap** vs. spec is the fallback: when no source has reviews, current code returns `primary.rating` (whatever stub rating the primary carried); spec wants `null`.
 
-**1. Body parsing — lines 47–48**
-Drop both `flightTotal` and `hotelTotal` reads.
+### Edit (lines 788–807)
 
-**2. logStep — line 51**
-Remove `flightTotal`, `hotelTotal` from the `"Request body"` payload.
+Replace the weighted-average block with a `validSources`-based version:
 
-**3. Bounds check — line 58**
-Reduce to:
 ```ts
-if (activitiesTotal < 0 || activitiesTotal > 1000000) { … }
+// Calculate weighted average rating.
+// Exclude sources with no reviews — log10(0+1)=0 weight, but keeping them in
+// the source list distorts downstream consumers and the null-fallback semantics.
+const candidates = [google, tripAdvisor, foursquare, openTripMap];
+const validSources = candidates.filter((p): p is PlaceDetails =>
+  !!p &&
+  Number.isFinite(p.rating) && p.rating > 0 &&
+  Number.isFinite(p.totalReviews) && p.totalReviews > 0
+);
+
+const weightedSum = validSources.reduce(
+  (acc, s) => acc + s.rating * Math.log10(s.totalReviews + 1), 0
+);
+const totalWeight = validSources.reduce(
+  (acc, s) => acc + Math.log10(s.totalReviews + 1), 0
+);
+const totalReviews = validSources.reduce((acc, s) => acc + s.totalReviews, 0);
+const avgRating = totalWeight > 0
+  ? Math.round((weightedSum / totalWeight) * 10) / 10
+  : null;
+
+return {
+  ...primary,
+  rating: avgRating ?? null,
+  totalReviews,
+  photos: allPhotos.slice(0, 8),
+};
 ```
 
-**4. Server-derived selection prices — lines 148–160**
-Delete `serverFlightTotal` and `serverHotelTotal` blocks (the `trip.flight_selection` / `trip.hotel_selection` price reads).
+### Behavioral change
 
-**5. Cents conversion + price-mismatch guards — lines 163–184**
-Delete `clientFlightCents`, `clientHotelCents`, `serverFlightCents`, `serverHotelCents`, both PRICE_MISMATCH return branches, and fallback `flightCents` / `hotelCents`. Keep only:
-```ts
-const activitiesCents = Math.round((activitiesTotal || 0) * 100);
-```
+- **Before:** no valid sources → `rating = primary.rating` (could be 0/stale).
+- **After:** no valid sources → `rating = null`. Downstream UI must already handle null (other code paths return null ratings).
 
-**6. Currency-mismatch soft warns — lines 196–204**
-Delete both `flightSelCurrency` and `hotelSelCurrency` blocks.
+### Note on user's spec
 
-**7. Line items — lines 236–256**
-Delete both `if (flightCents > 0)` and `if (hotelCents > 0)` `lineItems.push(...)`. Keep service fee (227–234) and activities (258–267).
-
-**8. Idempotency total — line 275**
-```ts
-const totalCents = (activitiesCents | 0);
-```
-
-**9. trip_payments inserts — lines 316–348**
-Delete the `flightCents > 0` and `hotelCents > 0` paymentRecords pushes. Keep the activities push.
-
-### What stays
-
-- Auth, trip lookup, `tripCurrency` / `activitiesCurrency` resolution.
-- `SERVICE_FEE_CENTS` line item (always required).
-- Activities currency-mismatch hard reject (lines 187–194).
-- `activitiesCents` line item, `activity` paymentRecord, Stripe session create + idempotency, trip status / booking_reference update.
+The user's snippet shows an early `return { rating: null, totalReviews: 0, sources: [] }`. That shape doesn't match `PlaceDetails` (no `sources` field, would drop `name/address/photos/etc.` from `primary`). I'm preserving the `...primary` spread and just nulling `rating` — same null-guard semantics, no broken contract for callers.
 
 ### Verification
 
 ```bash
-grep -c "hotelTotal\|hotelCents\|Hotel Booking" supabase/functions/create-booking-checkout/index.ts   # 0
-grep -c "flightTotal\|flightCents\|Flight Booking" supabase/functions/create-booking-checkout/index.ts # 0
-grep -c "flight_selection\|hotel_selection" supabase/functions/create-booking-checkout/index.ts        # 0
+grep -c "validSources" supabase/functions/fetch-reviews/index.ts   # ≥ 1
 ```
 
-### Caller note (out of scope)
-
-Frontend may still POST `flightTotal` / `hotelTotal`; they will be silently ignored after this change. Flag for follow-up caller cleanup.
-
-### Deploy
-
-Redeploy `create-booking-checkout` after edits.
+Then deploy `fetch-reviews`.
