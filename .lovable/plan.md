@@ -1,110 +1,26 @@
-## RS.4 — Refund clawback handles partially-spent packs
+## RS.5 — Balance reconciliation background job
 
-**File:** `supabase/functions/stripe-webhook/index.ts` — credit-pack clawback inside `charge.refunded`, L932–L971.
+Add an hourly pg_cron job that recomputes each user's `credit_balances` cache from `credit_purchases` (source of truth) and corrects any drift. Then run it once to backfill existing drift.
 
-Today, on refund we zero `credit_purchases.remaining` and log a single `stripe_refund` ledger row. If the user already burned some credits before the refund, our audit row understates the grant (only the unspent portion is reported as `credits_delta`) and there's no signal that the spent portion was forgiven. RS.4 makes the partial-spend case explicit and adds a structured ledger row + metadata for ops auditing. Policy (a) is baked in: spent credits are forgiven, never clawed from the user's free-tier balance.
+### Files
 
-### Schema
+**New migration** `supabase/migrations/<timestamp>_balance_reconciliation_job.sql`:
 
-`credit_ledger.metadata jsonb DEFAULT '{}'` already exists. ✅
-`uq_credit_ledger_stripe_session (stripe_session_id, transaction_type) WHERE stripe_session_id IS NOT NULL` is the idempotency backstop — we still only insert one `transaction_type='refund'` row per session, so the unique index isn't violated. ✅
-No migration needed.
+1. `CREATE OR REPLACE FUNCTION public.reconcile_credit_balances() RETURNS jsonb` — `SECURITY DEFINER`, `search_path = public`. Iterates distinct `user_id` from `credit_purchases` where `remaining > 0`, computes:
+   - `purchased_credits` = SUM(remaining) for `credit_type IN ('flex','club_base','topup','migration','manual_grant')`
+   - `free_credits` = SUM(remaining) for `credit_type IN ('free_monthly','signup_bonus','referral_bonus','club_bonus','refund')`
+   - filtered by `expires_at IS NULL OR expires_at > now()`
+   
+   Compares to cache, upserts on drift, returns `{success, total_users_checked, drift_corrected, ran_at}`.
+2. `REVOKE ALL ... FROM PUBLIC, anon, authenticated;` `GRANT EXECUTE ... TO service_role;`
+3. `cron.schedule('reconcile-credit-balances-hourly', '0 * * * *', $$SELECT public.reconcile_credit_balances()$$);` — guarded with `IF NOT EXISTS` check against `cron.job` to make migration re-runnable.
 
-### Code change
+**Post-deploy backfill** (run via insert tool, not migration): `SELECT public.reconcile_credit_balances();`
 
-Inside `if (!existingClawback) { … }` at L945, replace the body with:
+### Notes / decisions baked in
 
-```ts
-// 1) Compute already-spent credits from this pack via the ledger
-const { data: spentForSession } = await supabaseAdmin
-  .from('credit_ledger')
-  .select('credits_delta')
-  .eq('stripe_session_id', checkoutSession.id)
-  .eq('transaction_type', 'spend');
-const totalSpentFromThisPack = (spentForSession || [])
-  .reduce((sum, row) => sum + Math.abs(Number(row.credits_delta) || 0), 0);
-
-// 2) Pack totals (granted vs remaining) for audit
-const { data: purchaseRows } = await supabaseAdmin
-  .from('credit_purchases')
-  .select('id, remaining, amount')
-  .eq('stripe_session_id', checkoutSession.id);
-const totalGranted   = (purchaseRows || []).reduce((s, r) => s + Number(r.amount    || 0), 0);
-const totalRemaining = (purchaseRows || []).reduce((s, r) => s + Number(r.remaining || 0), 0);
-
-// 3) Zero remaining on every credit_purchases row for this session
-for (const row of creditRows) {
-  totalClawed += row.remaining;
-  await supabaseAdmin
-    .from('credit_purchases')
-    .update({ remaining: 0, updated_at: new Date().toISOString() })
-    .eq('id', row.id);
-}
-
-// 4) Single ledger audit row — branch on partial-spend
-if (totalSpentFromThisPack > 0) {
-  // Policy (a): forgive already-spent credits; only the unspent portion is clawed
-  console.warn('[stripe-webhook] Refund on partially-spent pack — clawing back unspent only', {
-    userId: refundUserId,
-    sessionId: checkoutSession.id,
-    totalGranted,
-    totalRemaining,
-    totalSpent: totalSpentFromThisPack,
-  });
-  await supabaseAdmin.from('credit_ledger').insert({
-    user_id: refundUserId,
-    transaction_type: 'refund',
-    action_type: 'stripe_refund_partial_spent',
-    credits_delta: -totalRemaining,
-    is_free_credit: false,
-    stripe_session_id: checkoutSession.id,
-    notes: `Stripe refund on partially-spent pack. Clawed: ${totalRemaining}, already spent: ${totalSpentFromThisPack}, total granted: ${totalGranted}`,
-    metadata: {
-      total_granted: totalGranted,
-      total_spent: totalSpentFromThisPack,
-      total_clawed: totalRemaining,
-      refund_id: refundRef,
-    },
-  });
-} else {
-  // Full claw-back, original ledger shape
-  await supabaseAdmin.from('credit_ledger').insert({
-    user_id: refundUserId,
-    transaction_type: 'refund',
-    action_type: 'stripe_refund',
-    credits_delta: -totalClawed,
-    is_free_credit: false,
-    stripe_session_id: checkoutSession.id,
-    notes: `Stripe refund clawback: ${totalClawed} credits (refund ${refundRef})`,
-  });
-}
-
-// 5) Sync balance cache
-await syncBalanceCache(supabaseAdmin, refundUserId);
-log("Consumer credit clawback complete", {
-  userId: refundUserId,
-  creditsClawed: totalClawed,
-  alreadySpent: totalSpentFromThisPack,
-  refundId: refundRef,
-});
-```
-
-The `else` branch (`existingClawback` exists → "Duplicate consumer credit clawback, skipping") at L969–L971 is unchanged.
-
-### Notes
-
-- `transaction_type='spend'` is the value emitted by the credit-deduction path (consistent with the negative `credits_delta` semantics elsewhere in this file). If the codebase actually uses a different label (e.g. `'usage'`), the partial-spend branch will silently report 0 spent and we'll always take the full-clawback path — safe but inaccurate. I'll spot-check existing inserts during implementation; if the term differs, I'll match it and call it out.
-- Single ledger row per refund, so `uq_credit_ledger_stripe_session` is preserved.
-- `totalRemaining` is computed over all rows for the session, while `totalClawed` is summed from `creditRows` (same filter `gt('remaining', 0)`); they're equal in practice, but the structured `metadata.total_clawed` uses `totalRemaining` to match the `credits_delta` exactly.
-
-### Verify
-
-```
-grep -c "stripe_refund_partial_spent\|totalSpentFromThisPack" supabase/functions/stripe-webhook/index.ts
-```
-Expect ≥ 2.
-
-### Out of scope
-- Policy (b) (issue partial monetary refund proportional to unspent credits + treat the rest as debt).
-- Backfilling existing refunded sessions with the new ledger shape.
-- Frontend surfacing of "credits forgiven" in the receipt/history UI.
+- The original spec listed only 4 paid + 4 free credit_types. The DB CHECK constraint allows 10 types. I expanded the buckets so `topup`/`migration`/`manual_grant` count as purchased and `refund` counts as free, matching how those rows are used elsewhere in the codebase. If you want a different bucketing (e.g. exclude `refund` entirely), say so before approving.
+- `pg_cron` is the standard scheduler in this project; assumed already enabled. The migration will `CREATE EXTENSION IF NOT EXISTS pg_cron;` to be safe.
+- Uses `ON CONFLICT (user_id)` — `credit_balances.user_id` already has a UNIQUE constraint. ✓
+- Does not touch `free_credits_expires_at` or `last_free_credit_at` (orthogonal fields managed elsewhere).
+- Verification: `ls supabase/migrations/ | grep balance_reconciliation` and the manual `SELECT` returns the drift_corrected count.
