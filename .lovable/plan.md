@@ -1,44 +1,42 @@
-## L6 — Distance parsing units guard
+## L7 — Itinerary chat stream cleanup warning comment
 
-**File:** `supabase/functions/route-details/index.ts` (around line 199)
+**File:** `supabase/functions/itinerary-chat/index.ts` (L715–L719)
 
-**Change:** Add a defensive sanity check after parsing `leg.distanceMeters` from the Google Routes API. If a single leg's distance exceeds ~2,000,000 meters (2,000 km), log an error — Google's response shape likely changed (e.g. miles instead of meters). Non-fatal: log only, do not throw or alter the response.
+**Change:** Add a warning comment + `console.warn` to the dormant `if (stream)` branch. No behavior change for any current caller (frontend uses `stream: false`).
 
-### Edit (single insertion at L199)
+### Edit
 
-Replace:
+Replace L715–L719:
 ```ts
-// Parse total distance
-const distanceMeters = leg.distanceMeters || 0;
-const distanceMiles = (distanceMeters / 1609.34).toFixed(1);
+    if (stream) {
+      return new Response(response.body, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
+    }
 ```
 
 With:
 ```ts
-// Parse total distance
-const distanceMeters = Number(leg.distanceMeters) || 0;
-
-// Sanity-check: a single leg distance should never exceed ~2,000,000 meters
-// (2000 km). If it does, Google's response shape changed and we're parsing
-// the wrong unit. Fail loudly so we catch it in dev rather than silently
-// rendering "100 mi" as "160,934 m".
-if (Number.isFinite(distanceMeters) && distanceMeters > 2_000_000) {
-  console.error('[route-details] Implausible leg distance — possibly wrong unit:', {
-    distanceMeters, expected: 'meters',
-  });
-  // Don't fail the response — just log. Caller decides what to do with the value.
-}
-
-const distanceMiles = (distanceMeters / 1609.34).toFixed(1);
+    if (stream) {
+      // WARNING: Streaming mode is currently UNUSED in production (frontend
+      // calls with stream: false). Re-enabling streaming requires:
+      //   - Cost tracking refactor — currently fires post-stream, won't fire
+      //     if client disconnects mid-stream
+      //   - Mutation extraction (lines 688-905) is bypassed on this branch
+      //   - Cleanup handlers (cost save, idempotency record) miss the stream path
+      // Until those are addressed, do not flip frontend to stream: true.
+      console.warn('[itinerary-chat] Streaming mode invoked — verify cost tracking + mutation paths first');
+      return new Response(response.body, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
+    }
 ```
-
-Note: the loop in this file processes a single `leg` (no `i` index in scope), so the log payload omits `legIndex` from the spec snippet.
 
 ### Verify
 ```
-grep -c "Implausible leg distance\|2_000_000" supabase/functions/route-details/index.ts
+grep -c "Streaming mode is currently UNUSED" supabase/functions/itinerary-chat/index.ts
 ```
-Expect ≥ 1 (will be 2).
+Expect ≥ 1.
 
 ### Out of scope
-- No frontend changes, no behavior change for callers, no AI/billing impact.
+- No refactor of streaming behavior. No frontend change. No billing/cost path change.
