@@ -845,6 +845,7 @@ serve(async (req) => {
                 is_paid: false,
                 paid_amount_usd: 0,
                 paid_amount_local: 0,
+                currency: charge.currency.toUpperCase(),  // capture the actual refund currency (RS.M.B3)
                 refunded_at: new Date().toISOString(),
                 refund_amount_cents: charge.amount_refunded,
                 updated_at: new Date().toISOString(),
