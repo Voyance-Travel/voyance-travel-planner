@@ -66,6 +66,39 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    // Preference gate: respect user's email opt-out before doing any work.
+    // Both `email_notifications` (master switch) and `trip_reminders` (specific
+    // gate for trip-related emails) must be true. Defaults are true/true so
+    // users who never visited preferences still receive these emails.
+    const { data: prefs } = await supabase
+      .from('user_preferences')
+      .select('email_notifications, trip_reminders')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (prefs && (prefs.email_notifications === false || prefs.trip_reminders === false)) {
+      console.log(`[post-trip-email] Skipped — user ${userId} opted out`, {
+        email_notifications: prefs.email_notifications,
+        trip_reminders: prefs.trip_reminders,
+      });
+      // Mark as "sent" in the log so we don't retry forever.
+      await supabase.from('trip_notifications').upsert(
+        {
+          trip_id: tripId,
+          user_id: userId,
+          notification_type: 'post_trip_followup',
+          sent: true,
+          sent_at: new Date().toISOString(),
+          metadata: { skipped_reason: 'user_opted_out' },
+        },
+        { onConflict: 'trip_id,notification_type' }
+      );
+      return new Response(
+        JSON.stringify({ success: true, skipped: true, reason: 'user_opted_out' }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Check if email already sent (unless forced)
     const { data: existingNotif } = await supabase
       .from('trip_notifications')

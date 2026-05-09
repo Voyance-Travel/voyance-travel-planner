@@ -1,33 +1,18 @@
-## Fix 3.1 — Push 410 token cleanup
+## Fix 3.2 — post-trip-email opt-out preference check
 
-Update `supabase/functions/send-push/index.ts` to detect APNs dead-token signals and delete them from `push_tokens`.
+Insert a preference gate in `supabase/functions/post-trip-email/index.ts` after line 67 (ownership check) and before line 69 (already-sent check).
 
-### Changes
+### Verified
+- `user_preferences` has both `email_notifications` and `trip_reminders` columns.
+- `trip_notifications` has `UNIQUE (trip_id, notification_type)` (`unique_trip_notification`) — `upsert` with `onConflict: 'trip_id,notification_type'` works.
 
-**1. Extend `PushResult` interface** (lines 101–107)
-Add optional `shouldDeleteToken?: boolean` field.
+### Change
+Query `user_preferences` for the user; if either flag is explicitly `false`, log + upsert a `trip_notifications` row with `sent=true` and `metadata.skipped_reason='user_opted_out'`, then return `{ success: true, skipped: true, reason: 'user_opted_out' }`. Missing prefs row = defaults true → proceed normally. `forceResend` path unaffected.
 
-**2. Update `sendApns` error branch** (lines 154–156)
-After logging the APNs error, set `shouldDeleteToken = true` when:
-- `res.status === 410` (any reason)
-- `res.status === 400` AND parsed JSON body `reason` is `BadDeviceToken` or `Unregistered`
-
-Return the flag on the `PushResult`.
-
-**3. Cleanup pass in main handler** (lines 244–251)
-After tallying `sent`/`failed`:
-- Collect `deadTokens = results.filter(r => r.shouldDeleteToken).map(r => r.token)`
-- If non-empty, create a service-role Supabase client and run `.from('push_tokens').delete({ count: 'exact' }).in('token', deadTokens)`
-- Log `Deleted N dead tokens`; swallow errors (log only — don't fail the response)
-- Include `deleted` in the JSON response and the final summary log
-
-### Notes
-- `createClient` is already imported at the top.
-- Cleanup is idempotent — re-deleting an already-deleted token is a no-op.
-- No DB schema or other file changes required.
+No DB migration, no other file changes.
 
 ### Verification
 ```
-grep -n "shouldDeleteToken" supabase/functions/send-push/index.ts        # 3+ hits
-grep -n "push_tokens" supabase/functions/send-push/index.ts              # includes .delete().in('token', ...)
+grep -n "user_preferences\|email_notifications\|trip_reminders" supabase/functions/post-trip-email/index.ts   # 3+ hits
+grep -n "user_opted_out\|skipped_reason" supabase/functions/post-trip-email/index.ts                          # 2+ hits
 ```
