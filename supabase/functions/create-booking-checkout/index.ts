@@ -126,6 +126,20 @@ serve(async (req) => {
     logStep("Trip found", { destination: trip.destination });
 
     // =========================================================================
+    // CURRENCY RESOLUTION (R3.4)
+    // =========================================================================
+    const tripCurrency = String((trip as any).budget_currency || 'usd').toLowerCase();
+    if (!SUPPORTED_CURRENCIES.has(tripCurrency)) {
+      logStep("Unsupported trip currency", { tripCurrency });
+      return new Response(JSON.stringify({
+        error: `Unsupported currency: ${tripCurrency.toUpperCase()}. Please change your trip currency.`,
+        code: "UNSUPPORTED_CURRENCY",
+      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const activitiesCurrency = activitiesCurrencyInput || tripCurrency;
+    logStep("Currency resolved", { tripCurrency, activitiesCurrency });
+
+    // =========================================================================
     // SERVER-SIDE PRICE VALIDATION — prevent client-side price manipulation
     // =========================================================================
     const PRICE_TOLERANCE_CENTS = 100; // $1 rounding tolerance
