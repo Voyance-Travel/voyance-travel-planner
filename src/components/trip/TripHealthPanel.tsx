@@ -85,6 +85,77 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
       return;
     }
 
+    // ── HC.1: required-meal / thin-day / large-gap checks ──────────────────
+    // Mirrors server deriveMealPolicy + density protocol so the panel
+    // surfaces the same gaps the repair pipeline would.
+    const dayMode: string = day?.metadata?.quality?.dayMode || '';
+    const requiredMeals: string[] = (() => {
+      if (dayMode === 'late_arrival' || dayMode === 'full_day_event') return [];
+      if (dayMode === 'early_departure') return ['breakfast'];
+      if (dayMode === 'midday_arrival') return ['lunch', 'dinner'];
+      if (dayMode === 'midday_departure' || dayMode === 'afternoon_departure') return ['breakfast', 'lunch'];
+      return ['breakfast', 'lunch', 'dinner'];
+    })();
+
+    if (requiredMeals.length > 0) {
+      const DINING_CATS = ['dining', 'restaurant', 'food'];
+      const detectedMeals = new Set<string>();
+      for (const a of realActivities) {
+        const cat = (a.category || a.type || '').toLowerCase();
+        const title = (a.title || a.name || '').toLowerCase();
+        if (!DINING_CATS.some((c) => cat.includes(c))) continue;
+        if (title.includes('breakfast') || title.includes('brunch')) detectedMeals.add('breakfast');
+        else if (title.includes('lunch')) detectedMeals.add('lunch');
+        else if (title.includes('dinner') || title.includes('supper')) detectedMeals.add('dinner');
+      }
+      const missingMeals = requiredMeals.filter((m) => !detectedMeals.has(m));
+      if (missingMeals.length > 0) {
+        issues.push({
+          id: `missing-meals-${dayNum}`,
+          severity: 'error',
+          message: `Day ${dayNum} missing ${missingMeals.join(', ')}`,
+          fixLabel: 'Regenerate Day',
+          fixAction: 'refresh_day',
+          dayNumber: dayNum,
+        });
+      }
+    }
+
+    // Thin-day — skip days that legitimately have a tiny usable window
+    const SKIP_THIN = new Set(['late_arrival', 'early_departure', 'full_day_event', 'midday_departure']);
+    if (!SKIP_THIN.has(dayMode) && realActivities.length < 3) {
+      issues.push({
+        id: `thin-day-${dayNum}`,
+        severity: realActivities.length === 1 ? 'error' : 'warning',
+        message: `Day ${dayNum} has only ${realActivities.length} activit${realActivities.length === 1 ? 'y' : 'ies'} (light schedule)`,
+        fixLabel: 'Add Activities',
+        fixAction: 'refresh_day',
+        dayNumber: dayNum,
+      });
+    }
+
+    // Large gap — flag any ≥3h gap between consecutive activities
+    const sortedForGap = [...realActivities]
+      .filter((a: any) => !!a.startTime)
+      .sort((a: any, b: any) => parseTime(a.startTime || '00:00') - parseTime(b.startTime || '00:00'));
+    let prevEnd: number | null = null;
+    for (const a of sortedForGap) {
+      const startMins = parseTime(a.startTime || '00:00');
+      if (prevEnd !== null && startMins - prevEnd >= 180) {
+        const gapHours = Math.floor((startMins - prevEnd) / 60);
+        issues.push({
+          id: `gap-${dayNum}-${startMins}`,
+          severity: 'warning',
+          message: `Day ${dayNum} has ${gapHours}h gap before ${a.title || a.name || 'next activity'}`,
+          fixLabel: 'Fill Gap',
+          fixAction: 'refresh_day',
+          dayNumber: dayNum,
+        });
+      }
+      const endMins = parseTime(a.endTime || a.startTime || '00:00');
+      if (endMins > startMins) prevEnd = endMins;
+    }
+
     // Timing conflicts — overlapping activities
     const TRANSIT_CATS = ['transit', 'transportation', 'transfer', 'walking', 'transport', 'commute', 'taxi', 'travel'];
     const TRANSIT_TITLE_RE = /^(walk|transfer|return|drive|taxi|metro|train|bus|tram|ride)\b/i;
