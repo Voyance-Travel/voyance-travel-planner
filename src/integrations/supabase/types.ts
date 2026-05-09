@@ -2165,6 +2165,39 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_idempotency_cache: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          expires_at: string
+          idempotency_key: string
+          input_hash: string
+          response_data: Json
+          trip_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          expires_at: string
+          idempotency_key: string
+          input_hash: string
+          response_data: Json
+          trip_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          expires_at?: string
+          idempotency_key?: string
+          input_hash?: string
+          response_data?: Json
+          trip_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       city_landmarks_cache: {
         Row: {
           city: string
