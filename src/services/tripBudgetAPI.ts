@@ -498,12 +498,27 @@ export async function calculateBudgetSummary(tripId: string): Promise<BudgetSumm
 
   const tripCurrency = String(tripRowResp.data?.budget_currency || 'USD').toUpperCase();
 
-  // Get all splits for all expenses
-  const allSplits: ExpenseSplit[] = [];
-  for (const expense of expenses) {
-    const splits = await getExpenseSplits(expense.id);
-    allSplits.push(...splits);
+  // Batch fetch all splits for all expenses in one query (was N+1).
+  const expenseIds = expenses.map(e => e.id).filter(Boolean);
+  const { data: splitRows } = expenseIds.length > 0
+    ? await supabase.from('expense_splits').select('*').in('expense_id', expenseIds)
+    : { data: [] as any[] };
+
+  const splitsByExpense = new Map<string, ExpenseSplit[]>();
+  for (const row of (splitRows || [])) {
+    const split: ExpenseSplit = {
+      id: row.id,
+      expenseId: row.expense_id,
+      memberId: row.member_id,
+      amount: Number(row.amount),
+      percentage: row.percentage ? Number(row.percentage) : null,
+      isPaid: row.is_paid,
+      paidAt: row.paid_at,
+    };
+    if (!splitsByExpense.has(split.expenseId)) splitsByExpense.set(split.expenseId, []);
+    splitsByExpense.get(split.expenseId)!.push(split);
   }
+  const allSplits: ExpenseSplit[] = Array.from(splitsByExpense.values()).flat();
 
   // Per-expense currency normalization. Mismatched currencies drop to 0 +
   // surface in mixedCurrencyExpenseIds so the UI can flag "needs conversion".
