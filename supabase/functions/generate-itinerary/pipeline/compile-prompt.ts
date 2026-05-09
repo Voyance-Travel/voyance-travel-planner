@@ -626,7 +626,17 @@ If this describes a primary purpose (event, wedding, conference), dedicate appro
     arrivalAirportDisplay, airportTransferMinutes,
   });
   flightContext = schema.flightContext;
-  const dayConstraints = schema.dayConstraints;
+  const baseDayConstraints = schema.dayConstraints;
+
+  // RS.M.I1: explicit hotel-change directive — propagates to first/last/middle-day branches
+  const hotelChangeNote = facts.resolvedIsHotelChange
+    ? `\n\n=== HOTEL CHANGE DAY ===\nYou are switching hotels today. Schedule:\n` +
+      `- Checkout from ${facts.resolvedPreviousHotelName || 'previous hotel'} (typically 11:00)\n` +
+      `- Travel to ${resolvedHotelOverride?.name || flightContext.hotelName || 'new hotel'} (~30-45 min depending on distance)\n` +
+      `- Check-in at new hotel (typically 15:00)\n` +
+      `- Plan flexible activities BEFORE checkout and AFTER check-in. No tight reservations during the gap.\n`
+    : '';
+  const dayConstraints = `${baseDayConstraints}${hotelChangeNote}`;
 
   // ═══════════════════════════════════════════════════════════════════════
   // TIMING INSTRUCTIONS + MEAL POLICY
