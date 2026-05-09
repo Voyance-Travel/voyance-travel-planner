@@ -1,18 +1,12 @@
-## Fix 3.2 — post-trip-email opt-out preference check
+## Fix 4.1 — IAP receipt validation network retry
 
-Insert a preference gate in `supabase/functions/post-trip-email/index.ts` after line 67 (ownership check) and before line 69 (already-sent check).
+`supabase/functions/validate-iap-receipt/index.ts`:
 
-### Verified
-- `user_preferences` has both `email_notifications` and `trip_reminders` columns.
-- `trip_notifications` has `UNIQUE (trip_id, notification_type)` (`unique_trip_notification`) — `upsert` with `onConflict: 'trip_id,notification_type'` works.
+1. Add `fetchWithRetry(url, init, maxAttempts=3)` helper near the top (after imports, before `serve`). Retries on 5xx and thrown network errors with 250ms / 750ms / 2250ms backoff. Apple status-code responses (HTTP 200 + status field) pass through untouched.
+2. Replace prod `fetch(appleVerifyUrl, …)` (lines 76–84) with `fetchWithRetry(...)`.
+3. Replace sandbox-fallback `fetch('https://sandbox.itunes.apple.com/verifyReceipt', …)` (lines 90–98) with `fetchWithRetry(...)`.
 
-### Change
-Query `user_preferences` for the user; if either flag is explicitly `false`, log + upsert a `trip_notifications` row with `sent=true` and `metadata.skipped_reason='user_opted_out'`, then return `{ success: true, skipped: true, reason: 'user_opted_out' }`. Missing prefs row = defaults true → proceed normally. `forceResend` path unaffected.
-
-No DB migration, no other file changes.
-
-### Verification
+### Verify
 ```
-grep -n "user_preferences\|email_notifications\|trip_reminders" supabase/functions/post-trip-email/index.ts   # 3+ hits
-grep -n "user_opted_out\|skipped_reason" supabase/functions/post-trip-email/index.ts                          # 2+ hits
+grep -n "fetchWithRetry" supabase/functions/validate-iap-receipt/index.ts   # 3 hits
 ```

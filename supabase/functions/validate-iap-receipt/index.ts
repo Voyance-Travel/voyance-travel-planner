@@ -23,6 +23,47 @@ const PRODUCT_CONFIG: Record<string, {
   'com.voyancetravel.club.adventurer': { credits: 2400, bonusCredits: 800, type: 'club', tier: 'adventurer' },
 };
 
+/**
+ * Fetch with exponential backoff retry on transient failures.
+ * Apple's verifyReceipt can return 500/503 under load, or the connection
+ * can drop entirely. We retry up to 3 times with 250ms / 750ms / 2250ms backoff.
+ *
+ * Apple-validation status codes (e.g. 21007) are NOT network failures — those
+ * come back with HTTP 200 and a status field in the body. The caller still
+ * handles those.
+ */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  maxAttempts = 3,
+): Promise<Response> {
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      // Treat 5xx as transient and retry; any other status returns to the caller.
+      if (res.status >= 500 && attempt < maxAttempts) {
+        const body = await res.text().catch(() => '');
+        console.warn(`[fetchWithRetry] attempt ${attempt} got ${res.status}, retrying`, { url, body: body.slice(0, 200) });
+      } else {
+        return res;
+      }
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[fetchWithRetry] attempt ${attempt} threw, retrying`, {
+        url,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      if (attempt === maxAttempts) break;
+    }
+    // Backoff: 250ms, 750ms, 2250ms (3x growth)
+    await new Promise(r => setTimeout(r, 250 * Math.pow(3, attempt - 1)));
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(`fetchWithRetry exhausted ${maxAttempts} attempts to ${url}`);
+}
+
 Deno.serve(async (req) => {
   const corsResp = handleCorsPreflightRequest(req);
   if (corsResp) return corsResp;
@@ -73,7 +114,7 @@ Deno.serve(async (req) => {
     const sharedSecret = Deno.env.get('APPLE_SHARED_SECRET');
 
     if (receiptData && sharedSecret) {
-      const appleResponse = await fetch(appleVerifyUrl, {
+      const appleResponse = await fetchWithRetry(appleVerifyUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -87,7 +128,7 @@ Deno.serve(async (req) => {
 
       // Status 21007 means sandbox receipt sent to production; retry with sandbox
       if (appleResult.status === 21007 && !isSandbox) {
-        const sandboxResponse = await fetch('https://sandbox.itunes.apple.com/verifyReceipt', {
+        const sandboxResponse = await fetchWithRetry('https://sandbox.itunes.apple.com/verifyReceipt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
