@@ -17,7 +17,8 @@
 
 import { enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
 import { clampBookendEndTime } from '../_shared/clamp-bookend.ts';
-import { fixPlaceholdersForDay, nuclearPlaceholderSweep, nuclearWellnessSweep, nuclearCrossCitySweep } from './fix-placeholders.ts';
+import { fixPlaceholdersForDay, nuclearPlaceholderSweep, nuclearWellnessSweep, nuclearCrossCitySweep, nuclearDiningStrip } from './fix-placeholders.ts';
+import { pruneOrphanTransits } from '../_shared/orphan-transit.ts';
 import {
   checkAndApplyFreeVenue,
   enforceMarketDiningCap,
@@ -245,6 +246,17 @@ export async function universalQualityPass(
   const wellnessSweepCount = nuclearWellnessSweep(result, city, hotelName);
   if (wellnessSweepCount > 0) {
     console.warn(`[QUALITY] Wellness nuclear sweep mutated/removed ${wellnessSweepCount} placeholder(s) in Day ${dayIndex + 1}`);
+  }
+
+  // ── Step 4d: Nuclear DINING STRIP — splice survivors that even the late
+  // fallback can't fix, then prune orphan transit connectors. ──
+  const diningStripCount = nuclearDiningStrip(result, city, diningConfig);
+  if (diningStripCount > 0) {
+    console.warn(`[QUALITY] Dining nuclear strip removed ${diningStripCount} unfillable placeholder(s) in Day ${dayIndex + 1}`);
+  }
+  const orphanCount = pruneOrphanTransits(result);
+  if (orphanCount > 0) {
+    console.warn(`[QUALITY] Orphan-transit cleanup removed ${orphanCount} connector(s) in Day ${dayIndex + 1}`);
   }
 
   // ── Step 5: Free venue pricing ──
@@ -475,6 +487,21 @@ export function terminalCleanup(
     }
   } catch (e) {
     console.warn(`[${label}] Terminal cross-city sweep failed (non-blocking):`, e);
+  }
+
+  // ── 1e. Nuclear DINING STRIP + orphan-transit cleanup (terminal) ──
+  try {
+    const diningConfig = getDiningConfig('Explorer', '');
+    const diningStripCount = nuclearDiningStrip(activities, city || '', diningConfig);
+    if (diningStripCount > 0) {
+      console.warn(`[${label}] Terminal dining strip removed ${diningStripCount} unfillable placeholder(s)`);
+    }
+    const orphanCount = pruneOrphanTransits(activities);
+    if (orphanCount > 0) {
+      console.warn(`[${label}] Terminal orphan-transit cleanup removed ${orphanCount} connector(s)`);
+    }
+  } catch (e) {
+    console.warn(`[${label}] Terminal dining strip / orphan cleanup failed (non-blocking):`, e);
   }
 
   // ── 1b. Deduplicate "Return to Hotel" entries — keep only the LAST one ──

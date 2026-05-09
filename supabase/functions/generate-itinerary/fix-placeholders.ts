@@ -809,6 +809,77 @@ export function isPlaceholderMeal(activity: any, cityName: string): boolean {
   return false;
 }
 
+// =============================================================================
+// NUCLEAR DINING STRIP — terminal safety net mirroring nuclearWellnessSweep.
+// nuclearPlaceholderSweep above tries to REPLACE every surviving placeholder
+// meal via resolveAnyMealFallback. In the rare path where that resolver
+// returns nothing usable OR applyFallbackToActivity no-ops, the placeholder
+// card persists with isPlaceholderMeal=true. This function makes one last
+// fallback attempt and, if that still fails, splices the card out — and also
+// drops the immediately preceding orphan transit ("Walk to <placeholder>")
+// connector. Returns the number of activities stripped.
+// =============================================================================
+export function nuclearDiningStrip(
+  activities: any[],
+  city: string,
+  diningConfig?: DiningConfig,
+): number {
+  if (!Array.isArray(activities) || activities.length === 0) return 0;
+  const destinationCity = (city || '').toLowerCase().split(',')[0].trim();
+  const usedNames = new Set<string>();
+  let stripped = 0;
+
+  for (let i = activities.length - 1; i >= 0; i--) {
+    const act = activities[i];
+    if (!act) continue;
+    if (act.locked || act.isLocked) continue;
+    if (!isPlaceholderMeal(act, destinationCity)) continue;
+
+    const startTimeStr = act.startTime || act.start_time || '12:00';
+    const mealType = parseMealType(startTimeStr);
+
+    // One last fallback attempt (resolveAnyMealFallback should usually return
+    // something; be defensive in case the city pool is exhausted).
+    try {
+      const fallback = resolveAnyMealFallback(city, mealType, usedNames);
+      if (fallback) {
+        applyFallbackToActivity(act, fallback, mealType, usedNames, diningConfig, city);
+        act.category = 'dining';
+        act._placeholder_replaced = true;
+        if (!isPlaceholderMeal(act, destinationCity)) {
+          console.warn(`[DINING NUCLEAR] LATE-REPLACED surviving placeholder → "${act.title}"`);
+          continue;
+        }
+      }
+    } catch (e) {
+      console.warn(`[DINING NUCLEAR] Late-fallback errored:`, e);
+    }
+
+    // Strip — placeholder still present, no usable fallback.
+    const before = act.title || '(untitled)';
+    if (act.cost && typeof act.cost === 'object') act.cost.amount = 0;
+    act.cost_per_person = 0;
+    activities.splice(i, 1);
+    stripped++;
+    console.warn(`[DINING NUCLEAR] STRIPPED placeholder dining "${before}" — no venue, no fallback`);
+
+    // Drop the immediately preceding transit connector (e.g. "Walk to <X>").
+    if (i > 0) {
+      const prev = activities[i - 1];
+      const prevCat = String(prev?.category || '').toLowerCase();
+      const prevTitle = String(prev?.title || '');
+      const isTransitish = prevCat === 'transport' || prevCat === 'transit'
+        || /^(?:walk|travel|transfer|drive|ride|taxi|train|bus|metro|tram|ferry|boat|water taxi|vaporetto)\s+to\s+/i.test(prevTitle);
+      if (isTransitish && !prev?.locked && !prev?.isLocked) {
+        activities.splice(i - 1, 1);
+        console.warn(`[DINING NUCLEAR] Dropped orphan preceding transit "${prevTitle}"`);
+      }
+    }
+  }
+
+  return stripped;
+}
+
 
 // =============================================================================
 // NUCLEAR PLACEHOLDER SWEEP — synchronous, zero-API last line of defense
