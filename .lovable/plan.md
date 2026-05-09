@@ -1,91 +1,60 @@
-## RS.1 — Subscription lifecycle handlers (stripe-webhook)
+## RS.2 — Refund propagation to `activity_costs`
 
-**File:** `supabase/functions/stripe-webhook/index.ts` (replace stub at L976–L980)
+**File:** `supabase/functions/stripe-webhook/index.ts` — `charge.refunded` handler
 
-Replace the no-op `customer.subscription.*` block with real handlers, plus a new `invoice.payment_succeeded` case for renewals. Reuses existing `CLUB_PRODUCT_MAP`, `syncBalanceCache`, `fulfill_credit_purchase` RPC, and `user_tiers` patterns already in the file.
+Today, when Stripe fires `charge.refunded`, we transition booking state and trigger Viator cancellation, but the `activity_costs` row stays with `is_paid=true` / `paid_amount_usd=<original>`. The Payments tab + budget summary keep showing the activity as paid forever.
 
-### Resolution helpers (inline in the new block)
+### Schema migration
 
-Tier/user resolution order on `invoice.payment_succeeded` and on `customer.subscription.deleted`:
+`activity_costs` already has `is_paid`, `paid_amount_usd`, `paid_at`. Missing the columns the spec writes to. Migration:
 
-1. `sub.metadata.user_id` || `sub.metadata.userId`
-2. Stripe customer email → `auth.users` lookup via `supabaseAdmin.auth.admin.listUsers()` filter (or `profiles` table by email)
-
-Tier resolution order:
-
-1. `sub.metadata.tier` || `sub.metadata.club_tier` (only if it's a known tier)
-2. `sub.items.data[0].price.product` (a `prod_…` id) → `CLUB_PRODUCT_MAP[productId].tier`
-
-If both fail → `console.warn` with subscription id and `break` (Stripe will not retry; this is a config issue, not a transient one).
-
-### Behavior
-
-**`invoice.payment_succeeded`** (subscription renewals only):
-- Skip when `!invoice.subscription` (one-time invoices, e.g. flex top-ups, are already handled via `checkout.session.completed`).
-- Retrieve subscription, resolve `userId` + `tier`/`productId` via the order above.
-- Look up `clubInfo = CLUB_PRODUCT_MAP[productId]` — single source of truth (voyager 500/100, explorer 1200/400, adventurer 2500/700). No duplicated TIER_CONFIG.
-- Call existing `fulfill_credit_purchase` RPC with:
-  - `p_credits: clubInfo.baseCredits`
-  - `p_bonus_credits: clubInfo.bonusCredits`
-  - `p_credit_type: 'club_base'`
-  - `p_stripe_session_id: \`subscription_renewal_${invoice.id}\`` (idempotent — invoice id is unique per renewal; the RPC's unique index on `(stripe_session_id, transaction_type)` handles replays).
-  - `p_amount_cents: invoice.amount_paid || 0`
-  - `p_club_tier: clubInfo.tier`, `p_product_id: productId`, `p_price_id: invoice.lines.data[0]?.price?.id ?? null`
-- On RPC error → `logError` and `throw` (so we return 500 and Stripe retries — same pattern as `checkout.session.completed`).
-- On success → `syncBalanceCache(supabaseAdmin, userId)`.
-- Re-upsert `user_tiers` to the renewed tier (only upgrade, never downgrade — same `TIER_HIERARCHY` block already used at L393–L416; refactor into a small `upsertUserTier(userId, tier)` helper at file top so both flows share it).
-
-**`customer.subscription.deleted`**:
-- Resolve `userId` (metadata → email lookup). If unresolvable, warn + break.
-- Zero out remaining club credits: `update credit_purchases set remaining = 0 where user_id = $userId and credit_type in ('club_base','club_bonus')`.
-- Insert audit row in `credit_ledger`:
-  - `transaction_type: 'subscription_cancel'`, `credits_delta: 0`, `is_free_credit: false`, `action_type: 'subscription_deleted'`
-  - `metadata: { stripe_subscription_id, cancelled_at: sub.canceled_at ? ISO : null }`
-- Force-downgrade `user_tiers` to `'free'` via direct upsert (this is the one path that bypasses the upgrade-only guard — cancellation is the documented downgrade trigger).
-- `syncBalanceCache(supabaseAdmin, userId)`.
-
-**`customer.subscription.created`** & **`customer.subscription.updated`**:
-- No-op — initial grant is handled by the original `checkout.session.completed` (subscription mode passes the same metadata + product into that flow today). Just `log('Subscription event (no-op for v1)', { subId, type, status })` for observability.
-
-### New small helper at top of file (near `syncBalanceCache`)
-
-```ts
-async function upsertUserTier(
-  supabaseAdmin: ReturnType<typeof createClient>,
-  userId: string,
-  newTier: string,
-  opts: { allowDowngrade?: boolean } = {}
-) { /* mirrors L393-L416 logic, with allowDowngrade=true for cancellation */ }
+```sql
+ALTER TABLE public.activity_costs
+  ADD COLUMN IF NOT EXISTS paid_amount_local numeric(10,2),
+  ADD COLUMN IF NOT EXISTS refunded_at timestamptz,
+  ADD COLUMN IF NOT EXISTS refund_amount_cents integer;
 ```
 
-Refactor the existing inline block at L393–L416 to call `upsertUserTier(..., { allowDowngrade: false })` so the downgrade path on cancellation reuses the same code.
+No data backfill, no RLS changes (existing service-role + trip-owner policies cover the new columns).
 
-### Email→userId fallback helper
+### Code change
+
+`supabase/functions/stripe-webhook/index.ts`, inside the `case "charge.refunded"` branch, immediately after the `transition_booking_state` RPC call at L834–L838 and before the Viator vendor-cancel `try` block at L840:
 
 ```ts
-async function resolveUserIdFromCustomer(
-  supabaseAdmin, stripe, customerId: string
-): Promise<string | null> {
-  const customer = await stripe.customers.retrieve(customerId);
-  if (!customer || customer.deleted || !customer.email) return null;
-  const { data } = await supabaseAdmin.auth.admin.listUsers();
-  return data?.users?.find(u => u.email?.toLowerCase() === customer.email.toLowerCase())?.id ?? null;
+// Zero the activity cost so the budget summary reflects the refund.
+// Without this, trip budgets show the cost as still-spent forever.
+const { error: costErr } = await supabaseAdmin
+  .from('activity_costs')
+  .update({
+    is_paid: false,
+    paid_amount_usd: 0,
+    paid_amount_local: 0,
+    refunded_at: new Date().toISOString(),
+    refund_amount_cents: charge.amount_refunded,
+    updated_at: new Date().toISOString(),
+  })
+  .eq('activity_id', activityId);
+
+if (costErr) {
+  logError('Failed to zero activity_costs on refund', { activityId, error: costErr });
+} else {
+  log('activity_costs zeroed for refund', { activityId, refundAmount: charge.amount_refunded });
 }
 ```
+
+The existing `if (activityId)` guard (L833) already wraps this region, so no extra null check needed. Uses existing `log` / `logError` helpers for consistency with the rest of the handler.
+
+Note: `activity_id` is a `text` column and the unique index is `(trip_id, activity_id)`. There's a tiny theoretical risk an activity_id collides across trips, but in practice the same Stripe charge maps to one trip's activity row. Spec says `.eq('activity_id', activityId)`; we keep that.
 
 ### Verify
 
 ```
-grep -c "subscription.deleted\|invoice.payment_succeeded\|subscription_renewal_" supabase/functions/stripe-webhook/index.ts
+grep -c "from('activity_costs').update.*is_paid: false" supabase/functions/stripe-webhook/index.ts
 ```
-Expect ≥ 3.
-
-### Caveat (preserved from spec)
-
-Subscription-mode checkout flows must stamp `metadata: { user_id, tier }` on `subscription_data` to make resolution deterministic. The fallback path (customer.email → auth.users + price.product → CLUB_PRODUCT_MAP) handles legacy subs without metadata, but emit a `console.warn` whenever the fallback fires so we can audit and backfill. **Out of scope:** updating any subscription-creation flow; that's a separate task.
+Expect ≥ 1.
 
 ### Out of scope
-- No DB schema changes (uses existing `credit_purchases`, `credit_ledger`, `user_tiers`).
-- No frontend changes.
-- No update to `CLUB_PRODUCT_MAP` (already correct).
-- Plan/upgrade/downgrade mid-cycle handling (`subscription.updated`) — logged only; v2 work.
+- Partial refunds (`amount_refunded < amount`) — spec zeroes regardless; matches the "zero the activity cost" comment. Future work could compute `paid_amount_usd = (amount - amount_refunded) / 100`.
+- Frontend display of `refunded_at` badge — DB write only; UI consumes `is_paid=false` already.
+- `trip_payments` row updates — already handled by existing webhook code paths and `transition_booking_state`.

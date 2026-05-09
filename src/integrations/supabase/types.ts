@@ -223,8 +223,11 @@ export type Database = {
           local_currency: string | null
           notes: string | null
           num_travelers: number
+          paid_amount_local: number | null
           paid_amount_usd: number | null
           paid_at: string | null
+          refund_amount_cents: number | null
+          refunded_at: string | null
           source: string
           total_cost_usd: number | null
           trip_id: string
@@ -244,8 +247,11 @@ export type Database = {
           local_currency?: string | null
           notes?: string | null
           num_travelers?: number
+          paid_amount_local?: number | null
           paid_amount_usd?: number | null
           paid_at?: string | null
+          refund_amount_cents?: number | null
+          refunded_at?: string | null
           source?: string
           total_cost_usd?: number | null
           trip_id: string
@@ -265,8 +271,11 @@ export type Database = {
           local_currency?: string | null
           notes?: string | null
           num_travelers?: number
+          paid_amount_local?: number | null
           paid_amount_usd?: number | null
           paid_at?: string | null
+          refund_amount_cents?: number | null
+          refunded_at?: string | null
           source?: string
           total_cost_usd?: number | null
           trip_id?: string
