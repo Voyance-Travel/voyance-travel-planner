@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { withRetry, logBackendError, classifyBackendError } from '@/lib/backendError';
 
 export interface TripNotification {
   id: string;
@@ -40,39 +41,41 @@ export async function scheduleTripNotifications(tripId: string, userId: string):
 // Get all pending notifications for a user from the edge function
 async function getEdgeFunctionNotifications(userId: string): Promise<TripNotification[]> {
   try {
-    const { data, error } = await supabase.functions.invoke('trip-notifications', {
-      body: {
-        action: 'get-user-notifications',
-        userId
-      }
-    });
-
-    if (error) {
-      console.error('Failed to get edge function notifications:', error);
-      return [];
-    }
+    const data = await withRetry(async () => {
+      const { data, error } = await supabase.functions.invoke('trip-notifications', {
+        body: { action: 'get-user-notifications', userId },
+      });
+      if (error) throw error;
+      return data;
+    }, { tries: 2, delayMs: 400 });
 
     return (data?.notifications || []).map((n: any) => ({
       ...n,
       read: n.sent || false,
       source: 'edge' as const,
     }));
-  } catch {
+  } catch (err) {
+    logBackendError('[notifications] edge fetch failed:', err);
     return [];
   }
 }
 
 // Get collaboration notifications from the trip_notifications table
 async function getDbNotifications(userId: string): Promise<TripNotification[]> {
-  const { data, error } = await supabase
-    .from('trip_notifications')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  if (error) {
-    console.error('Failed to get DB notifications:', error);
+  let data: any[] | null = null;
+  try {
+    data = await withRetry(async () => {
+      const res = await supabase
+        .from('trip_notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (res.error) throw res.error;
+      return res.data;
+    }, { tries: 2, delayMs: 400 });
+  } catch (err) {
+    logBackendError('[notifications] db fetch failed:', err);
     return [];
   }
 
