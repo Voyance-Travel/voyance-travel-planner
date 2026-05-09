@@ -53,7 +53,7 @@ Deno.test("validation gate: TRUNCATED_SENTENCE trims field on critical", () => {
     },
   ];
   const out = applyValidationGate(day, results, { dayNumber: 1 });
-  assertEquals(out.day.activities[0].description, "Wander Cannaregio at golden hour.");
+  assertEquals(out.day.activities[0].description, "Wander Cannaregio at golden hour and watch the canals shimmer.");
   assertEquals(out.counters.blankedFields, 1);
   assertEquals(out.counters.forcedDowngrades, 1);
   assertEquals(out.verdict, "persist_forced");
