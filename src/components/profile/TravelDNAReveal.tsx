@@ -672,7 +672,14 @@ export default function TravelDNAReveal({ userId, className, refreshKey }: Trave
               >
                 <TravelDNATransparency dnaData={dnaData.travel_dna_v2 as any} />
                 <DNAAccuracyFeedback userId={userId} />
-                <DNAFeedbackChat userId={userId} />
+                <DNAFeedbackChat
+                  userId={userId}
+                  onFeedbackApplied={() => {
+                    queryClient.invalidateQueries({ queryKey: ['travelDNA', userId] });
+                    queryClient.invalidateQueries({ queryKey: ['profile', userId] });
+                    queryClient.invalidateQueries({ queryKey: ['profile'] });
+                  }}
+                />
                 <div className="pt-4 border-t border-border">
                   <AchievementsPanel />
                 </div>
