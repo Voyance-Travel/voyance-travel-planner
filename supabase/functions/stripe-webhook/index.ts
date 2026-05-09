@@ -66,6 +66,81 @@ async function syncBalanceCache(supabaseAdmin: ReturnType<typeof createClient>, 
     }, { onConflict: 'user_id' });
 }
 
+const TIER_HIERARCHY: Record<string, number> = { free: 0, flex: 1, voyager: 2, explorer: 3, adventurer: 4 };
+
+/**
+ * Upsert user_tiers. By default, never downgrades (matches credit-purchase semantics).
+ * Pass { allowDowngrade: true } for cancellation flows that must force a downgrade.
+ */
+async function upsertUserTier(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  newTier: string,
+  opts: { allowDowngrade?: boolean } = {},
+) {
+  const { data: currentTierData } = await supabaseAdmin
+    .from('user_tiers')
+    .select('tier')
+    .eq('user_id', userId)
+    .maybeSingle();
+  const currentTier = currentTierData?.tier || 'free';
+  const currentRank = TIER_HIERARCHY[currentTier] ?? 0;
+  const newRank = TIER_HIERARCHY[newTier] ?? 0;
+
+  if (opts.allowDowngrade) {
+    await supabaseAdmin.from('user_tiers').upsert({
+      user_id: userId,
+      tier: newTier,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+    console.log(`[STRIPE-WEBHOOK] User tier set (downgrade allowed)`, JSON.stringify({ userId, from: currentTier, to: newTier }));
+    return;
+  }
+
+  if (newRank > currentRank) {
+    await supabaseAdmin.from('user_tiers').upsert({
+      user_id: userId,
+      tier: newTier,
+      first_purchase_at: currentTierData ? undefined : new Date().toISOString(),
+      highest_purchase: newTier,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+    console.log(`[STRIPE-WEBHOOK] User tier upgraded`, JSON.stringify({ userId, from: currentTier, to: newTier }));
+  } else if (!currentTierData) {
+    await supabaseAdmin.from('user_tiers').insert({
+      user_id: userId,
+      tier: newTier,
+      first_purchase_at: new Date().toISOString(),
+      highest_purchase: newTier,
+    });
+    console.log(`[STRIPE-WEBHOOK] User tier created`, JSON.stringify({ userId, tier: newTier }));
+  }
+}
+
+/**
+ * Resolve a Supabase auth user_id from a Stripe customer id, via email match.
+ * Used as a fallback when subscription metadata is missing.
+ */
+async function resolveUserIdFromCustomer(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  stripe: Stripe,
+  customerId: string | null,
+): Promise<string | null> {
+  if (!customerId) return null;
+  try {
+    const customer = await stripe.customers.retrieve(customerId);
+    if (!customer || (customer as Stripe.DeletedCustomer).deleted) return null;
+    const email = (customer as Stripe.Customer).email;
+    if (!email) return null;
+    const { data } = await supabaseAdmin.auth.admin.listUsers();
+    const match = data?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+    return match?.id ?? null;
+  } catch (err) {
+    console.warn(`[STRIPE-WEBHOOK] resolveUserIdFromCustomer failed`, err instanceof Error ? err.message : String(err));
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
@@ -391,34 +466,8 @@ serve(async (req) => {
             });
 
             // ── Upsert user_tiers (only upgrade, never downgrade) ──
-            const TIER_HIERARCHY: Record<string, number> = { free: 0, flex: 1, voyager: 2, explorer: 3, adventurer: 4 };
             const newTier = clubInfo ? clubInfo.tier : 'flex';
-            const { data: currentTierData } = await supabaseAdmin
-              .from('user_tiers')
-              .select('tier')
-              .eq('user_id', userId)
-              .maybeSingle();
-            const currentTierRank = TIER_HIERARCHY[currentTierData?.tier || 'free'] || 0;
-            const newTierRank = TIER_HIERARCHY[newTier] || 0;
-
-            if (newTierRank > currentTierRank) {
-              await supabaseAdmin.from('user_tiers').upsert({
-                user_id: userId,
-                tier: newTier,
-                first_purchase_at: currentTierData ? undefined : new Date().toISOString(),
-                highest_purchase: newTier,
-                updated_at: new Date().toISOString(),
-              }, { onConflict: 'user_id' });
-              log("User tier upgraded", { userId, from: currentTierData?.tier || 'free', to: newTier });
-            } else if (!currentTierData) {
-              await supabaseAdmin.from('user_tiers').insert({
-                user_id: userId,
-                tier: newTier,
-                first_purchase_at: new Date().toISOString(),
-                highest_purchase: newTier,
-              });
-              log("User tier created", { userId, tier: newTier });
-            }
+            await upsertUserTier(supabaseAdmin, userId, newTier);
           }
         }
 
@@ -972,12 +1021,130 @@ serve(async (req) => {
         break;
       }
 
-      // Subscription events (existing)
-      case "customer.subscription.created":
-      case "customer.subscription.updated":
-      case "customer.subscription.deleted":
-        log("Subscription event", { type: event.type });
+      // ========================================
+      // Subscription Renewals — invoice.payment_succeeded
+      //   Fires monthly/yearly when Stripe auto-charges an active subscription.
+      //   Initial-purchase grants are handled via checkout.session.completed; this
+      //   handler is renewals only. Idempotent on invoice.id.
+      // ========================================
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as Stripe.Invoice;
+        // deno-lint-ignore no-explicit-any
+        const subscriptionRef = (invoice as any).subscription as string | null;
+        if (!subscriptionRef) {
+          log("invoice.payment_succeeded: not a subscription invoice — skipping", { invoiceId: invoice.id });
+          break;
+        }
+
+        const sub = await stripe.subscriptions.retrieve(subscriptionRef);
+        let userId = (sub.metadata?.user_id || sub.metadata?.userId) as string | undefined;
+        if (!userId) {
+          const fallbackId = await resolveUserIdFromCustomer(supabaseAdmin, stripe, sub.customer as string);
+          if (fallbackId) {
+            console.warn(`[STRIPE-WEBHOOK] invoice.payment_succeeded: resolved userId via customer.email fallback`, JSON.stringify({ subId: sub.id, userId: fallbackId }));
+            userId = fallbackId;
+          }
+        }
+
+        // Resolve product/tier — prefer metadata, fall back to subscription line item product
+        const productId = (sub.items.data[0]?.price?.product as string | undefined) ?? undefined;
+        const metaTier = (sub.metadata?.tier || sub.metadata?.club_tier) as string | undefined;
+        const clubInfo = productId ? CLUB_PRODUCT_MAP[productId] : undefined;
+        const tier = (metaTier && ['voyager', 'explorer', 'adventurer'].includes(metaTier))
+          ? metaTier
+          : clubInfo?.tier;
+
+        if (!userId || !tier || !clubInfo) {
+          console.warn(`[STRIPE-WEBHOOK] invoice.payment_succeeded: cannot resolve user/tier — skipping`, JSON.stringify({
+            subId: sub.id, invoiceId: invoice.id, hasUserId: !!userId, hasTier: !!tier, productId,
+          }));
+          break;
+        }
+
+        const renewalSessionId = `subscription_renewal_${invoice.id}`;
+        // deno-lint-ignore no-explicit-any
+        const priceId = ((invoice as any).lines?.data?.[0]?.price?.id as string | undefined) ?? null;
+
+        const { error: fulfillErr } = await supabaseAdmin.rpc('fulfill_credit_purchase', {
+          p_user_id: userId,
+          p_credits: clubInfo.baseCredits,
+          p_bonus_credits: clubInfo.bonusCredits,
+          p_credit_type: 'club_base',
+          p_stripe_session_id: renewalSessionId,
+          p_amount_cents: invoice.amount_paid || 0,
+          p_club_tier: tier,
+          p_product_id: productId ?? null,
+          p_price_id: priceId,
+        });
+
+        if (fulfillErr) {
+          logError("CRITICAL: subscription renewal fulfill_credit_purchase RPC FAILED — will retry via Stripe", JSON.stringify(fulfillErr));
+          throw new Error(`subscription renewal fulfill failed: ${fulfillErr.message}`);
+        }
+
+        await upsertUserTier(supabaseAdmin, userId, tier);
+        await syncBalanceCache(supabaseAdmin, userId);
+        log("Subscription renewed", { userId, tier, invoiceId: invoice.id, subId: sub.id });
         break;
+      }
+
+      // ========================================
+      // Subscription Cancellation — customer.subscription.deleted
+      //   Revoke club-tier credits and downgrade tier to 'free'.
+      // ========================================
+      case "customer.subscription.deleted": {
+        const sub = event.data.object as Stripe.Subscription;
+        let userId = (sub.metadata?.user_id || sub.metadata?.userId) as string | undefined;
+        if (!userId) {
+          const fallbackId = await resolveUserIdFromCustomer(supabaseAdmin, stripe, sub.customer as string);
+          if (fallbackId) {
+            console.warn(`[STRIPE-WEBHOOK] subscription.deleted: resolved userId via customer.email fallback`, JSON.stringify({ subId: sub.id, userId: fallbackId }));
+            userId = fallbackId;
+          }
+        }
+        if (!userId) {
+          console.warn(`[STRIPE-WEBHOOK] subscription.deleted: cannot resolve userId — skipping`, JSON.stringify({ subId: sub.id }));
+          break;
+        }
+
+        // Zero out remaining club credits (base + bonus)
+        const { error: zeroErr } = await supabaseAdmin
+          .from('credit_purchases')
+          .update({ remaining: 0, updated_at: new Date().toISOString() })
+          .eq('user_id', userId)
+          .in('credit_type', ['club_base', 'club_bonus']);
+        if (zeroErr) logError("subscription.deleted: failed to zero club credits", JSON.stringify(zeroErr));
+
+        // Audit row
+        const cancelledAt = sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : new Date().toISOString();
+        await supabaseAdmin.from('credit_ledger').insert({
+          user_id: userId,
+          transaction_type: 'subscription_cancel',
+          credits_delta: 0,
+          is_free_credit: false,
+          action_type: 'subscription_deleted',
+          notes: `Club subscription ${sub.id} cancelled — credits revoked`,
+          metadata: { stripe_subscription_id: sub.id, cancelled_at: cancelledAt },
+        });
+
+        // Force downgrade to free
+        await upsertUserTier(supabaseAdmin, userId, 'free', { allowDowngrade: true });
+        await syncBalanceCache(supabaseAdmin, userId);
+        log("Subscription cancelled", { userId, subId: sub.id, cancelledAt });
+        break;
+      }
+
+      // ========================================
+      // Subscription created/updated — observability only.
+      //   Initial grants are handled by checkout.session.completed.
+      //   Mid-cycle plan upgrades/downgrades are not supported in v1.
+      // ========================================
+      case "customer.subscription.created":
+      case "customer.subscription.updated": {
+        const sub = event.data.object as Stripe.Subscription;
+        log("Subscription event (no-op for v1)", { subId: sub.id, type: event.type, status: sub.status });
+        break;
+      }
 
       default:
         log("Unhandled event type", { type: event.type });
