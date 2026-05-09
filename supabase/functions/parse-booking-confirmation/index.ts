@@ -335,6 +335,64 @@ ${confirmationText}`;
       parsedBooking.segment_type = 'other';
     }
 
+    // Post-parse validation: catch LLM hallucinations BEFORE persisting.
+    const validationErrors: string[] = [];
+
+    const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}/;
+    if (parsedBooking.start_date && !ISO_DATE_RE.test(parsedBooking.start_date)) {
+      validationErrors.push(`start_date is malformed: "${parsedBooking.start_date}"`);
+    }
+    if (parsedBooking.end_date && !ISO_DATE_RE.test(parsedBooking.end_date)) {
+      validationErrors.push(`end_date is malformed: "${parsedBooking.end_date}"`);
+    }
+
+    const currentYear = new Date().getFullYear();
+    if (parsedBooking.start_date) {
+      const startYear = parseInt(parsedBooking.start_date.slice(0, 4), 10);
+      if (startYear < currentYear - 1 || startYear > currentYear + 5) {
+        validationErrors.push(`start_date year ${startYear} is outside plausible range`);
+      }
+    }
+
+    const priceFields = ['total_price', 'price_per_person', 'price'] as const;
+    for (const field of priceFields) {
+      const val = (parsedBooking as any)[field];
+      if (val != null) {
+        if (typeof val !== 'number' || val < 0 || val > 1_000_000) {
+          validationErrors.push(`${field} out of plausible range: ${val}`);
+        }
+      }
+    }
+
+    if (hasTripContext && parsedBooking.start_date && tripContext?.tripDates?.start) {
+      const tStart = new Date(tripContext.tripDates.start);
+      const tEnd = new Date(tripContext.tripDates.end || tripContext.tripDates.start);
+      const bStart = new Date(parsedBooking.start_date);
+      const slack = 86_400_000;
+      if (bStart.getTime() < tStart.getTime() - slack || bStart.getTime() > tEnd.getTime() + slack) {
+        validationErrors.push(
+          `start_date ${parsedBooking.start_date} falls outside trip range ` +
+          `${tripContext.tripDates.start}–${tripContext.tripDates.end}`
+        );
+      }
+    }
+
+    if (parsedBooking.segment_type !== 'other' && !parsedBooking.confirmation_number) {
+      validationErrors.push(`confirmation_number is required for ${parsedBooking.segment_type} bookings`);
+    }
+
+    if (validationErrors.length > 0) {
+      console.warn('[parse-booking-confirmation] Validation failed:', validationErrors, { parsed: parsedBooking });
+      return new Response(
+        JSON.stringify({
+          error: 'Booking validation failed',
+          details: validationErrors,
+          raw: parsedBooking,
+        }),
+        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Ensure segments array exists (backward compat)
     if (!parsedBooking.segments || !Array.isArray(parsedBooking.segments) || parsedBooking.segments.length === 0) {
       if (parsedBooking.segment_type === 'flight') {
