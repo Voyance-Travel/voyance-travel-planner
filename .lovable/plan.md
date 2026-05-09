@@ -1,81 +1,64 @@
-## M4 — Cost summary currency normalization
+## M5 — Multi-hotel date boundary (same-day handover)
 
-`calculateBudgetSummary` sums `plannedAmount` / `actualAmount` across expenses without checking each expense's `currency`. A trip with EUR + JPY + USD expenses produces a meaningless number. Per spec: don't fake an FX conversion in v1 — exclude mismatched currencies from totals and surface a warning so the UI can flag them.
+**File:** `src/services/hotelItineraryPatch.ts`
 
-### Schema reality check (the user's snippet needs adapting)
+### Problem
 
-The proposed snippet assumes `expense.amount`, an in-scope `trip` object, and a single `total += …`. Actual code:
+`isDayInRange` uses an exclusive upper bound (`d < checkOutDate`). On a same-day handover (Hotel A checkout = Hotel B check-in on the same calendar day), the day belongs unambiguously to Hotel B for non-checkout activities, but the existing logic does not signal this explicitly. Today it works only because `Array.prototype.find` happens to skip Hotel A (its `isDayInRange` returns `false` since `d === checkOutDate`) and lands on Hotel B. That's fragile and breaks if hotel order, normalization, or any caller relies on `isDayInRange` to resolve a hotel claim on a boundary day.
 
-- `TripExpense` has `plannedAmount`, `actualAmount` (nullable), and `currency` — no `amount` field. Four reductions exist: `totalPlanned`, `totalActual`, `totalPaid`, and the per-member `owed` aggregate (which sums `ExpenseSplit.amount`, inheriting the parent expense's currency).
-- `calculateBudgetSummary(tripId)` only takes `tripId` — no `trip` object in scope. Need to fetch trip currency.
-- `BudgetSummary` has no `currency` or warning field today; the UI can't render the warning until we expose one.
+The user's spec asks for an explicit `isInclusive` opt-in so the destination (arriving) hotel can claim its check-in day even when another hotel's exclusive range would also be evaluated.
 
-### Step 1 — Fetch trip currency at top of the function
+### Plan
 
-```ts
-const { data: tripRow } = await supabase
-  .from('trips')
-  .select('currency, budget_currency')
-  .eq('id', tripId)
-  .maybeSingle();
-const tripCurrency = (tripRow?.currency || tripRow?.budget_currency || 'USD').toUpperCase();
-```
+1. **Extend `isDayInRange` signature** (line 46–50) with an `isInclusive` flag, defaulting to `false` to preserve the current generation-pipeline convention documented at the top of the file:
 
-(Verify both columns exist on `trips`; if only one does, drop the other from the select.)
+   ```ts
+   function isDayInRange(
+     dayDate: string | undefined,
+     checkInDate?: string,
+     checkOutDate?: string,
+     isInclusive = false,
+   ): boolean {
+     if (!checkInDate || !checkOutDate || !dayDate) return true;
+     const d = dayDate.slice(0, 10);
+     const ci = checkInDate.slice(0, 10);
+     const co = checkOutDate.slice(0, 10);
+     return isInclusive ? (d >= ci && d <= co) : (d >= ci && d < co);
+   }
+   ```
 
-### Step 2 — Per-expense normalization helper
+2. **Update the multi-hotel loop** (`patchItineraryWithMultipleHotels`, around line 200–207) so the arriving hotel wins on same-day handover. Resolve `matchingHotel` in two passes:
 
-```ts
-const mixedCurrencyExpenseIds: string[] = [];
-const normalize = (expense: TripExpense, raw: number): number => {
-  const expenseCurrency = (expense.currency || tripCurrency).toUpperCase();
-  if (expenseCurrency === tripCurrency) return raw;
-  if (!mixedCurrencyExpenseIds.includes(expense.id)) {
-    mixedCurrencyExpenseIds.push(expense.id);
-    console.warn('[budget] Mixed-currency expense not converted', {
-      expenseId: expense.id, expenseCurrency, tripCurrency, amount: raw,
-    });
-  }
-  return 0; // truthful display > fake total; v1.x will add real FX
-};
-```
+   ```ts
+   // Pass 1: prefer the hotel whose check-in is exactly this day (arrival wins on handover)
+   const arrivingHotel = hotels.find(
+     h => h.checkInDate && dayDate && h.checkInDate.slice(0, 10) === dayDate.slice(0, 10),
+   );
+   // Pass 2: otherwise, the hotel whose exclusive range covers this day
+   const stayingHotel = hotels.find(h => isDayInRange(dayDate, h.checkInDate, h.checkOutDate));
+   const matchingHotel = arrivingHotel ?? stayingHotel;
 
-### Step 3 — Apply to all four totals
+   const departingHotel = hotels.find(h => isCheckoutDay(dayDate, h.checkOutDate));
+   ```
 
-```ts
-const totalPlanned = expenses.reduce((sum, e) => sum + normalize(e, e.plannedAmount), 0);
-const totalActual  = expenses.reduce((sum, e) => sum + normalize(e, e.actualAmount ?? e.plannedAmount), 0);
-const totalPaid    = expenses
-  .filter(e => e.paymentStatus === 'paid')
-  .reduce((sum, e) => sum + normalize(e, e.actualAmount ?? e.plannedAmount), 0);
-const totalPending = totalActual - totalPaid;
-```
+   Behavior on a same-day A→B handover:
+   - `departingHotel = A` → checkout activity gets "Checkout from Hotel A" ✓
+   - `matchingHotel = B` (via `arrivingHotel`) → "Check-in at Hotel B" / settle-in / freshen-up / return cards get Hotel B ✓
 
-For member balances: a split inherits its parent expense's currency. Build an `expenseById` map and run splits through `normalize(parentExpense, split.amount)` in both the `owes` and `owed` reductions. Skips fall to 0 the same way.
+3. **Single-hotel function (`patchItineraryWithHotel`) is unchanged** — it scopes to one hotel only, no handover possible. Comment at the top of the file already documents the exclusive convention; keep that verbatim.
 
-### Step 4 — Expose currency + warning on `BudgetSummary`
+4. **No migration, no schema change, no UI change.** Pure logic fix in this one file.
 
-```ts
-export interface BudgetSummary {
-  totalPlanned: number;
-  totalActual: number;
-  totalPaid: number;
-  totalPending: number;
-  currency: string;                      // NEW — what the totals are denominated in
-  mixedCurrencyExpenseIds: string[];     // NEW — expenses dropped from totals
-  memberBalances: { … }[];
-  settlements: TripSettlement[];
-}
-```
+### Verification
 
-Return `currency: tripCurrency` and `mixedCurrencyExpenseIds` from the function. UI consumers can render a "X expenses need conversion" badge when the array is non-empty.
+- Trip with Hotel A (checkIn D1, checkOut D3) and Hotel B (checkIn D3, checkOut D5):
+  - D1, D2 → Hotel A (all accom cards)
+  - D3 → "Checkout from Hotel A" + "Check-in at Hotel B" / freshen-up Hotel B
+  - D4 → Hotel B
+- Trip with single hotel: identical output to today.
+- `grep -n "isInclusive\|arrivingHotel"` → 3+ hits.
 
-### Out of scope (explicit)
+### Out of scope
 
-- Real FX conversion (exchangerate.host etc.) — v1.x.
-- Migrating existing UI consumers to render the warning — they keep working; the new fields are optional readers.
-
-### Verify
-
-- `grep -n "Mixed-currency expense not converted\|mixedCurrencyExpenseIds" src/services/tripBudgetAPI.ts` → 3+ hits
-- Trip with one EUR + one USD expense: totals only include the matching-currency rows; `mixedCurrencyExpenseIds.length === 1`; console shows one `[budget]` warn per mismatched expense (deduped by ID).
+- The mem rule "Hotel Date Boundary Policy — inclusive-exclusive boundaries" stays intact; this only adds an opt-in inclusive overload for the arriving-hotel resolver.
+- No changes to generation pipeline or `isCheckoutDay`.
