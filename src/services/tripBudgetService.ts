@@ -382,7 +382,7 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
       .maybeSingle(),
     supabase
       .from('trips')
-      .select('itinerary_data, hotel_selection, flight_selection')
+      .select('itinerary_data, hotel_selection, flight_selection, budget_currency')
       .eq('id', tripId)
       .maybeSingle(),
   ]);
