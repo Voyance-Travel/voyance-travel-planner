@@ -42,6 +42,15 @@ function shouldSendReminder(daysUntil: number, reminderType: "daily" | "weekly" 
   return false;
 }
 
+function computeDaysUntilLocal(startDate: string, userTimezone: string | null): number {
+  const tz = userTimezone || "UTC";
+  // "today" in user's timezone, formatted as YYYY-MM-DD via en-CA locale
+  const todayLocal = new Date().toLocaleDateString("en-CA", { timeZone: tz });
+  const start = new Date(`${startDate}T00:00:00`);
+  const today = new Date(`${todayLocal}T00:00:00`);
+  return Math.floor((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 // Daily messages (week of trip)
 const dailyMessages = [
   {
