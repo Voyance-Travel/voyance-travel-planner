@@ -30,6 +30,15 @@ Deno.test('end-of-day "Walk to Salsify" still dropped (no logistics keyword)', (
   assertEquals(acts.length, 1);
 });
 
+Deno.test('end-of-day "Travel to <restaurant>" dropped (generic verb, no logistics keyword)', () => {
+  const acts = [
+    { id: '1', title: 'Tour Kirstenbosch', category: 'sightseeing' },
+    { id: '2', title: 'Travel to Salsify at The Roundhouse', category: 'transport' },
+  ];
+  const removed = pruneOrphanTransits(acts);
+  assertEquals(removed, 1);
+  assertEquals(acts.length, 1);
+
 Deno.test('orphan target in middle still dropped (Case 2 unchanged)', () => {
   const acts = [
     { id: '1', title: 'Walk to Salsify', category: 'transport' },
