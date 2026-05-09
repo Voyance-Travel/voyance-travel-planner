@@ -4,6 +4,13 @@
  */
 
 import { extractRestaurantVenueName } from './generation-utils.ts';
+import {
+  pickTransitTier,
+  haversineMeters,
+  extractCoords,
+  MAX_WALK_DISTANCE_METERS,
+  MAX_WALK_DURATION_MINUTES,
+} from '../_shared/transit-mode.ts';
 
 // =============================================================================
 // ALWAYS-FREE VENUE PATTERNS — shared across sanitization, repair, and generation
