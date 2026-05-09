@@ -853,10 +853,16 @@ async function ensurePersistentStorageUrl(
     : image.url;
 
   try {
-    const stableEntityId = `${entityKey}-${(image.placeId || destination || 'global')}`
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .slice(0, 80);
+    // Stable key: prefer place_id (deterministic per Google place), then a
+    // destination+entityKey slug. URL hash was the bug — Google's photo URLs
+    // are token-based and change every request, so the same photo from the
+    // same place got a fresh hash and re-downloaded each time.
+    const sluggify = (s: string) =>
+      String(s || '').toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 60);
+
+    const stableEntityId = image.placeId
+      ? `${entityKey}-${sluggify(image.placeId)}`.slice(0, 80)
+      : `${entityKey}-${sluggify(destination || 'global')}`.slice(0, 80);
 
     const storageEntityType: 'destination' | 'activity' = entityType === 'destination' ? 'destination' : 'activity';
 
