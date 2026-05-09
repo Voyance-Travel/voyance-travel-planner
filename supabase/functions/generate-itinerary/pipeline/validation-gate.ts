@@ -21,6 +21,7 @@
 
 import { FAILURE_CODES, type ValidationResult } from './types.ts';
 import type { StrictDayMinimal, StrictActivityMinimal } from '../day-validation.ts';
+import { pickTransitFallback } from '../../_shared/transit-mode.ts';
 
 export interface GateCounters {
   critical: number;
@@ -93,6 +94,31 @@ export function applyValidationGate(
           counters.droppedActivities++;
           counters.forcedDowngrades++;
         }
+        break;
+      }
+      case FAILURE_CODES.WALK_OVER_THRESHOLD: {
+        // Final safety net: even if repair-day was bypassed (e.g. legacy path)
+        // or coords missing, force walk → taxi with conservative defaults.
+        const t = (act.transportation = act.transportation || {});
+        const distM = Number(t.distanceMeters) || 0;
+        const curDur = Number(t.durationMinutes) || 0;
+        const destName = (day.activities[idx + 1] as any)?.location?.name
+          || act?.location?.name || '';
+        const tier = pickTransitFallback(distM > 0 ? distM : null, curDur, destName);
+        t.method = tier.method;
+        t.durationMinutes = tier.durationMinutes;
+        t.duration = `${tier.durationMinutes} min`;
+        const currency = t.estimatedCost?.currency || 'USD';
+        t.estimatedCost = { amount: tier.costAmount, currency };
+        if (act.cost && typeof act.cost === 'object') {
+          act.cost.amount = tier.costAmount;
+          if (!act.cost.currency) act.cost.currency = currency;
+        }
+        if (typeof act.title === 'string') {
+          const verb = tier.method === 'metro' ? 'Metro' : 'Taxi';
+          act.title = act.title.replace(/^(?:Walk|Walking)\b/i, verb);
+        }
+        counters.forcedDowngrades++;
         break;
       }
       default: {

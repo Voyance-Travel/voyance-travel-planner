@@ -14,6 +14,15 @@
 export const MAX_WALK_DISTANCE_METERS = 650;
 export const MAX_WALK_DURATION_MINUTES = 15;
 
+/**
+ * Hard ceiling — anything above these triggers the WALK_OVER_THRESHOLD
+ * validate→repair→gate cascade (see pipeline/validate-day.ts, repair-day.ts,
+ * validation-gate.ts). Higher than the sanitizer ceiling because we only want
+ * to fire here once distance is confidently known (post-enrichment).
+ */
+export const WALK_HARD_DISTANCE_METERS = 1500;
+export const WALK_HARD_DURATION_MINUTES = 30;
+
 export type TransitMethod = 'walk' | 'metro' | 'uber';
 
 export interface TransitTier {
@@ -75,6 +84,34 @@ export function pickTransitTier(
     costAmount: Math.round(3 + (distanceMeters / 1000) * 1.8),
     instructions: `Take a rideshare ${(distanceMeters / 1000).toFixed(1)}km to ${safeDest}`,
     distanceMeters,
+  };
+}
+
+/**
+ * Conservative fallback when distance may be unknown. Used by the
+ * WALK_OVER_THRESHOLD repair handler + validation gate as a single source
+ * of truth so thresholds never drift between layers.
+ *
+ * - Known distance → delegate to `pickTransitTier`.
+ * - Unknown/zero distance → taxi default: 20-min floor (or current duration if
+ *   higher) at $15.
+ */
+export function pickTransitFallback(
+  distanceMeters: number | null | undefined,
+  currentDurationMin?: number,
+  destinationName?: string,
+): TransitTier {
+  const safeDest = destinationName || 'destination';
+  if (distanceMeters != null && Number.isFinite(distanceMeters) && distanceMeters > 0) {
+    return pickTransitTier(distanceMeters, safeDest);
+  }
+  const dur = Math.max(Number(currentDurationMin) > 0 ? Number(currentDurationMin) : 0, 20);
+  return {
+    method: 'uber',
+    durationMinutes: dur,
+    costAmount: 15,
+    instructions: `Taxi to ${safeDest}`,
+    distanceMeters: 0,
   };
 }
 
