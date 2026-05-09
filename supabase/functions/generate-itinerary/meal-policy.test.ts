@@ -407,3 +407,30 @@ Deno.test('enforceRequiredMealsFinalGuard prunes orphan transit after duplicate-
   const dinnerCount = titles.filter((t: string) => /^Dinner at/i.test(t)).length;
   assertEquals(dinnerCount, 1, 'duplicate-meal strip should leave exactly one dinner');
 });
+
+Deno.test('enforceRequiredMealsFinalGuard removes orphan transit pointing at dropped duplicate dinner', () => {
+  // Two dinner cards + a transit pointing at the SECOND (which dedup will drop).
+  // Asserts the transit is cleared when its target is removed.
+  const activities = [
+    { id: 'd1', title: 'Dinner at Salsify', category: 'dining',
+      startTime: '19:00', endTime: '20:30',
+      location: { name: 'Salsify', address: 'The Roundhouse' } },
+    { id: 't1', title: 'Travel to La Colombe', category: 'transport',
+      startTime: '20:45', endTime: '21:05',
+      transportation: { method: 'taxi', duration: '20 min' } },
+    { id: 'd2', title: 'Dinner at La Colombe', category: 'dining',
+      startTime: '21:10', endTime: '22:40',
+      location: { name: 'La Colombe', address: 'Constantia' } },
+  ];
+
+  const result = enforceRequiredMealsFinalGuard(
+    activities as any, ['dinner'], 1, 'Cape Town', 'USD', 'full_exploration', [],
+  );
+
+  const titles = result.activities.map((a: any) => a.title);
+  const dinnerCount = titles.filter((t: string) => /^Dinner at/i.test(t)).length;
+  assertEquals(dinnerCount, 1, 'dedup should keep exactly one dinner');
+
+  const orphanTransit = titles.find((t: string) => /^Travel to La Colombe/i.test(t));
+  assertEquals(orphanTransit, undefined, 'orphan transit pointing at dropped dinner must be cleared');
+});
