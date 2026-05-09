@@ -1002,7 +1002,7 @@ function checkSentenceCompleteness(activities: StrictActivityMinimal[], results:
       const tail = v.slice(-80);
       results.push({
         code: FAILURE_CODES.TRUNCATED_SENTENCE,
-        severity: 'error',
+        severity: 'critical',
         message: `Activity "${act.title}" ${field} appears truncated mid-sentence: "…${tail}"`,
         activityIndex: i,
         field,

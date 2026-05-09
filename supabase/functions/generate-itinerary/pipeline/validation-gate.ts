@@ -22,6 +22,7 @@
 import { FAILURE_CODES, type ValidationResult } from './types.ts';
 import type { StrictDayMinimal, StrictActivityMinimal } from '../day-validation.ts';
 import { pickTransitFallback } from '../../_shared/transit-mode.ts';
+import { trimToLastSentence } from './repair-day.ts';
 
 export interface GateCounters {
   critical: number;
@@ -119,6 +120,20 @@ export function applyValidationGate(
           act.title = act.title.replace(/^(?:Walk|Walking)\b/i, verb);
         }
         counters.forcedDowngrades++;
+        break;
+      }
+      case FAILURE_CODES.TRUNCATED_SENTENCE: {
+        // Trim mid-sentence tail back to the last sentence boundary.
+        // If no terminator exists, leave field unchanged (don't fall through
+        // to default which would blank it — fragment > blank).
+        if (r.field && typeof act[r.field] === 'string') {
+          const trimmed = trimToLastSentence(act[r.field]);
+          if (trimmed != null && trimmed !== act[r.field]) {
+            act[r.field] = trimmed;
+            counters.blankedFields++;
+            counters.forcedDowngrades++;
+          }
+        }
         break;
       }
       default: {

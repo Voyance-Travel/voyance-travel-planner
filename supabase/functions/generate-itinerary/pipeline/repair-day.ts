@@ -310,6 +310,22 @@ const FALLBACK_RESTAURANTS: Record<string, Record<string, FallbackVenue[]>> = {
   },
 };
 
+const SENTENCE_TERMINATOR_RE = /[.!?…)"'’”\]]\s*$/;
+/**
+ * Trim a mid-sentence string back to the last sentence boundary.
+ * Returns the trimmed string when ≥40 chars of complete sentence remain;
+ * returns null otherwise (caller should leave field unchanged).
+ */
+export function trimToLastSentence(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (v.length < 40) return null;
+  if (SENTENCE_TERMINATOR_RE.test(v)) return null; // already terminated
+  const m = v.match(/^(.*[.!?…])\s*[^.!?…]*$/s);
+  if (m && m[1].length >= 40) return m[1].trim();
+  return null;
+}
+
 export function getCityTier(city?: string): CityTransitTier {
   if (!city) return TRANSIT_TIERS.default;
   const lower = city.toLowerCase().trim();
@@ -2812,6 +2828,29 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         before: formatOps(ops),
         after: 'cleaned',
       });
+    }
+  }
+
+  // --- 10c. TRUNCATED_SENTENCE: trim to last sentence boundary ---
+  // Mirrors validate-day's checkSentenceCompleteness. Trim mid-sentence tails
+  // back to the last [.!?…] when ≥40 chars of complete sentence remain;
+  // otherwise leave the fragment alone (ship fragment > blank field).
+  for (let i = 0; i < activities.length; i++) {
+    const act: any = activities[i];
+    if (lockedIds.has(act.id)) continue;
+    for (const field of ['description', 'tips', 'notes'] as const) {
+      const before = (act as any)[field];
+      const trimmed = trimToLastSentence(before);
+      if (trimmed != null && trimmed !== before) {
+        (act as any)[field] = trimmed;
+        repairs.push({
+          code: FAILURE_CODES.TRUNCATED_SENTENCE,
+          activityIndex: i,
+          action: `trim_to_last_sentence:${field}`,
+          before,
+          after: trimmed,
+        });
+      }
     }
   }
 
