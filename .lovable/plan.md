@@ -1,68 +1,77 @@
-## CL.2 — Places Text Search cache layer
+## CL.3 — Dispose of flight search
 
-The 4 edge functions calling Google Places Text Search currently have no cache. Same query ("hotels in Venice", "Da Ivo Venice", etc.) re-bills $0.017 every time across users. We'll add a deterministic-key cache table and a thin wrapper, then alias-import in the 4 call sites — zero call-site code changes.
+### State of play (verified)
 
-### Step 1 — Migration: cache table + race-safe hit bumper
+`searchFlights`/`useFlightSearch` are **still wired** in two pages, but those pages are **route-orphaned** — `/planner/flight` is registered in `App.tsx` and `routes.ts` but **nothing in the live UI navigates to it**. Direct-URL only. So this is Path 2b (UI present), but the UI is already detached from the user flow.
 
-New `google_places_search_cache` table keyed by `cache_key text PRIMARY KEY`. Stores `text_query`, `location_bias`, `included_type`, `field_mask`, `response_data jsonb`, `result_count`, `hit_count`, `last_hit_at`, `expires_at` (default `now() + 30 days`).
+Surface area to remove:
+- 2 pages: `src/pages/planner/PlannerFlight.tsx`, `src/pages/planner/PlannerFlightEnhanced.tsx`
+- 2 components used only by those pages: `src/components/planner/flight/EnhancedFlightCard.tsx`, `src/components/planner/flight/FlightFilters.tsx`
+- 1 route + 1 route constant + 1 admin tracking entry
+- Search-related exports in `src/services/flightAPI.ts`
+- The entire `supabase/functions/flights/` edge function
 
-Indexes on `expires_at` and `text_query`. RLS enabled, all privileges revoked from PUBLIC/anon/authenticated, granted to `service_role` only — server-internal cost infrastructure, no client should read it.
+Surface area to **keep**:
+- `supabase/functions/flight-status/` — used by `FlightStatusTracker.tsx` for post-booking tracking. Different feature.
+- `src/components/planner/flight/MultiLegFlightEditor.tsx` — used by `src/pages/Start.tsx` for **manual** flight entry. Keep.
+- `src/services/flightItineraryPatch.ts` and `src/services/flightRankingAPI.ts` — manual entry parsing/ranking. Keep.
 
-`bump_places_cache_hit(p_cache_key text)` SECURITY DEFINER function for atomic `hit_count = hit_count + 1, last_hit_at = now()` updates. Execute granted to `service_role` only.
+### Step 1 — Delete UI files
 
-### Step 2 — Shared helper: `cachedGooglePlacesTextSearch`
-
-Append to `supabase/functions/_shared/google-api.ts` alongside existing `googlePlacesTextSearch`. Same `(params, ctx)` signature → same `PlacesTextSearchResult` return shape, so it's a drop-in replacement.
-
-Logic:
-1. Build deterministic key from JSON of `{textQuery (lowercased+trimmed), locationBias, includedType, fieldMask, maxResultCount}`, hash via djb2, prefix `places_text:`.
-2. Cache lookup: `select response_data where cache_key=? and expires_at > now()`. On hit → fire-and-forget `bump_places_cache_hit` RPC, return `{ok:true, status:200, data:cached}`.
-3. Cache miss → call live `googlePlacesTextSearch`. On `result.ok` upsert response into cache. Return live result either way.
-4. Cache lookup/store failures are warnings, never block the live result.
-
-Logs `[places-cache] HIT` / `MISS` for visibility.
-
-### Step 3 — Alias-swap 4 call sites
-
-Pure import-line change; no call-site identifiers move:
-
-```typescript
-// Before
-import { googlePlacesTextSearch } from "../_shared/google-api.ts";
-// After
-import { cachedGooglePlacesTextSearch as googlePlacesTextSearch } from "../_shared/google-api.ts";
+```
+src/pages/planner/PlannerFlight.tsx
+src/pages/planner/PlannerFlightEnhanced.tsx
+src/components/planner/flight/EnhancedFlightCard.tsx
+src/components/planner/flight/FlightFilters.tsx
 ```
 
-Files (verified via grep):
-- `supabase/functions/recommend-restaurants/index.ts:5` (1 call at L104)
-- `supabase/functions/hotels/index.ts:5` (3 calls: L420, L624, L692)
-- `supabase/functions/fetch-reviews/index.ts:5` (1 call at L143)
-- `supabase/functions/generate-full-preview/index.ts:4` (1 call at L313)
+`MultiLegFlightEditor.tsx` stays — `Start.tsx` still uses it.
 
-### Verification
+### Step 2 — Remove route + constants
 
-- `ls supabase/migrations/ | grep places_search_cache` → 1 file
-- `grep -n "export async function cachedGooglePlacesTextSearch" supabase/functions/_shared/google-api.ts` → 1 hit
-- `grep -rn "cachedGooglePlacesTextSearch as googlePlacesTextSearch" supabase/functions` → 4 hits
-- Deploy the 4 affected functions
-- Trigger a hotels search twice for the same city — second call should log `[places-cache] HIT`
+- `src/App.tsx`: remove the `import PlannerFlight from "./pages/planner/PlannerFlightEnhanced";` line and the `<Route path="/planner/flight" …>` line.
+- `src/config/routes.ts`: remove `FLIGHT: '/planner/flight'` from `ROUTES.PLANNER`.
+- `src/pages/admin/UserTracking.tsx`: remove the `'/planner/flight': 'Flight Search'` map entry.
+- `src/test/navigation.test.ts`: remove the three `/planner/flight` lines (lines 78, 137, 446) so the test no longer asserts the dead route exists.
 
-### Cost-effectiveness query (run after a few days)
+### Step 3 — Trim `src/services/flightAPI.ts`
 
-```sql
-SELECT text_query, hit_count, result_count,
-       (hit_count * 0.017)::numeric(10,2) AS dollars_saved
-FROM public.google_places_search_cache
-WHERE hit_count > 0
-ORDER BY hit_count DESC LIMIT 20;
+The file mixes search (going away) with hold/details/amadeus helpers (only consumed by the two pages above, so also dead). Remove all of:
+
+- `searchFlights`, `searchRoundtripFlights`
+- `useFlightSearch`, `useRoundtripFlightSearch`, `useFlightDetails`, `useCreateFlightHold`, `useReleaseFlightHold`, `useAmadeusConfig`
+- `getFlightDetails`, `createFlightHold`, `releaseFlightHold`, `getAmadeusConfig`
+- `generateMockFlights` (only used by `searchFlights`)
+- `RoundtripFlightResults`, `FlightHoldInput`, `FlightHoldResponse` interfaces
+- The bottom `export const flightAPI = { … }` aggregate
+
+Keep the data-shape interfaces (`FlightSegment`, `FlightPassengers`, `FlightPrice`, `FlightBaggage`, `FlightPriceLock`, `FlightOption`, `FlightSearchResponse`) since `flightItineraryPatch.ts`/`flightRankingAPI.ts` and the manual-entry editor may import them — verify with a grep before pruning.
+
+If after pruning the file is empty of runtime code, delete it entirely. Otherwise keep it as a types module.
+
+### Step 4 — Delete the edge function
+
+```
+supabase/functions/flights/
 ```
 
-### Out of scope (intentionally)
+Then call `delete_edge_functions` for `["flights"]` to remove the deployed copy.
 
-- No caching for user-typed free-text search (every input is unique; would just bloat the table).
-- No backfill of existing call patterns — cache warms naturally as users generate.
-- Orphan cleanup of expired rows: skipped for now; 30-day TTL + low row volume = negligible. Add a cron later if `pg_total_relation_size` grows past ~100MB.
+### Step 5 — Verify
 
-### Expected impact
+- `grep -rn "searchFlights\|useFlightSearch\|FlightSearchParams" src --include="*.ts" --include="*.tsx"` → 0 hits
+- `grep -rn "/planner/flight" src --include="*.ts" --include="*.tsx"` → 0 hits
+- `ls supabase/functions/flights` → not found
+- `ls supabase/functions/flight-status` → still exists
+- Build/type-check passes (the harness runs it automatically)
+- `MultiLegFlightEditor` and `flight-status` paths unchanged
 
-After ~1 month of usage, the same-city hotel/restaurant queries should overlap heavily across users. Realistic estimate: 40–60% Places Text Search call reduction, dominated by `hotels in <city>` repeats.
+### Out of scope
+
+- No data migration: there's no user-generated flight-search history table to clean up; results were always live.
+- The dead `'flights'` query-key on `releaseFlightHold` invalidation goes away with the hook itself, so no orphan cache state.
+- `flightRankingAPI.ts` line 238 comment ("actual flight fetching … happens in flightAPI") is stale once we land this. Will update the comment to reflect manual-only flow.
+
+### Risk
+
+Very low. The route is already orphaned from the live UI, so deleting it removes a direct-URL escape hatch but no user-visible flow. The only way someone reaches it today is by typing `/planner/flight` manually, and after Step 2 they'll get the 404 page — which is the intended end state.

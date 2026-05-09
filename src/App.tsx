@@ -71,7 +71,6 @@ import CreditsAndBilling from "./pages/CreditsAndBilling";
 
 // Pages - Trip Planning
 import MultiCityPlanner from "./pages/planner/MultiCityPlanner";
-import PlannerFlight from "./pages/planner/PlannerFlightEnhanced";
 import PlannerHotel from "./pages/planner/PlannerHotelEnhanced";
 import PlannerSummary from "./pages/planner/PlannerSummary";
 import PlannerItinerary from "./pages/planner/PlannerItinerary";
@@ -236,7 +235,6 @@ function AnimatedRoutes() {
         {/* Trip Planning Routes */}
         <Route path="/planner" element={<Navigate to="/start" replace />} />
         <Route path="/planner/multi-city" element={<ProtectedRoute><MultiCityPlanner /></ProtectedRoute>} />
-        <Route path="/planner/flight" element={<ProtectedRoute><PlannerFlight /></ProtectedRoute>} />
         <Route path="/planner/hotel" element={<Navigate to="/start" replace />} />
         <Route path="/planner/summary" element={<ProtectedRoute><PlannerSummary /></ProtectedRoute>} />
         <Route path="/planner/itinerary" element={<ProtectedRoute><PlannerItinerary /></ProtectedRoute>} />

@@ -45,7 +45,6 @@ export const ROUTES = {
   PLANNER: {
     ROOT: '/planner',
     MULTI_CITY: '/planner/multi-city',
-    FLIGHT: '/planner/flight',
     HOTEL: '/planner/hotel',
     SUMMARY: '/planner/summary',
     ITINERARY: '/planner/itinerary',
