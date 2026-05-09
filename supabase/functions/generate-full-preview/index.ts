@@ -399,7 +399,9 @@ Respond in JSON format:
         success: true,
         preview,
         conversionCopy: {
-          headline: `Your ${cappedDays}-Day ${destination} Itinerary is Ready`,
+          headline: isPartialPreview
+            ? `Your ${destination} Itinerary Preview — First ${cappedDays} of ${totalDays} Days`
+            : `Your ${totalDays}-Day ${destination} Itinerary is Ready`,
           subheadline: `${allActivities.length} curated experiences across ${neighborhoods.length} neighborhoods`,
           cta: "Get My Complete Itinerary",
           valueProps: [
