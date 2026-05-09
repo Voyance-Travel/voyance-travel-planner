@@ -302,10 +302,21 @@ export function useCreateReview() {
   return useMutation({
     mutationFn: createReview,
     onSuccess: (review) => {
-      queryClient.invalidateQueries({ queryKey: reviewKeys.activity(review.activityId) });
-      queryClient.invalidateQueries({ queryKey: reviewKeys.stats(review.activityId) });
+      // Always invalidate the broad reviews key — catches null-activityId paths
+      // and any UI surface that reads reviews without filtering by activity.
+      queryClient.invalidateQueries({ queryKey: reviewKeys.all });
+
+      // Also invalidate the specific activity/stats keys when present, so
+      // per-activity panels refetch immediately.
+      if (review.activityId) {
+        queryClient.invalidateQueries({ queryKey: reviewKeys.activity(review.activityId) });
+        queryClient.invalidateQueries({ queryKey: reviewKeys.stats(review.activityId) });
+      }
       if (review.destinationId) {
         queryClient.invalidateQueries({ queryKey: reviewKeys.destination(review.destinationId) });
+      }
+      if (review.userId) {
+        queryClient.invalidateQueries({ queryKey: reviewKeys.user(review.userId) });
       }
       toast.success('Review submitted successfully!');
     },
