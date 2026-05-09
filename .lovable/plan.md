@@ -1,28 +1,36 @@
-## Fix 7.2 — send-trip-reminders idempotency
+## Fix 7.3 — Timezone-aware daysUntil in send-trip-reminders
 
-### 1. Migration: `supabase/migrations/<ts>_trip_notifications_idempotency.sql`
-
+### 1. Migration: `<ts>_user_timezone_preference.sql`
 ```sql
-ALTER TABLE public.trip_notifications
-  ADD COLUMN IF NOT EXISTS sent_date date NOT NULL DEFAULT CURRENT_DATE;
+ALTER TABLE public.user_preferences
+  ADD COLUMN IF NOT EXISTS timezone text;
+```
+No backfill — null is treated as UTC at runtime.
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_trip_notifications_unique_per_day
-  ON public.trip_notifications (trip_id, user_id, notification_type, sent_date);
+### 2. `supabase/functions/send-trip-reminders/index.ts`
+
+**a. Add helper** (top of file, after imports):
+```ts
+function computeDaysUntilLocal(startDate: string, userTimezone: string | null): number {
+  const tz = userTimezone || 'UTC';
+  const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
+  const start = new Date(`${startDate}T00:00:00`);
+  const today = new Date(`${todayLocal}T00:00:00`);
+  return Math.floor((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
 ```
 
-### 2. Edge function: `supabase/functions/send-trip-reminders/index.ts`
+**b. Restructure the qualifying loop (lines ~405–414).** Currently `daysUntil` is computed in UTC before preferences are fetched. Move the preferences fetch earlier so the tz map is available, then compute per-user:
 
-Inside the `for (const trip of filteredTrips)` loop, **before** `sendReminderEmail()`:
-
-- Build `notification_type = \`trip_reminder_${trip.reminderType}_d${trip.daysUntil}\`` so daily reminders on different `daysUntil` values still fire (only same-day cron retries are blocked).
-- Build `sent_date = new Date().toISOString().slice(0, 10)`.
-- `INSERT` into `trip_notifications` with `{trip_id, user_id, notification_type, sent_date, sent: false}`.
-- If error code `'23505'` → `console.log` skip + `continue`. If other error → `console.error` + `continue` (don't email when claim fails).
-- After successful `sendReminderEmail`, `UPDATE` the row set `sent: true, sent_at: now()` matched on the same 4-tuple.
+1. After the `trips` query, collect `userIds = [...new Set(trips.map(t => t.user_id))]`.
+2. Fetch preferences once: `.select("user_id, trip_reminders, timezone").in("user_id", userIds).eq("trip_reminders", true)`.
+3. Build `tzByUser = new Map(preferences?.map(p => [p.user_id, p.timezone]) ?? [])` and `usersWithReminders = new Set(tzByUser.keys())`.
+4. In the qualifying loop, skip trips whose user isn't in `usersWithReminders`, then:
+   ```ts
+   const daysUntil = computeDaysUntilLocal(trip.start_date, tzByUser.get(trip.user_id) ?? null);
+   ```
+5. Drop the now-redundant later `preferences` fetch + `filteredTrips` filter (replaced by the upfront one).
 
 ### Verify
-- `grep -n "trip_notifications.*insert\|sent_date\|23505" supabase/functions/send-trip-reminders/index.ts` → 3+ hits
-- `ls supabase/migrations/ | grep trip_notifications_idempotency` → 1 hit
-
-### Note on reminder-type granularity
-Current `reminderType` ("daily"/"weekly"/"monthly") collapses 7 distinct `daysUntil` daily emails into one type. Using a daysUntil-suffixed type prevents idempotency from blocking the next-day reminder while still blocking same-day cron retries.
+- `grep -n "computeDaysUntilLocal\|timeZone\|tzByUser" supabase/functions/send-trip-reminders/index.ts` → 4+ hits
+- `grep "timezone" supabase/migrations/*user_timezone_preference*.sql` → 1 hit

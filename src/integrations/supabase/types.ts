@@ -8670,6 +8670,7 @@ export type Database = {
           stripe_connect_onboarding_complete: boolean | null
           stripe_connect_status: string | null
           stripe_payout_schedule: string | null
+          timezone: string | null
           travel_agent_mode: boolean | null
           travel_companions: string[] | null
           travel_frequency: string | null
@@ -8750,6 +8751,7 @@ export type Database = {
           stripe_connect_onboarding_complete?: boolean | null
           stripe_connect_status?: string | null
           stripe_payout_schedule?: string | null
+          timezone?: string | null
           travel_agent_mode?: boolean | null
           travel_companions?: string[] | null
           travel_frequency?: string | null
@@ -8830,6 +8832,7 @@ export type Database = {
           stripe_connect_onboarding_complete?: boolean | null
           stripe_connect_status?: string | null
           stripe_payout_schedule?: string | null
+          timezone?: string | null
           travel_agent_mode?: boolean | null
           travel_companions?: string[] | null
           travel_frequency?: string | null
