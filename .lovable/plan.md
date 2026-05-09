@@ -1,54 +1,38 @@
-# L2 — Fix N+1 in `calculateBudgetSummary`
+# L3 — Cost contract comment for refresh-day
 
-`src/services/tripBudgetAPI.ts` lines 502-506 currently do:
-
-```ts
-const allSplits: ExpenseSplit[] = [];
-for (const expense of expenses) {
-  const splits = await getExpenseSplits(expense.id);  // 1 round-trip per expense
-  allSplits.push(...splits);
-}
-```
-
-A trip with 30 expenses = 30 sequential `expense_splits` queries before the budget summary renders.
+Add an explicit "COST CONTRACT" block to the existing JSDoc header at the top of `supabase/functions/refresh-day/index.ts` (lines 1-15) so future contributors don't accidentally wire AI/LLM calls into this no-cost function.
 
 ## Change
 
-Replace the loop with one batched `.in('expense_id', expenseIds)` query, then map rows into `ExpenseSplit` shape using the same field mapping `getExpenseSplits` uses (so the rest of the function — which reads `s.expenseId`, `s.memberId`, `s.amount`, `s.isPaid` — keeps working unchanged).
+Extend the existing header (don't replace — the POST/Returns shape doc is still useful) with:
 
 ```ts
-// Batch fetch all splits for all expenses in one query (was N+1).
-const expenseIds = expenses.map(e => e.id).filter(Boolean);
-const { data: splitRows } = expenseIds.length > 0
-  ? await supabase.from('expense_splits').select('*').in('expense_id', expenseIds)
-  : { data: [] as any[] };
-
-const splitsByExpense = new Map<string, ExpenseSplit[]>();
-for (const row of (splitRows || [])) {
-  const split: ExpenseSplit = {
-    id: row.id,
-    expenseId: row.expense_id,
-    memberId: row.member_id,
-    amount: Number(row.amount),
-    percentage: row.percentage ? Number(row.percentage) : null,
-    isPaid: row.is_paid,
-    paidAt: row.paid_at,
-  };
-  if (!splitsByExpense.has(split.expenseId)) splitsByExpense.set(split.expenseId, []);
-  splitsByExpense.get(split.expenseId)!.push(split);
-}
-
-const allSplits: ExpenseSplit[] = Array.from(splitsByExpense.values()).flat();
+/**
+ * refresh-day — Lightweight validation pass for a single itinerary day.
+ *
+ * Re-validates timing, transit, operating hours, buffer gaps, and flags conflicts.
+ * Returns issues AND proposed changes that users can accept/reject individually.
+ *
+ * COST CONTRACT: This function MUST NOT call AI/LLM gateways or billable
+ * external services. It only:
+ *   - Re-validates the day via validate-day
+ *   - Re-runs deterministic repair-day normalizations
+ *   - Applies the validation gate
+ *   - Adjusts timing buffers
+ *
+ * If you need to call AI here, you must:
+ *   1. Add a credit-spend gate (mirror useGenerationGate)
+ *   2. Update the UI to surface the cost
+ *   3. Update billing docs
+ *
+ * Skipping these steps will silently bill users — DON'T.
+ *
+ * POST { ... }  // (unchanged)
+ * Returns { ... }  // (unchanged)
+ */
 ```
-
-`allSplits` is preserved (used at lines 536 and 546 with `.filter`). `splitsByExpense` is also exported into the closure so future code (and the verify check) can use the indexed lookup. No behavior change otherwise.
 
 ## Verification
 
-- `grep -c "splitsByExpense" src/services/tripBudgetAPI.ts` ≥ 2 (the `Map` declaration + `.set`/`.get` references give 4+).
-- Existing `getExpenseSplits` helper stays as-is (still used by other call sites at line 365).
-- Budget summary numbers match what they did before (same input rows, same field mapping).
-
-## Out of scope
-
-- Changing the consumer-side `.filter(s => s.expenseId === ...)` calls to use the new `splitsByExpense` map (would be a nice micro-optimization, but spec says "replace per-expense fetch", not refactor balance computation).
+- `grep -c "COST CONTRACT" supabase/functions/refresh-day/index.ts` ≥ 1.
+- No code paths change — comment-only.
