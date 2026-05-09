@@ -22,7 +22,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO } from 'date-fns';
 import { safeFormatDate } from '@/utils/dateUtils';
-import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { mergeAccommodationActivities } from '@/utils/accommodationActivities';
 import type { GeneratedDay, GeneratedActivity, TripOverview } from '@/hooks/useItineraryGeneration';
 
@@ -1138,15 +1138,18 @@ function ActivityCard({
             )}
 
             {/* Insider Tips */}
-            {extActivity.tips && (
-              <div className="flex items-start gap-2 text-sm bg-primary/5 border border-primary/20 rounded-md p-3">
-                <Sparkles className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-                <div>
-                  <span className="font-medium text-primary text-xs">Insider Tip</span>
-                  <p className="text-muted-foreground mt-0.5">{extActivity.tips}</p>
+            {(() => {
+              const tip = sanitizeActivityText(extActivity.tips);
+              return tip ? (
+                <div className="flex items-start gap-2 text-sm bg-primary/5 border border-primary/20 rounded-md p-3">
+                  <Sparkles className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                  <div>
+                    <span className="font-medium text-primary text-xs">Insider Tip</span>
+                    <p className="text-muted-foreground mt-0.5">{tip}</p>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : null;
+            })()}
 
             {/* Transportation to Next */}
             {activity.transportation && (
