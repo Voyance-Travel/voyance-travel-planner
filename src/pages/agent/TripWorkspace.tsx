@@ -300,11 +300,14 @@ export default function TripWorkspace() {
   }, []);
 
   const handleInventorySelect = useCallback((item: InventoryItem) => {
-    // TODO: Add item to itinerary or create booking segment
-    toast({ title: `Added ${item.title} to trip` });
+    // Inventory → itinerary wiring is not built yet. Surface the limitation
+    // honestly instead of pretending the item was added.
+    toast({
+      title: 'Coming soon',
+      description: `Adding "${item.title}" to the itinerary from inventory isn't wired up yet.`,
+    });
     setInventoryDrawerOpen(false);
-    loadTripData();
-  }, [loadTripData]);
+  }, []);
 
   // Computed values
   const pendingTasks = tasks.filter(t => t.status !== 'completed');

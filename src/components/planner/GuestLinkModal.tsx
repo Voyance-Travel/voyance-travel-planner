@@ -382,16 +382,19 @@ export default function GuestLinkModal({
                     placeholder="friend@email.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleInviteByEmail()}
+                    disabled
                     className="flex-1"
                   />
-                  <Button onClick={handleInviteByEmail} disabled={isInviting || !email} size="sm">
-                    {isInviting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send'}
+                  <Button disabled size="sm" title="Email invites coming soon">
+                    Send
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  They'll receive an invite to join your trip. They must create an account to view the itinerary.
-                </p>
+                <div className="flex items-start gap-2 text-[11px] text-muted-foreground bg-muted/30 p-2.5 rounded-lg">
+                  <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                  <p>
+                    Email invites are <strong>coming soon</strong>. For now, add companions from the <strong>My Friends</strong> tab — they'll get access as soon as you confirm.
+                  </p>
+                </div>
               </TabsContent>
             </Tabs>
           )}
