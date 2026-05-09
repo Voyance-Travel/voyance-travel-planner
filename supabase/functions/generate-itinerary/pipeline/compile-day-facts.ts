@@ -426,6 +426,8 @@ export async function compileDayFacts(
           location: act.location,
           cost: act.cost || act.estimatedCost,
           isLocked: true,
+          locked: true,
+          is_locked: true,
           tags: act.tags,
           bookingRequired: act.bookingRequired,
           tips: act.tips,
