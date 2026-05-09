@@ -93,7 +93,54 @@ export async function searchActivities(params: ActivitySearchParams): Promise<Ac
     throw new Error(error.message || 'Failed to search activities');
   }
 
-  return data as ActivitySearchResponse;
+  // Apply user's avoid-list before returning. Preferences come from the
+  // user_preferences table (avoid_categories, avoid_venues columns).
+  const response = (data as ActivitySearchResponse) || { success: true, activities: [], totalCount: 0, source: 'database', fromCache: false };
+  let activities = response.activities || [];
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: prefs } = await supabase
+        .from('user_preferences')
+        .select('avoid_categories, avoid_venues')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const avoidCategories = new Set(
+        ((prefs as any)?.avoid_categories || [])
+          .map((c: string) => c.toLowerCase().trim())
+          .filter(Boolean)
+      );
+      const avoidVenues = Array.from(
+        new Set(
+          ((prefs as any)?.avoid_venues || [])
+            .map((v: string) => v.toLowerCase().trim())
+            .filter(Boolean)
+        )
+      ) as string[];
+
+      if (avoidCategories.size > 0 || avoidVenues.length > 0) {
+        activities = activities.filter((a) => {
+          const cat = String(a.category || '').toLowerCase();
+          const title = String(a.title || '').toLowerCase();
+          if (avoidCategories.has(cat)) return false;
+          for (const v of avoidVenues) {
+            if (title.includes(v)) return false;
+          }
+          return true;
+        });
+      }
+    }
+  } catch (prefErr) {
+    console.warn('[Activities] avoid-list filter skipped:', prefErr);
+  }
+
+  return {
+    ...response,
+    activities,
+    totalCount: activities.length,
+  };
 }
 
 /**
