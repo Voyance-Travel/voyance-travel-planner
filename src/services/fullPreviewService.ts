@@ -64,6 +64,8 @@ export interface FullPreview {
   destination: string;
   country?: string;
   totalDays: number;
+  previewedDays?: number;
+  isPartialPreview?: boolean;
   totalActivities: number;
   days: PreviewDay[];
   tripSummary: {
