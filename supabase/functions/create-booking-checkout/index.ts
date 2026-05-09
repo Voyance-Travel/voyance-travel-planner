@@ -231,6 +231,12 @@ serve(async (req) => {
     let insertedRowIds: string[] = [];
 
     try {
+      // Deterministic idempotency key — collapses duplicate clicks for the same trip+amount
+      // within a 60-second window; later retries (e.g. after expired session) get a fresh key.
+      const totalCents = (flightCents | 0) + (hotelCents | 0) + (activitiesCents | 0);
+      const minuteBucket = Math.floor(Date.now() / 60000);
+      const idempotencyKey = `booking:${userId}:${tripId}:${totalCents}:${minuteBucket}`.slice(0, 255);
+
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         customer_email: customerId ? undefined : userEmail,
@@ -243,7 +249,7 @@ serve(async (req) => {
           trip_id: tripId,
           trip_destination: trip.destination,
         },
-      });
+      }, { idempotencyKey });
       stripeSessionId = session.id;
       logStep("Checkout session created", { sessionId: session.id });
 
