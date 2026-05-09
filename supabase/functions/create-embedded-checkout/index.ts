@@ -139,6 +139,9 @@ serve(async (req) => {
       if (packageTier) sessionMetadata.package_tier = packageTier;
     }
 
+    // Deterministic idempotency key — collapses duplicate clicks for the same purchase intent
+    const idempotencyKey = `embedded:${userId}:${priceId}:${mode}:${groupTripId ?? ''}:${returnPath ?? ''}`.slice(0, 255);
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : email,
@@ -147,7 +150,7 @@ serve(async (req) => {
       ui_mode: "embedded",
       return_url: `${origin}${returnPath}?session_id={CHECKOUT_SESSION_ID}&payment=success`,
       metadata: sessionMetadata,
-    });
+    }, { idempotencyKey });
 
     logStep("Embedded checkout session created", { sessionId: session.id });
 
