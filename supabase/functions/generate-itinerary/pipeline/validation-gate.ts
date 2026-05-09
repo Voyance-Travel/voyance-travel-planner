@@ -122,6 +122,20 @@ export function applyValidationGate(
         counters.forcedDowngrades++;
         break;
       }
+      case FAILURE_CODES.TRUNCATED_SENTENCE: {
+        // Trim mid-sentence tail back to the last sentence boundary.
+        // If no terminator exists, leave field unchanged (don't fall through
+        // to default which would blank it — fragment > blank).
+        if (r.field && typeof act[r.field] === 'string') {
+          const trimmed = trimToLastSentence(act[r.field]);
+          if (trimmed != null && trimmed !== act[r.field]) {
+            act[r.field] = trimmed;
+            counters.blankedFields++;
+            counters.forcedDowngrades++;
+          }
+        }
+        break;
+      }
       default: {
         // Unknown critical → blank the offending field if any, else drop.
         if (r.field && typeof act[r.field] === 'string') {
