@@ -130,6 +130,17 @@ async function enrichActivities(
     return aTime - bTime;
   });
 
+  // Orphan-transit cleanup: cross-city / placeholder filters above can drop a
+  // dining/sightseeing card while leaving the "Walk to <X>" connector that
+  // pointed at it. Strip those orphans now that the day is sorted.
+  if (crossCityRemovedFromEnrichment + crossCityRemovedFromAddress > 0) {
+    const { pruneOrphanTransits } = await import('../../_shared/orphan-transit.ts');
+    const orphans = pruneOrphanTransits(merged);
+    if (orphans > 0) {
+      console.warn(`[enrich-day] Orphan-transit cleanup removed ${orphans} connector(s) after cross-city filter`);
+    }
+  }
+
   const enrichedWithRatings = enrichedKept.filter((a: any) => a.rating).length;
   console.log(`[enrich-day] Enrichment complete: ${enrichedWithRatings}/${activitiesToEnrich.length} activities got ratings`);
   if (crossCityRemovedFromEnrichment + crossCityRemovedFromAddress > 0) {
