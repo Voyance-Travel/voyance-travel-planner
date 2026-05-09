@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { Loader2 } from 'lucide-react';
 import { useGuideFollow } from '@/hooks/useGuideFollow';
 import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
+import ReactMarkdown from 'react-markdown';
 
 interface CommunityGuideDetail {
   id: string;
