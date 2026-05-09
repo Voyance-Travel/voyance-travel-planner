@@ -1477,7 +1477,7 @@ export function EditorialItinerary({
       // the root cause of phantom Budget Coach suggestions and Payments rows.
       try {
         if (activitiesForCostTable.length > 0) {
-          const synced = await syncActivitiesToCostTable(tripId, activitiesForCostTable);
+          const synced = await syncActivitiesToCostTable(tripId, activitiesForCostTable, liveActivityIds);
           console.log(`[EditorialItinerary] Synced ${synced}/${activitiesForCostTable.length} activity costs`);
         }
 
