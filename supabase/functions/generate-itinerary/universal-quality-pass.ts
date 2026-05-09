@@ -489,6 +489,21 @@ export function terminalCleanup(
     console.warn(`[${label}] Terminal cross-city sweep failed (non-blocking):`, e);
   }
 
+  // ── 1e. Nuclear DINING STRIP + orphan-transit cleanup (terminal) ──
+  try {
+    const diningConfig = getDiningConfig('Explorer', '');
+    const diningStripCount = nuclearDiningStrip(activities, city || '', diningConfig);
+    if (diningStripCount > 0) {
+      console.warn(`[${label}] Terminal dining strip removed ${diningStripCount} unfillable placeholder(s)`);
+    }
+    const orphanCount = pruneOrphanTransits(activities);
+    if (orphanCount > 0) {
+      console.warn(`[${label}] Terminal orphan-transit cleanup removed ${orphanCount} connector(s)`);
+    }
+  } catch (e) {
+    console.warn(`[${label}] Terminal dining strip / orphan cleanup failed (non-blocking):`, e);
+  }
+
   // ── 1b. Deduplicate "Return to Hotel" entries — keep only the LAST one ──
   // Also recategorize mismatched hotel returns so repairBookends sees them correctly
   {
