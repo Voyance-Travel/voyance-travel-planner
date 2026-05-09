@@ -5,9 +5,9 @@ import { applyValidationGate } from "../pipeline/validation-gate.ts";
 import { FAILURE_CODES } from "../pipeline/types.ts";
 
 Deno.test("trimToLastSentence: trims mid-sentence tail to last terminator", () => {
-  const v = "Wander Cannaregio at golden hour. The light through the canals";
+  const v = "Wander Cannaregio at golden hour and watch the canals shimmer. The light through the";
   const out = trimToLastSentence(v);
-  assertEquals(out, "Wander Cannaregio at golden hour.");
+  assertEquals(out, "Wander Cannaregio at golden hour and watch the canals shimmer.");
 });
 
 Deno.test("trimToLastSentence: returns null when already terminated", () => {
