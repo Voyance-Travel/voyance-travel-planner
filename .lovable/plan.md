@@ -1,44 +1,48 @@
-## Plan: MapKit token allowed origins from env
+## Plan: Route `suggest-hotel-swaps` through Lovable AI Gateway
 
-Replace hardcoded `origin` array in `supabase/functions/mapkit-token/index.ts` (L39-43) with an env-driven `ALLOWED_ORIGINS` constant defined at module scope.
+Replace the broken `lovable-ai.lovable.dev` call (using `SUPABASE_ANON_KEY` as bearer — wrong key + wrong endpoint) with the standard gateway pattern used by `mid-trip-dna` / `dna-feedback-chat`.
 
-### Change
+### Change in `supabase/functions/suggest-hotel-swaps/index.ts`
 
-In `supabase/functions/mapkit-token/index.ts`:
-
-1. Add a module-scope constant above `Deno.serve(...)` (after the import on L1):
+1. Drop the dead `apiKey` line (L105) — `GOOGLE_AI_API_KEY` / `GEMINI_API_KEY` aren't used downstream.
+2. Replace L107-122 with:
 
 ```ts
-const ALLOWED_ORIGINS = (() => {
-  const raw = Deno.env.get('MAPKIT_ALLOWED_ORIGINS');
-  if (!raw) {
-    return [
-      'https://travelwithvoyance.com',
-      'https://www.travelwithvoyance.com',
-      'https://voyance-travel-planner.lovable.app',
-    ];
-  }
-  return raw.split(',').map(s => s.trim()).filter(Boolean);
-})();
+const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${Deno.env.get('LOVABLE_API_KEY')}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    model: 'google/gemini-2.5-flash',
+    messages: [
+      { role: 'user', content: prompt },
+    ],
+    temperature: 0.3,
+  }),
+});
 ```
 
-2. Replace L39-43 (the inline `origin: [...]` array) with `origin: ALLOWED_ORIGINS,`.
+Preserves: model (`google/gemini-2.5-flash`), single-user-message shape (the existing prompt is self-contained — no system split needed), and `temperature: 0.3` (intentionally lower than the 0.7 in the user's example because the function returns a strict JSON array; bumping creativity would hurt parse rate).
 
-Token expiry (`exp: now + 3600`) stays unchanged.
+3. Add 429/402 handling alongside the existing `!aiResponse.ok` branch so credit-exhaustion / rate-limit errors surface cleanly:
 
-### Secret
-
-After the code change, request the user add the runtime secret `MAPKIT_ALLOWED_ORIGINS` via `secrets--add_secret`, with the suggested value:
-
+```ts
+if (aiResponse.status === 429) {
+  return new Response(JSON.stringify({ error: 'Rate limit exceeded, please try again shortly.' }),
+    { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+if (aiResponse.status === 402) {
+  return new Response(JSON.stringify({ error: 'AI credits exhausted. Add credits in Workspace settings.' }),
+    { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
 ```
-https://travelwithvoyance.com,https://www.travelwithvoyance.com,https://voyance-travel-planner.lovable.app,https://id-preview--bbef7015-a2df-45af-893d-7d36d59f8dcd.lovable.app
-```
 
-(Including the existing `id-preview--…lovable.app` origin so previews keep working; user can append staging hosts.)
-
-If the user skips the secret, sane defaults ship in code so prod won't break.
+Response parsing (`aiData.choices?.[0]?.message?.content`) already matches the gateway's OpenAI-compatible shape — no changes needed below L130.
 
 ### Verify
 
-- `grep -n "MAPKIT_ALLOWED_ORIGINS" supabase/functions/mapkit-token/index.ts` → 1+ hit.
-- Edge function auto-deploys; no other call sites to update.
+- `grep -n "lovable-ai.lovable.dev\|ai.gateway.lovable.dev" supabase/functions/suggest-hotel-swaps/index.ts` → only `ai.gateway.lovable.dev` remains.
+- `grep -n "SUPABASE_ANON_KEY\|SUPABASE_PROJECT_REF\|GOOGLE_AI_API_KEY\|GEMINI_API_KEY" supabase/functions/suggest-hotel-swaps/index.ts` → 0 hits.
+- Edge function auto-deploys; no client-side changes.

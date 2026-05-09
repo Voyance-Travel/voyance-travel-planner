@@ -102,15 +102,11 @@ Return a JSON array of swap suggestions. Each suggestion must have:
 If no swaps are beneficial, return an empty array [].
 Return ONLY the JSON array, no markdown or explanation.`;
 
-    const apiKey = Deno.env.get('GOOGLE_AI_API_KEY') || Deno.env.get('GEMINI_API_KEY');
-    
-    // Use Lovable AI endpoint
-    const aiResponse = await fetch('https://lovable-ai.lovable.dev/api/generate', {
+    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${Deno.env.get('LOVABLE_API_KEY')}`,
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-        'x-supabase-project-ref': Deno.env.get('SUPABASE_PROJECT_REF') || '',
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
@@ -121,6 +117,18 @@ Return ONLY the JSON array, no markdown or explanation.`;
       }),
     });
 
+    if (aiResponse.status === 429) {
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded, please try again shortly.' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (aiResponse.status === 402) {
+      return new Response(
+        JSON.stringify({ error: 'AI credits exhausted. Add credits in Workspace settings.' }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     if (!aiResponse.ok) {
       const errText = await aiResponse.text();
       console.error('[suggest-hotel-swaps] AI call failed:', errText);
