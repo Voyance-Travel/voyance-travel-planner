@@ -358,6 +358,8 @@ export async function compileDayFacts(
           location: a.location as { name?: string; address?: string } || { name: '', address: '' },
           cost: a.cost as { amount: number; currency: string } || { amount: 0, currency: 'USD' },
           isLocked: true,
+          locked: true,
+          is_locked: true,
           tags: a.tags || [],
           bookingRequired: a.booking_required || false,
           tips: a.tips || undefined,
