@@ -151,9 +151,10 @@ const handler = async (req: Request): Promise<Response> => {
     const safeMessage = escapeHtml(message);
     const safeType = escapeHtml(type);
 
-    // Send notification to support team
+    // Send notification to support team (env-driven, falls back to default)
+    const SUPPORT_EMAIL = Deno.env.get("SUPPORT_EMAIL") ?? "contact@travelwithvoyance.com";
     const supportEmailResult = await sendEmail({
-      to: "contact@travelwithvoyance.com",
+      to: SUPPORT_EMAIL,
       subject: emailSubject,
       replyTo: email,
       fromName: "Voyance Contact Form",
