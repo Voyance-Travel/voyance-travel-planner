@@ -488,17 +488,14 @@ serve(async (req) => {
             break;
           }
 
-          // Add credits to the group pool
-          const { error: updateErr } = await supabaseAdmin
-            .from('group_budgets')
-            .update({
-              remaining_credits: budget.remaining_credits + creditsToAdd,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', budget.id);
+          // Atomic add — single SQL UPDATE prevents lost-update under concurrent webhooks
+          const { data: newRemaining, error: updateErr } = await supabaseAdmin.rpc('add_to_group_budget', {
+            p_budget_id: budget.id,
+            p_credits: creditsToAdd,
+          });
           if (updateErr) {
-            logError("CRITICAL: group_budgets update FAILED", JSON.stringify(updateErr));
-            throw new Error(`group_budgets update failed: ${updateErr.message}`);
+            logError("CRITICAL: add_to_group_budget FAILED", JSON.stringify(updateErr));
+            throw new Error(`add_to_group_budget failed: ${updateErr.message}`);
           }
 
           // Group transaction log (negative credits_spent = added to pool, matches topup-group-budget)
@@ -525,7 +522,7 @@ serve(async (req) => {
           });
 
           log("Group pool credit purchase fulfilled", {
-            userId, tripId, creditsToAdd, newRemaining: budget.remaining_credits + creditsToAdd,
+            userId, tripId, creditsToAdd, newRemaining,
           });
         }
 

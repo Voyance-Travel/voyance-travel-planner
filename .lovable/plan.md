@@ -1,25 +1,27 @@
-## Fix 2.1 — Decide the fate of `purchase-smart-finish`
+## Fix 2.2: Atomic group-budget mutations
 
-### Status check (already done)
-The `supabase/functions/purchase-smart-finish/` folder was deleted in an earlier turn. A repo-wide `rg` confirms:
+### Current state (verified)
+- `topup-group-budget/index.ts` already uses the atomic `add_to_group_budget(uuid, int)` RPC (lines 88-95). No change needed there.
+- `spend-group-credits` edge function **does not exist** in this codebase (`ls supabase/functions | grep group` returns only `purchase-group-unlock` and `topup-group-budget`).
+- The actual remaining non-atomic read-modify-write is in **`supabase/functions/stripe-webhook/index.ts` lines 452-502** — the `group_pool_credit_purchase` branch reads `remaining_credits` then writes `budget.remaining_credits + creditsToAdd`. Two concurrent Stripe webhooks for the same budget can lose an update.
 
-- No code in `src/` or `supabase/functions/` references `purchase-smart-finish`.
-- `stripe-webhook/index.ts` has zero `smart_finish` branches.
-- The Smart Finish purchase flow already runs end-to-end through credits: `SmartFinishBanner.tsx` deducts 50 credits via `pricing.ts:18` then directly sets `smart_finish_purchased = true` on the trip row (lines 300/323/365).
-- `enrich-manual-trip` is the only other writer of that flag, also via the credits path.
+### Changes
 
-So the recommended path **(b) delete** is effectively complete in the codebase. The single remaining loose end is the **deployed copy of the function still living in the Supabase project** — it's unreferenced source-side but may still be invokable.
+**1. New migration** (`supabase/migrations/<ts>_atomic_group_budget.sql`):
+- Add `public.spend_from_group_budget(p_budget_id uuid, p_cost int) RETURNS jsonb` — atomic conditional decrement returning `{success:true, remaining_credits}` or `{success:false, reason:'insufficient'}`. `SECURITY DEFINER`, `search_path = public`, `REVOKE ALL FROM PUBLIC`, `GRANT EXECUTE TO service_role` (matching the pattern of existing `add_to_group_budget`). Provided defensively for the next group-spend caller; no current invoker.
+- Leave existing `add_to_group_budget` untouched (already atomic and granted to `service_role`).
 
-### Action
-1. Remove the orphan deployment by calling `supabase--delete_edge_functions` with `["purchase-smart-finish"]`. This guarantees the parallel paid-but-unfulfilled codepath is gone end-to-end (no surprise invocations from old clients, bookmarks, or stale `curl` scripts).
-2. Update `@security-memory` to record that the Smart Finish Stripe checkout function was intentionally removed and that any future claim of "Smart Finish needs its own Stripe session" must instead extend the existing credits flow.
+**2. `supabase/functions/stripe-webhook/index.ts`** (lines 491-502):
+- Replace the `.from('group_budgets').update({ remaining_credits: budget.remaining_credits + creditsToAdd, ... })` block with an `rpc('add_to_group_budget', { p_budget_id: budget.id, p_credits: creditsToAdd })` call.
+- The returning value becomes the new `remaining_credits`; use it in the success log on line 528 instead of recomputing `budget.remaining_credits + creditsToAdd`.
+- Keep the surrounding fetch (still needed for `owner_id` / fallback-to-personal-balance check) and all logging/idempotency unchanged.
 
 ### Out of scope
-- Re-introducing a Stripe path for Smart Finish (path (a)). The credits flow is the canonical purchase route — re-adding a Stripe checkout would split fulfillment again.
-- Touching `smart_finish_purchased` columns or `SmartFinishBanner.tsx` business logic.
-- Webhook changes — there's nothing to remove.
+- No frontend changes.
+- No edits to `topup-group-budget` (already atomic).
+- No new `spend-group-credits` edge function — the user's plan referenced one that doesn't exist; the spend RPC ships ready for the next caller without inventing a function nothing uses.
+- No changes to `purchase-group-unlock` (it INSERTs a fresh row, not a read-modify-write).
 
 ### Validation
-- After deletion, attempting `supabase.functions.invoke('purchase-smart-finish', ...)` returns 404 (expected).
-- `SmartFinishBanner` purchase flow continues to deduct 50 credits and flip `smart_finish_purchased` (no behavior change).
-- A grep for `purchase-smart-finish` returns zero hits anywhere.
+- Stripe webhook: re-run / replay a `group_pool_credit_purchase` event in test mode; ledger and `group_budget_transactions` rows still appear, `remaining_credits` increments by exactly `creditsToAdd`.
+- `supabase--linter` after migration to catch any function-grant warnings.
