@@ -20,7 +20,7 @@ export interface ValidationIssue {
   activityId: string;
   activityTitle: string;
   message: string;
-  severity: 'warning' | 'error';
+  severity: 'info' | 'warning' | 'error';
   autoFixed?: boolean;
 }
 
