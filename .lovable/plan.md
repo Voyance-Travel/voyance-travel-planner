@@ -1,47 +1,37 @@
-## Goal
+## MD2 Fix: Wire DNAFeedbackChat success callback
 
-Delete the unreachable predictions branch from `mid-trip-dna/index.ts`. The only caller (`MidTripDNA.tsx:82`) always passes `mode: 'daily-briefing'`, so lines 133–321 (~190 lines) are dead code: they call the Lovable AI gateway, build a tool-call schema, and return a `predictions` payload that nothing consumes.
+### Scope
+Single render site found:
+- `src/components/profile/TravelDNAReveal.tsx:674` — `<DNAFeedbackChat userId={userId} />` with no `onFeedbackApplied`.
 
-Path A keeps the live daily-briefing behavior identical and removes the dead AI call path. If predictions are wanted later, they can be re-introduced alongside a real UI surface.
+The DNA query in this same file uses `queryKey: ['travelDNA', userId, refreshKey]` (note: `travelDNA`, not `travel-dna` as in the issue snippet). Profile queries use the broad key `['profile']` / `['profile', userId]`.
 
-## Changes
+### Change
+In `src/components/profile/TravelDNAReveal.tsx`:
 
-### 1. `supabase/functions/mid-trip-dna/index.ts`
+1. Import `useQueryClient` from `@tanstack/react-query` (already imports `useQuery` from same package).
+2. Inside the default-exported `TravelDNAReveal` component, instantiate:
+   ```ts
+   const queryClient = useQueryClient();
+   ```
+3. Pass the callback to the existing render site:
+   ```tsx
+   <DNAFeedbackChat
+     userId={userId}
+     onFeedbackApplied={() => {
+       queryClient.invalidateQueries({ queryKey: ['travelDNA', userId] });
+       queryClient.invalidateQueries({ queryKey: ['profile', userId] });
+       queryClient.invalidateQueries({ queryKey: ['profile'] });
+     }}
+   />
+   ```
 
-- Make `daily-briefing` the only supported mode. Reject anything else with a clean 400 instead of silently falling through to the dead branch.
-- Delete lines 133–321 (the entire "ORIGINAL PREDICTIONS MODE" block: trip+DNA load, prompt build, `fetch` to `ai.gateway.lovable.dev`, tool-call parse, predictions response).
-- Keep the outer `try/catch`, CORS handling, auth check, and the existing daily-briefing block byte-for-byte.
-- Remove the now-unused `LOVABLE_API_KEY` read (it lives inside the deleted block; daily-briefing has its own AI call earlier in the file that keeps its own key read).
+Using the actual project keys (`travelDNA`, `profile`) ensures invalidation matches; partial-match invalidation will refresh `['travelDNA', userId, refreshKey]` regardless of `refreshKey` value.
 
-Concretely, after the `if (mode === 'daily-briefing') { … return … }` block, replace the predictions section with:
+### Verification
+- `rg -n "DNAFeedbackChat" src -g '*.tsx'` — confirm only one render site (TravelDNAReveal.tsx:674) — already verified.
+- After submitting feedback in the Deeper tab, the archetype/trait UI should refresh without manual reload.
 
-```ts
-return new Response(
-  JSON.stringify({ error: "Unsupported mode. Only 'daily-briefing' is supported." }),
-  { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-);
-```
-
-### 2. No client changes
-
-`MidTripDNA.tsx` already passes `mode: 'daily-briefing'` and only reads `data.briefing`. No other file references this function (verified via `grep -rn "mid-trip-dna" src/ supabase/`).
-
-### 3. No config changes
-
-`supabase/config.toml` already has a `[functions.mid-trip-dna]` block — keep it.
-
-## Verification
-
-After the edit:
-
-```
-grep -n "predictions\|generate_trip_predictions\|ai.gateway.lovable.dev\|LOVABLE_API_KEY" supabase/functions/mid-trip-dna/index.ts
-```
-
-Expected: only matches inside the daily-briefing block (which has its own AI call). No `generate_trip_predictions` tool, no `predictions` response field.
-
-Line count of `index.ts` should drop by ~190 lines.
-
-## Risk
-
-Near-zero. The deleted branch was unreachable. Daily-briefing behavior is unchanged. Anyone calling the function without `mode` (or with a different mode) used to get a silent AI prediction call; now they get a clear 400. That's a behavior change only for callers that don't exist.
+### Out of scope
+- No changes to `DNAFeedbackChat.tsx` itself; the optional prop already exists.
+- No backend changes.

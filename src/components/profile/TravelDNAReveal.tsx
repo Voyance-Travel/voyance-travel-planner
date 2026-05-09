@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { getAppUrl } from '@/utils/getAppUrl';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, 
