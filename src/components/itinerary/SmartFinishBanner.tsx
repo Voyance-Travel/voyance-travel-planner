@@ -314,7 +314,10 @@ export function SmartFinishBanner({
       await spendCredits.mutateAsync({
         action: 'SMART_FINISH',
         tripId,
-        metadata: { source: 'smart_finish_retry' },
+        metadata: {
+          source: 'smart_finish_retry',
+          idempotencyKey: `smart_finish:${tripId}:retry:${Date.now()}`,
+        },
       });
 
       // Step 2: Mark as purchased
@@ -356,7 +359,10 @@ export function SmartFinishBanner({
       await spendCredits.mutateAsync({
         action: 'SMART_FINISH',
         tripId,
-        metadata: { source: 'smart_finish_banner' },
+        metadata: {
+          source: 'smart_finish_banner',
+          idempotencyKey: `smart_finish:${tripId}:purchase:${Date.now()}`,
+        },
       });
 
       // Step 2: Mark as purchased

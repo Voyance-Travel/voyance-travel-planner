@@ -4168,7 +4168,10 @@ export function EditorialItinerary({
         action: 'REGENERATE_TRIP',
         tripId,
         creditsAmount: regenerationCost,
-        metadata: { dayCount: totalDays },
+        metadata: {
+          dayCount: totalDays,
+          idempotencyKey: `regenerate_trip:${tripId}:${totalDays}:${Date.now()}`,
+        },
       });
 
       // 2. Day-by-day generation (matching original progressive pattern)
