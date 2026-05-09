@@ -1,68 +1,107 @@
-## Fix #2 — Unhardcode currency in `supabase/functions/hotels/index.ts`
+## Fix #3 — Wire `applyValidationGate` into `refresh-day`
 
-### Audit
-`grep` confirms exactly two `currency: 'USD'` literals (no other casings):
-- L503 — Google Places result mapping in `searchHotels`
-- L573 — `generateFallbackHotels`
+### Context check (important)
+The user's snippet assumes `refresh-day` regenerates a `refreshedDay` and has `trip`, `totalDays`, `refreshedDay.metadata` in scope. **It doesn't.** `supabase/functions/refresh-day/index.ts` is a *diagnostic* endpoint:
+- Input: `{ activities, date, destination, dayNumber, … }` (no `tripId`, no `trip`, no `totalDays`).
+- Output: `{ issues, proposedChanges, transitEstimates, buffers, totalCost, activitiesValidated, dayNumber }`.
+- It never mutates a day; the client applies `proposedChanges`.
 
-`estimateNightlyPrice` (L102) returns USD-baked numbers from a fixed `basePrices` table. Per the user's note, we'll accept that for now (Google priceLevel→USD anchor) — no conversion. We'll just stamp the trip's currency code on the result objects so downstream consumers (cost snapshot, UI) display it consistently with the rest of the trip.
+So we can't copy the snippet verbatim — the variables don't exist. We adapt the same *intent* to fit this endpoint's shape: run the validation gate against the input activities, surface findings in the response, and (optionally) emit forced downgrades as additional `proposedChanges` the client can apply.
 
-### Changes (single file: `supabase/functions/hotels/index.ts`)
+### Plan (single file: `supabase/functions/refresh-day/index.ts`)
 
-**1. Resolve `tripCurrency` at handler entry (after `body = await req.json()`, ~L1067).**
+**1. Extend body type** (L271–283) with two optional fields:
+```ts
+totalDays?: number;
+hotelName?: string;
+```
+Destructure them at L284 with sensible fallbacks: `totalDays = dayNumber`, `hotelName = undefined`. (Last-day-specific gate codes only fire when `dayNumber === totalDays`; passing `totalDays` from the client is best, default keeps existing behavior conservative.)
+
+**2. Insert validation-gate block** just before the final `return new Response(...)` at L603, after `buffers` is computed. Cascade is non-blocking; on error we log + skip.
 
 ```ts
-const SUPPORTED_CURRENCIES = new Set([
-  'usd','eur','gbp','cad','aud','chf','jpy','sek','nok','dkk','nzd',
-]);
+// VALIDATION GATE — mirrors action-generate-day.ts:1245-1267 (adapted for diagnostic shape).
+// Surfaces critical semantic failures (reservationUrgency leak, walk-over-threshold,
+// truncated descriptions, punctuation-only fields) as additional issues + proposedChanges.
+let gateCounters: any = null;
+let gateForcedActivities: any[] | null = null;
+try {
+  const { validateDay } = await import('../generate-itinerary/pipeline/validate-day.ts');
+  const { applyValidationGate } = await import('../generate-itinerary/pipeline/validation-gate.ts');
+  const { deriveMealPolicy } = await import('../generate-itinerary/meal-policy.ts');
 
-let tripCurrency = String(body?.currency || '').toLowerCase();
-if (!tripCurrency && body?.tripId) {
-  try {
-    const admin = getSupabaseAdmin();
-    const { data: trip } = await admin
-      .from('trips')
-      .select('budget_currency')
-      .eq('id', body.tripId)
-      .maybeSingle();
-    if (trip?.budget_currency) tripCurrency = String(trip.budget_currency).toLowerCase();
-  } catch (e) {
-    console.warn('[Hotels] trip currency lookup failed:', e);
-  }
-}
-if (!tripCurrency) tripCurrency = 'usd';
+  const isFirstDay = dayNumber === 1;
+  const isLastDay = dayNumber === totalDays;
+  const policy = deriveMealPolicy({
+    dayNumber, totalDays,
+    isFirstDay, isLastDay,
+    arrivalTime24: undefined,
+    departureTime24: undefined,
+  });
 
-if (!SUPPORTED_CURRENCIES.has(tripCurrency)) {
-  return new Response(
-    JSON.stringify({ error: `Unsupported currency: ${tripCurrency.toUpperCase()}`, code: 'UNSUPPORTED_CURRENCY' }),
-    { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  const dayMinimal = {
+    dayNumber,
+    date: date || '',
+    title: '',
+    activities: [...sorted],
+  };
+
+  const validationResults = validateDay({
+    day: dayMinimal as any,
+    dayNumber,
+    isFirstDay,
+    isLastDay,
+    totalDays,
+    destination,
+    hasHotel: true,
+    hotelName: body.hotelName,
+    requiredMeals: policy.requiredMeals || [],
+    previousDays: [],
+  });
+
+  const gate = applyValidationGate(
+    dayMinimal as any,
+    validationResults,
+    { dayNumber, destination },
   );
+
+  gateCounters = gate.counters;
+  if (gate.verdict === 'persist_forced') {
+    gateForcedActivities = gate.day.activities;
+    // Surface a single roll-up issue so the client knows to refresh from gate output.
+    issues.push({
+      type: 'validation_gate',
+      activityId: 'day',
+      activityTitle: `Day ${dayNumber}`,
+      severity: 'error',
+      message: `Validation gate forced ${gate.counters.forcedDowngrades} downgrade(s): ${gate.counters.blankedFields} blanked field(s), ${gate.counters.droppedActivities} dropped activity(ies).`,
+    } as any);
+  }
+} catch (gateErr) {
+  console.warn('[refresh-day] Validation gate failed (non-blocking):', gateErr);
 }
 ```
 
-Placement: inserted before the `body.action === 'book'` branch so all three branches (book / search-by-name / search / enrich) and the default search share one resolved value. (`searchHotelsByName` and `enrichHotelByName` don't currently emit a `currency` field, so they're unaffected.)
-
-**2. Thread `tripCurrency` into the two emitters.**
-
-- Add an optional `currency?: string` property to `HotelSearchParams` (L12) so we can pass it through `searchHotels(body)` without changing the call signature. Set `params.currency = tripCurrency` on `body` before invoking `searchHotels(body)` and `generateFallbackHotels(...)`.
-- In `searchHotels`, replace L503 `currency: 'USD',` → `currency: (params.currency || 'usd').toUpperCase(),`.
-- In `generateFallbackHotels`, replace L573 `currency: 'USD',` → `currency: (params.currency || 'usd').toUpperCase(),`. (Also called from L441/L540 fallback paths — same `params` object, currency already attached.)
-
-Output stays uppercase (`'EUR'`, `'GBP'`) to match the existing wire-format the field had with `'USD'`.
-
-**3. `estimateNightlyPrice` — out of scope for this fix.**
-Per the user's note, we accept that priceLevel→USD anchor numbers are not converted. No signature change. (Future work: multiply by FX or pull priceLevel-to-local from a per-currency table.)
-
-### Verify
-
-```bash
-grep -nE "currency: 'USD'|currency: \"USD\"" supabase/functions/hotels/index.ts
-# expected: no matches
+**3. Include in response** (L603 payload):
+```ts
+return new Response(JSON.stringify({
+  issues, proposedChanges, transitEstimates, buffers, totalCost,
+  activitiesValidated: sorted.length,
+  dayNumber,
+  gateCounters,
+  gateForcedActivities,
+}), { ... });
 ```
 
-Plus a smoke call: POST to `/hotels` with `{ tripId, destination, checkIn, checkOut }` for a EUR trip and confirm result objects carry `currency: "EUR"`.
+Adding new keys is additive; existing clients ignore unknown fields. A follow-up frontend task can teach the consumer to apply `gateForcedActivities` (out of scope for this fix — backend wiring only, matching user's "the gate alone catches the worst symptoms" framing).
 
 ### Out of scope
-- FX conversion of `basePrices` table.
-- Currency for `searchHotelsByName` / `enrichHotelByName` (those endpoints don't surface a price/currency today).
-- Migrating other edge functions still hardcoding USD (separate fixes).
+- Calling `repairDay` upstream (user said "if you want full pipeline parity — but the gate alone catches the worst symptoms").
+- Frontend consumption of `gateCounters` / `gateForcedActivities` (separate task).
+- Threading `tripId`-based `trip` / `hotel_selection.name` into refresh-day (would require an auth+admin lookup; current endpoint is auth-light by design).
+
+### Verify
+```bash
+grep -n "applyValidationGate" supabase/functions/refresh-day/index.ts
+# expected: 2 hits (import + call)
+```
