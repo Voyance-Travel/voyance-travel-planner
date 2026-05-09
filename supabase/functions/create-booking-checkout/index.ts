@@ -198,7 +198,7 @@ serve(async (req) => {
     try {
       // Deterministic idempotency key — collapses duplicate clicks for the same trip+amount
       // within a 60-second window; later retries (e.g. after expired session) get a fresh key.
-      const totalCents = (flightCents | 0) + (hotelCents | 0) + (activitiesCents | 0);
+      const totalCents = (activitiesCents | 0);
       const minuteBucket = Math.floor(Date.now() / 60000);
       const idempotencyKey = `booking:${userId}:${tripId}:${totalCents}:${minuteBucket}`.slice(0, 255);
 
