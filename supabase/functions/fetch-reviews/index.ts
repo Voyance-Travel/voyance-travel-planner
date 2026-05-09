@@ -785,23 +785,30 @@ function mergePlaceDetails(
   if (foursquare?.photos) allPhotos.push(...foursquare.photos);
   if (openTripMap?.photos) allPhotos.push(...openTripMap.photos);
 
-  // Calculate weighted average rating
-  let totalWeight = 0;
-  let weightedRating = 0;
-  let totalReviews = 0;
+  // Calculate weighted average rating.
+  // Exclude sources with no reviews — log10(0+1)=0 weight, but keeping them
+  // around distorts null-fallback semantics.
+  const candidates = [google, tripAdvisor, foursquare, openTripMap];
+  const validSources = candidates.filter((p): p is PlaceDetails =>
+    !!p &&
+    Number.isFinite(p.rating) && p.rating > 0 &&
+    Number.isFinite(p.totalReviews) && p.totalReviews > 0
+  );
 
-  for (const p of [google, tripAdvisor, foursquare, openTripMap]) {
-    if (p && p.rating > 0 && p.totalReviews > 0) {
-      const weight = Math.log10(p.totalReviews + 1);
-      weightedRating += p.rating * weight;
-      totalWeight += weight;
-      totalReviews += p.totalReviews;
-    }
-  }
+  const weightedSum = validSources.reduce(
+    (acc, s) => acc + s.rating * Math.log10(s.totalReviews + 1), 0
+  );
+  const totalWeight = validSources.reduce(
+    (acc, s) => acc + Math.log10(s.totalReviews + 1), 0
+  );
+  const totalReviews = validSources.reduce((acc, s) => acc + s.totalReviews, 0);
+  const avgRating = totalWeight > 0
+    ? Math.round((weightedSum / totalWeight) * 10) / 10
+    : null;
 
   return {
     ...primary,
-    rating: totalWeight > 0 ? Math.round((weightedRating / totalWeight) * 10) / 10 : primary.rating,
+    rating: avgRating ?? null,
     totalReviews,
     photos: allPhotos.slice(0, 8),
   };
