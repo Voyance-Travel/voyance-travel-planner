@@ -510,3 +510,100 @@ export function buildPhotoResource(photoName: string): string {
   // photoName already starts with "places/X/photos/Y" — return as-is.
   return photoName;
 }
+
+// ============================================================================
+// Cached Places Text Search — CL.2 cost-cut layer
+// ----------------------------------------------------------------------------
+// Same signature as googlePlacesTextSearch. Checks google_places_search_cache
+// by deterministic key first; on miss, falls through to the live call and
+// stores the result for 30 days. Cache failures are non-blocking warnings.
+// ============================================================================
+
+import { createClient as _createSupabaseClient } from "npm:@supabase/supabase-js@2.90.1";
+
+export async function cachedGooglePlacesTextSearch(
+  params: PlacesTextSearchParams,
+  ctx: GoogleCallContext,
+): Promise<PlacesTextSearchResult> {
+  // Build deterministic cache key from the search inputs only.
+  // signal is intentionally excluded — it's per-request, not part of identity.
+  const keyParts = JSON.stringify({
+    q: (params.textQuery ?? "").toLowerCase().trim(),
+    bias: params.locationBias ?? null,
+    type: params.includedType ?? null,
+    fields: params.fieldMask,
+    max: params.maxResultCount ?? null,
+    lang: params.languageCode ?? null,
+  });
+
+  // djb2 hash → hex (deterministic, handles unicode)
+  let h = 5381;
+  for (let i = 0; i < keyParts.length; i++) {
+    h = ((h << 5) + h + keyParts.charCodeAt(i)) | 0;
+  }
+  const cacheKey = `places_text:${Math.abs(h).toString(16)}`;
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = _createSupabaseClient(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false },
+  });
+
+  // Cache-first lookup
+  try {
+    const { data: cached } = await supabase
+      .from("google_places_search_cache")
+      .select("response_data, expires_at, result_count")
+      .eq("cache_key", cacheKey)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
+
+    if (cached?.response_data) {
+      console.log(
+        `[places-cache] HIT query="${params.textQuery}" key=${cacheKey} count=${cached.result_count}`,
+      );
+      // Fire-and-forget hit-count bump
+      supabase.rpc("bump_places_cache_hit", { p_cache_key: cacheKey }).then(
+        () => {},
+        () => {},
+      );
+      return {
+        ok: true,
+        status: 200,
+        data: cached.response_data,
+      };
+    }
+  } catch (cacheErr) {
+    console.warn("[places-cache] Cache lookup failed (continuing to Google):", cacheErr);
+  }
+
+  // Cache miss — call Google
+  console.log(
+    `[places-cache] MISS query="${params.textQuery}" key=${cacheKey} — calling Google`,
+  );
+  const result = await googlePlacesTextSearch(params, ctx);
+
+  // Store on success only
+  if (result.ok && result.data) {
+    try {
+      await supabase.from("google_places_search_cache").upsert(
+        {
+          cache_key: cacheKey,
+          text_query: params.textQuery,
+          location_bias: params.locationBias ?? null,
+          included_type: params.includedType ?? null,
+          field_mask: params.fieldMask,
+          response_data: result.data,
+          result_count: Array.isArray(result.data?.places) ? result.data.places.length : 0,
+          created_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+        { onConflict: "cache_key" },
+      );
+    } catch (storeErr) {
+      console.warn("[places-cache] Cache store failed:", storeErr);
+    }
+  }
+
+  return result;
+}

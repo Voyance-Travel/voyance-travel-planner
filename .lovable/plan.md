@@ -1,41 +1,68 @@
-## TG2 — Route mismatch in publish copy-link
+## CL.2 — Places Text Search cache layer
 
-**Audit claim is wrong, but there's still a small action to take.**
+The 4 edge functions calling Google Places Text Search currently have no cache. Same query ("hotels in Venice", "Da Ivo Venice", etc.) re-bills $0.017 every time across users. We'll add a deterministic-key cache table and a thin wrapper, then alias-import in the 4 call sites — zero call-site code changes.
 
-`src/pages/TravelGuideEditor.tsx:183` builds `${getAppUrl()}/guide/${guide.slug}`. `src/App.tsx:258` actually defines `<Route path="/guide/:slug" element={<PublicTravelGuide />} />` — so the link works today and renders from the `travel_guides` table.
+### Step 1 — Migration: cache table + race-safe hit bumper
 
-The relevant question after TG1 (which now mirrors AI guides into `community_guides` and exposes them at `/community-guide/:slug`) is: which surface should the "Copy public link" button point at?
+New `google_places_search_cache` table keyed by `cache_key text PRIMARY KEY`. Stores `text_query`, `location_bias`, `included_type`, `field_mask`, `response_data jsonb`, `result_count`, `hit_count`, `last_hit_at`, `expires_at` (default `now() + 30 days`).
 
-Recommendation: **keep `/guide/:slug`** (no change to TG2). Reasons:
-- The route exists and works.
-- `PublicTravelGuide` is the renderer purpose-built for `travel_guides` rows; `CommunityGuidePublic` is the markdown-fallback view we just added for the mirror.
-- Switching now would silently re-route every existing share link.
+Indexes on `expires_at` and `text_query`. RLS enabled, all privileges revoked from PUBLIC/anon/authenticated, granted to `service_role` only — server-internal cost infrastructure, no client should read it.
 
-Optional follow-up (not part of this plan unless you want it): once the community surface is the canonical one, flip the copy-link target to `/community-guide/${guide.slug}` and add a redirect from `/guide/:slug` → `/community-guide/:slug`.
+`bump_places_cache_hit(p_cache_key text)` SECURITY DEFINER function for atomic `hit_count = hit_count + 1, last_hit_at = now()` updates. Execute granted to `service_role` only.
 
-**Action:** none. Mark TG2 as resolved-by-investigation (audit had stale route info).
+### Step 2 — Shared helper: `cachedGooglePlacesTextSearch`
 
----
+Append to `supabase/functions/_shared/google-api.ts` alongside existing `googlePlacesTextSearch`. Same `(params, ctx)` signature → same `PlacesTextSearchResult` return shape, so it's a drop-in replacement.
 
-## Price Alerts — Path B (remove the toggle)
+Logic:
+1. Build deterministic key from JSON of `{textQuery (lowercased+trimmed), locationBias, includedType, fieldMask, maxResultCount}`, hash via djb2, prefix `places_text:`.
+2. Cache lookup: `select response_data where cache_key=? and expires_at > now()`. On hit → fire-and-forget `bump_places_cache_hit` RPC, return `{ok:true, status:200, data:cached}`.
+3. Cache miss → call live `googlePlacesTextSearch`. On `result.ok` upsert response into cache. Return live result either way.
+4. Cache lookup/store failures are warnings, never block the live result.
 
-Confirmed in code:
-- `src/pages/Settings.tsx:71` state, `:194` handler, `:485` UI.
-- DB column `profiles.price_alerts` is read at `:111` and written via `savePreference('price_alerts', …)`.
-- No `pg_cron.schedule` calls `send-price-alerts` anywhere (verified).
+Logs `[places-cache] HIT` / `MISS` for visibility.
 
-**Plan:**
+### Step 3 — Alias-swap 4 call sites
 
-1. `src/pages/Settings.tsx` — remove the price-alerts UI block only:
-   - Delete the `priceAlerts` `useState` (line 71).
-   - Delete `handlePriceAlerts` (lines 194–197).
-   - Delete the JSX block (the `<div>…<Switch id="price-alerts" />…</div>` and the `<Separator />` immediately above it) around lines 478–489.
-   - Remove `price_alerts` from the `.select(...)` projection on line 111 and the `setPriceAlerts(...)` line at 131.
+Pure import-line change; no call-site identifiers move:
 
-2. **Do not** drop the `profiles.price_alerts` column. Keep existing user opt-ins intact so we can re-expose the toggle once the cron is wired. No migration in this plan.
+```typescript
+// Before
+import { googlePlacesTextSearch } from "../_shared/google-api.ts";
+// After
+import { cachedGooglePlacesTextSearch as googlePlacesTextSearch } from "../_shared/google-api.ts";
+```
 
-3. **Do not** delete the `send-price-alerts` edge function. Leaving it dormant costs nothing and preserves the implementation for when scheduling is ready.
+Files (verified via grep):
+- `supabase/functions/recommend-restaurants/index.ts:5` (1 call at L104)
+- `supabase/functions/hotels/index.ts:5` (3 calls: L420, L624, L692)
+- `supabase/functions/fetch-reviews/index.ts:5` (1 call at L143)
+- `supabase/functions/generate-full-preview/index.ts:4` (1 call at L313)
 
-Out of scope: scheduling the cron (Path A), tooltip-disable styling (Path C), backfilling/clearing existing `price_alerts` values, and any change to the function code.
+### Verification
 
-**Files touched:** `src/pages/Settings.tsx` only.
+- `ls supabase/migrations/ | grep places_search_cache` → 1 file
+- `grep -n "export async function cachedGooglePlacesTextSearch" supabase/functions/_shared/google-api.ts` → 1 hit
+- `grep -rn "cachedGooglePlacesTextSearch as googlePlacesTextSearch" supabase/functions` → 4 hits
+- Deploy the 4 affected functions
+- Trigger a hotels search twice for the same city — second call should log `[places-cache] HIT`
+
+### Cost-effectiveness query (run after a few days)
+
+```sql
+SELECT text_query, hit_count, result_count,
+       (hit_count * 0.017)::numeric(10,2) AS dollars_saved
+FROM public.google_places_search_cache
+WHERE hit_count > 0
+ORDER BY hit_count DESC LIMIT 20;
+```
+
+### Out of scope (intentionally)
+
+- No caching for user-typed free-text search (every input is unique; would just bloat the table).
+- No backfill of existing call patterns — cache warms naturally as users generate.
+- Orphan cleanup of expired rows: skipped for now; 30-day TTL + low row volume = negligible. Add a cron later if `pg_total_relation_size` grows past ~100MB.
+
+### Expected impact
+
+After ~1 month of usage, the same-city hotel/restaurant queries should overlap heavily across users. Realistic estimate: 40–60% Places Text Search call reduction, dominated by `hotels in <city>` repeats.

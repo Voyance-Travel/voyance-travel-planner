@@ -3964,6 +3964,48 @@ export type Database = {
         }
         Relationships: []
       }
+      google_places_search_cache: {
+        Row: {
+          cache_key: string
+          created_at: string
+          expires_at: string
+          field_mask: string
+          hit_count: number
+          included_type: string | null
+          last_hit_at: string | null
+          location_bias: Json | null
+          response_data: Json
+          result_count: number
+          text_query: string
+        }
+        Insert: {
+          cache_key: string
+          created_at?: string
+          expires_at?: string
+          field_mask: string
+          hit_count?: number
+          included_type?: string | null
+          last_hit_at?: string | null
+          location_bias?: Json | null
+          response_data: Json
+          result_count?: number
+          text_query: string
+        }
+        Update: {
+          cache_key?: string
+          created_at?: string
+          expires_at?: string
+          field_mask?: string
+          hit_count?: number
+          included_type?: string | null
+          last_hit_at?: string | null
+          location_bias?: Json | null
+          response_data?: Json
+          result_count?: number
+          text_query?: string
+        }
+        Relationships: []
+      }
       group_budget_transactions: {
         Row: {
           action_type: string
@@ -9663,6 +9705,10 @@ export type Database = {
       }
       bump_archetype_guide_usage: {
         Args: { p_archetype: string; p_destination_id: string }
+        Returns: undefined
+      }
+      bump_places_cache_hit: {
+        Args: { p_cache_key: string }
         Returns: undefined
       }
       bump_venue_usage: { Args: { p_place_id: string }; Returns: undefined }
