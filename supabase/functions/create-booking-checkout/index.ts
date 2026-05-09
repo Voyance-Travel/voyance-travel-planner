@@ -44,18 +44,16 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const tripId = typeof body?.tripId === 'string' ? body.tripId.trim() : '';
-    const flightTotal = typeof body?.flightTotal === 'number' ? body.flightTotal : 0;
-    const hotelTotal = typeof body?.hotelTotal === 'number' ? body.hotelTotal : 0;
     const activitiesTotal = typeof body?.activitiesTotal === 'number' ? body.activitiesTotal : 0;
     const activitiesCurrencyInput = typeof body?.activitiesCurrency === 'string' ? body.activitiesCurrency.toLowerCase() : '';
-    logStep("Request body", { tripId, flightTotal, hotelTotal, activitiesTotal, activitiesCurrencyInput });
+    logStep("Request body", { tripId, activitiesTotal, activitiesCurrencyInput });
 
     if (!tripId || tripId.length > 200) {
       return new Response(JSON.stringify({ success: false, error: "Invalid tripId", code: "INVALID_INPUT" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
       });
     }
-    if (flightTotal < 0 || hotelTotal < 0 || activitiesTotal < 0 || flightTotal > 1000000 || hotelTotal > 1000000 || activitiesTotal > 1000000) {
+    if (activitiesTotal < 0 || activitiesTotal > 1000000) {
       return new Response(JSON.stringify({ success: false, error: "Invalid price values", code: "INVALID_INPUT" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
       });
@@ -140,48 +138,8 @@ serve(async (req) => {
     logStep("Currency resolved", { tripCurrency, activitiesCurrency });
 
     // =========================================================================
-    // SERVER-SIDE PRICE VALIDATION — prevent client-side price manipulation
+    // ACTIVITIES PRICE NORMALIZATION
     // =========================================================================
-    const PRICE_TOLERANCE_CENTS = 100; // $1 rounding tolerance
-
-    // Derive flight price from stored selection
-    let serverFlightTotal = 0;
-    if (trip.flight_selection) {
-      const fs = trip.flight_selection as any;
-      // Support multiple price shapes stored by Amadeus integration
-      serverFlightTotal = Number(fs.totalPrice ?? fs.total_price ?? fs.price ?? fs.grandTotal ?? fs.grand_total ?? 0);
-    }
-
-    // Derive hotel price from stored selection
-    let serverHotelTotal = 0;
-    if (trip.hotel_selection) {
-      const hs = trip.hotel_selection as any;
-      serverHotelTotal = Number(hs.totalPrice ?? hs.total_price ?? hs.price ?? hs.total ?? 0);
-    }
-
-    // Validate client-sent values against server-derived values
-    const clientFlightCents = Math.round((flightTotal || 0) * 100);
-    const clientHotelCents = Math.round((hotelTotal || 0) * 100);
-    const serverFlightCents = Math.round(serverFlightTotal * 100);
-    const serverHotelCents = Math.round(serverHotelTotal * 100);
-
-    if (serverFlightCents > 0 && Math.abs(clientFlightCents - serverFlightCents) > PRICE_TOLERANCE_CENTS) {
-      logStep("SECURITY: Flight price mismatch", { client: clientFlightCents, server: serverFlightCents });
-      return new Response(JSON.stringify({ error: "Flight price has changed. Please refresh and try again.", code: "PRICE_MISMATCH" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
-      });
-    }
-
-    if (serverHotelCents > 0 && Math.abs(clientHotelCents - serverHotelCents) > PRICE_TOLERANCE_CENTS) {
-      logStep("SECURITY: Hotel price mismatch", { client: clientHotelCents, server: serverHotelCents });
-      return new Response(JSON.stringify({ error: "Hotel price has changed. Please refresh and try again.", code: "PRICE_MISMATCH" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
-      });
-    }
-
-    // Use server-derived prices when available, fall back to client values only when no selection exists
-    const flightCents = serverFlightCents > 0 ? serverFlightCents : clientFlightCents;
-    const hotelCents = serverHotelCents > 0 ? serverHotelCents : clientHotelCents;
     const activitiesCents = Math.round((activitiesTotal || 0) * 100);
 
     // Hard-reject Viator/activities currency mismatch (R3.4)
@@ -191,16 +149,6 @@ serve(async (req) => {
         error: `Activity prices are quoted in ${activitiesCurrency.toUpperCase()} but trip currency is ${tripCurrency.toUpperCase()}. Refresh and retry.`,
         code: "CURRENCY_MISMATCH",
       }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // Soft warning if flight/hotel selections carry an explicit currency that differs.
-    const flightSelCurrency = String((trip.flight_selection as any)?.currency || '').toLowerCase();
-    if (flightCents > 0 && flightSelCurrency && flightSelCurrency !== tripCurrency) {
-      logStep("CURRENCY_MISMATCH flight (soft warn)", { flightSelCurrency, tripCurrency });
-    }
-    const hotelSelCurrency = String((trip.hotel_selection as any)?.currency || '').toLowerCase();
-    if (hotelCents > 0 && hotelSelCurrency && hotelSelCurrency !== tripCurrency) {
-      logStep("CURRENCY_MISMATCH hotel (soft warn)", { hotelSelCurrency, tripCurrency });
     }
 
     // Initialize Stripe
@@ -233,28 +181,6 @@ serve(async (req) => {
       quantity: 1,
     });
 
-    if (flightCents > 0) {
-      lineItems.push({
-        price_data: {
-          currency: tripCurrency,
-          product_data: { name: 'Flight Booking', description: `Flights for trip to ${trip.destination}` },
-          unit_amount: flightCents,
-        },
-        quantity: 1,
-      });
-    }
-
-    if (hotelCents > 0) {
-      lineItems.push({
-        price_data: {
-          currency: tripCurrency,
-          product_data: { name: 'Hotel Booking', description: `Accommodation in ${trip.destination}` },
-          unit_amount: hotelCents,
-        },
-        quantity: 1,
-      });
-    }
-
     if (activitiesCents > 0) {
       lineItems.push({
         price_data: {
@@ -272,7 +198,7 @@ serve(async (req) => {
     try {
       // Deterministic idempotency key — collapses duplicate clicks for the same trip+amount
       // within a 60-second window; later retries (e.g. after expired session) get a fresh key.
-      const totalCents = (flightCents | 0) + (hotelCents | 0) + (activitiesCents | 0);
+      const totalCents = (activitiesCents | 0);
       const minuteBucket = Math.floor(Date.now() / 60000);
       const idempotencyKey = `booking:${userId}:${tripId}:${totalCents}:${minuteBucket}`.slice(0, 255);
 
@@ -312,40 +238,6 @@ serve(async (req) => {
 
       // Create pending payment records in trip_payments for each item
       const paymentRecords: any[] = [];
-
-      if (flightCents > 0 && trip.flight_selection) {
-        const flightData = trip.flight_selection as any;
-        paymentRecords.push({
-          trip_id: tripId,
-          user_id: userId,
-          item_type: 'flight',
-          item_id: flightData?.id || `flight-${tripId.slice(0, 8)}`,
-          item_name: `Flights to ${trip.destination}`,
-          amount_cents: flightCents,
-          currency: 'USD',
-          quantity: 1,
-          status: 'pending',
-          stripe_checkout_session_id: session.id,
-          external_provider: 'amadeus',
-        });
-      }
-
-      if (hotelCents > 0 && trip.hotel_selection) {
-        const hotelData = trip.hotel_selection as any;
-        paymentRecords.push({
-          trip_id: tripId,
-          user_id: userId,
-          item_type: 'hotel',
-          item_id: hotelData?.hotelId || hotelData?.id || `hotel-${tripId.slice(0, 8)}`,
-          item_name: hotelData?.name || `Hotel in ${trip.destination}`,
-          amount_cents: hotelCents,
-          currency: 'USD',
-          quantity: 1,
-          status: 'pending',
-          stripe_checkout_session_id: session.id,
-          external_provider: 'amadeus',
-        });
-      }
 
       if (activitiesCents > 0) {
         paymentRecords.push({
