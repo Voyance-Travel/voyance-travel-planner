@@ -56,7 +56,7 @@ serve(async (req) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: booking, error: bErr } = await (service as any)
       .from("bookings")
-      .select("id, user_id, stripe_payment_intent_id, total_amount_cents, status")
+      .select("id, user_id, stripe_payment_intent_id, price_cents, status")
       .eq("id", bookingId)
       .maybeSingle();
     if (bErr) {
@@ -68,7 +68,7 @@ serve(async (req) => {
     if (booking.stripe_payment_intent_id !== paymentIntentId) {
       return json({ error: "paymentIntentId mismatch" }, 400);
     }
-    if (amountCents > (booking.total_amount_cents ?? 0)) {
+    if (amountCents > (booking.price_cents ?? 0)) {
       return json({ error: "amountCents exceeds booking total" }, 400);
     }
     if (booking.status === "refunded" || booking.status === "cancelled") {
