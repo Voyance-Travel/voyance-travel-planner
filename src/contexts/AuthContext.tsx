@@ -576,7 +576,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       'authTokenExpiry',
     ];
     legacyKeys.forEach(key => localStorage.removeItem(key));
-    
+
+    // Clear pending invite token (sessionStorage + durable localStorage)
+    // Protects the next user on shared devices from inheriting an invite
+    const { clearPendingInviteToken } = await import('@/utils/inviteTokenPersistence');
+    clearPendingInviteToken();
+
     // Clean up quiz-related keys
     Object.keys(localStorage)
       .filter(key => key.startsWith('voyance_quiz_'))
