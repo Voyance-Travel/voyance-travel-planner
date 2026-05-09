@@ -640,6 +640,41 @@ ${itineraryDescription}
       ...messages,
     ];
 
+    // ── IDEMPOTENCY: detect retries (browser reload, double-submit) ───────
+    // Hash last 3 messages — covers the active turn. Same input → cached
+    // response, no AI call, no double cost, no double record_user_intent.
+    const inputHash = (() => {
+      const json = JSON.stringify(messages.slice(-3));
+      let h = 5381;
+      for (let i = 0; i < json.length; i++) h = ((h << 5) + h + json.charCodeAt(i)) | 0;
+      return Math.abs(h).toString(16);
+    })();
+    const idempotencyKey = `chat:${conversationId ?? 'no-conv'}:${inputHash}`;
+
+    if (!stream) {
+      try {
+        const idemSupabase = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+        );
+        const { data: cached } = await idemSupabase
+          .from('chat_idempotency_cache')
+          .select('response_data')
+          .eq('idempotency_key', idempotencyKey)
+          .gt('expires_at', new Date().toISOString())
+          .maybeSingle();
+        if (cached?.response_data) {
+          console.log('[itinerary-chat] Idempotent retry — returning cached response for', idempotencyKey);
+          return new Response(
+            JSON.stringify(cached.response_data),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } catch (idemErr) {
+        console.warn('[itinerary-chat] Idempotency lookup failed (non-blocking):', idemErr);
+      }
+    }
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
