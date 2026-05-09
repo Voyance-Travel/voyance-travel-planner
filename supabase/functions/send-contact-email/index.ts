@@ -88,6 +88,9 @@ const handler = async (req: Request): Promise<Response> => {
     const type = ['general', 'support', 'feedback', 'bug_report', 'feature_request'].includes(rawBody.type) 
       ? rawBody.type 
       : 'general';
+    const userId: string | null = typeof rawBody.userId === 'string' && UUID_RE.test(rawBody.userId)
+      ? rawBody.userId
+      : null;
 
     if (!name || !email || !message) {
       return new Response(
