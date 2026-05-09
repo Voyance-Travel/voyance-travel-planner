@@ -1,56 +1,47 @@
-## M7 — Activities API broken first call
+## DC.3 — Strip booking handler from `supabase/functions/hotels/index.ts`
 
-**File:** `src/services/activitiesAPI.ts` (lines 76–101)
+File is 1219 lines. Booking-mode code is concentrated and easy to excise cleanly. Below are the exact ranges and the call-site fallout to flag.
 
-### Problem
+### What to delete
 
-`searchActivities` makes two `supabase.functions.invoke('activities', …)` calls:
+1. **Booking block in dispatcher** — lines **1099–1129**
+   The `if (body.action === 'book') { … }` branch inside `serve()`, including the inline `createClient` + auth guard + `bookHotel(body, user.id)` call.
 
-1. **Line 84–90** — `method: 'GET'` with `body: null` and no query string. The edge function reads from `url.searchParams` (verified at `supabase/functions/activities/index.ts:170-174`), so this call has no `destination`/`destinationId` and returns a 400 (`'Destination or destinationId is required'`). The result is then **discarded** (`data`, `error` are shadowed by the second call's destructure but never read or thrown).
-2. **Line 93** — invokes `activities?<query>` and uses its result.
+2. **Booking helpers** — lines **763–1043** (continuous block)
+   - `interface HotelBookingRequest` (764–787)
+   - `interface HotelBookingResponse` (789–800)
+   - `async function bookHotel(...)` (802–983) — covers payment lookup, `payment.status !== 'paid'` guard (829), `getAmadeusToken()` call (842), Amadeus POST + sandbox simulation (885–946), success path (948–982)
+   - `async function updateTripHotelConfirmation(...)` (985–1043) — only used by `bookHotel`
+   - Section banner comment at 763
 
-The first call is a wasted network round-trip + a silent server error in logs every time a user searches activities.
+3. **Stale Amadeus comment refs** — touch up so verify command passes cleanly:
+   - Line 311 banner: `(removed Amadeus-specific normalizeHotelData)` → keep file note neutral (`FIELD NORMALIZATION`)
+   - Line 409 inline comment: `(replaces Amadeus)` → drop the parenthetical
 
-### Plan
+### What stays (verified untouched)
 
-Replace the dual-invoke block with a single GET that includes the query string. Param names already match the edge function (`destination`, `destinationId`, `category`, `limit`) — verified, no rename needed.
+- All search code paths (`searchHotels`, `searchHotelsByName`, `enrichHotelByName`, photo caching, currency resolution, server-side dedup cache).
+- Dispatcher branches: default search (1156–1204), `searchByName` (1132–1143), `enrich` (1146–1154).
+- `createClient` import at line 2 (still used by `getSupabaseAdmin` at line 28).
 
-```ts
-export async function searchActivities(params: ActivitySearchParams): Promise<ActivitySearchResponse> {
-  const queryParams = new URLSearchParams();
-  if (params.destination) queryParams.set('destination', params.destination);
-  if (params.destinationId) queryParams.set('destinationId', params.destinationId);
-  if (params.category) queryParams.set('category', params.category);
-  if (params.limit) queryParams.set('limit', params.limit.toString());
+### Verification (post-edit)
 
-  // Single GET with query params (the shape the edge function expects).
-  // Removed the buggy body-on-GET first call that always 400'd silently.
-  const { data, error } = await supabase.functions.invoke(
-    `activities?${queryParams.toString()}`,
-    { method: 'GET' },
-  );
-
-  if (error) {
-    console.error('[Activities] Edge function error:', error);
-    throw new Error(error.message || 'Failed to search activities');
-  }
-
-  return data as ActivitySearchResponse;
-}
+```bash
+ls supabase/functions/hotels/index.ts                              # exists
+grep -c "payment.status\|paymentId" supabase/functions/hotels/index.ts   # 0
+grep -c "Amadeus\|amadeus" supabase/functions/hotels/index.ts            # 0
+grep -n "body.action" supabase/functions/hotels/index.ts                 # only searchByName, enrich
+wc -l supabase/functions/hotels/index.ts                                 # ~935 lines
 ```
 
-Notes vs the user's snippet:
-- **Keep `throw`, not `return []`.** Existing callers (`useActivitySearch` / React Query) rely on thrown errors to populate `query.error` and trigger retry/error UI. Returning `[]` would silently mask real failures and break the typed `ActivitySearchResponse` return contract.
-- **Keep `params.destinationId`** in the query (the user's spec snippet omitted it, but it's a real param the edge function reads and the hook gates `enabled` on).
-- **No method override needed** beyond `method: 'GET'`; supabase-js default is POST, so we explicitly set GET to match the edge handler.
+### Caller fallout (out of scope for DC.3, flagged)
 
-### Verification
+`src/services/hotelBookingAPI.ts` will have two now-dead exports calling `action: 'book'`:
+- `createHotelBooking` (line ~104, invokes at line 112)
+- A second invoke at line 362 inside `checkHotelAvailability` is `action: 'search'` — that one stays valid.
 
-- `grep -c "supabase.functions.invoke('activities'" src/services/activitiesAPI.ts` → 0 (the bare-name invoke is gone).
-- `grep -n "activities?" src/services/activitiesAPI.ts` → 1 hit.
-- A search with `destination: 'Venice'` triggers a single network call to `…/functions/v1/activities?destination=Venice`, returns activities, no 400 in logs.
-- `useActivitySearch` error path still surfaces failures.
+`createHotelBooking` will return a 400 from the edge function (no matching branch falls through to default search, which will reject the booking-shaped body). Recommend a follow-up DC item to delete `createHotelBooking` + its UI callers, mirroring DC.1/DC.2 for flights.
 
-### Out of scope
+### Edge function deploy
 
-- The duplicate `Content-Type` header (supabase-js sets it). Not changing other call sites.
+After the edit, redeploy via `supabase--deploy_edge_functions` with `["hotels"]` so the live function drops the booking surface.
