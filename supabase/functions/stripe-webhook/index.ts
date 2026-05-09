@@ -66,6 +66,81 @@ async function syncBalanceCache(supabaseAdmin: ReturnType<typeof createClient>, 
     }, { onConflict: 'user_id' });
 }
 
+const TIER_HIERARCHY: Record<string, number> = { free: 0, flex: 1, voyager: 2, explorer: 3, adventurer: 4 };
+
+/**
+ * Upsert user_tiers. By default, never downgrades (matches credit-purchase semantics).
+ * Pass { allowDowngrade: true } for cancellation flows that must force a downgrade.
+ */
+async function upsertUserTier(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  newTier: string,
+  opts: { allowDowngrade?: boolean } = {},
+) {
+  const { data: currentTierData } = await supabaseAdmin
+    .from('user_tiers')
+    .select('tier')
+    .eq('user_id', userId)
+    .maybeSingle();
+  const currentTier = currentTierData?.tier || 'free';
+  const currentRank = TIER_HIERARCHY[currentTier] ?? 0;
+  const newRank = TIER_HIERARCHY[newTier] ?? 0;
+
+  if (opts.allowDowngrade) {
+    await supabaseAdmin.from('user_tiers').upsert({
+      user_id: userId,
+      tier: newTier,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+    console.log(`[STRIPE-WEBHOOK] User tier set (downgrade allowed)`, JSON.stringify({ userId, from: currentTier, to: newTier }));
+    return;
+  }
+
+  if (newRank > currentRank) {
+    await supabaseAdmin.from('user_tiers').upsert({
+      user_id: userId,
+      tier: newTier,
+      first_purchase_at: currentTierData ? undefined : new Date().toISOString(),
+      highest_purchase: newTier,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+    console.log(`[STRIPE-WEBHOOK] User tier upgraded`, JSON.stringify({ userId, from: currentTier, to: newTier }));
+  } else if (!currentTierData) {
+    await supabaseAdmin.from('user_tiers').insert({
+      user_id: userId,
+      tier: newTier,
+      first_purchase_at: new Date().toISOString(),
+      highest_purchase: newTier,
+    });
+    console.log(`[STRIPE-WEBHOOK] User tier created`, JSON.stringify({ userId, tier: newTier }));
+  }
+}
+
+/**
+ * Resolve a Supabase auth user_id from a Stripe customer id, via email match.
+ * Used as a fallback when subscription metadata is missing.
+ */
+async function resolveUserIdFromCustomer(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  stripe: Stripe,
+  customerId: string | null,
+): Promise<string | null> {
+  if (!customerId) return null;
+  try {
+    const customer = await stripe.customers.retrieve(customerId);
+    if (!customer || (customer as Stripe.DeletedCustomer).deleted) return null;
+    const email = (customer as Stripe.Customer).email;
+    if (!email) return null;
+    const { data } = await supabaseAdmin.auth.admin.listUsers();
+    const match = data?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+    return match?.id ?? null;
+  } catch (err) {
+    console.warn(`[STRIPE-WEBHOOK] resolveUserIdFromCustomer failed`, err instanceof Error ? err.message : String(err));
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
