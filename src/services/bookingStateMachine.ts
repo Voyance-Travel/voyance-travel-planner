@@ -15,6 +15,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // TYPES
 // ============================================================================
 
+// NOTE: 'changed' is reserved for the future booking-modification flow
+// (e.g. Viator/vendor reschedules, supplier-driven date or price changes).
+// Currently no caller transitions into 'changed' — the state, its label,
+// its badge color, and its allowed-transition row in VALID_TRANSITIONS
+// (also mirrored in the SQL booking_item_state enum and the
+// transition_booking_state RPC) are intentionally kept so adding the flow
+// later doesn't require an enum migration. Do not delete without a plan
+// for the corresponding Postgres enum-value removal.
 export type BookingItemState = 
   | 'not_selected' 
   | 'selected_pending' 
