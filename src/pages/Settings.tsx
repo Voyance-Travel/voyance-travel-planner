@@ -108,7 +108,7 @@ export default function Settings() {
         const [prefsResult, rolesResult] = await Promise.all([
           supabase
             .from('user_preferences')
-            .select('email_notifications, push_notifications, marketing_emails, trip_reminders, price_alerts, budget_alerts, phone_number, travel_agent_mode, agent_business_name')
+            .select('email_notifications, push_notifications, marketing_emails, trip_reminders, budget_alerts, phone_number, travel_agent_mode, agent_business_name')
             .eq('user_id', user.id)
             .maybeSingle(),
           supabase
