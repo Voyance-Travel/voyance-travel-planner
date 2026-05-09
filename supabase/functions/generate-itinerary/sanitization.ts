@@ -852,8 +852,6 @@ export function enforceBarNightcapPriceCap(activity: Record<string, any>, logPre
 const TRANSIT_TITLE_RE_FOR_GUARD = /^(?:Travel|Taxi|Walk|Walking|Bus|Metro|Tram|Train|Drive|Ride|Ferry|Uber|Rideshare)\s+(?:to|from|along|through)\s+/i;
 const WALK_METHODS = new Set(['walk', 'walking', 'on foot', 'foot']);
 
-import { isTransitActivity } from '../_shared/transit-detect.ts';
-
 function formatDurationMin(min: number): string {
   if (min < 60) return `${min} min`;
   const h = Math.floor(min / 60); const m = min % 60;
