@@ -30,8 +30,9 @@ async function checkRateLimit(supabaseAdmin: any, userId: string): Promise<{ all
   return { allowed: result.allowed, remaining: result.remaining };
 }
 
-// Single Trip Unlock price
-const SINGLE_TRIP_PRICE_ID = 'price_1RpYXMFYxIg9jcJUxDiyEFp5'; // $29.99 one-time
+// Service-fee amount (charged in trip currency, no FX conversion)
+const SERVICE_FEE_CENTS = 2999; // $29.99 / €29.99 / £29.99 etc.
+const SUPPORTED_CURRENCIES = new Set(['usd','eur','gbp','cad','aud','chf','jpy','sek','nok','dkk','nzd']);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -46,7 +47,8 @@ serve(async (req) => {
     const flightTotal = typeof body?.flightTotal === 'number' ? body.flightTotal : 0;
     const hotelTotal = typeof body?.hotelTotal === 'number' ? body.hotelTotal : 0;
     const activitiesTotal = typeof body?.activitiesTotal === 'number' ? body.activitiesTotal : 0;
-    logStep("Request body", { tripId, flightTotal, hotelTotal, activitiesTotal });
+    const activitiesCurrencyInput = typeof body?.activitiesCurrency === 'string' ? body.activitiesCurrency.toLowerCase() : '';
+    logStep("Request body", { tripId, flightTotal, hotelTotal, activitiesTotal, activitiesCurrencyInput });
 
     if (!tripId || tripId.length > 200) {
       return new Response(JSON.stringify({ success: false, error: "Invalid tripId", code: "INVALID_INPUT" }), {
@@ -124,6 +126,20 @@ serve(async (req) => {
     logStep("Trip found", { destination: trip.destination });
 
     // =========================================================================
+    // CURRENCY RESOLUTION (R3.4)
+    // =========================================================================
+    const tripCurrency = String((trip as any).budget_currency || 'usd').toLowerCase();
+    if (!SUPPORTED_CURRENCIES.has(tripCurrency)) {
+      logStep("Unsupported trip currency", { tripCurrency });
+      return new Response(JSON.stringify({
+        error: `Unsupported currency: ${tripCurrency.toUpperCase()}. Please change your trip currency.`,
+        code: "UNSUPPORTED_CURRENCY",
+      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const activitiesCurrency = activitiesCurrencyInput || tripCurrency;
+    logStep("Currency resolved", { tripCurrency, activitiesCurrency });
+
+    // =========================================================================
     // SERVER-SIDE PRICE VALIDATION — prevent client-side price manipulation
     // =========================================================================
     const PRICE_TOLERANCE_CENTS = 100; // $1 rounding tolerance
@@ -168,6 +184,25 @@ serve(async (req) => {
     const hotelCents = serverHotelCents > 0 ? serverHotelCents : clientHotelCents;
     const activitiesCents = Math.round((activitiesTotal || 0) * 100);
 
+    // Hard-reject Viator/activities currency mismatch (R3.4)
+    if (activitiesCents > 0 && activitiesCurrency !== tripCurrency) {
+      logStep("CURRENCY_MISMATCH activities", { activitiesCurrency, tripCurrency });
+      return new Response(JSON.stringify({
+        error: `Activity prices are quoted in ${activitiesCurrency.toUpperCase()} but trip currency is ${tripCurrency.toUpperCase()}. Refresh and retry.`,
+        code: "CURRENCY_MISMATCH",
+      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Soft warning if flight/hotel selections carry an explicit currency that differs.
+    const flightSelCurrency = String((trip.flight_selection as any)?.currency || '').toLowerCase();
+    if (flightCents > 0 && flightSelCurrency && flightSelCurrency !== tripCurrency) {
+      logStep("CURRENCY_MISMATCH flight (soft warn)", { flightSelCurrency, tripCurrency });
+    }
+    const hotelSelCurrency = String((trip.hotel_selection as any)?.currency || '').toLowerCase();
+    if (hotelCents > 0 && hotelSelCurrency && hotelSelCurrency !== tripCurrency) {
+      logStep("CURRENCY_MISMATCH hotel (soft warn)", { hotelSelCurrency, tripCurrency });
+    }
+
     // Initialize Stripe
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not configured");
@@ -188,16 +223,20 @@ serve(async (req) => {
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
 
-    // Trip service fee (always required)
+    // Trip service fee (always required) — charged in trip currency, no FX
     lineItems.push({
-      price: SINGLE_TRIP_PRICE_ID,
+      price_data: {
+        currency: tripCurrency,
+        product_data: { name: 'Voyance Trip Service Fee' },
+        unit_amount: SERVICE_FEE_CENTS,
+      },
       quantity: 1,
     });
 
     if (flightCents > 0) {
       lineItems.push({
         price_data: {
-          currency: 'usd',
+          currency: tripCurrency,
           product_data: { name: 'Flight Booking', description: `Flights for trip to ${trip.destination}` },
           unit_amount: flightCents,
         },
@@ -208,7 +247,7 @@ serve(async (req) => {
     if (hotelCents > 0) {
       lineItems.push({
         price_data: {
-          currency: 'usd',
+          currency: tripCurrency,
           product_data: { name: 'Hotel Booking', description: `Accommodation in ${trip.destination}` },
           unit_amount: hotelCents,
         },
@@ -219,7 +258,7 @@ serve(async (req) => {
     if (activitiesCents > 0) {
       lineItems.push({
         price_data: {
-          currency: 'usd',
+          currency: tripCurrency,
           product_data: { name: 'Activities & Experiences', description: `Curated activities for your trip` },
           unit_amount: activitiesCents,
         },
@@ -248,6 +287,7 @@ serve(async (req) => {
           user_id: userId,
           trip_id: tripId,
           trip_destination: trip.destination,
+          currency: tripCurrency,
         },
       }, { idempotencyKey });
       stripeSessionId = session.id;
