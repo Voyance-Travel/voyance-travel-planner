@@ -656,7 +656,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     console.log('[Auth] Preferences saved successfully');
-    
+
+    // ALSO mark profiles.quiz_completed so transformProfile picks it up next session.
+    // Best-effort: preferences already saved; don't throw on failure.
+    const { error: profileError } = await supabase.from('profiles').upsert(
+      { id: session.user.id, quiz_completed: true, updated_at: new Date().toISOString() },
+      { onConflict: 'id' }
+    );
+    if (profileError) {
+      console.error('[Auth] Error syncing profile.quiz_completed:', profileError);
+    }
+
     // Update local state
     setUser({ 
       ...user, 

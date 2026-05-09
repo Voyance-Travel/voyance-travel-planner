@@ -1,55 +1,35 @@
-## Fix 2.4: Require idempotency key for high-value spend-credits
+## Fix 1 — Sync `quiz_completed` to `profiles` from `setPreferences`
 
-### Current state (verified)
-- **Server already enforces it.** `supabase/functions/spend-credits/index.ts:555-563` rejects with HTTP 400 + `MISSING_IDEMPOTENCY_KEY` whenever `action ∈ {trip_generation, smart_finish, hotel_optimization, regenerate_trip}` and `metadata.idempotencyKey` is missing.
-- **`pending_credit_charges` insert at line 593-605 is gated by the same action set** — so the "high-value path" check the user describes already maps 1:1.
-- **Frontend gaps that will break under this rule** (audited via `rg`):
-  1. `src/components/itinerary/SmartFinishBanner.tsx:314-318` — retry SMART_FINISH, no key
-  2. `src/components/itinerary/SmartFinishBanner.tsx:356-360` — purchase SMART_FINISH, no key
-  3. `src/components/trip/TripConfirmationBanner.tsx:211-214` — HOTEL_OPTIMIZATION, no key
-  4. `src/components/itinerary/EditorialItinerary.tsx:4167-4172` — REGENERATE_TRIP, no key
-- **Already passing keys** (no change): `useGenerationGate.ts:221`, `ItineraryGenerator.tsx:651`, `useUnlockDay.ts:86-92`.
-- **`src/services/iapService.ts`** — never calls `spend-credits` (it's a Capacitor / iOS link-out helper). No work needed.
+### Verified
+- `AuthContext.tsx:623-666` — `setPreferences` writes only to `user_preferences`. No `profiles` upsert.
+- `OnboardConversation.tsx:179-192` — Already does the matching `profiles` upsert (`id`, `quiz_completed: true`, `updated_at`) with `onConflict: 'id'`. We're mirroring this exact pattern.
+- `transformProfile` reads `quiz_completed` from `profiles`, so any flow that calls `setPreferences` without going through `OnboardConversation` (e.g. quick-quiz, programmatic preference save, future entry points) leaves `profiles.quiz_completed = false` and the user is re-prompted next session.
 
-### Changes (frontend only)
+### Change
 
-**1. `SmartFinishBanner.tsx`**
-At top of `handleRetryEnrichment` and `handlePurchase`, generate one stable key per flow attempt and pass it via `metadata`:
+In `src/contexts/AuthContext.tsx`, after the existing `user_preferences` upsert succeeds (line 656) and before the local `setUser` (line 661), add a best-effort `profiles` upsert:
+
 ```ts
-const idempotencyKey = `smart_finish:${tripId}:${Date.now()}`;
-await spendCredits.mutateAsync({
-  action: 'SMART_FINISH', tripId,
-  metadata: { source: 'smart_finish_banner', idempotencyKey },
-});
-```
-Use a separate `Date.now()` per click so a deliberate retry after a failure can re-charge (matches existing `unlock_day_..._${Date.now()}` pattern in `useUnlockDay.ts`). The user's "stable retry-safe key" guidance — for SMART_FINISH the retry path is invoked explicitly via `handleRetryEnrichment` which already runs after a refund, so a fresh key per click is correct.
-
-**2. `TripConfirmationBanner.tsx:211`**
-```ts
-await spendCredits.mutateAsync({
-  action: 'HOTEL_OPTIMIZATION', tripId,
-  metadata: { idempotencyKey: `hotel_optimization:${tripId}:${Date.now()}` },
-});
-```
-
-**3. `EditorialItinerary.tsx:4167`**
-Extend the existing metadata object:
-```ts
-metadata: {
-  dayCount: totalDays,
-  idempotencyKey: `regenerate_trip:${tripId}:${totalDays}:${Date.now()}`,
-},
+// ALSO mark profiles.quiz_completed so transformProfile picks it up next session.
+// Best-effort: preferences already saved; don't throw on failure.
+const { error: profileError } = await supabase.from('profiles').upsert(
+  { id: session.user.id, quiz_completed: true, updated_at: new Date().toISOString() },
+  { onConflict: 'id' }
+);
+if (profileError) {
+  console.error('[Auth] Error syncing profile.quiz_completed:', profileError);
+}
 ```
 
 ### Out of scope
-- No server changes — `spend-credits/index.ts` already implements the gate exactly as described.
-- No edits to low-value action callers (add_activity, swap_activity, etc.) — they remain optional per spec.
-- No changes to `useSpendCredits.ts` plumbing — it already forwards `metadata` verbatim.
-- `iapService.ts` audit closed: not a `spend-credits` caller.
+- No change to the `user_preferences` upsert above it.
+- No change to `OnboardConversation.tsx` (already correct).
+- No throw on profile error — preferences save is the source of truth; `quiz_completed` mirroring is a derived flag.
+
+### Note on remaining fixes
+The user message references "Fix 1b" plus 3 medium / 2 low fixes from the audit but only Fix 1 was included in this turn. I'll ship Fix 1 now; the remaining fixes can land as separate follow-up turns when their specs arrive.
 
 ### Validation
-- Trigger Smart Finish purchase → confirm successful charge + no 400 in console.
-- Trigger Smart Finish twice rapidly via double-click → second call returns the cached idempotent hit (look for `[spend-credits] Idempotent hit` server log) and balance only drops once.
-- Trigger Hotel Optimization confirmation → same.
-- Trigger trip regeneration → same.
-- `rg "action: 'SMART_FINISH'|'HOTEL_OPTIMIZATION'|'REGENERATE_TRIP'|'TRIP_GENERATION'" src` and confirm every match has an `idempotencyKey` in the same `metadata`.
+- Call `setPreferences(...)` from a non-onboarding code path (e.g. devtools or an existing settings save) → check `select quiz_completed from profiles where id = '<uid>'` returns `true`.
+- Reload session → `transformProfile` flips `quizCompleted` to `true` without re-running onboarding.
+- Force the profiles upsert to fail (e.g. revoke RLS in a scratch env) → preferences still save, console logs the sync error, no exception bubbles to the caller.
