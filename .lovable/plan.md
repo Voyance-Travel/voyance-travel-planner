@@ -1,99 +1,77 @@
-## RS.M.I2 — Synthesize a placeholder day instead of failing the response
+## RS.M.I3 — Cache generation-time meal policy on the day, prefer it on save
 
 ### Context
 
-`supabase/functions/generate-itinerary/action-generate-day.ts` is an HTTP edge handler. The current parse-fail paths (lines 288, 292, 296) throw, which bubbles to the outer catch (line 1758) and returns a 500 to the caller — the day save fails and the user sees an error.
+Meal policy is currently derived twice:
 
-There is no explicit retry loop; the three throw sites are the equivalent of "all retries exhausted" for parsing the AI output (no tool_call, no embedded JSON, or content not parseable). The intent of RS.M.I2 is to fall through to post-processing with an empty-but-valid day so meal-guard + dead-gap-fill produce something recoverable.
+1. **At generation** — `pipeline/compile-prompt.ts` calls `deriveMealPolicy(...)` (3 sites: arrival/departure/middle day, lines 647 / 661 / 705) using `flightContext.arrivalTime24` / `flightContext.returnDepartureTime24`. The result `dayMealPolicy` is returned from `compilePrompt` and consumed by `action-generate-day.ts` (already in scope at line 214).
+2. **At save** — `action-save-itinerary.ts` line 297 re-derives policy using `savedArrivalTime24` / `savedDepartureTime24` read fresh from `trips`.
 
-`generatedDay` is consumed by ~1500 lines of post-processing below. All required scope variables (`dayNumber`, `resolvedDestination`, `destination`, `date`) are already in scope.
+If flight times change between generation and save (user edits, hotel auto-arrival recompute, multi-traveler merge), the two policies silently diverge — meal-guard at save time can inject the wrong required meals or skip them.
 
-### Change
+The user's spec mentions `compile-day-facts.ts` but the policy is actually computed in `compile-prompt.ts` and the day object is assembled later (after the AI call) in `action-generate-day.ts`. The natural stamp site is `action-generate-day.ts`, where both `dayMealPolicy` and `generatedDay` exist together.
 
-**File:** `supabase/functions/generate-itinerary/action-generate-day.ts` (lines 270–297)
+### Changes
 
-Replace the three throw sites in the parse block with a single shared placeholder synthesizer. Track the failure reason for telemetry/UI.
+**1. `supabase/functions/generate-itinerary/action-generate-day.ts`** — stamp the policy onto the generated day
+
+Right after `generatedDay` is fully built and before post-processing branches that mutate it (around line ~330, after the `else { generatedDay = buildPlaceholderDay(...) }` block from RS.M.I2), add:
 
 ```ts
-const message = data.choices?.[0]?.message;
-const toolCall = message?.tool_calls?.[0];
-
-let generatedDay: any;
-let parseFailureReason: string | null = null;
-
-const buildPlaceholderDay = (reason: string) => {
-  console.error('[action-generate-day] All retries exhausted, returning placeholder day', {
-    dayNumber,
-    destination: resolvedDestination || destination,
-    reason,
-  });
-  parseFailureReason = reason;
-  return {
-    dayNumber,
-    date: date || '',
-    title: `Day ${dayNumber} in ${resolvedDestination || destination || 'your destination'}`,
-    theme: 'Generation failed — retry recommended',
-    description:
-      'We had trouble generating this day. Tap regenerate to try again, or browse alternatives.',
-    activities: [], // meal-guard + dead-gap-fill will populate basic structure
-    metadata: {
-      quality: {
-        generation_failed: true,
-        generation_error: reason.slice(0, 200),
-        generated_at: new Date().toISOString(),
-        retry_recommended: true,
-      },
-    },
+// RS.M.I3: cache the meal policy used during generation so action-save-itinerary
+// can prefer it instead of re-deriving from possibly-changed flight times.
+if (dayMealPolicy) {
+  generatedDay.metadata = generatedDay.metadata || {};
+  generatedDay.metadata.quality = generatedDay.metadata.quality || {};
+  generatedDay.metadata.quality.meal_policy_at_generation = {
+    dayMode: dayMealPolicy.dayMode,
+    requiredMeals: dayMealPolicy.requiredMeals,
+    isFullExplorationDay: dayMealPolicy.isFullExplorationDay,
+    arrivalTime24: facts.flightContext?.arrivalTime24 || null,
+    departureTime24:
+      facts.flightContext?.returnDepartureTime24 ||
+      facts.flightContext?.returnDepartureTime ||
+      null,
+    generated_at: new Date().toISOString(),
   };
-};
-
-if (toolCall?.function?.arguments) {
-  try {
-    generatedDay = sanitizeGeneratedDay(
-      sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))),
-      dayNumber, resolvedDestination, paramUsedRestaurants,
-    );
-  } catch (parseErr) {
-    console.error('[generate-day] tool_call arguments not parseable:', parseErr);
-    generatedDay = buildPlaceholderDay(`tool_call parse failed: ${(parseErr as Error)?.message || 'unknown'}`);
-  }
-} else if (message?.content) {
-  console.log('[generate-day] AI returned content instead of tool_call, attempting to parse...');
-  try {
-    const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
-    const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      generatedDay = sanitizeGeneratedDay(
-        sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))),
-        dayNumber, resolvedDestination, paramUsedRestaurants,
-      );
-    } else {
-      console.error('[generate-day] No JSON found in content:', contentStr.substring(0, 500));
-      generatedDay = buildPlaceholderDay('no JSON in content');
-    }
-  } catch (parseErr) {
-    console.error('[generate-day] Failed to parse content as JSON:', parseErr);
-    generatedDay = buildPlaceholderDay(`content not parseable: ${(parseErr as Error)?.message || 'unknown'}`);
-  }
-} else {
-  console.error('[generate-day] Invalid AI response - no tool_calls or content:', JSON.stringify(data).substring(0, 1000));
-  generatedDay = buildPlaceholderDay('no tool_calls or content in AI response');
 }
 ```
 
-Also wrap the existing `JSON.parse(toolCall.function.arguments)` (currently un-`try`-d at line 276) in the same handler — that's the most common failure mode and it currently bubbles up to the 500.
+**2. `supabase/functions/generate-itinerary/action-save-itinerary.ts`** — prefer cached policy at line 297
+
+```ts
+// RS.M.I3: prefer the meal policy cached at generation. Re-deriving here
+// against current flight times silently disagrees with what the AI was
+// instructed to produce when the user changes flights between gen and save.
+const cachedPolicy = (day as any)?.metadata?.quality?.meal_policy_at_generation;
+const policy = cachedPolicy && Array.isArray(cachedPolicy.requiredMeals)
+  ? {
+      dayMode: cachedPolicy.dayMode,
+      requiredMeals: cachedPolicy.requiredMeals as RequiredMeal[],
+      isFullExplorationDay: !!cachedPolicy.isFullExplorationDay,
+      // remaining MealPolicy fields aren't read by the meal-guard branch below
+    } as any
+  : deriveMealPolicy({
+      dayNumber,
+      totalDays,
+      isFirstDay,
+      isLastDay,
+      arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
+      departureTime24: isLastDay ? savedDepartureTime24 : undefined,
+    });
+```
 
 ### Notes
 
-- Post-processing already tolerates `activities: []` — meal-guard injects required meals, dead-gap-fill adds activities, and universalQualityPass handles bookends. Empty days flow through cleanly.
-- `metadata.quality.generation_failed` is the sentinel the UI/health panel can read to surface "tap regenerate" hint (no UI change required for this fix).
-- `parseFailureReason` stays local; we don't change the success-shape response contract.
-- No change to the outer catch — genuine non-parse errors (auth, network) still 500 as before.
+- Stamping at the generation boundary (action-generate-day.ts) — not inside compile-prompt.ts — keeps the prompt builder pure and avoids mutating an object that compile-prompt.ts doesn't own.
+- The cached shape is intentionally a subset of `MealPolicy`. The save-time consumer only reads `requiredMeals` (line 306, 312) and never references `usableHours` / `mealInstructionText` etc., so a partial restore is safe. If a future caller reads more fields, it can fall through to a `deriveMealPolicy` re-derive.
+- Backward-compatible: days saved before this change have no cached policy and fall through to the existing re-derive — no migration needed.
+- Manual / locked / extracted activities continue to flow through the meal guard exactly as before; this change only swaps the source of `requiredMeals`.
 
 ### Verify
 
 ```bash
-grep -c "generation_failed\|All retries exhausted" \
-  supabase/functions/generate-itinerary/action-generate-day.ts
+grep -rc "meal_policy_at_generation" supabase/functions/generate-itinerary/ \
+  | awk -F: '{s+=$2} END {print s}'
 ```
-Expect ≥ 2 (will be 3: the log line, the metadata flag literal, plus reason).
+Expect ≥ 2 (will be 2: one in `action-generate-day.ts`, one in `action-save-itinerary.ts`).
