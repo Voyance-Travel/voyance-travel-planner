@@ -1,26 +1,34 @@
-## RS.5 — Balance reconciliation background job
+## RS.6 — Persistence atomicity for itinerary save (v1: sync status flag)
 
-Add an hourly pg_cron job that recomputes each user's `credit_balances` cache from `credit_purchases` (source of truth) and corrects any drift. Then run it once to backfill existing drift.
+Pragmatic v1: when the JSON write succeeds but the normalized-table sync fails, mark the trip so the frontend knows the normalized data is stale and falls back to `trips.itinerary_data` (the source of truth).
 
-### Files
+### Changes
 
-**New migration** `supabase/migrations/<timestamp>_balance_reconciliation_job.sql`:
+**1. Migration** — add two columns to `public.trips`:
+```sql
+ALTER TABLE public.trips
+  ADD COLUMN IF NOT EXISTS itinerary_sync_status text NOT NULL DEFAULT 'synced',
+  ADD COLUMN IF NOT EXISTS itinerary_synced_at timestamptz;
+```
+CHECK constraint `itinerary_sync_status IN ('synced','pending','failed')`. Index optional (low-cardinality, low-volume reads).
 
-1. `CREATE OR REPLACE FUNCTION public.reconcile_credit_balances() RETURNS jsonb` — `SECURITY DEFINER`, `search_path = public`. Iterates distinct `user_id` from `credit_purchases` where `remaining > 0`, computes:
-   - `purchased_credits` = SUM(remaining) for `credit_type IN ('flex','club_base','topup','migration','manual_grant')`
-   - `free_credits` = SUM(remaining) for `credit_type IN ('free_monthly','signup_bonus','referral_bonus','club_bonus','refund')`
-   - filtered by `expires_at IS NULL OR expires_at > now()`
-   
-   Compares to cache, upserts on drift, returns `{success, total_users_checked, drift_corrected, ran_at}`.
-2. `REVOKE ALL ... FROM PUBLIC, anon, authenticated;` `GRANT EXECUTE ... TO service_role;`
-3. `cron.schedule('reconcile-credit-balances-hourly', '0 * * * *', $$SELECT public.reconcile_credit_balances()$$);` — guarded with `IF NOT EXISTS` check against `cron.job` to make migration re-runnable.
+**2. `supabase/functions/generate-itinerary/action-save-itinerary.ts` (lines 779–805)** — restructure the dual-write into 4 phases:
+- Phase 1: `persistTripItinerary(...)` (unchanged — JSON source of truth).
+- Phase 2: stamp `itinerary_sync_status='pending'`, `itinerary_synced_at=null`.
+- Phase 3: call `handleSyncItineraryTables`. Inspect both the thrown-error path AND the existing `syncBody.success === false` path (current code only logs, doesn't surface). Treat either as failure. Never re-throw — JSON is durable.
+- Phase 4: stamp `itinerary_sync_status` = `'synced'` (with `itinerary_synced_at = now()`) on success, or `'failed'` (with `itinerary_synced_at = null`) otherwise.
 
-**Post-deploy backfill** (run via insert tool, not migration): `SELECT public.reconcile_credit_balances();`
+Uses the existing `supabase` client passed into the action (already service-role in this edge function), not a separate `supabaseAdmin`.
 
-### Notes / decisions baked in
+**3. Frontend read path** — out of scope for v1 unless requested. The flag is written; surfacing it in the UI/load path is a follow-up. (Spec says "Frontend... or trigger a re-sync" — phrased as optional.) I'll flag this in the plan note rather than touch frontend code, since the user's explicit "verify" criterion is just the grep against the edge function.
 
-- The original spec listed only 4 paid + 4 free credit_types. The DB CHECK constraint allows 10 types. I expanded the buckets so `topup`/`migration`/`manual_grant` count as purchased and `refund` counts as free, matching how those rows are used elsewhere in the codebase. If you want a different bucketing (e.g. exclude `refund` entirely), say so before approving.
-- `pg_cron` is the standard scheduler in this project; assumed already enabled. The migration will `CREATE EXTENSION IF NOT EXISTS pg_cron;` to be safe.
-- Uses `ON CONFLICT (user_id)` — `credit_balances.user_id` already has a UNIQUE constraint. ✓
-- Does not touch `free_credits_expires_at` or `last_free_credit_at` (orthogonal fields managed elsewhere).
-- Verification: `ls supabase/migrations/ | grep balance_reconciliation` and the manual `SELECT` returns the drift_corrected count.
+**4. Types regeneration** — automatic after migration; no manual edit to `src/integrations/supabase/types.ts`.
+
+### Verify
+- `grep -c "itinerary_sync_status" supabase/functions/generate-itinerary/action-save-itinerary.ts` → ≥ 2 (will be 3: pending stamp, synced stamp, failed stamp).
+- Migration file present under `supabase/migrations/`.
+
+### Notes / decisions
+- Default `'synced'` so existing rows aren't flagged stale.
+- No re-throw on sync failure — preserves current "non-fatal" semantics that the codebase already documents at line 803.
+- Frontend fallback wiring deferred. Say the word and I'll add it (likely in the trip-load hook: if `itinerary_sync_status === 'failed'`, prefer `trips.itinerary_data` over the normalized tables, or fire a re-sync action).

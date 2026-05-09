@@ -8300,6 +8300,8 @@ export type Database = {
           itinerary_status:
             | Database["public"]["Enums"]["itinerary_status"]
             | null
+          itinerary_sync_status: string
+          itinerary_synced_at: string | null
           itinerary_version: number
           journey_id: string | null
           journey_name: string | null
@@ -8366,6 +8368,8 @@ export type Database = {
           itinerary_status?:
             | Database["public"]["Enums"]["itinerary_status"]
             | null
+          itinerary_sync_status?: string
+          itinerary_synced_at?: string | null
           itinerary_version?: number
           journey_id?: string | null
           journey_name?: string | null
@@ -8432,6 +8436,8 @@ export type Database = {
           itinerary_status?:
             | Database["public"]["Enums"]["itinerary_status"]
             | null
+          itinerary_sync_status?: string
+          itinerary_synced_at?: string | null
           itinerary_version?: number
           journey_id?: string | null
           journey_name?: string | null
@@ -9858,6 +9864,8 @@ export type Database = {
           itinerary_status:
             | Database["public"]["Enums"]["itinerary_status"]
             | null
+          itinerary_sync_status: string
+          itinerary_synced_at: string | null
           itinerary_version: number
           journey_id: string | null
           journey_name: string | null
