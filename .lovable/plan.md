@@ -1,59 +1,73 @@
-# L4 — Honest preview cap (Option B)
+# L5 — Move scheduled notifications to a relational table (DEFERRED)
 
-Make the 2-day preview cap visible to users instead of silently misrepresenting a 10-day trip as 2 days. No behavior change to generation; only response shape + 2 small UI tweaks.
+**Status:** Deferred. Documented for the future; not to be implemented in this turn. Current JSONB approach is fine while trip volume is small. Trigger a migration when *any* of: trips table > ~5k rows with notifications, p95 `trips` row size approaches the 8KB toast threshold, or the cron sweep in `trip-notifications` exceeds ~2s.
 
-## Backend — `supabase/functions/generate-full-preview/index.ts`
+## Current shape (for reference)
 
-1. **Line 148** — keep cap, name the constant:
-   ```ts
-   const PREVIEW_DAY_CAP = 2;
-   const cappedDays = Math.min(totalDays, PREVIEW_DAY_CAP);
-   ```
-2. **Line 346** — stop overwriting `totalDays` with `cappedDays`. Emit both:
-   ```ts
-   totalDays,            // real trip length
-   previewedDays: cappedDays,
-   isPartialPreview: cappedDays < totalDays,
-   totalActivities: allActivities.length,
-   ```
-3. **Lines 391, 398** — tweak the headline/log so partial previews say "first {X} of {Y} days":
-   ```ts
-   const dayLabel = cappedDays < totalDays
-     ? `First ${cappedDays} of ${totalDays} Days`
-     : `${totalDays}-Day`;
-   // headline: `Your ${dayLabel} ${destination} Itinerary is Ready`
-   ```
+`supabase/functions/trip-notifications/index.ts` reads/writes `trips.metadata.scheduledNotifications: TripNotification[]` at five call sites:
 
-## Frontend type — `src/services/fullPreviewService.ts`
+- L195–199 — overwrite on schedule
+- L222–237 — cron sweep selects every active trip's full `metadata`
+- L261–283 — single-trip update on dismiss
+- L410–461 — list-for-user fetch
 
-`FullPreview` interface (lines 63-79) — add:
-```ts
-previewedDays?: number;
-isPartialPreview?: boolean;
+Every write rewrites the entire `metadata` blob; the cron sweep deserializes JSONB for every active trip even when none are due.
+
+## Target schema
+
+```sql
+create table public.trip_notifications (
+  id uuid primary key default gen_random_uuid(),
+  trip_id uuid not null references public.trips(id) on delete cascade,
+  user_id uuid not null,
+  type text not null,                 -- 'pre_trip' | 'mid_trip' | 'post_trip' | 'feedback' | …
+  title text not null,
+  message text not null,
+  scheduled_for timestamptz not null,
+  delivered_at timestamptz,
+  dismissed_at timestamptz,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index trip_notifications_due_idx
+  on public.trip_notifications (scheduled_for)
+  where delivered_at is null and dismissed_at is null;
+
+create index trip_notifications_trip_idx on public.trip_notifications (trip_id);
+create index trip_notifications_user_idx on public.trip_notifications (user_id);
+
+alter table public.trip_notifications enable row level security;
+
+create policy "owner reads own notifications"
+  on public.trip_notifications for select
+  using (auth.uid() = user_id);
+
+create policy "owner dismisses own notifications"
+  on public.trip_notifications for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- Inserts/scheduling done via service role from the edge function only.
 ```
-(Optional for back-compat with any cached responses.)
 
-## Frontend UI — `src/components/itinerary/FullPreviewItinerary.tsx`
+## Migration path (zero-downtime, three deploys)
 
-1. **Line 50-55 local interface** — mirror the two new fields.
-2. **Lines 271-288 stats grid** — "Days" tile shows real `preview.totalDays`. When `isPartialPreview`, render a small muted line under the day cards (~line 318):
-   ```tsx
-   {preview.isPartialPreview && (
-     <p className="text-xs text-muted-foreground text-center">
-       Showing the first {preview.previewedDays} of {preview.totalDays} days. Unlock to see all {preview.totalDays}.
-     </p>
-   )}
-   ```
-3. No CTA copy change needed — backend headline already adapts.
+1. **Deploy 1 — dual-write, single-read.** Add the table + RLS. In `trip-notifications/index.ts` keep reading from `metadata.scheduledNotifications` but additionally `upsert` into `trip_notifications` on every schedule/dismiss. No reader change yet.
+2. **Backfill.** One-shot job: for each trip with `metadata.scheduledNotifications`, insert any rows missing in `trip_notifications` (dedupe on `trip_id + type + scheduled_for`).
+3. **Deploy 2 — flip reads.** Cron sweep + user-list fetch query `trip_notifications` directly (`scheduled_for <= now() and delivered_at is null and dismissed_at is null`). Stop reading the JSONB blob. Keep dual-write briefly as a safety net.
+4. **Deploy 3 — drop JSONB.** Remove `metadata.scheduledNotifications` writes and run a migration to strip the key from existing rows: `update trips set metadata = metadata - 'scheduledNotifications'`. Update any frontend that still reads it.
 
-## Verification
+## Frontend impact
 
-- `grep -c "isPartialPreview\|previewedDays" supabase/functions/generate-full-preview/index.ts` ≥ 2.
-- TypeScript build passes (interface field added in both `fullPreviewService.ts` and the local component interface).
-- Manual: a 2-day trip → no partial banner; a 10-day trip → "Showing the first 2 of 10 days" + headline reads "First 2 of 10 Days".
+Search hits for `scheduledNotifications` outside the edge function: zero. Frontend only consumes the function's response shape, which stays the same. No UI change required.
 
 ## Out of scope
 
-- Lifting the cap (Option A).
-- Changing pricing or unlock flow.
-- Touching `previewConverter.ts` (loops over `preview.days` directly, unaffected).
+- Push/email channel changes.
+- Cron job schedule.
+- Any work in this turn — this plan exists so we have it ready when the trigger conditions hit.
+
+## When to revisit
+
+Open this plan and execute Deploy 1 the moment a) `select count(*) from trips where jsonb_array_length(coalesce(metadata->'scheduledNotifications','[]'::jsonb)) > 0` exceeds ~5k, b) `pg_column_size(metadata)` p95 > 4KB on `trips`, or c) the `trip-notifications` cron run exceeds 2s.
