@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { normalizeUnsplashUrl, PLACEHOLDER_TRAVEL_SRC } from "./utils/unsplash";
+import { registerOAuthDeepLinkHandler } from "@/lib/native/oauthDeepLink";
 
 function installUnsplashSrcNormalizer() {
   const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
