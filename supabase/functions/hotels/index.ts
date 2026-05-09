@@ -20,6 +20,7 @@ interface HotelSearchParams {
   starRating?: number[];
   amenities?: string[];
   tripId?: string;
+  currency?: string;
 }
 
 // ============= SUPABASE CLIENT =============

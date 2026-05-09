@@ -1,15 +1,68 @@
-## Fix typo: `user.id` → `userId` in itinerary-chat:815
+## Fix #2 — Unhardcode currency in `supabase/functions/hotels/index.ts`
 
-One-character fix. Line 815 of `supabase/functions/itinerary-chat/index.ts` references `user.id`, but the in-scope variable is `userId` (declared at line 465 as `let userId`). `user` is not defined in this scope, so the call would throw `ReferenceError` whenever the `structured` branch is hit.
+### Audit
+`grep` confirms exactly two `currency: 'USD'` literals (no other casings):
+- L503 — Google Places result mapping in `searchHotels`
+- L573 — `generateFallbackHotels`
 
-### Change
+`estimateNightlyPrice` (L102) returns USD-baked numbers from a fixed `basePrices` table. Per the user's note, we'll accept that for now (Google priceLevel→USD anchor) — no conversion. We'll just stamp the trip's currency code on the result objects so downstream consumers (cost snapshot, UI) display it consistently with the rest of the trip.
+
+### Changes (single file: `supabase/functions/hotels/index.ts`)
+
+**1. Resolve `tripCurrency` at handler entry (after `body = await req.json()`, ~L1067).**
 
 ```ts
-// Before
-await upsertDayIntents(serviceSupabase, itineraryContext.tripId, user.id, [structured]);
+const SUPPORTED_CURRENCIES = new Set([
+  'usd','eur','gbp','cad','aud','chf','jpy','sek','nok','dkk','nzd',
+]);
 
-// After
-await upsertDayIntents(serviceSupabase, itineraryContext.tripId, userId, [structured]);
+let tripCurrency = String(body?.currency || '').toLowerCase();
+if (!tripCurrency && body?.tripId) {
+  try {
+    const admin = getSupabaseAdmin();
+    const { data: trip } = await admin
+      .from('trips')
+      .select('budget_currency')
+      .eq('id', body.tripId)
+      .maybeSingle();
+    if (trip?.budget_currency) tripCurrency = String(trip.budget_currency).toLowerCase();
+  } catch (e) {
+    console.warn('[Hotels] trip currency lookup failed:', e);
+  }
+}
+if (!tripCurrency) tripCurrency = 'usd';
+
+if (!SUPPORTED_CURRENCIES.has(tripCurrency)) {
+  return new Response(
+    JSON.stringify({ error: `Unsupported currency: ${tripCurrency.toUpperCase()}`, code: 'UNSUPPORTED_CURRENCY' }),
+    { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
 ```
 
-No other call sites to update.
+Placement: inserted before the `body.action === 'book'` branch so all three branches (book / search-by-name / search / enrich) and the default search share one resolved value. (`searchHotelsByName` and `enrichHotelByName` don't currently emit a `currency` field, so they're unaffected.)
+
+**2. Thread `tripCurrency` into the two emitters.**
+
+- Add an optional `currency?: string` property to `HotelSearchParams` (L12) so we can pass it through `searchHotels(body)` without changing the call signature. Set `params.currency = tripCurrency` on `body` before invoking `searchHotels(body)` and `generateFallbackHotels(...)`.
+- In `searchHotels`, replace L503 `currency: 'USD',` → `currency: (params.currency || 'usd').toUpperCase(),`.
+- In `generateFallbackHotels`, replace L573 `currency: 'USD',` → `currency: (params.currency || 'usd').toUpperCase(),`. (Also called from L441/L540 fallback paths — same `params` object, currency already attached.)
+
+Output stays uppercase (`'EUR'`, `'GBP'`) to match the existing wire-format the field had with `'USD'`.
+
+**3. `estimateNightlyPrice` — out of scope for this fix.**
+Per the user's note, we accept that priceLevel→USD anchor numbers are not converted. No signature change. (Future work: multiply by FX or pull priceLevel-to-local from a per-currency table.)
+
+### Verify
+
+```bash
+grep -nE "currency: 'USD'|currency: \"USD\"" supabase/functions/hotels/index.ts
+# expected: no matches
+```
+
+Plus a smoke call: POST to `/hotels` with `{ tripId, destination, checkIn, checkOut }` for a EUR trip and confirm result objects carry `currency: "EUR"`.
+
+### Out of scope
+- FX conversion of `basePrices` table.
+- Currency for `searchHotelsByName` / `enrichHotelByName` (those endpoints don't surface a price/currency today).
+- Migrating other edge functions still hardcoding USD (separate fixes).
