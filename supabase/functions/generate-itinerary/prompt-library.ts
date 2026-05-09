@@ -1323,7 +1323,9 @@ export function buildRegularDayPrompt(
   lines.push(`     Jazz clubs, rooftop bars, night markets, shows, river cruises,`);
   lines.push(`     neighborhood walks at night, dessert spots, live music`);
    lines.push(`   - Can be optional/skippable — note "optional" in description if so`);
-  lines.push(`   - Cap evening / nightcap / café / drinks-only stops at €30/person unless it is an explicit ticketed show or tasting experience. NEVER inherit dinner-tier pricing for a drinks stop`);
+  lines.push(`   - Evening drinks / nightcap / café / aperitivo / digestif cost = €10–€35 per person, FLAT, regardless of venue prestige (a Michelin-listed café still charges €15 for an espresso)`);
+  lines.push(`   - DO NOT copy or echo the preceding dinner's price onto the nightcap card. Dinner price and drinks price are independent — generate the drinks price from the drinks venue, not from the previous activity`);
+  lines.push(`   - Example: Dinner at Da Ivo (€200/pp) → Nightcap at Gran Caffè Quadri (€18/pp), NOT €200/pp. Only exception: ticketed shows / formal tastings (price for the ticket)`);
   lines.push('');
 
   lines.push(`   HOTEL BOOKENDS:`);
