@@ -1,56 +1,55 @@
-## Goal
-Stop the misleading "$400 → $700 → $900 → $1,100" climb during itinerary generation. The numbers are correct snapshots of a partial trip — we just need to label them as in-progress so the user understands.
+## Problem
 
-## Source of truth
-`trips.itinerary_status` (existing enum: `not_started | queued | generating | partial | ready | failed`).
-`isGenerating === true` ⇔ status ∈ `{queued, generating, partial}`. Everything else (including `not_started` and `failed`) is `false`.
+`action-generate-day.ts` (single-day refresh) caches `metadata.quality.meal_policy_at_generation` at line 336. The multi-day generator in `action-generate-trip-day.ts` derives the same policy but never persists it. Health panel reads from this metadata key — so day-refreshed trips report meal violations correctly, but multi-day-generated trips silently pass.
 
-Why this over an activity-cost row count: the status field is already authoritative, set by `itineraryAPI.ts` at start/end of generation, and avoids guessing "expected" totals on multi-city/manual trips.
+## Fix
 
-## Changes
+Mirror the `action-generate-day.ts:336-346` write in two places inside `supabase/functions/generate-itinerary/action-generate-trip-day.ts`.
 
-### 1. `src/services/tripBudgetService.ts` — `getBudgetSummary` (~lines 614-683)
-- Add `isGenerating: boolean` to the `BudgetSummary` return type (and the interface declaration above the function — find with rg).
-- Inside `getBudgetSummary`, after fetching settings & ledger, do a lightweight read:
-  ```ts
-  const { data: tripRow } = await supabase
-    .from('trips')
-    .select('itinerary_status')
-    .eq('id', tripId)
-    .maybeSingle();
-  const isGenerating = ['queued', 'generating', 'partial'].includes(tripRow?.itinerary_status ?? '');
-  ```
-- Include `isGenerating` in the returned object.
-- One extra query per summary fetch is acceptable; summary is React-Query–cached.
+### Site A — final per-day guard (~after line 1803)
 
-### 2. `src/hooks/useTripBudget.ts` (lines 76-96, return shape)
-- Extend `UseTripBudgetReturn` with `isGenerating: boolean`.
-- Derive `isGenerating = summary?.isGenerating ?? false` and include it in the returned object.
-- Also: shrink the React Query `staleTime` for the summary to ~5 s while `isGenerating` is true, by passing `refetchInterval: isGenerating ? 4000 : false` so the flag (and totals) refresh as generation progresses. Stop polling once status flips to `ready`.
+Right after the `if/else` meal_audit block that closes at line 1803, insert (unconditional, sibling of the audit assignment):
 
-### 3. UI — `src/components/planner/budget/BudgetTab.tsx`
-The visible climbing total is on the progress bar / "used / remaining" row in this tab. Two surgical edits:
+```ts
+dayResult.metadata = dayResult.metadata || {};
+dayResult.metadata.quality = dayResult.metadata.quality || {};
+dayResult.metadata.quality.meal_policy_at_generation = {
+  dayMode: _fmgPolicy.dayMode,
+  requiredMeals: _fmgPolicy.requiredMeals,
+  isFullExplorationDay: _fmgPolicy.isFullExplorationDay,
+  arrivalTime24: _isFirstDay ? (savedArrTime24Hoisted ?? null) : null,
+  departureTime24: _isLastDay ? (savedDepTime24Hoisted ?? null) : null,
+  generated_at: new Date().toISOString(),
+};
+```
 
-- Pull `isGenerating` from `useTripBudget`.
-- Where the trip total / used amount is rendered (the progress bar block — find by ripgrep on `formattedBudget` / `usedPercent`):
-  - When `isGenerating` is `true`, render a small inline pill **"Calculating…"** next to the total and apply `animate-pulse` + `opacity-70` to the numeric values, plus dampen the progress-fill color to `bg-muted` instead of the warning gradient.
-  - Suppress the over-budget warning banner (`isOverBudget`) while `isGenerating` so we don't fire a red alert on a half-built itinerary. Also gate the Coach (`isCoachEligible(…)` block) on `!isGenerating`.
-- Leave the "Loading budget…" full-page spinner alone — it's for the initial fetch, not generation.
+Written unconditionally (not gated on `!alreadyCompliant`) to match `action-generate-day.ts` behavior — the cache must exist even when generation produced a compliant day.
 
-Other consumers (`EditorialItinerary.tsx` only reads `settings`, so no change there. `tripBudgetCompanionsAPI.ts` does not consume `summary`.) are unaffected.
+### Site B — multi-day finalization loop (~line 2335, right after `policy` is derived)
 
-### 4. Verification
-- Start a fresh trip generation: BudgetTab progress bar dims, "Calculating…" pill appears, no over-budget toast fires.
-- After `itinerary_status='ready'`: pill disappears, totals stable, polling stops (verify no recurring `tripBudgetSummary` queries in the network tab).
-- Manual / build-myself trips (status stays `not_started`): pill never shown — pre-existing behavior preserved.
-- Failed generation (`failed`): pill cleared, totals shown as final.
+In the loop at lines 2322-2371, immediately after `deriveMealPolicy(...)` returns `policy` and **before** the `if (policy.requiredMeals.length === 0) { … continue; }` early-return, insert:
 
-### Out of scope
-- Adding new DB columns or migrations (the enum already exists).
-- Smoothing the climb itself (it's correct data, just unlabeled).
-- Touching budget Coach internals beyond the eligibility gate.
+```ts
+updatedDays[i].metadata = updatedDays[i].metadata || {};
+updatedDays[i].metadata.quality = updatedDays[i].metadata.quality || {};
+updatedDays[i].metadata.quality.meal_policy_at_generation = {
+  dayMode: policy.dayMode,
+  requiredMeals: policy.requiredMeals,
+  isFullExplorationDay: policy.isFullExplorationDay,
+  arrivalTime24: isFirstDayLoop ? (savedArrivalTime24 ?? null) : null,
+  departureTime24: isLastDayLoop ? (savedDepartureTime24 ?? null) : null,
+  generated_at: new Date().toISOString(),
+};
+```
 
-## Files touched
-- `src/services/tripBudgetService.ts` (return type + 1 query)
-- `src/hooks/useTripBudget.ts` (return shape + conditional `refetchInterval`)
-- `src/components/planner/budget/BudgetTab.tsx` (pill + dim + gates)
+Placed before the `requiredMeals.length === 0` early-continue so even pure-exploration days carry the cache (health engine needs to know "policy was applied, no meals required" vs. "never recorded").
+
+## Verification
+
+1. `rg -n "meal_policy_at_generation" supabase/functions/generate-itinerary/` → 3 write sites (was 1).
+2. Generate a fresh multi-day trip; confirm `itinerary_data.days[i].metadata.quality.meal_policy_at_generation` is populated for every day, including days where `requiredMeals` is empty.
+3. Confirm health panel now flags meal violations on multi-day-generated trips that previously passed silently.
+
+## Out of scope
+
+No changes to `action-generate-day.ts`, no changes to the health engine, no schema/migration changes.
