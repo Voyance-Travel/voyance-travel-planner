@@ -16,7 +16,7 @@ export const CREDIT_COSTS = {
   // Fixed per-action costs
   UNLOCK_DAY: 60,             // Unlock a full day of details
   SMART_FINISH: 50,           // Smart Finish for manual/imported trips
-  REGENERATE_DAY: 10,         // Regenerate a day (after 5 free/trip)
+  REGENERATE_DAY: 30,         // Regenerate a day (after free quota/trip) — half of generation rate
   SWAP_ACTIVITY: 5,           // Swap an activity (after 10 free/trip)
   ADD_ACTIVITY: 5,            // Add a new activity to a day
   RESTAURANT_REC: 5,          // Restaurant recommendation (after 5 free/trip)

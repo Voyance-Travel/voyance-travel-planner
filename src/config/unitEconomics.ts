@@ -159,7 +159,7 @@ export const CREDIT_ACTION_MAPPING = {
   unlock_day: { credits: 60, costMin: 0.06, costMax: 0.15, desc: 'Unlock full day details' },
   smart_finish: { credits: 50, costMin: 0.03, costMax: 0.06, desc: 'Smart Finish enrichment' },
   swap_activity: { credits: 5, costMin: 0.005, costMax: 0.02, desc: 'Swap an activity' },
-  regenerate_day: { credits: 10, costMin: 0.02, costMax: 0.08, desc: 'Regenerate a day' },
+  regenerate_day: { credits: 30, costMin: 0.02, costMax: 0.08, desc: 'Regenerate a day' },
   restaurant_rec: { credits: 5, costMin: 0.01, costMax: 0.04, desc: 'Restaurant recommendation' },
   ai_message: { credits: 5, costMin: 0.005, costMax: 0.02, desc: 'AI companion message' },
   hotel_search: { credits: 40, costMin: 0.01, costMax: 0.05, desc: 'Hotel search per city' },
