@@ -20,7 +20,7 @@ interface DestinationImage {
   url: string;
   alt: string;
   type: string;
-  source: 'curated' | 'database' | 'google_places' | 'lovable_ai' | 'pexels' | 'fallback';
+  source: 'curated' | 'database' | 'google_places' | 'lovable_ai' | 'pexels' | 'fallback' | 'unsplash';
 }
 
 /**
