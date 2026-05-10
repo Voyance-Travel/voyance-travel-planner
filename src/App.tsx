@@ -23,6 +23,7 @@ import { useErrorTracker } from '@/hooks/useErrorTracker';
 
 // Providers
 import { AuthProvider } from "@/contexts/AuthContext";
+import DNARecalcOnVisit from "@/components/system/DNARecalcOnVisit";
 import { TripPlannerProvider } from "@/contexts/TripPlannerContext";
 import { QuizProvider } from "@/contexts/QuizContext";
 import { OutOfCreditsProvider } from "@/contexts/OutOfCreditsContext";
@@ -327,6 +328,7 @@ const App = () => (
                 <WelcomeBonusManager />
                 <SiteOnboardingTour />
                 <OAuthReturnHandler />
+                <DNARecalcOnVisit />
                 <OutOfCreditsModal />
                 <ErrorBoundary>
                   <AnimatedRoutes />
