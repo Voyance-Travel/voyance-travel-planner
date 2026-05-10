@@ -164,9 +164,30 @@ export default function MicroDisambiguation({
   const [isResolved, setIsResolved] = useState(() => {
     return localStorage.getItem(dismissKey) === 'true';
   });
+  // checkedDb gates rendering until DB has confirmed resolution status (cross-device sync)
+  const [checkedDb, setCheckedDb] = useState(() => localStorage.getItem(dismissKey) === 'true');
 
-  // Don't show if confidence is high enough or already resolved
-  if (confidence >= 60 || isResolved) {
+  useEffect(() => {
+    if (!userId || isResolved) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('travel_dna_profiles')
+        .select('disambiguation_resolved_at')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (data?.disambiguation_resolved_at) {
+        setIsResolved(true);
+        localStorage.setItem(dismissKey, 'true');
+      }
+      setCheckedDb(true);
+    })();
+    return () => { cancelled = true; };
+  }, [userId, isResolved, dismissKey]);
+
+  // Don't show if confidence is high enough, already resolved, or DB check pending
+  if (confidence >= 60 || isResolved || !checkedDb) {
     return null;
   }
 
