@@ -191,7 +191,7 @@ export function trackDestinationInterest(
   country: string,
   source: 'card_click' | 'details_view' | 'compare' | 'save'
 ): void {
-  const entityId = `${city.toLowerCase()}_${country.toLowerCase()}`.replace(/\s+/g, '_');
+  const entityId = normalizeEntityId(`${city} ${country}`);
   
   trackEvent({
     enrichment_type: 'destination_interest',
