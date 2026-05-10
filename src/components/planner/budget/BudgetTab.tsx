@@ -651,7 +651,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       })()}
 
       {/* Over-budget diagnostic banner — decomposes the overage and offers one-click fixes (hidden in manual mode) */}
-      {!isManualMode && (() => {
+      {!isManualMode && !isGenerating && (() => {
         const budgetCents = settings?.budget_total_cents || 0;
         if (budgetCents <= 0 || !summary || snapshot.tripTotalCents <= budgetCents) return null;
 
