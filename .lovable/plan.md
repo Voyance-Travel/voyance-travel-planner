@@ -1,32 +1,37 @@
-## Pairing Coherence for Secondary Archetype Selection
+## Wire Secondary Archetype Into Generation Prompt
 
-Update `src/services/engines/travelDNA/archetype-matcher.ts` so the secondary archetype is chosen with a same-category penalty and a forbidden-pair filter, instead of always being the second-highest raw score.
+The existing system already passes `secondaryArchetype` through `context.travelerDNA` (confirmed at line 2957) but never references it when assembling the per-day prompt. Today only the primary feeds `buildAllConstraints`, `buildExperienceGuidancePrompt`, and `buildDestinationGuidancePrompt`. Result: secondary is cosmetic.
 
 ### Change
 
-Replace the two-line primary/secondary selection (around lines 413–414):
+File: `supabase/functions/generate-itinerary/generation-core.ts`
 
-```ts
-const primary = matches[0];
-const secondary = matches.length > 1 && matches[1].score > 0 ? matches[1] : null;
-```
+1. Just after the `archetypeDefinition` lookup (around line 792), resolve the secondary:
+   ```ts
+   const secondaryArchetype = context.travelerDNA?.secondaryArchetype;
+   const secondaryArchetypeDef = secondaryArchetype && secondaryArchetype !== context.travelerDNA?.primaryArchetype
+     ? getArchetypeDefinition(secondaryArchetype)
+     : null;
+   ```
+   Guard against the secondary equalling the primary so we don't double-count.
 
-With:
+2. Build a `secondaryFlavor` string using the existing `ArchetypeDefinition` shape (`name`, `identity`):
+   ```ts
+   const secondaryFlavor = secondaryArchetypeDef
+     ? `\n\nSECONDARY DNA: ${secondaryArchetypeDef.name} — ${secondaryArchetypeDef.identity}.\n` +
+       `Across the full trip, include 1–2 activities or moments that lean into this secondary identity. ` +
+       `Treat it as subtle seasoning, never as a contradiction to the primary archetype's day structure, variety caps, or avoid list. ` +
+       `Example: primary=Luxury Luminary + secondary=Story Seeker → mostly curated high-end experiences, but swap one Michelin night for an "underground jazz bar locals know."`
+     : '';
+   ```
 
-1. `primary = matches[0]` (unchanged).
-2. Build `secondaryCandidates` from `matches.slice(1)`, computing `adjustedScore = m.category === primary.category ? m.score * 0.7 : m.score` (30% same-category penalty).
-3. Re-sort candidates by `adjustedScore` desc.
-4. Define a module-level `FORBIDDEN_PAIRS` set with the 14 incoherent slug pairs from the spec, and an `isForbiddenPair(a, b)` helper that checks both orderings.
-5. `secondary = secondaryCandidates.find(m => !isForbiddenPair(primary.id, m.id) && m.adjustedScore > 0) ?? null`.
+3. Append `secondaryFlavor` to the `generationHierarchy` template (line 828–883) — adding it after `${destinationGuidancePrompt}` keeps it adjacent to the archetype-shaping block that already lands in the system prompt at line 895.
 
-### Notes
-
-- `FORBIDDEN_PAIRS` will be defined at module scope (above the function) so it isn't re-allocated each call. `isForbiddenPair` will live alongside it.
-- No changes to scoring, gates, or the confidence-gap logic above this block.
-- `ArchetypeMatch` already carries `category` and `id`, so no type changes needed.
+That's the entire change. No new imports, no signature changes, no edits to `archetype-constraints.ts` or downstream pipeline. `getArchetypeDefinition` already returns a default for unknown slugs, so this is null-safe via the explicit guard above.
 
 ### Verification
 
-- `grep -c "FORBIDDEN_PAIRS" src/services/engines/travelDNA/archetype-matcher.ts` ≥ 1.
-- Synthetic test 1: Sanctuary Seeker primary + Adrenaline Architect close-second → secondary is filtered out (forbidden), next eligible candidate returned.
-- Synthetic test 2: Two Restorer-category matches close in score → 0.7× penalty pushes a different-category candidate into secondary slot unless gap is very large.
+- `grep -n "SECONDARY DNA" supabase/functions/generate-itinerary/generation-core.ts` returns the new block.
+- Generate a trip for a profile with primary=`luxury_luminary`, secondary=`story_seeker`. Inspect `edge_function_logs` for `generate-itinerary` (or `action-generate-trip-day`) and confirm `SECONDARY DNA: …` appears in the system prompt payload.
+- Inspect the resulting itinerary: at least one evening should be a "local discovery" type rather than a second Michelin meal.
+- Sanity test with no secondary (or secondary === primary) — prompt unchanged, no empty `SECONDARY DNA:` header leaks into the model context.

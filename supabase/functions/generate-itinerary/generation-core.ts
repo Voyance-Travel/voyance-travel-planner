@@ -795,6 +795,18 @@ export async function generateSingleDayWithRetry(
       const baseMinActivitiesFromArchetype = archetypeDefinition.dayStructure.minScheduledActivities
         || Math.max(3, Math.ceil(baseMaxActivitiesFromArchetype * 0.6));
 
+      // Secondary archetype flavoring — 1-2 activities per trip lean into this identity
+      const secondaryArchetypeSlug = context.travelerDNA?.secondaryArchetype;
+      const secondaryArchetypeDef = secondaryArchetypeSlug && secondaryArchetypeSlug !== context.travelerDNA?.primaryArchetype
+        ? getArchetypeDefinition(secondaryArchetypeSlug)
+        : null;
+      const secondaryFlavor = secondaryArchetypeDef
+        ? `\n\nSECONDARY DNA: ${secondaryArchetypeDef.name} — ${secondaryArchetypeDef.identity}.\n` +
+          `Across the full trip, include 1–2 activities or moments that lean into this secondary identity. ` +
+          `Treat it as subtle seasoning, never as a contradiction to the primary archetype's day structure, variety caps, or avoid list. ` +
+          `Example: primary=Luxury Luminary + secondary=Story Seeker → mostly curated high-end experiences, but swap one Michelin night for an "underground jazz bar locals know."`
+        : '';
+
       // Smart Finish should output a fully polished day (anchors + added value), not a sparse archetype-only day.
       const isSmartFinishGeneration = !!context.isSmartFinish;
       // Override activity counts for transition days — they have a fixed structure (6-8)
@@ -880,6 +892,7 @@ ${comprehensiveConstraints}
 ${experienceGuidancePrompt}
 
 ${destinationGuidancePrompt}
+${secondaryFlavor}
 `;
 
       // Phase 2: Build temporal intelligence prompts
