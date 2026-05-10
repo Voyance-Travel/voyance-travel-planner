@@ -39,12 +39,11 @@ export interface BlendedDnaResult {
 
 /**
  * Blend multiple travelers' DNA trait scores into a unified profile.
- * 
+ *
  * Rules:
- * - Owner gets 50% weight
- * - Remaining 50% split equally among companions with includePreferences=true
- * - Companions with includePreferences=false are excluded
- * - If no companions have includePreferences=true, returns 100% owner DNA
+ * - Each included traveler gets an equal share (1 / N), regardless of who owns the trip.
+ * - Companions with includePreferences=false are excluded from N.
+ * - If no companions have includePreferences=true, returns 100% owner DNA.
  */
 export function blendTravelDna(travelers: TravelerDnaInput[]): BlendedDnaResult {
   const owner = travelers.find(t => t.isOwner);
@@ -87,27 +86,27 @@ export function blendTravelDna(travelers: TravelerDnaInput[]): BlendedDnaResult 
     };
   }
 
-  // Owner gets 50%, remaining 50% split among companions
-  const ownerWeight = 0.5;
-  const companionWeight = 0.5 / includedCompanions.length;
+  // Even split across owner + included companions
+  const totalTravelers = 1 + includedCompanions.length;
+  const evenWeight = 1 / totalTravelers;
 
   // Collect all trait keys
   const allTraitKeys = new Set<string>();
   Object.keys(owner.traitScores).forEach(k => allTraitKeys.add(k));
   includedCompanions.forEach(c => Object.keys(c.traitScores).forEach(k => allTraitKeys.add(k)));
 
-  // Blend traits
+  // Blend traits — every traveler weighted equally
   const blendedTraits: Record<string, number> = {};
   for (const key of allTraitKeys) {
-    const ownerScore = owner.traitScores[key] ?? 0;
+    const ownerScore = (owner.traitScores[key] ?? 0) * evenWeight;
     const companionSum = includedCompanions.reduce(
-      (sum, c) => sum + (c.traitScores[key] ?? 0) * companionWeight,
+      (sum, c) => sum + (c.traitScores[key] ?? 0) * evenWeight,
       0
     );
-    blendedTraits[key] = Math.round(ownerScore * ownerWeight + companionSum);
+    blendedTraits[key] = Math.round(ownerScore + companionSum);
   }
 
-  // Determine dominant archetype (owner's by default, since they have highest weight)
+  // Dominant archetype label defaults to owner's (tie-break only — influence is even)
   const dominantArchetype = owner.archetypeId;
 
   // Build profiles with weights
@@ -117,14 +116,14 @@ export function blendTravelDna(travelers: TravelerDnaInput[]): BlendedDnaResult 
       name: owner.name,
       archetypeId: owner.archetypeId,
       isOwner: true,
-      weight: ownerWeight,
+      weight: evenWeight,
     },
     ...includedCompanions.map(c => ({
       userId: c.userId,
       name: c.name,
       archetypeId: c.archetypeId,
       isOwner: false,
-      weight: companionWeight,
+      weight: evenWeight,
     })),
   ];
 
@@ -133,7 +132,7 @@ export function blendTravelDna(travelers: TravelerDnaInput[]): BlendedDnaResult 
     dominantArchetype,
     travelerProfiles,
     blendMethod: 'weighted_average',
-    ownerWeight,
+    ownerWeight: evenWeight,
     isBlended: true,
   };
 }
