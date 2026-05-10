@@ -188,9 +188,37 @@ Refine your analysis based on this additional information.`
                        content.match(/```\s*([\s\S]*?)\s*```/) ||
                        [null, content];
       parsed = JSON.parse(jsonMatch[1] || content);
-    } catch (parseError) {
+    } catch (parseError: any) {
       console.error("Failed to parse AI response:", content);
-      throw new Error("Failed to analyze your story. Please try again.");
+
+      // Categorize the failure so the frontend can show appropriate UX.
+      let errorReason: 'network' | 'timeout' | 'malformed_response' | 'low_confidence' | 'refused' | 'unknown' = 'unknown';
+      let userMessage = 'Failed to analyze your story';
+      const analysisResult: any = undefined;
+      const errMsg = String(parseError?.message ?? '');
+
+      if (parseError instanceof SyntaxError || errMsg.includes('JSON')) {
+        errorReason = 'malformed_response';
+        userMessage = 'We had trouble understanding the AI response. Please try again with a slightly different story.';
+      } else if (errMsg.includes('timeout') || errMsg.includes('AbortError')) {
+        errorReason = 'timeout';
+        userMessage = 'The analysis took too long. Please try again — sometimes a shorter story helps.';
+      } else if (errMsg.includes('network') || errMsg.includes('fetch')) {
+        errorReason = 'network';
+        userMessage = 'Connection issue while analyzing. Please check your internet and try again.';
+      } else if (analysisResult?.confidence != null && analysisResult.confidence < 30) {
+        errorReason = 'low_confidence';
+        userMessage = 'We could not confidently determine your travel style from this story. Try adding more detail about specific trips or moments.';
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: userMessage,
+          code: errorReason.toUpperCase(),
+          debug: errMsg.slice(0, 200),
+        }),
+        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Find the archetype objects
