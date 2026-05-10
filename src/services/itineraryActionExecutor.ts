@@ -692,7 +692,10 @@ async function executePacingAction(
 
   const updatedDays = [...currentDays];
   updatedDays[dayIndex] = { ...day, activities: updatedActivities };
-  await updateTripItinerary(tripId, updatedDays);
+  const pacingPersist = await updateTripItinerary(tripId, updatedDays);
+  if (!pacingPersist.success) {
+    return { success: false, message: PERSIST_FAILURE_MESSAGE, error: pacingPersist.error, updatedDays };
+  }
 
   return {
     success: true,
