@@ -165,6 +165,7 @@ async function assertCppLooksPerPerson(args: {
       `inflating user budget by ×${args.numTravelers}.`
     );
   }
+}
 
 // ─── View Queries (read-only, canonical totals) ──────────────
 
