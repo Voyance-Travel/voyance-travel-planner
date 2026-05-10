@@ -301,7 +301,7 @@ serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    console.log("[chat-trip-planner] Authenticated user:", user.id);
+    debugLog("[chat-trip-planner] Authenticated user:", user.id);
 
     const { messages } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");

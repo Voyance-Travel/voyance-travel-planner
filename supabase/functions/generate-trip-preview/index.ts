@@ -268,7 +268,8 @@ Respond in JSON format:
 
     await costTracker.save();
 
-    console.log(`[generate-trip-preview] ✓ Generated ${cappedDays}-day preview for ${destination} | User: ${userId || 'anon'}`);
+    console.log(`[generate-trip-preview] ✓ Generated ${cappedDays}-day preview for ${destination}`);
+    debugLog(`[generate-trip-preview] user=${userId || 'anon'}`);
 
     return new Response(
       JSON.stringify({

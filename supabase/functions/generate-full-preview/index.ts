@@ -242,7 +242,8 @@ Respond in JSON format:
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    console.log(`[generate-full-preview] Generating ${cappedDays}-day preview for ${destination} | User: ${userId}`);
+    console.log(`[generate-full-preview] Generating ${cappedDays}-day preview for ${destination}`);
+    debugLog(`[generate-full-preview] user=${userId}`);
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
