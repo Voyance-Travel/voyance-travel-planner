@@ -367,6 +367,78 @@ function hasMismatchedContent(category: string, altTextOrName: string): boolean 
 }
 
 // =============================================================================
+// TIER 2A: UNSPLASH FALLBACK (Free, professionally curated, destination heroes)
+// Used BEFORE Google Places for destination heroes — Unsplash returns iconic
+// landmark photos rather than random user uploads. ToS requires attribution
+// + utm_source/utm_medium params on photographer + Unsplash links.
+// =============================================================================
+const UNSPLASH_UTM = "utm_source=voyance&utm_medium=referral";
+
+function withUtm(url: string): string {
+  if (!url) return url;
+  return url.includes("?") ? `${url}&${UNSPLASH_UTM}` : `${url}?${UNSPLASH_UTM}`;
+}
+
+async function tryUnsplashFallback(destination: string): Promise<DestinationImage | null> {
+  const accessKey = Deno.env.get("UNSPLASH_ACCESS_KEY");
+  if (!accessKey) return null;
+  if (!destination || destination.trim().length < 2) return null;
+
+  const query = encodeURIComponent(`${destination} landmark`);
+  const url = `https://api.unsplash.com/search/photos?query=${query}&per_page=5&orientation=landscape&order_by=relevant`;
+
+  try {
+    const response = await fetch(url, {
+      headers: { Authorization: `Client-ID ${accessKey}` },
+    });
+    if (!response.ok) {
+      console.warn(`[unsplash] HTTP ${response.status} for "${destination}"`);
+      return null;
+    }
+    const data = await response.json();
+    const results = Array.isArray(data?.results) ? data.results : [];
+
+    const qualityResults = results.filter(
+      (r: any) => (r?.width ?? 0) >= 1920 && (r?.likes ?? 0) >= 50
+    );
+    if (qualityResults.length === 0) {
+      console.log(`[unsplash] no quality results for "${destination}" (${results.length} raw)`);
+      return null;
+    }
+
+    const best = qualityResults.sort((a: any, b: any) => (b.likes ?? 0) - (a.likes ?? 0))[0];
+    const photographerName = best?.user?.name || "Unsplash";
+    const photographerUrl = best?.user?.links?.html
+      ? withUtm(best.user.links.html)
+      : "";
+    const sourceUrl = best?.links?.html ? withUtm(best.links.html) : "";
+    const rawUrl = best?.urls?.raw || best?.urls?.regular;
+    if (!rawUrl) return null;
+
+    console.log(
+      `[unsplash] hit dest="${destination}" likes=${best.likes} photographer="${photographerName}"`
+    );
+
+    return {
+      id: `unsplash-${best.id}`,
+      url: `${rawUrl}&w=1920&q=80&fit=crop`,
+      alt: best?.alt_description || `${destination} landmark`,
+      type: "hero",
+      source: "unsplash",
+      width: best?.width,
+      height: best?.height,
+      attribution: `Photo by ${photographerName} on Unsplash`,
+      photographer: photographerName,
+      photographer_url: photographerUrl,
+      source_url: sourceUrl,
+    };
+  } catch (err) {
+    console.error("[unsplash] fetch failed", err);
+    return null;
+  }
+}
+
+// =============================================================================
 // TIER 2: GOOGLE PLACES PHOTOS (New Places API v1) - HARDENED
 // =============================================================================
 async function getGooglePlacesPhoto(
