@@ -1,44 +1,27 @@
-## RS.M14 — Filter blocked users from search results
+## RS.M15 — Include travel date in attraction enrichment cache key
 
-**File:** `src/services/usersSearchAPI.ts` (`searchUsers`, lines 35–61)
+**File:** `supabase/functions/enrich-attraction/index.ts`, line 34.
 
-No `user_blocks` table exists. Blocking is modeled via `friendships` with `status = 'blocked'`. Either side of the friendship row may be the blocker, so we hide the user on either direction (mutual hiding).
+This function uses the shared `perplexity-cache` (not a dedicated `attraction_enrichment_cache` table — that table doesn't exist). `buildCacheKey(prefix, ...parts)` is variadic, so we just append `travelDate` as another segment. No migration needed.
+
+Today the cache key is `attractionName::destination`, so two requests for the same attraction on different travel dates collide and reuse stale "isOpen / openingHours / admissionPrice" data from another date — even though the prompt does include `dateContext`. The fix makes the cache match the prompt input.
 
 ### Change
 
-Inside `searchUsers`, after the existing profile query succeeds and before the `return`:
-
 ```ts
-// Mutual hide: drop any user who is in a 'blocked' friendship with the
-// current user (regardless of which side initiated the block).
-const { data: { user: currentUser } } = await supabase.auth.getUser();
-let blockedUserIds = new Set<string>();
-if (currentUser) {
-  const { data: blocks } = await supabase
-    .from('friendships')
-    .select('requester_id, addressee_id')
-    .eq('status', 'blocked')
-    .or(`requester_id.eq.${currentUser.id},addressee_id.eq.${currentUser.id}`);
-
-  for (const b of blocks || []) {
-    if (b.requester_id !== currentUser.id) blockedUserIds.add(b.requester_id);
-    if (b.addressee_id !== currentUser.id) blockedUserIds.add(b.addressee_id);
-  }
-}
-
-const filtered = (data || []).filter(p => !blockedUserIds.has(p.id));
-return filtered.map(profile => ({ /* existing mapping */ }));
+// line 34
+const cacheKey = buildCacheKey('attraction', attractionName, destination, travelDate || 'any');
 ```
 
-Also exclude `currentUser.id` itself from the result (existing search returns yourself — a small adjacent fix; keep it scoped to one extra `.has` check). If you'd rather not, drop that line — the user's task only requires blocked filtering.
+That's the only line that changes. `setCache(cacheKey, …)` on line 123 already reuses the same variable.
 
 ### Verification
 
-- `grep -c "blockedUserIds\|friendships" src/services/usersSearchAPI.ts` ≥ 2
-- Manual: a profile with a `friendships` row to the current user where `status='blocked'` (in either direction) should not appear in search results.
+- `grep -c "travelDate\|travel_date" supabase/functions/enrich-attraction/index.ts` ≥ 2 (already 2 from existing usage; new line brings it to 3).
+- Manual: two requests with same attraction+destination but different `travelDate` → second one is a cache miss (new Perplexity call); same attraction+destination+travelDate → second one is a cache hit.
 
 ### Out of scope
 
-- Creating a dedicated `user_blocks` table
-- Filtering blocks elsewhere (friend lists, notifications, trip sharing)
-- RLS changes — existing `friendships` SELECT policy already permits both sides to read the row
+- Creating an `attraction_enrichment_cache` table or migrating storage layer
+- Changing TTL (still 24h)
+- Bucketing dates (e.g. by ISO week) — keep one entry per exact date for now
