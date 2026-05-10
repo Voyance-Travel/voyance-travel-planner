@@ -1,10 +1,37 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from "../_shared/cors.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 serve(async (req) => {
   const preflight = handleCorsPreflightRequest(req);
   if (preflight) return preflight;
+
+  // Require an authenticated caller — this endpoint calls the paid Lovable AI
+  // gateway. TODO(rate-limit): add per-user / per-IP rate limiting — deferred
+  // (see Discover hardening).
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return errorResponse("Authentication required", 401);
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  try {
+    const authClient = createClient(supabaseUrl, supabaseAnonKey);
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: authError } = await authClient.auth.getClaims(token);
+    if (authError || !claimsData?.claims) {
+      return errorResponse("Invalid token", 401);
+    }
+  } catch (e) {
+    console.error("[suggest-landmarks] Auth check failed:", e);
+    return errorResponse("Invalid token", 401);
+  }
+
+  const costTracker = trackCost("suggest-landmarks", "google/gemini-2.5-flash");
 
   try {
     const { city, country } = await req.json();
@@ -12,9 +39,7 @@ serve(async (req) => {
       return errorResponse("city is required", 400);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Check cache first
     const normalizedCity = city.trim();
@@ -26,6 +51,8 @@ serve(async (req) => {
       .maybeSingle();
 
     if (cached?.landmarks) {
+      costTracker.markCacheHit().addMetadata("city", normalizedCity);
+      await costTracker.save();
       return jsonResponse({ landmarks: cached.landmarks, cached: true });
     }
 
@@ -69,6 +96,8 @@ Return the JSON array only, no other text.`;
     }
 
     const aiData = await aiResponse.json();
+    costTracker.recordAiUsage(aiData, "google/gemini-2.5-flash");
+    costTracker.addMetadata("city", normalizedCity);
     const content = aiData.choices?.[0]?.message?.content || "[]";
 
     // Parse the JSON — handle markdown fences if present
@@ -88,6 +117,7 @@ Return the JSON array only, no other text.`;
         }));
     } catch {
       console.error("Failed to parse AI landmarks response:", content);
+      await costTracker.save();
       return errorResponse("Failed to parse landmarks", 500);
     }
 
@@ -104,6 +134,7 @@ Return the JSON array only, no other text.`;
       );
     }
 
+    await costTracker.save();
     return jsonResponse({ landmarks, cached: false });
   } catch (e) {
     console.error("suggest-landmarks error:", e);
