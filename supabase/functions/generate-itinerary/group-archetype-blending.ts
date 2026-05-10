@@ -20,6 +20,12 @@ export interface TravelerArchetype {
   name?: string;
   archetype: string;
   isPrimary: boolean; // The trip owner/planner
+  /**
+   * Optional secondary archetype identity. When set and distinct from `archetype`,
+   * the day assigner may allocate up to one "deepening" middle day per traveler
+   * to bias activities toward this secondary's affinity. Null/undefined skips it.
+   */
+  secondaryArchetype?: string | null;
 }
 
 export interface BlendingResult {
@@ -52,9 +58,14 @@ export interface BlendedGuidance {
 
 export interface DayArchetypeAssignment {
   dayNumber: number;
+  /** For deepening days, this is the secondary archetype id; for primary days, the traveler's primary; for group days, 'group'. */
   primaryArchetype: string;
   theme: string;
   rationale: string;
+  /** Discriminator. Missing = legacy ('group' if primaryArchetype === 'group', else 'primary'). */
+  kind?: 'group' | 'primary' | 'deepening';
+  /** For 'primary' and 'deepening' days, the traveler whose archetype the day is favoring. */
+  travelerId?: string;
 }
 
 export interface ArchetypeConflict {
