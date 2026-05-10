@@ -160,8 +160,15 @@ export async function blendGroupArchetypes(
 ): Promise<BlendingResult> {
   console.log(`[GroupBlend] Blending ${travelers.length} travelers' archetypes`);
   
-  // If only one traveler, no blending needed
-  if (travelers.length <= 1) {
+  // Solo trip + no usable secondary → no blending needed (legacy fast path).
+  // Solo trip WITH a distinct secondary still falls through so a deepening day
+  // can be allocated.
+  const soloHasSecondary =
+    travelers.length === 1 &&
+    !!travelers[0]?.secondaryArchetype &&
+    travelers[0].secondaryArchetype !== travelers[0].archetype;
+
+  if (travelers.length <= 1 && !soloHasSecondary) {
     const archetype = travelers[0]?.archetype || 'flexible_wanderer';
     return {
       blendedGuidance: {
