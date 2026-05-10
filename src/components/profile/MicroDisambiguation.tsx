@@ -146,6 +146,27 @@ const DISAMBIGUATION_QUESTIONS: DisambiguationQuestion[] = [
       },
     ],
   },
+  {
+    id: 'purpose_vs_collection',
+    question: 'When you get back from a trip, what matters more?',
+    subtext: 'Helps us tell apart two close-fitting archetypes.',
+    options: [
+      {
+        id: 'recommend_authority',
+        label: 'Being able to recommend the best spots to everyone who asks',
+        iconName: 'Users',
+        // Purpose Voyager (community_builder): social sharing + purpose-driven
+        deltas: { social: 4, transformation: 3 },
+      },
+      {
+        id: 'check_off_destination',
+        label: 'Crossing another destination off your personal list',
+        iconName: 'MapPin',
+        // Passport Collector (collection_curator): novelty/quantity, less transformative
+        deltas: { adventure: 3, transformation: -2 },
+      },
+    ],
+  },
 ];
 
 // ============================================================================

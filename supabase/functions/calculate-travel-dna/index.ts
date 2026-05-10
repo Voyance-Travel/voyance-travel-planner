@@ -1102,6 +1102,15 @@ const DISAMBIGUATION_QUESTIONS_BY_TRAIT: Record<Trait, string[]> = {
   transformation: ['traveler_type', 'interests', 'activities'],
 };
 
+// Pair-specific disambiguation questions, served by MicroDisambiguation modal
+// (not the quiz). Keys are bidirectional `${primary}:${secondary}`.
+// TODO: archetype slug `community_builder` displays as "Purpose Voyager" —
+// confusion source. Consider unifying in a future schema migration.
+const DISAMBIGUATION_QUESTIONS_BY_PAIR: Record<string, string[]> = {
+  'community_builder:collection_curator': ['purpose_vs_collection'],
+  'collection_curator:community_builder': ['purpose_vs_collection'],
+};
+
 // ============================================================================
 // TENSION RESOLVERS - One-liners for common profile contradictions
 // ============================================================================
@@ -2518,7 +2527,22 @@ serve(async (req) => {
                (Array.isArray(val) ? val.length > 0 : true);
       }));
       
-      if (disambiguationTraits && disambiguationTraits.length > 0) {
+      // Pair-specific question takes priority over trait-based selection
+      const pairKey = `${primaryArchetype.id}:${secondaryArchetype?.id ?? ''}`;
+      const reversedKey = `${secondaryArchetype?.id ?? ''}:${primaryArchetype.id}`;
+      const pairQuestions =
+        DISAMBIGUATION_QUESTIONS_BY_PAIR[pairKey] ??
+        DISAMBIGUATION_QUESTIONS_BY_PAIR[reversedKey];
+
+      if (pairQuestions && pairQuestions.length > 0) {
+        const filtered = pairQuestions.filter((q) => !answeredQuestionIds.has(q));
+        if (filtered.length > 0) {
+          nextQuestionIds = filtered.slice(0, 3);
+          console.log(`[TravelDNA V2] Pair-specific disambiguation:`, pairKey, nextQuestionIds);
+        }
+      }
+
+      if (!nextQuestionIds && disambiguationTraits && disambiguationTraits.length > 0) {
         // Sort disambiguation traits by fill rate (ascending - lowest first)
         const sortedTraits = [...disambiguationTraits].sort((a, b) => 
           (fillRates[a] || 0) - (fillRates[b] || 0)
