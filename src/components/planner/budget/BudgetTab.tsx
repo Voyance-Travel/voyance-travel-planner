@@ -346,6 +346,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     isOverBudget,
     warningLevel,
     isLoading,
+    isGenerating,
     formattedBudget,
     formattedRemaining,
     updateSettings,
