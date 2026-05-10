@@ -286,6 +286,31 @@ Your trips will be designed for two. Romance isn't just about luxury (though we'
     ]
   },
 
+  story_seeker: {
+    id: 'story_seeker',
+    name: 'The Story Seeker',
+    category: 'CONNECTOR',
+    revealParagraph: "You travel for the moments you couldn't have planned. The midnight swim, the local who invited you to dinner, the detour that became the whole trip — that's the stuff you came for.",
+    youProbably: [
+      "Say yes to invitations from strangers more often than you should",
+      "Skip the famous landmark for the local-only spot down the street",
+      "Get nervous when an itinerary looks too polished",
+      "Come home with the stories nobody else has",
+      "Remember moments, not checklists"
+    ],
+    itineraryWillInclude: [
+      "At least one wildcard, free-form local discovery block per trip",
+      "Real local hangouts over tourist-marketed venues",
+      "Loose afternoons that leave room for the unplanned",
+      "Just enough structure that you don't miss the essentials"
+    ],
+    protectFrom: [
+      "Over-scripted, locked-down hour-by-hour days",
+      "Tourist-trap experiences that won't make a story",
+      "Itineraries so full there's no room for a detour"
+    ]
+  },
+
   // ═══════════════════════════════════════════════════════════════════════════
   // ACHIEVERS
   // ═══════════════════════════════════════════════════════════════════════════
