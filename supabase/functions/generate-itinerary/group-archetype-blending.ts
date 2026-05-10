@@ -633,6 +633,9 @@ export { formatArchetypeName, getCompatibilityScore };
 
 // =============================================================================
 // TRAIT SCORE BLENDING - Shared algorithm for owner + companions
+// TODO(secondary-blend-v1.1): consider 0.3× secondary trait weighting once
+// deepening-day signal is validated. For now, secondaries influence day
+// assignment + prompt only; trait math stays owner-50/companions-50.
 // =============================================================================
 
 const BLEND_TRAIT_KEYS = ['pace', 'budget', 'social', 'planning', 'comfort', 'authenticity', 'adventure', 'cultural', 'transformation'];
