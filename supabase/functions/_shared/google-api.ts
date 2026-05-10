@@ -27,6 +27,7 @@ import { CostTracker, trackCost } from "./cost-tracker.ts";
 
 export type GoogleSku =
   | "places_text_search"
+  | "places_details"
   | "places_photo"
   | "geocoding"
   | "routes"
@@ -79,6 +80,9 @@ function recordSku(tracker: CostTracker, sku: GoogleSku, count = 1) {
   switch (sku) {
     case "places_text_search":
       tracker.recordGooglePlaces(count);
+      break;
+    case "places_details":
+      tracker.recordGooglePlaceDetails(count);
       break;
     case "places_photo":
       tracker.recordGooglePhotos(count);

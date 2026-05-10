@@ -6831,60 +6831,75 @@ export type Database = {
         Row: {
           action_type: string
           amadeus_calls: number
+          attempt_id: string
           cost_category: Database["public"]["Enums"]["cost_category"] | null
           created_at: string
           duration_ms: number | null
           estimated_cost_usd: number | null
           google_geocoding_calls: number
           google_photos_calls: number
+          google_place_details_calls: number
           google_places_calls: number
           google_routes_calls: number
           id: string
           input_tokens: number
+          is_cache_hit: boolean
           metadata: Json | null
           model: string
           output_tokens: number
           perplexity_calls: number
+          retry_of: string | null
+          token_source: string | null
           trip_id: string | null
           user_id: string | null
         }
         Insert: {
           action_type: string
           amadeus_calls?: number
+          attempt_id?: string
           cost_category?: Database["public"]["Enums"]["cost_category"] | null
           created_at?: string
           duration_ms?: number | null
           estimated_cost_usd?: number | null
           google_geocoding_calls?: number
           google_photos_calls?: number
+          google_place_details_calls?: number
           google_places_calls?: number
           google_routes_calls?: number
           id?: string
           input_tokens?: number
+          is_cache_hit?: boolean
           metadata?: Json | null
           model: string
           output_tokens?: number
           perplexity_calls?: number
+          retry_of?: string | null
+          token_source?: string | null
           trip_id?: string | null
           user_id?: string | null
         }
         Update: {
           action_type?: string
           amadeus_calls?: number
+          attempt_id?: string
           cost_category?: Database["public"]["Enums"]["cost_category"] | null
           created_at?: string
           duration_ms?: number | null
           estimated_cost_usd?: number | null
           google_geocoding_calls?: number
           google_photos_calls?: number
+          google_place_details_calls?: number
           google_places_calls?: number
           google_routes_calls?: number
           id?: string
           input_tokens?: number
+          is_cache_hit?: boolean
           metadata?: Json | null
           model?: string
           output_tokens?: number
           perplexity_calls?: number
+          retry_of?: string | null
+          token_source?: string | null
           trip_id?: string | null
           user_id?: string | null
         }

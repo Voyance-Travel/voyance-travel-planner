@@ -128,9 +128,15 @@ export const MODEL_PRICING = {
 // Google API pricing (per call) - March 2025 per-SKU free tiers
 // WARNING: At 60 trips × 40-60 calls/trip = 2,400-3,600 calls/period
 // FREE TIER STATUS: UNKNOWN - must check Google Cloud Console billing
+//
+// DASHBOARD QUERY GUIDANCE:
+//   Cost totals (exclude retries):     WHERE retry_of IS NULL
+//   Reliability (count all attempts):  no filter
+//   Cache ROI:                          WHERE is_cache_hit = true
+//   Token quality:                      GROUP BY token_source ('api'|'estimate'|'unknown')
 export const GOOGLE_API_PRICING = {
   places_text_search: { perCall: 0.032, freeTierMonthly: 5000 },  // Google Advanced SKU (was 0.017 — incorrect)
-  places_details: { perCall: 0.017, freeTierMonthly: 5000 },
+  places_details: { perCall: 0.017, freeTierMonthly: 5000 },      // Basic Place Details SKU
   geocoding: { perCall: 0.005, freeTierMonthly: 10000 },
   photos: { perCall: 0.007, freeTierMonthly: 10000 },
   routes: { perCall: 0.005, freeTierMonthly: 5000 },
@@ -183,23 +189,47 @@ export function estimateTokens(content: string): number {
 }
 
 /**
- * Extract token counts from Lovable AI Gateway response.
- * The gateway returns usage data in the response.
+ * Source of token counts:
+ *   'api'      — provider returned precise usage (prompt_tokens / promptTokenCount)
+ *   'estimate' — counts derived from content length heuristic
+ *   'unknown'  — no AI usage recorded on this row
  */
-export function extractTokenUsage(aiResponse: any): { inputTokens: number; outputTokens: number } {
+export type TokenSource = 'api' | 'estimate' | 'unknown';
+
+/**
+ * Extract token counts from an AI response, tagging whether the count came
+ * from the provider's API (`source: 'api'`) or was estimated (`source: 'estimate'`).
+ *
+ * Supports both OpenAI-style (`usage.prompt_tokens` / `usage.completion_tokens`)
+ * and Gemini-style (`usageMetadata.promptTokenCount` / `candidatesTokenCount`).
+ */
+export function extractTokenUsage(aiResponse: any): {
+  inputTokens: number;
+  outputTokens: number;
+  source: TokenSource;
+} {
   const usage = aiResponse?.usage;
-  if (usage) {
+  const meta = aiResponse?.usageMetadata;
+
+  const apiInput =
+    usage?.prompt_tokens ?? usage?.input_tokens ?? meta?.promptTokenCount ?? null;
+  const apiOutput =
+    usage?.completion_tokens ?? usage?.output_tokens ?? meta?.candidatesTokenCount ?? null;
+
+  if (apiInput !== null && apiOutput !== null) {
     return {
-      inputTokens: usage.prompt_tokens || 0,
-      outputTokens: usage.completion_tokens || 0,
+      inputTokens: apiInput || 0,
+      outputTokens: apiOutput || 0,
+      source: 'api',
     };
   }
-  
+
   // Fallback: estimate from content if usage not provided
   const content = aiResponse?.choices?.[0]?.message?.content || '';
   return {
     inputTokens: 0, // Can't estimate input without original prompt
     outputTokens: estimateTokens(content),
+    source: 'estimate',
   };
 }
 
@@ -216,6 +246,7 @@ export interface CostTrackingEntry {
   input_tokens: number;
   output_tokens: number;
   google_places_calls?: number;
+  google_place_details_calls?: number;
   google_geocoding_calls?: number;
   google_photos_calls?: number;
   google_routes_calls?: number;
@@ -224,6 +255,16 @@ export interface CostTrackingEntry {
   estimated_cost_usd?: number;
   duration_ms?: number;
   metadata?: Record<string, any>;
+  // Accuracy fields (Fix 1-3)
+  token_source?: TokenSource;
+  is_cache_hit?: boolean;
+  attempt_id?: string;
+  retry_of?: string | null;
+}
+
+export interface TrackerOptions {
+  /** If this attempt is a retry of a prior tracker, pass that tracker's attempt_id. */
+  retryOf?: string;
 }
 
 // =============================================================================
@@ -236,7 +277,11 @@ export class CostTracker {
   private entry: CostTrackingEntry;
    private category: CostCategory;
   
-  constructor(actionType: string, model: string = 'google/gemini-3-flash-preview') {
+  constructor(
+    actionType: string,
+    model: string = 'google/gemini-3-flash-preview',
+    opts: TrackerOptions = {},
+  ) {
     this.supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
@@ -252,14 +297,30 @@ export class CostTracker {
       input_tokens: 0,
       output_tokens: 0,
       google_places_calls: 0,
+      google_place_details_calls: 0,
       google_geocoding_calls: 0,
       google_photos_calls: 0,
       google_routes_calls: 0,
       amadeus_calls: 0,
       perplexity_calls: 0,
+      token_source: 'unknown',
+      is_cache_hit: false,
+      attempt_id: crypto.randomUUID(),
+      retry_of: opts.retryOf ?? null,
     };
   }
-  
+
+  /** Returns this tracker's attempt_id so a retry can reference it via { retryOf }. */
+  getAttemptId(): string {
+    return this.entry.attempt_id!;
+  }
+
+  /** Explicitly mark this row as a cache hit (cost = $0, work served from cache). */
+  markCacheHit(): this {
+    this.entry.is_cache_hit = true;
+    return this;
+  }
+
    /**
     * Override the auto-detected category
     */
@@ -293,7 +354,10 @@ export class CostTracker {
   }
   
   /**
-   * Record token usage from an AI response
+   * Record token usage from an AI response. Tracks whether the counts came
+   * from the provider's API (precise) or were estimated from content length.
+   * If any call on this tracker was estimated, `token_source` downgrades to
+   * 'estimate' for the row as a whole.
    */
   recordAiUsage(aiResponse: any, model?: string) {
     const usage = extractTokenUsage(aiResponse);
@@ -302,23 +366,40 @@ export class CostTracker {
     if (model) {
       this.entry.model = model;
     }
+    const prev = this.entry.token_source ?? 'unknown';
+    if (prev === 'unknown') {
+      this.entry.token_source = usage.source;
+    } else if (prev === 'api' && usage.source === 'estimate') {
+      this.entry.token_source = 'estimate';
+    }
     return this;
   }
   
   /**
-   * Manually record token counts (when usage not in response)
+   * Manually record token counts (when usage not in response).
+   * Manual counts are by definition not from the API → marks token_source as 'estimate'.
    */
   recordTokens(inputTokens: number, outputTokens: number) {
     this.entry.input_tokens += inputTokens;
     this.entry.output_tokens += outputTokens;
+    const prev = this.entry.token_source ?? 'unknown';
+    if (prev === 'unknown' || prev === 'api') {
+      this.entry.token_source = 'estimate';
+    }
     return this;
   }
   
   /**
-   * Record Google API calls
+   * Record Google API calls (Text Search — Advanced SKU).
    */
   recordGooglePlaces(count: number = 1) {
     this.entry.google_places_calls = (this.entry.google_places_calls || 0) + count;
+    return this;
+  }
+
+  /** Place Details (Basic SKU) — cheaper than Text Search. */
+  recordGooglePlaceDetails(count: number = 1) {
+    this.entry.google_place_details_calls = (this.entry.google_place_details_calls || 0) + count;
     return this;
   }
   
@@ -348,44 +429,52 @@ export class CostTracker {
   }
   
   /**
-   * Calculate estimated cost and save to database
+   * Calculate estimated cost and save to database.
+   *
+   * Cache-hit rows ($0 cost, no billable units) ARE persisted with
+   * `is_cache_hit = true` so the dashboard can compute cache ROI. Rows
+   * with no work AND no cache-hit signal (i.e. an opened-but-unused
+   * tracker) are still skipped to avoid noise.
    */
   async save(): Promise<void> {
     try {
       const durationMs = Date.now() - this.startTime;
-      
+
       // Calculate estimated cost
       const tokenCost = calculateTokenCost(
         this.entry.model,
         this.entry.input_tokens,
         this.entry.output_tokens
       );
-      
-      const googleCost = 
-        (this.entry.google_places_calls || 0) * 0.032 +  // Advanced SKU
-        (this.entry.google_geocoding_calls || 0) * 0.005 +
-        (this.entry.google_photos_calls || 0) * 0.007 +
-        (this.entry.google_routes_calls || 0) * 0.005;
-      
-      const otherCost = 
-        (this.entry.perplexity_calls || 0) * 0.005;
-      
+
+      const googleCost =
+        (this.entry.google_places_calls         || 0) * GOOGLE_API_PRICING.places_text_search.perCall +
+        (this.entry.google_place_details_calls  || 0) * GOOGLE_API_PRICING.places_details.perCall +
+        (this.entry.google_geocoding_calls      || 0) * GOOGLE_API_PRICING.geocoding.perCall +
+        (this.entry.google_photos_calls         || 0) * GOOGLE_API_PRICING.photos.perCall +
+        (this.entry.google_routes_calls         || 0) * GOOGLE_API_PRICING.routes.perCall;
+
+      const otherCost =
+        (this.entry.perplexity_calls || 0) * OTHER_API_PRICING.perplexity.perCall;
+
       const estimatedCost = tokenCost + googleCost + otherCost;
 
-      // Skip $0 rows: if no billable units were recorded, don't write a noise row.
-      // This dropped 850 rows/day (76% of destination_images traffic) on Apr 30.
       const billableUnits =
         (this.entry.input_tokens || 0) +
         (this.entry.output_tokens || 0) +
         (this.entry.google_places_calls || 0) +
+        (this.entry.google_place_details_calls || 0) +
         (this.entry.google_photos_calls || 0) +
         (this.entry.google_geocoding_calls || 0) +
         (this.entry.google_routes_calls || 0) +
         (this.entry.amadeus_calls || 0) +
         (this.entry.perplexity_calls || 0);
 
-      if (billableUnits === 0 && estimatedCost === 0) {
-        // Cache hit / fallback / no work performed — skip persisting.
+      const isCacheHit = !!this.entry.is_cache_hit || (billableUnits === 0 && estimatedCost === 0);
+
+      // Skip persistence only when nothing happened AND no cache-hit was claimed.
+      // Cache-hit rows MUST be persisted so the dashboard can show caching ROI.
+      if (billableUnits === 0 && estimatedCost === 0 && !this.entry.is_cache_hit) {
         return;
       }
 
@@ -393,17 +482,21 @@ export class CostTracker {
         .from('trip_cost_tracking')
         .insert({
           ...this.entry,
+          is_cache_hit: isCacheHit,
           estimated_cost_usd: estimatedCost,
           duration_ms: durationMs,
         });
-      
+
       if (error) {
         console.error('[cost-tracker] Failed to save:', error);
       } else {
-        console.log(`[cost-tracker] Saved: ${this.entry.action_type} | ` +
-          `tokens: ${this.entry.input_tokens}/${this.entry.output_tokens} | ` +
-          `cost: $${estimatedCost.toFixed(6)} | ` +
-          `duration: ${durationMs}ms`);
+        console.log(
+          `[cost-tracker] Saved: ${this.entry.action_type} | ` +
+          `tokens: ${this.entry.input_tokens}/${this.entry.output_tokens} (${this.entry.token_source}) | ` +
+          `cost: $${estimatedCost.toFixed(6)}${isCacheHit ? ' (CACHE HIT)' : ''} | ` +
+          `attempt: ${this.entry.attempt_id?.slice(0, 8)}${this.entry.retry_of ? ` (retry of ${this.entry.retry_of.slice(0, 8)})` : ''} | ` +
+          `duration: ${durationMs}ms`
+        );
       }
     } catch (err) {
       console.error('[cost-tracker] Error saving:', err);
@@ -416,10 +509,20 @@ export class CostTracker {
 // =============================================================================
 
 /**
- * Create a new cost tracker for an action
+ * Create a new cost tracker for an action.
+ *
+ * @param actionType - the action being tracked (e.g. 'generate-trip-day')
+ * @param model      - AI model identifier (defaults to gemini-3-flash-preview)
+ * @param opts.retryOf - if this attempt is a retry of a prior tracker, pass its `attempt_id`
+ *                       (returned by `tracker.getAttemptId()`); the dashboard then uses
+ *                       `WHERE retry_of IS NULL` to compute first-attempt cost totals.
  */
-export function trackCost(actionType: string, model?: string): CostTracker {
-  return new CostTracker(actionType, model);
+export function trackCost(
+  actionType: string,
+  model?: string,
+  opts: TrackerOptions = {},
+): CostTracker {
+  return new CostTracker(actionType, model, opts);
 }
 
 /**
