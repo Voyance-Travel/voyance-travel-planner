@@ -1,92 +1,62 @@
-## Context
+## Status check — most of this already shipped
 
-You suspect F&D shows ~$1,412 for 6 dining items on a 2-guest Florence trip because `cost_per_person × num_travelers` is being applied twice. I traced the full cost path and want to verify with DB evidence before changing code, because a code-only audit shows **single multiplication everywhere**.
+Tracing the request against the current code:
 
-## What I found in the code
+| Step | Where | Status |
+|---|---|---|
+| 1. Add `isGenerating` to `getBudgetSummary` | `src/services/tripBudgetService.ts:652-660`, type at line 133 | **Already done** — reads `trips.itinerary_status` and treats `queued / generating / partial` as in-progress. Cleaner than the proposed `expected_activity_count` heuristic because activity counts are a noisy proxy. |
+| 2. Pass through hook | `src/hooks/useTripBudget.ts:46, 92, 236` | **Already done** — exposed on the hook's return, and the summary query polls every 4s while generating so the indicator clears promptly when status flips. |
+| 3a. Indicator on the Budget tab | `src/components/planner/budget/BudgetTab.tsx:938-1015` | **Already done** — applies `opacity-70 animate-pulse` to the total + remaining, and shows a "Calculating…" label in place of the budget bar. |
+| 3b. Indicator on the prominent **Trip Total header** | `src/components/itinerary/EditorialItinerary.tsx` ROW 1 (lines ~6028–6126) | **Missing** — this is the $400 → $700 → $900 → $1,100 number the user is complaining about. |
 
-### Schema (single source of truth)
-`activity_costs.total_cost_usd` is a **stored generated column**:
-```sql
-total_cost_usd NUMERIC(10,2) GENERATED ALWAYS AS (cost_per_person_usd * num_travelers) STORED
+So the real gap is **only the Trip Total header in `EditorialItinerary.tsx`**. The Budget tab is fine; the home/itinerary header is not.
+
+## What's wrong with the header today
+
+`EditorialItinerary.tsx:6036` renders:
+```tsx
+<span className="text-2xl font-bold text-foreground truncate">
+  {formatCurrency(displayCost(totalCost), tripCurrency)}
+</span>
 ```
-(`supabase/migrations/20260301122724_*.sql:43`)
+…which reads from `financialSnapshot.tripTotalCents` (a separate snapshot built from `activity_costs`). It re-renders on every poll while activity_costs rows are still being inserted, but has no visual hint that the number is provisional. Same for the reconciliation chip strip at lines 6107-6124 ("Days (group) + Hotel + Flights + Reserve = Trip Total") — those numbers also climb silently.
 
-### All writers store per-person
-- `generation-core.ts:3341` — `cost_per_person_usd: Math.min(costPerPerson, 2000)` from `cost_reference` table (already per-person)
-- `action-repair-costs.ts:486` — `cost_per_person_usd: finalCost` (per-person from same reference)
-- `backfill-activity-costs/index.ts:301` — same pattern
-- `recordCommittedExpense` (`tripBudgetService.ts:714`) — splits `amountCents/100` into `cost_per_person_usd` with `num_travelers: 1` so the generated col equals the original
+## Plan — minimal scope, header-only
 
-### All readers multiply exactly once
-- `getBudgetLedger` (`tripBudgetService.ts:512`) — `Math.round(costPerPerson * numTravelers * 100)` — once
-- `canonicalCostRows.ts:103` — `(cost_per_person_usd || 0) * (num_travelers || 1) * 100` — once. This is the resolver behind both `usePayableItems` (Payments tab) and `useTripFinancialSnapshot` (trip total).
-- DB views (`v_trip_total`, `v_budget_by_category`, `v_payments_summary`) sum the generated `total_cost_usd` — also one multiplication
-- Existing regression test (`usePayableItems.test.ts:194-197`) explicitly asserts a 2-guest dining row stored `cost_per_person_usd: 15, num_travelers: 2` produces `$30`, not `$60`
-
-### So $1,412 / 6 items / 2 guests = $117 per person per meal
-This is on the high end but **plausible** in three real scenarios that don't involve double-multiplication:
-1. **Premium / luxury budget tier** — the cost reference returns `cost_high_usd`, often $90-$150/pp for Florence dining
-2. **Michelin / fine-dining floor** in repair (Florence has venues in `KNOWN_FINE_DINING_STARS` per memory) — applies a per-person floor
-3. **Bad legacy row** — an old AI write (before the per-person convention was enforced) stored a total in `cost_per_person_usd`. With `num_travelers=2` it would now display 2× too high.
-
-I can't tell which without seeing the actual rows.
-
-## Plan
-
-### Step 1 — Read the suspect Florence trip's rows (read-only)
-You provide the trip ID (or I can fetch the most recent Florence trip). Then run:
-
-```sql
-SELECT day_number, category, source, confidence,
-       cost_per_person_usd, num_travelers, total_cost_usd, notes
-FROM activity_costs
-WHERE trip_id = '<florence-trip-id>'
-  AND category = 'dining'
-ORDER BY day_number, created_at;
-```
-
-Decision matrix:
-- If `cost_per_person_usd` ≈ $50-$120 with `num_travelers = 2` → **no bug**, F&D total is correct for the tier. Fix is to challenge the cost-reference value, the budget tier, or a Michelin-floor mis-application — not the rollup.
-- If `cost_per_person_usd` ≈ $200+ with `num_travelers = 2` → **legacy double-store**. Fix below.
-- If any `num_travelers > 2` on a 2-guest trip → mis-set traveler count. One-shot UPDATE plus a write-time guard.
-
-### Step 2 — Add a DEV-mode parity assertion in `getBudgetLedger`
-Regardless of root cause, add the defensive check you proposed. It's cheap insurance and surfaces drift immediately on any future regression:
-
+### Step A — Source `isGenerating` in `EditorialItinerary`
+`useTripBudget` is already called on line 3333 for `settings`. Pull `isGenerating` off the same call:
 ```ts
-if (import.meta.env.DEV) {
-  const sumOfRows = liveCostRows.reduce(
-    (acc, r) => acc + Number(r.total_cost_usd || 0), 0
-  );
-  const sumOfPersonRows = liveCostRows.reduce(
-    (acc, r) => acc + (Number(r.cost_per_person_usd || 0) * (Number(r.num_travelers) || 1)),
-    0
-  );
-  if (Math.abs(sumOfRows - sumOfPersonRows) > 1) {
-    console.warn('[budget] cost mismatch', { sumOfRows, sumOfPersonRows });
-  }
-}
+const { settings: budgetSettings, isGenerating: isBudgetCalculating } =
+  useTripBudget({ tripId, totalDays: days.length, enabled: true });
 ```
+No new query, no extra round-trip. Single source of truth for "still calculating" already lives in the hook.
 
-(Note: this compares the DB generated column against the manual product. If they ever diverge, something is wrong with our data, not our math.)
+Edge case: when `budgetSettings === null` (user hasn't set a budget) the hook still returns `isGenerating` from the summary, so this works regardless of whether the user opened the Budget tab.
 
-### Step 3 — Add a one-shot diagnostic toast/log on Payments mount
-Same parity check at the canonical resolver level (`canonicalCostRows.ts`), so any user — not just one looking at devtools — surfaces the warning if a future regression slips in.
+### Step B — Visual indicator on Trip Total (Row 1)
+Wrap the existing total-and-tooltip block (line 6034-6056) so:
+- The total digits get `tabular-nums opacity-70 animate-pulse` while `isBudgetCalculating`
+- A small inline pill renders next to the number: *"Calculating…"* (uses `Loader2` from lucide with `animate-spin h-3 w-3`, `text-muted-foreground text-xs`). Identical pattern to the BudgetTab indicator so the two views feel consistent.
+- The `TripTotalDeltaIndicator` (the "+$340 just now" toast) is suppressed during calculation — those are noise, not real user-facing deltas. Pass `isGenerating` to it and have it render `null` when true. Avoids the surprise-swing label memory entry firing on every poll.
 
-### Step 4 — Conditional fix
-Only after Step 1's data:
-- **Case A (correct data, premium tier)**: no code change. Optionally tighten `cost_reference` premium values for Florence dining, or document in memory that $100+/pp Florence dinners are intentional at premium tier.
-- **Case B (legacy double-stored rows)**: write a migration that halves `cost_per_person_usd` only on rows where `num_travelers > 1` AND `source IN ('legacy', 'fallback')` AND `created_at < '<cutoff>'`, and add a write-time CHECK trigger to reject any single-row insert where `cost_per_person_usd > 500` without an explicit `[high-confidence override]` notes tag.
-- **Case C (mis-set num_travelers)**: one-shot UPDATE setting `num_travelers` to the trip's true traveler count; add a backfill safeguard in `generation-core.ts` to read travelers from `trips.travelers` rather than the `context` object.
+### Step C — Soft the reconciliation chip strip (Row 1, lines 6087-6125)
+Apply `opacity-60` to the whole `<div>` inside the IIFE while calculating, so the "Days (group) + Hotel + Flights = Trip Total" chips visibly de-emphasise. Don't hide them — users still want to see the running breakdown.
+
+### Step D — `aria-live` and a11y
+Wrap the total in `aria-live="polite"` and `aria-busy={isBudgetCalculating}`. Screen readers currently re-announce the number on every poll; this lets AT decide.
+
+### Step E — Don't touch
+- `financialSnapshot.tripTotalCents` math is unchanged.
+- BudgetTab is unchanged.
+- `getBudgetSummary` is unchanged. The plan's proposed `expected_activity_count` heuristic is **rejected** in favour of the existing `itinerary_status` check — counts can lag by minutes when post-gen passes are still writing cost rows, which would leave the indicator stuck on after the trip is actually done.
 
 ## Verify
+- Start a trip generation → Trip Total in the header pulses + "Calculating…" pill, reconciliation chips dim, no delta toasts fire.
+- Generation completes → pill disappears within one 4s poll, total snaps to crisp.
+- Reload page mid-generation → indicator shows correctly because `itinerary_status` is fetched server-side.
+- Manual mode (no generation) → pill never appears (confirmed: `itinerary_status` is `'ready'` by `isManualMode`).
+- BudgetTab indicator behaves exactly as before.
 
-- `getBudgetLedger` parity check in console must stay silent on a fresh Florence trip.
-- Generate a 2-guest Florence trip:
-  - Open Payments tab; F&D total should fall in the band justified by the rows in Step 1.
-  - Sum of (F&D + Activities + Transit + Hotel + Flight + Misc) must equal trip total within $1.
-- Re-run the existing `usePayableItems.test.ts` ($30, not $60) regression to confirm no breakage.
+## Risk
 
-## Open question for you
-
-Do you have the Florence trip ID handy? I need it for Step 1 — without it I'd be patching speculatively, and the wrong fix here will silently halve correct premium-tier prices for everyone.
+Low. Touching one component, one new boolean, no math changes. The fact that `isGenerating` is already wired through means we're just consuming an existing signal.

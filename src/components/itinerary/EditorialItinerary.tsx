@@ -3330,7 +3330,7 @@ export function EditorialItinerary({
   const { guestEditMode, isPropose, setGuestEditMode, isUpdating: isUpdatingEditMode } = useGuestEditMode(tripId);
   
   // Get budget settings to pass limit to PaymentsTab
-  const { settings: budgetSettings } = useTripBudget({ tripId, totalDays: days.length, enabled: true });
+  const { settings: budgetSettings, isGenerating: isBudgetCalculating } = useTripBudget({ tripId, totalDays: days.length, enabled: true });
   
   // Manual builder overrides preview mode — user gets full editing without AI enrichment
   const effectiveIsPreview = isPreview && !isManualMode;
@@ -6031,9 +6031,25 @@ export function EditorialItinerary({
               {/* ROW 1: Trip Total + Currency Toggle + Meta */}
               <div className="px-4 sm:px-6 py-4 border-b border-border/50 overflow-hidden">
                 <div className="flex items-center justify-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0" aria-live="polite" aria-busy={isBudgetCalculating}>
                     <span className="text-sm text-muted-foreground shrink-0">Trip Total</span>
-                    <span className="text-2xl font-bold text-foreground truncate">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
+                    <span
+                      className={cn(
+                        "text-2xl font-bold text-foreground truncate tabular-nums",
+                        isBudgetCalculating && "opacity-70 animate-pulse"
+                      )}
+                    >
+                      {formatCurrency(displayCost(totalCost), tripCurrency)}
+                    </span>
+                    {isBudgetCalculating && (
+                      <span
+                        className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                        title="Final trip total may differ — itinerary still generating"
+                      >
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Calculating…
+                      </span>
+                    )}
                     {tripCurrency !== 'USD' && rateDisclosure(tripCurrency) && (
                       <Tooltip delayDuration={200}>
                         <TooltipTrigger asChild>
@@ -6050,10 +6066,12 @@ export function EditorialItinerary({
                         </TooltipContent>
                       </Tooltip>
                     )}
-                    <TripTotalDeltaIndicator
-                      delta={financialSnapshot.lastDelta}
-                      onDismiss={financialSnapshot.acknowledgeDelta}
-                    />
+                    {!isBudgetCalculating && (
+                      <TripTotalDeltaIndicator
+                        delta={financialSnapshot.lastDelta}
+                        onDismiss={financialSnapshot.acknowledgeDelta}
+                      />
+                    )}
                   </div>
                   {localCurrency !== 'USD' && (
                     <Tooltip delayDuration={200}>
@@ -6104,7 +6122,7 @@ export function EditorialItinerary({
                   );
                   return (
                     <>
-                      <div className="flex items-center gap-x-2 gap-y-1 mt-1.5 text-xs text-muted-foreground flex-wrap justify-center">
+                      <div className={cn("flex items-center gap-x-2 gap-y-1 mt-1.5 text-xs text-muted-foreground flex-wrap justify-center", isBudgetCalculating && "opacity-60")}>
                         <Chip label="Days (group)" value={daysGroupUsd} />
                         {hotelCost > 0 && (<><Sep char="+" /><Chip label="Hotel" value={hotelCost} /></>)}
                         {flightCost > 0 && (<><Sep char="+" /><Chip label="Flights" value={flightCost} /></>)}
