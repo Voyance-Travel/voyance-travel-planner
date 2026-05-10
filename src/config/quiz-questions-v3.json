@@ -1437,7 +1437,7 @@
       "category": "EXPLORER",
       "required": {
         "cultural_depth": { "min": 0.7 },
-        "learning_focus": { "min": 0.5 }
+        "learning_focus": { "min": 0.5, "max": 0.7 }
       },
       "boosters": {
         "cultural_depth": 1.5,
@@ -1448,7 +1448,8 @@
       "penalties": {
         "bucket_list": { "above": 0.7, "weight": -0.8 },
         "pace": { "above": 0.7, "weight": -0.5 },
-        "status_seeking": { "above": 0.6, "weight": -0.6 }
+        "status_seeking": { "above": 0.6, "weight": -0.6 },
+        "learning_focus": { "above": 0.8, "weight": -1.5 }
       }
     },
     "urban_nomad": {
