@@ -1710,36 +1710,35 @@ async function fetchImageTiered(
 
     // If every candidate failed the basic gate, fall through to later tiers
     // (Wikimedia / AI fallback / category placeholder). Never cache garbage.
-    if (!bestImage) {
-      console.log(`[quality-gate] all ${candidates.length} candidates rejected for "${cleanName}" — falling through`);
-      // Continue to Tier 5+ below. Treat as if we had no candidates.
-    }
+    if (bestImage) {
+      // Persist external image URLs into our own storage when possible.
+      const persistentBestImage = await ensurePersistentStorageUrl(
+        bestImage,
+        entityType,
+        venueName,
+        destination
+      );
 
-    // Persist external image URLs into our own storage when possible.
-    const persistentBestImage = await ensurePersistentStorageUrl(
-      bestImage,
-      entityType,
-      venueName,
-      destination
-    );
+      // Cache the result with quality score — keyed on cleanName so reads hit.
+      // Also alias under the raw venueName so legacy lookups continue to hit.
+      await cacheImage(supabase, entityType, cleanName, destination, persistentBestImage, qualityScore);
+      if (cleanName !== venueName) {
+        await cacheImage(supabase, entityType, venueName, destination, persistentBestImage, qualityScore);
+      }
 
-    // Cache the result with quality score — keyed on cleanName so reads hit.
-    // Also alias under the raw venueName so legacy lookups continue to hit.
-    await cacheImage(supabase, entityType, cleanName, destination, persistentBestImage, qualityScore);
-    if (cleanName !== venueName) {
-      await cacheImage(supabase, entityType, venueName, destination, persistentBestImage, qualityScore);
-    }
+      // Store in shared venue cache for cross-function reuse
+      if (bestImage.placeId) {
+        cacheVenueResult(cleanName, destination, {
+          placeId: bestImage.placeId,
+          name: cleanName,
+          photoUrl: persistentBestImage.url,
+        }).catch(() => {});
+      }
 
-    // Store in shared venue cache for cross-function reuse
-    if (bestImage.placeId) {
-      cacheVenueResult(cleanName, destination, {
-        placeId: bestImage.placeId,
-        name: cleanName,
-        photoUrl: persistentBestImage.url,
-      }).catch(() => {});
+      return persistentBestImage;
     }
-    
-    return persistentBestImage;
+    // bestImage is null → all candidates failed the basic gate.
+    // Fall through to negative-cache + category fallback below; never persist garbage.
   }
 
   // ── NEGATIVE CACHE: Remember that this venue has no results ──────────────
