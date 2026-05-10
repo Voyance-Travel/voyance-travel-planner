@@ -591,7 +591,7 @@ async function executePacingAction(
   let updatedActivities = [...day.activities];
 
   if (adjustment === 'more_relaxed') {
-    const unlockedIdx = updatedActivities.findIndex(a => !a.isLocked);
+    const unlockedIdx = updatedActivities.findIndex(a => !isActivityLocked(a));
     if (unlockedIdx !== -1 && updatedActivities.length > 2) {
       updatedActivities.splice(unlockedIdx, 1);
     }
