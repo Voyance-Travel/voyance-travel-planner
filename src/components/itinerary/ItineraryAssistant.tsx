@@ -371,13 +371,45 @@ export function ItineraryAssistant({
 
     // Show immediate feedback that we're working on it
     toast.loading('Applying changes...', { id: actionId, description: 'This may take a few seconds' });
-    
+
+    // Hoisted so the catch/else paths can issue a refund if execution fails
+    let spendContext: { idempotencyKey?: string; pendingChargeId?: string | null } | undefined;
+    const creditAction = action.type === 'suggest_activity_swap' ? 'SWAP_ACTIVITY'
+      : action.type === 'rewrite_day' ? 'REGENERATE_DAY'
+      : action.type === 'regenerate_day' ? 'REGENERATE_DAY'
+      : null;
+    const refundOriginalAction =
+      creditAction === 'SWAP_ACTIVITY' ? 'swap_activity'
+      : creditAction === 'REGENERATE_DAY' ? 'regenerate_day'
+      : null;
+    const refundOnFailure = async (reason: string, errorMessage?: string) => {
+      if (!spendContext?.idempotencyKey || !refundOriginalAction) return;
+      try {
+        const { data, error: refundErr } = await supabase.functions.invoke('spend-credits', {
+          body: {
+            action: 'REFUND',
+            tripId,
+            metadata: {
+              originalAction: refundOriginalAction,
+              pendingChargeId: spendContext.pendingChargeId ?? undefined,
+              reason,
+              ...(errorMessage ? { errorMessage } : {}),
+            },
+            originalIdempotencyKey: spendContext.idempotencyKey,
+          },
+        });
+        if (refundErr) {
+          console.error('[ActionExecutor] Refund invoke error:', refundErr);
+        } else {
+          console.log('[ActionExecutor] Refund issued:', data);
+        }
+      } catch (err) {
+        console.error('[ActionExecutor] Refund failed:', err);
+      }
+    };
+
     try {
       // Spend credits for actions that cost credits BEFORE executing
-      const creditAction = action.type === 'suggest_activity_swap' ? 'SWAP_ACTIVITY'
-        : action.type === 'rewrite_day' ? 'REGENERATE_DAY'
-        : action.type === 'regenerate_day' ? 'REGENERATE_DAY'
-        : null;
 
       let spendContext: { idempotencyKey?: string; pendingChargeId?: string | null } | undefined;
 
