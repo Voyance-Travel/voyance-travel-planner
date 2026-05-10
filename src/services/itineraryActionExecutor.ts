@@ -378,9 +378,13 @@ async function executeRewriteDayAction(
   updatedDays[dayIndex] = mergedDay;
   await updateTripItinerary(tripId, updatedDays);
 
+  const restoredSuffix = lockGuard.violations > 0
+    ? ` (restored ${lockGuard.violations} locked item${lockGuard.violations === 1 ? '' : 's'} the AI tried to change)`
+    : '';
+
   return {
     success: true,
-    message: reason || `Rewrote Day ${target_day} based on your instructions`,
+    message: (reason || `Rewrote Day ${target_day} based on your instructions`) + restoredSuffix,
     updatedDays,
     diff,
     costDelta,
