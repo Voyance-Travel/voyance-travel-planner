@@ -935,13 +935,21 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-baseline gap-2">
+            <div className={cn("flex items-baseline gap-2 flex-wrap", isGenerating && "opacity-70 animate-pulse")}>
               <span className={cn(
                 "text-2xl font-bold",
-                snapshot.tripTotalCents > (settings?.budget_total_cents || Infinity) ? "text-destructive" : "text-foreground"
+                !isGenerating && snapshot.tripTotalCents > (settings?.budget_total_cents || Infinity) ? "text-destructive" : "text-foreground"
               )}>
                 {formatCurrency(snapshot.tripTotalCents)}
               </span>
+              {isGenerating && (
+                <span
+                  className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                  aria-live="polite"
+                >
+                  Calculating…
+                </span>
+              )}
               {(settings?.budget_currency || 'USD') !== 'USD' && rateDisclosure(settings?.budget_currency || 'USD') && (
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
@@ -960,21 +968,27 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                   </Tooltip>
                 </TooltipProvider>
               )}
-              {(settings?.budget_total_cents || 0) > 0 && (
+              {!isGenerating && (settings?.budget_total_cents || 0) > 0 && (
                 <span className="text-xs text-muted-foreground">
                   ({Math.round((snapshot.tripTotalCents / (settings?.budget_total_cents || 1)) * 100)}%)
                 </span>
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Estimated total for {travelers} traveler{travelers !== 1 ? 's' : ''}
-              {travelers > 1 && snapshot.tripTotalCents > 0 && (
-                <> · {formatCurrency(Math.floor(snapshot.tripTotalCents / travelers / 100) * 100)}/person</>
+              {isGenerating ? (
+                <>Estimating costs as your itinerary is generated…</>
+              ) : (
+                <>
+                  Estimated total for {travelers} traveler{travelers !== 1 ? 's' : ''}
+                  {travelers > 1 && snapshot.tripTotalCents > 0 && (
+                    <> · {formatCurrency(Math.floor(snapshot.tripTotalCents / travelers / 100) * 100)}/person</>
+                  )}
+                </>
               )}
             </p>
-            <Progress 
-              value={Math.min((settings?.budget_total_cents || 0) > 0 ? (snapshot.tripTotalCents / (settings!.budget_total_cents || 1)) * 100 : 0, 100)} 
-              className="h-2 mt-3"
+            <Progress
+              value={Math.min((settings?.budget_total_cents || 0) > 0 ? (snapshot.tripTotalCents / (settings!.budget_total_cents || 1)) * 100 : 0, 100)}
+              className={cn("h-2 mt-3", isGenerating && "opacity-50")}
             />
             {snapshot.paidCents > 0 && (
               <p className="text-xs text-muted-foreground mt-2">
