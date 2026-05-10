@@ -1,91 +1,90 @@
 ## Goal
 
-When the matcher returns Purpose Voyager (slug `community_builder`) and Passport Collector (slug `collection_curator`) as the top two archetypes with a close score gap, ask a tailored disambiguation question instead of a generic trait-based one.
+After the new matcher gates ship, every existing `travel_dna_profiles` row should re-run through the canonical TS matcher exactly once so primary/secondary archetypes reflect the new logic. We avoid building a duplicate Deno-side matcher (memory: *"TS `matchArchetypes` is the only archetype matcher — never port to SQL"*) and we avoid surprising inactive users with silent assignment changes.
+
+**Approach: soft rollout via a one-shot per-user recalc on next visit, plus an optional admin sweep for proactive convergence.**
+
+The user's spec edge function (`supabase/functions/recalculate-all-dna/index.ts`) is **not** built, because `recalculateArchetype` and `recalculateDNAFromPreferences` import frontend-only modules (`@/integrations/supabase/client`, `archetype-matcher.ts`) and porting them to `_shared/` would create a second matcher.
 
 ## Files & changes
 
-### 1. `supabase/functions/calculate-travel-dna/index.ts`
+### 1. Migration — add a recalc flag
 
-**A. Add pair-specific question map** (just below `DISAMBIGUATION_QUESTIONS_BY_TRAIT`, ~line 1103):
+`supabase/migrations/<ts>_dna_recalc_flag.sql`:
 
-```ts
-// TODO: archetype slug `community_builder` displays as "Purpose Voyager" —
-// confusion source. Consider unifying in a future schema migration.
-const DISAMBIGUATION_QUESTIONS_BY_PAIR: Record<string, string[]> = {
-  'community_builder:collection_curator': ['purpose_vs_collection'],
-  'collection_curator:community_builder': ['purpose_vs_collection'],
-};
+```sql
+ALTER TABLE public.travel_dna_profiles
+  ADD COLUMN IF NOT EXISTS dna_recalc_needed_at TIMESTAMPTZ;
+
+COMMENT ON COLUMN public.travel_dna_profiles.dna_recalc_needed_at IS
+  'When non-null, client should re-run recalculateArchetype() on next load and clear this. Set by gate-change rollouts.';
+
+-- Mark every existing profile for recalc (one-shot)
+UPDATE public.travel_dna_profiles
+SET dna_recalc_needed_at = NOW()
+WHERE dna_recalc_needed_at IS NULL;
 ```
 
-**B. Pair-first selection** in the disambiguation block (~line 2521, before the trait-based loop):
+Existing RLS already covers the column (user-scoped policies on `user_id`).
+
+### 2. Client trigger — `src/services/engines/travelDNA/recalculateArchetype.ts`
+
+Extend with a thin wrapper that reads the flag, recalcs, and clears it:
 
 ```ts
-const pairKey = `${primaryArchetype.id}:${secondaryArchetype?.id ?? ''}`;
-const reversedKey = `${secondaryArchetype?.id ?? ''}:${primaryArchetype.id}`;
-const pairQuestions =
-  DISAMBIGUATION_QUESTIONS_BY_PAIR[pairKey] ??
-  DISAMBIGUATION_QUESTIONS_BY_PAIR[reversedKey];
+export async function recalculateIfNeeded(userId: string): Promise<RecalculateResult | { success: true; skipped: true }> {
+  const { data } = await supabase
+    .from("travel_dna_profiles")
+    .select("dna_recalc_needed_at, primary_archetype_name")
+    .eq("user_id", userId)
+    .maybeSingle();
 
-if (pairQuestions && pairQuestions.length > 0) {
-  // Filter against answered + valid IDs the same way the trait branch does
-  const filtered = pairQuestions.filter(
-    (q) => !answeredQuestionIds.has(q),
-  );
-  if (filtered.length > 0) {
-    nextQuestionIds = filtered.slice(0, 3);
-    console.log(`[TravelDNA V2] Pair-specific disambiguation:`, pairKey, nextQuestionIds);
+  if (!data?.dna_recalc_needed_at) return { success: true, skipped: true };
+
+  const before = data.primary_archetype_name;
+  const result = await recalculateArchetype(userId);
+
+  await supabase
+    .from("travel_dna_profiles")
+    .update({ dna_recalc_needed_at: null })
+    .eq("user_id", userId);
+
+  if (result.success && result.primary !== before) {
+    console.log(`[recalculateIfNeeded] shift user=${userId} ${before} → ${result.primary}`);
   }
-}
-
-// Existing trait-based fallback only runs when nextQuestionIds is still unset
-if (!nextQuestionIds && disambiguationTraits && disambiguationTraits.length > 0) {
-  // ... existing logic unchanged ...
+  return result;
 }
 ```
 
-Note: `purpose_vs_collection` is **not** a quiz ID — it's a MicroDisambiguation question ID. Skip the `VALID_QUIZ_QUESTION_IDS` check for pair questions (they're served by the modal, not the quiz).
+### 3. Wire the trigger on app entry
 
-### 2. `src/components/profile/MicroDisambiguation.tsx`
+In `src/App.tsx` (or `useAuthSession`/main authenticated layout — wherever the user-bound effect for "load profile on auth" lives), call `recalculateIfNeeded(userId)` once when a session is detected. Fire-and-forget (never blocks UI). Show a one-time `sonner` toast on shift: *"Your Travel DNA has been refined."*
 
-Append a new entry to the `DISAMBIGUATION_QUESTIONS` array (~line 149), matching the existing schema (`question`/`label`/`iconName`, deltas keyed to the 8 traits):
+### 4. Optional: admin sweep page (skippable for now)
 
-```ts
-{
-  id: 'purpose_vs_collection',
-  question: 'When you get back from a trip, what matters more?',
-  subtext: 'Helps us tell apart two close-fitting archetypes.',
-  options: [
-    {
-      id: 'recommend_authority',
-      label: 'Being able to recommend the best spots to everyone who asks',
-      iconName: 'Users',
-      // Purpose Voyager (community_builder) leans social + transformation
-      deltas: { social: 4, transformation: 3 },
-    },
-    {
-      id: 'check_off_destination',
-      label: 'Crossing another destination off your personal list',
-      iconName: 'MapPin',
-      // Passport Collector (collection_curator) leans adventure + low transformation
-      deltas: { adventure: 3, transformation: -2 },
-    },
-  ],
-},
-```
+`src/pages/admin/DNARecalcSweep.tsx` — admin-only route that:
+- Pages through `travel_dna_profiles` where `dna_recalc_needed_at IS NOT NULL` (limit 200/page).
+- For each row, calls `recalculateArchetype(userId)`, clears the flag, accumulates shift counts.
+- Renders running totals: `total | recalculated | unchanged | failed | top 20 shifts`.
 
-Trait mapping rationale (since spec deltas `experience_accumulation`, `social_sharing`, `collection_drive`, `bucket_list` aren't in the 8-trait system):
-- `recommend_authority` → `social:+4` (sharing/authority is social) + `transformation:+3` (purpose-driven travel)
-- `check_off_destination` → `adventure:+3` (novelty/quantity of places) + `transformation:-2` (away from purpose)
+Gated by existing admin role check (`has_role(auth.uid(), 'admin')`). Lets you converge inactive users on demand without an edge function.
+
+## Why not the spec's edge function
+
+- `recalculateDNAFromPreferences` (in `src/utils/quizMapping.ts`) and `recalculateArchetype` (in `src/services/engines/travelDNA/`) both import `@/integrations/supabase/client` and `archetype-matcher.ts`. Neither resolves under Deno without a port.
+- The matcher contains tension resolvers, forbidden pairs, category penalty, and (newly added) pair-specific disambiguation logic — duplicating it server-side guarantees drift on the next gate change.
+- Soft rollout converges on every active user within days and gives you the same shift telemetry via `[recalculateIfNeeded] shift …` logs in browser/edge logs.
 
 ## Verification
 
-- `grep -c "DISAMBIGUATION_QUESTIONS_BY_PAIR" supabase/functions/calculate-travel-dna/index.ts` ≥ 2
-- `grep -n "purpose_vs_collection" src/components/profile/MicroDisambiguation.tsx` returns 1 hit
-- Profile that scores `community_builder` primary + `collection_curator` close-second: edge function logs `[TravelDNA V2] Pair-specific disambiguation: community_builder:collection_curator`
-- Modal shows the new question (not pace/social/etc. trait questions)
-- Answering "recommend authority" → re-recalculation tilts toward Purpose Voyager; "check off destination" tilts toward Passport Collector
+- After migration: `SELECT count(*) FROM travel_dna_profiles WHERE dna_recalc_needed_at IS NOT NULL;` equals previous total profile count.
+- Sign in with a known account → check console: `[recalculateArchetype]` runs once; subsequent loads are silent (`skipped:true`).
+- Spot-check 3–5 users: row's `primary_archetype_name` updated and `dna_recalc_needed_at IS NULL` post-visit.
+- After ~2 weeks (or via admin sweep): `SELECT count(*)` of remaining flagged rows ≈ inactive-user count.
+- Zero rows with `primary_archetype_name IS NULL` (the matcher always returns a primary; if it fails it leaves the existing value untouched).
 
 ## Out of scope
 
-- Renaming the `community_builder` slug to `purpose_voyager` (separate large migration).
-- Adding more pair-specific questions for other archetype pairs.
+- Deno-side matcher port.
+- Forced bulk recalc for inactive users (admin sweep covers this if needed).
+- Notification email about the shift (toast only).
