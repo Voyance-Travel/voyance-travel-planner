@@ -24,7 +24,7 @@ import { getTripDurationConfig, calculateDayEnergies, buildTripDurationPrompt, a
 import { buildReservationUrgencyPrompt } from './reservation-urgency.ts';
 import { buildDailyEstimatesPrompt } from './daily-estimates.ts';
 import { blendGroupArchetypes, type TravelerArchetype } from './group-archetype-blending.ts';
-import { getUserPreferences } from './preference-context.ts';
+import { getUserPreferences, getBehavioralEnrichment } from './preference-context.ts';
 import {
   deriveForcedSlots,
   deriveScheduleConstraints,
@@ -487,7 +487,28 @@ export async function handleGenerateTrip(
         console.warn('[generate-trip] Activity feedback signals failed (non-blocking):', afErr);
       }
 
-      
+      // 10c. Behavioral enrichment (implicit signals: locks, removals, time edits from user_enrichment)
+      try {
+        const enrichment = await getBehavioralEnrichment(supabase, userId);
+        if (enrichment) {
+          const { likedCategories = [], avoidedCategories = [], timePrefs = [] } = enrichment;
+          if (likedCategories.length > 0 || avoidedCategories.length > 0 || timePrefs.length > 0) {
+            enrichmentContext.behavioralEnrichment = enrichment;
+            const timeStr = timePrefs.length
+              ? timePrefs.map((t: { category: string; slot: string }) => `${t.category}→${t.slot}`).join(', ')
+              : 'no clear pattern yet';
+            enrichmentContext.behavioralEnrichmentPrompt =
+              `\n## 🧭 IMPLICIT BEHAVIORAL SIGNALS (from past trip-planning behavior)\n` +
+              `- Categories user gravitates toward (locks / repeat picks): ${likedCategories.join(', ') || 'no clear pattern yet'}\n` +
+              `- Categories user has removed across past trips (avoid unless explicitly requested): ${avoidedCategories.join(', ') || 'no clear pattern yet'}\n` +
+              `- Preferred time-of-day patterns: ${timeStr}\n`;
+            console.log(`[generate-trip] Behavioral enrichment: liked=[${likedCategories.join('|')}] avoided=[${avoidedCategories.join('|')}] timePrefs=${timePrefs.length}`);
+          }
+        }
+      } catch (beErr) {
+        console.warn('[generate-trip] Behavioral enrichment failed (non-blocking):', beErr);
+      }
+
       // 11. Recently used activities for variety
       try {
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
