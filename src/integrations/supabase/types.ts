@@ -5842,6 +5842,36 @@ export type Database = {
           },
         ]
       }
+      trait_drift_log: {
+        Row: {
+          after_scores: Json | null
+          before_scores: Json | null
+          deltas: Json
+          id: string
+          ran_at: string
+          sample_size: number
+          user_id: string
+        }
+        Insert: {
+          after_scores?: Json | null
+          before_scores?: Json | null
+          deltas: Json
+          id?: string
+          ran_at?: string
+          sample_size: number
+          user_id: string
+        }
+        Update: {
+          after_scores?: Json | null
+          before_scores?: Json | null
+          deltas?: Json
+          id?: string
+          ran_at?: string
+          sample_size?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       travel_dna_history: {
         Row: {
           created_at: string | null
