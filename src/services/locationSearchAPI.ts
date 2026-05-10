@@ -157,11 +157,24 @@ export async function searchAirports(query: string, limit = 20): Promise<Airport
     }));
   }
   
-  // Otherwise, regular search
+  // Otherwise, regular search.
+  // Reject queries shorter than 2 chars — single-letter wildcards match
+  // thousands of airports and force a full table scan.
+  const trimmed = (query ?? '').trim();
+  if (trimmed.length < 2) {
+    return [];
+  }
+
+  // 2-char queries: prefix-match the code column only (uses the index on `code`).
+  // 3+ char queries: also match name/city via contains.
+  const filter = trimmed.length === 2
+    ? `code.ilike.${trimmed}%`
+    : `code.ilike.${trimmed}%,name.ilike.%${trimmed}%,city.ilike.%${trimmed}%`;
+
   const { data, error } = await supabase
     .from('airports')
     .select('*')
-    .or(`code.ilike.%${query}%,name.ilike.%${query}%,city.ilike.%${query}%`)
+    .or(filter)
     .limit(limit);
 
   if (error) {
