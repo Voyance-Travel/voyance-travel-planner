@@ -127,8 +127,8 @@ RULES:
         const advisoryData = JSON.parse(jsonMatch[0]);
         const result = { data: advisoryData, citations: data.citations };
         
-        // Cache for 7 days
-        await setCache(cacheKey, 'travel_advisory', result, TTL.SEVEN_DAYS);
+        // Cache for 14 days (advisories change monthly at most)
+        await setCache(cacheKey, 'travel_advisory', result, TTL.FOURTEEN_DAYS);
         
         return new Response(
           JSON.stringify({ success: true, ...result }),

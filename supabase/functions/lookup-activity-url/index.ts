@@ -105,8 +105,8 @@ RULES:
       url = content.replace(/[.,;:!?\s]+$/, '');
     }
 
-    // Cache result (even null) for 30 days
-    await setCache(cacheKey, 'activity_url', { url }, TTL.THIRTY_DAYS);
+    // Cache result (even null) for 90 days (booking URLs are stable)
+    await setCache(cacheKey, 'activity_url', { url }, TTL.NINETY_DAYS);
 
     return new Response(
       JSON.stringify({ success: true, url }),

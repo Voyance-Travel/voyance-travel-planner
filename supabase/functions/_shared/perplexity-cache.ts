@@ -80,6 +80,7 @@ export const TTL = {
   SIX_HOURS:    6 * 60 * 60 * 1000,
   ONE_DAY:     24 * 60 * 60 * 1000,
   SEVEN_DAYS:   7 * 24 * 60 * 60 * 1000,
+  FOURTEEN_DAYS: 14 * 24 * 60 * 60 * 1000,
   THIRTY_DAYS: 30 * 24 * 60 * 60 * 1000,
   NINETY_DAYS: 90 * 24 * 60 * 60 * 1000,
 } as const;
