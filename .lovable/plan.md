@@ -1,72 +1,87 @@
 ## Problem
 
-Some food cards render with no "why this place" copy. The render path is fine — `EditorialItinerary.tsx:11202` and `LiveActivityCard.tsx:175` both render `sanitizeActivityText(activity.description)` if truthy. The blank cards have an empty/missing `description` upstream.
+Day 1 (and any non-departure day) sometimes terminates without a "Return to Hotel" anchor, while other days end with one. UX inconsistency.
 
-## Trace
+## Trace — two leak paths
 
-1. **LLM schema (root cause).** `generation-core.ts:1350` declares `required: ["id","title","startTime","endTime","category","location","cost","bookingRequired","personalization","tips","crowdLevel","isHiddenGem","hasTimingHack"]` — `description` is **not required**. The model legitimately omits it on busy generations, especially on meal cards where the venue+address feel "self-explanatory" to it.
+**Where the bookend lives:** `universal-quality-pass.ts::runStep8` is the canonical injector. Called from Step 8 in `universalQualityPass` for every non-departure day (`dayIndex < totalDays - 1`).
 
-2. **Verified-venue enrichment.** `verified_venues` table has no `description` column (only name/address/coords/place_id/etc). When a dining card's venue is swapped to a verified row, no description is filled in — whatever the LLM emitted survives, including empty.
+### Leak 1 — `runStep8` 17:00 floor too strict
+`runStep8` (lines 79–129) only injects when last activity ends **17:00–23:59**:
 
-3. **Inline fallback path is healthy.** `applyFallbackToActivity` (fix-placeholders.ts:451) does write `fallback.description`, and the inline DBs have descriptions for every entry. So the gap is narrowly: LLM-generated dining cards (not fallback-replaced) where the model skipped the optional `description` field.
+```ts
+if (h >= 17 && h <= 23) startTime24 = ...
+if (!startTime24) {
+  console.warn(`[QUALITY] Skipped hotel return injection on Day ${...}: last activity ends at "${candidate}" (need 17:00–23:59)`);
+  return;
+}
+```
 
-4. **Render fallbacks missing.** `personalization.whyThisFits` (always required by schema, line 1347) is captured in the type at EditorialItinerary line 283 but never rendered. So even when the LLM did write a perfectly good "why this fits" line, the card shows nothing if `description` is blank.
+Day 1 arrival pattern: late-afternoon arrival → hotel check-in → one cultural anchor 14:30–16:30 → no dinner (arrival too late or meal-guard hasn't run yet) → last activity ends 16:30 → **silent skip**, day ships with no hotel-return.
 
-## Fix — defense in depth (4 layers, narrowly scoped)
+### Leak 2 — dinner-required deferral never re-attempts
+`universalQualityPass` Step 8 (lines 333–366) defers when `dinner` is required but absent, with this comment:
 
-### 1. Make `description` required in the LLM schema
-- `supabase/functions/generate-itinerary/generation-core.ts:1350` — add `"description"` to the `required` array.
-- Same file: tighten the `description` schema entry around line 1299 to `{ type: "string", minLength: 40, description: "1–2 sentences explaining why this specific place — what makes it worth the visit. For dining: house specialty / atmosphere / reservation tip. Never generic ('great food', 'nice spot')." }`.
+```
+A subsequent terminal cleanup / save-time pass will append the
+hotel-return card AFTER dinner.
+```
 
-### 2. Backfill on save (server, all dining cards)
-- New helper `ensureDiningDescription(act, destinationCity)` in `supabase/functions/_shared/scrub-activity.ts` (or a new sibling file `dining-description-backfill.ts`).
-- Behavior, in priority order, for activities whose category is `dining`/`restaurant`/`food` OR whose title starts with `Breakfast|Brunch|Lunch|Dinner|Drinks at`:
-  1. If `description` is non-empty after the existing scrubbers, leave it.
-  2. Else, if a venue-name match (case-insensitive, after `stripVenueMealSuffix`) exists in the inline fallback DB for the city, copy that entry's `description`.
-  3. Else, if `personalization.whyThisFits` is non-empty, copy it into `description`.
-  4. Else, leave blank — UI fallback (layer 4) will handle it.
-- Wire into the same boundary as `scrubActivity`: `validate-day`, `repair-day` §10b, `action-save-itinerary` `normalizeDays`. One log line `[DINING_DESC_BACKFILL] source=fallback|whyThisFits|noop count=N`.
+But there is **no such pass**. Search confirms: after the final per-day meal-guard injects dinner (`action-generate-trip-day.ts:1786`), nothing re-invokes `runStep8`. `action-save-itinerary.ts::normalizeDays` runs scrub + bookend-clamp + post-checkout prune — none of those add a hotel-return. `repair-day.ts` §5b only handles the case where the day already ends on a transport-to-hotel.
 
-### 3. Repair-day pass for already-saved trips
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add a small step (after §10b, before timing cascade) that runs `ensureDiningDescription` over all dining rows for the day and patches `itinerary_data` if any descriptions were filled. Sentinel `metadata.repair.dining_desc_backfilled = N`.
-- This covers existing trips when the user opens / refreshes the day.
+So: dinner-required day → Step 8 deferred → meal-guard injects 19:30 dinner → day persists with dinner as the terminal card, no hotel-return.
 
-### 4. UI fallback (defense-in-depth, covers trips that never re-save)
-- `src/components/itinerary/EditorialItinerary.tsx:11202` and `LiveActivityCard.tsx:175`:
-  - Compute `descText = sanitizeActivityText(activity.description) || sanitizeActivityText(activity.personalization?.whyThisFits)`.
-  - Render the same `<p>` block when `descText` is truthy.
-  - No new copy, no new component — strictly a fallback chain.
-- Mirror the same fallback chain in `FullItinerary.tsx`, `FullPreviewItinerary.tsx`, and `LiveItineraryView.tsx` if they have the same render pattern (will verify during implementation; expected to be 1-line edits).
+### Confirmed un-affected paths
+- Departure days are intentionally exempt (gate `dayIndex < totalDays - 1`).
+- Single-day trips are exempt (acceptable — only day = departure day).
+- Days where the last activity is a hotel-bound transport are handled by `repair-day.ts` §5b.
+
+## Fix — three layers, narrowly scoped
+
+### 1. Loosen the `runStep8` time gate
+- File: `supabase/functions/generate-itinerary/universal-quality-pass.ts`, function `runStep8` (line 83).
+- Change the accepted window from `17:00–23:59` to **`14:00–23:59`**. 14:00 is the earliest plausible end of a "real day" — anything ending before that is degenerate (the day has nothing of substance after lunch) and the bookend would read as a midday surrender. We keep that skip.
+- The warning log stays but with the new threshold. If the existing memory `dinner-required-defer-hotel-return` cared about a 17:00 boundary, no — it only describes the deferral mechanic, not the time floor.
+- Export `runStep8` so step 2 can reuse it.
+
+### 2. Re-run Step 8 after the final meal-guard
+- File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts` around line 1788 (inside the `if (!_fmgResult.alreadyCompliant)` branch where `dayResult.activities` is replaced).
+- After updating `dayResult.activities`, call `runStep8(dayResult.activities, dayNumber - 1, hotelName)`.
+- Idempotent because `runStep8` already short-circuits when the last activity is `STAY|ACCOMMODATION` or matches `/return.*hotel|back.*hotel|return\s+to/i`.
+- One log line `[QUALITY] Day N: re-ran Step 8 after meal-guard injected dinner — hotel-return appended` (or "no-op" path covered by the existing log inside `runStep8`).
+- Sentinel `dayResult.metadata.quality.hotel_return_post_meal_guard = true` when a card was appended.
+
+### 3. Save-time safety net (covers manual edits, undo/redo, escaped generations, single-day refresh)
+- File: `supabase/functions/generate-itinerary/action-save-itinerary.ts`, function `normalizeDays` (line 121).
+- After the existing `pruneNonLogisticsAfterCheckout(activities)` and **before** the day is returned, for every day except the last (departure) day:
+  - Detect `isAlreadyTerminatedAtHotel` using the same predicate as `runStep8` (cat ∈ STAY/ACCOMMODATION OR title matches `/return.*hotel|back.*hotel|return\s+to/i`).
+  - If not, call `runStep8(activities, dayNumber - 1, hotelName)` (resolve `hotelName` from the trip context already passed into `normalizeDays` — needs a small signature extension).
+  - Skip on departure day (last day) — same gate as Step 8.
+  - Skip when the day has < 1 non-logistics activity (degenerate / hotel-only days handled elsewhere).
+- Log `[QUALITY] day=N save-time hotel-return appended` so we can measure how often the earlier passes missed it.
+
+### Out of scope
+- Day-1 arrival-day specific logic (`Day 1 missing Arrival Cultural Anchor` already exists at line 326 — separate concern).
+- Departure-day terminal card (handled by `Departure Day Graceful Finish`).
+- Walking-card "Walk to <hotel>" injection — `repair-day.ts` §5b already covers the trailing-transport path; we are not changing that.
+- Single-day trips (intentionally end on departure logistics).
 
 ### Tests
 
-- New `supabase/functions/_shared/__tests__/dining-description-backfill.test.ts`:
-  - LLM-empty + venue in inline DB → filled from inline DB.
-  - LLM-empty + venue NOT in inline DB + whyThisFits present → filled from whyThisFits.
-  - LLM-empty + nothing else → left blank (UI handles it).
-  - Non-dining activity → untouched even if description empty.
-  - Dining card with existing good description → untouched.
-- New `src/components/itinerary/__tests__/foodCardDescriptionFallback.test.tsx`:
-  - Empty `description`, populated `personalization.whyThisFits` → renders the whyThisFits text.
-  - Both empty → no `<p>` rendered (no broken layout).
+- Extend `supabase/functions/generate-itinerary/scenario.test.ts` (or add a new `hotel-return-bookend.test.ts` if scope demands):
+  - **Day 1 ends at 16:30 with no dinner required** → after `universalQualityPass`, last activity is "Return to <hotel>" starting 16:30.
+  - **Day 1 dinner-required, no dinner, ends 16:00** → Step 8 deferred; after simulated meal-guard inject of 19:00 dinner + re-run, hotel-return present at the end.
+  - **Departure day with last activity ending 16:00** → no hotel-return appended.
+  - **Day already ends on STAY/ACCOMMODATION card** → Step 8 idempotent no-op.
+  - **Day ends on transport-to-hotel** → `repair-day.ts` §5b path still wins (no double-append).
+  - **Save-time path:** day enters `normalizeDays` without a hotel-return → exits with one. Day enters with one → no duplicate.
+- Update fixtures only if the missing-bookend assertion fires on existing snapshots; prefer not.
 
-### Out of scope
-- `verified_venues.description` column — bigger refactor; the inline-fallback name match in step 2 covers the common case and is reversible.
-- Sightseeing / wellness / shopping description gaps — same root cause but user asked specifically about food cards. The schema change in step 1 helps everywhere; backfill steps 2-4 are intentionally dining-only.
-- Tone/quality of LLM descriptions — separate prompt tuning task.
-
-## Files
-
-- edit `supabase/functions/generate-itinerary/generation-core.ts` (schema)
-- new  `supabase/functions/_shared/dining-description-backfill.ts`
-- new  `supabase/functions/_shared/__tests__/dining-description-backfill.test.ts`
-- edit `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (wire pass)
-- edit `supabase/functions/generate-itinerary/pipeline/validate-day.ts` (wire pass)
-- edit `supabase/functions/generate-itinerary/action-save-itinerary.ts` (wire in `normalizeDays`)
-- edit `src/components/itinerary/EditorialItinerary.tsx` (UI fallback)
-- edit `src/components/itinerary/LiveActivityCard.tsx` (UI fallback)
-- edit `src/components/itinerary/FullItinerary.tsx`, `FullPreviewItinerary.tsx`, `LiveItineraryView.tsx` (verify + UI fallback)
-- new  `src/components/itinerary/__tests__/foodCardDescriptionFallback.test.tsx`
+### Files
+- edit `supabase/functions/generate-itinerary/universal-quality-pass.ts` (loosen time gate, export `runStep8`)
+- edit `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (post-meal-guard retry)
+- edit `supabase/functions/generate-itinerary/action-save-itinerary.ts` (save-time safety net + thread `hotelName` into `normalizeDays`)
+- new  test cases in `scenario.test.ts` or a dedicated `hotel-return-bookend.test.ts`
 - edit `.lovable/plan.md`
 
-Memory candidate (post-implement): `mem://constraints/itinerary/dining-description-backfill` — "Dining cards must always render a 'why this place' line; ensureDiningDescription backfills from inline DB → whyThisFits at validate/repair/save; UI falls back to whyThisFits."
+Memory candidate post-implement: `mem://constraints/itinerary/day-end-hotel-return-bookend` — "Every non-departure day ends on a hotel-return card. `runStep8` accepts last-activity end ≥ 14:00; called from universalQualityPass, post-meal-guard retry, and `normalizeDays` save-time net. Idempotent."
