@@ -13,6 +13,18 @@ interface PostTripEmailRequest {
   forceResend?: boolean;
 }
 
+async function triggerSummarization(supabase: any, tripId: string, source: string) {
+  try {
+    const { error } = await supabase.functions.invoke('summarize-trip-learnings', {
+      body: { tripId },
+    });
+    if (error) console.error(`[post-trip-email] Summarization invoke failed (${source})`, error);
+    else console.log(`[post-trip-email] Summarization invoked (${source}) for trip ${tripId}`);
+  } catch (err) {
+    console.error(`[post-trip-email] Summarization invoke threw (${source})`, err);
+  }
+}
+
 interface TripMemory {
   title: string;
   date: string;
@@ -93,6 +105,7 @@ const handler = async (req: Request): Promise<Response> => {
         },
         { onConflict: 'trip_id,notification_type' }
       );
+      await triggerSummarization(supabase, tripId, 'opt_out');
       return new Response(
         JSON.stringify({ success: true, skipped: true, reason: 'user_opted_out' }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -109,6 +122,7 @@ const handler = async (req: Request): Promise<Response> => {
       .maybeSingle();
 
     if (existingNotif && !forceResend) {
+      await triggerSummarization(supabase, tripId, 'already_sent');
       return new Response(
         JSON.stringify({ success: true, message: "Email already sent" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -201,6 +215,8 @@ const handler = async (req: Request): Promise<Response> => {
         sent_at: new Date().toISOString(),
         metadata: { memories: memories.length, destination: trip.destination },
       }, { onConflict: 'trip_id,notification_type' });
+
+    await triggerSummarization(supabase, tripId, 'after_email');
 
     return new Response(
       JSON.stringify({ 
