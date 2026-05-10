@@ -892,6 +892,7 @@ ${comprehensiveConstraints}
 ${experienceGuidancePrompt}
 
 ${destinationGuidancePrompt}
+${secondaryFlavor}
 `;
 
       // Phase 2: Build temporal intelligence prompts
