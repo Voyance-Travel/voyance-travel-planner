@@ -216,8 +216,12 @@ IMPORTANT: Return ONLY valid JSON, no markdown, no code fences.`;
     });
 
     // Update destination with enriched content
+    // Update destination with enriched content + 90-day TTL
+    const enrichedAt = new Date();
+    const newExpiresAt = new Date(enrichedAt.getTime() + 90 * 24 * 60 * 60 * 1000);
     const updatePayload: Record<string, unknown> = {
-      enriched_at: new Date().toISOString(),
+      enriched_at: enrichedAt.toISOString(),
+      enrichment_expires_at: newExpiresAt.toISOString(),
     };
 
     if (enriched.description) updatePayload.description = enriched.description;
