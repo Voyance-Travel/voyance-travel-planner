@@ -631,7 +631,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       )}
 
       {/* Over-budget Warning Banner — snapshot is the only source (hidden in manual mode and on empty-itinerary failure) */}
-      {!isManualMode && !isEmptyItineraryFailure && (() => {
+      {!isManualMode && !isEmptyItineraryFailure && !isGenerating && (() => {
         const showWarning = settings?.budget_warnings_enabled !== false
           && settings?.budget_warning_threshold !== 'off'
           && (snapshotStatus === 'red' || (snapshotStatus === 'yellow' && settings?.budget_warning_threshold !== 'red_only'));
