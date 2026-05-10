@@ -32,7 +32,7 @@ serve(async (req) => {
 
     const { data: learnings, error: lErr } = await supabase
       .from('trip_learnings')
-      .select('trip_id, trips!inner(id, end_date)')
+      .select('trip_id, user_id, trips!inner(id, end_date)')
       .is('lessons_summary', null)
       .lt('trips.end_date', cutoffIso)
       .order('trip_id', { ascending: false })
@@ -46,7 +46,7 @@ serve(async (req) => {
       });
     }
 
-    const candidates = (learnings ?? []) as Array<{ trip_id: string }>;
+    const candidates = (learnings ?? []) as Array<{ trip_id: string; user_id: string | null }>;
     let succeeded = 0;
     let failed = 0;
     const failures: Array<{ tripId: string; error: string }> = [];
@@ -62,6 +62,17 @@ serve(async (req) => {
           console.error(`[summarize-batch] invoke failed for trip ${row.trip_id}`, error);
         } else {
           succeeded++;
+          // Fire-and-forget trait drift recompute for this user.
+          if (row.user_id) {
+            fetch(`${supabaseUrl}/functions/v1/recompute-trait-drift`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serviceKey}`,
+              },
+              body: JSON.stringify({ userId: row.user_id }),
+            }).catch((e) => console.warn('[summarize-batch] drift invoke failed', e));
+          }
         }
       } catch (err) {
         failed++;
