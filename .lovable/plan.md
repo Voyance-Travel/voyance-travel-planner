@@ -1,125 +1,54 @@
-## RS.M.P5 — Subscription created/updated real handling
+## RS.M.P6 — Apple IAP receipt-not-found graceful handling
 
 ### Findings
-- `customer.subscription.deleted` (lines 1166–1206) already handles cancellation: zero club credits, audit ledger row, `upsertUserTier(... 'free', allowDowngrade: true)`, sync balance.
-- `customer.subscription.created`/`updated` (lines 1213–1218) is a no-op log stub.
-- `user_tiers` columns today: `user_id, tier, first_purchase_at, highest_purchase, updated_at`. Missing `stripe_subscription_id`, `subscription_status`, `current_period_end` → migration needed.
-- `tier` has a CHECK constraint restricting it to `free|flex|voyager|explorer|adventurer` — `'voyager'` (the spec default) is valid.
-- Existing helpers available: `upsertUserTier(...)` (handles upgrade/downgrade gating), `syncBalanceCache(...)`, `resolveUserIdFromCustomer(...)`, `log(...)`, `logError(...)`.
+- Two Apple-validation failure paths in `validate-iap-receipt/index.ts`:
+  - Line 142–143: sandbox-retry path returns generic 400.
+  - Line 146–147: production path returns generic 400.
+- Both currently call `errorResponse(...)` from `_shared/cors.ts` which doesn't accept structured fields. Need to switch to `jsonResponse(...)` (already imported) so we can return `{success:false, error, code, userActionable, appleStatus}` plus a 400 status.
 
 ### Plan
 
-**1. Migration — add subscription tracking columns to `user_tiers`**
+**1. Add a status-message map** at module scope (top of file, after `IAP_PRODUCTS`):
 
-```sql
-ALTER TABLE public.user_tiers
-  ADD COLUMN IF NOT EXISTS stripe_subscription_id text,
-  ADD COLUMN IF NOT EXISTS subscription_status   text,
-  ADD COLUMN IF NOT EXISTS current_period_end    timestamptz;
+```ts
+// Apple status code → user-friendly message + retryability hint for the FE
+const APPLE_STATUS_MESSAGES: Record<number, { msg: string; userActionable: boolean }> = {
+  21000: { msg: 'Receipt could not be read by Apple. Please try again.', userActionable: true },
+  21002: { msg: 'Receipt data was malformed. Please contact support.', userActionable: false },
+  21003: { msg: 'Receipt authentication failed. Please try restoring your purchases.', userActionable: true },
+  21004: { msg: 'Shared secret mismatch. Please contact support.', userActionable: false },
+  21005: { msg: 'Apple is temporarily unavailable. Please try again in a few minutes.', userActionable: true },
+  21006: { msg: 'This subscription has expired.', userActionable: false },
+  21007: { msg: 'Sandbox receipt sent to production — should auto-retry.', userActionable: false },
+  21008: { msg: 'Production receipt sent to sandbox — should auto-retry.', userActionable: false },
+  21010: { msg: 'Apple cannot find this user account. Please contact support.', userActionable: false },
+};
 
-CREATE INDEX IF NOT EXISTS idx_user_tiers_stripe_sub
-  ON public.user_tiers (stripe_subscription_id)
-  WHERE stripe_subscription_id IS NOT NULL;
-```
-
-No RLS change (existing "Users can read own tier" SELECT policy already covers the new columns; writes stay service-role-only).
-
-**2. Replace stub at lines 1213–1218 with real handler** (`supabase/functions/stripe-webhook/index.ts`)
-
-```text
-case "customer.subscription.created":
-case "customer.subscription.updated": {
-  const sub = event.data.object as Stripe.Subscription;
-
-  // Resolve user_id (metadata first, customer-email fallback — same pattern as deleted)
-  let userId = (sub.metadata?.user_id || sub.metadata?.userId) as string | undefined;
-  if (!userId) {
-    const fb = await resolveUserIdFromCustomer(supabaseAdmin, stripe, sub.customer as string);
-    if (fb) userId = fb;
-  }
-  if (!userId) {
-    log('subscription.created/updated: cannot resolve userId — skipping', { subId: sub.id });
-    break;
-  }
-
-  const status = sub.status;
-  const tier = (sub.metadata?.tier || sub.metadata?.club_tier || 'voyager') as string;
-  const periodEndIso = sub.current_period_end
-    ? new Date(sub.current_period_end * 1000).toISOString()
-    : null;
-
-  if (status === 'active' || status === 'trialing') {
-    // Use upsertUserTier (no-downgrade) so a paused/downgraded plan can't drop tier;
-    // initial grants stay owned by checkout.session.completed.
-    await upsertUserTier(supabaseAdmin, userId, tier);
-
-    // Stamp subscription tracking columns directly (the helper doesn't touch them)
-    await supabaseAdmin.from('user_tiers').update({
-      stripe_subscription_id: sub.id,
-      subscription_status: status,
-      current_period_end: periodEndIso,
-      updated_at: new Date().toISOString(),
-    }).eq('user_id', userId);
-
-    log('Subscription active/trialing — tier + status updated', { userId, tier, status, subId: sub.id });
-
-  } else if (status === 'past_due' || status === 'incomplete' || status === 'incomplete_expired') {
-    // Don't revoke — Stripe retries renewals for ~3 weeks. Just stamp status for UI.
-    await supabaseAdmin.from('user_tiers').update({
-      subscription_status: status,
-      current_period_end: periodEndIso,
-      updated_at: new Date().toISOString(),
-    }).eq('user_id', userId);
-
-    log('Subscription needs attention — flagged for UI notice', { userId, status, subId: sub.id });
-
-  } else if (status === 'canceled' || status === 'unpaid') {
-    // Treat like deleted: zero club credits, force-downgrade tier, sync balance.
-    await supabaseAdmin.from('credit_purchases')
-      .update({ remaining: 0, updated_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .in('credit_type', ['club_base', 'club_bonus']);
-
-    await supabaseAdmin.from('credit_ledger').insert({
-      user_id: userId,
-      transaction_type: 'subscription_cancel',
-      credits_delta: 0,
-      is_free_credit: false,
-      action_type: 'subscription_updated_canceled',
-      notes: `Subscription ${sub.id} transitioned to ${status} — credits revoked`,
-      metadata: { stripe_subscription_id: sub.id, status },
-    });
-
-    await upsertUserTier(supabaseAdmin, userId, 'free', { allowDowngrade: true });
-    await supabaseAdmin.from('user_tiers').update({
-      subscription_status: status,
-      current_period_end: periodEndIso,
-      updated_at: new Date().toISOString(),
-    }).eq('user_id', userId);
-
-    await syncBalanceCache(supabaseAdmin, userId);
-    log('Subscription canceled/unpaid — credits revoked', { userId, status, subId: sub.id });
-
-  } else {
-    // paused, etc. — observe only
-    log('Subscription event — observed (no action)', { userId, status, subId: sub.id });
-  }
-
-  break;
+function appleStatusError(status: number) {
+  const friendly = APPLE_STATUS_MESSAGES[status] || {
+    msg: `Apple receipt validation returned status ${status}. Please contact support.`,
+    userActionable: false,
+  };
+  return jsonResponse(
+    {
+      success: false,
+      error: friendly.msg,
+      code: `APPLE_STATUS_${status}`,
+      userActionable: friendly.userActionable,
+      appleStatus: status,
+    },
+    400,
+  );
 }
 ```
 
-### Why this shape
-- Reuses the existing `upsertUserTier` helper (with explicit `allowDowngrade`) instead of inlining `from('user_tiers').upsert({tier, ...})` so the no-downgrade invariant other handlers depend on stays consistent. The user's draft would silently bypass it.
-- Keeps initial credit grants owned by `checkout.session.completed` (this handler **never** grants credits — only revokes on cancel/unpaid).
-- `past_due` / `incomplete*` get a status-only stamp so the UI can show "needs attention" without losing benefits during Stripe's smart-retry window.
-- `canceled`/`unpaid` mirrors the existing `subscription.deleted` block exactly (revoke + downgrade + sync) so duplicate `deleted` and `updated→canceled` events converge to the same state.
+**2. Replace both failure returns** (lines 142–143 and 146–147) with `return appleStatusError(<status>);`. Keep the `console.error` log lines for observability.
 
 ### Verification
-- `grep -c "subscription.created\|subscription.updated\|subscription_status" supabase/functions/stripe-webhook/index.ts` ≥ 3 (will hit ~6: case labels + 3 column writes).
-- `\d public.user_tiers` shows the three new columns.
-- Manual: replay a `customer.subscription.updated` event with `status='past_due'` → row gets `subscription_status='past_due'`, club credits untouched. Replay with `status='canceled'` → club credits zeroed, tier='free', balance synced.
+- `grep -c "APPLE_STATUS_MESSAGES\|userActionable" supabase/functions/validate-iap-receipt/index.ts` ≥ 2 (will hit ~5).
+- Smoke test isn't possible from the sandbox without a real Apple receipt, but the response shape is unit-checkable: any non-zero `appleResult.status` → 400 with the new payload.
 
 ### Out of scope
-- Mid-cycle plan upgrade/downgrade credit reconciliation (e.g. voyager→explorer top-up of base credits). Initial grants still flow through `checkout.session.completed`; tier in `user_tiers` will reflect the new metadata via `upsertUserTier`'s upgrade path, but credit deltas for plan-changes are deferred.
-- Backfilling `subscription_status` for existing tier rows (no Stripe replay endpoint here; future events will populate naturally).
+- Frontend rendering of the `userActionable` flag (separate ticket — backend just returns the contract).
+- Status-21006 special handling (auto-mark subscription expired) — out of scope; current ticket is messaging only.
+- Changes to `errorResponse` helper — leaving it in place for other callers.
