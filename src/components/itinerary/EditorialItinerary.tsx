@@ -80,6 +80,7 @@ import { BlendRecalcBanner } from './BlendRecalcBanner';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { useRefreshDay, type RefreshResult, type ProposedChange } from '@/hooks/useRefreshDay';
 import { RefreshDayDiffView } from './RefreshDayDiffView';
+import { RefreshDaySheet } from './RefreshDaySheet';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { RegenerateGuidedAssistDialog } from './RegenerateGuidedAssistDialog';
 import { WeatherForecast } from './WeatherForecast';
@@ -2326,6 +2327,7 @@ export function EditorialItinerary({
   const [refreshResults, setRefreshResults] = useState<Record<number, RefreshResult>>({});
   const { isRefreshing: isRefreshingDay, refreshDay } = useRefreshDay();
   const [refreshingDayNumber, setRefreshingDayNumber] = useState<number | null>(null);
+  const [refreshSheetDay, setRefreshSheetDay] = useState<number | null>(null);
 
   // Notify parent of refresh state changes
   useEffect(() => {
@@ -2483,26 +2485,32 @@ export function EditorialItinerary({
       });
       const result = await refreshDay(activities, day.date || '', destination, day.dayNumber);
       if (result) {
-        setRefreshResults(prev => ({ ...prev, [day.dayNumber]: result }));
-        const errorCount = result.issues.filter(i => i.severity === 'error').length;
-        const warnCount = result.issues.filter(i => i.severity === 'warning').length;
         if (result.issues.length === 0) {
-          toast.success(`Day ${day.dayNumber} validated, no issues found!`);
+          // Clear any stale stored result and confirm clean.
+          setRefreshResults(prev => {
+            if (!(day.dayNumber in prev)) return prev;
+            const next = { ...prev };
+            delete next[day.dayNumber];
+            return next;
+          });
+          setRefreshSheetDay(prev => (prev === day.dayNumber ? null : prev));
+          toast.success('Day timeline checked — looks clean');
         } else {
+          setRefreshResults(prev => ({ ...prev, [day.dayNumber]: result }));
+          setRefreshSheetDay(day.dayNumber);
+          const errorCount = result.issues.filter(i => i.severity === 'error').length;
+          const warnCount = result.issues.filter(i => i.severity === 'warning').length;
           toast(`Day ${day.dayNumber}: ${errorCount} error${errorCount !== 1 ? 's' : ''}, ${warnCount} warning${warnCount !== 1 ? 's' : ''}`, {
             icon: '⚠️',
           });
         }
-        // Scroll the diff view into focus so the user can actually see the result.
-        requestAnimationFrame(() => {
-          const el = document.getElementById(`refresh-diff-${day.dayNumber}`);
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        });
       } else {
-        toast.error(`Could not re-check Day ${day.dayNumber} — please try again.`);
+        console.error('[handleRefreshDay] refresh-day returned null');
+        toast.error('Refresh failed — please try again');
       }
     } catch (err: any) {
-      toast.error(`Could not re-check Day ${day.dayNumber}: ${err?.message || 'unknown error'}`);
+      console.error('[handleRefreshDay] failed', err);
+      toast.error('Refresh failed — please try again');
     } finally {
       setRefreshingDayNumber(null);
     }
@@ -2595,11 +2603,8 @@ export function EditorialItinerary({
         if ((firstResult.issues || []).length === 0) {
           toast.info(`Day ${day.dayNumber} timing already looks clean.`);
         } else {
-          toast(`Day ${day.dayNumber} has no auto-fixable timing issues. Review the suggestions below.`, { icon: 'ℹ️' });
-          requestAnimationFrame(() => {
-            const el = document.getElementById(`refresh-diff-${day.dayNumber}`);
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          });
+          setRefreshSheetDay(day.dayNumber);
+          toast(`Day ${day.dayNumber} has no auto-fixable timing issues. Review the suggestions.`, { icon: 'ℹ️' });
         }
         return;
       }
@@ -8733,6 +8738,24 @@ export function EditorialItinerary({
          tripId={tripId}
       />
 
+      {/* Refresh Day results sheet — surfaces refresh-day diagnostics + accept/reject */}
+      <RefreshDaySheet
+        open={refreshSheetDay !== null && !!refreshResults[refreshSheetDay]}
+        onOpenChange={(open) => {
+          if (!open) setRefreshSheetDay(null);
+        }}
+        result={refreshSheetDay !== null ? refreshResults[refreshSheetDay] || null : null}
+        onAcceptAll={(changes) => {
+          if (refreshSheetDay === null) return;
+          const idx = days.findIndex((d: any) => d.dayNumber === refreshSheetDay);
+          if (idx >= 0) handleApplyRefreshChanges(idx, changes);
+        }}
+        onAcceptSelected={(changes) => {
+          if (refreshSheetDay === null) return;
+          const idx = days.findIndex((d: any) => d.dayNumber === refreshSheetDay);
+          if (idx >= 0) handleApplyRefreshChanges(idx, changes);
+        }}
+      />
       
     </div>
   );
@@ -10997,29 +11020,7 @@ function DayCard({
                 </div>
               )}
 
-              {/* Refresh Day Diff View */}
-              {refreshResult && refreshResult.dayNumber === day.dayNumber && (
-                <div id={`refresh-diff-${day.dayNumber}`}>
-                  <RefreshDayDiffView
-                    dayNumber={day.dayNumber}
-                    proposedChanges={refreshResult.proposedChanges || []}
-                    issues={refreshResult.issues}
-                    transitEstimates={refreshResult.transitEstimates}
-                    buffers={refreshResult.buffers || []}
-                    onAcceptAll={(changes) => onApplyRefreshChanges?.(changes)}
-                    onAcceptSelected={(changes) => onApplyRefreshChanges?.(changes)}
-                    onDismiss={() => onDismissRefresh?.()}
-                    onFindAlternative={(activityId, _activityTitle) => {
-                      if (!onActivitySwap) return;
-                      const matchedActivity = day.activities.find(a => a.id === activityId);
-                      if (matchedActivity) {
-                        onActivitySwap(dayIndex, matchedActivity);
-                      }
-                    }}
-                    className="mt-3"
-                  />
-                </div>
-              )}
+              {/* Refresh Day diff is rendered in <RefreshDaySheet /> at the editor root */}
             </div>
             )}
           </motion.div>

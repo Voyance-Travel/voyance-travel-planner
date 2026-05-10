@@ -1,79 +1,69 @@
-## Goal
-Make `travel_dna_profiles.trait_scores` slowly evolve from real behavior. Build a per-user drift recompute that reads the last 12 months of `activity_feedback`, maps categories to traits, applies bounded deltas (±0.05/trait/call, clamped to [0,1]), updates the profile with `derivation_source = 'drift'`, and recalculates the archetype.
+## Problem
 
-UI surfacing is explicitly deferred.
+The bottom-of-day toolbar **Refresh** button in `EditorialItinerary.tsx` (line 10925, plus a duplicate "Refresh Day" button on the buffer-warning strip at line 10507) calls `handleRefreshDay`, which already invokes `refresh-day` and stores results. However, the diff is rendered as an *inline* `RefreshDayDiffView` block at the very bottom of the day (line 11000) — below transit subtotal, day total, and any unchanged-activity rows. On long days the user never sees it scroll into view, so the click feels silent. Toasts also fire but get drowned out, and there is no modal-style accept/reject affordance like the AI chat "Review first" pattern.
 
-## File 1 — `supabase/functions/recompute-trait-drift/index.ts` (new)
+## Goals
 
-Service-role edge function. `verify_jwt = false` (called by cron / batch / admin). Body: `{ userId: string, dryRun?: boolean }`.
+1. Spinner on the button while in flight (already wired via `isRefreshingDay` — verify both buttons keep working).
+2. On response:
+   - `issues.length === 0` → success toast `Day timeline checked — looks clean`.
+   - `issues.length > 0` → open a **Sheet** with each proposed change as an accept/reject row (same UX as the chat Review-first flow), instead of relying on the inline diff that can sit below the fold.
+3. On error (network failure, function throw) → `toast.error('Refresh failed — please try again')` and `console.error`.
 
-Steps:
-1. Load `activity_feedback` for `user_id = :userId` where `created_at >= now() - interval '12 months'`. Bail with `{ skipped: 'no_feedback' }` if 0 rows.
-2. Map each row to trait deltas via `CATEGORY_TRAIT_MAP` (see below). Rating weight: `loved = +1.0`, `liked = +0.5`, `neutral = 0`, `disliked = -1.0`, `hated = -1.5`. Multiplier per signal: `0.01` (so 100 strong loves = 1.0 raw, before cap).
-3. Aggregate per trait → raw delta. Clamp each trait delta to **±0.05**.
-4. Read current `travel_dna_profiles` row (`trait_scores`, `derivation_source`). If row missing → `{ skipped: 'no_profile' }`.
-5. Apply: `new = clamp(old + delta, 0, 1)` for each numeric trait (skip `life_stage` — it's a string).
-6. Upsert `trait_scores`, set `derivation_source = 'drift'`, `updated_at = now()`. Log a `trait_drift_log` row (see migration) with `{user_id, deltas, applied_count, sample_size, ran_at}`.
-7. Call existing `recalculateArchetype(userId)` equivalent — actually that's a TS client helper. Cleaner: invoke RPC if exists, else just write `trait_scores` and let the next archetype recalc path pick it up. Per memory `mem://constraints/dna/storage-merge-and-recalc`, the only canonical matcher is the TS `matchArchetypes`. So after writing, **invoke the existing `calculate-travel-dna` edge function (or whatever runs `matchArchetypes`)** with the user — confirm by reading `calculate-travel-dna/index.ts` during build. If that's the wrong function, we leave a TODO and only update `trait_scores` (archetype recalc happens on next quiz/conversation save). Decide at build time.
-8. On `dryRun`, return computed deltas without writing.
+## Implementation
 
-Returns `{ userId, sampleSize, deltas, beforeScores, afterScores, archetypeRecalced: boolean }`.
+### 1. New component: `src/components/itinerary/RefreshDaySheet.tsx`
 
-### Category → trait map (initial)
-```
-sightseeing      → cultural_depth, art_focus, photo_focus
-museum / culture → cultural_depth, art_focus, learning_focus
-dining / food    → food_focus
-nightlife / bar  → social_energy, novelty_seeking
-adventure / outdoor / hiking → adventure, nature_orientation
-wellness / spa   → restoration_need, healing_focus
-shopping         → status_seeking
-nature / park    → nature_orientation
-beach            → restoration_need, nature_orientation
-entertainment    → novelty_seeking, social_energy
-sports           → adventure
-relaxation       → restoration_need
-transport / logistics → (ignored)
-```
-Map keyed by both `activity_category` (primary) and `activity_type` fallback. Unknown categories ignored (don't fail).
+A `Sheet` (shadcn, side="right" on desktop, "bottom" on mobile) that wraps the existing `RefreshDayDiffView` content. Props:
 
-## File 2 — Migration: drift log + cron
-
-```sql
-CREATE TABLE IF NOT EXISTS public.trait_drift_log (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  ran_at timestamptz NOT NULL DEFAULT now(),
-  sample_size int NOT NULL,
-  deltas jsonb NOT NULL,
-  before_scores jsonb,
-  after_scores jsonb
-);
-ALTER TABLE public.trait_drift_log ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users read own drift log" ON public.trait_drift_log
-  FOR SELECT TO authenticated USING (auth.uid() = user_id);
-CREATE INDEX IF NOT EXISTS idx_trait_drift_log_user_ran ON public.trait_drift_log(user_id, ran_at DESC);
+```ts
+interface RefreshDaySheetProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  dayNumber: number;
+  result: RefreshResult | null;
+  onAcceptAll: (changes: ProposedChange[]) => void;
+  onAcceptSelected: (changes: ProposedChange[]) => void;
+  onFindAlternative?: (activityId: string, activityTitle: string) => void;
+}
 ```
 
-## File 3 — Trigger wiring (separate `supabase/insert` SQL, not migration, per scheduled-job convention)
+Internally it reuses `RefreshDayDiffView` for the diff/accept-reject body so we don't duplicate the per-change rendering (it already supports cherry-pick + Accept All).
 
-Two layers, belt-and-suspenders:
+### 2. Wire it in `EditorialItinerary.tsx`
 
-**a) Per-trip invoke** in `summarize-trip-learnings-batch/index.ts` (existing) — after each successful summarization, fire-and-forget POST to `recompute-trait-drift` with that trip's `user_id`. (Tiny addition; same auth pattern.)
+- Add state: `const [refreshSheetDay, setRefreshSheetDay] = useState<number | null>(null);`
+- Update `handleRefreshDay` (around line 2452):
+  - Keep `setRefreshingDayNumber` for the spinner.
+  - On success:
+    - `issues.length === 0` → `toast.success('Day timeline checked — looks clean')`. **Do not** open the sheet. Clear any prior `refreshResults[dayNumber]`.
+    - `issues.length > 0` → store result in `refreshResults` and call `setRefreshSheetDay(day.dayNumber)` to open the sheet. Keep the existing summary toast as a secondary signal.
+  - On `result == null` or thrown error → `toast.error('Refresh failed — please try again')` + `console.error('[handleRefreshDay] failed', err)`.
+  - Remove the `requestAnimationFrame` scroll-into-view block (sheet replaces it).
+- Render `<RefreshDaySheet>` once at the editor root (outside the per-day map), driven by `refreshSheetDay` and `refreshResults[refreshSheetDay]`.
+- On accept/dismiss inside the sheet: call existing `handleApplyRefreshChanges` / `setRefreshResults` cleanup, then `setRefreshSheetDay(null)`.
 
-**b) Weekly cron sweep** via `pg_cron` job `recompute-trait-drift-weekly` at `0 5 * * 1` (Mondays 5am UTC). Selects users with ≥1 `activity_feedback` row in the last 7 days and no `trait_drift_log.ran_at` since their newest feedback, then calls `recompute-trait-drift` for each (cap 100 per run). Implemented as a small batch edge function `recompute-trait-drift-batch/index.ts` invoked by cron — same shape as the existing summarize batch.
+### 3. Inline diff view
 
-This catches manual-mode users / opt-out paths the per-trip path misses.
+Remove (or hide behind a `viewMode === 'inline'` flag, defaulted off) the inline `<RefreshDayDiffView>` render at line 11000 so we have a single surface. Keep the component itself — the sheet reuses it.
 
-## Safety rails
-- ±0.05 per-trait per-call cap.
-- Min 5 ratings required to apply; below that → `skipped: 'insufficient_signal'`.
-- `derivation_source = 'drift'` only when actual deltas applied (not on dry runs / skips). Quiz / conversation writes still take precedence and overwrite back to their respective sources via the existing DNA storage merge contract — drift is the lowest-priority source.
-- Numeric clamp `[0, 1]`; `life_stage` never touched.
+### 4. Spinner verification
+
+Both buttons (lines 10507 buffer-warning strip, 10925 bottom toolbar) already use `isRefreshingDay` for `animate-spin` + disabled state. No change needed; manually verify after edits.
+
+### 5. `DayActionToolbar.tsx` cleanup (optional)
+
+That standalone component is defined but has zero consumers (`grep` confirms). Out of scope for this task — leave alone unless we hit it incidentally.
 
 ## Verification
-- Seed/find a user with ≥5 `activity_feedback` rows.
-- `curl` the function with that `userId`. Confirm response `deltas` is non-empty and bounded.
-- `select trait_scores, derivation_source from travel_dna_profiles where user_id = …` shows shifted floats, source `drift`.
-- `select * from trait_drift_log where user_id = …` has the run.
-- Re-run immediately → sample size same, deltas similar but capped; no runaway.
+
+1. Clean day (no overlaps, no buffer issues) → click Refresh → spinner shows briefly → green success toast `Day timeline checked — looks clean`. No sheet opens.
+2. Day with a known issue (e.g. 7h gap or zero-buffer chain) → click Refresh → spinner → sheet slides in from the side with each proposed change as an accept/reject row → Accept All applies via existing `handleApplyRefreshChanges`.
+3. Offline (DevTools → Network → Offline) → click Refresh → spinner stops → red error toast `Refresh failed — please try again` → `console.error` line in DevTools.
+
+## Files touched
+
+- `src/components/itinerary/RefreshDaySheet.tsx` *(new)*
+- `src/components/itinerary/EditorialItinerary.tsx` *(handler + sheet mount + remove inline diff render)*
+
+No edge function or DB changes.
