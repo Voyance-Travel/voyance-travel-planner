@@ -1,41 +1,79 @@
-## Lock down `voyance_picks` writes to admins only
+## Stop exposing reviewer emails in `customer_reviews`
 
 ### Findings
 
-- The curated/editorial picks table is **`voyance_picks`** (not `editorial_picks` or `founder_picks`). It's the only matching table — confirmed via the scanner finding and the existing memory entry `[Voyance Picks](mem://features/voyance-picks-system)`.
+- Table `public.customer_reviews` has columns `id, user_id, name, email, rating, review_text, trip_destination, archetype, is_featured, is_approved, photo_consent, created_at, updated_at`.
 - Current policies:
-  - `Voyance picks are publicly readable` — SELECT, USING (true), {public} ✅ keep
-  - `Authenticated users can manage voyance picks` — ALL, USING/CHECK `auth.uid() IS NOT NULL` ❌ this is the vulnerability
-- Admin pattern in this project is **NOT** a `profiles.is_admin` flag. It uses the canonical role table via the SECURITY DEFINER helper `public.has_role(uuid, app_role)`, with `app_role` enum values `user | admin | moderator`. This is the same helper used elsewhere (see core memory on roles).
+  - SELECT `Approved reviews are publicly visible` — `is_approved = true`, `{public}` ← leaks `email` (and `name`, `user_id`)
+  - SELECT `Users can view their own reviews` — owner-only
+  - INSERT `Authenticated users can submit own reviews`
+  - UPDATE `Users can update their own reviews`
+- Frontend usage: `customer_reviews` is only **written** (`src/components/reviews/ReviewCapturePopup.tsx` inserts a review and prefills the form from `user.email`). **No frontend code reads `customer_reviews` for display** — confirmed by ripgrep. So removing public read access of PII causes zero UI breakage. No public testimonial component currently queries this table.
+- Other places `email` is referenced are unrelated (auth user, profiles delete flows).
+
+### Approach
+
+Use Approach A from the request (view-based), but skip the join — the table already has its own denormalized `name` column. Lock the base table to owner-only reads and expose a sanitized view for any future public testimonial UI.
 
 ### Migration
 
 ```sql
-DROP POLICY "Authenticated users can manage voyance picks" ON public.voyance_picks;
+-- 1. Remove the over-broad public SELECT policy
+DROP POLICY "Approved reviews are publicly visible" ON public.customer_reviews;
 
--- Public SELECT policy already exists, keep it.
+-- Owner SELECT policy ("Users can view their own reviews") is retained — owners
+-- can still read their own email (self-data).
 
-CREATE POLICY "Admins can manage voyance picks"
-  ON public.voyance_picks
-  FOR ALL
-  TO authenticated
-  USING (public.has_role(auth.uid(), 'admin'::public.app_role))
-  WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+-- 2. Lock down column privileges as belt-and-braces (in case a future policy
+--    re-broadens public read access, email + user_id stay revoked).
+REVOKE SELECT (email, user_id) ON public.customer_reviews FROM anon, authenticated;
 
-REVOKE INSERT, UPDATE, DELETE ON public.voyance_picks FROM authenticated, anon;
+-- 3. Public-safe view for displaying approved testimonials
+CREATE OR REPLACE VIEW public.public_customer_reviews
+WITH (security_invoker = true) AS
+SELECT
+  id,
+  -- Mask name: first character + "***" (e.g., "Jane Doe" -> "J***")
+  CASE
+    WHEN name IS NULL OR length(btrim(name)) = 0 THEN 'Anonymous'
+    ELSE substring(btrim(name) FROM 1 FOR 1) || '***'
+  END                                    AS reviewer_display,
+  rating,
+  review_text,
+  trip_destination,
+  archetype,
+  is_featured,
+  photo_consent,
+  created_at
+FROM public.customer_reviews
+WHERE is_approved = true;
+
+-- The view runs with caller privileges. To let anon/auth read approved rows
+-- through the view without granting them table SELECT on the base table,
+-- add a dedicated permissive SELECT policy scoped to the columns the view
+-- actually exposes (email/user_id are still revoked at the column-grant level
+-- AND not selected by the view).
+CREATE POLICY "Approved reviews readable via view"
+  ON public.customer_reviews
+  FOR SELECT
+  TO anon, authenticated
+  USING (is_approved = true);
+
+GRANT SELECT ON public.public_customer_reviews TO anon, authenticated;
 ```
 
-No new table, no schema change — just policy replacement + grant tightening. RLS is already enabled.
+Why both the new policy and the column-level REVOKE: the policy is needed so the view (security_invoker) can read approved rows under the caller's role; the column REVOKE guarantees that even if a client SELECTs the base table directly, `email` and `user_id` are denied at the privilege layer — independent of RLS.
 
 ### Verification
 
-1. Anonymous SELECT → still works (public-read policy unchanged).
-2. Authenticated non-admin INSERT/UPDATE/DELETE → RLS violation (42501).
-3. Admin (row in `user_roles` with `role='admin'`) INSERT/UPDATE/DELETE → succeeds.
-4. Edge functions writing as service role → continue to work (service role bypasses RLS).
+1. Anonymous `select * from customer_reviews` → permission denied on `email`/`user_id` (or empty/error from PostgREST). Approved rows readable only by selecting non-PII columns.
+2. Anonymous `select * from public_customer_reviews` → approved rows, no email, name masked.
+3. Authenticated non-owner same as above.
+4. Owner `select email from customer_reviews where user_id = auth.uid()` → still works via the retained owner-SELECT policy + default grant to row owner.
+5. Insert path (`ReviewCapturePopup`) unchanged — INSERT policy unaffected.
 
 ### Files
 
-- New migration: `supabase/migrations/<ts>_lock_voyance_picks_writes_to_admins.sql`
+- New migration: `supabase/migrations/<ts>_lock_customer_reviews_pii.sql`
 
-No frontend changes — only admins should already be hitting write paths in the app; this just makes the DB enforce it.
+No frontend changes — there is no existing public-read consumer of this table.
