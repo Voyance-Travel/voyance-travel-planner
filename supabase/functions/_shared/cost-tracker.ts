@@ -246,6 +246,7 @@ export interface CostTrackingEntry {
   input_tokens: number;
   output_tokens: number;
   google_places_calls?: number;
+  google_place_details_calls?: number;
   google_geocoding_calls?: number;
   google_photos_calls?: number;
   google_routes_calls?: number;
@@ -254,6 +255,16 @@ export interface CostTrackingEntry {
   estimated_cost_usd?: number;
   duration_ms?: number;
   metadata?: Record<string, any>;
+  // Accuracy fields (Fix 1-3)
+  token_source?: TokenSource;
+  is_cache_hit?: boolean;
+  attempt_id?: string;
+  retry_of?: string | null;
+}
+
+export interface TrackerOptions {
+  /** If this attempt is a retry of a prior tracker, pass that tracker's attempt_id. */
+  retryOf?: string;
 }
 
 // =============================================================================
@@ -266,7 +277,11 @@ export class CostTracker {
   private entry: CostTrackingEntry;
    private category: CostCategory;
   
-  constructor(actionType: string, model: string = 'google/gemini-3-flash-preview') {
+  constructor(
+    actionType: string,
+    model: string = 'google/gemini-3-flash-preview',
+    opts: TrackerOptions = {},
+  ) {
     this.supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
@@ -282,14 +297,30 @@ export class CostTracker {
       input_tokens: 0,
       output_tokens: 0,
       google_places_calls: 0,
+      google_place_details_calls: 0,
       google_geocoding_calls: 0,
       google_photos_calls: 0,
       google_routes_calls: 0,
       amadeus_calls: 0,
       perplexity_calls: 0,
+      token_source: 'unknown',
+      is_cache_hit: false,
+      attempt_id: crypto.randomUUID(),
+      retry_of: opts.retryOf ?? null,
     };
   }
-  
+
+  /** Returns this tracker's attempt_id so a retry can reference it via { retryOf }. */
+  getAttemptId(): string {
+    return this.entry.attempt_id!;
+  }
+
+  /** Explicitly mark this row as a cache hit (cost = $0, work served from cache). */
+  markCacheHit(): this {
+    this.entry.is_cache_hit = true;
+    return this;
+  }
+
    /**
     * Override the auto-detected category
     */
