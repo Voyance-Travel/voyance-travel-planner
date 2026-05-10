@@ -1,54 +1,34 @@
-## RS.M12 — Consistent counting in `getTripStats`
+## RS.M13 — Timezone-correct date comparison in getNextTrip
 
-Goal: every trip lands in exactly one bucket and `total === planned + completed + drafts + other`. Keep the existing `{ count, trips: TripSummary[] }` return shape and the date-based bucketing.
+**File:** `src/services/userStatsAPI.ts` (lines 203, 209)
 
-### Current behavior to preserve (`src/services/userStatsAPI.ts` 88-132)
-
-- Status `'draft'` → drafts.
-- Status `'completed'` → completed.
-- Otherwise: `start_date > now` → planned, `end_date < now` → completed, else planned.
-
-Today every trip is assigned, so the off-by-one risk is mostly theoretical — but a single bucket of truth + an `other` overflow guarantees the invariant under future status additions.
+`start_date` is stored as `YYYY-MM-DD` (no timezone). Comparing it to `new Date().toISOString()` mixes a date-only value with a UTC timestamp, which can hide today's trip for users west of UTC late in the day.
 
 ### Change
 
-1. Replace the imperative push loop with one bucket assignment per trip via a switch-style classifier:
-   ```ts
-   type Bucket = 'planned' | 'completed' | 'drafts' | 'other';
-   const classify = (t: typeof trips[number]): Bucket => {
-     if (t.status === 'draft') return 'drafts';
-     if (t.status === 'completed') return 'completed';
-     if (t.start_date && parseLocalDate(t.start_date) > now) return 'planned';
-     if (t.end_date && parseLocalDate(t.end_date) < now) return 'completed';
-     if (t.status === 'planning' || !t.status) return 'planned';
-     return 'other'; // unrecognized status — surface instead of silently bucketing
-   };
-   const buckets: Record<Bucket, TripSummary[]> = { planned: [], completed: [], drafts: [], other: [] };
-   for (const trip of trips || []) {
-     buckets[classify(trip)].push({ id: trip.id, destination: trip.destination, startDate: trip.start_date, endDate: trip.end_date, status: trip.status });
-   }
-   ```
+Replace the UTC ISO string with a local YYYY-MM-DD computed via `toLocaleDateString('en-CA')`:
 
-2. Return shape stays compatible for the three existing buckets, plus `other`:
-   ```ts
-   return {
-     planned: { count: buckets.planned.length, trips: buckets.planned },
-     completed: { count: buckets.completed.length, trips: buckets.completed },
-     drafts: { count: buckets.drafts.length, trips: buckets.drafts },
-     other: { count: buckets.other.length, trips: buckets.other },
-     total: (trips?.length) || 0,
-   };
-   ```
+```ts
+// Compare local-date to local-date. start_date is stored as 'YYYY-MM-DD'
+// (no timezone), so use today's date in the user's local timezone.
+const todayLocal = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
 
-3. Extend the `TripStats` interface (lines 21-25) with `other: { count: number; trips: TripSummary[] }`. Existing consumers reading `planned/completed/drafts/total` keep working unchanged; `other` is additive.
+const { data: trips, error } = await supabase
+  .from('trips')
+  .select('id, destination, start_date, end_date')
+  .eq('user_id', user.id)
+  .gte('start_date', todayLocal)
+  .order('start_date', { ascending: true })
+  .limit(1);
+```
+
+The `now` variable (line 203) is removed since `Date.now()` is still used directly on line 221 for `daysUntil`.
 
 ### Verification
 
-- `grep -c "classify\|other: { count" src/services/userStatsAPI.ts` ≥ 1.
-- Existing consumers (`useTripStats`, line 309) continue to compile — only adding an optional-feeling field on the type.
-- Manual: with statuses `planning`/`completed`/`draft` only, `other.count === 0` and totals match prior behavior.
+`grep -c "todayLocal\|toLocaleDateString('en-CA')" src/services/userStatsAPI.ts` ≥ 2
 
 ### Out of scope
 
-- Renaming buckets, surfacing `other` in any UI, or changing date-inference semantics.
-- Touching `getCountriesVisited` or other functions in the file.
+- `getTripStats` date comparisons (separate task)
+- `parseLocalDate` / `daysUntil` math (already local via `parseLocalDate`)

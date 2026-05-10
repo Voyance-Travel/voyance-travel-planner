@@ -200,13 +200,15 @@ export async function getNextTrip(): Promise<NextTripResponse> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Authentication required');
   
-  const now = new Date().toISOString();
-  
+  // Compare local-date to local-date. start_date is stored as 'YYYY-MM-DD'
+  // (no timezone), so use today's date in the user's local timezone.
+  const todayLocal = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+
   const { data: trips, error } = await supabase
     .from('trips')
     .select('id, destination, start_date, end_date')
     .eq('user_id', user.id)
-    .gte('start_date', now)
+    .gte('start_date', todayLocal)
     .order('start_date', { ascending: true })
     .limit(1);
   
