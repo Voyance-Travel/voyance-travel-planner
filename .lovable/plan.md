@@ -1,106 +1,105 @@
-# Refund credits on regenerate_day failure
+# Refund silent credit loss on chat-Assistant Apply failures
 
-## Problem
+## Scope verification (matches user's question)
 
-`REGENERATE_DAY` charges credits client-side **before** invoking `generate-itinerary` (`EditorialItinerary.tsx` lines 5093-5103, 5119-5128). On failure the catch block just shows a toast — **credits stay deducted**.
+**`ai_message` is already free.** Confirmed in `ItineraryAssistant.tsx:108` (`// ai_message is now free — no cap tracking needed`) and in core memory ("AI chat is free; credits deducted only for structural changes applied"). The chargeable event is **clicking Apply** on a proposed action — which charges `SWAP_ACTIVITY` or `REGENERATE_DAY`. So the refund target is the Apply path, not every chat message. ✅
 
-Two failure modes today:
-1. **Hard fail** — `supabase.functions.invoke` returns an error or throws (lines 5234-5236).
-2. **Silent fail** — `action-generate-day.ts` `buildPlaceholderDay()` (line 250-280) returns a 200 with `metadata.quality.generation_failed = true` and zero activities. The client treats this as success.
+**`swap_activity` and `add_activity` in `EditorialItinerary.tsx`** charge credits, then mutate React state (`setDays(...)`) and dispatch a debounced auto-save. There is **no awaitable failure surface** between the spend and the user-visible "swapped/added" outcome — `handleConfirmSwap` (line ~3962) and `handleAddActivity` (line ~5398) are local state operations. The auto-save timer (`useEffect` after `setHasChanges(true)`) is fire-and-forget and not currently hooked back to refunds; wrapping it would mean watching state from the wrong scope. **Out of scope** for this fix; flag for follow-up.
 
-## Why not the user's proposed shape
+The actual silent-loss surface is the **chat-Assistant Apply path**, where `spendCredits.mutateAsync(...)` is followed by `await executeAction(...)`. `executeAction` invokes `generate-itinerary` (swap/regenerate/rewrite) and returns `{ success: false, error }` on every failure path — currently the catch / `result.success === false` branches just toast and **leave the credit deducted**.
 
-The user suggested wrapping the server-side generator in try/catch and adding a new `refund_credits` RPC + `idempotency_key`-keyed ledger column. We already have all of that infrastructure:
+## File: `src/components/itinerary/ItineraryAssistant.tsx`
 
-- `spend-credits` already has a fully-built **`REFUND`** action (lines 365-540) with: defensive-refund lookup by `originalIdempotencyKey`, idempotency by `pendingChargeId`, ledger row, `credit_purchases` restore, balance cache resync.
-- The migration just landed adding `credit_ledger.idempotency_key` + unique partial index.
-- Server-side refund from inside `action-generate-day` would require service-role refund plumbing AND duplicates what client-side already does (the client already knows the outcome and already holds the original `idempotencyKey` from `useSpendCredits`).
+Around lines 376-577 (`handleActionApply`).
 
-So we reuse `REFUND` from the client at the point of failure, and add `regenerate_day` to the refundable map. No new RPC, no migration.
+### Capture spend context
 
-## Changes
-
-### 1. `supabase/functions/spend-credits/index.ts`
-
-Add `regenerate_day` to `REFUNDABLE_COSTS` so the REFUND handler resolves the amount when the client passes `originalAction: 'REGENERATE_DAY'` without an explicit `creditsAmount`:
+Where credits are spent (line 383-388), capture `idempotencyKey` and `pendingChargeId` from the response (already exposed by `useSpendCredits` after the prior fix):
 
 ```ts
-const REFUNDABLE_COSTS: Record<string, number> = {
-  SMART_FINISH: 50, smart_finish: 50,
-  UNLOCK_DAY: 60,   unlock_day: 60,
-  HOTEL_OPTIMIZATION: 100, hotel_optimization: 100,
-  REGENERATE_DAY: 0, regenerate_day: 0, // tier-dependent — force defensive lookup
-};
+let spendContext: { idempotencyKey?: string; pendingChargeId?: string | null } | undefined;
+if (creditAction) {
+  const creditResult = await spendCredits.mutateAsync({ action: creditAction, tripId, metadata: { ... } });
+  if (!creditResult.success) throw new Error('Insufficient credits');
+  spendContext = {
+    idempotencyKey: (creditResult as { idempotencyKey?: string }).idempotencyKey,
+    pendingChargeId: (creditResult as { pendingChargeId?: string | null }).pendingChargeId ?? null,
+  };
+}
 ```
 
-Cost varies by tier (1-5 credits), so we keep `0` and rely on the defensive-refund path that reads the actual debit amount from the original ledger row (lines 415-417 already handle this).
+### Add a refund helper inside `handleActionApply`
 
-### 2. `src/components/itinerary/EditorialItinerary.tsx` — `handleDayRegenerateInternal`
-
-Capture the `idempotencyKey` from the spend, detect both hard and silent failures, and call REFUND once on failure.
-
-**At spend site** (lines 5093-5103, 5119-5128) — capture the spend result so we have its `idempotencyKey`:
+Maps the assistant's chargeable action types to the `originalAction` strings the REFUND handler in `spend-credits` already understands:
 
 ```ts
-const spendResult = await spendCredits.mutateAsync({
-  action: 'REGENERATE_DAY', tripId, dayIndex,
-});
-// stash for refund — pass through to handleDayRegenerateInternal
-```
+const refundOriginalAction =
+  creditAction === 'SWAP_ACTIVITY'    ? 'swap_activity'
+  : creditAction === 'REGENERATE_DAY' ? 'regenerate_day'
+  : null;
 
-Pass `spendResult.idempotencyKey` (auto-generated by `useSpendCredits` per the recent fix) and the spend's `pendingChargeId` into `handleDayRegenerateInternal` via a new optional arg `spendContext`.
-
-**In `handleDayRegenerateInternal`** wrap the existing try with a refund call in catch + after the success branch when a placeholder is detected:
-
-```ts
-const isFailedDay = (d: any) =>
-  !d || !Array.isArray(d.activities) || d.activities.length === 0
-    || d?.metadata?.quality?.generation_failed === true;
-
-// hard fail (catch block)
-} catch (err) {
-  console.error('Regenerate error:', err);
-  if (spendContext?.idempotencyKey) {
+const refundOnFailure = async (reason: string, errorMessage?: string) => {
+  if (!spendContext?.idempotencyKey || !refundOriginalAction) return;
+  try {
     await supabase.functions.invoke('spend-credits', {
       body: {
         action: 'REFUND',
         tripId,
         metadata: {
-          originalAction: 'regenerate_day',
-          pendingChargeId: spendContext.pendingChargeId,
-          reason: 'generation_failed',
-          errorMessage: err instanceof Error ? err.message : String(err),
+          originalAction: refundOriginalAction,
+          pendingChargeId: spendContext.pendingChargeId ?? undefined,
+          reason,
+          ...(errorMessage ? { errorMessage } : {}),
         },
         originalIdempotencyKey: spendContext.idempotencyKey,
       },
-    }).catch(refundErr => console.error('[Regenerate] Refund failed:', refundErr));
+    });
+  } catch (refundErr) {
+    console.error('[ActionExecutor] Refund failed:', refundErr);
   }
-  toast.error('Failed to regenerate day — credits refunded');
-}
+};
+```
 
-// silent fail (after data.day inspection)
-if (isFailedDay(data?.day)) {
-  /* same REFUND invoke as above with reason: 'placeholder_day' */
-  toast.error("We couldn't regenerate this day — credits refunded");
-  return;
+Server-side this routes through the existing REFUND handler (`spend-credits/index.ts:368-540`) with `originalIdempotencyKey` defensive lookup, dedup by `pendingChargeId`, ledger row, balance restore.
+
+### Wire refund into the two failure paths
+
+**Path A — `result.success === false`** (currently the `else` branch around line 555):
+
+```ts
+} else {
+  await refundOnFailure('execution_failed', result.error || result.message);
+  toast.error('Action failed — credits refunded', { id: actionId, description: result.message });
 }
 ```
 
-Apply the same pattern to `handleGuidedAssistSubmit` → `handleDayRegenerateInternal` path so guided-assist regens are covered too.
+**Path B — thrown exception** (`catch (error)` around line 559):
 
-### 3. `src/services/itineraryActionExecutor.ts` (`executeRegenerateAction`, line 555)
+```ts
+await refundOnFailure('execution_threw', error instanceof Error ? error.message : String(error));
+toast.error('Failed to execute action — credits refunded', { id: actionId, description: ... });
+```
 
-This is the chat/assistant path for `regenerate_day`. It does **not** charge credits itself — credits flow through `useSpendCredits` from the chat caller. Add the same placeholder/error refund gate keyed off the `idempotencyKey` already attached to the action's `creditContext` (already plumbed by `executeAction`). If `creditContext` is absent (free action), no-op.
+### Add `swap_activity` to `REFUNDABLE_COSTS`
 
-## Out of scope
+`supabase/functions/spend-credits/index.ts` (the REFUND handler already lists `regenerate_day` from the prior fix). Add `SWAP_ACTIVITY` / `swap_activity` with `0` (tier-dependent — defensive lookup populates from the original ledger row via `originalIdempotencyKey`):
 
-- The user's `refund_credits` RPC + new `credit_ledger.idempotency_key` migration: the column already exists from the previous migration; the existing REFUND handler already does atomic restore + ledger insert + idempotency.
-- Server-side refund from `action-generate-day.ts`: not needed — placeholder-day pattern means the function reliably returns 200 with a detectable shape, so client-side detection is sufficient and avoids service-role plumbing.
-- Refund on full-trip `REGENERATE_TRIP` (line 4248): same pattern would apply but is a separate failure surface; flag for a follow-up.
+```ts
+const REFUNDABLE_COSTS: Record<string, number> = {
+  ...,
+  SWAP_ACTIVITY: 0, swap_activity: 0,
+};
+```
+
+## Out of scope (and why)
+
+- **`ai_message` refund** — chat is free; no charge to refund. The user's spec confirms "free until you click Apply".
+- **`add_activity` / `swap_activity` from EditorialItinerary** — local state mutations with no awaitable failure surface. The realistic failure (autosave / cost-sync) is decoupled from the spend by debounced effects; refunding requires reworking the autosave contract, not a try/catch wrap. Logging this as a separate issue.
+- **No new RPC, no migration** — uses existing REFUND action and the `idempotency_key` column added in the prior migration.
 
 ## Verification
 
-1. Mock `generate-itinerary` to throw → toast says "credits refunded", ledger has spend + refund, balance restored.
-2. Mock `generate-itinerary` to return `{ day: { activities: [], metadata: { quality: { generation_failed: true } } } }` → same outcome.
-3. Successful regen → no refund row, balance stays debited.
-4. Double-trigger refund (network retry) → second REFUND returns `idempotent: true` via `pendingChargeId` dedup.
+1. Mock `executeSwapAction` to return `{ success: false, error: 'No alternatives' }` → toast says "credits refunded", `credit_ledger` shows spend + refund (transaction_type='refund'), balance restored.
+2. Mock `executeRewriteDayAction` to throw → same outcome via the catch path.
+3. Successful Apply → no refund row.
+4. Double-trigger by retry → second REFUND returns `idempotent: true` via `pendingChargeId` dedup.
