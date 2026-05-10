@@ -40,6 +40,7 @@ import {
   type DiffEntry,
 } from '@/services/itineraryActionExecutor';
 
+import { supabase } from '@/integrations/supabase/client';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
 import { useEntitlements } from '@/hooks/useEntitlements';
