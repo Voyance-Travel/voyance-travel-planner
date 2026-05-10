@@ -78,23 +78,7 @@ serve(async (req) => {
       })) || []
     };
 
-    // Generate AI summary
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    
-    if (!LOVABLE_API_KEY) {
-      // Fallback: Generate a basic summary without AI
-      const basicSummary = generateBasicSummary(context);
-      
-      await supabase
-        .from('trip_learnings')
-        .update({ lessons_summary: basicSummary })
-        .eq('id', learning.id);
-
-      return new Response(
-        JSON.stringify({ summary: basicSummary }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     const prompt = `Analyze this trip feedback and generate a concise, actionable summary (2-3 sentences max) that can be used to improve future itinerary generation for this traveler.
 
@@ -108,37 +92,54 @@ Focus on:
 
 Output a single paragraph that could be injected into an AI prompt for their next trip planning.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: "You are a travel insights analyst. Generate concise, actionable summaries for improving future trip planning." },
-          { role: "user", content: prompt }
-        ],
-        max_tokens: 300,
-      }),
-    });
+    let lessonsSummary = '';
+    let summarySource: 'ai' | 'fallback' = 'ai';
 
-    if (!response.ok) {
-      throw new Error(`AI request failed: ${response.status}`);
+    try {
+      if (!LOVABLE_API_KEY) throw new Error('No LOVABLE_API_KEY configured');
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: "You are a travel insights analyst. Generate concise, actionable summaries for improving future trip planning." },
+            { role: "user", content: prompt }
+          ],
+          max_tokens: 300,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI request failed: ${response.status}`);
+      }
+
+      const aiResult = await response.json();
+      lessonsSummary = aiResult.choices?.[0]?.message?.content?.trim() || '';
+
+      if (!lessonsSummary || lessonsSummary.length < 20) {
+        throw new Error('AI returned empty/short summary');
+      }
+    } catch (err) {
+      console.warn('[summarize] AI failed, using rule-based fallback:', err instanceof Error ? err.message : err);
+      lessonsSummary = generateBasicSummary(context);
+      summarySource = 'fallback';
     }
 
-    const aiResult = await response.json();
-    const summary = aiResult.choices?.[0]?.message?.content?.trim() || generateBasicSummary(context);
-
-    // Update the learning with the summary
     await supabase
       .from('trip_learnings')
-      .update({ lessons_summary: summary })
+      .update({
+        lessons_summary: lessonsSummary,
+        summary_source: summarySource,
+      })
       .eq('id', learning.id);
 
     return new Response(
-      JSON.stringify({ summary }),
+      JSON.stringify({ summary: lessonsSummary, summary_source: summarySource }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
