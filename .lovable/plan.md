@@ -1,33 +1,54 @@
-## RS.M11 — Module-level dedup for `useDestinationEnrichment`
+## RS.M12 — Consistent counting in `getTripStats`
 
-The hook currently dedups per-instance via `triggeredRef`, so two simultaneous mounts of the same destination (multi-tab UI, parent + child both mounting, fast remounts) each fire `enrich-destination`. The DB `enriched_at` guard catches it server-side, but we still pay the round-trip + LLM call.
+Goal: every trip lands in exactly one bucket and `total === planned + completed + drafts + other`. Keep the existing `{ count, trips: TripSummary[] }` return shape and the date-based bucketing.
 
-The user's snippet is a simplification — the real hook also tracks `isEnriching` / `enrichmentDone` state, runs a thinness check, and invalidates 3 react-query keys on success. The plan keeps all that and only changes the gating layer.
+### Current behavior to preserve (`src/services/userStatsAPI.ts` 88-132)
 
-### Change — `src/hooks/useDestinationEnrichment.ts`
+- Status `'draft'` → drafts.
+- Status `'completed'` → completed.
+- Otherwise: `start_date > now` → planned, `end_date < now` → completed, else planned.
 
-1. Add module-level dedup map at top of file (above the hook):
+Today every trip is assigned, so the off-by-one risk is mostly theoretical — but a single bucket of truth + an `other` overflow guarantees the invariant under future status additions.
+
+### Change
+
+1. Replace the imperative push loop with one bucket assignment per trip via a switch-style classifier:
    ```ts
-   // Shared across all hook instances in this tab. Cross-tab dedup is handled
-   // by the DB-side `enriched_at` guard inside the enrich-destination function.
-   const enrichInFlight = new Map<string, Promise<void>>();
+   type Bucket = 'planned' | 'completed' | 'drafts' | 'other';
+   const classify = (t: typeof trips[number]): Bucket => {
+     if (t.status === 'draft') return 'drafts';
+     if (t.status === 'completed') return 'completed';
+     if (t.start_date && parseLocalDate(t.start_date) > now) return 'planned';
+     if (t.end_date && parseLocalDate(t.end_date) < now) return 'completed';
+     if (t.status === 'planning' || !t.status) return 'planned';
+     return 'other'; // unrecognized status — surface instead of silently bucketing
+   };
+   const buckets: Record<Bucket, TripSummary[]> = { planned: [], completed: [], drafts: [], other: [] };
+   for (const trip of trips || []) {
+     buckets[classify(trip)].push({ id: trip.id, destination: trip.destination, startDate: trip.start_date, endDate: trip.end_date, status: trip.status });
+   }
    ```
 
-2. Inside the `useEffect`, after the existing thinness check passes, key by `dbDestination.id.toLowerCase()`:
-   - If `enrichInFlight.has(key)` → bail out (no state flip, no invoke). The other mount will invalidate queries on completion, and react-query's shared cache will deliver the result to this mount.
-   - Otherwise create the promise, store it in the map, and `delete` in `finally`. Wrap the existing `enrich()` body so the map cleanup is guaranteed.
+2. Return shape stays compatible for the three existing buckets, plus `other`:
+   ```ts
+   return {
+     planned: { count: buckets.planned.length, trips: buckets.planned },
+     completed: { count: buckets.completed.length, trips: buckets.completed },
+     drafts: { count: buckets.drafts.length, trips: buckets.drafts },
+     other: { count: buckets.other.length, trips: buckets.other },
+     total: (trips?.length) || 0,
+   };
+   ```
 
-3. Keep `triggeredRef` as the per-instance guard (prevents the same mount from re-firing on unrelated re-renders before the module map is populated). Both guards coexist.
-
-4. No change to the return shape, the thinness logic, or the invalidation keys.
+3. Extend the `TripStats` interface (lines 21-25) with `other: { count: number; trips: TripSummary[] }`. Existing consumers reading `planned/completed/drafts/total` keep working unchanged; `other` is additive.
 
 ### Verification
 
-- `grep -c "enrichInFlight\|Map<string, Promise<void>>" src/hooks/useDestinationEnrichment.ts` ≥ 1 (expect 3+).
-- Manual: open two destination tabs simultaneously for an unenriched city → only one `enrich-destination` invocation in network tab.
+- `grep -c "classify\|other: { count" src/services/userStatsAPI.ts` ≥ 1.
+- Existing consumers (`useTripStats`, line 309) continue to compile — only adding an optional-feeling field on the type.
+- Manual: with statuses `planning`/`completed`/`draft` only, `other.count === 0` and totals match prior behavior.
 
 ### Out of scope
 
-- Cross-tab dedup (handled by DB).
-- Refactoring the thinness heuristic.
-- Changing the enrich-destination function itself.
+- Renaming buckets, surfacing `other` in any UI, or changing date-inference semantics.
+- Touching `getCountriesVisited` or other functions in the file.
