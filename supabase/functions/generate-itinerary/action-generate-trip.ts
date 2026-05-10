@@ -443,6 +443,50 @@ export async function handleGenerateTrip(
       } catch (ptErr) {
         console.warn('[generate-trip] Past trip learnings failed (non-blocking):', ptErr);
       }
+
+      // 10b. Activity feedback signals (loved/disliked categories from prior ratings)
+      try {
+        const { data: recentFeedback } = await supabase
+          .from('activity_feedback')
+          .select('rating, activity_type, activity_category, created_at')
+          .eq('user_id', userId)
+          .in('rating', ['loved', 'liked', 'disliked'])
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        const tally = (rows: Array<{ activity_type: string | null; activity_category: string | null }>) => {
+          const counts: Record<string, number> = {};
+          for (const r of rows) {
+            const key = (r.activity_type || r.activity_category || '').trim().toLowerCase();
+            if (!key) continue;
+            counts[key] = (counts[key] ?? 0) + 1;
+          }
+          return Object.entries(counts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([k]) => k);
+        };
+
+        const rows = (recentFeedback ?? []) as Array<{ rating: string; activity_type: string | null; activity_category: string | null }>;
+        const loved = tally(rows.filter(r => r.rating === 'loved' || r.rating === 'liked'));
+        const disliked = tally(rows.filter(r => r.rating === 'disliked'));
+
+        if (rows.length > 0 && (loved.length > 0 || disliked.length > 0)) {
+          enrichmentContext.behavioralPreferences = {
+            consistentlyLoved: loved,
+            consistentlyDisliked: disliked,
+            sampleSize: rows.length,
+          };
+          enrichmentContext.behavioralPreferencesPrompt =
+            `\n## 🎯 PAST BEHAVIORAL SIGNALS (from ${rows.length} prior activity ratings)\n` +
+            `- Strongly favor: ${loved.join(', ') || 'no clear pattern yet'}\n` +
+            `- Actively avoid (unless directly requested): ${disliked.join(', ') || 'no clear pattern yet'}\n`;
+          console.log(`[generate-trip] Behavioral signals: loved=[${loved.join('|')}] disliked=[${disliked.join('|')}] from ${rows.length} ratings`);
+        }
+      } catch (afErr) {
+        console.warn('[generate-trip] Activity feedback signals failed (non-blocking):', afErr);
+      }
+
       
       // 11. Recently used activities for variety
       try {

@@ -829,6 +829,7 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
       if (gc.forcedSlotsPrompt) promptParts.push(gc.forcedSlotsPrompt as string);
       if (gc.scheduleConstraintsPrompt) promptParts.push(gc.scheduleConstraintsPrompt as string);
       if (gc.pastTripLearnings) promptParts.push(gc.pastTripLearnings as string);
+      if (gc.behavioralPreferencesPrompt) promptParts.push(gc.behavioralPreferencesPrompt as string);
 
       if (gc.recentlyUsedActivities) {
         const recentNames = gc.recentlyUsedActivities as string[];
