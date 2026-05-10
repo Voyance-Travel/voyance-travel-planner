@@ -560,7 +560,10 @@ async function executeRegenerateAction(
     return { success: false, message: 'Failed to regenerate day with scheduling constraints', error: error?.message || data?.error || 'Unknown error' };
   }
 
-  const regenActivities = data.day.activities || day.activities;
+  let regenActivities = data.day.activities || day.activities;
+  const regenLockGuard = verifyLocksPreserved(day.activities, regenActivities, target_day);
+  regenActivities = regenLockGuard.restored;
+
   const regenDiff = computeDayDiff(target_day, day.activities, regenActivities);
   const regenCostDelta = computeDayCost(regenActivities) - computeDayCost(day.activities);
 
@@ -568,9 +571,13 @@ async function executeRegenerateAction(
   updatedDays[dayIndex] = { ...day, ...data.day, activities: regenActivities };
   await updateTripItinerary(tripId, updatedDays);
 
+  const regenRestoredSuffix = regenLockGuard.violations > 0
+    ? ` (restored ${regenLockGuard.violations} locked item${regenLockGuard.violations === 1 ? '' : 's'} the AI tried to change)`
+    : '';
+
   return {
     success: true,
-    message: 'Refreshed Day ' + target_day + (new_focus ? ' (more "' + new_focus + '")' : '') + ' without breaking flight/arrival timing',
+    message: 'Refreshed Day ' + target_day + (new_focus ? ' (more "' + new_focus + '")' : '') + ' without breaking flight/arrival timing' + regenRestoredSuffix,
     updatedDays,
     diff: regenDiff,
     costDelta: regenCostDelta,
