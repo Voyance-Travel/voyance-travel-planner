@@ -82,14 +82,31 @@ function timeToMins(raw: unknown): number | null {
   return h * 60 + mm;
 }
 
-function isLockedRow(a: any): boolean {
+/**
+ * Universal lock check — true if a row is locked by ANY representation:
+ *  - Boolean flags: `locked`, `is_locked`, `isLocked`
+ *  - State string: `lock_state === 'locked'`
+ *  - Source provenance (Universal Locking Protocol): `source ∈
+ *    {user, manual, extracted, pinned}`, or top-level `userAdded` /
+ *    `pinned` / `extracted` flags.
+ *
+ * Use this at every code-level "is this row protected from AI mutation?"
+ * check. Reading only `a.isLocked` silently bypasses locks set via the
+ * editor's lock toggle (which writes `lock_state`) — see
+ * mem://constraints/itinerary/chat-executor-lock-preservation.
+ */
+export function isActivityLocked(a: any): boolean {
   if (!a) return false;
   if (a.locked === true || a.is_locked === true || a.isLocked === true) return true;
   if (a.lock_state === 'locked') return true;
+  if (a.userAdded === true || a.pinned === true || a.extracted === true) return true;
   const source = String(a.source || '').toLowerCase();
   if (['user', 'manual', 'extracted', 'pinned'].includes(source)) return true;
   return false;
 }
+
+// Internal alias for backwards compatibility with this module's earlier name.
+const isLockedRow = isActivityLocked;
 
 /** Strip prompt-artifact tokens from title/name/description in place. */
 export function stripPromptArtifactsInActivities(activities: any[]): number {

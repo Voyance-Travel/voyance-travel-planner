@@ -1,45 +1,84 @@
-## Bug 7: Transport mode change doesn't persist
+## Bug 8: AI chat doesn't verify lock preservation
 
-`handleTransportModeChange` (EditorialItinerary.tsx:3162–3325) updates React state in three branches (optimize success, optimize-returned-no-data, optimize threw) but never persists to the DB and never reflects the new transport cost in the budget ledger. It also relies on a hardcoded fallback cost map duplicated across two of those branches.
+The chat path silently violates locks because three things are wrong:
+
+1. **Flag mismatch.** Every lock check in `itineraryActionExecutor.ts` reads only `a.isLocked`. The Universal Locking Protocol uses `isLocked`, `locked`, `is_locked`, `lock_state === 'locked'`, plus source flags `user/manual/extracted/pinned`. A row locked via the editor's "Lock" toggle (which sets `locked: true` and/or `lock_state: 'locked'`) is invisible to the chat executor → swap/filter/regenerate happily replaces it.
+2. **AI sees the wrong shape.** `ItineraryAssistant.tsx:130` only forwards `isLocked: a.isLocked` to the model. The system prompt asks the AI to "preserve_locked" but the AI literally cannot tell which rows are locked when only `lock_state` is set.
+3. **No post-write verification.** `executeRewriteDayAction` and `executeRegenerateAction` send `keepActivities` IDs to the edge function and trust the response. If the backend drops or mutates a locked row, nothing notices.
 
 ### Fix
 
-**1. Persist after every successful state mutation**
+**1. Single shared lock helper.** Export `isActivityLocked(act)` from `src/lib/itinerary/persistDayContract.ts` (the existing `isLockedRow` already covers all flags + sources — promote it to an exported `isActivityLocked` and re-use). The signature: `(a: any) => boolean`.
 
-Refactor the three `setDays(prev => …)` blocks to compute the new days array up-front (or capture it in a `let nextDays` via the updater), then after `setDays`:
-- Call `syncBudgetFromDays(nextDays)` so `activity_costs` reflects the new transport cost.
-- Call `safeUpdateItineraryData(tripId, { days: nextDays, status, optionSelections, savedAt: new Date().toISOString(), metadata: { ...parsedMetadata, lastUpdated: new Date().toISOString() } })` and on failure fall back to `setHasChanges(true)` (mirrors the pattern just added to `handleUpdateActivityTime`).
+**2. Replace every flag check in `itineraryActionExecutor.ts`** with `isActivityLocked`:
+- Line 241 (`rewrite_day` keepActivities filter)
+- Line 378 (`swap` pre-check)
+- Line 486 (`regenerate_day` keepActivities filter)
+- Line 546 (`pacing more_relaxed` removal pick)
+- Line 681 (`filter` per-activity skip)
 
-This applies to all three branches: optimize-success, optimize-no-data, and the catch block.
+**3. Forward full lock state to the AI.** In `ItineraryAssistant.tsx`, the per-activity payload becomes:
+```ts
+isLocked: isActivityLocked(a),
+```
+so the AI's `preserve_locked` instruction has correct ground truth across all three lock representations.
 
-**2. Replace hardcoded fallback cost map with shared helper**
-
-The two duplicated `modeCosts` maps (lines 3248-3250 and 3287-3289) are the only client-side estimator and silently disagree with server logic. Extract into a single helper `src/lib/itinerary/transportModeFallbackCost.ts`:
+**4. Post-write lock-violation guard for day-level rewrites.** Add a shared verifier in the executor:
 
 ```ts
-// Mirrors supabase/functions/_shared/transit-mode.ts tier costs.
-// Used ONLY when optimize-itinerary returns no usable cost.
-export function transportModeFallbackCost(mode: string): number { … }
+function verifyLocksPreserved(
+  before: Activity[],
+  after: Activity[],
+  dayNumber: number,
+): { restored: Activity[]; violations: number } {
+  const lockedBefore = before.filter(isActivityLocked);
+  let violations = 0;
+  const matched = new Set<number>();
+  const result = [...after];
+
+  for (const locked of lockedBefore) {
+    const idx = result.findIndex(a =>
+      (locked.id && a.id === locked.id) ||
+      (activityTitle(a) === activityTitle(locked) && (a.startTime || a.time) === (locked.startTime || locked.time))
+    );
+    if (idx === -1) {
+      // Backend dropped a locked row — re-insert verbatim.
+      result.push({ ...locked });
+      violations++;
+    } else if (matched.has(idx)) {
+      violations++;
+    } else {
+      // Force the original locked snapshot to win over any AI mutation.
+      result[idx] = { ...locked };
+      matched.add(idx);
+    }
+  }
+  if (violations > 0) {
+    console.warn(`[LOCK_VIOLATION] day=${dayNumber} restored=${violations} (chat executor)`);
+  }
+  return { restored: result, violations };
+}
 ```
 
-Both fallback branches in `handleTransportModeChange` import and call this helper. Helper marks the cost with `basis: 'fallback_estimate'` on the activity's `transportation.estimatedCost` so a follow-up cost repair can re-price it.
+Call it inside `executeRewriteDayAction` and `executeRegenerateAction` immediately after the backend returns and before `mergeAccommodationActivities` / `updateTripItinerary`. When `violations > 0`, append to the result message: `"(restored N locked item${plural} the AI tried to change)"` so the toast user-facing text surfaces silently dropped rows.
 
-**3. Lock-respect (consistency with bug 6)**
-
-Add a guard at the top of `handleTransportModeChange`: if the activity is locked (`isLocked || locked || lock_state === 'locked'`), show a toast and return.
-
-**4. Dependency array**
-
-Add `parsedMetadata`, `safeUpdateItineraryData`, `syncBudgetFromDays` to the `useCallback` deps (the first two are already module-scope/stable; `syncBudgetFromDays` is the important addition).
+**5. Also harden `executeFilterAction`** — its `if (activity.isLocked) continue` is the only guard inside the loop; switching to `isActivityLocked` is sufficient (no post-write needed since each swap is per-activity).
 
 ### Verification
 
-- Change a transport mode, hard-reload before global Save → mode + cost still applied.
-- Locked transport activity → toast, no change.
-- With network offline / optimize edge function down → fallback path still persists, cost shows on card and in PaymentsTab.
-- `bunx vitest run no-raw-itinerary-writes` still passes (uses sanctioned `safeUpdateItineraryData`).
+- Lock an activity via UI (sets `lock_state: 'locked'` only). Ask chat "rewrite Day 2." Expect: locked item still in place, toast notes restoration if backend tried.
+- Lock via legacy `isLocked: true`. Same flow. Same outcome.
+- Manual/extracted rows (`source: 'user'/'extracted'`) — chat "swap my dinner on Day 3" returns "is locked and cannot be swapped".
+- Filter "make it vegan" with one locked dining row — that row is skipped, others swap.
+- Console shows `[LOCK_VIOLATION] day=N restored=K (chat executor)` if and only if backend tried to drop a locked row.
+- `bunx vitest run no-raw-itinerary-writes` still passes.
 
 ### Files
 
-- `src/lib/itinerary/transportModeFallbackCost.ts` (new)
-- `src/components/itinerary/EditorialItinerary.tsx` (handleTransportModeChange only)
+- `src/lib/itinerary/persistDayContract.ts` (export `isActivityLocked`)
+- `src/services/itineraryActionExecutor.ts` (5 flag-check replacements + `verifyLocksPreserved` in two executors)
+- `src/components/itinerary/ItineraryAssistant.tsx` (single line: payload uses `isActivityLocked(a)`)
+
+### Memory
+
+After implementation, save a constraint memory `mem://constraints/itinerary/chat-executor-lock-preservation` describing the helper + post-write verifier so future chat-action additions don't re-introduce the bug.

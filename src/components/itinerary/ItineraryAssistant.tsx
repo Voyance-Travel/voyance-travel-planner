@@ -21,6 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { isActivityLocked } from '@/lib/itinerary/persistDayContract';
 import { toast } from 'sonner';
 import { 
   sendChatMessage, 
@@ -127,7 +128,7 @@ export function ItineraryAssistant({
         category: a.category,
         time: a.time || a.startTime || '',
         cost: typeof a.cost === 'number' ? a.cost : (a.cost as { amount?: number })?.amount,
-        isLocked: a.isLocked,
+        isLocked: isActivityLocked(a),
       })),
     })),
     accommodationInfo,

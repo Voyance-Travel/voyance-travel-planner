@@ -7,6 +7,54 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { ItineraryAction } from './itineraryChatAPI';
 import type { Json } from '@/integrations/supabase/types';
+import { isActivityLocked } from '@/lib/itinerary/persistDayContract';
+
+/**
+ * Verify locked rows from `before` survived in `after` after a backend
+ * day-level rewrite. Restores any dropped/mutated locked row verbatim and
+ * logs a `[LOCK_VIOLATION]` sentinel. See
+ * mem://constraints/itinerary/chat-executor-lock-preservation.
+ */
+function verifyLocksPreserved(
+  before: Activity[],
+  after: Activity[],
+  dayNumber: number,
+): { restored: Activity[]; violations: number } {
+  const lockedBefore = (before || []).filter(isActivityLocked);
+  if (lockedBefore.length === 0) return { restored: after, violations: 0 };
+
+  let violations = 0;
+  const matched = new Set<number>();
+  const result = [...(after || [])];
+
+  for (const locked of lockedBefore) {
+    const lockedTitle = (locked.title || locked.name || '').toLowerCase().trim();
+    const lockedTime = (locked.startTime || locked.time || '');
+    const idx = result.findIndex((a, i) => {
+      if (matched.has(i)) return false;
+      if (locked.id && a.id === locked.id) return true;
+      const at = (a.title || a.name || '').toLowerCase().trim();
+      const ts = (a.startTime || a.time || '');
+      return at === lockedTitle && ts === lockedTime;
+    });
+    if (idx === -1) {
+      result.push({ ...locked });
+      violations++;
+    } else {
+      // Force the original locked snapshot to win over any AI mutation.
+      const current = result[idx];
+      const drift = JSON.stringify(current) !== JSON.stringify(locked);
+      result[idx] = { ...locked };
+      matched.add(idx);
+      if (drift) violations++;
+    }
+  }
+
+  if (violations > 0) {
+    console.warn(`[LOCK_VIOLATION] day=${dayNumber} restored=${violations} (chat executor)`);
+  }
+  return { restored: result, violations };
+}
 
 // ============================================================================
 // GUARDRAILS (COMMON-SENSE SCHEDULING)
@@ -238,7 +286,7 @@ async function executeRewriteDayAction(
 
   const day = currentDays[dayIndex];
   const keepActivities = preserve_locked
-    ? day.activities.filter(a => a.isLocked || isProtectedActivity(a)).map(a => a.id).filter(Boolean)
+    ? day.activities.filter(a => isActivityLocked(a) || isProtectedActivity(a)).map(a => a.id).filter(Boolean)
     : [];
 
   const { data, error } = await supabase.functions.invoke('generate-itinerary', {
@@ -261,6 +309,11 @@ async function executeRewriteDayAction(
   }
 
   let newActivities = data.day.activities || day.activities;
+
+  // Lock-preservation gate — backend may drop or mutate locked rows despite
+  // `keepActivities`. Restore them verbatim before further processing.
+  const lockGuard = verifyLocksPreserved(day.activities, newActivities, target_day);
+  newActivities = lockGuard.restored;
 
   // Preserve distinct accommodation intents (check-in, freshen-up, return, checkout)
   // instead of collapsing all hotel cards into one
@@ -325,9 +378,13 @@ async function executeRewriteDayAction(
   updatedDays[dayIndex] = mergedDay;
   await updateTripItinerary(tripId, updatedDays);
 
+  const restoredSuffix = lockGuard.violations > 0
+    ? ` (restored ${lockGuard.violations} locked item${lockGuard.violations === 1 ? '' : 's'} the AI tried to change)`
+    : '';
+
   return {
     success: true,
-    message: reason || `Rewrote Day ${target_day} based on your instructions`,
+    message: (reason || `Rewrote Day ${target_day} based on your instructions`) + restoredSuffix,
     updatedDays,
     diff,
     costDelta,
@@ -375,7 +432,7 @@ async function executeSwapAction(
   }
 
   const targetActivity = day.activities[activityIndex];
-  if (targetActivity.isLocked) {
+  if (isActivityLocked(targetActivity)) {
     return { success: false, message: `"${activityTitle(targetActivity)}" is locked and cannot be swapped`, error: 'Activity is locked' };
   }
   if (isProtectedActivity(targetActivity)) {
@@ -483,7 +540,7 @@ async function executeRegenerateAction(
 
   const day = currentDays[dayIndex];
   const keepActivities = day.activities
-    .filter(a => a.isLocked || isProtectedActivity(a) || isMealActivity(a))
+    .filter(a => isActivityLocked(a) || isProtectedActivity(a) || isMealActivity(a))
     .map(a => a.id)
     .filter(Boolean);
 
@@ -503,7 +560,10 @@ async function executeRegenerateAction(
     return { success: false, message: 'Failed to regenerate day with scheduling constraints', error: error?.message || data?.error || 'Unknown error' };
   }
 
-  const regenActivities = data.day.activities || day.activities;
+  let regenActivities = data.day.activities || day.activities;
+  const regenLockGuard = verifyLocksPreserved(day.activities, regenActivities, target_day);
+  regenActivities = regenLockGuard.restored;
+
   const regenDiff = computeDayDiff(target_day, day.activities, regenActivities);
   const regenCostDelta = computeDayCost(regenActivities) - computeDayCost(day.activities);
 
@@ -511,9 +571,13 @@ async function executeRegenerateAction(
   updatedDays[dayIndex] = { ...day, ...data.day, activities: regenActivities };
   await updateTripItinerary(tripId, updatedDays);
 
+  const regenRestoredSuffix = regenLockGuard.violations > 0
+    ? ` (restored ${regenLockGuard.violations} locked item${regenLockGuard.violations === 1 ? '' : 's'} the AI tried to change)`
+    : '';
+
   return {
     success: true,
-    message: 'Refreshed Day ' + target_day + (new_focus ? ' (more "' + new_focus + '")' : '') + ' without breaking flight/arrival timing',
+    message: 'Refreshed Day ' + target_day + (new_focus ? ' (more "' + new_focus + '")' : '') + ' without breaking flight/arrival timing' + regenRestoredSuffix,
     updatedDays,
     diff: regenDiff,
     costDelta: regenCostDelta,
@@ -543,7 +607,7 @@ async function executePacingAction(
   let updatedActivities = [...day.activities];
 
   if (adjustment === 'more_relaxed') {
-    const unlockedIdx = updatedActivities.findIndex(a => !a.isLocked);
+    const unlockedIdx = updatedActivities.findIndex(a => !isActivityLocked(a));
     if (unlockedIdx !== -1 && updatedActivities.length > 2) {
       updatedActivities.splice(unlockedIdx, 1);
     }
@@ -678,7 +742,7 @@ async function executeFilterAction(
 
     for (let actIndex = 0; actIndex < day.activities.length; actIndex++) {
       const activity = day.activities[actIndex];
-      if (activity.isLocked) continue;
+      if (isActivityLocked(activity)) continue;
       if (isProtectedActivity(activity)) continue;
 
       const diningOnly = normalizedScope === 'dining_only' || filter_type === 'dietary';
