@@ -1,67 +1,46 @@
-## RS.L11 — Behavior metadata schema enforcement
+## NEW.2 — Bar/nightcap cap widened to café-style venues
 
-Add a whitelist-based sanitizer for metadata in `src/services/behaviorTrackingService.ts` to prevent arbitrary keys (and prompt-injection–shaped strings) from being persisted to `user_enrichment.metadata`.
+Single-line regex widen so the bar-price cap fires on café/aperitivo/digestif/pre-post-dinner stops that act as nightcaps without using the literal word "nightcap" (e.g. "Gran Caffè Quadri" nightcap pattern).
 
-### 1. Add helper near top of file (after `normalizeEntityId`)
+### Change
 
-```ts
-const ALLOWED_METADATA_KEYS = new Set([
-  // Core event context
-  'page', 'referrer', 'feature', 'action', 'target',
-  // Trip context
-  'trip_id', 'destination', 'day_number', 'activity_id',
-  // Search context
-  'query', 'result_count', 'selected_index',
-  // Timing
-  'duration_ms', 'time_to_action_ms',
-  // User segment
-  'tier', 'archetype', 'cohort',
-  // Existing internal callers in this file
-  'source', 'category', 'reason', 'weight', 'stage', 'abandoned_at',
-]);
+`supabase/functions/generate-itinerary/sanitization.ts:794`
 
-function sanitizeMetadata(raw: Record<string, unknown> | undefined | null): Record<string, unknown> {
-  if (!raw || typeof raw !== 'object') return {};
-  const clean: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(raw)) {
-    if (!ALLOWED_METADATA_KEYS.has(key)) {
-      console.warn('[behaviorTracking] Dropping non-whitelisted metadata key:', key);
-      continue;
-    }
-    if (typeof value === 'string' && /(?:ignore previous|system prompt|SYSTEM:|<\|im_start\|>)/i.test(value)) {
-      console.warn('[behaviorTracking] Dropping suspicious metadata value for key:', key);
-      continue;
-    }
-    if (typeof value === 'string' && value.length > 500) {
-      clean[key] = value.slice(0, 500);
-    } else {
-      clean[key] = value;
-    }
-  }
-  return clean;
-}
-```
-
-Note on whitelist: the spec list omits keys this file already writes (`source`, `category`, `reason`, `weight`, `stage`, `abandoned_at`). Adding them prevents the sanitizer from silently dropping legitimate internal tracking. Out of scope: `last_interaction_at`, `first_interaction_at`, `interaction_history` are server-derived and merged after sanitization, so they don't need to be whitelisted.
-
-### 2. Wrap user-supplied metadata at the two insert/update sites
-
-`trackEnrichment` (around lines 120–153) is the single low-level writer; sanitize `event.metadata` once at the top of the function so both branches benefit:
+Replace:
 
 ```ts
-const safeMeta = sanitizeMetadata(event.metadata);
+export const BAR_KEYWORDS = /\b(nightcap|cocktail|aperitif|drinks?\s+at|wine\s+bar|rooftop\s+bar|hotel\s+bar|speakeasy)\b/i;
 ```
 
-Then replace `...event.metadata` (lines 126, 130, 149) with `...safeMeta` and `{ at: now, ...safeMeta }`.
+With:
 
-This covers all higher-level callers (`trackDestinationSearch`, `trackDestinationInterest`, `trackCategoryInteraction`, etc.) since they all funnel through `trackEnrichment`.
+```ts
+export const BAR_KEYWORDS = /\b(nightcap|cocktail|aperitif|aperitivo|digestif|drinks?\s+at|drinks?\s+only|after\s+dinner|wine\s+bar|rooftop\s+bar|hotel\s+bar|speakeasy|caff[eè]|caf[eé]\s+stop|pre[\s-]?dinner|post[\s-]?dinner)\b/i;
+```
 
-### 3. Verify
+### Blast radius
+
+`BAR_KEYWORDS` (from `sanitization.ts`) is consumed in exactly two cap paths, both of which already pair with `EXPLICIT_DRINKS_RE` exemptions and `MAX_BAR_PRICE` ceiling — so the widened set just enrolls more rows into the existing safe cap, no new behavior:
+- `sanitization.ts:818` — generation-time bar cap.
+- `action-repair-costs.ts:439` — repair-costs cap parity (mem://constraints/itinerary/repair-costs-bar-cap-parity).
+
+Unaffected: `generation-core.ts:2503` defines its own local `BAR_KEYWORDS` const for a different category-coercion path; not an export consumer.
+
+### Edge-case notes
+
+- `caff[eè]` matches "caffè" / "caffe" / "caffé"; full-meal venues with "caffè" in the name (e.g. "Caffè Florian breakfast at 09:00") are still bypassed by the existing breakfast/lunch/full-meal heuristics in the cap path (the cap only fires for drinks-only/late-evening shapes already gated upstream).
+- `caf[eé]\s+stop` is intentionally narrow — only matches phrasings like "café stop" / "cafe stop" so generic café visits aren't downgraded.
+- `pre[\s-]?dinner` / `post[\s-]?dinner` covers "pre-dinner drinks" / "post dinner aperitivo" framings.
+
+### Verification
 
 ```
-grep -c "sanitizeMetadata\|ALLOWED_METADATA_KEYS" src/services/behaviorTrackingService.ts
+grep -n "aperitivo\|digestif\|caff\[e" supabase/functions/generate-itinerary/sanitization.ts
 ```
-Expect ≥ 2 (definition of set + helper + 1 call site = 3+).
+Expect the new regex line.
+
+Optional smoke: a synthetic activity `{title: "Nightcap at Gran Caffè Quadri", price: 206}` should now be capped to `MAX_BAR_PRICE` by both `sanitization.ts` and `action-repair-costs.ts` paths.
 
 ### Files touched
-- `src/services/behaviorTrackingService.ts` — add helper, sanitize once inside `trackEnrichment`.
+
+- `supabase/functions/generate-itinerary/sanitization.ts` — one-line regex change.
