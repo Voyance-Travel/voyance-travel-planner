@@ -8086,10 +8086,14 @@ export function EditorialItinerary({
                   await refreshUndoState();
                 }
                 // Apply the cascade
-                setDays(prev => prev.map((d, idx) => {
-                  if (idx !== dayIndex) return d;
-                  return { ...d, activities: kept };
-                }));
+                let nextDays: EditorialDay[] = [];
+                setDays(prev => {
+                  nextDays = prev.map((d, idx) => {
+                    if (idx !== dayIndex) return d;
+                    return { ...d, activities: kept };
+                  });
+                  return nextDays;
+                });
                 setHasChanges(true);
                 if (source === 'time_edit') {
                   setTimeEditModal(null);
@@ -8107,6 +8111,28 @@ export function EditorialItinerary({
                   toast.warning(`"${a.title}" shortened to ${a.durationMinutes} min (was ${a.__originalDurationMinutes} min) to fit before midnight`);
                 });
                 setPendingCascade(null);
+
+                // Persist immediately for time_edit cascades so the change survives refresh.
+                if (source === 'time_edit' && tripId) {
+                  try {
+                    const { safeUpdateItineraryData } = await import('@/services/safeUpdateItineraryData');
+                    const itineraryToPersist: Record<string, unknown> = {
+                      days: JSON.parse(JSON.stringify(nextDays)),
+                      status: 'ready',
+                      optionSelections,
+                      savedAt: new Date().toISOString(),
+                    };
+                    if (parsedMetadata) {
+                      itineraryToPersist.metadata = { ...parsedMetadata, lastUpdated: new Date().toISOString() };
+                    }
+                    const res = await safeUpdateItineraryData(tripId, itineraryToPersist);
+                    if (res?.error) throw res.error;
+                    setHasChanges(false);
+                    setLastSaved(new Date());
+                  } catch (err) {
+                    console.warn('[time-edit cascade] persist failed:', err);
+                  }
+                }
               }}
             >
               Shift anyway
