@@ -1,44 +1,40 @@
 
-## Reconciliation result: no changes required
+## Scope
 
-`supabase/functions/generate-itinerary/archetype-constraints.ts` was already brought up to spec in an earlier pass. Every item the spec asks for is already present. Confirming line-by-line:
+Replace the 6 prose fields (`hookLine`, `coreDescription`, `whatThisMeans`, `superpowers`, `growthEdges`, `perfectTripPreview`) on 7 archetype entries in `src/data/archetypeNarratives.ts`. Preserve `id`, `name`, `category`, `emoji`, and any optional fields (`iconName`, `revealParagraph`, `youProbably`, `itineraryPreview`) untouched.
 
-### Category moves — already applied
+## Locations (verified)
 
-| Archetype | Spec | File (line) |
+| Slug | Line | Current `name` |
 |---|---|---|
-| `community_builder` | `achiever` | `category: "Achiever"` (line 464) ✅ |
-| `escape_artist` | `explorer` | `category: "Explorer"` (line 987) ✅ |
-| `eco_ethicist` | `transformer` | `category: "Transformer"` (line 1252) ✅ |
+| `cultural_anthropologist` | 129 | The Cultural Anthropologist |
+| `community_builder` | 416 | The Purpose Voyager |
+| `story_seeker` | 441 | The Story Seeker |
+| `collection_curator` | 616 | The Passport Collector |
+| `retreat_regular` | 666 | The Wellness Devotee |
+| `beach_therapist` | 691 | The Beach Therapist |
+| `sabbatical_scholar` | 853 | The Immersion Seeker |
 
-(File uses TitleCase per the `ArchetypeDefinition` type union — semantically identical to the lowercase casing used in the spec.)
+## Edits
 
-### Identity + meaning rewrites — already in place (verbatim)
+For each entry, replace the 6 prose fields with the spec text verbatim. No structural changes (no new fields, no removed fields, no renamed slugs).
 
-| Archetype | Line | Status |
-|---|---|---|
-| `cultural_anthropologist` | 53–90 | ✅ Spec text + `cultural_activity_ratio: 0.2-0.3` already present |
-| `sabbatical_scholar` | 1438–1471 | ✅ Spec text + `educational_activity_ratio: 0.8` already present |
-| `story_seeker` | 496–535 | ✅ Spec text + `unscripted_activity_minimum: 1` already present |
-| `community_builder` | 462–494 | ✅ Spec text + `activity_density: 'high'`, `mix: { iconic: 0.6, hidden: 0.4 }` |
-| `collection_curator` | 640–673 | ✅ Spec text + `activity_density: 'high'` |
-| `beach_therapist` | 825–876 | ✅ Spec text + `requiresWaterDaily: true`, `hotelRequirement: 'walkable_to_water'` |
-| `retreat_regular` | 781–823 | ✅ Spec text + `retreat_property_time_ratio: [0.7, 0.8]`, `outside_retreat_days: 1`, `required_amenities: ['spa','meditation','yoga','healthy_dining']`, `hotelRequirement: 'retreat_property'` |
+## Out of scope (flagged, not changed)
 
-### Missing archetype `eco_ethicist` — already defined (line 1250–1337)
+The reveal-narrative file currently has two category labels that disagree with the matcher's archetype categories shipped earlier:
 
-Already has, and slightly exceeds, the spec definition: identity/meaning, full `avoid` + `prefer` lists, `dayStructure { minScheduled: 3, maxScheduled: 4, michelinOK: false, spaOK: false, pace: 'moderate', startTime: '08:30' }`, full `affinity` (high/medium/low/never), `timePreferences`, `diningPolicy { michelinAllowed: false, preferLocal: true, minLocalShare: 0.8 }`, `hotelRequirement: 'eco_certified'`. Nothing missing.
+- `community_builder` is `CONNECTOR` here but matcher/constraints place it as `ACHIEVER`.
+- `escape_artist` is `RESTORER` here but matcher/constraints place it as `EXPLORER`.
 
-### No-op recommendation
+The user's request is explicitly about prose fields only ("Update these 7 archetype entries with new hookLine, coreDescription, whatThisMeans[], superpowers[], growthEdges[], and perfectTripPreview fields"), and `escape_artist` isn't even in the 7. I will **not** touch categories in this pass — flagging it here so it can be a separate decision if the inconsistency matters for category-based UI styling on the reveal page.
 
-The spec is already shipped in this file. **No edits needed**. Note: the spec also mentions "rename internal references where safe" for the Purpose Voyager display name — per the `mem://constraints` rule and your earlier guidance, the slug stays `community_builder`; only the display `identity: "The Purpose Voyager"` (line 463) reflects the rename, which is already in place.
+## Verification
 
-### Verification (read-only — no file changes)
+1. After edits, `grep -c "hookLine" src/data/archetypeNarratives.ts` should be unchanged in count (still one `hookLine:` per archetype) — this only confirms presence, not correctness. Better:
+2. `rg -A1 "id: 'cultural_anthropologist'" src/data/archetypeNarratives.ts | head` and similar spot-checks confirm the new `hookLine` opens with "You don't just visit a place — you want to understand it" etc.
+3. TypeScript build passes (no shape change to `ArchetypeNarrative`).
+4. Visual: open DNA reveal page for each of the 7 archetypes (or unit-render `getArchetypeNarrative('cultural_anthropologist')`) and confirm new copy renders.
 
-If you want runtime confirmation rather than a file diff:
+## Files touched
 
-1. **Mindful Voyager test trip** — generate trip with `eco_ethicist` primary; assert no chain restaurants, no animal-tourism keywords, ≥80% local dining via existing `diningPolicy.minLocalShare`.
-2. **Beach Therapist test trip** — generate; assert each day has ≥1 water activity (`requiresWaterDaily`) and hotel matches `walkable_to_water`.
-3. **Retreat Regular test trip** — generate 5-day; assert exactly 1 outside-retreat day and ≥70% on-property time.
-
-If any of those three fail at runtime, the bug is in the generator's enforcement of these flags, not in `archetype-constraints.ts`. Happy to dig into the enforcement layer next if you want.
+- `src/data/archetypeNarratives.ts` — 7 contiguous-block edits
