@@ -233,7 +233,7 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
     
     isLoading: settingsLoading || summaryLoading || ledgerLoading,
     isUpdating: updateMutation.isPending || addExpenseMutation.isPending,
-    
+    isGenerating: summary?.isGenerating ?? false,
     hasBudget,
     isOverBudget,
     warningLevel,
