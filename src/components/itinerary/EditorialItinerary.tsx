@@ -5090,24 +5090,27 @@ export function EditorialItinerary({
       setShowGuidedAssist(true);
     } else {
       // Spend credits before regenerating (server handles free caps)
-      {
-        try {
-          await spendCredits.mutateAsync({
-            action: 'REGENERATE_DAY',
-            tripId,
-            dayIndex,
-          });
-        } catch (err) {
-          // Credit deduction failed - show nudge
-          console.error('[Regenerate] Credit spend failed:', err);
-          setCreditNudge({ action: 'REGENERATE_DAY' });
-          return;
-        }
+      let spendContext: { idempotencyKey?: string; pendingChargeId?: string | null } | undefined;
+      try {
+        const spendResult = await spendCredits.mutateAsync({
+          action: 'REGENERATE_DAY',
+          tripId,
+          dayIndex,
+        });
+        spendContext = {
+          idempotencyKey: (spendResult as { idempotencyKey?: string })?.idempotencyKey,
+          pendingChargeId: (spendResult as { pendingChargeId?: string | null })?.pendingChargeId ?? null,
+        };
+      } catch (err) {
+        // Credit deduction failed - show nudge
+        console.error('[Regenerate] Credit spend failed:', err);
+        setCreditNudge({ action: 'REGENERATE_DAY' });
+        return;
       }
       
       // Increment count and proceed with regeneration
       setDayRegenCounts(prev => ({ ...prev, [dayIndex]: currentCount + 1 }));
-      handleDayRegenerateInternal(dayIndex);
+      handleDayRegenerateInternal(dayIndex, undefined, spendContext);
     }
   }, [canRegenerate, dayRegenCounts, isPaid, spendCredits, tripId]);
 
@@ -5116,20 +5119,23 @@ export function EditorialItinerary({
     if (guidedAssistDayIndex === null) return;
     
     // Spend credits before regenerating (server handles free caps)
-    {
-      try {
-        await spendCredits.mutateAsync({
-          action: 'REGENERATE_DAY',
-          tripId,
-          dayIndex: guidedAssistDayIndex,
-        });
-      } catch (err) {
-        console.error('[GuidedAssist] Credit spend failed:', err);
-        setCreditNudge({ action: 'REGENERATE_DAY' });
-        setShowGuidedAssist(false);
-        setGuidedAssistDayIndex(null);
-        return;
-      }
+    let spendContext: { idempotencyKey?: string; pendingChargeId?: string | null } | undefined;
+    try {
+      const spendResult = await spendCredits.mutateAsync({
+        action: 'REGENERATE_DAY',
+        tripId,
+        dayIndex: guidedAssistDayIndex,
+      });
+      spendContext = {
+        idempotencyKey: (spendResult as { idempotencyKey?: string })?.idempotencyKey,
+        pendingChargeId: (spendResult as { pendingChargeId?: string | null })?.pendingChargeId ?? null,
+      };
+    } catch (err) {
+      console.error('[GuidedAssist] Credit spend failed:', err);
+      setCreditNudge({ action: 'REGENERATE_DAY' });
+      setShowGuidedAssist(false);
+      setGuidedAssistDayIndex(null);
+      return;
     }
     
     // Reset count for this day after guided assist
@@ -5139,13 +5145,47 @@ export function EditorialItinerary({
     if (preferences) {
       setPendingGuidedPreferences(preferences);
     }
-    handleDayRegenerateInternal(guidedAssistDayIndex, preferences || undefined);
+    handleDayRegenerateInternal(guidedAssistDayIndex, preferences || undefined, spendContext);
     setShowGuidedAssist(false);
     setGuidedAssistDayIndex(null);
   }, [guidedAssistDayIndex, isPaid, spendCredits, tripId]);
 
   // Internal regenerate handler (after credit check passed)
-  const handleDayRegenerateInternal = useCallback(async (dayIndex: number, guidedPreferences?: string) => {
+  const handleDayRegenerateInternal = useCallback(async (
+    dayIndex: number,
+    guidedPreferences?: string,
+    spendContext?: { idempotencyKey?: string; pendingChargeId?: string | null },
+  ) => {
+    // Refund REGENERATE_DAY credits when generation hard-fails or returns
+    // a placeholder day (action-generate-day.ts buildPlaceholderDay path).
+    // Idempotent server-side via pendingChargeId + originalIdempotencyKey.
+    const refundRegenCredits = async (reason: string, errorMessage?: string) => {
+      if (!spendContext?.idempotencyKey) return;
+      try {
+        await supabase.functions.invoke('spend-credits', {
+          body: {
+            action: 'REFUND',
+            tripId,
+            metadata: {
+              originalAction: 'regenerate_day',
+              pendingChargeId: spendContext.pendingChargeId ?? undefined,
+              reason,
+              ...(errorMessage ? { errorMessage } : {}),
+            },
+            originalIdempotencyKey: spendContext.idempotencyKey,
+          },
+        });
+      } catch (refundErr) {
+        console.error('[Regenerate] Refund failed:', refundErr);
+      }
+    };
+    const isFailedDay = (d: unknown): boolean => {
+      const day = d as { activities?: unknown[]; metadata?: { quality?: { generation_failed?: boolean } } } | null | undefined;
+      if (!day) return true;
+      if (!Array.isArray(day.activities) || day.activities.length === 0) return true;
+      if (day.metadata?.quality?.generation_failed === true) return true;
+      return false;
+    };
     const day = days[dayIndex];
     if (!day) return;
 
@@ -5246,6 +5286,11 @@ export function EditorialItinerary({
         });
 
         if (error) throw error;
+        if (isFailedDay(data?.day)) {
+          await refundRegenCredits('placeholder_day');
+          toast.error("We couldn't regenerate this day — credits refunded");
+          return;
+        }
         if (data?.day) {
           // Post-regeneration: deduplicate ALL accommodation entries, keep only original
           const originalHotel = (day.activities || []).find(isAccommodationLike);
@@ -5272,7 +5317,8 @@ export function EditorialItinerary({
       }
     } catch (err) {
       console.error('Regenerate error:', err);
-      toast.error('Failed to regenerate day');
+      await refundRegenCredits('generation_failed', err instanceof Error ? err.message : String(err));
+      toast.error('Failed to regenerate day — credits refunded');
     } finally {
       setRegeneratingDay(null);
       setPendingGuidedPreferences(null);

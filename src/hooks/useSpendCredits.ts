@@ -47,6 +47,10 @@ interface SpendCreditsResponse {
   success: boolean;
   spent: number;
   action: string;
+  /** Set on every successful spend; pass back as `originalIdempotencyKey` on REFUND. */
+  idempotencyKey?: string;
+  /** Server-issued pending charge id; pass in REFUND metadata for atomic dedup. */
+  pendingChargeId?: string | null;
   newBalance: {
     total: number;
     purchased: number;
@@ -124,7 +128,7 @@ export function useSpendCredits() {
           throw new Error(data.error);
         }
 
-        return data;
+        return { ...data, idempotencyKey } as SpendCreditsResponse & { idempotencyKey: string };
       } finally {
         pendingRef.current = null;
       }
