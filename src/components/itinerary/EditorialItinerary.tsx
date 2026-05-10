@@ -5090,24 +5090,27 @@ export function EditorialItinerary({
       setShowGuidedAssist(true);
     } else {
       // Spend credits before regenerating (server handles free caps)
-      {
-        try {
-          await spendCredits.mutateAsync({
-            action: 'REGENERATE_DAY',
-            tripId,
-            dayIndex,
-          });
-        } catch (err) {
-          // Credit deduction failed - show nudge
-          console.error('[Regenerate] Credit spend failed:', err);
-          setCreditNudge({ action: 'REGENERATE_DAY' });
-          return;
-        }
+      let spendContext: { idempotencyKey?: string; pendingChargeId?: string | null } | undefined;
+      try {
+        const spendResult = await spendCredits.mutateAsync({
+          action: 'REGENERATE_DAY',
+          tripId,
+          dayIndex,
+        });
+        spendContext = {
+          idempotencyKey: (spendResult as { idempotencyKey?: string })?.idempotencyKey,
+          pendingChargeId: (spendResult as { pendingChargeId?: string | null })?.pendingChargeId ?? null,
+        };
+      } catch (err) {
+        // Credit deduction failed - show nudge
+        console.error('[Regenerate] Credit spend failed:', err);
+        setCreditNudge({ action: 'REGENERATE_DAY' });
+        return;
       }
       
       // Increment count and proceed with regeneration
       setDayRegenCounts(prev => ({ ...prev, [dayIndex]: currentCount + 1 }));
-      handleDayRegenerateInternal(dayIndex);
+      handleDayRegenerateInternal(dayIndex, undefined, spendContext);
     }
   }, [canRegenerate, dayRegenCounts, isPaid, spendCredits, tripId]);
 
@@ -5116,20 +5119,23 @@ export function EditorialItinerary({
     if (guidedAssistDayIndex === null) return;
     
     // Spend credits before regenerating (server handles free caps)
-    {
-      try {
-        await spendCredits.mutateAsync({
-          action: 'REGENERATE_DAY',
-          tripId,
-          dayIndex: guidedAssistDayIndex,
-        });
-      } catch (err) {
-        console.error('[GuidedAssist] Credit spend failed:', err);
-        setCreditNudge({ action: 'REGENERATE_DAY' });
-        setShowGuidedAssist(false);
-        setGuidedAssistDayIndex(null);
-        return;
-      }
+    let spendContext: { idempotencyKey?: string; pendingChargeId?: string | null } | undefined;
+    try {
+      const spendResult = await spendCredits.mutateAsync({
+        action: 'REGENERATE_DAY',
+        tripId,
+        dayIndex: guidedAssistDayIndex,
+      });
+      spendContext = {
+        idempotencyKey: (spendResult as { idempotencyKey?: string })?.idempotencyKey,
+        pendingChargeId: (spendResult as { pendingChargeId?: string | null })?.pendingChargeId ?? null,
+      };
+    } catch (err) {
+      console.error('[GuidedAssist] Credit spend failed:', err);
+      setCreditNudge({ action: 'REGENERATE_DAY' });
+      setShowGuidedAssist(false);
+      setGuidedAssistDayIndex(null);
+      return;
     }
     
     // Reset count for this day after guided assist
@@ -5139,7 +5145,7 @@ export function EditorialItinerary({
     if (preferences) {
       setPendingGuidedPreferences(preferences);
     }
-    handleDayRegenerateInternal(guidedAssistDayIndex, preferences || undefined);
+    handleDayRegenerateInternal(guidedAssistDayIndex, preferences || undefined, spendContext);
     setShowGuidedAssist(false);
     setGuidedAssistDayIndex(null);
   }, [guidedAssistDayIndex, isPaid, spendCredits, tripId]);
