@@ -5604,35 +5604,43 @@ export function EditorialItinerary({
 
   // Update existing activity (full edit)
   const handleUpdateActivity = useCallback((dayIndex: number, activityIndex: number, updates: Partial<EditorialActivity>) => {
-    setDays(prev => prev.map((day, dIdx) => {
-      if (dIdx !== dayIndex) return day;
-      const updatedActivities = day.activities.map((activity, aIdx) => {
-        if (aIdx !== activityIndex) return activity;
-        return {
-          ...activity,
-          ...updates,
-          isLocked: true,
-          time: updates.startTime || activity.startTime || activity.time,
-        };
-      });
-      // Auto-sort chronologically when a time changes
-      if (updates.startTime || updates.endTime) {
-        updatedActivities.sort((a, b) => {
-          const parseMin = (t?: string) => {
-            if (!t) return 9999;
-            const parts = t.match(/(\d{1,2}):(\d{2})/);
-            if (!parts) return 9999;
-            return parseInt(parts[1]) * 60 + parseInt(parts[2]);
+    let nextDays: EditorialDay[] = [];
+    setDays(prev => {
+      nextDays = prev.map((day, dIdx) => {
+        if (dIdx !== dayIndex) return day;
+        const updatedActivities = day.activities.map((activity, aIdx) => {
+          if (aIdx !== activityIndex) return activity;
+          return {
+            ...activity,
+            ...updates,
+            // Preserve current lock state unless caller explicitly toggled it.
+            isLocked: 'isLocked' in updates ? (updates as any).isLocked : activity.isLocked,
+            time: updates.startTime || activity.startTime || activity.time,
           };
-          return parseMin(a.startTime || a.time) - parseMin(b.startTime || b.time);
         });
-      }
-      return { ...day, activities: updatedActivities };
-    }));
+        // Auto-sort chronologically when a time changes
+        if (updates.startTime || updates.endTime) {
+          updatedActivities.sort((a, b) => {
+            const parseMin = (t?: string) => {
+              if (!t) return 9999;
+              const parts = t.match(/(\d{1,2}):(\d{2})/);
+              if (!parts) return 9999;
+              return parseInt(parts[1]) * 60 + parseInt(parts[2]);
+            };
+            return parseMin(a.startTime || a.time) - parseMin(b.startTime || b.time);
+          });
+        }
+        return { ...day, activities: updatedActivities };
+      });
+      return nextDays;
+    });
     setHasChanges(true);
+    // Sync activity_costs + dispatch booking-changed so header total, Budget tab,
+    // and Payments tab refresh immediately (mirrors swap / generated-days paths).
+    syncBudgetFromDays(nextDays);
     setEditActivityModal(null);
     toast.success('Activity updated');
-  }, []);
+  }, [syncBudgetFromDays]);
 
    // Reset share state when tripId changes — prevents stale links
    useEffect(() => {
