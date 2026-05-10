@@ -6842,7 +6842,11 @@ export type Database = {
           hotel_selection: Json | null
           id: string
           itinerary_data: Json | null
+          label: string | null
+          metadata: Json
+          restored_at: string | null
           start_date: string
+          times_restored: number
           trip_id: string
         }
         Insert: {
@@ -6853,7 +6857,11 @@ export type Database = {
           hotel_selection?: Json | null
           id?: string
           itinerary_data?: Json | null
+          label?: string | null
+          metadata?: Json
+          restored_at?: string | null
           start_date: string
+          times_restored?: number
           trip_id: string
         }
         Update: {
@@ -6864,7 +6872,11 @@ export type Database = {
           hotel_selection?: Json | null
           id?: string
           itinerary_data?: Json | null
+          label?: string | null
+          metadata?: Json
+          restored_at?: string | null
           start_date?: string
+          times_restored?: number
           trip_id?: string
         }
         Relationships: [
