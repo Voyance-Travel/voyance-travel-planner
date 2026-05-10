@@ -85,6 +85,7 @@ export function useTripHeroImage({
   const [apiImageUrl, setApiImageUrl] = useState<string | null>(null);
   const [apiFetched, setApiFetched] = useState(false);
   const [apiFailed, setApiFailed] = useState(false);
+  const [apiAttribution, setApiAttribution] = useState<UseTripHeroImageResult['attribution']>(undefined);
   const [isLoading, setIsLoading] = useState(false);
 
   const curatedImages = getCuratedImages(destination);
