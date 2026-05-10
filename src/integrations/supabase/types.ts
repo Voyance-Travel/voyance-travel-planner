@@ -10056,6 +10056,7 @@ export type Database = {
         }
         Returns: Json
       }
+      prune_itinerary_versions_per_trip: { Args: never; Returns: Json }
       reconcile_credit_balances: { Args: never; Returns: Json }
       rescue_orphan_cost_row: {
         Args: {
