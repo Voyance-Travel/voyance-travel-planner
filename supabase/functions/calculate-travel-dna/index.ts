@@ -2527,7 +2527,22 @@ serve(async (req) => {
                (Array.isArray(val) ? val.length > 0 : true);
       }));
       
-      if (disambiguationTraits && disambiguationTraits.length > 0) {
+      // Pair-specific question takes priority over trait-based selection
+      const pairKey = `${primaryArchetype.id}:${secondaryArchetype?.id ?? ''}`;
+      const reversedKey = `${secondaryArchetype?.id ?? ''}:${primaryArchetype.id}`;
+      const pairQuestions =
+        DISAMBIGUATION_QUESTIONS_BY_PAIR[pairKey] ??
+        DISAMBIGUATION_QUESTIONS_BY_PAIR[reversedKey];
+
+      if (pairQuestions && pairQuestions.length > 0) {
+        const filtered = pairQuestions.filter((q) => !answeredQuestionIds.has(q));
+        if (filtered.length > 0) {
+          nextQuestionIds = filtered.slice(0, 3);
+          console.log(`[TravelDNA V2] Pair-specific disambiguation:`, pairKey, nextQuestionIds);
+        }
+      }
+
+      if (!nextQuestionIds && disambiguationTraits && disambiguationTraits.length > 0) {
         // Sort disambiguation traits by fill rate (ascending - lowest first)
         const sortedTraits = [...disambiguationTraits].sort((a, b) => 
           (fillRates[a] || 0) - (fillRates[b] || 0)
