@@ -1535,6 +1535,25 @@ async function fetchImageTiered(
     }
   }
 
+  // TIER 2A: Unsplash (destination heroes only — free, professionally curated)
+  // Runs BEFORE Google Places so iconic landmark photos win over random user uploads.
+  if (entityType === 'destination') {
+    const unsplashImage = await tryUnsplashFallback(destination);
+    if (unsplashImage) {
+      const persistentUnsplash = await ensurePersistentStorageUrl(
+        unsplashImage,
+        entityType,
+        venueName,
+        destination
+      );
+      await cacheImage(supabase, entityType, cleanName, destination, persistentUnsplash, 0.85);
+      if (cleanName !== venueName) {
+        await cacheImage(supabase, entityType, venueName, destination, persistentUnsplash, 0.85);
+      }
+      return persistentUnsplash;
+    }
+  }
+
   // TIER 2: Google Places (best for real venue photos)
   if (googleApiKey) {
     const googleImage = await getGooglePlacesPhoto(
