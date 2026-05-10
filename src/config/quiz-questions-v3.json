@@ -1885,11 +1885,11 @@
       "name": "The Restoration Seeker",
       "category": "TRANSFORMER",
       "required": {
-        "healing_focus": { "min": 0.7 }
+        "healing_focus": { "min": 0.6 }
       },
       "boosters": {
         "healing_focus": 2.0,
-        "restoration_need": 1.0,
+        "restoration_need": 0.5,
         "spirituality": 0.6
       },
       "penalties": {
