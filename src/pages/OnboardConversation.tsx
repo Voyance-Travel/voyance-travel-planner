@@ -167,7 +167,7 @@ export default function OnboardConversation() {
             if (adv === 'thrill-seeking') base += 3;
             else if (adv === 'moderate') base += 1;
             const transformKeywords = ['changed me', 'perspective', 'growth', 'challenge myself', 'push myself', 'reset', 'reflect', 'discover', 'become', 'transform', 'pilgrimage', 'soul-searching', 'sabbatical', 'gap year'];
-            const hits = [...(analysis.whatWorked || []), ...(analysis.whatFailed || [])]
+            const hits = [story, followUpAnswer, analysis.reasoning || '']
               .join(' ')
               .toLowerCase();
             const transformSignal = transformKeywords.filter(kw => hits.includes(kw)).length;
