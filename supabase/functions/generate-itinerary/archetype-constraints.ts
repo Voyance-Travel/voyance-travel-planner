@@ -27,7 +27,22 @@ export interface ArchetypeDefinition {
     beachTimeMin?: string;
     sunsetRequired?: boolean;
     walkingExpected?: boolean;
+    // v3 extensions (additive, optional)
+    pace?: 'slow' | 'moderate' | 'fast';
+    cultural_activity_ratio?: [number, number];
+    educational_activity_ratio?: number;
+    unscripted_activity_minimum?: number;
+    activity_density?: 'low' | 'moderate' | 'high';
+    mix?: { iconic: number; hidden: number };
+    retreat_property_time_ratio?: [number, number];
+    outside_retreat_days?: number;
+    required_amenities?: string[];
+    requiresWaterDaily?: boolean;
   };
+  hotelRequirement?: 'waterfront' | 'walkable_to_water' | 'eco_certified' | 'retreat_property';
+  affinity?: { high: string[]; medium: string[]; low: string[]; never: string[] };
+  timePreferences?: { startTime: string; peakEnergy: string; preference: string };
+  diningPolicy?: { michelinAllowed: boolean; preferLocal: boolean; minLocalShare: number };
 }
 
 // =============================================================================
@@ -39,33 +54,21 @@ const EXPLORER_ARCHETYPES: Record<string, ArchetypeDefinition> = {
     identity: "The Cultural Anthropologist",
     category: "Explorer",
     meaning: `
-This traveler wants to UNDERSTAND a place, not just see it.
+Wants a vacation but ALSO wants to understand where they are. Includes 1-2 cultural tour activities + breakfast/shopping/leisure. NOT obsessed with learning every element — that's Sabbatical Scholar's territory. They want to come back having learned something about the place's culture, history, and bones — without it being a full-time educational experience.
 
-They want:
-- Local customs and traditions explained
-- Historical context for everything
-- Conversations with locals
-- Authentic neighborhoods, not tourist zones
-- Museums with depth, not gift shops
-- Understanding WHY things are the way they are
+DAY STRUCTURE CUE:
+- cultural_activity_ratio: 0.2-0.3 (1-2 activities per day, not all)
+- Mix cultural depth with leisure, food, and downtime
+- One meaningful site or guided experience per day, not three
 
-Their ideal day:
-- Morning at a meaningful historical/cultural site
-- Lunch where locals eat, chance to observe daily life
-- Afternoon in a neighborhood tourists skip
-- Evening: local performance, lecture, or home dining experience
-
-WHAT "CULTURAL" MEANS FOR THEM:
-- Depth over breadth
-- Context over photo ops
-- Learning over consuming
-- Authentic over staged
+UNLIKE Sabbatical Scholar (educational_activity_ratio 0.8+):
+- Cultural Anthropologist is a vacationer with curiosity, not a student
+- Surface-level is fine for some hours; depth is reserved for highlights
 
 VIOLATIONS:
+- More than 2 cultural/educational anchors per day = VIOLATION
 - Tourist trap restaurants = VIOLATION
 - Photo-op-only stops = VIOLATION
-- Surface-level experiences = VIOLATION
-- "See 10 sites in one day" = VIOLATION
 `,
     avoid: [
       'Tourist trap restaurants',
@@ -79,7 +82,8 @@ VIOLATIONS:
     dayStructure: {
       maxScheduledActivities: 4,
       startTime: '09:00',
-      spaOK: false
+      spaOK: false,
+      cultural_activity_ratio: [0.2, 0.3]
     }
   },
 
@@ -457,50 +461,35 @@ VIOLATIONS:
 
   community_builder: {
     identity: "The Purpose Voyager",
-    category: "Connector",
+    category: "Achiever",
     meaning: `
-This traveler wants their trip to MEAN something beyond tourism.
+Compulsive traveler. Has been everywhere and connects through expertise — "I've been to Lisbon, here's exactly what to do." Their social currency is travel authority. Higher activity density. Mix of iconic must-dos AND insider-knowledge spots so they can recommend both later.
 
-They want:
-- Cultural exchange with locals, not just observation
-- Supporting local artisans and small businesses directly
-- Meaningful homestay or local family dining experiences
-- Understanding how people actually live
-- Experiences that create mutual benefit
-- Leaving a place a little better than they found it
-
-Their ideal day:
-- Morning: visit a local artisan workshop or small business
-- Lunch with a local family or at a community-run spot
-- Afternoon: cultural exchange, local market, or meaningful conversation
-- Evening: locally owned restaurant, supporting the neighborhood economy
-
-WHAT "PURPOSE" MEANS FOR THEM:
-- Impact over entertainment
-- Exchange over observation
-- Supporting local economies directly
-- Authentic connection, not staged experiences
-- They want to understand, not just consume
+DAY STRUCTURE CUE:
+- activity_density: high
+- mix: 60% iconic + 40% hidden gems (the "I know the spots" duality)
+- Aim for shareable, recommendation-worthy stops; avoid filler
+- They want stories AND credibility — show them you've done the research
 
 VIOLATIONS:
-- Luxury resort bubbles = VIOLATION
-- Chain restaurants/hotels = VIOLATION
-- Tourist-only zones = VIOLATION
-- Passive sightseeing without connection = VIOLATION
+- Sparse / lazy day = VIOLATION
+- All hidden gems with no iconic anchors = VIOLATION (no recommend-credibility)
+- All iconic with no insider spots = VIOLATION (no expertise signal)
 `,
     avoid: [
-      'Luxury experiences',
-      'Tourist bubbles',
-      'Chain businesses',
-      'Passive sightseeing',
-      'Exploitative "poverty tourism"',
-      'Staged authenticity'
+      'Sparse, low-density days',
+      'Generic itineraries with no insider angle',
+      'Tourist-only zones with zero hidden-gem mix',
+      'Passive sightseeing without context'
     ],
     dayStructure: {
-      maxScheduledActivities: 3,
+      maxScheduledActivities: 5,
+      minScheduledActivities: 4,
       startTime: '08:00',
       spaOK: false,
-      michelinOK: false
+      michelinOK: true,
+      activity_density: 'high',
+      mix: { iconic: 0.6, hidden: 0.4 }
     }
   },
 
@@ -508,41 +497,21 @@ VIOLATIONS:
     identity: "The Story Seeker",
     category: "Connector",
     meaning: `
-This traveler wants the REAL stories. Not the tourist version — the locals-only, off-the-beaten-path, "you won't believe what happened" stories.
+Memory-maker. Lives for unscripted, raw, "you had to be there" experiences. The midnight swim. The local who invited them to dinner. Things you can't plan via AI scripting. Aware that polished tourist itineraries miss the magic.
 
-They want:
-- To be WITH the locals, not observing them
-- Off-beaten-path experiences that tourists never find
-- The crazy stories — the hidden bar, the secret viewpoint, the local legend
-- Authentic human connection, not curated "cultural experiences"
-- To come home with stories nobody else has
-- The narrative of a place, told by the people who live it
+DAY STRUCTURE CUE:
+- unscripted_activity_minimum: 1 per trip — leave at least one free-form local-discovery block (NOT a specific venue) so the moment can find them
+- Keep the day loose: gaps and wander-windows are features, not bugs
+- They want the night that wasn't on the plan more than the landmark that was
 
-Their ideal day:
-- Morning: wander into a neighborhood tourists don't go to
-- Coffee at the local spot where regulars know each other
-- Lunch: wherever a local recommends on the spot
-- Afternoon: follow a lead — someone told them about a place, a person, a thing
-- Evening: local bar, live music, wherever the night takes them
-
-WHAT "STORY" MEANS FOR THEM:
-- The best stories come from the unexpected
-- They'd rather talk to a bartender for 2 hours than see 5 landmarks
-- "Hidden gem" isn't a marketing phrase — it's what they actually want
-- They collect experiences, not photos
-- If it's on a "Top 10" list, they're probably not interested
-
-UNLIKE Cultural Anthropologist (who wants to UNDERSTAND):
-- Story Seeker wants to EXPERIENCE, not analyze
-- Less academic, more spontaneous
-- They follow the moment, not a research agenda
+UNLIKE Cultural Anthropologist (analyzes) and Sabbatical Scholar (studies):
+- Story Seeker EXPERIENCES — they follow the moment, not a research agenda
 
 VIOLATIONS:
-- Major tourist attractions as the focus = VIOLATION
-- Organized group tours = VIOLATION
-- "Must-see" lists = VIOLATION
-- Tourist-oriented restaurants = VIOLATION
-- Curated/staged cultural experiences = VIOLATION
+- Wall-to-wall scheduled days with no breathing room = VIOLATION
+- "Top 10" tourist lists as the spine of the trip = VIOLATION
+- Curated/staged cultural performances = VIOLATION
+- No unscripted block on the trip = VIOLATION
 `,
     avoid: [
       'Major tourist attractions as focus',
@@ -560,7 +529,8 @@ VIOLATIONS:
       spaOK: false,
       michelinOK: false,
       nightlifeExpected: true,
-      requiredUnscheduledBlocks: 1
+      requiredUnscheduledBlocks: 1,
+      unscripted_activity_minimum: 1
     }
   }
 };
@@ -671,44 +641,34 @@ VIOLATIONS:
     identity: "The Passport Collector",
     category: "Achiever",
     meaning: `
-This traveler lives to be somewhere NEW. They collect destinations like stamps in a passport.
+Collects destinations like trophies. Country count is a metric. Breadth not depth. May spend less time per place to maximize total collection. More about the stamp than the deep knowledge.
 
-They want:
-- New places, new experiences, new stamps
-- The thrill of arrival — touching down somewhere they've never been
-- A mix of iconic and unexpected moments
-- Flexibility — the vibe might change on the way there
-- Being able to say "I've been there, I've done that, I've lived that"
-- Travel as identity — this is who they are
+DAY STRUCTURE CUE:
+- activity_density: high (cover ground)
+- iconic_priority: very high — must-see landmarks anchor the trip
+- They want to say "I saw it" more than "I understood it"
+- Pace is fast; transitions are tight; pack the highlights
 
-Their ideal day:
-- Morning: something iconic for this destination
-- Lunch: whatever the locals recommend
-- Afternoon: explore what makes this place unique
-- Evening: experience the local scene
-
-WHAT "COLLECTOR" MEANS FOR THEM:
-- It's about BEING somewhere new, not checking boxes
-- Every destination adds to who they are
-- They're always planning the next trip
-- The journey matters as much as the destination
-- They adapt to wherever they land
+UNLIKE Cultural Anthropologist (depth) and Story Seeker (unscripted):
+- Passport Collector optimizes for COVERAGE, not depth or serendipity
 
 VIOLATIONS:
-- Generic tourist itinerary that could be anywhere = VIOLATION
-- Ignoring what makes this destination unique = VIOLATION
-- Overly rigid scheduling = VIOLATION
+- Skipping major iconic landmarks of the destination = VIOLATION
+- Slow / contemplative day with one activity = VIOLATION
+- Generic itinerary that could be anywhere = VIOLATION
 `,
     avoid: [
-      'Generic sightseeing',
-      'Experiences outside their interest area (unless essential)',
-      'Surface-level tours',
-      'Rushed visits'
+      'Slow / contemplative single-activity days',
+      'Skipping iconic destination anchors',
+      'Generic sightseeing with no local hook',
+      'Rushed visits to nothing memorable'
     ],
     dayStructure: {
-      maxScheduledActivities: 4,
-      startTime: '09:00',
-      spaOK: false
+      maxScheduledActivities: 5,
+      minScheduledActivities: 4,
+      startTime: '08:30',
+      spaOK: false,
+      activity_density: 'high'
     }
   },
 
@@ -822,40 +782,28 @@ VIOLATIONS:
     identity: "The Wellness Devotee",
     category: "Restorer",
     meaning: `
-This traveler wants structured wellness programs.
+Travels TO escape — from the inbox, the noise, the obligations. Combo of escape + sanctuary + wellness. Mostly stillness inside the retreat property (70-80% of trip time), one real adventure day outside, wellness amenities required as anchors.
 
-They want:
-- Wellness retreat experiences
-- Spa treatments (YES, this IS the spa person)
-- Health-focused dining
-- Structured relaxation
-- Detox/cleanse options
-- Professional wellness guidance
-
-Their ideal day:
-- Morning wellness activity
-- Spa treatment
-- Healthy lunch
-- Afternoon treatment or class
-- Evening: gentle yoga, healthy dinner
+DAY STRUCTURE CUE:
+- retreat_property_time_ratio: 0.7-0.8 (most of the trip happens on-property)
+- outside_retreat_days: 1 (exactly one real adventure day off-property)
+- required_amenities: spa OR meditation OR yoga OR healthy dining (at least one anchors each day)
+- Pace: slow; mornings and evenings on-property by default
 
 WHAT "RETREAT" MEANS:
 - Professional wellness, not DIY
-- Structured programs welcome
+- The property IS the destination
 - Health is the priority
-- This IS the spa traveler
-
-THIS traveler gets spa. Others don't.
 
 VIOLATIONS:
-- Adventure activities = VIOLATION
-- Unhealthy food = VIOLATION
-- Late nights = VIOLATION
-- Alcohol = VIOLATION
-- City sightseeing focus = VIOLATION
+- Daily off-property excursions = VIOLATION (defeats escape)
+- No wellness anchor (spa / meditation / yoga / healthy dining) = VIOLATION
+- Late nights, alcohol-focused evenings = VIOLATION
+- City-sightseeing-heavy itinerary = VIOLATION
 `,
     avoid: [
-      'Adventure activities',
+      'Daily off-property excursions',
+      'Adventure activities (except 1 dedicated outside day)',
       'Unhealthy dining',
       'Late nights',
       'Alcohol-focused experiences',
@@ -866,46 +814,42 @@ VIOLATIONS:
       maxScheduledActivities: 4,
       startTime: '07:00',
       endTime: '21:00',
-      spaOK: true
-    }
+      spaOK: true,
+      retreat_property_time_ratio: [0.7, 0.8],
+      outside_retreat_days: 1,
+      required_amenities: ['spa', 'meditation', 'yoga', 'healthy_dining']
+    },
+    hotelRequirement: 'retreat_property'
   },
 
   beach_therapist: {
     identity: "The Beach Therapist",
     category: "Restorer",
     meaning: `
-This traveler finds peace at the BEACH, not the SPA.
+Water is the identity. Period. Ocean, lake, river. Give them water and everything else falls into place. Doesn't need fancy hotel or packed itinerary. Needs waves, salt air, sand. Plans around water specifically, regardless of pace/budget/social context.
 
-They want:
-- Extended beach/water time (3-4 hours minimum)
-- Sunset watching
-- Casual seafood meals
-- Hammock time
-- Ocean sounds
-- Simple, natural restoration
-
-THIS IS NOT A SPA PERSON. The BEACH is their therapy.
+HARD CONSTRAINT: water access required EVERY day of the trip.
+- Hotel: must be waterfront or walkable to water
+- Daily activity: at least one water-based or water-adjacent activity per day
 
 Their ideal day:
 - Late morning start
-- Beach by 11am, stay until 4pm
+- Beach/water by 11am, stay until 4pm
 - Casual lunch near water
-- Rest
-- Sunset somewhere scenic
+- Rest, sunset somewhere scenic
 - Simple dinner, feet in sand if possible
 
 WHAT "BEACH THERAPIST" MEANS:
-- Beach = spa for them
+- Beach/water = therapy. Not spa. Not wellness center.
 - Simple > fancy
 - Natural > manufactured
 - Ocean > treatment room
 
 VIOLATIONS:
-- Spa treatments = VIOLATION
-- Wellness centers = VIOLATION
-- Luxury hotel amenities = VIOLATION
-- Being far from water = VIOLATION
-- Packed schedules = VIOLATION
+- Any day without water access = VIOLATION
+- Hotel not on water / not walkable to water = VIOLATION
+- Spa-as-substitute-for-beach = VIOLATION
+- Packed sightseeing schedule = VIOLATION
 `,
     avoid: [
       'Spa treatments',
@@ -925,8 +869,10 @@ VIOLATIONS:
       startTime: '10:00',
       sunsetRequired: true,
       spaOK: false,
-      michelinOK: false
-    }
+      michelinOK: false,
+      requiresWaterDaily: true
+    },
+    hotelRequirement: 'walkable_to_water'
   },
 
   slow_traveler: {
@@ -1038,7 +984,7 @@ VIOLATIONS:
 
   escape_artist: {
     identity: "The Escape Artist",
-    category: "Restorer",
+    category: "Explorer",
     meaning: `
 This traveler is OVERWHELMED and needs to GET AWAY. They're not picky about where — they just need OUT.
 
@@ -1301,49 +1247,51 @@ VIOLATIONS:
 // =============================================================================
 
 const TRANSFORMER_ARCHETYPES: Record<string, ArchetypeDefinition> = {
-  // TODO: when ArchetypeDefinition adds affinity/timePreferences/diningPolicy fields, expand per the Mindful Voyager v2 spec.
   eco_ethicist: {
     identity: "The Mindful Voyager",
     category: "Transformer",
     meaning: `
-This traveler prioritizes sustainability and ethics.
+Travels with intention — values sustainability, ethical sourcing, and meaningful connection over consumption.
 
 They want:
-- Eco-friendly accommodations
-- Sustainable experiences
-- Low carbon footprint
-- Supporting local/ethical businesses
-- Nature conservation experiences
-- Avoiding over-tourism
+- Locally-owned restaurants and cafes (target: 80%+ of meals local)
+- B-corp / family-run / eco-certified hotels
+- Community-based tourism with direct local benefit
+- Sustainable food (farm-to-table, foraging, local producers)
+- Conservation-focused nature experiences
+- Public transit, walking, low-carbon options
 
 Their ideal day:
 - Local, sustainable breakfast
 - Eco-tour or conservation activity
 - Lunch at farm-to-table
-- Afternoon nature experience
-- Evening at locally-owned restaurant
+- Afternoon nature/cultural experience with local guide
+- Evening at a locally-owned restaurant
 
-WHAT "ECO" MEANS:
+WHAT "MINDFUL" MEANS:
 - Environmental impact matters
-- Local businesses over chains
-- Quality over convenience
+- Ethics over convenience
+- Local businesses over chains and global brands
 - Would rather skip than harm
 
 VIOLATIONS:
-- Chain hotels/restaurants = VIOLATION
-- High-carbon activities = VIOLATION
-- Over-touristed sites without purpose = VIOLATION
-- Single-use plastic = VIOLATION
+- Chain restaurants / global brands = VIOLATION
+- Cruise ship excursions, mass-tourism photo-ops = VIOLATION
+- Animal exploitation (elephant riding, tiger temples, captive dolphin shows) = VIOLATION
+- High-emission optional activities (helicopter, jet ski, race cars) = VIOLATION
+- Fast fashion shopping districts = VIOLATION
+- Michelin / status-driven fine dining = VIOLATION (not the point)
 `,
     avoid: [
-      'Chain hotels/restaurants and global brands',
-      'High-carbon / high-emission optional activities (helicopter tours, jet ski, race cars)',
-      'Over-touristed sites and mass-tourism photo-op venues',
-      'Single-use plastic venues',
-      'Exploitative tourism',
+      'Mass tourism venues',
       'Cruise ship excursions',
       'Animal exploitation experiences (elephant riding, tiger temples, captive dolphin shows)',
-      'Fast fashion shopping districts'
+      'Fast fashion shopping districts',
+      'Chain restaurants and global brands',
+      'Chain hotels and global hotel brands',
+      'High-emission activities (helicopter tours, jet ski, race cars)',
+      'Over-touristed sites without purpose',
+      'Single-use plastic venues'
     ],
     prefer: [
       'Locally-owned restaurants and cafes',
@@ -1359,8 +1307,33 @@ VIOLATIONS:
       maxScheduledActivities: 4,
       startTime: '08:30',
       michelinOK: false,
-      spaOK: false
-    }
+      spaOK: false,
+      pace: 'moderate'
+    },
+    affinity: {
+      high: [
+        'locally-owned restaurants',
+        'B-corp certified hotels',
+        'community-based tourism',
+        'sustainable food',
+        'cultural immersion',
+        'nature reserves with conservation focus'
+      ],
+      medium: ['museums', 'walking tours', 'public transit experiences'],
+      low: ['luxury experiences', 'all-inclusive resorts'],
+      never: ['unethical wildlife tourism', 'sweatshop-sourced shopping']
+    },
+    timePreferences: {
+      startTime: '08:30',
+      peakEnergy: 'morning',
+      preference: 'thoughtful_pacing'
+    },
+    diningPolicy: {
+      michelinAllowed: false,
+      preferLocal: true,
+      minLocalShare: 0.8
+    },
+    hotelRequirement: 'eco_certified'
   },
 
   gap_year_graduate: {
@@ -1466,35 +1439,21 @@ VIOLATIONS:
     identity: "The Immersion Seeker",
     category: "Transformer",
     meaning: `
-This traveler wants to LIVE through a city, not just pass through it.
+Treats vacation as a class. Every meal, hotel, activity should have an educational angle. Books historically significant hotels, takes guided context tours, eats at restaurants with cultural significance. The whole trip is learning.
 
-They want:
-- Museums that tell the story of a place
-- Guided tours with expert knowledge
-- Monuments and historical sites with real context
-- Coffee at the café where a famous writer once worked
-- Understanding the layers of history beneath their feet
-- Cultural depth — not just eat-and-drink tourism
+DAY STRUCTURE CUE:
+- educational_activity_ratio: 0.8+ (most activities are educational)
+- Guided tours, expert lectures, archive visits, historic restaurants — all welcome
+- Even meals and hotels should carry historical/cultural significance
+- Pace is deliberate; they will linger in a museum for 3 hours
 
-Their ideal day:
-- Morning: museum or major historical/cultural site
-- Lunch at a spot with its own story
-- Afternoon: walking tour, monument, or historic neighborhood
-- Evening: local performance, reading, or reflection at a meaningful venue
-
-WHAT "IMMERSION" MEANS:
-- They want to know WHERE they are and WHY it matters
-- History lives in the streets, not just museums
-- Finding the story in every building, every corner
-- Deep understanding over surface-level tourism
-- It's not all museums — it's discovering the history woven into everyday places
+UNLIKE Cultural Anthropologist (cultural_activity_ratio 0.2-0.3 — vacationer with curiosity):
+- Sabbatical Scholar IS the student. The whole trip is the syllabus.
 
 VIOLATIONS:
-- Beach resort focus = VIOLATION
-- Pure adventure activities = VIOLATION
-- Party focus = VIOLATION
-- Surface-level sightseeing = VIOLATION
-- Rushing through museums = VIOLATION
+- Day with <80% educational/cultural anchors = VIOLATION
+- Beach/resort/party focus = VIOLATION
+- Surface-level sightseeing or rushing through museums = VIOLATION
 `,
     avoid: [
       'Beach/resort focus',
@@ -1506,7 +1465,8 @@ VIOLATIONS:
     dayStructure: {
       maxScheduledActivities: 4,
       startTime: '09:00',
-      spaOK: false
+      spaOK: false,
+      educational_activity_ratio: 0.8
     }
   },
 
