@@ -505,6 +505,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loadingTimeoutRef.current = null;
       }
       subscription.unsubscribe();
+      window.removeEventListener('storage', onStorage);
+      try { bcRef.current?.close(); } catch { /* noop */ }
+      bcRef.current = null;
     };
   }, []);
 
