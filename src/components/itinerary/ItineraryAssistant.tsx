@@ -379,6 +379,8 @@ export function ItineraryAssistant({
         : action.type === 'regenerate_day' ? 'REGENERATE_DAY'
         : null;
 
+      let spendContext: { idempotencyKey?: string; pendingChargeId?: string | null } | undefined;
+
       if (creditAction) {
         console.log(`[ActionExecutor] Spending credits for ${creditAction}`);
         const creditResult = await spendCredits.mutateAsync({
@@ -395,7 +397,43 @@ export function ItineraryAssistant({
           console.log('[ActionExecutor] Credit spend FAILED — aborting');
           throw new Error('Insufficient credits');
         }
+        spendContext = {
+          idempotencyKey: (creditResult as { idempotencyKey?: string }).idempotencyKey,
+          pendingChargeId: (creditResult as { pendingChargeId?: string | null }).pendingChargeId ?? null,
+        };
       }
+
+      const refundOriginalAction =
+        creditAction === 'SWAP_ACTIVITY' ? 'swap_activity'
+        : creditAction === 'REGENERATE_DAY' ? 'regenerate_day'
+        : null;
+
+      const refundOnFailure = async (reason: string, errorMessage?: string) => {
+        if (!spendContext?.idempotencyKey || !refundOriginalAction) return;
+        try {
+          const { data, error: refundErr } = await supabase.functions.invoke('spend-credits', {
+            body: {
+              action: 'REFUND',
+              tripId,
+              metadata: {
+                originalAction: refundOriginalAction,
+                pendingChargeId: spendContext.pendingChargeId ?? undefined,
+                reason,
+                ...(errorMessage ? { errorMessage } : {}),
+              },
+              originalIdempotencyKey: spendContext.idempotencyKey,
+            },
+          });
+          if (refundErr) {
+            console.error('[ActionExecutor] Refund invoke error:', refundErr);
+          } else {
+            console.log('[ActionExecutor] Refund issued:', data);
+          }
+        } catch (err) {
+          console.error('[ActionExecutor] Refund failed:', err);
+        }
+      };
+
 
       // Execute the action using the action executor
       const result = await executeAction(action, tripId, currentDays, destination);
