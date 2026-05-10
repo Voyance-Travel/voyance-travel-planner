@@ -1698,12 +1698,15 @@
       "name": "The Wellness Devotee",
       "category": "RESTORER",
       "required": {
-        "restoration_need": { "min": 0.7 },
-        "planning": { "min": 0.4 }
+        "escape_need": { "min": 0.6 },
+        "restoration_need": { "min": 0.6 }
       },
       "boosters": {
+        "escape_need": 1.2,
         "restoration_need": 1.5,
-        "planning": 0.8,
+        "healing_focus": 0.5,
+        "food_focus": 0.4,
+        "spirituality": 0.4,
         "quality_intrinsic": 0.6
       },
       "penalties": {
