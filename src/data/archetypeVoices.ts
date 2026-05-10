@@ -71,20 +71,20 @@ export const archetypeVoiceStyles: Record<string, ArchetypeVoiceStyle> = {
 
   cultural_anthropologist: {
     descriptionPrefix: {
-      cultural: "This is where you'll understand what makes this place tick.",
-      dining: "Eat what the locals eat. Food tells the story.",
-      sightseeing: "Look past the surface. The real story is in the details.",
-      shopping: "Local artisans, traditional crafts. This is the authentic stuff.",
-      nature: "This landscape shaped the culture. See how.",
-      entertainment: "Local performance, local story. This is the real thing.",
+      cultural: "A cultural anchor for the trip — not the whole day, just enough.",
+      dining: "A long, leisurely meal — part of the cultural picture, not a pit stop.",
+      sightseeing: "Worth understanding, not just photographing.",
+      shopping: "Local craft and neighborhood finds, on the way to lunch.",
+      nature: "A walk that gives you a sense of how the place is laid out.",
+      entertainment: "A real local moment, not a staged tourist set piece.",
     },
     paceNotes: {
-      morning: "Start where the locals start. Coffee, conversation.",
-      afternoon: "This is when the neighborhood reveals itself.",
-      evening: "The city transforms. Watch how people live here.",
+      morning: "One cultural anchor — a tour, museum, or guided walk.",
+      afternoon: "Free time. Wander, shop, sit somewhere.",
+      evening: "Family-run dinner with a story behind it.",
     },
-    diningNotes: "No tourist menus. We've found where the locals actually eat.",
-    toneDescriptor: "curious, observant, seeking authentic understanding",
+    diningNotes: "Real neighborhood places. The trattoria with the regulars, not the menu in four languages.",
+    toneDescriptor: "curious but balanced — wants context without turning the trip into a lecture",
   },
 
   luxury_luminary: {
@@ -179,20 +179,110 @@ export const archetypeVoiceStyles: Record<string, ArchetypeVoiceStyle> = {
 
   beach_therapist: {
     descriptionPrefix: {
-      cultural: "A quick visit, then back to the beach.",
-      dining: "Seafood with a view. Toes in the sand.",
-      sightseeing: "Coastal views are the only views that matter.",
-      wellness: "Ocean sounds, salt air, pure restoration.",
-      nature: "Beach walks, tide pools, the rhythm of the waves.",
+      cultural: "A short, water-adjacent stop — then back toward the shore.",
+      dining: "Seafood, sea breeze, no rush.",
+      sightseeing: "If it's not near the water, keep it brief.",
+      wellness: "Salt air and waves do most of the work here.",
+      nature: "Coastline, tide pools, a long slow walk along the shore.",
       entertainment: "Sunset cocktails. The ocean is the show.",
     },
     paceNotes: {
-      morning: "Beach is best before it gets crowded.",
-      afternoon: "Siesta, swim, repeat. This is the rhythm.",
-      evening: "Sunset on the beach. There's nothing else.",
+      morning: "Slow start near the water — swim before the heat.",
+      afternoon: "Active or restful, your call — but stay close to the water.",
+      evening: "Wind down with the waves. Dinner with feet near sand.",
     },
-    diningNotes: "Fresh catch, ocean views. The simpler the better.",
-    toneDescriptor: "coastal, restorative, salt-and-sun healing",
+    diningNotes: "Fresh, local, simple — and ideally with a view of the water.",
+    toneDescriptor: "calm, water-anchored, unhurried",
+  },
+
+  community_builder: {
+    descriptionPrefix: {
+      cultural: "An iconic stop — the kind you'll need to be able to speak to.",
+      dining: "A spot worth recommending — equal parts insider and impressive.",
+      sightseeing: "Cover this so you can tell people whether it's actually worth it.",
+      shopping: "Neighborhood favorites you'll mention by name later.",
+      nature: "Worth covering, even briefly — adds range to your map.",
+      entertainment: "The spot people will Instagram. Now you'll know it firsthand.",
+    },
+    paceNotes: {
+      morning: "Iconic anchor first — the must-do.",
+      afternoon: "Off-the-beaten-path neighborhood — the insider half of the recommendation.",
+      evening: "Notes-worthy dinner — somewhere you'll actually recommend.",
+    },
+    diningNotes: "Mix iconic and insider — the famous spot AND the local-favorite, so you can speak to both.",
+    toneDescriptor: "high-density, authoritative, mixing iconic must-dos with insider spots",
+  },
+
+  story_seeker: {
+    descriptionPrefix: {
+      cultural: "Worth a look, but stay open — the story usually shows up off-script.",
+      dining: "A real local spot — not the polished one with the line out front.",
+      sightseeing: "Anchor the day here, then let it drift.",
+      shopping: "Markets, side streets, follow what looks alive.",
+      nature: "Wander it — the route matters less than what you find.",
+      entertainment: "A backyard show, a neighborhood bar — wherever the night goes.",
+    },
+    paceNotes: {
+      morning: "Loose start — market, coffee, follow your nose.",
+      afternoon: "Wildcard block — leave room for whatever shows up.",
+      evening: "No script. A local tip is worth more than a reservation.",
+    },
+    diningNotes: "Where the locals actually eat — not where the food blogs send people.",
+    toneDescriptor: "unscripted, follow-your-nose, leaving deliberate room for the unplanned",
+  },
+
+  collection_curator: {
+    descriptionPrefix: {
+      cultural: "The iconic landmark for this stop — the proof you were here.",
+      dining: "A quick, well-rated bite — the trip is about the route, not the table.",
+      sightseeing: "Hit the must-see, photo, move on.",
+      shopping: "A small souvenir at most — luggage stays light.",
+      nature: "The signature view for this country, then onward.",
+      entertainment: "If it's the famous one, do it — otherwise save the time.",
+    },
+    paceNotes: {
+      morning: "Early start — the route doesn't move itself.",
+      afternoon: "Anchor landmark, photo, stamp earned.",
+      evening: "Light dinner, early night — tomorrow's a transfer day.",
+    },
+    diningNotes: "Well-rated and convenient. Meals are fuel between landmarks, not the point.",
+    toneDescriptor: "efficient, breadth-focused, anchored on iconic landmarks",
+  },
+
+  retreat_regular: {
+    descriptionPrefix: {
+      cultural: "A rare excursion outside the property — keep it intentional.",
+      dining: "A real meal in town today — savor it before heading back.",
+      sightseeing: "On your one outside day — see it properly, then back to the cocoon.",
+      wellness: "A sanctuary moment — spa, meditation, or quiet time on the property.",
+      nature: "A grounding walk on the property, no agenda.",
+      entertainment: "Quiet evening at the retreat — a book, the bath, an early night.",
+    },
+    paceNotes: {
+      morning: "Slow morning at the retreat — yoga, breakfast, no rush.",
+      afternoon: "Wellness or stillness — spa, treatment, or a quiet hour.",
+      evening: "Quiet dinner on the property, early night.",
+    },
+    diningNotes: "Healthy, real food on the property most days. The one outside meal is a small pleasure, not a production.",
+    toneDescriptor: "quiet, restorative, intentional — mostly on-property with one real day outside",
+  },
+
+  sabbatical_scholar: {
+    descriptionPrefix: {
+      cultural: "Part of the curriculum — context-rich, expert-led.",
+      dining: "The restaurant that taught the city this dish — the meal is the lesson.",
+      sightseeing: "Read the placards. The story is why we're here.",
+      shopping: "Bookshops, archives, things with a paper trail.",
+      nature: "A landscape with history — what shaped the place, not just the view.",
+      entertainment: "A performance, a lecture, something with substance.",
+    },
+    paceNotes: {
+      morning: "Private guide or museum first — go in deep while you're sharp.",
+      afternoon: "More learning — a second site, a working studio, a serious bookshop.",
+      evening: "Dinner at the historically significant table — context is half the meal.",
+    },
+    diningNotes: "Choose the table with the story — the place that invented the dish, the room with the history.",
+    toneDescriptor: "vacation-as-curriculum — every meal, hotel, and tour part of the lesson",
   },
 
   // Default fallback voice

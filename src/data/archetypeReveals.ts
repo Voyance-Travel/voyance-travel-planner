@@ -28,29 +28,23 @@ export const ARCHETYPE_REVEALS: Record<string, ArchetypeReveal> = {
     id: 'cultural_anthropologist',
     name: 'The Cultural Anthropologist',
     category: 'EXPLORER',
-    revealParagraph: `You've never been satisfied with just seeing a place. You want to understand it.
-
-While others are checking off sights, you're noticing how people greet each other, what they eat for breakfast, why the streets are laid out the way they are. You've probably annoyed travel companions by spending an hour in a local market that "wasn't on the itinerary." You don't care. That market taught you more than any museum could.
-
-You ask questions that other tourists don't think to ask. You learn a few words of the language, not because you have to, but because it changes how people respond to you. You've left places feeling like you actually know something about how people live there, not just what the buildings look like.
-
-Your trips will prioritize depth over breadth. We'll build in time for wandering, for conversations, for the moments that can't be scheduled. Less "top ten attractions," more "how this place actually works."`,
+    revealParagraph: "You don't just visit a place — you want to understand it. A great trip leaves you with a real sense of where you were, balanced with all the food, shopping, and wandering that makes a vacation a vacation.",
     youProbably: [
-      "Have learned basic phrases in languages you'll only use once",
-      "Spent an hour talking to a local when you only meant to ask for directions",
-      "Feel frustrated when tours skim the surface",
-      "Keep travel journals full of observations, not just activities"
+      "Read a little about a place before you go — not too much, just enough",
+      "Take the cultural tour AND the long lunch right after",
+      "Notice details on a neighborhood walk that other travelers blow past",
+      "Come back with stories that have substance, not just photos"
     ],
     itineraryWillInclude: [
-      "Local neighborhood immersion, not just tourist centers",
-      "Conversations and connections, not just transactions",
-      "Context and history that explains why things are the way they are",
-      "Time to observe, not just consume"
+      "1–2 cultural anchors per trip — a tour, museum, or guided neighborhood walk",
+      "Plenty of unstructured time for shopping, wandering, lingering",
+      "Family-run restaurants with a real story to them",
+      "Just enough context to understand what you're looking at"
     ],
     protectFrom: [
-      "Surface-level 'Instagram moment' tourism",
-      "Rushing past the details that matter",
-      "Missing the real story"
+      "Marathon learning days that turn the trip into a lecture",
+      "Pure tourist-strip stops with no real context",
+      "Cramming so many sights you forget which city you're in"
     ]
   },
 
@@ -272,29 +266,48 @@ Your trips will be designed for two. Romance isn't just about luxury (though we'
     id: 'community_builder',
     name: 'The Purpose Voyager',
     category: 'CONNECTOR',
-    revealParagraph: `You travel with a conscience.
-
-You've thought about where your money goes, who benefits from your visit, whether your presence helps or harms. Not in a preachy way. You just can't enjoy a place if you know your trip is extracting more than it gives.
-
-You seek out local businesses, guides from the community, experiences that create connection rather than consumption. You've probably stayed places that weren't the most convenient because they felt more authentic, more responsible, more right.
-
-Your trips will reflect your values. We'll prioritize locally-owned, community-positive experiences. Places where your presence matters in a good way. Travel that enriches the places you visit, not just your Instagram.`,
+    revealParagraph: "You've been everywhere — and everyone asks you for advice. You don't just travel; you accumulate the kind of knowledge that makes you the friend everyone texts before a trip.",
     youProbably: [
-      "Research how to support local communities before visiting",
-      "Avoid chain restaurants and hotels",
-      "Learn basic phrases to connect more genuinely",
-      "Feel uncomfortable with overtourism"
+      "Have a list of recommendations memorized for half the cities you've visited",
+      "Get genuine joy from helping a friend nail their itinerary",
+      "Mix iconic and insider so you can speak to both",
+      "Track destinations less for the count, more for the expertise"
     ],
     itineraryWillInclude: [
-      "Meaningful local connections",
-      "Community-supported businesses",
-      "Opportunities to give back (if you want them)",
-      "Experiences that benefit both you and the place"
+      "Higher activity density — you cover a lot",
+      "Iconic landmarks AND off-the-beaten-path spots in equal measure",
+      "Local-favorite restaurants alongside the famous ones",
+      "Notes-worthy moments you'll be recommending for years"
     ],
     protectFrom: [
-      "Exploitative tourism",
-      "Experiences that harm local communities",
-      "The guilt of being a passive consumer"
+      "Empty days where nothing happens",
+      "Pure tourist-trap itineraries that won't impress your friends",
+      "Skipping the spots you'll need to know about later"
+    ]
+  },
+
+  story_seeker: {
+    id: 'story_seeker',
+    name: 'The Story Seeker',
+    category: 'CONNECTOR',
+    revealParagraph: "You travel for the moments you couldn't have planned. The midnight swim, the local who invited you to dinner, the detour that became the whole trip — that's the stuff you came for.",
+    youProbably: [
+      "Say yes to invitations from strangers more often than you should",
+      "Skip the famous landmark for the local-only spot down the street",
+      "Get nervous when an itinerary looks too polished",
+      "Come home with the stories nobody else has",
+      "Remember moments, not checklists"
+    ],
+    itineraryWillInclude: [
+      "At least one wildcard, free-form local discovery block per trip",
+      "Real local hangouts over tourist-marketed venues",
+      "Loose afternoons that leave room for the unplanned",
+      "Just enough structure that you don't miss the essentials"
+    ],
+    protectFrom: [
+      "Over-scripted, locked-down hour-by-hour days",
+      "Tourist-trap experiences that won't make a story",
+      "Itineraries so full there's no room for a detour"
     ]
   },
 
@@ -366,29 +379,24 @@ Your trips will have edge. We'll find the experiences that require something fro
     id: 'collection_curator',
     name: 'The Passport Collector',
     category: 'ACHIEVER',
-    revealParagraph: `You have a thing. And it shapes how you see the world.
-
-Maybe it's wine regions. Maybe it's modernist architecture. Maybe it's stadiums, or jazz clubs, or ancient ruins. Whatever it is, it gives you a lens that most travelers don't have, and it leads you to places they'll never find.
-
-You've probably planned entire trips around your interest while others thought you were obsessive. You know better. The obsession is what makes it interesting. Going deep on something is more rewarding than going wide on everything.
-
-Your trips will feed your focus. We'll build around your interest, not despite it. The hidden gems, the expert experiences, the places that only matter if you know why they matter. Your thing is the organizing principle.`,
+    revealParagraph: "Your map is your scoreboard. You'd rather hit three new places than spend a week in one — breadth is the point, and you're optimizing for it.",
     youProbably: [
-      "Have a niche interest that drives your travel choices",
-      "Know more about your specialty than most tour guides",
-      "Have spent hours on something others walked past in minutes",
-      "Plan trips around a single experience related to your passion"
+      "Count countries the way other people count birthdays",
+      "Have a running list of which stamp comes next",
+      "Know exactly which flight deal unlocks the next country",
+      "Feel a real hit of satisfaction when a new pin goes in",
+      "Trade depth for breadth without flinching"
     ],
     itineraryWillInclude: [
-      "Deep focus on what you actually care about",
-      "Expert-level experiences in your interest",
-      "The freedom to spend hours on one thing",
-      "Access to the serious stuff"
+      "Routes designed to maximize new-country / new-city count",
+      "An iconic landmark anchor in each stop — the proof you were there",
+      "Tight, efficient logistics between destinations",
+      "Less time per place, more places overall"
     ],
     protectFrom: [
-      "Generalist tourism that bores you",
-      "Rushing past the things you came for",
-      "'Well-rounded' itineraries that round off your passion"
+      "Lingering somewhere just to fill an afternoon",
+      "Itineraries that quietly cut a destination from the route",
+      "Logistics that waste a day you could spend in a new country"
     ]
   },
 
@@ -460,29 +468,24 @@ Your trips will honor that. Contemplative spaces, spiritual depth, room for sile
     id: 'retreat_regular',
     name: 'The Wellness Devotee',
     category: 'RESTORER',
-    revealParagraph: `You've learned that real rest requires structure.
-
-Left to your own devices, you'd still check email on the beach, squeeze in one more sight, not fully unplug. You need something external to hold the space: a program, a schedule, a setting designed for restoration.
-
-That's why retreats, spas, and wellness resorts work for you. They give you permission to do what you actually need: nothing. Yoga at 7am. Massage at 2pm. Dinner at a set time. The structure liberates you from having to decide.
-
-Your trips will be restoration-forward. We'll find the places that know how to take care of you, where everything is designed to help you let go, not keep going.`,
+    revealParagraph: "You travel to disappear from your life. The retreat is the cocoon — quiet, restorative, mostly on-property — with one real day outside before you sink back in.",
     youProbably: [
-      "Have a go-to retreat you return to",
-      "Consider spa time essential, not extra",
-      "Feel no guilt about unstructured days",
-      "Return from vacation genuinely rested (not needing another one)"
+      "Pick the retreat first, then figure out the destination",
+      "Treat the spa, the yoga room, and the quiet garden as the main attractions",
+      "Need an escape from the inbox more than another sightseeing list",
+      "Surface for one real outing, then happily retreat back to the property",
+      "Come home rebuilt, not just rested"
     ],
     itineraryWillInclude: [
-      "Real restoration (not 'relaxing' that's actually exhausting)",
-      "Wellness without the woo-woo (unless you want it)",
-      "Permission to do nothing",
-      "Coming home better than you left"
+      "70–80% of the trip happening at the retreat or property",
+      "Daily wellness rituals: spa, meditation, yoga, or healthy dining",
+      "One full day out for a market, lunch in town, or a real adventure",
+      "Quiet evenings, early nights, no over-stimulation"
     ],
     protectFrom: [
-      "Feeling guilty about rest",
-      "Itineraries that exhaust you",
-      "'Wellness' that's actually work"
+      "Over-packed days that defeat the point of a retreat",
+      "Wellness that's secretly more scheduling",
+      "Feeling like you need to justify staying on the property"
     ]
   },
 
@@ -490,29 +493,24 @@ Your trips will be restoration-forward. We'll find the places that know how to t
     id: 'beach_therapist',
     name: 'The Beach Therapist',
     category: 'RESTORER',
-    revealParagraph: `Your happy place has sand and water.
-
-You've discovered the simplest truth about vacation: sometimes you just need to be horizontal. The sound of waves. A book. A drink. Nowhere to be, nothing to do, no one expecting anything from you.
-
-Other people feel guilty for "wasting" a trip on a beach. You've stopped caring what other people think. The beach isn't wasted time. It's the point.
-
-Your trips will prioritize sun, water, and simplicity. We won't overload you with activities or make you feel bad about doing nothing. Sometimes the best trips are the ones where you come back tan, rested, and with very few photos.`,
+    revealParagraph: "Water is your home. Give you the ocean, a lake, a river at sunset — and everything else falls into place.",
     youProbably: [
-      "Have a favorite beach you return to",
-      "Can happily spend an entire day doing nothing",
-      "Feel confused when people ask what you'll 'do' at the beach",
-      "Find the sound of waves genuinely healing"
+      "Plan the trip around the water before anything else",
+      "Know the difference between swim beaches and view beaches",
+      "Reset faster in saltwater than anywhere else",
+      "Pick the waterfront hotel even if it's not the fanciest",
+      "Track sunsets the way other people track restaurants"
     ],
     itineraryWillInclude: [
-      "Beach time (obviously)",
-      "Minimal scheduling (the point is no schedule)",
-      "Good spots to do nothing",
-      "Maybe some good seafood (you're not dead)"
+      "Water within reach every single day",
+      "Hotel that's waterfront or walkable to it",
+      "Morning swim and a sunset moment built into each day",
+      "Lazy beach lunches and seafood with a view"
     ],
     protectFrom: [
-      "Pressure to 'do' things",
-      "Itineraries that ignore the beach",
-      "Guilt about having no plans"
+      "Landlocked stretches with no water in sight",
+      "Days packed so tight you never make it to the shore",
+      "Cute inland detours that pull you away from the coast"
     ]
   },
 
@@ -738,29 +736,24 @@ Your trips will reflect your self-knowledge. We won't give you the same itinerar
     id: 'sabbatical_scholar',
     name: 'The Immersion Seeker',
     category: 'TRANSFORMER',
-    revealParagraph: `Travel, for you, is education by another name.
-
-You want to understand how the world got this way. The history, the context, the layers of meaning beneath the surface. A building isn't just a building. It's a story. A meal isn't just food. It's cultural transmission across generations.
-
-You probably read about places before you go, and you definitely have more questions after you return. You've been accused of making trips "too serious." But you know that understanding makes everything richer.
-
-Your trips will feed your curiosity. Historical context, local expertise, the stories that most visitors never hear. We'll give you the depth that turns sightseeing into genuine learning.`,
+    revealParagraph: "Your vacation is your education. Every meal, hotel, museum, walking tour is part of the curriculum — and you're the eager student.",
     youProbably: [
-      "Read about destinations before visiting",
-      "Get genuinely excited by historical context",
-      "Find museums more energizing than exhausting",
-      "Return home with new understanding, not just photos"
+      "Pick the historically significant hotel over the slick one",
+      "Actually read the museum placards (and the footnotes)",
+      "Choose dinner at the place that invented the dish",
+      "Have a guide in mind before you have a flight booked",
+      "Come home with more questions than you left with"
     ],
     itineraryWillInclude: [
-      "Depth over breadth",
-      "Expert access where possible",
-      "The context that makes sites meaningful",
-      "Time to actually learn, not just see"
+      "Almost every activity has an educational angle",
+      "Context-rich hotel with a real story behind it",
+      "Private guided tours with serious historians",
+      "Restaurants chosen for what they taught the city, not just the food"
     ],
     protectFrom: [
-      "Surface-level tourism",
-      "Missing the deeper story",
-      "Itineraries that prioritize photos over understanding"
+      "Surface-level photo-stop tourism",
+      "Generic luxury without context",
+      "Skimming the things you actually came to learn"
     ]
   },
 
