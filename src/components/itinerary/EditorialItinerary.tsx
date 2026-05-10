@@ -5527,6 +5527,14 @@ export function EditorialItinerary({
     const targetActivity = day.activities[activityIndex];
     if (!targetActivity) return;
 
+    // Universal Locking Protocol — never mutate a locked activity directly
+    const isLockedFlag = (a: any) =>
+      !!a && (a.isLocked === true || a.locked === true || a.lock_state === 'locked');
+    if (isLockedFlag(targetActivity)) {
+      toast.error('Unlock this activity first to change its time');
+      return;
+    }
+
     const oldStartStr = targetActivity.startTime || targetActivity.time || '12:00';
     const formatTime = (mins: number) => {
       const c = Math.max(0, Math.min(mins, 23 * 60 + 59));
@@ -5534,12 +5542,18 @@ export function EditorialItinerary({
     };
     const deltaMinutes = parseTime(startTime) - parseTime(oldStartStr);
 
+    let cascadeHitLock = false;
     let shifted = day.activities.map((activity, aIdx) => {
       if (aIdx === activityIndex) {
         const newDuration = parseTime(endTime) - parseTime(startTime);
         return { ...activity, startTime, endTime, time: startTime, durationMinutes: Math.max(newDuration, 0) };
       }
       if (cascade && aIdx > activityIndex && deltaMinutes !== 0) {
+        // Locked downstream activities act as fixed pegs — do not shift them.
+        if (isLockedFlag(activity)) {
+          cascadeHitLock = true;
+          return activity;
+        }
         const aStart = activity.startTime || activity.time;
         const aEnd = activity.endTime;
         const rawNewStart = aStart ? parseTime(aStart) + deltaMinutes : null;
@@ -5606,14 +5620,43 @@ export function EditorialItinerary({
     }
 
     // Apply directly (no overflow)
-    setDays(prev => prev.map((d, dIdx) => {
-      if (dIdx !== dayIndex) return d;
-      return { ...d, activities: shifted };
-    }));
-    setHasChanges(true);
+    let nextDays: EditorialDay[] = [];
+    setDays(prev => {
+      nextDays = prev.map((d, dIdx) => {
+        if (dIdx !== dayIndex) return d;
+        return { ...d, activities: shifted };
+      });
+      return nextDays;
+    });
     setTimeEditModal(null);
     toast.success(cascade ? 'Schedule shifted' : 'Activity time updated');
-  }, [days]);
+    if (cascadeHitLock) {
+      toast.info('Some locked activities were kept in place — review the schedule for overlaps.');
+    }
+
+    // Persist immediately so a refresh / concurrent backend repair doesn't drop the edit.
+    (async () => {
+      try {
+        const { safeUpdateItineraryData } = await import('@/services/safeUpdateItineraryData');
+        const itineraryToPersist: Record<string, unknown> = {
+          days: JSON.parse(JSON.stringify(nextDays)),
+          status: 'ready',
+          optionSelections,
+          savedAt: new Date().toISOString(),
+        };
+        if (parsedMetadata) {
+          itineraryToPersist.metadata = { ...parsedMetadata, lastUpdated: new Date().toISOString() };
+        }
+        const res = await safeUpdateItineraryData(tripId, itineraryToPersist);
+        if (res?.error) throw res.error;
+        setHasChanges(false);
+        setLastSaved(new Date());
+      } catch (err) {
+        console.warn('[time-edit] persist failed, falling back to global Save:', err);
+        setHasChanges(true);
+      }
+    })();
+  }, [days, tripId, optionSelections, parsedMetadata]);
 
   // Update existing activity (full edit)
   const handleUpdateActivity = useCallback((dayIndex: number, activityIndex: number, updates: Partial<EditorialActivity>) => {
