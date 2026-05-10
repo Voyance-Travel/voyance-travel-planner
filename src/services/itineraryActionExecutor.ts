@@ -7,6 +7,54 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { ItineraryAction } from './itineraryChatAPI';
 import type { Json } from '@/integrations/supabase/types';
+import { isActivityLocked } from '@/lib/itinerary/persistDayContract';
+
+/**
+ * Verify locked rows from `before` survived in `after` after a backend
+ * day-level rewrite. Restores any dropped/mutated locked row verbatim and
+ * logs a `[LOCK_VIOLATION]` sentinel. See
+ * mem://constraints/itinerary/chat-executor-lock-preservation.
+ */
+function verifyLocksPreserved(
+  before: Activity[],
+  after: Activity[],
+  dayNumber: number,
+): { restored: Activity[]; violations: number } {
+  const lockedBefore = (before || []).filter(isActivityLocked);
+  if (lockedBefore.length === 0) return { restored: after, violations: 0 };
+
+  let violations = 0;
+  const matched = new Set<number>();
+  const result = [...(after || [])];
+
+  for (const locked of lockedBefore) {
+    const lockedTitle = (locked.title || locked.name || '').toLowerCase().trim();
+    const lockedTime = (locked.startTime || locked.time || '');
+    const idx = result.findIndex((a, i) => {
+      if (matched.has(i)) return false;
+      if (locked.id && a.id === locked.id) return true;
+      const at = (a.title || a.name || '').toLowerCase().trim();
+      const ts = (a.startTime || a.time || '');
+      return at === lockedTitle && ts === lockedTime;
+    });
+    if (idx === -1) {
+      result.push({ ...locked });
+      violations++;
+    } else {
+      // Force the original locked snapshot to win over any AI mutation.
+      const current = result[idx];
+      const drift = JSON.stringify(current) !== JSON.stringify(locked);
+      result[idx] = { ...locked };
+      matched.add(idx);
+      if (drift) violations++;
+    }
+  }
+
+  if (violations > 0) {
+    console.warn(`[LOCK_VIOLATION] day=${dayNumber} restored=${violations} (chat executor)`);
+  }
+  return { restored: result, violations };
+}
 
 // ============================================================================
 // GUARDRAILS (COMMON-SENSE SCHEDULING)
