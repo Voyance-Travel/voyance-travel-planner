@@ -146,6 +146,11 @@ serve(async (req) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
+  // Hoisted so the outer catch can record errors against the event row.
+  let event: Stripe.Event | null = null;
+  let supabaseAdmin: ReturnType<typeof createClient> | null = null;
+  let webhookResult: 'handled' | 'unhandled' = 'handled';
+
   try {
     log("Webhook received");
 
@@ -164,7 +169,6 @@ serve(async (req) => {
       throw new Error("No Stripe signature found");
     }
 
-    let event: Stripe.Event;
     try {
       event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
     } catch (err) {
@@ -174,12 +178,31 @@ serve(async (req) => {
 
     log("Event type", { type: event.type, id: event.id });
 
-    const supabaseAdmin = createClient(
+    supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
+    // RS.L4 — observability: log every event before processing.
+    // UNIQUE(event_id) means a duplicate insert (Stripe retry of a previously
+    // processed event) returns 23505, in which case we short-circuit 200.
+    const { error: logErr } = await supabaseAdmin.from('stripe_webhook_log').insert({
+      event_id: event.id,
+      event_type: event.type,
+      payload: { id: (event.data.object as any)?.id, type: event.type },
+      result: 'received',
+    });
+    if (logErr && (logErr as any).code === '23505') {
+      log('Duplicate event ID — already processed', { eventId: event.id });
+      return new Response('OK', { status: 200 });
+    }
+    if (logErr) {
+      // Non-fatal: still process the event so fulfillment isn't blocked by logging.
+      log('stripe_webhook_log insert failed (non-fatal)', logErr);
+    }
+
     switch (event.type) {
+
       // ========================================
       // Payment Intent Succeeded
       // ========================================
