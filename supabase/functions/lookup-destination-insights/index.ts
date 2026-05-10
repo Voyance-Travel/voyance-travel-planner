@@ -162,13 +162,26 @@ RULES:
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const insightsData = JSON.parse(jsonMatch[0]);
+        const payload = {
+          success: true,
+          data: insightsData,
+          destination: locationContext,
+          citations: data.citations,
+        };
+        // Cache the result (90-day TTL)
+        try {
+          const now = new Date();
+          await supabaseAdmin.from('destination_insights_cache').upsert({
+            destination: cacheKey,
+            insights: payload,
+            created_at: now.toISOString(),
+            expires_at: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+          });
+        } catch (cacheWriteErr) {
+          console.warn('destination_insights_cache write failed:', cacheWriteErr);
+        }
         return new Response(
-          JSON.stringify({ 
-            success: true, 
-            data: insightsData, 
-            destination: locationContext,
-            citations: data.citations 
-          }),
+          JSON.stringify(payload),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
