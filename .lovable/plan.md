@@ -1,37 +1,38 @@
-## HIGH-6 — Triple Preview Cache Key: Investigation Result
+## P1.3 — `pre_restore_snapshot` audit
 
-**Finding: the described cache does not exist in this codebase.** I searched the full repo (frontend + edge functions) for any cache keyed by `${destination}:${startDate}:${endDate}`, `previewCache`, `cacheKey`, etc. and found nothing for the trip-preview / full-preview / quick-preview flow.
+### Findings
 
-### What actually exists
+**Both parts of the spec are already in place, and the migration in the spec is not applicable.**
 
-Three preview services / edge functions, each isolated:
+1. **Enum migration — NOT NEEDED.** The spec assumes `created_by_action` is an enum named `itinerary_version_action`. It isn't. In `public.itinerary_versions`:
 
-| Service | Edge function | React Query key | Storage |
-|---|---|---|---|
-| Quick preview | `generate-quick-preview` | (no hook) | none |
-| Trip preview (free, 2-day teaser) | `generate-trip-preview` | `mutationKey: ['generate-trip-preview']` | none |
-| Full preview (real venues, gated details) | `generate-full-preview` | `mutationKey: ['generate-full-preview']` | none |
+   ```
+   created_by_action | text |  | (nullable, no default)
+   ```
 
-- `src/services/tripPreviewService.ts` and `src/services/fullPreviewService.ts` are **mutation-based** — they call `supabase.functions.invoke(...)` on every request. There is no in-memory map, no `sessionStorage`/`localStorage` write, no shared cache module.
-- React Query's `mutationKey`s are already distinct, so there is no collision between Quick/Trip and Full responses at the client cache layer.
-- `src/components/itinerary/ItineraryGenerator.tsx` (only consumer of `generateFullPreview`) does not cache responses either.
-- Backend caches that do exist (`viator-search`, `lookup-*`, `hotels`) are unrelated to trip previews and already have type-prefixed keys (`buildCacheKey('travel-advisory', …)` etc.).
+   It's a plain `text` column, so no `ALTER TYPE … ADD VALUE 'pre_restore_snapshot'` is required (and running one would fail — the type does not exist). Other code already writes free-form values like `'manual_save'`, `'regenerate'`, `'swap'`, `'restored_from_v12'`, etc.
+
+2. **Pre-restore snapshot insert — ALREADY WIRED.** `src/services/itineraryVersionHistory.ts` `restoreVersion(...)` (lines 138–225) already:
+   - reads the current `is_current = true` row,
+   - inserts a new row with `created_by_action: 'pre_restore_snapshot'` and `day_metadata.label = 'Pre-restore snapshot'`, `auto_snapshot: true`, `before_restore_of_version: versionNumber`,
+   - aborts the restore if the snapshot insert fails (prevents data loss),
+   - then inserts the restore row tagged `restored_from_v{n}`.
+
+3. **Verify command result.** `grep -rn "pre_restore_snapshot" supabase/migrations/ src/services/` currently returns **1** match (in `src/services/itineraryVersionHistory.ts`), not ≥2, because no migration file references it — and none is required, since the column is `text`. The spec's expected count assumes the enum path.
+
+### Plan
+
+A. **Close P1.3 as already-shipped.** Add an audit note to `.lovable/plan.md` recording:
+   - column is `text` not enum → migration skipped intentionally,
+   - code path already snapshots current state before restore,
+   - verify-grep expected count adjusted to ≥1 in `src/services/`.
+
+   No code or DB changes.
+
+B. **(Optional, only if you want it.)** Tighten `formatVersionLabel` in `itineraryVersionHistory.ts` to render `pre_restore_snapshot` as `"Pre-restore snapshot"` instead of falling through to `"Modified"`. Pure UI label, ~3 lines added to the existing `switch`.
+
+C. **Reject — you actually want an enum.** If the intent is to lock `created_by_action` down to a known set of values, that's a larger migration (create enum, backfill all existing text values into the enum, alter column type, update every writer). I can scope that separately if you want — it's not what the spec described.
 
 ### Recommendation
 
-No code change required for HIGH-6 as specified — there is nothing to retrofit a `previewType` into. Two options:
-
-1. **Close HIGH-6 as not-applicable** (recommended). Document the audit finding so the next reviewer doesn't re-flag it.
-2. **Defensive hardening** — add a `previewType: 'quick' | 'full' | 'trip'` segment to the React Query `mutationKey`s anyway, so any future shared caching layer (e.g. if someone migrates these to `useQuery` with `queryKey: [..., destination, startDate, endDate]`) cannot collide. This is one-line per file:
-   - `tripPreviewService.ts:189` → `mutationKey: ['preview', 'trip', 'generate']`
-   - `fullPreviewService.ts:150` → `mutationKey: ['preview', 'full', 'generate']`
-   - (and add `previewType` to `usePreviewAvailability` queryKey at line 198 for symmetry)
-
-The verifier `grep -rn "previewType.*destination\|cacheKey.*previewType" src/` would still return 0 with option 2 since these mutations don't include destination/startDate in the key, so the verification command in the spec cannot pass without inventing a cache that doesn't belong here.
-
-### Question for you
-
-Which do you want?
-- **A.** Close HIGH-6 as not-applicable (no code change, just an audit note in `.lovable/plan.md`).
-- **B.** Apply the defensive hardening above (rename two mutationKeys + queryKey).
-- **C.** You believe there's another cache I missed — point me at the file and I'll re-plan.
+**A + B.** A closes the ticket honestly; B is the only meaningful behavior change still on the table for this item, and it's cosmetic.
