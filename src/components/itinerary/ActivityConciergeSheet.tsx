@@ -43,6 +43,7 @@ interface ActivityConciergeSheetProps {
     booking_required?: boolean;
     bookingUrl?: string;
     booking_url?: string;
+    aiNotes?: AISavedNote[];
   };
   dayDate: string;
   dayTitle?: string;
