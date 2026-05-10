@@ -354,7 +354,10 @@ export class CostTracker {
   }
   
   /**
-   * Record token usage from an AI response
+   * Record token usage from an AI response. Tracks whether the counts came
+   * from the provider's API (precise) or were estimated from content length.
+   * If any call on this tracker was estimated, `token_source` downgrades to
+   * 'estimate' for the row as a whole.
    */
   recordAiUsage(aiResponse: any, model?: string) {
     const usage = extractTokenUsage(aiResponse);
@@ -363,23 +366,40 @@ export class CostTracker {
     if (model) {
       this.entry.model = model;
     }
+    const prev = this.entry.token_source ?? 'unknown';
+    if (prev === 'unknown') {
+      this.entry.token_source = usage.source;
+    } else if (prev === 'api' && usage.source === 'estimate') {
+      this.entry.token_source = 'estimate';
+    }
     return this;
   }
   
   /**
-   * Manually record token counts (when usage not in response)
+   * Manually record token counts (when usage not in response).
+   * Manual counts are by definition not from the API → marks token_source as 'estimate'.
    */
   recordTokens(inputTokens: number, outputTokens: number) {
     this.entry.input_tokens += inputTokens;
     this.entry.output_tokens += outputTokens;
+    const prev = this.entry.token_source ?? 'unknown';
+    if (prev === 'unknown' || prev === 'api') {
+      this.entry.token_source = 'estimate';
+    }
     return this;
   }
   
   /**
-   * Record Google API calls
+   * Record Google API calls (Text Search — Advanced SKU).
    */
   recordGooglePlaces(count: number = 1) {
     this.entry.google_places_calls = (this.entry.google_places_calls || 0) + count;
+    return this;
+  }
+
+  /** Place Details (Basic SKU) — cheaper than Text Search. */
+  recordGooglePlaceDetails(count: number = 1) {
+    this.entry.google_place_details_calls = (this.entry.google_place_details_calls || 0) + count;
     return this;
   }
   
