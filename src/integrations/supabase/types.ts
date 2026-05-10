@@ -5876,6 +5876,7 @@ export type Database = {
           archetype_matches: Json | null
           calculated_at: string | null
           created_at: string | null
+          derivation_source: string
           dna_confidence_score: number | null
           dna_rarity: string | null
           dna_version: number | null
@@ -5897,6 +5898,7 @@ export type Database = {
           archetype_matches?: Json | null
           calculated_at?: string | null
           created_at?: string | null
+          derivation_source?: string
           dna_confidence_score?: number | null
           dna_rarity?: string | null
           dna_version?: number | null
@@ -5918,6 +5920,7 @@ export type Database = {
           archetype_matches?: Json | null
           calculated_at?: string | null
           created_at?: string | null
+          derivation_source?: string
           dna_confidence_score?: number | null
           dna_rarity?: string | null
           dna_version?: number | null
@@ -10105,17 +10108,30 @@ export type Database = {
         Args: { p_force_rotate?: boolean; p_trip_id: string }
         Returns: Json
       }
-      save_onboarding_dna: {
-        Args: {
-          p_confidence: number
-          p_preferences: Json
-          p_primary_archetype: string
-          p_secondary_archetype: string
-          p_trait_scores: Json
-          p_user_id: string
-        }
-        Returns: Json
-      }
+      save_onboarding_dna:
+        | {
+            Args: {
+              p_confidence: number
+              p_preferences: Json
+              p_primary_archetype: string
+              p_secondary_archetype: string
+              p_trait_scores: Json
+              p_user_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_confidence: number
+              p_derivation_source?: string
+              p_preferences: Json
+              p_primary_archetype: string
+              p_secondary_archetype: string
+              p_trait_scores: Json
+              p_user_id: string
+            }
+            Returns: Json
+          }
       scrub_itinerary_activities: { Args: { acts: Json }; Returns: Json }
       spend_from_group_budget: {
         Args: { p_budget_id: string; p_cost: number }
