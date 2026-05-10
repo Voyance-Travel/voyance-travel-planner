@@ -390,6 +390,7 @@ export function sanitizeActivityText(text: string | undefined | null): string {
     .replace(PROMPT_ARTIFACT_REPLACE_RE, '')
     .replace(RESERVATION_LABEL_LEAK_RE, '')
     .replace(ORPHAN_EMPTY_LABEL_RE, '')
+    .replace(REQUIREMENT_PROSE_LEAK_RE, '')
     .replace(VENUE_MEAL_SUFFIX_RE, '')
     .replace(FULFILLS_RE, ' ')
     .replace(META_DISTANCE_COST_RE, '')
