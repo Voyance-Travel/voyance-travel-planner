@@ -54,6 +54,10 @@ export const FAILURE_CODES = {
 
   // Transit hard ceiling (validate-day → repair-day → validation-gate)
   WALK_OVER_THRESHOLD:       'WALK_OVER_THRESHOLD',
+
+  // Pricing sanity (B3, Barcelona Diagnosis 2026-05-10)
+  PRICE_IMPLAUSIBLE:         'PRICE_IMPLAUSIBLE',
+  PRICE_TOO_LOW:             'PRICE_TOO_LOW',
 } as const;
 
 export type FailureCode = typeof FAILURE_CODES[keyof typeof FAILURE_CODES];

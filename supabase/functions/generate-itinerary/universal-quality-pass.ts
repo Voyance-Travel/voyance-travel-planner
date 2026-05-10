@@ -80,6 +80,17 @@ const DEDUP_SKIP_CATS = new Set([
  * activity (when last activity ends 17:00–23:59). Extracted so the orchestrator
  * can defer this step (e.g., when dinner is required-but-missing).
  */
+// Late-nightlife categories that legitimately end past midnight. When such an
+// activity is the day's terminal anchor, we still need a hotel-return bookend
+// (Bug B2: Paradiso speakeasy ending 00:20 on Barcelona Day 2 shipped with no
+// return). The card is marked `source: 'late_nightlife_bookend'` so the UI
+// ghost filter (hideGhostActivities.ts) exempts it from the pre-dawn / wrap
+// suppression that targets phantom returns.
+const LATE_NIGHTLIFE_CATS = new Set([
+  'NIGHTLIFE', 'BAR', 'ENTERTAINMENT', 'COCKTAILS', 'LOUNGE',
+]);
+const LATE_NIGHTLIFE_TITLE_RE = /\b(speakeasy|nightclub|cocktail|nightcap|club|lounge|bar|aperitif|aperitivo)\b/i;
+
 export function runStep8(result: any[], dayIndex: number, hotelName?: string): void {
   if (!result || result.length === 0) return;
   const lastActivity = result[result.length - 1];
@@ -90,23 +101,48 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
     lastCat === 'ACCOMMODATION' ||
     /return.*hotel|back.*hotel|return\s+to/i.test(lastTitle);
   if (alreadyReturn) return;
+  // Skip logistics tails (airport/station transfers)
+  if (/\b(airport|station|terminal|gate)\b/i.test(lastTitle) &&
+      /TRANSPORT|TRANSIT|TRAVEL|LOGISTICS/.test(lastCat)) {
+    return;
+  }
 
   const candidate = lastActivity?.end_time || lastActivity?.endTime || '';
   const m = String(candidate).match(/(\d{1,2}):(\d{2})/);
   let startTime24: string | null = null;
+  let lateNightBleed = false;
   if (m) {
     const h = parseInt(m[1], 10);
-    // Lowered floor 17:00 → 14:00. Day-1 arrival pattern often ends mid-afternoon
+    // Standard floor 14:00–23:59. Day-1 arrival pattern often ends mid-afternoon
     // (e.g., cultural anchor 14:30–16:30) and would otherwise ship without a
     // hotel-return bookend, breaking UX consistency with other days.
-    if (h >= 14 && h <= 23) startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
+    if (h >= 14 && h <= 23) {
+      startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
+    } else if (h >= 0 && h <= 2) {
+      // B2: late-nightlife bleed. Only accept when the prior activity is
+      // unambiguously evening nightlife (start ≥ 21:00) so we don't bless a
+      // genuinely broken card.
+      const startRaw = lastActivity?.start_time || lastActivity?.startTime || '';
+      const sm = String(startRaw).match(/(\d{1,2}):(\d{2})/);
+      const startHour = sm ? parseInt(sm[1], 10) : -1;
+      const titleNightlife = LATE_NIGHTLIFE_TITLE_RE.test(lastTitle);
+      const catNightlife = LATE_NIGHTLIFE_CATS.has(lastCat);
+      if (startHour >= 21 && (titleNightlife || catNightlife)) {
+        startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
+        lateNightBleed = true;
+      }
+    }
   }
   if (!startTime24) {
-    console.warn(`[QUALITY] Skipped hotel return injection on Day ${dayIndex + 1}: last activity ends at "${candidate}" (need 14:00–23:59)`);
+    console.warn(`[QUALITY] Skipped hotel return injection on Day ${dayIndex + 1}: last activity ends at "${candidate}" (need 14:00–23:59 or post-midnight nightlife bleed)`);
     return;
   }
-  const [sh, sm] = startTime24.split(':').map((n) => parseInt(n, 10));
-  const endMins = Math.min(sh * 60 + sm + 30, 23 * 60 + 59);
+  const [sh, smin] = startTime24.split(':').map((n) => parseInt(n, 10));
+  const rawEnd = sh * 60 + smin + 25; // 25-min taxi default for late nights
+  // For the standard daytime case, clamp to 23:59. For the late-nightlife
+  // bleed we allow the card to live in the 00:00–02:55 window so it doesn't
+  // visually precede the speakeasy it follows.
+  const endMins = lateNightBleed ? Math.min(rawEnd, 2 * 60 + 55) : Math.min(rawEnd, 23 * 60 + 59);
   const endTime24 = `${String(Math.floor(endMins / 60)).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
   const resolvedHotel = (hotelName && hotelName.trim()) || '';
   const card: any = {
@@ -119,16 +155,23 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
     endTime: endTime24,
     cost_per_person: 0,
     cost: { amount: 0, currency: 'USD' },
-    description: 'Return to your hotel for a restful night.',
+    description: lateNightBleed
+      ? 'Short taxi back to your hotel after a late night out.'
+      : 'Return to your hotel for a restful night.',
     is_free: true,
     price_per_person: 0,
     skipEnrichment: true,
+    source: lateNightBleed ? 'late_nightlife_bookend' : 'bookend-validator',
+    tags: lateNightBleed ? ['hotel', 'rest', 'late_nightlife_bookend'] : ['hotel', 'rest'],
   };
-  // Belt-and-braces: route through the shared bookend clamp so the 23:59 cap
-  // lives in exactly one place.
-  clampBookendEndTime(card, { label: 'STEP8' });
+  // For standard daytime returns, route through the shared bookend clamp so
+  // the 23:59 cap lives in exactly one place. Skip for the late-night-bleed
+  // case where the post-midnight end-time is intentional.
+  if (!lateNightBleed) {
+    clampBookendEndTime(card, { label: 'STEP8' });
+  }
   result.push(card);
-  console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}`);
+  console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}${lateNightBleed ? ' (late-nightlife bleed)' : ''}`);
 }
 
 

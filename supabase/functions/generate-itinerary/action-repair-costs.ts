@@ -7,6 +7,11 @@ import { type ActionContext, verifyTripAccess, okJson, errorJson } from './actio
 import { ALWAYS_FREE_VENUE_PATTERNS, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS, FINE_DINING_MIN_PRICE_DEFAULT, KNOWN_MICHELIN_HIGH, KNOWN_MICHELIN_MID, KNOWN_UPSCALE, MICHELIN_FLOOR, KNOWN_TICKETED_ATTRACTIONS, LUXURY_HOTEL_SIGNATURE_RE, RESTAURANT_LEAD_RE, EXPLICIT_DRINKS_RE, BAR_KEYWORDS, BAR_TITLE_BAR, BAR_EXCLUDE, MAX_BAR_PRICE, DEFAULT_BAR_PRICE } from './sanitization.ts';
 import { isPlaceholderWellness } from './fix-placeholders.ts';
 import { isWalkingLeg } from '../_shared/walking-leg.ts';
+import {
+  CATEGORY_PRICE_CEILINGS,
+  inferSubcategory,
+  shouldSkipPriceSanity,
+} from './_shared/category-price-bounds.ts';
 
 export async function handleRepairTripCosts(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;
@@ -459,8 +464,51 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         }
       }
 
+      // ── B3: Per-category price ceiling sanity ──
+      // Catches AI-hallucinated prices like Pastelería Hofmann (pastry shop
+      // €120/pp). Runs after Michelin floor + bar cap so fine-dining and
+      // drinks paths take precedence. Skips locked/user/booked rows.
+      if (
+        Deno.env.get('PRICE_SANITY_ENABLED') !== 'false' &&
+        source !== 'michelin_floor' &&
+        source !== 'bar_cap_repair' &&
+        source !== 'ticketed_attraction_floor' &&
+        source !== 'user' &&
+        source !== 'user_override' &&
+        source !== 'booked'
+      ) {
+        try {
+          const probe = {
+            title,
+            name: title,
+            category,
+            subcategory,
+            venue_name: venueName,
+            startTime: activity.start_time || activity.startTime,
+            start_time: activity.start_time || activity.startTime,
+            tags: activity.tags,
+          };
+          if (!shouldSkipPriceSanity(probe)) {
+            const subcat = inferSubcategory(probe);
+            if (subcat) {
+              const bound = CATEGORY_PRICE_CEILINGS[subcat];
+              if (bound && costPerPerson > bound.max) {
+                const median = Math.round((bound.min + bound.max) / 2);
+                console.warn(`[REPAIR_PRICE_SUBSTITUTE] (repair-costs) "${title}" subcat=${subcat} orig=${costPerPerson} median=${median}`);
+                costPerPerson = median;
+                source = 'category_median_substitute';
+                wasCorrected = true;
+                corrected++;
+              }
+            }
+          }
+        } catch (e) {
+          // Defensive: never let sanity check abort repair pipeline.
+          console.warn('[REPAIR_PRICE_SUBSTITUTE] probe failed (non-blocking):', e);
+        }
+      }
 
-      // Write-time guard: free venues and walking transport must be $0.
+
       // The DB trigger enforces this too, but normalizing here keeps the
       // returned payload consistent and avoids a useless DB round-trip.
       const titleLowerForGuard = (title || '').toLowerCase().trim();

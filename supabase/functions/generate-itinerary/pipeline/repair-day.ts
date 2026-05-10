@@ -36,6 +36,12 @@ import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
 import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
 import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../../_shared/prompt-leak-scrub.ts';
 import { scrubActivity, formatOps, opsHadChange } from '../../_shared/scrub-activity.ts';
+import {
+  CATEGORY_PRICE_CEILINGS,
+  inferSubcategory,
+  extractPerPersonPrice,
+  shouldSkipPriceSanity,
+} from '../_shared/category-price-bounds.ts';
 import { ensureDayDiningDescriptions } from '../../_shared/dining-description-backfill.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 import { pickTransitFallback } from '../../_shared/transit-mode.ts';
@@ -2899,6 +2905,53 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       before: String(beforeAmt),
       after: '0',
     });
+  }
+
+  // --- 10e. PRICE_IMPLAUSIBLE: substitute median for hallucinated/contaminated prices ---
+  // B3 (Barcelona Diagnosis): Pastelería Hofmann case — pastry shop priced
+  // €120/pp. Substitute the per-category median, mirror across all canonical
+  // price fields (cost-repair-jsonb-parity), and tag for downstream audit.
+  if (Deno.env.get('PRICE_SANITY_ENABLED') !== 'false') {
+    for (const result of validationResults) {
+      if (result.code !== FAILURE_CODES.PRICE_IMPLAUSIBLE) continue;
+      const idx = result.activityIndex;
+      if (idx == null || idx < 0 || idx >= activities.length) continue;
+      const act: any = activities[idx];
+      if (lockedIds.has(act.id)) continue;
+      if (shouldSkipPriceSanity(act)) continue;
+      const subcat = inferSubcategory(act);
+      if (!subcat) continue;
+      const bound = CATEGORY_PRICE_CEILINGS[subcat];
+      if (!bound) continue;
+      const originalAmount = extractPerPersonPrice(act);
+      if (originalAmount === null) continue;
+      const median = Math.round((bound.min + bound.max) / 2);
+
+      // Mirror to all canonical fields (Cost-Repair JSONB Parity memory).
+      if (!act.cost || typeof act.cost !== 'object') act.cost = { amount: median, currency: 'USD' };
+      else act.cost.amount = median;
+      if (!act.cost.currency) act.cost.currency = 'USD';
+      (act.cost as any).priceSource = 'category_median_substitute';
+      (act.cost as any).originalAmount = originalAmount;
+
+      if (act.estimatedCost && typeof act.estimatedCost === 'object') {
+        act.estimatedCost.amount = median;
+        if (!act.estimatedCost.currency) act.estimatedCost.currency = 'USD';
+      }
+      if (typeof act.price_per_person === 'number') act.price_per_person = median;
+      if (typeof act.estimated_price_per_person === 'number') act.estimated_price_per_person = median;
+      if (typeof act.cost_per_person === 'number') act.cost_per_person = median;
+      if (typeof act.price === 'number') act.price = median;
+
+      console.warn(`[REPAIR_PRICE_SUBSTITUTE] day=${dayNumber} venue="${act.title || act.name || '?'}" subcat=${subcat} orig=${originalAmount} median=${median}`);
+      repairs.push({
+        code: FAILURE_CODES.PRICE_IMPLAUSIBLE,
+        activityIndex: idx,
+        action: 'price_median_substitute',
+        before: `${originalAmount} (${subcat})`,
+        after: `${median} (median of $${bound.min}-$${bound.max})`,
+      });
+    }
   }
 
   // --- 12. NON-FLIGHT DEPARTURE: strip airport activities ---

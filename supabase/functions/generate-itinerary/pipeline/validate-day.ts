@@ -19,6 +19,12 @@ import type { RequiredMeal } from '../meal-policy.ts';
 import { hasBodyPromptLeak, hasTitleLeak } from '../../_shared/prompt-leak-scrub.ts';
 import { WALK_HARD_DISTANCE_METERS, WALK_HARD_DURATION_MINUTES } from '../../_shared/transit-mode.ts';
 import { isTransitActivity } from '../../_shared/transit-detect.ts';
+import {
+  CATEGORY_PRICE_CEILINGS,
+  inferSubcategory,
+  extractPerPersonPrice,
+  shouldSkipPriceSanity,
+} from '../_shared/category-price-bounds.ts';
 
 // =============================================================================
 // GENERIC VENUE PATTERNS — placeholders the AI sometimes generates
@@ -173,12 +179,52 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkWalkOverThreshold(activities, results);
   checkCategoryVenueCoherence(activities, results);
 
+  // --- PRICE SANITY (B3, Barcelona Diagnosis) ---
+  checkPlausiblePricing(activities, results);
+
   // --- CROSS-DAY: previous day ended with checkout, this day has hotel-bound activities ---
   if (previousDays.length > 0 && !isFirstDay) {
     checkCrossDayCheckoutHotelLeak(activities, previousDays[previousDays.length - 1], results);
   }
 
   return results;
+}
+
+/**
+ * B3 — Per-category price sanity. Flags activities whose per-person price
+ * falls outside CATEGORY_PRICE_CEILINGS for their inferred subcategory.
+ * Respects Universal Locking, manual edits, and Walking Is Free.
+ */
+function checkPlausiblePricing(activities: any[], results: ValidationResult[]): void {
+  for (let i = 0; i < activities.length; i++) {
+    const act = activities[i];
+    if (shouldSkipPriceSanity(act)) continue;
+    const subcat = inferSubcategory(act);
+    if (!subcat) continue;
+    const bound = CATEGORY_PRICE_CEILINGS[subcat];
+    if (!bound) continue;
+    const price = extractPerPersonPrice(act);
+    if (price === null) continue;
+    if (price < bound.min) {
+      results.push({
+        code: FAILURE_CODES.PRICE_TOO_LOW,
+        severity: 'warning',
+        message: `Price $${price}/pp below typical floor $${bound.min} for ${subcat} ("${act.title || act.name || ''}")`,
+        activityIndex: i,
+        field: 'cost',
+        autoRepairable: false,
+      });
+    } else if (price > bound.max) {
+      results.push({
+        code: FAILURE_CODES.PRICE_IMPLAUSIBLE,
+        severity: 'error',
+        message: `Price $${price}/pp exceeds ceiling $${bound.max} for ${subcat} ("${act.title || act.name || ''}") — likely hallucinated or cross-contaminated venue data.`,
+        activityIndex: i,
+        field: 'cost',
+        autoRepairable: true,
+      });
+    }
+  }
 }
 
 // =============================================================================
