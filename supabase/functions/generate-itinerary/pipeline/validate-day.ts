@@ -143,6 +143,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   // --- LOGISTICS_SEQUENCE (departure day only) ---
   if (isLastDay) {
     checkLogisticsSequence(activities, returnDepartureTime24, results);
+    checkDepartureChronology(activities, isLastDay, results);
   }
 
   // --- DUPLICATE_CONCEPT (trip-wide) ---
@@ -539,6 +540,52 @@ function checkMealDuplicate(activities: StrictActivityMinimal[], results: Valida
           });
         }
       }
+    }
+  }
+}
+
+/**
+ * NEW.3 — Post-checkout chronology validator.
+ * Mirrors `_shared/post-checkout-prune.ts::pruneNonLogisticsAfterCheckout` and
+ * repair-day §14b. Emits LOGISTICS_SEQUENCE so the existing repair + save-time
+ * sweep handle it, while giving telemetry/health-score visibility upstream.
+ */
+function checkDepartureChronology(activities: StrictActivityMinimal[], isLastDay: boolean, results: ValidationResult[]): void {
+  if (!isLastDay || !Array.isArray(activities) || activities.length < 2) return;
+
+  // Find the LAST checkout row (accommodation + checkout title)
+  let checkoutIdx = -1;
+  for (let i = activities.length - 1; i >= 0; i--) {
+    const a: any = activities[i];
+    const t = String(a?.title || a?.name || '').toLowerCase();
+    const cat = String(a?.category || '').toLowerCase();
+    if (cat === 'accommodation' && /check[\s-]?out|checkout/.test(t)) {
+      checkoutIdx = i;
+      break;
+    }
+  }
+  if (checkoutIdx === -1) return;
+
+  for (let i = checkoutIdx + 1; i < activities.length; i++) {
+    const a: any = activities[i];
+    // Universal locking — skip locked/user/manual/extracted/pinned rows
+    if (a?.isLocked || a?.userAdded || a?.userEdited || a?.extracted || a?.pinned || a?.isManual) continue;
+
+    const title = String(a?.title || a?.name || '').toLowerCase();
+    const cat = String(a?.category || '').toLowerCase();
+    const isDepartureLogistics =
+      /airport|station|terminal|departure|flight|train|return\s+home|heading\s+home/i.test(title) ||
+      cat === 'transport' || cat === 'transit' || cat === 'logistics' || cat === 'flight';
+
+    if (!isDepartureLogistics) {
+      results.push({
+        code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+        severity: 'critical',
+        message: `Activity "${a?.title || a?.name}" is scheduled after final checkout — should be removed or moved before checkout`,
+        activityIndex: i,
+        field: 'startTime',
+        autoRepairable: true,
+      });
     }
   }
 }
