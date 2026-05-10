@@ -144,10 +144,21 @@ export async function generateFullPreview(
 /**
  * Hook for generating full preview itineraries
  */
-export function useGenerateFullPreview() {
+export function useGenerateFullPreview(
+  params?: Pick<FullPreviewRequest, 'destination' | 'startDate' | 'endDate'>,
+) {
   return useMutation({
     mutationFn: generateFullPreview,
-    mutationKey: ['generate-full-preview'],
+    // HIGH-6: discriminate by previewType + destination + dates so a Full
+    // result can never be served when Quick is requested (and vice-versa),
+    // and so switching destinations/dates allocates a fresh mutation slot.
+    mutationKey: [
+      'preview',
+      'full',
+      params?.destination ?? '',
+      params?.startDate ?? '',
+      params?.endDate ?? '',
+    ],
   });
 }
 
