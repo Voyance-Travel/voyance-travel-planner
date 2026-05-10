@@ -248,11 +248,11 @@ Deno.serve(async (req) => {
 
     // Check if it was already fulfilled (idempotency in the RPC)
     if (fulfillResult?.skipped) {
-      console.log(`[validate-iap-receipt] Already fulfilled for ${transactionId}`);
+      console.log(`[validate-iap-receipt] Already fulfilled for ${verifiedTxnId}`);
       return jsonResponse({ success: true, credits: totalCredits, duplicate: true });
     }
 
-    console.log(`[validate-iap-receipt] ✅ Fulfilled ${totalCredits} credits for user ${user.id} (txn: ${transactionId})`);
+    console.log(`[validate-iap-receipt] ✅ Fulfilled ${totalCredits} credits for user ${user.id} (txn: ${verifiedTxnId})`);
 
     return jsonResponse({ success: true, credits: totalCredits });
   } catch (error) {
