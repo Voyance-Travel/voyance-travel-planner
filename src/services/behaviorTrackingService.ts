@@ -58,6 +58,44 @@ export function normalizeEntityId(name: string | undefined | null): string {
     .slice(0, 80);
 }
 
+// ============ METADATA SCHEMA ENFORCEMENT ============
+
+const ALLOWED_METADATA_KEYS = new Set([
+  // Core event context
+  'page', 'referrer', 'feature', 'action', 'target',
+  // Trip context
+  'trip_id', 'destination', 'day_number', 'activity_id',
+  // Search context
+  'query', 'result_count', 'selected_index',
+  // Timing
+  'duration_ms', 'time_to_action_ms',
+  // User segment
+  'tier', 'archetype', 'cohort',
+  // Existing internal callers in this file
+  'source', 'category', 'reason', 'weight', 'stage', 'abandoned_at',
+]);
+
+function sanitizeMetadata(raw: Record<string, unknown> | undefined | null): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object') return {};
+  const clean: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!ALLOWED_METADATA_KEYS.has(key)) {
+      console.warn('[behaviorTracking] Dropping non-whitelisted metadata key:', key);
+      continue;
+    }
+    if (typeof value === 'string' && /(?:ignore previous|system prompt|SYSTEM:|<\|im_start\|>)/i.test(value)) {
+      console.warn('[behaviorTracking] Dropping suspicious metadata value for key:', key);
+      continue;
+    }
+    if (typeof value === 'string' && value.length > 500) {
+      clean[key] = value.slice(0, 500);
+    } else {
+      clean[key] = value;
+    }
+  }
+  return clean;
+}
+
 // ============ DEBOUNCE CACHE ============
 // Prevent duplicate tracking within short windows
 
