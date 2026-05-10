@@ -77,6 +77,7 @@ interface ArchetypeProfile {
   name: string;
   category: string;
   required: Record<string, TraitRequirement>;
+  requiredAny?: Array<Record<string, TraitRequirement>>;
   boosters: Record<string, number>;
   penalties: Record<string, PenaltyRule>;
   lifeStageBonus?: Record<string, number>;
