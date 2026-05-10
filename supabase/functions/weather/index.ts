@@ -408,6 +408,28 @@ Deno.serve(async (req) => {
   const corsResp = handleCorsPreflightRequest(req);
   if (corsResp) return corsResp;
 
+  // Require an authenticated caller — this endpoint hits paid upstream APIs
+  // (Apple WeatherKit, Open-Meteo). Matches the JWT pattern used elsewhere.
+  // TODO(rate-limit): add per-user / per-IP rate limiting — deferred (see Discover hardening).
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return errorResponse('Authentication required', 401);
+  }
+  try {
+    const authClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+    );
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: authError } = await authClient.auth.getClaims(token);
+    if (authError || !claimsData?.claims) {
+      return errorResponse('Invalid token', 401);
+    }
+  } catch (e) {
+    console.error('[Weather] Auth check failed:', e);
+    return errorResponse('Invalid token', 401);
+  }
+
   const costTracker = trackCost('weather', 'weatherkit');
 
   try {
