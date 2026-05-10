@@ -510,7 +510,10 @@ async function executeSwapAction(
     { type: 'added', dayNumber: target_day, activityTitle: bestAlternative.name, category: bestAlternative.category, costAfter },
   ];
 
-  await updateTripItinerary(tripId, updatedDays);
+  const swapPersist = await updateTripItinerary(tripId, updatedDays);
+  if (!swapPersist.success) {
+    return { success: false, message: PERSIST_FAILURE_MESSAGE, error: swapPersist.error, updatedDays };
+  }
 
   return {
     success: true,
