@@ -194,30 +194,43 @@ export async function getTripStats(): Promise<TripStats> {
   const allTrips = trips || [];
   const now = new Date();
   
-  // Filter trips by actual dates, not just status
-  const completedTrips = allTrips.filter(t => {
-    // Status-based: explicitly completed
-    if (t.status === 'completed') return true;
-    // Date-based: trip has ended (end_date is in the past)
-    // Include drafts that have past end dates - these are real trips that happened
-    if (t.end_date && parseLocalDate(t.end_date) < now) return true;
-    return false;
-  });
-  
-  const upcomingTrips = allTrips.filter(t => {
-    // Explicitly completed trips are not upcoming
-    if (t.status === 'completed') return false;
-    // Trip has already ended - not upcoming
-    if (t.end_date && parseLocalDate(t.end_date) < now) return false;
-    // Trip hasn't ended yet (future or currently ongoing)
-    if (t.end_date && parseLocalDate(t.end_date) >= now) return true;
-    // No end date but has future start date
-    if (t.start_date && parseLocalDate(t.start_date) >= now) return true;
-    return false;
-  });
-  
-  const draftTrips = allTrips.filter(t => t.status === 'draft');
-  
+  // Mutually exclusive bucketing — every trip lands in exactly one bucket.
+  const buckets = {
+    completed: [] as typeof allTrips,
+    upcoming: [] as typeof allTrips,
+    draft: [] as typeof allTrips,
+    other: [] as typeof allTrips,
+  };
+
+  for (const t of allTrips) {
+    let key: keyof typeof buckets;
+    if (t.status === 'completed' || (t.end_date && parseLocalDate(t.end_date) < now)) {
+      key = 'completed';
+    } else if (t.start_date && parseLocalDate(t.start_date) >= now) {
+      key = 'upcoming';
+    } else if (t.end_date && parseLocalDate(t.end_date) >= now) {
+      // Currently ongoing (started, not yet ended)
+      key = 'upcoming';
+    } else if (t.status === 'draft' || t.status === 'planning') {
+      key = 'draft';
+    } else {
+      key = 'other';
+    }
+    buckets[key].push(t);
+  }
+
+  if (import.meta.env.DEV) {
+    const sum = buckets.completed.length + buckets.upcoming.length + buckets.draft.length + buckets.other.length;
+    console.assert(
+      sum === allTrips.length,
+      `[getTripStats] sum ${sum} != total ${allTrips.length}`,
+    );
+  }
+
+  const completedTrips = buckets.completed;
+  const upcomingTrips = buckets.upcoming;
+  const draftTrips = buckets.draft;
+
   // Extract unique destinations from COMPLETED trips only
   const completedDestinations = completedTrips.map(t => t.destination);
   const uniqueCities = [...new Set(completedDestinations)];
