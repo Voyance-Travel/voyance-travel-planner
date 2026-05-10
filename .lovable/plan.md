@@ -1,37 +1,45 @@
-## Wire Secondary Archetype Into Generation Prompt
+## Persist DNA Disambiguation Resolution to Database
 
-The existing system already passes `secondaryArchetype` through `context.travelerDNA` (confirmed at line 2957) but never references it when assembling the per-day prompt. Today only the primary feeds `buildAllConstraints`, `buildExperienceGuidancePrompt`, and `buildDestinationGuidancePrompt`. Result: secondary is cosmetic.
+LocalStorage-only resolution gets lost on browser clears, new devices, and incognito sessions. Persist to `travel_dna_profiles` so the answer follows the user.
 
-### Change
+### 1. Migration
 
-File: `supabase/functions/generate-itinerary/generation-core.ts`
+New columns on `travel_dna_profiles`:
+- `disambiguation_resolved_at TIMESTAMPTZ` (nullable, default NULL)
+- `disambiguation_question_id TEXT` (nullable)
+- `disambiguation_answer_id TEXT` (nullable)
+- `COMMENT` on `disambiguation_resolved_at` documenting NULL semantics.
 
-1. Just after the `archetypeDefinition` lookup (around line 792), resolve the secondary:
-   ```ts
-   const secondaryArchetype = context.travelerDNA?.secondaryArchetype;
-   const secondaryArchetypeDef = secondaryArchetype && secondaryArchetype !== context.travelerDNA?.primaryArchetype
-     ? getArchetypeDefinition(secondaryArchetype)
-     : null;
-   ```
-   Guard against the secondary equalling the primary so we don't double-count.
+No RLS change needed — existing user-scoped policies on `travel_dna_profiles` already cover these columns. After migration the auto-generated `src/integrations/supabase/types.ts` will pick the new fields up.
 
-2. Build a `secondaryFlavor` string using the existing `ArchetypeDefinition` shape (`name`, `identity`):
-   ```ts
-   const secondaryFlavor = secondaryArchetypeDef
-     ? `\n\nSECONDARY DNA: ${secondaryArchetypeDef.name} — ${secondaryArchetypeDef.identity}.\n` +
-       `Across the full trip, include 1–2 activities or moments that lean into this secondary identity. ` +
-       `Treat it as subtle seasoning, never as a contradiction to the primary archetype's day structure, variety caps, or avoid list. ` +
-       `Example: primary=Luxury Luminary + secondary=Story Seeker → mostly curated high-end experiences, but swap one Michelin night for an "underground jazz bar locals know."`
-     : '';
-   ```
+### 2. `src/components/profile/MicroDisambiguation.tsx`
 
-3. Append `secondaryFlavor` to the `generationHierarchy` template (line 828–883) — adding it after `${destinationGuidancePrompt}` keeps it adjacent to the archetype-shaping block that already lands in the system prompt at line 895.
+**a. Async resolution check on mount.** The current component reads `isResolved` synchronously from localStorage and early-returns at line 169. Refactor that into a `useEffect` that:
+1. Seeds local state from `localStorage[dismissKey]` (instant render skip on returning Chrome session).
+2. Queries `travel_dna_profiles.disambiguation_resolved_at` for `userId` (`.maybeSingle()`).
+3. If non-null → `setIsResolved(true)` + write `localStorage[dismissKey] = 'true'` to sync the cache.
+4. While the DB check is in flight, render `null` (no flicker — the prompt only ever appears after we know it's unresolved). Track a `checkedDb` boolean so we don't render the question UI until either localStorage was already true or the DB query has returned.
 
-That's the entire change. No new imports, no signature changes, no edits to `archetype-constraints.ts` or downstream pipeline. `getArchetypeDefinition` already returns a default for unknown slugs, so this is null-safe via the explicit guard above.
+**b. Persist on resolution (around lines 218–227).** Right after the `recalculateDNAFromPreferences(userId)` call, before the localStorage write, add:
+
+```ts
+await supabase
+  .from('travel_dna_profiles')
+  .update({
+    disambiguation_resolved_at: new Date().toISOString(),
+    disambiguation_question_id: question.id,
+    disambiguation_answer_id: selectedAnswer,
+  })
+  .eq('user_id', userId);
+```
+
+Keep the existing `localStorage.setItem(dismissKey, 'true')` as a fast-path cache. DB is canonical.
+
+No other edits — `voyance_events` insert, override merge, and recalc all stay as-is.
 
 ### Verification
 
-- `grep -n "SECONDARY DNA" supabase/functions/generate-itinerary/generation-core.ts` returns the new block.
-- Generate a trip for a profile with primary=`luxury_luminary`, secondary=`story_seeker`. Inspect `edge_function_logs` for `generate-itinerary` (or `action-generate-trip-day`) and confirm `SECONDARY DNA: …` appears in the system prompt payload.
-- Inspect the resulting itinerary: at least one evening should be a "local discovery" type rather than a second Michelin meal.
-- Sanity test with no secondary (or secondary === primary) — prompt unchanged, no empty `SECONDARY DNA:` header leaks into the model context.
+- Migration: `\d travel_dna_profiles` shows the three new columns.
+- Resolve disambiguation in Chrome → `select disambiguation_resolved_at, disambiguation_question_id, disambiguation_answer_id from travel_dna_profiles where user_id = '<id>'` returns non-null.
+- Open incognito as same user → component mounts, queries DB, sees the timestamp, returns null. No prompt shown.
+- Clear localStorage in regular browser → same outcome (DB hit suppresses prompt).

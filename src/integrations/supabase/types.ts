@@ -5910,6 +5910,9 @@ export type Database = {
           calculated_at: string | null
           created_at: string | null
           derivation_source: string
+          disambiguation_answer_id: string | null
+          disambiguation_question_id: string | null
+          disambiguation_resolved_at: string | null
           dna_confidence_score: number | null
           dna_rarity: string | null
           dna_version: number | null
@@ -5932,6 +5935,9 @@ export type Database = {
           calculated_at?: string | null
           created_at?: string | null
           derivation_source?: string
+          disambiguation_answer_id?: string | null
+          disambiguation_question_id?: string | null
+          disambiguation_resolved_at?: string | null
           dna_confidence_score?: number | null
           dna_rarity?: string | null
           dna_version?: number | null
@@ -5954,6 +5960,9 @@ export type Database = {
           calculated_at?: string | null
           created_at?: string | null
           derivation_source?: string
+          disambiguation_answer_id?: string | null
+          disambiguation_question_id?: string | null
+          disambiguation_resolved_at?: string | null
           dna_confidence_score?: number | null
           dna_rarity?: string | null
           dna_version?: number | null
