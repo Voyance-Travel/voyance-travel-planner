@@ -11,6 +11,7 @@ import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { recalculateArchetype } from '@/services/engines/travelDNA/recalculateArchetype';
 
 interface Archetype {
   id: string;
@@ -195,6 +196,7 @@ export default function OnboardConversation() {
             planning_preference: analysis.traits.planning,
             budget_tier: analysis.traits.comfort,
           },
+          p_derivation_source: 'conversation',
         });
 
         const result = data as { success?: boolean; error?: string } | null;
@@ -209,6 +211,17 @@ export default function OnboardConversation() {
           console.error('[OnboardConversation] save_onboarding_dna returned failure', data);
           toast.error(`Save failed: ${result?.error || 'unknown error'}. Please try again.`);
           return;
+        }
+
+        // P0.9: Re-derive archetype against the merged trait_scores. The RPC's
+        // JSONB merge preserves quiz-only traits (~17) when conversation runs
+        // second, but the caller-passed primary_archetype was computed against
+        // only the 8 conversation traits and goes stale on merge. Always
+        // recalc against the canonical merged keyset.
+        const recalc = await recalculateArchetype(user.id);
+        if (!recalc.success) {
+          const errMsg = 'error' in recalc ? recalc.error : 'unknown';
+          console.warn('[OnboardConversation] recalculateArchetype failed (non-fatal)', errMsg);
         }
 
         toast.success('Your Travel DNA has been saved!');

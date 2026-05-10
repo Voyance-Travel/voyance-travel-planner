@@ -818,32 +818,56 @@ export async function saveTravelDNA(
   sessionId: string | null,
   dna: TravelDNAPayload
 ): Promise<boolean> {
+  const incomingTraits = dna.trait_scores
+    ? (JSON.parse(JSON.stringify(dna.trait_scores)) as Record<string, unknown>)
+    : null;
+
+  // P0.9: Read existing profile so we can JSONB-merge trait_scores (preserve
+  // conversation-only traits when quiz runs second) and stamp the correct
+  // derivation_source ('quiz' on first write, 'merged' if conversation already wrote).
+  const { data: existing } = await supabase
+    .from('travel_dna_profiles')
+    .select('id, trait_scores, derivation_source')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  const existingRow = existing as
+    | { id: string; trait_scores: Record<string, unknown> | null; derivation_source: string | null }
+    | null;
+
+  const mergedTraits: Record<string, unknown> | null = incomingTraits
+    ? { ...((existingRow?.trait_scores as Record<string, unknown>) ?? {}), ...incomingTraits }
+    : ((existingRow?.trait_scores as Record<string, unknown>) ?? null);
+
+  const nextDerivationSource =
+    !existingRow || !existingRow.derivation_source
+      ? 'quiz'
+      : existingRow.derivation_source === 'quiz'
+        ? 'quiz'
+        : 'merged';
+
   const payload = {
     user_id: userId,
     session_id: sessionId,
-    // Only persist DB-backed fields (avoid 400s from extra UI-only keys)
+    // Only persist DB-backed fields (avoid 400s from extra UI-only keys).
+    // primary/secondary archetype + confidence are written here as a safety net,
+    // then immediately overwritten by recalculateArchetype() below against the merged keyset.
     primary_archetype_name: dna.primary_archetype_name,
     secondary_archetype_name: dna.secondary_archetype_name,
     dna_confidence_score: dna.dna_confidence_score,
     dna_rarity: dna.dna_rarity,
-    trait_scores: dna.trait_scores ? JSON.parse(JSON.stringify(dna.trait_scores)) : null,
+    trait_scores: mergedTraits as unknown as Json,
     tone_tags: dna.tone_tags ?? null,
     emotional_drivers: dna.emotional_drivers ?? null,
     perfect_trip_preview: (dna as { perfect_trip_preview?: string | null })?.perfect_trip_preview ?? null,
     summary: dna.summary,
+    derivation_source: nextDerivationSource,
     calculated_at: new Date().toISOString(),
   };
 
-  // Try to update first, then insert if not exists
-  const { data: existing } = await supabase
-    .from('travel_dna_profiles')
-    .select('id')
-    .eq('user_id', userId)
-    .maybeSingle();
-
   let error;
-  
-  if (existing) {
+
+  if (existingRow) {
     const result = await supabase
       .from('travel_dna_profiles')
       .update(payload)
@@ -859,6 +883,20 @@ export async function saveTravelDNA(
   if (error) {
     console.error('Failed to save travel DNA:', JSON.stringify(error, null, 2));
     return false;
+  }
+
+  // P0.9: Re-derive archetype against the merged trait_scores. Single source of
+  // truth lives in the TS matcher; the caller's primary_archetype_name above is
+  // now superseded.
+  try {
+    const { recalculateArchetype } = await import('@/services/engines/travelDNA/recalculateArchetype');
+    const recalc = await recalculateArchetype(userId);
+    if (!recalc.success) {
+      const errMsg = 'error' in recalc ? recalc.error : 'unknown';
+      console.warn('[saveTravelDNA] recalculateArchetype failed (non-fatal)', errMsg);
+    }
+  } catch (recalcErr) {
+    console.warn('[saveTravelDNA] recalculateArchetype threw (non-fatal)', recalcErr);
   }
 
   // Also save to history

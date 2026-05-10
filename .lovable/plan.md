@@ -1,41 +1,79 @@
-## P1.8 — CL.3: de-scope, close the cost-leak category
+## P0.9 — DNA storage merge + archetype re-derive
 
-### Decision
+### Diagnosis confirmed
 
-**Mark CL.3 not applicable. Close the cost-leak category.**
+Read the actual code, the agent's diagnosis is correct:
 
-### Why
+- `supabase/migrations/20260510003416_*.sql` lines 28-34: `save_onboarding_dna()` does `trait_scores = EXCLUDED.trait_scores` — **full replace, no merge**. ✅ matches the report.
+- `src/utils/quizMapping.ts:846-857` `saveTravelDNA()` does plain `.update(payload)` with the same full-replace `trait_scores` field. ✅ matches.
+- Quiz path produces ~25-26 traits; conversation path produces 8. Whichever runs second silently shrinks `trait_scores` to its own keyset and leaves `primary_archetype_name` as whatever the caller passed — frequently stale or computed against a different keyset.
+- **Archetype matcher exists only in TypeScript** (`src/services/engines/travelDNA/archetype-matcher.ts:348` `matchArchetypes`). There is no SQL `match_archetype()` function — the lovable-stack-overflow snippet referencing one would not work as written.
 
-Pass 1 (Apr 30, recorded in `mem://technical/observability/cost-savings-pass-1`) shipped exactly **two** distinct caching/skipping wins, plus collateral guards:
+This invalidates the "Cleaner: SQL trigger" option from the snippet. The correct fix is the **easier** option — a shared TS `recalculateArchetype()` boundary — because porting the matcher (29 archetypes × 5 pattern groups, life-stage adjustments, penalties, confidence gaps) to PL/pgSQL is a half-day rewrite for zero benefit and creates two sources of truth.
 
-| ID    | Leak                       | Fix shipped                                                                   |
-| ----- | -------------------------- | ----------------------------------------------------------------------------- |
-| CL.1  | `destination_images` Google Places spend | TIER 1.5 shared-table lookup (`attractions`+`activities` ILIKE) before Google; CostTracker skips $0 rows; HARD_GENERIC name guard; negative-cache TTL 14d→30d |
-| CL.2  | `viator-search` repeat calls | In-memory 24h LRU (max 500 entries), keyed by `activity\|destination\|category`, with tripId/userId/referrer attribution |
-| CL.3  | *(speculative in original audit)* | **No distinct third helper identified, in memory or in the codebase.**            |
+### Fix (3 parts, ship together)
 
-The original audit listed CL.3 as "TBD — likely a third caching helper." The (7) verification couldn't find one because **there isn't one**. The only adjacent areas worth scanning were:
+**Part 1 — JSONB merge in the RPC**
 
-- **Google Place Details / Photo URL cache** — already covered by `googleApiCache` table + the centralized wrapper (see `mem://technical/observability/google-api-centralization`). No leak.
-- **`user_behavior` tracking writes** — fire-and-forget inserts, no external API spend, not a cost leak.
-- **Stripe API calls** — already idempotent + webhook-driven; no polling pattern leaking calls.
+Migration: replace `save_onboarding_dna()` body. Change line 32 from:
+```sql
+trait_scores = EXCLUDED.trait_scores,
+```
+to:
+```sql
+trait_scores = COALESCE(public.travel_dna_profiles.trait_scores, '{}'::jsonb) || EXCLUDED.trait_scores,
+```
+Conversation's 8 keys override quiz's same-named keys; the other ~17 quiz-only keys survive. Same-named keys take the newer value (this is fine — conversation may have refined a trait the quiz also measured).
 
-Post-Pass-1 spend signals (per the cost-savings memory verification target: ≥40% reduction on `destination_images`) have held. There is no smoking-gun third leak to chase.
+Also change `primary_archetype_name = EXCLUDED.primary_archetype_name` to **NOT** trust the caller — set it to `NULL` (sentinel for "needs re-derive") OR leave it as the caller's value but immediately overwrite client-side via `recalculateArchetype()` (see Part 2). Going with **the latter** so the row is never in a NULL-archetype state mid-write.
 
-### Action
+**Part 2 — Shared `recalculateArchetype(userId)` boundary**
 
-1. **Close CL.3 as `not_applicable`** in the audit ledger with the note:
-   > "CL.3 was speculative. No distinct third caching helper identified post-Pass-1. Google Places (CL.1), Viator (CL.2), and the centralized Google API wrapper cover all known billable-call surfaces. Reopen only if `trip_cost_tracking` shows a new sustained spike on a non-CL.1/CL.2 source."
+New file: `src/services/engines/travelDNA/recalculateArchetype.ts`. Single function:
 
-2. **Close the cost-leak category.** Future cost work should be opened as new tickets, triggered by an actual `trip_cost_tracking` spike rather than a speculative slot in the original audit.
+1. `SELECT trait_scores, life_stage FROM travel_dna_profiles WHERE user_id = $1`
+2. `matchArchetypes(traitScores, lifeStage)` — reuse the existing TS matcher
+3. `UPDATE travel_dna_profiles SET primary_archetype_name = $primary, secondary_archetype_name = $secondary, dna_confidence_score = $confidence, updated_at = now() WHERE user_id = $1`
 
-3. **Re-open trigger (documented for future-me):** if `trip_cost_tracking` shows >$X/week sustained on any single `source` other than `destination_images` / `viator_search`, file CL.3 fresh against that specific source.
+Wire it into both paths:
+
+- `OnboardConversation.tsx` — call **after** `supabase.rpc('save_onboarding_dna', …)` resolves successfully.
+- `quizMapping.ts::saveTravelDNA()` — also adopt JSONB merge for the quiz-after-conversation case (read existing `trait_scores`, merge in JS, write back), then call `recalculateArchetype()`.
+
+This puts archetype derivation in **one** place. Callers no longer pass `primary_archetype_name`; it's always derived from the merged trait set.
+
+> Tradeoff vs SQL trigger: requires both call sites to remember the post-write call. Mitigated by adding a one-line lint test (`grep "save_onboarding_dna" src/ | xargs grep -L "recalculateArchetype"` → must be empty) in CI.
+
+**Part 3 — `derivation_source` tracking column**
+
+Migration: `ALTER TABLE travel_dna_profiles ADD COLUMN derivation_source text NOT NULL DEFAULT 'quiz' CHECK (derivation_source IN ('quiz', 'conversation', 'merged'));`
+
+Set logic:
+- Quiz path writes `'quiz'` on first write; if existing row has `derivation_source <> 'quiz'`, write `'merged'`.
+- Conversation path writes `'conversation'` on first write; if existing row has `derivation_source <> 'conversation'`, write `'merged'`.
+- Implemented via `CASE` in the RPC's `ON CONFLICT DO UPDATE` and a small read-modify-write block in `saveTravelDNA()`.
+
+Used for: support debugging ("how was this user's DNA computed?"), future A/B of merge-vs-prefer-one-source policy, and admin dashboard filtering.
 
 ### Files / state changed
 
-- Edit `.lovable/plan.md` only — append the P1.8 closure note. No code, no migrations, no deploys.
+- **New migration** (≈40 lines): replace `save_onboarding_dna()` body with merge-aware version; `ALTER TABLE travel_dna_profiles ADD COLUMN derivation_source ... CHECK ...`. Single migration file, both DDL + function replace.
+- **New file** `src/services/engines/travelDNA/recalculateArchetype.ts` (~50 lines).
+- **Edit** `src/utils/quizMapping.ts::saveTravelDNA` (~25 line diff): read-merge-write `trait_scores`, set `derivation_source`, drop `primary_archetype_name` from payload (now derived), call `recalculateArchetype` after write.
+- **Edit** `src/pages/OnboardConversation.tsx` (~3 lines): `await recalculateArchetype(user.id)` immediately after the `save_onboarding_dna` RPC resolves successfully. **Do not change** the RPC arg shape — keep passing `p_primary_archetype` for backward compat; it's ignored once the recalculate fires.
+- **No** changes to `archetype-matcher.ts` — reused as-is.
+- **Memory** — append a Core rule: "DNA writes always merge JSONB + recalculate archetype via shared boundary; never trust caller-passed `primary_archetype_name`."
 
-### Out of scope (explicitly)
+### Verification
 
-- I am **not** speculatively adding a Google Place Details cache "just in case" — `googleApiCache` already exists and the centralized wrapper enforces it. Adding a second layer with no observed leak would be cargo-culting and adds maintenance burden.
-- I am **not** caching `user_behavior` writes — they don't hit external APIs.
+1. **Repro pre-fix** (in dev): create a test user, run quiz path → check `trait_scores` keys (~25), archetype X. Run conversation onboarding → verify `trait_scores` keys shrink to 8, archetype unchanged. ✅ confirms bug.
+2. **Post-fix repro**: same flow → `trait_scores` keys stay ~25 (8 from convo override + 17 quiz-only preserved), `primary_archetype_name` recomputed against full keyset, `derivation_source = 'merged'`.
+3. **Reverse order**: convo first (8 keys, `'conversation'`) → quiz second → 25+ keys, `'merged'`, archetype recomputed.
+4. **Idempotency**: run conversation twice → no growth in keys beyond 25, archetype stable.
+5. **Lint**: `rg "primary_archetype_name" src/` shouldn't show new direct-write call sites; only the matcher module.
+
+### Out of scope
+
+- Backfill of existing corrupted profiles. The migration only fixes future writes. Optional follow-up: a one-shot script that, for users whose `derivation_source` is missing (i.e., pre-migration rows), reads `trait_scores`, runs the matcher, updates `primary_archetype_name`, marks `derivation_source = 'merged'`. Worth doing as a P1 follow-up but separate from this ticket.
+- SQL-side archetype matcher port. Explicitly rejected — the TS matcher is the source of truth.
+- Changing the conversation pipeline's trait derivation (already addressed in the prior `OnboardConversation.tsx` fix; that fix stands).
