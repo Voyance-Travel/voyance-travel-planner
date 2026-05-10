@@ -5286,6 +5286,11 @@ export function EditorialItinerary({
         });
 
         if (error) throw error;
+        if (isFailedDay(data?.day)) {
+          await refundRegenCredits('placeholder_day');
+          toast.error("We couldn't regenerate this day — credits refunded");
+          return;
+        }
         if (data?.day) {
           // Post-regeneration: deduplicate ALL accommodation entries, keep only original
           const originalHotel = (day.activities || []).find(isAccommodationLike);
@@ -5312,7 +5317,8 @@ export function EditorialItinerary({
       }
     } catch (err) {
       console.error('Regenerate error:', err);
-      toast.error('Failed to regenerate day');
+      await refundRegenCredits('generation_failed', err instanceof Error ? err.message : String(err));
+      toast.error('Failed to regenerate day — credits refunded');
     } finally {
       setRegeneratingDay(null);
       setPendingGuidedPreferences(null);
