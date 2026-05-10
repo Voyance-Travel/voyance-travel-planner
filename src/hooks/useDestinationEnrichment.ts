@@ -50,9 +50,17 @@ export function useDestinationEnrichment(
     if (!isThin) return;
 
     triggeredRef.current = dbDestination.id;
+
+    const key = dbDestination.id.toLowerCase();
+    if (enrichInFlight.has(key)) {
+      // Another mount is already enriching this destination. Skip the invoke;
+      // the in-flight call will invalidate shared react-query caches on completion.
+      return;
+    }
+
     setIsEnriching(true);
 
-    const enrich = async () => {
+    const promise = (async () => {
       try {
         const { data, error } = await supabase.functions.invoke('enrich-destination', {
           body: { destinationId: dbDestination.id },
@@ -64,7 +72,6 @@ export function useDestinationEnrichment(
         }
 
         if (data?.enriched || data?.skipped) {
-          // Invalidate queries to refetch enriched data
           queryClient.invalidateQueries({ queryKey: ['destination-by-city'] });
           queryClient.invalidateQueries({ queryKey: ['activities-by-destination', dbDestination.id] });
           queryClient.invalidateQueries({ queryKey: ['attractions-by-destination', dbDestination.id] });
@@ -74,10 +81,11 @@ export function useDestinationEnrichment(
         console.error('Enrichment failed:', err);
       } finally {
         setIsEnriching(false);
+        enrichInFlight.delete(key);
       }
-    };
+    })();
 
-    enrich();
+    enrichInFlight.set(key, promise);
   }, [dbDestination?.id, isStaticDestination, hasActivities, queryClient]);
 
   return { isEnriching, enrichmentDone };
