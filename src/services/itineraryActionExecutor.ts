@@ -423,7 +423,7 @@ async function executeSwapAction(
   }
 
   const targetActivity = day.activities[activityIndex];
-  if (targetActivity.isLocked) {
+  if (isActivityLocked(targetActivity)) {
     return { success: false, message: `"${activityTitle(targetActivity)}" is locked and cannot be swapped`, error: 'Activity is locked' };
   }
   if (isProtectedActivity(targetActivity)) {
