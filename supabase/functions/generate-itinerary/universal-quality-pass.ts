@@ -80,7 +80,7 @@ const DEDUP_SKIP_CATS = new Set([
  * activity (when last activity ends 17:00–23:59). Extracted so the orchestrator
  * can defer this step (e.g., when dinner is required-but-missing).
  */
-function runStep8(result: any[], dayIndex: number, hotelName?: string): void {
+export function runStep8(result: any[], dayIndex: number, hotelName?: string): void {
   if (!result || result.length === 0) return;
   const lastActivity = result[result.length - 1];
   const lastCat = String(lastActivity?.category || '').toUpperCase();
@@ -96,10 +96,13 @@ function runStep8(result: any[], dayIndex: number, hotelName?: string): void {
   let startTime24: string | null = null;
   if (m) {
     const h = parseInt(m[1], 10);
-    if (h >= 17 && h <= 23) startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
+    // Lowered floor 17:00 → 14:00. Day-1 arrival pattern often ends mid-afternoon
+    // (e.g., cultural anchor 14:30–16:30) and would otherwise ship without a
+    // hotel-return bookend, breaking UX consistency with other days.
+    if (h >= 14 && h <= 23) startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
   }
   if (!startTime24) {
-    console.warn(`[QUALITY] Skipped hotel return injection on Day ${dayIndex + 1}: last activity ends at "${candidate}" (need 17:00–23:59)`);
+    console.warn(`[QUALITY] Skipped hotel return injection on Day ${dayIndex + 1}: last activity ends at "${candidate}" (need 14:00–23:59)`);
     return;
   }
   const [sh, sm] = startTime24.split(':').map((n) => parseInt(n, 10));
