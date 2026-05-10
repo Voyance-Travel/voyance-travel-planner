@@ -1296,7 +1296,12 @@
     "spirituality": { "dimension": "transformation", "range": [0, 1], "default": 0.2, "description": "Not a factor (0) to Primary (1)" },
     "healing_focus": { "dimension": "transformation", "range": [0, 1], "default": 0, "description": "Not relevant (0) to Travel as medicine (1)" },
     "learning_focus": { "dimension": "authenticity", "range": [0, 1], "default": 0.3, "description": "Not driven by learning (0) to Primary (1)" },
-    "ethics_focus": { "dimension": "values", "range": [0, 1], "default": 0.3, "description": "Not a factor (0) to Drives decisions (1)" }
+    "ethics_focus": { "dimension": "values", "range": [0, 1], "default": 0.3, "description": "Not a factor (0) to Drives decisions (1)" },
+    "experience_accumulation": { "dimension": "motivation", "range": [0, 1], "default": 0.5, "description": "Drive to visit many places and become a recommendation authority" },
+    "social_sharing":          { "dimension": "social",     "range": [0, 1], "default": 0.4, "description": "Tendency to share travel knowledge and give recommendations to others" },
+    "collection_drive":        { "dimension": "motivation", "range": [0, 1], "default": 0.3, "description": "Tracks destinations/countries as a collection metric" },
+    "escape_need":             { "dimension": "motivation", "range": [0, 1], "default": 0.4, "description": "Travels specifically to escape normal life (distinct from general restoration)" },
+    "autonomy_preference":     { "dimension": "social",     "range": [0, 1], "default": 0.4, "description": "Prefers solo, autonomous travel; resists group obligations" }
   },
   "archetypeProfiles": {
     "cultural_anthropologist": {
