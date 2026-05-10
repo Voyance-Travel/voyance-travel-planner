@@ -113,7 +113,13 @@ export function hasBodyPromptLeak(act: any): { field: string } | null {
     // Reset lastIndex on the global regex before each .test()
     RESERVATION_LABEL_LEAK_RE.lastIndex = 0;
     ORPHAN_EMPTY_LABEL_RE.lastIndex = 0;
-    if (RESERVATION_LABEL_LEAK_RE.test(v) || ORPHAN_EMPTY_LABEL_RE.test(v)) {
+    REQUIREMENT_PROSE_LEAK_RE.lastIndex = 0;
+    if (
+      RESERVATION_LABEL_LEAK_RE.test(v) ||
+      ORPHAN_EMPTY_LABEL_RE.test(v) ||
+      SLOT_PLACEHOLDER_LEAK_TEST_RE.test(v) ||
+      REQUIREMENT_PROSE_LEAK_RE.test(v)
+    ) {
       return { field: key };
     }
   }
