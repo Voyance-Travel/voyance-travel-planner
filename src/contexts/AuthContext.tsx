@@ -288,6 +288,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         currentUserIdRef.current = null;
         setSession(null);
         setUser(null);
+        // Broadcast to other tabs unless this signout was itself triggered by a remote broadcast
+        if (!isHandlingRemoteSignoutRef.current) {
+          try { bcRef.current?.postMessage({ type: 'auth:signout' }); } catch { /* noop */ }
+        }
+        isHandlingRemoteSignoutRef.current = false;
         return;
       }
 
