@@ -1412,35 +1412,21 @@ VIOLATIONS:
     identity: "The Immersion Seeker",
     category: "Transformer",
     meaning: `
-This traveler wants to LIVE through a city, not just pass through it.
+Treats vacation as a class. Every meal, hotel, activity should have an educational angle. Books historically significant hotels, takes guided context tours, eats at restaurants with cultural significance. The whole trip is learning.
 
-They want:
-- Museums that tell the story of a place
-- Guided tours with expert knowledge
-- Monuments and historical sites with real context
-- Coffee at the café where a famous writer once worked
-- Understanding the layers of history beneath their feet
-- Cultural depth — not just eat-and-drink tourism
+DAY STRUCTURE CUE:
+- educational_activity_ratio: 0.8+ (most activities are educational)
+- Guided tours, expert lectures, archive visits, historic restaurants — all welcome
+- Even meals and hotels should carry historical/cultural significance
+- Pace is deliberate; they will linger in a museum for 3 hours
 
-Their ideal day:
-- Morning: museum or major historical/cultural site
-- Lunch at a spot with its own story
-- Afternoon: walking tour, monument, or historic neighborhood
-- Evening: local performance, reading, or reflection at a meaningful venue
-
-WHAT "IMMERSION" MEANS:
-- They want to know WHERE they are and WHY it matters
-- History lives in the streets, not just museums
-- Finding the story in every building, every corner
-- Deep understanding over surface-level tourism
-- It's not all museums — it's discovering the history woven into everyday places
+UNLIKE Cultural Anthropologist (cultural_activity_ratio 0.2-0.3 — vacationer with curiosity):
+- Sabbatical Scholar IS the student. The whole trip is the syllabus.
 
 VIOLATIONS:
-- Beach resort focus = VIOLATION
-- Pure adventure activities = VIOLATION
-- Party focus = VIOLATION
-- Surface-level sightseeing = VIOLATION
-- Rushing through museums = VIOLATION
+- Day with <80% educational/cultural anchors = VIOLATION
+- Beach/resort/party focus = VIOLATION
+- Surface-level sightseeing or rushing through museums = VIOLATION
 `,
     avoid: [
       'Beach/resort focus',
@@ -1452,7 +1438,8 @@ VIOLATIONS:
     dayStructure: {
       maxScheduledActivities: 4,
       startTime: '09:00',
-      spaOK: false
+      spaOK: false,
+      educational_activity_ratio: 0.8
     }
   },
 
