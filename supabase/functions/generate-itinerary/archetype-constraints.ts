@@ -54,33 +54,21 @@ const EXPLORER_ARCHETYPES: Record<string, ArchetypeDefinition> = {
     identity: "The Cultural Anthropologist",
     category: "Explorer",
     meaning: `
-This traveler wants to UNDERSTAND a place, not just see it.
+Wants a vacation but ALSO wants to understand where they are. Includes 1-2 cultural tour activities + breakfast/shopping/leisure. NOT obsessed with learning every element — that's Sabbatical Scholar's territory. They want to come back having learned something about the place's culture, history, and bones — without it being a full-time educational experience.
 
-They want:
-- Local customs and traditions explained
-- Historical context for everything
-- Conversations with locals
-- Authentic neighborhoods, not tourist zones
-- Museums with depth, not gift shops
-- Understanding WHY things are the way they are
+DAY STRUCTURE CUE:
+- cultural_activity_ratio: 0.2-0.3 (1-2 activities per day, not all)
+- Mix cultural depth with leisure, food, and downtime
+- One meaningful site or guided experience per day, not three
 
-Their ideal day:
-- Morning at a meaningful historical/cultural site
-- Lunch where locals eat, chance to observe daily life
-- Afternoon in a neighborhood tourists skip
-- Evening: local performance, lecture, or home dining experience
-
-WHAT "CULTURAL" MEANS FOR THEM:
-- Depth over breadth
-- Context over photo ops
-- Learning over consuming
-- Authentic over staged
+UNLIKE Sabbatical Scholar (educational_activity_ratio 0.8+):
+- Cultural Anthropologist is a vacationer with curiosity, not a student
+- Surface-level is fine for some hours; depth is reserved for highlights
 
 VIOLATIONS:
+- More than 2 cultural/educational anchors per day = VIOLATION
 - Tourist trap restaurants = VIOLATION
 - Photo-op-only stops = VIOLATION
-- Surface-level experiences = VIOLATION
-- "See 10 sites in one day" = VIOLATION
 `,
     avoid: [
       'Tourist trap restaurants',
@@ -94,7 +82,8 @@ VIOLATIONS:
     dayStructure: {
       maxScheduledActivities: 4,
       startTime: '09:00',
-      spaOK: false
+      spaOK: false,
+      cultural_activity_ratio: [0.2, 0.3]
     }
   },
 
