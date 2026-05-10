@@ -310,6 +310,11 @@ async function executeRewriteDayAction(
 
   let newActivities = data.day.activities || day.activities;
 
+  // Lock-preservation gate — backend may drop or mutate locked rows despite
+  // `keepActivities`. Restore them verbatim before further processing.
+  const lockGuard = verifyLocksPreserved(day.activities, newActivities, target_day);
+  newActivities = lockGuard.restored;
+
   // Preserve distinct accommodation intents (check-in, freshen-up, return, checkout)
   // instead of collapsing all hotel cards into one
   {
