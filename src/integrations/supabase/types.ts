@@ -9928,6 +9928,7 @@ export type Database = {
       cleanup_expired_venues: { Args: never; Returns: number }
       cleanup_rate_limits: { Args: never; Returns: Json }
       cleanup_stale_intel_locks: { Args: never; Returns: undefined }
+      complete_quiz: { Args: { _prefs: Json }; Returns: undefined }
       consume_free_edit: { Args: { p_user_id: string }; Returns: Json }
       deduct_credits_fifo: {
         Args: { p_cost: number; p_user_id: string }

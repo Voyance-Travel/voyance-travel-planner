@@ -716,48 +716,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user || !session?.user) return;
     
     console.log('[Auth] Saving preferences to Supabase:', preferences);
-    
-    // Map quiz answer keys to database columns
-    // Quiz uses: pace, interests, budget, accommodation, planning
-    const dbPayload: Record<string, unknown> = {
-      user_id: session.user.id,
-      quiz_completed: true,
-      completed_at: new Date().toISOString(),
-    };
-    
-    // Map each quiz field to its database column
-    if (preferences.budget) dbPayload.budget_tier = preferences.budget;
-    if (preferences.pace) dbPayload.travel_pace = preferences.pace;
-    if (preferences.accommodation) dbPayload.accommodation_style = preferences.accommodation;
-    if (preferences.planning) dbPayload.planning_preference = preferences.planning;
-    if (preferences.interests) dbPayload.interests = preferences.interests;
-    if (preferences.travel_companions) dbPayload.travel_companions = preferences.travel_companions;
-    if (preferences.travel_vibes) dbPayload.travel_vibes = preferences.travel_vibes;
-    if (preferences.traveler_type) dbPayload.traveler_type = preferences.traveler_type;
-    if (preferences.primary_goal) dbPayload.primary_goal = preferences.primary_goal;
-    
-    // Save to Supabase - cast to satisfy TypeScript
-    const { error } = await supabase.from('user_preferences').upsert(
-      dbPayload as any,
-      { onConflict: 'user_id' }
-    );
-    
+
+    // Atomic dual-write: complete_quiz RPC upserts user_preferences AND profiles
+    // in a single Postgres transaction. If either fails, both roll back — the two
+    // rows can never disagree on quiz_completed status.
+    const { error } = await supabase.rpc('complete_quiz', {
+      _prefs: {
+        budget: preferences.budget ?? null,
+        pace: preferences.pace ?? null,
+        accommodation: preferences.accommodation ?? null,
+        planning: preferences.planning ?? null,
+        interests: preferences.interests ?? null,
+        travel_companions: preferences.travel_companions ?? null,
+        travel_vibes: preferences.travel_vibes ?? null,
+        traveler_type: preferences.traveler_type ?? null,
+        primary_goal: preferences.primary_goal ?? null,
+      },
+    });
+
     if (error) {
-      console.error('[Auth] Error saving preferences:', error);
+      console.error('[Auth] Error completing quiz:', error);
       throw error;
     }
-    
-    console.log('[Auth] Preferences saved successfully');
 
-    // ALSO mark profiles.quiz_completed so transformProfile picks it up next session.
-    // Best-effort: preferences already saved; don't throw on failure.
-    const { error: profileError } = await supabase.from('profiles').upsert(
-      { id: session.user.id, quiz_completed: true, updated_at: new Date().toISOString() },
-      { onConflict: 'id' }
-    );
-    if (profileError) {
-      console.error('[Auth] Error syncing profile.quiz_completed:', profileError);
-    }
+    console.log('[Auth] Preferences saved successfully');
 
     // Update local state
     setUser({ 
