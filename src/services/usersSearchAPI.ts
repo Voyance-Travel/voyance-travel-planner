@@ -51,13 +51,33 @@ export async function searchUsers(query: string): Promise<UserSearchResult[]> {
     throw new Error(error.message);
   }
 
-  return (data || []).map(profile => ({
-    id: profile.id,
-    name: profile.display_name || 'User',
-    username: profile.handle || '',
-    email: '', // Email not exposed for privacy
-    avatar: profile.avatar_url || undefined,
-  }));
+  // Mutual hide: drop any user who is in a 'blocked' friendship with the
+  // current user (regardless of which side initiated the block). Blocking
+  // is modeled via friendships.status='blocked' (no dedicated user_blocks table).
+  const { data: { user: currentUser } } = await supabase.auth.getUser();
+  const blockedUserIds = new Set<string>();
+  if (currentUser) {
+    const { data: blocks } = await supabase
+      .from('friendships')
+      .select('requester_id, addressee_id')
+      .eq('status', 'blocked')
+      .or(`requester_id.eq.${currentUser.id},addressee_id.eq.${currentUser.id}`);
+
+    for (const b of blocks || []) {
+      if (b.requester_id !== currentUser.id) blockedUserIds.add(b.requester_id);
+      if (b.addressee_id !== currentUser.id) blockedUserIds.add(b.addressee_id);
+    }
+  }
+
+  return (data || [])
+    .filter(profile => !blockedUserIds.has(profile.id))
+    .map(profile => ({
+      id: profile.id,
+      name: profile.display_name || 'User',
+      username: profile.handle || '',
+      email: '', // Email not exposed for privacy
+      avatar: profile.avatar_url || undefined,
+    }));
 }
 
 // ============================================================================
