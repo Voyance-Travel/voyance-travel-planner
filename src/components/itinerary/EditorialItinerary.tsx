@@ -11198,12 +11198,16 @@ function ActivityRow({
           </p>
         )}
 
-        {/* Description */}
-        {(() => { const d = sanitizeActivityText(activity.description); return d ? (
-          <p className="text-base text-muted-foreground leading-relaxed mt-2">
-            {d}
-          </p>
-        ) : null; })()}
+        {/* Description — fall back to personalization.whyThisFits when blank */}
+        {(() => {
+          const d = sanitizeActivityText(activity.description)
+            || sanitizeActivityText((activity as any)?.personalization?.whyThisFits);
+          return d ? (
+            <p className="text-base text-muted-foreground leading-relaxed mt-2">
+              {d}
+            </p>
+          ) : null;
+        })()}
 
         {/* Location */}
         {locationText && (
