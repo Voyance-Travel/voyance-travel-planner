@@ -3065,6 +3065,27 @@ export type Database = {
         }
         Relationships: []
       }
+      destination_insights_cache: {
+        Row: {
+          created_at: string
+          destination: string
+          expires_at: string
+          insights: Json
+        }
+        Insert: {
+          created_at?: string
+          destination: string
+          expires_at?: string
+          insights: Json
+        }
+        Update: {
+          created_at?: string
+          destination?: string
+          expires_at?: string
+          insights?: Json
+        }
+        Relationships: []
+      }
       destinations: {
         Row: {
           airport_codes: Json | null

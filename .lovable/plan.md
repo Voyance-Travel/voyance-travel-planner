@@ -1,60 +1,39 @@
-## RS.M9 — PDF cached image URLs (preventive helper)
+## RS.M10 — Cache lookup-destination-insights (90-day TTL)
 
-### Finding
+The function currently calls Perplexity on every invocation. Sibling lookups (events, advisory) cache. Insights data (language, voltage, emergency #, timezone, water) is essentially static, so a 90-day cache is safe and a big cost win.
 
-`src/utils/consumerPdfGenerator.ts` does **not currently embed any activity photos** — there is no `photos.map`, no `pdf.addImage`, and no reference to `act.photos` anywhere in the file. The current PDF is text-only (title/time/location/duration/cost/description/tip).
+### 1. Migration: `destination_insights_cache`
 
-So the literal "find where images are embedded and add a filter" instruction has no target. We have two reasonable paths:
-
-**Option A (recommended) — add the helper now as a guard rail.** Export `isPermanentImageUrl` from the file so:
-- The verify-grep passes (`isPermanentImageUrl` + `supabase.co/storage` both appear).
-- Any future contributor wiring photos into the PDF has a ready, correctly-named filter and cannot accidentally embed token-expiring Google URLs.
-- Zero runtime/visual change today — pure additive utility.
-
-**Option B — no-op + comment.** Skip the change since there are no photos to filter; document in the file that when photos are added, they MUST be filtered through `isPermanentImageUrl`. Fails the verify-grep.
-
-### Plan (Option A)
-
-**`src/utils/consumerPdfGenerator.ts`**
-
-Add near the top of the file (after the layout constants block, before `generateConsumerTripPdf`):
-
-```ts
-/**
- * Returns true only for image URLs that won't expire — safe to embed in a PDF
- * the user will keep for years.
- *
- * Permanent: our cached copies on Supabase Storage, Cloudinary, etc.
- * Expiring:  raw Google Places photo media URLs (token-bearing).
- *
- * Unknown hosts return false (conservative — better to omit than serve a
- * broken image later).
- */
-export const isPermanentImageUrl = (url: string | undefined | null): boolean => {
-  if (!url) return false;
-  if (url.includes('supabase.co/storage') || url.includes('supabase.in/storage')) return true;
-  if (url.includes('cloudinary.com')) return true;
-  if (url.includes('googleusercontent.com') && url.includes('photoreference=')) return false;
-  if (url.includes('places.googleapis.com')) return false;
-  return false;
-};
+```sql
+CREATE TABLE IF NOT EXISTS public.destination_insights_cache (
+  destination text PRIMARY KEY,
+  insights jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL DEFAULT now() + interval '90 days'
+);
+ALTER TABLE public.destination_insights_cache ENABLE ROW LEVEL SECURITY;
+GRANT ALL ON public.destination_insights_cache TO service_role;
 ```
 
-No call site changes (none exist). When/if a future change adds photo embedding, the contributor uses:
+No public RLS policy — only the edge function (service role) reads/writes. Authenticated/anon clients have no access by default once RLS is on, which is the desired posture.
 
-```ts
-const safePhotos = (act.photos || [])
-  .map((p: any) => (typeof p === 'string' ? p : p?.url))
-  .filter(isPermanentImageUrl);
-```
+Cache key: `${destination}|${country ?? ''}` lowercased — country is part of the request and changes the lookup, so it must be part of the key (different "Springfield"s).
+
+### 2. Edge function changes — `supabase/functions/lookup-destination-insights/index.ts`
+
+- Add Supabase admin client (using `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`, same pattern as the other lookup functions).
+- Build `cacheKey = `${destination}|${country ?? ''}`.toLowerCase()`.
+- **Cache read** before the Perplexity call: select `insights, expires_at` where `destination = cacheKey` and `expires_at > now()`. On hit, return the cached payload in the same shape the function currently emits (`{ success, data, destination, citations }`) with a `cached: true` flag, and skip cost tracking.
+- **Cache write** after a successful Perplexity parse: upsert `{ destination: cacheKey, insights: <full success payload>, created_at, expires_at: now + 90d }`. Failures are logged and ignored — never block the response.
+- Cost tracker still runs on cache miss only.
 
 ### Verification
 
-- `grep -c "isPermanentImageUrl\|supabase.co/storage" src/utils/consumerPdfGenerator.ts` ≥ 1.
-- File still compiles; no behavior change in current PDFs.
+- `grep -c "destination_insights_cache" supabase/functions/lookup-destination-insights/index.ts` ≥ 2 (read + upsert).
+- Manually invoke twice for the same destination; second call returns `cached: true` with no Perplexity log line.
 
 ### Out of scope
 
-- Actually embedding photos in the PDF (separate feature).
-- Backfilling cached photos for existing activities.
-- Extending the allowlist to other CDNs we don't currently use.
+- Backfilling existing destinations.
+- Cache invalidation UI / admin tools.
+- Touching the other lookup functions.
