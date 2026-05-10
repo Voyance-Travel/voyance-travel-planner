@@ -5915,6 +5915,7 @@ export type Database = {
           disambiguation_resolved_at: string | null
           dna_confidence_score: number | null
           dna_rarity: string | null
+          dna_recalc_needed_at: string | null
           dna_version: number | null
           emotional_drivers: string[] | null
           id: string
@@ -5940,6 +5941,7 @@ export type Database = {
           disambiguation_resolved_at?: string | null
           dna_confidence_score?: number | null
           dna_rarity?: string | null
+          dna_recalc_needed_at?: string | null
           dna_version?: number | null
           emotional_drivers?: string[] | null
           id?: string
@@ -5965,6 +5967,7 @@ export type Database = {
           disambiguation_resolved_at?: string | null
           dna_confidence_score?: number | null
           dna_rarity?: string | null
+          dna_recalc_needed_at?: string | null
           dna_version?: number | null
           emotional_drivers?: string[] | null
           id?: string
