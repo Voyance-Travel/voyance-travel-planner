@@ -626,7 +626,17 @@ export async function getBudgetSummary(tripId: string, totalDays?: number): Prom
   
   // Read from activity_costs directly
   const ledger = await getBudgetLedger(tripId);
-  
+
+  // Generation in progress? Used to label partial totals as estimates.
+  const { data: tripRow } = await supabase
+    .from('trips')
+    .select('itinerary_status')
+    .eq('id', tripId)
+    .maybeSingle();
+  const isGenerating = ['queued', 'generating', 'partial'].includes(
+    (tripRow?.itinerary_status as string | undefined) ?? ''
+  );
+
   let committedHotel = 0;
   let committedFlight = 0;
   let committedOther = 0;
