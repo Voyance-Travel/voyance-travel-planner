@@ -196,7 +196,21 @@ Deno.serve(async (req) => {
         console.warn(`[delete-my-account] Could not delete from ${table}: ${tableErr}`)
       }
     }
-    
+
+    // Tables with non-`user_id` owner columns (friendships, group_budgets, guide_reports)
+    for (const { table, columns } of SPECIAL_COLUMN_TABLES) {
+      for (const col of columns) {
+        try {
+          const { error } = await supabase.from(table).delete().eq(col, userId)
+          if (error) {
+            console.warn(`[delete-my-account] Warning deleting from ${table}.${col}: ${error.message}`)
+          }
+        } catch (err) {
+          console.warn(`[delete-my-account] Could not delete from ${table}.${col}: ${err}`)
+        }
+      }
+    }
+
     // Also delete where id = user_id (for profiles table)
     await supabase.from('profiles').delete().eq('id', userId)
 
