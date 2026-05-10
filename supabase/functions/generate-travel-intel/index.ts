@@ -79,6 +79,63 @@ serve(async (req) => {
       }
     }
 
+    // ── Acquire generation lock so concurrent callers don't all hit Perplexity ──
+    const lockKey = tripId ? `travel_intel_${tripId}` : null;
+    let lockAcquired = false;
+
+    if (lockKey && !forceRefresh) {
+      const { error: claimErr } = await supabaseAdmin
+        .from('travel_intel_locks')
+        .insert({
+          lock_key: lockKey,
+          locked_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 30_000).toISOString(),
+        });
+
+      if (claimErr && (claimErr as { code?: string }).code === '23505') {
+        // Another caller is generating. Poll the cache for up to 25s.
+        console.log(`[travel-intel] Lock held by peer for ${tripId}, waiting…`);
+        for (let i = 0; i < 25; i++) {
+          await new Promise(r => setTimeout(r, 1000));
+          const { data: retryCache } = await supabaseAdmin
+            .from('travel_intel_cache')
+            .select('intel_data, destination, start_date, end_date, request_params')
+            .eq('trip_id', tripId)
+            .single();
+
+          if (
+            retryCache?.intel_data &&
+            retryCache.destination === destination &&
+            retryCache.start_date === startDate &&
+            retryCache.end_date === endDate
+          ) {
+            return new Response(
+              JSON.stringify({
+                success: true,
+                data: retryCache.intel_data,
+                destination: country ? `${destination}, ${country}` : destination,
+                dates: { startDate, endDate },
+                cached: true,
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+        console.warn(`[travel-intel] Peer lock holder for ${tripId} did not produce cache; proceeding ourselves.`);
+      } else if (claimErr) {
+        console.warn('[travel-intel] Lock insert failed, continuing without lock:', claimErr);
+      } else {
+        lockAcquired = true;
+      }
+    }
+
+    const releaseLock = async () => {
+      if (lockAcquired && lockKey) {
+        await supabaseAdmin.from('travel_intel_locks').delete().eq('lock_key', lockKey);
+        lockAcquired = false;
+      }
+    };
+
     // ── No cache hit — call Perplexity ──
     const costTracker = trackCost('generate_travel_intel', 'perplexity/sonar-pro');
 
