@@ -3168,8 +3168,8 @@ export default function TripDetail() {
                     )}
 
                     <ErrorBoundary>
-
-                  tripId={trip.id}
+                   <EditorialItinerary
+                   tripId={trip.id}
                   destination={trip.destination}
                   destinationCountry={
                     trip.destination_country ||
