@@ -134,33 +134,28 @@ export async function unlockAchievement(
       return { success: false, error: 'Not authenticated' };
     }
 
-    // Check if already unlocked
-    const { data: existing } = await supabase
+    // Atomic upsert — UNIQUE (user_id, achievement_id) handles the race where
+    // two concurrent calls both try to unlock. ignoreDuplicates: true means
+    // the existing row wins; `data` is null when the row already existed.
+    const { data, error } = await supabase
       .from('achievement_unlocks')
+      .upsert(
+        {
+          user_id: user.id,
+          achievement_id: achievementId,
+          metadata: metadata || {},
+        } as any,
+        { onConflict: 'user_id,achievement_id', ignoreDuplicates: true }
+      )
       .select('id')
-      .eq('user_id', user.id)
-      .eq('achievement_id', achievementId)
       .maybeSingle();
-
-    if (existing) {
-      return { success: true, alreadyUnlocked: true };
-    }
-
-    // Insert unlock
-    const { error } = await supabase
-      .from('achievement_unlocks')
-      .insert({
-        user_id: user.id,
-        achievement_id: achievementId,
-        metadata: metadata || {},
-      } as any);
 
     if (error) {
       console.error('[Achievements] Unlock error:', error);
       return { success: false, error: error.message };
     }
 
-    return { success: true };
+    return { success: true, alreadyUnlocked: data === null };
   } catch (err) {
     console.error('[Achievements] Unlock exception:', err);
     return { success: false, error: 'Failed to unlock achievement' };
