@@ -4,30 +4,10 @@
 
 // =============================================================================
 // CURRENCY CONVERSION - Normalize all costs to USD
+// Single source of truth: ../_shared/exchange-rates.ts (also used by frontend).
 // =============================================================================
-export const EXCHANGE_RATES_TO_USD: Record<string, number> = {
-  USD: 1, EUR: 0.92, GBP: 0.79, JPY: 149.5, CHF: 0.88, CAD: 1.36,
-  AUD: 1.53, NZD: 1.64, CNY: 7.24, HKD: 7.82, SGD: 1.34, THB: 35.8,
-  MXN: 17.2, BRL: 4.97, INR: 83.1, KRW: 1320, ZAR: 18.9, SEK: 10.45,
-  NOK: 10.62, DKK: 6.87, PLN: 4.02, CZK: 23.1, HUF: 358, ILS: 3.65,
-  AED: 3.67, TRY: 30.5, PHP: 55.8, IDR: 15650, MYR: 4.72, VND: 24500,
-  TWD: 31.5, ARS: 850, COP: 3950, PEN: 3.72, EGP: 30.9, MAD: 10.1,
-  QAR: 3.64, SAR: 3.75, KWD: 0.31, BHD: 0.377, OMR: 0.385, JOD: 0.71,
-};
-
-export function convertToUSD(amount: number, sourceCurrency: string): number {
-  if (!sourceCurrency || sourceCurrency.toUpperCase() === 'USD') {
-    return amount;
-  }
-  const rate = EXCHANGE_RATES_TO_USD[sourceCurrency.toUpperCase()];
-  if (!rate || rate === 0) {
-    console.log(`[convertToUSD] Unknown currency ${sourceCurrency}, assuming USD`);
-    return amount;
-  }
-  const converted = Math.round(amount / rate * 100) / 100;
-  console.log(`[convertToUSD] ${amount} ${sourceCurrency} -> ${converted} USD (rate: ${rate})`);
-  return converted;
-}
+export { EXCHANGE_RATES_TO_USD, convertToUSD } from '../_shared/exchange-rates.ts';
+import { convertToUSD } from '../_shared/exchange-rates.ts';
 
 export function normalizeCostToUSD(cost: { amount: number; currency?: string } | undefined): { amount: number; currency: string } {
   if (!cost) {
