@@ -119,7 +119,7 @@ export async function recalculateIfNeeded(userId: string): Promise<RecalculateIf
 
   if (!result.success) {
     // Leave flag in place so we retry on next visit.
-    return { success: false, error: result.error };
+    return { success: false, error: (result as { success: false; error: string }).error };
   }
 
   // Clear the flag (best-effort; if it fails the next visit will recalc again — idempotent).
