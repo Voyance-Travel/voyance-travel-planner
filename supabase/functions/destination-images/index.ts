@@ -1439,7 +1439,9 @@ Respond ONLY with JSON: {"score": <0-100>, "issues": ["issue1"], "confidence": <
       console.log("[Quality] API error:", response.status);
       // Fail open - assume image is acceptable
       // Fail closed for API errors — don't cache bad images
-      return { score: 0.5, pass: false, issues: ["api_error"], confidence: 0 };
+      // Fail closed — return 0.0 so any threshold check rejects, and the
+      // misleading "0.5" value doesn't mask the error in downstream logs.
+      return { score: 0.0, pass: false, issues: ["api_error"], confidence: 0 };
     }
 
     const data = await response.json();
@@ -1476,7 +1478,8 @@ Respond ONLY with JSON: {"score": <0-100>, "issues": ["issue1"], "confidence": <
     }
     // Fail open
     // Fail closed — better to show a category fallback than a bad image
-    return { score: 0.5, pass: false, issues: ["timeout"], confidence: 0 };
+    // Fail closed — see api_error branch.
+    return { score: 0.0, pass: false, issues: ["timeout"], confidence: 0 };
   }
 }
 
@@ -1667,21 +1670,50 @@ async function fetchImageTiered(
 
   // If we have real photo candidates, persist and cache
   if (candidates.length > 0) {
-    let bestImage = candidates[0];
-    let qualityScore = 0.8; // Default assumed quality
-    
-    // If multiple candidates and AI available, rank them (cheap — just text, no vision)
-    if (candidates.length > 1 && lovableApiKey) {
-      const ranked = await rankImageCandidates(candidates, cleanName, lovableApiKey);
-      if (ranked) {
-        bestImage = ranked;
+    // Cheap rule-based pre-filter BEFORE any LLM call. Drops portrait heroes,
+    // sub-1600px heroes, and URL red flags. Rejections are logged for admin
+    // review (fire-and-forget — never blocks the request).
+    const filtered: DestinationImage[] = [];
+    for (const c of candidates) {
+      const basic = passesBasicQuality(c, entityType);
+      if (basic.passes) {
+        filtered.push(c);
+      } else {
+        console.log(
+          `[quality-gate] rejected basic-check reason=${basic.reason} src=${c.source} url=${c.url.slice(0, 80)}`,
+        );
+        logRejectedImage(supabase, {
+          destination,
+          image_url: c.url,
+          source: c.source,
+          rejected_reason: basic.reason,
+          basic_check_result: basic,
+          llm_score: null,
+        });
       }
     }
 
-    // AI quality scoring REMOVED — it burned AI credits, added latency,
-    // and caused cascade retries with no negative caching.
-    // The match-score filtering (0.55 threshold) + content mismatch detection
-    // is sufficient quality control.
+    let bestImage: DestinationImage | null = filtered[0] ?? null;
+    let qualityScore = 0.8; // Default assumed quality
+
+    // If multiple survivors and AI available, rank them (cheap — text only,
+    // no vision). Fail-closed: on error rankImageCandidates returns null and
+    // we fall back deterministically to filtered[0].
+    if (filtered.length > 1 && lovableApiKey) {
+      const ranked = await rankImageCandidates(filtered, cleanName, lovableApiKey);
+      if (ranked) {
+        bestImage = ranked;
+      } else {
+        console.log("[quality-gate] LLM ranker returned null — using first basic-gate survivor");
+      }
+    }
+
+    // If every candidate failed the basic gate, fall through to later tiers
+    // (Wikimedia / AI fallback / category placeholder). Never cache garbage.
+    if (!bestImage) {
+      console.log(`[quality-gate] all ${candidates.length} candidates rejected for "${cleanName}" — falling through`);
+      // Continue to Tier 5+ below. Treat as if we had no candidates.
+    }
 
     // Persist external image URLs into our own storage when possible.
     const persistentBestImage = await ensurePersistentStorageUrl(
