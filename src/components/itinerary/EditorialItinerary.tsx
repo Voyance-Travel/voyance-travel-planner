@@ -2485,26 +2485,32 @@ export function EditorialItinerary({
       });
       const result = await refreshDay(activities, day.date || '', destination, day.dayNumber);
       if (result) {
-        setRefreshResults(prev => ({ ...prev, [day.dayNumber]: result }));
-        const errorCount = result.issues.filter(i => i.severity === 'error').length;
-        const warnCount = result.issues.filter(i => i.severity === 'warning').length;
         if (result.issues.length === 0) {
-          toast.success(`Day ${day.dayNumber} validated, no issues found!`);
+          // Clear any stale stored result and confirm clean.
+          setRefreshResults(prev => {
+            if (!(day.dayNumber in prev)) return prev;
+            const next = { ...prev };
+            delete next[day.dayNumber];
+            return next;
+          });
+          setRefreshSheetDay(prev => (prev === day.dayNumber ? null : prev));
+          toast.success('Day timeline checked — looks clean');
         } else {
+          setRefreshResults(prev => ({ ...prev, [day.dayNumber]: result }));
+          setRefreshSheetDay(day.dayNumber);
+          const errorCount = result.issues.filter(i => i.severity === 'error').length;
+          const warnCount = result.issues.filter(i => i.severity === 'warning').length;
           toast(`Day ${day.dayNumber}: ${errorCount} error${errorCount !== 1 ? 's' : ''}, ${warnCount} warning${warnCount !== 1 ? 's' : ''}`, {
             icon: '⚠️',
           });
         }
-        // Scroll the diff view into focus so the user can actually see the result.
-        requestAnimationFrame(() => {
-          const el = document.getElementById(`refresh-diff-${day.dayNumber}`);
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        });
       } else {
-        toast.error(`Could not re-check Day ${day.dayNumber} — please try again.`);
+        console.error('[handleRefreshDay] refresh-day returned null');
+        toast.error('Refresh failed — please try again');
       }
     } catch (err: any) {
-      toast.error(`Could not re-check Day ${day.dayNumber}: ${err?.message || 'unknown error'}`);
+      console.error('[handleRefreshDay] failed', err);
+      toast.error('Refresh failed — please try again');
     } finally {
       setRefreshingDayNumber(null);
     }
