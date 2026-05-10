@@ -6,7 +6,7 @@
  * so archetypes, tone tags, and all derived data stay in sync.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   HelpCircle, 
