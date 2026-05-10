@@ -378,6 +378,9 @@ serve(async (req) => {
         // ledger row via originalIdempotencyKey.
         REGENERATE_DAY: 0,
         regenerate_day: 0,
+        // swap_activity cost is tier-dependent — same defensive-refund pattern
+        SWAP_ACTIVITY: 0,
+        swap_activity: 0,
       };
 
       let originalAction = metadata?.originalAction as string | undefined;
