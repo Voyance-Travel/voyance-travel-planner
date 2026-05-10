@@ -146,7 +146,7 @@ export async function restoreVersion(
   error?: string;
 }> {
   try {
-    // Fetch the version to restore
+    // Step 1: Fetch the version to restore
     const { data: version, error: fetchError } = await supabase
       .from('itinerary_versions')
       .select('*')
@@ -159,10 +159,48 @@ export async function restoreVersion(
       return { success: false, error: 'Version not found' };
     }
 
-    // Save current state as a new version before restoring (so user can undo the undo)
-    // This is done automatically by the trigger when we insert
+    // Step 1.5: Pre-restore snapshot of CURRENT day state.
+    // Without this, if a user wants to undo the restore their pre-restore state
+    // is lost. We snapshot it as a new version row tagged auto_snapshot=true.
+    const { data: currentRow, error: currentErr } = await supabase
+      .from('itinerary_versions')
+      .select('activities, day_metadata')
+      .eq('trip_id', tripId)
+      .eq('day_number', dayNumber)
+      .eq('is_current', true)
+      .maybeSingle();
 
-    // Mark this as the restored version
+    if (currentErr) {
+      console.error('[restoreVersion] Pre-restore snapshot read failed — aborting restore', currentErr);
+      return { success: false, error: 'Could not snapshot current state — restore aborted to prevent data loss.' };
+    }
+
+    if (currentRow?.activities) {
+      const baseMeta = (currentRow.day_metadata && typeof currentRow.day_metadata === 'object' && !Array.isArray(currentRow.day_metadata))
+        ? (currentRow.day_metadata as Record<string, unknown>)
+        : {};
+      const snapshotMeta: Record<string, unknown> = {
+        ...baseMeta,
+        label: 'Pre-restore snapshot',
+        auto_snapshot: true,
+        before_restore_of_version: versionNumber,
+      };
+      const { error: snapshotErr } = await supabase
+        .from('itinerary_versions')
+        .insert({
+          trip_id: tripId,
+          day_number: dayNumber,
+          activities: currentRow.activities as Json,
+          day_metadata: snapshotMeta as Json,
+          created_by_action: 'pre_restore_snapshot',
+        });
+      if (snapshotErr) {
+        console.error('[restoreVersion] Pre-restore snapshot failed — aborting restore', snapshotErr);
+        return { success: false, error: 'Could not snapshot current state — restore aborted to prevent data loss.' };
+      }
+    }
+
+    // Step 2: Apply the restore (insert as a new version; trigger flips is_current)
     await supabase
       .from('itinerary_versions')
       .insert({
@@ -172,6 +210,8 @@ export async function restoreVersion(
         day_metadata: version.day_metadata as Json,
         created_by_action: `restored_from_v${versionNumber}`,
       });
+
+    console.log('[restoreVersion] Restored', versionNumber, 'with pre-snapshot saved');
 
     return {
       success: true,
