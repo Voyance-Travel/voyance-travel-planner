@@ -3164,165 +3164,160 @@ export function EditorialItinerary({
     const activity = day?.activities.find(a => a.id === activityId);
     if (!activity?.transportation) return;
 
+    // Lock guard — locked transport segments must not be mutated by AI/user mode change.
+    const isLockedFlag = (a: any) =>
+      !!a && (a.isLocked === true || a.locked === true || a.lock_state === 'locked');
+    if (isLockedFlag(activity)) {
+      toast.error('This transport segment is locked. Unlock it first to change mode.');
+      return;
+    }
+
     // Transport mode changes are free — no credit charge
 
+    const MODE_LABELS: Record<string, string> = {
+      walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus',
+      uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro',
+      rideshare: 'Rideshare', car: 'Drive', drive: 'Drive',
+    };
+
+    // Apply a mode change locally to a single activity. Used by all branches
+    // (optimize-success / no-data / threw). When `optTransportation` is given,
+    // we trust the optimize output for cost/duration; otherwise we fall back
+    // to `transportModeFallbackCost` and tag basis='fallback_estimate'.
+    const applyModeUpdate = async (
+      act: EditorialActivity,
+      optTransportation?: Record<string, any>,
+    ): Promise<EditorialActivity> => {
+      if (!act.transportation) return act;
+      const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
+      const newTitle = destMatch
+        ? `${MODE_LABELS[(newMode || '').toLowerCase()] || newMode} to ${destMatch[1]}`
+        : act.title;
+
+      let nextTransport: Record<string, any>;
+      if (optTransportation) {
+        nextTransport = { ...optTransportation, method: newMode };
+      } else {
+        const { transportModeFallbackCost, TRANSPORT_FALLBACK_BASIS } = await import(
+          '@/lib/itinerary/transportModeFallbackCost'
+        );
+        nextTransport = {
+          ...act.transportation,
+          method: newMode,
+          estimatedCost: {
+            amount: transportModeFallbackCost(newMode),
+            currency: act.transportation.estimatedCost?.currency || 'USD',
+            basis: TRANSPORT_FALLBACK_BASIS,
+          },
+        };
+      }
+
+      return {
+        ...act,
+        title: newTitle,
+        location: act.location ? { ...act.location, name: newTitle } : act.location,
+        transportation: nextTransport as EditorialActivity['transportation'],
+      };
+    };
+
     setChangingTransportActivityId(activityId);
+    let usedFallback = false;
     try {
       // Call optimize for just this single segment with the specified mode
       const activityIndex = day.activities.findIndex(a => a.id === activityId);
       const nextActivity = day.activities[activityIndex + 1];
-      
-      const { data, error } = await supabase.functions.invoke('optimize-itinerary', {
-        body: {
-          tripId,
-          destination,
-          days: [{
-            dayNumber: day.dayNumber,
-            date: day.date,
-            activities: day.activities.map(a => ({
-              id: a.id,
-              title: a.title,
-              category: a.category || a.type,
-              startTime: a.startTime,
-              endTime: a.endTime,
-              location: a.location,
-              cost: a.cost,
-              transportation: a.transportation,
-            })),
-          }],
-          enableRouteOptimization: true,
-          enableRealTransport: true,
-          enableCostLookup: false,
-          transportPreferences: {
-            allowedModes: [newMode],
-            forceModeForSegment: {
-              fromActivityId: activityId,
-              toActivityId: nextActivity?.id,
-              mode: newMode,
+
+      let optimizedDay: any | null = null;
+      try {
+        const { data, error } = await supabase.functions.invoke('optimize-itinerary', {
+          body: {
+            tripId,
+            destination,
+            days: [{
+              dayNumber: day.dayNumber,
+              date: day.date,
+              activities: day.activities.map(a => ({
+                id: a.id,
+                title: a.title,
+                category: a.category || a.type,
+                startTime: a.startTime,
+                endTime: a.endTime,
+                location: a.location,
+                cost: a.cost,
+                transportation: a.transportation,
+              })),
+            }],
+            enableRouteOptimization: true,
+            enableRealTransport: true,
+            enableCostLookup: false,
+            transportPreferences: {
+              allowedModes: [newMode],
+              forceModeForSegment: {
+                fromActivityId: activityId,
+                toActivityId: nextActivity?.id,
+                mode: newMode,
+              },
             },
           },
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.days?.[0]) {
-        // Update only the transport data for the changed activity
-        const optimizedDay = data.days[0];
-        setDays(prev => prev.map((d, idx) => {
-          if (idx !== dayIndex) return d;
-          return {
-            ...d,
-            activities: d.activities.map(act => {
-              const optAct = optimizedDay.activities?.find((oa: any) => oa.id === act.id);
-              if (optAct?.transportation && act.id === activityId) {
-                const updatedAct = { ...act, transportation: { ...optAct.transportation, method: newMode } };
-                const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
-                if (destMatch) {
-                  const mLabels: Record<string, string> = { walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus', uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro', rideshare: 'Rideshare', car: 'Drive' };
-                  const newTitle = `${mLabels[(newMode || '').toLowerCase()] || newMode} to ${destMatch[1]}`;
-                  updatedAct.title = newTitle;
-                  if (updatedAct.location) updatedAct.location = { ...updatedAct.location, name: newTitle };
-                }
-                return updatedAct;
-              }
-              // Fallback: optimize API returned data but no matching activity ID — apply local update
-              if (act.id === activityId && act.transportation) {
-                const mLabels: Record<string, string> = { walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus', uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro', rideshare: 'Rideshare', car: 'Drive' };
-                const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
-                const newTitle = destMatch ? `${mLabels[(newMode || '').toLowerCase()] || newMode} to ${destMatch[1]}` : act.title;
-                return {
-                  ...act,
-                  title: newTitle,
-                  location: act.location ? { ...act.location, name: newTitle } : act.location,
-                  transportation: { ...act.transportation, method: newMode },
-                };
-              }
-              return act;
-            }),
-          };
-        }));
-        setHasChanges(true);
-      } else {
-        // Optimize call returned no data — apply mode change locally with default costs
-        const modeCosts: Record<string, number> = {
-          walk: 0, walking: 0, metro: 3, subway: 3, bus: 2,
-          uber: 15, taxi: 20, rideshare: 12, car: 5,
-        };
-        setDays(prev => prev.map((d, idx) => {
-          if (idx !== dayIndex) return d;
-          return {
-            ...d,
-            activities: d.activities.map(act => {
-              if (act.id !== activityId || !act.transportation) return act;
-              const mLabels: Record<string, string> = { walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus', uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro', rideshare: 'Rideshare', car: 'Drive' };
-              const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
-              const newTitle = destMatch ? `${mLabels[(newMode || '').toLowerCase()] || newMode} to ${destMatch[1]}` : act.title;
-              return {
-                ...act,
-                title: newTitle,
-                location: act.location ? { ...act.location, name: newTitle } : act.location,
-                transportation: {
-                  ...act.transportation,
-                  method: newMode,
-                  estimatedCost: {
-                    amount: modeCosts[(newMode || '').toLowerCase()] ?? 0,
-                    currency: act.transportation.estimatedCost?.currency || 'USD',
-                  },
-                },
-              };
-            }),
-          };
-        }));
-        setHasChanges(true);
+        });
+        if (error) throw error;
+        optimizedDay = data?.days?.[0] ?? null;
+      } catch (optErr) {
+        console.error('Transport mode change error:', optErr);
+        usedFallback = true;
       }
-      const modeLabels: Record<string, string> = {
-        walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus',
-        uber: 'Rideshare', taxi: 'Taxi', train: 'Train',
-      };
-      toast.success(`Updated to ${modeLabels[newMode] || newMode}`);
-    } catch (err) {
-      console.error('Transport mode change error:', err);
-      // Optimize failed — apply mode change locally with default costs
-      const modeCosts: Record<string, number> = {
-        walk: 0, walking: 0, metro: 3, subway: 3, bus: 2,
-        uber: 15, taxi: 20, rideshare: 12, car: 5,
-      };
-      setDays(prev => prev.map((d, idx) => {
+
+      // Compute new activity (single source of truth for all branches).
+      const optAct = optimizedDay?.activities?.find?.((oa: any) => oa.id === activityId);
+      if (!optAct?.transportation) usedFallback = true;
+      const updatedActivity = await applyModeUpdate(activity, optAct?.transportation);
+
+      // Build next days array.
+      const nextDays = days.map((d, idx) => {
         if (idx !== dayIndex) return d;
         return {
           ...d,
-          activities: d.activities.map(act => {
-            if (act.id !== activityId || !act.transportation) return act;
-            const mLabels: Record<string, string> = { walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus', uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro', rideshare: 'Rideshare', car: 'Drive' };
-            const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
-            const newTitle = destMatch ? `${mLabels[(newMode || '').toLowerCase()] || newMode} to ${destMatch[1]}` : act.title;
-            return {
-              ...act,
-              title: newTitle,
-              location: act.location ? { ...act.location, name: newTitle } : act.location,
-              transportation: {
-                ...act.transportation,
-                method: newMode,
-                estimatedCost: {
-                  amount: modeCosts[(newMode || '').toLowerCase()] ?? 0,
-                  currency: act.transportation.estimatedCost?.currency || 'USD',
-                },
-              },
-            };
-          }),
+          activities: d.activities.map(a => (a.id === activityId ? updatedActivity : a)),
         };
-      }));
-      setHasChanges(true);
-      const modeLabels: Record<string, string> = {
-        walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus',
-        uber: 'Rideshare', taxi: 'Taxi', train: 'Train',
-      };
-      toast.success(`Updated to ${modeLabels[newMode] || newMode} (estimated cost)`);
+      });
+
+      setDays(nextDays);
+
+      // Reflect new transport cost in the budget ledger immediately.
+      try {
+        syncBudgetFromDays(nextDays);
+      } catch (syncErr) {
+        console.warn('[transportModeChange] syncBudgetFromDays failed:', syncErr);
+      }
+
+      // Persist immediately via the sanctioned write path so a refresh before
+      // global Save doesn't drop the change.
+      try {
+        const { safeUpdateItineraryData } = await import('@/services/safeUpdateItineraryData');
+        const itineraryToPersist: Record<string, unknown> = {
+          days: JSON.parse(JSON.stringify(nextDays)),
+          status: 'ready',
+          optionSelections,
+          savedAt: new Date().toISOString(),
+        };
+        if (parsedMetadata) {
+          itineraryToPersist.metadata = { ...parsedMetadata, lastUpdated: new Date().toISOString() };
+        }
+        const res = await safeUpdateItineraryData(tripId, itineraryToPersist);
+        if (res?.error) throw res.error;
+        setHasChanges(false);
+        setLastSaved(new Date());
+      } catch (persistErr) {
+        console.warn('[transportModeChange] persist failed, falling back to global Save:', persistErr);
+        setHasChanges(true);
+      }
+
+      const label = MODE_LABELS[newMode.toLowerCase()] || newMode;
+      toast.success(usedFallback ? `Updated to ${label} (estimated cost)` : `Updated to ${label}`);
     } finally {
       setChangingTransportActivityId(null);
     }
-  }, [days, isPaid, totalCredits, spendCredits, tripId, destination, transportCap]);
+  }, [days, tripId, destination, optionSelections, parsedMetadata, syncBudgetFromDays]);
   // Get trip permission for current user
   const { data: tripPermission, isLoading: permissionLoading } = useTripPermission(tripId);
   const { data: collaborators = [], refetch: refetchCollaborators } = useTripCollaborators(tripId);
