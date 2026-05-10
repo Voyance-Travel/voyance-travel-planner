@@ -176,7 +176,42 @@ export async function createTrip(input: {
   // Get user's current plan tier for ownership tracking
   const { data: entitlements } = await supabase.functions.invoke('get-entitlements');
   const ownerPlanTier = entitlements?.plans?.[0] || 'free';
-  
+
+  const toBackendTrip = (row: typeof data): BackendTrip => ({
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    destination: row.destination,
+    status: row.status as TripStatus,
+    tripType: row.trip_type || undefined,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    travelers: row.travelers || undefined,
+    budgetRange: row.budget_tier as BudgetPreference | undefined,
+    departureCity: row.origin_city || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+
+  // RS.L2 — Guard against double-click duplicate creation
+  const dedupWindowIso = new Date(Date.now() - 30_000).toISOString();
+  const { data: recent } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('name', input.name)
+    .eq('destination', input.destination)
+    .eq('start_date', input.startDate)
+    .gt('created_at', dedupWindowIso)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (recent) {
+    console.warn('[createTrip] Duplicate request detected — returning existing trip', { tripId: recent.id });
+    return toBackendTrip(recent as typeof data);
+  }
+
   const { data, error } = await supabase
     .from('trips')
     .insert({
@@ -194,7 +229,7 @@ export async function createTrip(input: {
     })
     .select()
     .single();
-  
+
   if (error) throw new Error(error.message);
   
   return {
