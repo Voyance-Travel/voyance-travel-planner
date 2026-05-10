@@ -1,26 +1,31 @@
-## DNA-1 — Trait mapping completeness
+## DNA-2 — Atomic 3-table DNA save
 
-### Findings
-
-`OnboardConversation.tsx` lines 135-154 currently map only 7 traits and hardcode `transformation: 3`. The personalization engine expects 8 traits including `cultural` (currently absent — defaults to 0/undefined downstream).
-
-`analysis.whatWorked` / `analysis.whatFailed` are already produced by the conversation-analysis AI step, so deriving `cultural` and `transformation` from keyword signals adds zero new LLM cost.
+### Current state
+`OnboardConversation.tsx` (lines 180-239) performs three sequential client-side upserts to `travel_dna_profiles`, `profiles`, and `user_preferences`. If write 2 or 3 fails, the user is left with a partial DNA state (e.g. DNA saved but `quiz_completed=false`), which strands them in an inconsistent onboarding loop.
 
 ### Plan
 
-Single-file replacement of the `traitScores` object literal (lines 135-154) in `src/pages/OnboardConversation.tsx`:
+**1. Migration** — `supabase/migrations/<timestamp>_atomic_dna_save.sql`
 
-1. Introduce a local `clamp` helper bounding values to `[-10, 10]` (canonical engine range).
-2. Wrap all 7 existing trait expressions in `clamp(...)` for safety.
-3. Add `cultural` derived from `authenticity` plus a keyword scan of `whatWorked + whatFailed` (museum/history/temple/heritage/etc., +1 per hit, capped at +3).
-4. Replace hardcoded `transformation: 3` with a derivation combining `authenticity`, `adventure`, and explicit growth/transformation keywords ("changed me", "perspective", "sabbatical", etc., +2 per hit, capped at +4).
+Create `public.save_onboarding_dna(p_user_id, p_primary_archetype, p_secondary_archetype, p_confidence, p_trait_scores, p_preferences) RETURNS jsonb`:
+- `LANGUAGE plpgsql SECURITY DEFINER` with `SET search_path = public`.
+- Three upserts wrapped in plpgsql block (implicit transaction): `travel_dna_profiles` (on conflict user_id), `profiles` (on conflict id, set `quiz_completed=true`), `user_preferences` (on conflict user_id, COALESCE-preserving existing values, `quiz_completed=true`).
+- `travel_companions` written as `ARRAY[p_preferences->>'travel_companion']::text[]`.
+- `EXCEPTION WHEN OTHERS` returns `{success:false, error, sqlstate}`; success path returns `{success:true, saved_at}`.
+- `REVOKE ALL FROM PUBLIC` then `GRANT EXECUTE TO authenticated`.
 
-Verbatim drop-in from the user's spec.
+Authorization note: function relies on `p_user_id` matching the authenticated caller. Will add an `IF p_user_id <> auth.uid() THEN RAISE EXCEPTION` guard at the top so a `SECURITY DEFINER` function can't be abused to write DNA for other users.
+
+**2. Edit `src/pages/OnboardConversation.tsx`** (lines 180-242)
+
+Replace the three `.upsert(...)` blocks + their `if (...Error) throw` guards with a single `supabase.rpc('save_onboarding_dna', { ... })` call mapping params per the spec. On `error || !data?.success`, log + toast + return (no navigate). On success, keep existing toast + `navigate(ROUTES.PROFILE.VIEW)`. Keep the surrounding `try/catch/finally` so `savingInProgressRef` resets correctly.
 
 ### Out of scope
-- Backend `travel_dna_profiles` schema changes (`cultural_score`/`transformation_score` columns already exist per project memory).
-- Re-running personalization for users onboarded before this fix (separate backfill task).
-- Tweaking weights — using exactly the values specified.
+- Changing the trait-score derivation (DNA-1 already shipped).
+- Migrating other multi-table writes (trip create, etc.) to RPCs.
+- Adding retry logic on the client — RPC is atomic, a single retry by the user is sufficient.
 
 ### Verification
-`grep -c "cultural:.*clamp\|transformation:.*clamp" src/pages/OnboardConversation.tsx` ≥ 2.
+- `ls supabase/migrations/ | grep atomic_dna_save` → file exists.
+- `grep -c "save_onboarding_dna" src/pages/OnboardConversation.tsx` ≥ 1.
+- Manual: complete onboarding → check `travel_dna_profiles`, `profiles.quiz_completed=true`, `user_preferences` all populated in one round-trip.
