@@ -108,6 +108,65 @@ export function validateCostUpdate(
   return { valid: true };
 }
 
+/**
+ * [CPP_DOUBLE_COUNT] write-time sanity gate.
+ *
+ * Logs an error when a writer hands us a value that looks like a TOTAL
+ * (cost_per_person × num_travelers) rather than a per-person value. Without
+ * this, the schema's `total_cost_usd GENERATED ALWAYS AS (cpp × nt)` column
+ * silently re-multiplies, inflating the user's budget by ×num_travelers.
+ *
+ * Heuristic: cpp > reference high × 3 AND source is not a known protected
+ * floor (michelin_floor, ticketed_attraction_floor, user_override, …).
+ * Cost-floor sources can legitimately exceed the band.
+ */
+const PROTECTED_FLOOR_SOURCES = new Set([
+  'michelin_floor',
+  'ticketed_attraction_floor',
+  'auto_corrected',
+  'reference_fallback',
+  'bar_cap_repair',
+  'user',
+  'user_override',
+  'logistics-sync',
+  'free_venue',
+]);
+
+async function assertCppLooksPerPerson(args: {
+  activityId: string;
+  cpp: number;
+  numTravelers: number;
+  category: string;
+  source?: string;
+  costReferenceId: string | null;
+}): Promise<void> {
+  if (args.cpp <= 0 || args.numTravelers < 2) return;
+  if (args.source && PROTECTED_FLOOR_SOURCES.has(args.source)) return;
+
+  let high: number | null = null;
+  if (args.costReferenceId) {
+    const { data } = await supabase
+      .from('cost_reference')
+      .select('cost_high_usd')
+      .eq('id', args.costReferenceId)
+      .maybeSingle();
+    high = (data as any)?.cost_high_usd ?? null;
+  }
+  if (high == null) {
+    // Fall back to the frontend category cap as a soft ceiling.
+    high = CATEGORY_CAPS[args.category] ?? GLOBAL_CAP;
+  }
+  if (args.cpp > high * 3) {
+    console.error(
+      `[CPP_DOUBLE_COUNT?] activity=${args.activityId} cpp=$${args.cpp} ` +
+      `nt=${args.numTravelers} ref_high=$${high} source=${args.source ?? 'reference'} ` +
+      `→ likely caller wrote total instead of per-person. ` +
+      `Schema's generated total_cost_usd column will re-multiply by num_travelers, ` +
+      `inflating user budget by ×${args.numTravelers}.`
+    );
+  }
+}
+
 // ─── View Queries (read-only, canonical totals) ──────────────
 
 export async function getTripTotal(tripId: string): Promise<TripTotal | null> {
@@ -219,6 +278,20 @@ export async function upsertActivityCost(params: {
     console.error('Cost validation failed: negative cost');
     return null;
   }
+
+  // [CPP_DOUBLE_COUNT] sanity gate. Catches writers that pass a TOTAL value
+  // (cpp × nt) into cost_per_person_usd. Symptom: end-user budget inflates by
+  // ×num_travelers because the schema's generated column re-multiplies.
+  // We only warn (don't block) — protected floors like Michelin can legitimately
+  // exceed reference high × 3.
+  await assertCppLooksPerPerson({
+    activityId: params.activity_id,
+    cpp: params.cost_per_person_usd,
+    numTravelers: params.num_travelers || 1,
+    category: params.category,
+    source: params.source,
+    costReferenceId: params.cost_reference_id || null,
+  });
 
   const { data, error } = await supabase
     .from('activity_costs')
@@ -358,6 +431,19 @@ export async function syncActivitiesToCostTable(
     source: a.source || 'reference',
     cost_reference_id: a.costReferenceId || null,
   }));
+
+  // [CPP_DOUBLE_COUNT] sanity gate — fire once per suspicious row in the batch.
+  // Best-effort: doesn't block the upsert.
+  for (const r of rows) {
+    void assertCppLooksPerPerson({
+      activityId: r.activity_id,
+      cpp: r.cost_per_person_usd,
+      numTravelers: r.num_travelers,
+      category: r.category,
+      source: r.source,
+      costReferenceId: r.cost_reference_id,
+    });
+  }
 
   // ─── ORPHAN-RESCUE PRE-PASS (RS.M.B2) ─────────────────────────────────
   // For incoming rows whose activity_id has no existing activity_costs row,
