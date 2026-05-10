@@ -341,6 +341,10 @@ const RESERVATION_LABEL_LEAK_RE =
 // Accepts camelCase JSON keys (lowercase first letter) too.
 const ORPHAN_EMPTY_LABEL_RE =
   /(?:^|(?<=[.!?]\s)|\n)\s*[A-Za-z][A-Za-z][A-Za-z ]{1,40}\s*:\s*[.\u2026]?\s*(?=$|\n|[.!?]\s|[A-Z])/g;
+// Requirement-prose leak — twin of supabase/functions/_shared/prompt-leak-scrub.ts.
+// "This satisfies your 'Deep Context' requirement."
+const REQUIREMENT_PROSE_LEAK_RE =
+  /\s*\bThis\s+(?:satisfies|fulfills|fulfils|meets)\s+(?:your|the)\s+['"\u201C\u201D][^'"\u201C\u201D]{1,60}['"\u201C\u201D]?\s+(?:requirement|criterion|criteria|need)s?\s*\.?\s*/gi;
 
 // Sentence-fragment patterns — twin of supabase/functions/_shared/prompt-leak-scrub.ts
 // Catches "spot for together", "ideal with for both.", "perfect for ." that
