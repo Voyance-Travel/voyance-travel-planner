@@ -496,6 +496,28 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
     return nameById.has(String(row.activity_id));
   });
 
+  // DEV-mode parity assertion: the DB-generated `total_cost_usd` column should
+  // always equal `cost_per_person_usd * num_travelers`. If it ever drifts, a
+  // writer somewhere is bypassing the per-person convention.
+  if (import.meta.env.DEV) {
+    const sumOfRows = liveCostRows.reduce(
+      (acc: number, r: any) => acc + (Number(r.total_cost_usd) || 0), 0
+    );
+    const sumOfPersonRows = liveCostRows.reduce(
+      (acc: number, r: any) =>
+        acc + (Number(r.cost_per_person_usd) || 0) * (Number(r.num_travelers) || 1),
+      0
+    );
+    if (Math.abs(sumOfRows - sumOfPersonRows) > 1) {
+      console.warn('[budget] cost mismatch — generated col vs per-person×travelers', {
+        tripId,
+        sumOfRows,
+        sumOfPersonRows,
+        delta: sumOfRows - sumOfPersonRows,
+      });
+    }
+  }
+
   const rawEntries: BudgetLedgerEntry[] = liveCostRows.map((row: any) => {
     let costPerPerson = Number(row.cost_per_person_usd) || 0;
     const numTravelers = Number(row.num_travelers) || 1;
