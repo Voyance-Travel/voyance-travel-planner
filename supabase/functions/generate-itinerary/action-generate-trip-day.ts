@@ -1802,6 +1802,20 @@ async function _handleGenerateTripDayInner(
             console.log(`[MEAL_AUDIT] day=${dayNumber} required=[${_fmgPolicy.requiredMeals.join(',')}] detected=[${_detectedPre.join(',')}] missing=[] pool=${_perDayPool.length} source="generate-trip-day:final-per-day" (no-op)`);
           }
 
+          // RS.M.I3: cache the meal policy used during generation so action-save-itinerary
+          // (and the health engine) can prefer it instead of re-deriving from possibly-changed
+          // flight times. Mirrors action-generate-day.ts:336-346. Written unconditionally.
+          dayResult.metadata = dayResult.metadata || {};
+          dayResult.metadata.quality = dayResult.metadata.quality || {};
+          dayResult.metadata.quality.meal_policy_at_generation = {
+            dayMode: _fmgPolicy.dayMode,
+            requiredMeals: _fmgPolicy.requiredMeals,
+            isFullExplorationDay: _fmgPolicy.isFullExplorationDay,
+            arrivalTime24: _isFirstDay ? (savedArrTime24Hoisted ?? null) : null,
+            departureTime24: _isLastDay ? (savedDepTime24Hoisted ?? null) : null,
+            generated_at: new Date().toISOString(),
+          };
+
           // ── LAST-DAY LUNCH ASSERTION ──────────────────────────────────
           // Belt-and-braces: if departure-day policy required lunch and it
           // STILL isn't present after the guard, force-fill via gap-filler
