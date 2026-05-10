@@ -1,85 +1,76 @@
-## P1.4 — `getTripStats` exclusive buckets + `other`
+## P1.5 — Delete `flight-status` edge function (and live UI consumers)
 
-### What the spec changes
+### Heads-up before I delete
 
-Today (`src/services/userAPI.ts:182-277`), the three counts are **independent filter passes**, so a trip can land in multiple buckets:
+The spec frames this as a stale function cleanup, but `flight-status` is **not orphaned**. It powers the agent workspace's "Flights" tab. Deleting it as written removes a live, working feature from `/agent/...`. I want to confirm scope before nuking it.
 
-- `completedTrips` — `status==='completed'` OR `end_date < now`
-- `upcomingTrips` — not completed AND (`end_date ≥ now` OR `start_date ≥ now`)
-- `draftTrips` — `status === 'draft'` (regardless of dates)
+### What's referenced today
 
-A draft trip with a future `start_date` is counted in **both** `upcoming` and `draft`. There is no catch-all, and the three numbers can sum to more than `totalTrips`.
 
-The spec switches to **mutually exclusive** buckets evaluated in priority order, plus a fourth `other` for trips that match none, plus a DEV sum-equals-total assertion.
+| Reference                                                               | Role                                                                                               |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `supabase/functions/flight-status/index.ts` (239 lines)                 | Amadeus-backed flight status lookup (carrier+flight+date → live status, gate, terminal, delay)     |
+| `supabase/config.toml:80` `[functions.flight-status]`                   | Deploy config                                                                                      |
+| `src/components/agent/FlightStatusTracker.tsx` (full file, ~200+ lines) | Component that calls `supabase.functions.invoke('flight-status', …)` and renders status cards      |
+| `src/pages/agent/TripWorkspace.tsx:92, 604`                             | Imports + renders `<FlightStatusTracker segments={segments} />` inside the "Flights" `TabsContent` |
 
-### Behavior change to flag
 
-Under the spec's priority (`ended → upcoming → draft → other`):
-
-- A trip with `status='draft'` and future `start_date` → now `upcoming`, no longer `draft`. Profile's "drafts" tile drops; "upcoming" rises by the same amount.
-- A trip with no dates and `status='completed'` → now `other` (the spec drops the explicit `status==='completed'` short-circuit). Profile's "completed" tile may drop.
-- A trip with no dates and no draft/planning status (e.g. `status='active'`, `'archived'`) → now `other` (was previously invisible).
-
-This is a real visible change on `src/pages/Profile.tsx`. It is also the explicit goal of the ticket (catch the leftovers), but worth naming.
+So the deletion blast radius is: 1 edge function + its config block + 1 component + 2 lines in `TripWorkspace.tsx` + the Flights tab visibly loses its tracker (the empty-state card below it stays).
 
 ### Plan
 
-1. **Rewrite the bucketing block (lines ~196–218)** as a single mutually exclusive loop:
+**Recommendation: A.** The spec's intent is "stop deploying this function," and the surrounding UI is internal-agent-only with an empty-state already in place. But I want explicit confirmation rather than silently breaking a tab.
 
-   ```ts
-   const buckets = {
-     completed: [] as typeof allTrips,
-     upcoming:  [] as typeof allTrips,
-     draft:     [] as typeof allTrips,
-     other:     [] as typeof allTrips,
-   };
+**A. Full delete (matches the spec literally).**
 
-   for (const t of allTrips) {
-     let key: keyof typeof buckets;
-     if (t.status === 'completed' || (t.end_date && parseLocalDate(t.end_date) < now)) {
-       key = 'completed';
-     } else if (t.start_date && parseLocalDate(t.start_date) >= now) {
-       key = 'upcoming';
-     } else if (t.end_date && parseLocalDate(t.end_date) >= now) {
-       // currently ongoing (started, not yet ended)
-       key = 'upcoming';
-     } else if (t.status === 'draft' || t.status === 'planning') {
-       key = 'draft';
-     } else {
-       key = 'other';
-     }
-     buckets[key].push(t);
-   }
+1. `rm -rf supabase/functions/flight-status/`
+2. Remove `[functions.flight-status]` block from `supabase/config.toml` (lines around 80).
+3. Delete `src/components/agent/FlightStatusTracker.tsx`.
+4. In `src/pages/agent/TripWorkspace.tsx`:
+  - drop the `import FlightStatusTracker …` (line 92),
+  - remove `<FlightStatusTracker segments={segments} />` (line 604),
+  - leave the existing "No flights to track" empty-state card so the tab still renders something useful when there are flights too — or replace with a static "Flight tracking coming soon" message; will go with **just removing the tracker line** and letting the existing card show whenever segments are empty (when segments exist, the tab will be blank — acceptable for an internal tool, but flagging it).
+5. Call `supabase--delete_edge_functions(["flight-status"])` so the deployed function is removed, not just the local file.
+6. Verify: `ls supabase/functions/ | grep flight-status` → empty; `rg -n "flight-status\|FlightStatusTracker" src/ supabase/` → empty.
 
-   if (import.meta.env.DEV) {
-     const sum = buckets.completed.length + buckets.upcoming.length + buckets.draft.length + buckets.other.length;
-     console.assert(sum === allTrips.length, `[getTripStats] sum ${sum} != total ${allTrips.length}`);
-   }
-   ```
+**B. Soft delete (safer).** Keep `FlightStatusTracker.tsx` but stub `invoke('flight-status', …)` to return `{ success: false, error: 'tracking unavailable' }` so the existing "tracking unavailable" UI path renders. Then delete the edge function + config. Frontend grep still shows one match (the now-unused invoke call) — fails the spec's verify, but preserves the tab structure.
 
-   Notes vs. the literal spec snippet:
-   - Keep `parseLocalDate` (existing util) instead of raw `new Date()` — matches the rest of the file's timezone-safe handling.
-   - Preserve today's "completed if `status==='completed'`" short-circuit so post-trip recap counts don't regress on date-less trips.
-   - Preserve today's "ongoing trip is upcoming" behavior (`end_date ≥ now` with no future start).
-   - Use plain arrays (`buckets.X.length`) — the `count + trips` shape in the spec is unused by the rest of the function.
+**C. Skip — keep flight-status.** If the function is supposed to stay (e.g., Amadeus key is configured and agents rely on it), reject the ticket. Confirm by checking whether `AMADEUS_API_KEY` / `AMADEUS_API_SECRET` are configured for the project; if they are, this feature is in production use.
 
-2. **Update downstream references** to read from buckets:
-   - `completedTrips` (variable) → `buckets.completed`
-   - `upcomingTrips` (variable) → `buckets.upcoming`
-   - `draftTrips` (variable) → `buckets.draft`
-   - `completedTrips.length` → `buckets.completed.length`, etc. (lines 221–249, 259–275).
+### Files / state changed for option A
 
-3. **Extend `TripStats` interface** (line 127) with `otherTrips: number` and populate it in the return object so Profile or future pages can read the leftover count. No consumer breaks — purely additive.
+- Deleted: `supabase/functions/flight-status/index.ts`, `src/components/agent/FlightStatusTracker.tsx`
+- Edited: `supabase/config.toml` (remove block), `src/pages/agent/TripWorkspace.tsx` (2 lines)
+- Deployed: `delete_edge_functions(["flight-status"])`
 
-4. **No change** to `TripStatsSummary`, `getTripStatsSummary`, or `Profile.tsx`. Profile only reads `completedTrips`/`upcomingTrips`/`draftTrips`/`totalTrips`, which still exist with the same names.
+No DB migration. No schema impact. The "Flights" tab on `/agent/...` will lose its tracker UI; the empty-state card remains for the no-segments case.
 
-### Verify
+### Question for you
 
-- `grep -c "other:" src/services/userAPI.ts` → expect ≥1 (bucket key + `otherTrips: buckets.other.length`).
-- DEV console: load Profile, confirm no `[getTripStats] sum != total` assertion fires across a fixture user with mixed statuses.
+Should I proceed with **A (full delete + agent UI gutted)**, **B (soft delete, keep tab UI shape)**, or **C (skip — function stays)**? **Option C — skip, keep** `flight-status`**.**
 
-### Files touched
+Reasons:
 
-- `src/services/userAPI.ts` — `TripStats` interface (1 line), `getTripStats` body (~30 lines).
+- Your original directive was "no longer support **flight search**" — that's the customer-facing flight *booking* path. **Flight status tracking is a different feature** (post-booking value: gate, terminal, delay for flights users already have). The spec conflated the two.
+- It's a **live working feature** in your internal agent workspace. The audit prescription was based on it being orphaned; you've proved that wrong. Following the spec literally would delete working code.
+- Cost to keep: ~zero. Edge function only bills per invocation; if the agent tab sees light use, billing is rounding error.
+- Cost to delete + later re-add: high. Re-implementing Amadeus integration, the React component, and the agent tab plumbing is a half-day's work to undo a 5-minute delete.
+- Option B (soft delete) is the worst of both — leaves dead code in the frontend, breaks the live call without any cleanup benefit, and still fails the spec's verify grep. Don't ship B under any circumstances.
 
-No DB migration, no consumer edits, no UI work.
+**Action:** reject the ticket. Update the audit note: "RS.M.X flight-status — not applicable. Function is live in agent workspace (`TripWorkspace.tsx:604`), powered by Amadeus, distinct from the deprecated `flights` search function."
+
+**Quick verification** before fully closing the ticket:
+
+```
+# Confirm Amadeus secrets are configured (proves it's actively used, not stub)
+```
+
+`# In Supabase Dashboard → Edge Function Secrets, look for:`
+
+`#   AMADEUS_API_KEY`
+
+`#   AMADEUS_API_SECRET`
+
+If both secrets are present → the function is in active use, definitely keep. If both are missing → the agent tab has been silently broken; you can either delete (Option A) or set up Amadeus credentials. Your call based on whether agent flight-tracking is something you actually use.
+
+Either way: don't blindly follow a spec that's targeting the wrong function.
