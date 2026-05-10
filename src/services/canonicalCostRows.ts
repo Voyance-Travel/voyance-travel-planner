@@ -100,7 +100,27 @@ export function normalizeCanonicalCategory(rawCat: string, name: string): string
 }
 
 function rowCentsFor(row: CanonicalCostInputRow): number {
-  return Math.round((row.cost_per_person_usd || 0) * (row.num_travelers || 1) * 100);
+  const perPerson = row.cost_per_person_usd || 0;
+  const travelers = row.num_travelers || 1;
+  // DEV-mode sanity guard: catch rows where cost_per_person_usd was stored
+  // as the already-multiplied total (legacy double-store), which would render
+  // as 2× the correct amount on Payments and the budget ledger.
+  if (
+    typeof import.meta !== 'undefined' &&
+    (import.meta as any).env?.DEV &&
+    travelers > 1 &&
+    perPerson > 500
+  ) {
+    // eslint-disable-next-line no-console
+    console.warn('[canonicalCostRows] suspiciously high per-person cost', {
+      activity_id: (row as any).activity_id,
+      category: (row as any).category,
+      cost_per_person_usd: perPerson,
+      num_travelers: travelers,
+      hint: 'value may have been stored as total instead of per-person',
+    });
+  }
+  return Math.round(perPerson * travelers * 100);
 }
 
 export interface ResolveCanonicalArgs {
