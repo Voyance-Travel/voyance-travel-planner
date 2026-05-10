@@ -220,7 +220,8 @@ export default function OnboardConversation() {
         // recalc against the canonical merged keyset.
         const recalc = await recalculateArchetype(user.id);
         if (!recalc.success) {
-          console.warn('[OnboardConversation] recalculateArchetype failed (non-fatal)', recalc.error);
+          const errMsg = 'error' in recalc ? recalc.error : 'unknown';
+          console.warn('[OnboardConversation] recalculateArchetype failed (non-fatal)', errMsg);
         }
 
         toast.success('Your Travel DNA has been saved!');
