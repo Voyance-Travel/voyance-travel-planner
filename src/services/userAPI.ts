@@ -273,6 +273,7 @@ export async function getTripStats(): Promise<TripStats> {
     completedTrips: completedTrips.length,
     upcomingTrips: upcomingTrips.length,
     draftTrips: draftTrips.length,
+    otherTrips: buckets.other.length,
     totalCountries: uniqueCountries.length,
     totalCities: uniqueCities.length,
     countriesVisited: uniqueCountries as string[],
