@@ -237,6 +237,43 @@ export async function persistDay(input: PersistDayInput): Promise<PersistDayResu
     `[persist-day] Persisted activities (uuid=${uuidRows.length}, external=${externalRows.length})`
   );
 
+  // ── 6.5 Drop activity_costs rows for this day whose activity_id is no longer
+  // in the freshly-persisted set. Without this, every regenerate-day leaves
+  // orphan cost rows behind and the trip total inflates by the cost of the
+  // previous version's activities. (Full-trip regen handles this via
+  // generation-core.ts Phase 5's trip-wide delete; per-day regen needs its
+  // own day-scoped equivalent.)
+  try {
+    const keepIds = normalizedActivities
+      .map((a: any) => a?.id)
+      .filter((v: any): v is string => typeof v === 'string' && v.length > 0);
+
+    let q = supabase
+      .from('activity_costs')
+      .delete()
+      .eq('trip_id', tripId)
+      .eq('day_number', dayNumber)
+      .neq('source', 'logistics-sync'); // never touch flight/hotel rows
+
+    if (keepIds.length > 0) {
+      const list = keepIds
+        .map((id) => `"${String(id).replace(/"/g, '\\"')}"`)
+        .join(',');
+      q = q.not('activity_id', 'in', `(${list})`);
+    }
+
+    const { data: removed, error: cleanupErr } = await q.select('id');
+    if (cleanupErr) {
+      console.error('[persist-day] activity_costs day-cleanup failed (non-fatal):', cleanupErr);
+    } else if (removed && removed.length > 0) {
+      console.log(
+        `[persist-day] Removed ${removed.length} orphan activity_costs rows for day ${dayNumber}`
+      );
+    }
+  } catch (err) {
+    console.error('[persist-day] activity_costs cleanup error (non-fatal):', err);
+  }
+
   // ── 7. Save version for undo functionality ──
   try {
     const versionDnaSnapshot = profile ? {
