@@ -160,6 +160,10 @@ const handler = async (req: Request): Promise<Response> => {
       ? Math.ceil((new Date(trip.end_date).getTime() - new Date(trip.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1
       : null;
 
+    // Resolve site URL from env, falling back to SITE_DOMAIN, then production domain.
+    const SITE_URL = Deno.env.get('SITE_URL')
+      ?? `https://${Deno.env.get('SITE_DOMAIN') ?? 'travelwithvoyance.com'}`;
+
     // Generate email HTML
     const emailHtml = generatePostTripEmailHtml({
       userName,
@@ -167,8 +171,8 @@ const handler = async (req: Request): Promise<Response> => {
       tripName: trip.name,
       tripDuration,
       memories,
-      feedbackUrl: `https://voyance-travel-planner.lovable.app/trips/${tripId}/feedback`,
-      archivesUrl: `https://voyance-travel-planner.lovable.app/trips/${tripId}`,
+      feedbackUrl: `${SITE_URL}/trips/${tripId}/feedback`,
+      archivesUrl: `${SITE_URL}/trips/${tripId}`,
     });
 
     // Send the email via Zoho SMTP
