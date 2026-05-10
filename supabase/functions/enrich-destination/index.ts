@@ -47,14 +47,22 @@ serve(async (req) => {
       });
     }
 
-    // Skip if already enriched
-    if (dest.enriched_at) {
-      log("Already enriched", { destinationId, enriched_at: dest.enriched_at });
+    // TTL-aware skip: only short-circuit if enriched AND not expired
+    const now = new Date();
+    const expiresAt = dest.enrichment_expires_at ? new Date(dest.enrichment_expires_at) : null;
+    const isExpired = !expiresAt || expiresAt.getTime() <= now.getTime();
+    const isFresh = !!dest.enriched_at && !isExpired;
+
+    if (isFresh) {
+      log("Already enriched (fresh)", { destinationId, expires_at: dest.enrichment_expires_at });
       return new Response(JSON.stringify({ success: true, skipped: true, reason: "already_enriched" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const isRefresh = !!dest.enriched_at && isExpired;
+    log(isRefresh ? "Refreshing (TTL expired)" : "First enrichment", { destinationId });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -208,8 +216,12 @@ IMPORTANT: Return ONLY valid JSON, no markdown, no code fences.`;
     });
 
     // Update destination with enriched content
+    // Update destination with enriched content + 90-day TTL
+    const enrichedAt = new Date();
+    const newExpiresAt = new Date(enrichedAt.getTime() + 90 * 24 * 60 * 60 * 1000);
     const updatePayload: Record<string, unknown> = {
-      enriched_at: new Date().toISOString(),
+      enriched_at: enrichedAt.toISOString(),
+      enrichment_expires_at: newExpiresAt.toISOString(),
     };
 
     if (enriched.description) updatePayload.description = enriched.description;
@@ -244,24 +256,44 @@ IMPORTANT: Return ONLY valid JSON, no markdown, no code fences.`;
     }>) || [];
 
     if (aiActivities.length > 0) {
-      const activityRows = aiActivities.map((act) => ({
-        destination_id: destinationId,
-        name: act.name,
-        category: act.category || "culture",
-        description: act.description || "",
-        duration_minutes: act.duration_minutes || 90,
-        tags: act.price_tier || "moderate",
-      }));
+      let toInsert = aiActivities;
 
-      const { error: actErr } = await supabaseClient
-        .from("activities")
-        .insert(activityRows);
+      // On refresh, skip names that already exist for this destination so we
+      // don't create duplicates of activities (or stomp user-curated rows).
+      if (isRefresh) {
+        const { data: existing } = await supabaseClient
+          .from("activities")
+          .select("name")
+          .eq("destination_id", destinationId);
+        const existingNames = new Set(
+          (existing ?? []).map((r: { name: string | null }) => (r.name ?? "").toLowerCase().trim())
+        );
+        toInsert = aiActivities.filter(
+          (a) => !existingNames.has((a.name ?? "").toLowerCase().trim())
+        );
+        log("Refresh activity dedupe", { proposed: aiActivities.length, new: toInsert.length });
+      }
 
-      if (actErr) {
-        log("Failed to insert activities (non-fatal)", { error: actErr.message });
-        // Non-fatal — destination was already enriched
-      } else {
-        log("Activities inserted", { count: activityRows.length });
+      if (toInsert.length > 0) {
+        const activityRows = toInsert.map((act) => ({
+          destination_id: destinationId,
+          name: act.name,
+          category: act.category || "culture",
+          description: act.description || "",
+          duration_minutes: act.duration_minutes || 90,
+          tags: act.price_tier || "moderate",
+        }));
+
+        const { error: actErr } = await supabaseClient
+          .from("activities")
+          .insert(activityRows);
+
+        if (actErr) {
+          log("Failed to insert activities (non-fatal)", { error: actErr.message });
+          // Non-fatal — destination was already enriched
+        } else {
+          log("Activities inserted", { count: activityRows.length });
+        }
       }
     }
 
