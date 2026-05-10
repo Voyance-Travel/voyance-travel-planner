@@ -112,10 +112,13 @@ Deno.serve(async (req) => {
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) return errorResponse('Unauthorized', 401);
 
-    const { receiptData, productId, transactionId } = await req.json();
+    const { receiptData, productId } = await req.json();
 
-    if (!productId || !transactionId) {
-      return errorResponse('Missing productId or transactionId', 400);
+    if (!productId) {
+      return errorResponse('Missing productId', 400);
+    }
+    if (!receiptData || typeof receiptData !== 'string') {
+      return errorResponse('Missing receiptData', 400);
     }
 
     const config = PRODUCT_CONFIG[productId];
@@ -123,74 +126,108 @@ Deno.serve(async (req) => {
       return errorResponse(`Unknown product: ${productId}`, 400);
     }
 
-    // ── Check for duplicate transaction (idempotency) ──
+    // ── Validate receipt with Apple (FAIL-CLOSED — no dev bypass) ──
+    const sharedSecret = Deno.env.get('APPLE_SHARED_SECRET');
+    if (!sharedSecret) {
+      console.error('[validate-iap-receipt] APPLE_SHARED_SECRET not configured');
+      return errorResponse('IAP not configured', 500);
+    }
+
+    const isSandbox = Deno.env.get('APPLE_IAP_SANDBOX') === 'true';
+    const prodUrl = 'https://buy.itunes.apple.com/verifyReceipt';
+    const sandboxUrl = 'https://sandbox.itunes.apple.com/verifyReceipt';
+    const firstUrl = isSandbox ? sandboxUrl : prodUrl;
+
+    const verifyBody = JSON.stringify({
+      'receipt-data': receiptData,
+      'password': sharedSecret,
+      'exclude-old-transactions': true,
+    });
+
+    let verifiedData: any;
+    try {
+      const appleResponse = await fetchWithRetry(firstUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: verifyBody,
+      });
+      verifiedData = await appleResponse.json();
+
+      // 21007 = sandbox receipt sent to prod → retry against sandbox
+      if (verifiedData.status === 21007 && !isSandbox) {
+        const sbResp = await fetchWithRetry(sandboxUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: verifyBody,
+        });
+        verifiedData = await sbResp.json();
+      }
+    } catch (err) {
+      console.error('[validate-iap-receipt] Apple verifyReceipt network failure:', err);
+      return errorResponse('Receipt verification failed', 502);
+    }
+
+    if (verifiedData.status !== 0) {
+      console.error('[validate-iap-receipt] Apple validation failed:', verifiedData.status);
+      return appleStatusError(verifiedData.status);
+    }
+
+    // ── Extract verified transaction (NEVER trust client-supplied transactionId) ──
+    const txn = verifiedData.latest_receipt_info?.[0]
+      ?? verifiedData.receipt?.in_app?.[0];
+
+    if (!txn?.transaction_id || !txn?.product_id) {
+      console.error('[validate-iap-receipt] No transaction in verified receipt');
+      return errorResponse('No transaction in receipt', 400);
+    }
+
+    // Cross-check: client-claimed productId must match what Apple says was purchased.
+    if (txn.product_id !== productId) {
+      console.error(`[validate-iap-receipt] Product mismatch: client=${productId} apple=${txn.product_id}`);
+      return errorResponse('Product mismatch with receipt', 400);
+    }
+
+    const verifiedTxnId: string = txn.transaction_id;
+    const totalCredits = config.credits + config.bonusCredits;
+
+    // ── Idempotency: dedupe on VERIFIED transaction_id ──
     const { data: existing } = await supabaseAdmin
       .from('iap_transactions')
-      .select('id')
-      .eq('transaction_id', transactionId)
+      .select('id, credits_granted')
+      .eq('transaction_id', verifiedTxnId)
       .maybeSingle();
 
     if (existing) {
-      console.log(`[validate-iap-receipt] Duplicate transaction ${transactionId}, returning success`);
-      return jsonResponse({ success: true, credits: config.credits + config.bonusCredits, duplicate: true });
-    }
-
-    // ── Validate receipt with Apple ──
-    const isSandbox = Deno.env.get('APPLE_IAP_SANDBOX') === 'true';
-    const appleVerifyUrl = isSandbox
-      ? 'https://sandbox.itunes.apple.com/verifyReceipt'
-      : 'https://buy.itunes.apple.com/verifyReceipt';
-
-    const sharedSecret = Deno.env.get('APPLE_SHARED_SECRET');
-
-    if (receiptData && sharedSecret) {
-      const appleResponse = await fetchWithRetry(appleVerifyUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          'receipt-data': receiptData,
-          'password': sharedSecret,
-          'exclude-old-transactions': true,
-        }),
+      console.log(`[validate-iap-receipt] Duplicate verified txn ${verifiedTxnId}`);
+      return jsonResponse({
+        success: true,
+        duplicate: true,
+        credits: existing.credits_granted ?? totalCredits,
       });
-
-      const appleResult = await appleResponse.json();
-
-      // Status 21007 means sandbox receipt sent to production; retry with sandbox
-      if (appleResult.status === 21007 && !isSandbox) {
-        const sandboxResponse = await fetchWithRetry('https://sandbox.itunes.apple.com/verifyReceipt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            'receipt-data': receiptData,
-            'password': sharedSecret,
-            'exclude-old-transactions': true,
-          }),
-        });
-        const sandboxResult = await sandboxResponse.json();
-        if (sandboxResult.status !== 0) {
-          console.error('[validate-iap-receipt] Apple validation failed:', sandboxResult.status);
-          return appleStatusError(sandboxResult.status);
-        }
-      } else if (appleResult.status !== 0) {
-        console.error('[validate-iap-receipt] Apple validation failed:', appleResult.status);
-        return appleStatusError(appleResult.status);
-      }
-    } else {
-      console.warn('[validate-iap-receipt] No receipt data or shared secret - proceeding with trust (dev mode)');
     }
 
-    // ── Record the IAP transaction ──
-    await supabaseAdmin.from('iap_transactions').insert({
+    // ── Record verified IAP transaction (UNIQUE constraint = concurrent dedupe) ──
+    const { error: insertErr } = await supabaseAdmin.from('iap_transactions').insert({
       user_id: user.id,
-      transaction_id: transactionId,
+      transaction_id: verifiedTxnId,
       product_id: productId,
       status: 'completed',
+      verified_at: new Date().toISOString(),
+      credits_granted: totalCredits,
+      raw_receipt: verifiedData,
     });
+    if (insertErr) {
+      // Race: another request inserted the same verified txn first → treat as duplicate.
+      if ((insertErr as any).code === '23505') {
+        console.log(`[validate-iap-receipt] Concurrent duplicate ${verifiedTxnId}`);
+        return jsonResponse({ success: true, duplicate: true, credits: totalCredits });
+      }
+      console.error('[validate-iap-receipt] Insert failed:', insertErr);
+      return errorResponse('Failed to record transaction', 500);
+    }
 
     // ── Fulfill credits using the same RPC as Stripe ──
-    const totalCredits = config.credits + config.bonusCredits;
-    const sessionId = `apple_iap_${transactionId}`;
+    const sessionId = `apple_iap_${verifiedTxnId}`;
 
     const { data: fulfillResult, error: fulfillErr } = await supabaseAdmin.rpc('fulfill_credit_purchase', {
       p_user_id: user.id,
@@ -211,11 +248,11 @@ Deno.serve(async (req) => {
 
     // Check if it was already fulfilled (idempotency in the RPC)
     if (fulfillResult?.skipped) {
-      console.log(`[validate-iap-receipt] Already fulfilled for ${transactionId}`);
+      console.log(`[validate-iap-receipt] Already fulfilled for ${verifiedTxnId}`);
       return jsonResponse({ success: true, credits: totalCredits, duplicate: true });
     }
 
-    console.log(`[validate-iap-receipt] ✅ Fulfilled ${totalCredits} credits for user ${user.id} (txn: ${transactionId})`);
+    console.log(`[validate-iap-receipt] ✅ Fulfilled ${totalCredits} credits for user ${user.id} (txn: ${verifiedTxnId})`);
 
     return jsonResponse({ success: true, credits: totalCredits });
   } catch (error) {
