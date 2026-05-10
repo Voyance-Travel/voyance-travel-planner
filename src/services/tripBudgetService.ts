@@ -124,6 +124,13 @@ export interface BudgetSummary {
   // Day breakdown
   dailyTargetCents: number;
   dayBreakdown?: DayBudget[];
+
+  /**
+   * True while the itinerary generator is still populating activity_costs
+   * (trips.itinerary_status ∈ {queued, generating, partial}). UIs should
+   * label totals as "Calculating…" and suppress over-budget warnings.
+   */
+  isGenerating: boolean;
 }
 
 export interface DayBudget {
