@@ -1247,49 +1247,51 @@ VIOLATIONS:
 // =============================================================================
 
 const TRANSFORMER_ARCHETYPES: Record<string, ArchetypeDefinition> = {
-  // TODO: when ArchetypeDefinition adds affinity/timePreferences/diningPolicy fields, expand per the Mindful Voyager v2 spec.
   eco_ethicist: {
     identity: "The Mindful Voyager",
     category: "Transformer",
     meaning: `
-This traveler prioritizes sustainability and ethics.
+Travels with intention — values sustainability, ethical sourcing, and meaningful connection over consumption.
 
 They want:
-- Eco-friendly accommodations
-- Sustainable experiences
-- Low carbon footprint
-- Supporting local/ethical businesses
-- Nature conservation experiences
-- Avoiding over-tourism
+- Locally-owned restaurants and cafes (target: 80%+ of meals local)
+- B-corp / family-run / eco-certified hotels
+- Community-based tourism with direct local benefit
+- Sustainable food (farm-to-table, foraging, local producers)
+- Conservation-focused nature experiences
+- Public transit, walking, low-carbon options
 
 Their ideal day:
 - Local, sustainable breakfast
 - Eco-tour or conservation activity
 - Lunch at farm-to-table
-- Afternoon nature experience
-- Evening at locally-owned restaurant
+- Afternoon nature/cultural experience with local guide
+- Evening at a locally-owned restaurant
 
-WHAT "ECO" MEANS:
+WHAT "MINDFUL" MEANS:
 - Environmental impact matters
-- Local businesses over chains
-- Quality over convenience
+- Ethics over convenience
+- Local businesses over chains and global brands
 - Would rather skip than harm
 
 VIOLATIONS:
-- Chain hotels/restaurants = VIOLATION
-- High-carbon activities = VIOLATION
-- Over-touristed sites without purpose = VIOLATION
-- Single-use plastic = VIOLATION
+- Chain restaurants / global brands = VIOLATION
+- Cruise ship excursions, mass-tourism photo-ops = VIOLATION
+- Animal exploitation (elephant riding, tiger temples, captive dolphin shows) = VIOLATION
+- High-emission optional activities (helicopter, jet ski, race cars) = VIOLATION
+- Fast fashion shopping districts = VIOLATION
+- Michelin / status-driven fine dining = VIOLATION (not the point)
 `,
     avoid: [
-      'Chain hotels/restaurants and global brands',
-      'High-carbon / high-emission optional activities (helicopter tours, jet ski, race cars)',
-      'Over-touristed sites and mass-tourism photo-op venues',
-      'Single-use plastic venues',
-      'Exploitative tourism',
+      'Mass tourism venues',
       'Cruise ship excursions',
       'Animal exploitation experiences (elephant riding, tiger temples, captive dolphin shows)',
-      'Fast fashion shopping districts'
+      'Fast fashion shopping districts',
+      'Chain restaurants and global brands',
+      'Chain hotels and global hotel brands',
+      'High-emission activities (helicopter tours, jet ski, race cars)',
+      'Over-touristed sites without purpose',
+      'Single-use plastic venues'
     ],
     prefer: [
       'Locally-owned restaurants and cafes',
@@ -1305,8 +1307,33 @@ VIOLATIONS:
       maxScheduledActivities: 4,
       startTime: '08:30',
       michelinOK: false,
-      spaOK: false
-    }
+      spaOK: false,
+      pace: 'moderate'
+    },
+    affinity: {
+      high: [
+        'locally-owned restaurants',
+        'B-corp certified hotels',
+        'community-based tourism',
+        'sustainable food',
+        'cultural immersion',
+        'nature reserves with conservation focus'
+      ],
+      medium: ['museums', 'walking tours', 'public transit experiences'],
+      low: ['luxury experiences', 'all-inclusive resorts'],
+      never: ['unethical wildlife tourism', 'sweatshop-sourced shopping']
+    },
+    timePreferences: {
+      startTime: '08:30',
+      peakEnergy: 'morning',
+      preference: 'thoughtful_pacing'
+    },
+    diningPolicy: {
+      michelinAllowed: false,
+      preferLocal: true,
+      minLocalShare: 0.8
+    },
+    hotelRequirement: 'eco_certified'
   },
 
   gap_year_graduate: {
