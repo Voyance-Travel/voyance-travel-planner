@@ -7,11 +7,9 @@ function mkAct(opts: Partial<any> & { startTime: string; endTime: string }) {
   return {
     title: opts.title ?? 'Sightseeing',
     category: opts.category ?? 'sightseeing',
-    startTime: opts.startTime,
-    start_time: opts.startTime,
-    endTime: opts.endTime,
-    end_time: opts.endTime,
     ...opts,
+    start_time: opts.startTime,
+    end_time: opts.endTime,
   };
 }
 
