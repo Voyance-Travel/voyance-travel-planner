@@ -984,7 +984,7 @@ VIOLATIONS:
 
   escape_artist: {
     identity: "The Escape Artist",
-    category: "Restorer",
+    category: "Explorer",
     meaning: `
 This traveler is OVERWHELMED and needs to GET AWAY. They're not picky about where — they just need OUT.
 
