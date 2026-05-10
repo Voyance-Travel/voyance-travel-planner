@@ -286,7 +286,7 @@ async function executeRewriteDayAction(
 
   const day = currentDays[dayIndex];
   const keepActivities = preserve_locked
-    ? day.activities.filter(a => a.isLocked || isProtectedActivity(a)).map(a => a.id).filter(Boolean)
+    ? day.activities.filter(a => isActivityLocked(a) || isProtectedActivity(a)).map(a => a.id).filter(Boolean)
     : [];
 
   const { data, error } = await supabase.functions.invoke('generate-itinerary', {
