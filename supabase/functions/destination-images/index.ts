@@ -173,7 +173,8 @@ async function checkCuratedCache(
 
     const isStorageUrl = !!resolvedUrl &&
       !resolvedUrl.startsWith('data:') &&
-      resolvedUrl.includes('/storage/v1/object/public/trip-photos/');
+      (resolvedUrl.includes('/storage/v1/object/public/destination-images/') ||
+       resolvedUrl.includes('/storage/v1/object/public/trip-photos/'));
 
     const needsHeal = !!resolvedUrl &&
       !resolvedUrl.startsWith('data:') &&
