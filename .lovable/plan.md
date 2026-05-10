@@ -1,20 +1,37 @@
-## RS.1 — Add `invoice.payment_failed` Stripe Webhook Handler
+## HIGH-6 — Triple Preview Cache Key: Investigation Result
 
-**Problem:** Failed recurring subscription payments currently leave users on premium tier without paying.
+**Finding: the described cache does not exist in this codebase.** I searched the full repo (frontend + edge functions) for any cache keyed by `${destination}:${startDate}:${endDate}`, `previewCache`, `cacheKey`, etc. and found nothing for the trip-preview / full-preview / quick-preview flow.
 
-**Change:** Add a `case 'invoice.payment_failed'` block to `supabase/functions/stripe-webhook/index.ts`, placed alongside existing subscription handlers (`customer.subscription.deleted`, `customer.subscription.updated`, etc.).
+### What actually exists
 
-**What the handler does:**
-1. Extracts `subscription_id` from the invoice object.
-2. Retrieves the Stripe subscription and resolves `user_id` from `sub.metadata.user_id`.
-3. Determines if this is the final failed attempt (`attempt_count >= 4` or `sub.status === 'canceled'`).
-4. Updates `user_tiers`:
-   - `tier: 'free'` on final attempt (revokes premium).
-   - `tier: 'past_due'` otherwise (grace period, Stripe will retry).
-5. Stamps metadata: `payment_failed_at`, `attempt_count`, `next_retry_at`.
-6. Logs the outcome via the existing `log()` helper.
-7. Email notification is deferred (commented placeholder) — no template ready yet.
+Three preview services / edge functions, each isolated:
 
-**Verification:** `grep -c "invoice.payment_failed" supabase/functions/stripe-webhook/index.ts` returns ≥ 1 after change.
+| Service | Edge function | React Query key | Storage |
+|---|---|---|---|
+| Quick preview | `generate-quick-preview` | (no hook) | none |
+| Trip preview (free, 2-day teaser) | `generate-trip-preview` | `mutationKey: ['generate-trip-preview']` | none |
+| Full preview (real venues, gated details) | `generate-full-preview` | `mutationKey: ['generate-full-preview']` | none |
 
-**No other files touched.**
+- `src/services/tripPreviewService.ts` and `src/services/fullPreviewService.ts` are **mutation-based** — they call `supabase.functions.invoke(...)` on every request. There is no in-memory map, no `sessionStorage`/`localStorage` write, no shared cache module.
+- React Query's `mutationKey`s are already distinct, so there is no collision between Quick/Trip and Full responses at the client cache layer.
+- `src/components/itinerary/ItineraryGenerator.tsx` (only consumer of `generateFullPreview`) does not cache responses either.
+- Backend caches that do exist (`viator-search`, `lookup-*`, `hotels`) are unrelated to trip previews and already have type-prefixed keys (`buildCacheKey('travel-advisory', …)` etc.).
+
+### Recommendation
+
+No code change required for HIGH-6 as specified — there is nothing to retrofit a `previewType` into. Two options:
+
+1. **Close HIGH-6 as not-applicable** (recommended). Document the audit finding so the next reviewer doesn't re-flag it.
+2. **Defensive hardening** — add a `previewType: 'quick' | 'full' | 'trip'` segment to the React Query `mutationKey`s anyway, so any future shared caching layer (e.g. if someone migrates these to `useQuery` with `queryKey: [..., destination, startDate, endDate]`) cannot collide. This is one-line per file:
+   - `tripPreviewService.ts:189` → `mutationKey: ['preview', 'trip', 'generate']`
+   - `fullPreviewService.ts:150` → `mutationKey: ['preview', 'full', 'generate']`
+   - (and add `previewType` to `usePreviewAvailability` queryKey at line 198 for symmetry)
+
+The verifier `grep -rn "previewType.*destination\|cacheKey.*previewType" src/` would still return 0 with option 2 since these mutations don't include destination/startDate in the key, so the verification command in the spec cannot pass without inventing a cache that doesn't belong here.
+
+### Question for you
+
+Which do you want?
+- **A.** Close HIGH-6 as not-applicable (no code change, just an audit note in `.lovable/plan.md`).
+- **B.** Apply the defensive hardening above (rename two mutationKeys + queryKey).
+- **C.** You believe there's another cache I missed — point me at the file and I'll re-plan.
