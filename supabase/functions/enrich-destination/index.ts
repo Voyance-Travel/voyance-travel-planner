@@ -256,24 +256,44 @@ IMPORTANT: Return ONLY valid JSON, no markdown, no code fences.`;
     }>) || [];
 
     if (aiActivities.length > 0) {
-      const activityRows = aiActivities.map((act) => ({
-        destination_id: destinationId,
-        name: act.name,
-        category: act.category || "culture",
-        description: act.description || "",
-        duration_minutes: act.duration_minutes || 90,
-        tags: act.price_tier || "moderate",
-      }));
+      let toInsert = aiActivities;
 
-      const { error: actErr } = await supabaseClient
-        .from("activities")
-        .insert(activityRows);
+      // On refresh, skip names that already exist for this destination so we
+      // don't create duplicates of activities (or stomp user-curated rows).
+      if (isRefresh) {
+        const { data: existing } = await supabaseClient
+          .from("activities")
+          .select("name")
+          .eq("destination_id", destinationId);
+        const existingNames = new Set(
+          (existing ?? []).map((r: { name: string | null }) => (r.name ?? "").toLowerCase().trim())
+        );
+        toInsert = aiActivities.filter(
+          (a) => !existingNames.has((a.name ?? "").toLowerCase().trim())
+        );
+        log("Refresh activity dedupe", { proposed: aiActivities.length, new: toInsert.length });
+      }
 
-      if (actErr) {
-        log("Failed to insert activities (non-fatal)", { error: actErr.message });
-        // Non-fatal — destination was already enriched
-      } else {
-        log("Activities inserted", { count: activityRows.length });
+      if (toInsert.length > 0) {
+        const activityRows = toInsert.map((act) => ({
+          destination_id: destinationId,
+          name: act.name,
+          category: act.category || "culture",
+          description: act.description || "",
+          duration_minutes: act.duration_minutes || 90,
+          tags: act.price_tier || "moderate",
+        }));
+
+        const { error: actErr } = await supabaseClient
+          .from("activities")
+          .insert(activityRows);
+
+        if (actErr) {
+          log("Failed to insert activities (non-fatal)", { error: actErr.message });
+          // Non-fatal — destination was already enriched
+        } else {
+          log("Activities inserted", { count: activityRows.length });
+        }
       }
     }
 
