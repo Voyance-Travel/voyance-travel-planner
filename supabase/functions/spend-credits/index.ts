@@ -373,6 +373,11 @@ serve(async (req) => {
         unlock_day: 60,
         HOTEL_OPTIMIZATION: 100,
         hotel_optimization: 100,
+        // regenerate_day cost is tier-dependent (1-5). Keep 0 to force the
+        // defensive-refund path to read the actual debit from the original
+        // ledger row via originalIdempotencyKey.
+        REGENERATE_DAY: 0,
+        regenerate_day: 0,
       };
 
       let originalAction = metadata?.originalAction as string | undefined;
