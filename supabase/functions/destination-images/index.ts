@@ -173,7 +173,8 @@ async function checkCuratedCache(
 
     const isStorageUrl = !!resolvedUrl &&
       !resolvedUrl.startsWith('data:') &&
-      resolvedUrl.includes('/storage/v1/object/public/trip-photos/');
+      (resolvedUrl.includes('/storage/v1/object/public/destination-images/') ||
+       resolvedUrl.includes('/storage/v1/object/public/trip-photos/'));
 
     const needsHeal = !!resolvedUrl &&
       !resolvedUrl.startsWith('data:') &&
@@ -894,7 +895,8 @@ Return ONLY the number (1, 2, 3, etc.) of the best image. Just the number, nothi
 // URL STABILIZATION + CACHE RESULT
 // =============================================================================
 function isTripPhotoStorageUrl(url: string): boolean {
-  return url.includes('/storage/v1/object/public/trip-photos/');
+  return url.includes('/storage/v1/object/public/destination-images/') ||
+    url.includes('/storage/v1/object/public/trip-photos/');
 }
 
 function shouldPersistInCuratedCache(image: DestinationImage): boolean {
