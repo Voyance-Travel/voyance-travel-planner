@@ -7,6 +7,11 @@ import { type ActionContext, verifyTripAccess, okJson, errorJson } from './actio
 import { ALWAYS_FREE_VENUE_PATTERNS, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS, FINE_DINING_MIN_PRICE_DEFAULT, KNOWN_MICHELIN_HIGH, KNOWN_MICHELIN_MID, KNOWN_UPSCALE, MICHELIN_FLOOR, KNOWN_TICKETED_ATTRACTIONS, LUXURY_HOTEL_SIGNATURE_RE, RESTAURANT_LEAD_RE, EXPLICIT_DRINKS_RE, BAR_KEYWORDS, BAR_TITLE_BAR, BAR_EXCLUDE, MAX_BAR_PRICE, DEFAULT_BAR_PRICE } from './sanitization.ts';
 import { isPlaceholderWellness } from './fix-placeholders.ts';
 import { isWalkingLeg } from '../_shared/walking-leg.ts';
+import {
+  CATEGORY_PRICE_CEILINGS,
+  inferSubcategory,
+  shouldSkipPriceSanity,
+} from './_shared/category-price-bounds.ts';
 
 export async function handleRepairTripCosts(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;
