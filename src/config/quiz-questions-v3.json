@@ -4,7 +4,7 @@
     "totalQuestions": 21,
     "estimatedTime": "5-6 minutes",
     "targetArchetypes": 29,
-    "traitDimensions": 25
+    "traitDimensions": 30
   },
   "questions": [
     {
@@ -104,7 +104,8 @@
           "traits": {
             "bucket_list": 0.9,
             "novelty_seeking": 0.7,
-            "pace": 0.7
+            "pace": 0.7,
+            "collection_drive": 0.4
           }
         },
         {
@@ -187,7 +188,8 @@
           "traits": {
             "pace": 0.25,
             "restoration_need": 0.7,
-            "flexibility": 0.7
+            "flexibility": 0.7,
+            "healing_focus": 0.5
           }
         },
         {
@@ -213,7 +215,8 @@
           "label": "Head back to the hotel for a proper nap.",
           "traits": {
             "pace": 0.15,
-            "restoration_need": 0.85
+            "restoration_need": 0.85,
+            "healing_focus": 0.6
           }
         }
       ]
@@ -237,7 +240,8 @@
           "traits": {
             "bucket_list": 0.75,
             "pace": 0.6,
-            "flexibility": 0.3
+            "flexibility": 0.3,
+            "collection_drive": 0.5
           }
         },
         {
@@ -318,7 +322,8 @@
           "traits": {
             "social_energy": 0.35,
             "group_size_pref": 0.25,
-            "planning": 0.7
+            "planning": 0.7,
+            "autonomy_preference": 0.85
           }
         },
         {
@@ -326,7 +331,8 @@
           "label": "I'll pass. I travel to get away from social obligations, not create new ones.",
           "traits": {
             "social_energy": 0.1,
-            "group_size_pref": 0.1
+            "group_size_pref": 0.1,
+            "autonomy_preference": 0.7
           }
         }
       ]
@@ -712,7 +718,8 @@
             "cultural_depth": 0.75,
             "planning": 0.7,
             "learning_focus": 0.7,
-            "niche_interest": 0.3
+            "niche_interest": 0.3,
+            "experience_accumulation": 0.6
           }
         },
         {
@@ -729,7 +736,8 @@
           "traits": {
             "cultural_depth": 0.65,
             "status_seeking": 0.6,
-            "budget_tier": 0.7
+            "budget_tier": 0.7,
+            "experience_accumulation": 0.7
           }
         },
         {
@@ -820,7 +828,9 @@
             "cultural_depth": 0.9,
             "social_energy": 0.6,
             "learning_focus": 0.7,
-            "art_focus": 0.25
+            "art_focus": 0.25,
+            "ethics_focus": 0.5,
+            "experience_accumulation": 0.4
           }
         },
         {
@@ -905,7 +915,8 @@
           "label": "The more the merrier. I love meeting everyone. Some of my best friends started as strangers on trips.",
           "traits": {
             "social_energy": 0.95,
-            "group_size_pref": 0.9
+            "group_size_pref": 0.9,
+            "social_sharing": 0.8
           }
         }
       ]
@@ -929,7 +940,8 @@
           "label": "Mountains, forests, somewhere I can't get cell service. Real nature, not a manicured park.",
           "traits": {
             "nature_orientation": 0.95,
-            "adventure": 0.7
+            "adventure": 0.7,
+            "escape_need": 0.85
           }
         },
         {
@@ -954,7 +966,8 @@
           "traits": {
             "nature_orientation": 0.7,
             "quality_intrinsic": 0.7,
-            "restoration_need": 0.7
+            "restoration_need": 0.7,
+            "escape_need": 0.7
           }
         },
         {
@@ -987,7 +1000,8 @@
           "label": "Just me. Solo travel is when I'm most myself.",
           "traits": {
             "social_energy": 0.1,
-            "group_size_pref": 0.0
+            "group_size_pref": 0.0,
+            "autonomy_preference": 0.9
           }
         },
         {
@@ -1233,7 +1247,8 @@
         "q21a": "Travel as responsibility.",
         "q21b": "Thoughtfully conscious.",
         "q21c": "Authenticity over ethics.",
-        "q21d": "Here for the experience."
+        "q21d": "Here for the experience.",
+        "q21e": "Conscious local-first traveler."
       },
       "answers": [
         {
@@ -1267,6 +1282,14 @@
           "traits": {
             "ethics_focus": 0.1
           }
+        },
+        {
+          "id": "q21e",
+          "label": "I prefer locally-owned, ethical operators.",
+          "traits": {
+            "ethics_focus": 0.5,
+            "social_sharing": 0.3
+          }
         }
       ]
     }
@@ -1296,7 +1319,12 @@
     "spirituality": { "dimension": "transformation", "range": [0, 1], "default": 0.2, "description": "Not a factor (0) to Primary (1)" },
     "healing_focus": { "dimension": "transformation", "range": [0, 1], "default": 0, "description": "Not relevant (0) to Travel as medicine (1)" },
     "learning_focus": { "dimension": "authenticity", "range": [0, 1], "default": 0.3, "description": "Not driven by learning (0) to Primary (1)" },
-    "ethics_focus": { "dimension": "values", "range": [0, 1], "default": 0.3, "description": "Not a factor (0) to Drives decisions (1)" }
+    "ethics_focus": { "dimension": "values", "range": [0, 1], "default": 0.3, "description": "Not a factor (0) to Drives decisions (1)" },
+    "experience_accumulation": { "dimension": "motivation", "range": [0, 1], "default": 0.5, "description": "Drive to visit many places and become a recommendation authority" },
+    "social_sharing":          { "dimension": "social",     "range": [0, 1], "default": 0.4, "description": "Tendency to share travel knowledge and give recommendations to others" },
+    "collection_drive":        { "dimension": "motivation", "range": [0, 1], "default": 0.3, "description": "Tracks destinations/countries as a collection metric" },
+    "escape_need":             { "dimension": "motivation", "range": [0, 1], "default": 0.4, "description": "Travels specifically to escape normal life (distinct from general restoration)" },
+    "autonomy_preference":     { "dimension": "social",     "range": [0, 1], "default": 0.4, "description": "Prefers solo, autonomous travel; resists group obligations" }
   },
   "archetypeProfiles": {
     "cultural_anthropologist": {
