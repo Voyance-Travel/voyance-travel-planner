@@ -77,6 +77,7 @@ async function checkCuratedCache(
       .eq("entity_type", entityType)
       .eq("entity_key", normalizedKey)
       .eq("is_blacklisted", false)
+      .lt("user_report_count", 3)
       .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
 
     if (destination) {
@@ -98,6 +99,7 @@ async function checkCuratedCache(
         .select("*")
         .eq("entity_type", entityType)
         .eq("is_blacklisted", false)
+        .lt("user_report_count", 3)
         .ilike("alt_text", `%${cleanName}%`)
         .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
 
@@ -574,7 +576,12 @@ async function getGooglePlacesPhoto(
       // Skip first photo (often logo/sign) and second (often interior/staff).
       // Prefer third photo which tends to be exterior/ambiance.
       const photoIndex = photos.length >= 4 ? 2 : photos.length >= 2 ? 1 : 0;
-      const photoResource = photos[photoIndex].name;
+      const chosenPhoto = photos[photoIndex];
+      const photoResource = chosenPhoto.name;
+      // Real source dimensions from Places v1 — falls back to defaults if missing.
+      // These flow into passesBasicQuality so portrait Google photos are rejected.
+      const sourceWidth = typeof chosenPhoto.widthPx === 'number' ? chosenPhoto.widthPx : 1200;
+      const sourceHeight = typeof chosenPhoto.heightPx === 'number' ? chosenPhoto.heightPx : 800;
 
       // Download to Supabase Storage via the central photo cache.
       // Using the resource-based helper keeps direct Google URLs out of feature code.
@@ -595,8 +602,8 @@ async function getGooglePlacesPhoto(
         alt: `${best.place.displayName?.text || venueName} - Photo`,
         type: entityType === 'destination' ? 'hero' : 'activity',
         source: "google_places",
-        width: 1200,
-        height: 800,
+        width: sourceWidth,
+        height: sourceHeight,
         placeId: best.place.id,
         photoReference: photoResource,
         cacheHit: cacheResult.cacheHit,
@@ -863,8 +870,8 @@ Return ONLY the number (1, 2, 3, etc.) of the best image. Just the number, nothi
     });
 
     if (!response.ok) {
-      console.log("[Images] AI ranking failed, using first candidate");
-      return candidates[0];
+      console.log("[Images] AI ranking failed — fail-closed (caller picks deterministic fallback)");
+      return null;
     }
 
     const data = await response.json();
@@ -876,10 +883,10 @@ Return ONLY the number (1, 2, 3, etc.) of the best image. Just the number, nothi
       return candidates[selectedIndex];
     }
 
-    return candidates[0];
+    return null;
   } catch (error) {
-    console.error("[Images] AI ranking error:", error);
-    return candidates[0];
+    console.error("[Images] AI ranking error — fail-closed:", error);
+    return null;
   }
 }
 
@@ -1287,6 +1294,79 @@ function generateFallbackGradient(destination: string): DestinationImage {
 }
 
 // =============================================================================
+// CHEAP RULE-BASED QUALITY GATE (runs before any LLM call)
+// =============================================================================
+
+/**
+ * Cheap pre-filter for candidate images. Rejects obvious garbage (portrait
+ * heroes, low-res heroes, URL red flags) before we spend AI credits / latency
+ * on LLM ranking. Activity/venue shots are NOT subject to aspect-ratio or
+ * resolution rules — square restaurant/hotel photos are legitimate.
+ */
+function passesBasicQuality(
+  image: DestinationImage,
+  entityType: string,
+): { passes: boolean; reason?: string } {
+  // Data URLs and AI-generated placeholders (always 1024²) are out of scope.
+  if (!image?.url || image.url.startsWith("data:") || image.source === "lovable_ai") {
+    return { passes: true };
+  }
+
+  const w = image.width ?? 0;
+  const h = image.height ?? 0;
+
+  if (entityType === "destination" && w > 0 && h > 0) {
+    const ratio = w / h;
+    if (ratio < 1.4) return { passes: false, reason: "aspect_ratio_too_narrow" };
+    if (w < 1600) return { passes: false, reason: "resolution_too_low" };
+  }
+
+  const url = image.url.toLowerCase();
+  const redFlags = ["selfie", "/menu", "receipt", "me-and", "us-at", "family-photo"];
+  if (redFlags.some((f) => url.includes(f))) {
+    return { passes: false, reason: "url_contains_red_flag" };
+  }
+
+  return { passes: true };
+}
+
+/**
+ * Fire-and-forget audit log for rejected image candidates. Never blocks
+ * the request. Used to build a dataset for tuning future quality models.
+ */
+function logRejectedImage(
+  supabase: any,
+  row: {
+    destination?: string;
+    image_url: string;
+    source?: string;
+    rejected_reason?: string;
+    llm_score?: number | null;
+    basic_check_result?: any;
+  },
+): void {
+  try {
+    supabase
+      .from("image_quality_log")
+      .insert({
+        destination: row.destination ?? null,
+        image_url: row.image_url,
+        source: row.source ?? null,
+        rejected_reason: row.rejected_reason ?? null,
+        llm_score: row.llm_score ?? null,
+        basic_check_result: row.basic_check_result ?? null,
+      })
+      .then((r: any) => {
+        if (r?.error) {
+          console.warn("[quality-log] insert failed:", r.error.message);
+        }
+      });
+  } catch (e) {
+    console.warn("[quality-log] insert threw:", e);
+  }
+}
+
+// =============================================================================
 // IMAGE QUALITY SCORING (Lovable AI Vision)
 // =============================================================================
 
@@ -1359,7 +1439,9 @@ Respond ONLY with JSON: {"score": <0-100>, "issues": ["issue1"], "confidence": <
       console.log("[Quality] API error:", response.status);
       // Fail open - assume image is acceptable
       // Fail closed for API errors — don't cache bad images
-      return { score: 0.5, pass: false, issues: ["api_error"], confidence: 0 };
+      // Fail closed — return 0.0 so any threshold check rejects, and the
+      // misleading "0.5" value doesn't mask the error in downstream logs.
+      return { score: 0.0, pass: false, issues: ["api_error"], confidence: 0 };
     }
 
     const data = await response.json();
@@ -1396,7 +1478,8 @@ Respond ONLY with JSON: {"score": <0-100>, "issues": ["issue1"], "confidence": <
     }
     // Fail open
     // Fail closed — better to show a category fallback than a bad image
-    return { score: 0.5, pass: false, issues: ["timeout"], confidence: 0 };
+    // Fail closed — see api_error branch.
+    return { score: 0.0, pass: false, issues: ["timeout"], confidence: 0 };
   }
 }
 
@@ -1587,47 +1670,75 @@ async function fetchImageTiered(
 
   // If we have real photo candidates, persist and cache
   if (candidates.length > 0) {
-    let bestImage = candidates[0];
-    let qualityScore = 0.8; // Default assumed quality
-    
-    // If multiple candidates and AI available, rank them (cheap — just text, no vision)
-    if (candidates.length > 1 && lovableApiKey) {
-      const ranked = await rankImageCandidates(candidates, cleanName, lovableApiKey);
-      if (ranked) {
-        bestImage = ranked;
+    // Cheap rule-based pre-filter BEFORE any LLM call. Drops portrait heroes,
+    // sub-1600px heroes, and URL red flags. Rejections are logged for admin
+    // review (fire-and-forget — never blocks the request).
+    const filtered: DestinationImage[] = [];
+    for (const c of candidates) {
+      const basic = passesBasicQuality(c, entityType);
+      if (basic.passes) {
+        filtered.push(c);
+      } else {
+        console.log(
+          `[quality-gate] rejected basic-check reason=${basic.reason} src=${c.source} url=${c.url.slice(0, 80)}`,
+        );
+        logRejectedImage(supabase, {
+          destination,
+          image_url: c.url,
+          source: c.source,
+          rejected_reason: basic.reason,
+          basic_check_result: basic,
+          llm_score: null,
+        });
       }
     }
 
-    // AI quality scoring REMOVED — it burned AI credits, added latency,
-    // and caused cascade retries with no negative caching.
-    // The match-score filtering (0.55 threshold) + content mismatch detection
-    // is sufficient quality control.
+    let bestImage: DestinationImage | null = filtered[0] ?? null;
+    let qualityScore = 0.8; // Default assumed quality
 
-    // Persist external image URLs into our own storage when possible.
-    const persistentBestImage = await ensurePersistentStorageUrl(
-      bestImage,
-      entityType,
-      venueName,
-      destination
-    );
-
-    // Cache the result with quality score — keyed on cleanName so reads hit.
-    // Also alias under the raw venueName so legacy lookups continue to hit.
-    await cacheImage(supabase, entityType, cleanName, destination, persistentBestImage, qualityScore);
-    if (cleanName !== venueName) {
-      await cacheImage(supabase, entityType, venueName, destination, persistentBestImage, qualityScore);
+    // If multiple survivors and AI available, rank them (cheap — text only,
+    // no vision). Fail-closed: on error rankImageCandidates returns null and
+    // we fall back deterministically to filtered[0].
+    if (filtered.length > 1 && lovableApiKey) {
+      const ranked = await rankImageCandidates(filtered, cleanName, lovableApiKey);
+      if (ranked) {
+        bestImage = ranked;
+      } else {
+        console.log("[quality-gate] LLM ranker returned null — using first basic-gate survivor");
+      }
     }
 
-    // Store in shared venue cache for cross-function reuse
-    if (bestImage.placeId) {
-      cacheVenueResult(cleanName, destination, {
-        placeId: bestImage.placeId,
-        name: cleanName,
-        photoUrl: persistentBestImage.url,
-      }).catch(() => {});
+    // If every candidate failed the basic gate, fall through to later tiers
+    // (Wikimedia / AI fallback / category placeholder). Never cache garbage.
+    if (bestImage) {
+      // Persist external image URLs into our own storage when possible.
+      const persistentBestImage = await ensurePersistentStorageUrl(
+        bestImage,
+        entityType,
+        venueName,
+        destination
+      );
+
+      // Cache the result with quality score — keyed on cleanName so reads hit.
+      // Also alias under the raw venueName so legacy lookups continue to hit.
+      await cacheImage(supabase, entityType, cleanName, destination, persistentBestImage, qualityScore);
+      if (cleanName !== venueName) {
+        await cacheImage(supabase, entityType, venueName, destination, persistentBestImage, qualityScore);
+      }
+
+      // Store in shared venue cache for cross-function reuse
+      if (bestImage.placeId) {
+        cacheVenueResult(cleanName, destination, {
+          placeId: bestImage.placeId,
+          name: cleanName,
+          photoUrl: persistentBestImage.url,
+        }).catch(() => {});
+      }
+
+      return persistentBestImage;
     }
-    
-    return persistentBestImage;
+    // bestImage is null → all candidates failed the basic gate.
+    // Fall through to negative-cache + category fallback below; never persist garbage.
   }
 
   // ── NEGATIVE CACHE: Remember that this venue has no results ──────────────
