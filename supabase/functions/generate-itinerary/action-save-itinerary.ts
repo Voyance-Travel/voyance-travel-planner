@@ -13,6 +13,7 @@ import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
 import { scrubActivity, addOps, formatOps, EMPTY_OPS, type ScrubOps } from '../_shared/scrub-activity.ts';
+import { ensureDayDiningDescriptions } from '../_shared/dining-description-backfill.ts';
 import { pruneNonLogisticsAfterCheckout } from '../_shared/post-checkout-prune.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
@@ -137,6 +138,10 @@ function normalizeDays(days: any[], tripStartDate: string | null, destination?: 
     let dayOps: ScrubOps = { ...EMPTY_OPS } as ScrubOps;
     for (const a of activities) {
       dayOps = addOps(dayOps, scrubActivity(a, { destination }));
+    }
+    const diningBackfill = ensureDayDiningDescriptions(activities, destination);
+    if (diningBackfill.fallback + diningBackfill.whyThisFits > 0) {
+      console.log(`[DINING_DESC_BACKFILL] day=${dayNumber} dest="${destination || 'unknown'}" fallback=${diningBackfill.fallback} whyThisFits=${diningBackfill.whyThisFits} scanned=${diningBackfill.scanned} path=save-itinerary`);
     }
     const pruneResult = pruneNonLogisticsAfterCheckout(activities);
     if (dayOps.titleLeak + dayOps.bodyLeak + dayOps.fragment + dayOps.mealSuffix

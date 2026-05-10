@@ -274,9 +274,13 @@ function TimelineActivityCard({
                   </div>
                 )}
 
-                {!isSkipped && (() => { const d = sanitizeActivityText(activity.description); return d ? (
-                  <p className="mt-1.5 text-xs text-muted-foreground/80 line-clamp-2 border-l-2 border-primary/20 pl-2 italic">{d}</p>
-                ) : null; })()}
+                {!isSkipped && (() => {
+                  const d = sanitizeActivityText(activity.description)
+                    || sanitizeActivityText((activity as any)?.personalization?.whyThisFits);
+                  return d ? (
+                    <p className="mt-1.5 text-xs text-muted-foreground/80 line-clamp-2 border-l-2 border-primary/20 pl-2 italic">{d}</p>
+                  ) : null;
+                })()}
               </div>
             </div>
 

@@ -11198,12 +11198,16 @@ function ActivityRow({
           </p>
         )}
 
-        {/* Description */}
-        {(() => { const d = sanitizeActivityText(activity.description); return d ? (
-          <p className="text-base text-muted-foreground leading-relaxed mt-2">
-            {d}
-          </p>
-        ) : null; })()}
+        {/* Description — fall back to personalization.whyThisFits when blank */}
+        {(() => {
+          const d = sanitizeActivityText(activity.description)
+            || sanitizeActivityText((activity as any)?.personalization?.whyThisFits);
+          return d ? (
+            <p className="text-base text-muted-foreground leading-relaxed mt-2">
+              {d}
+            </p>
+          ) : null;
+        })()}
 
         {/* Location */}
         {locationText && (
@@ -11357,12 +11361,16 @@ function ActivityRow({
               <span>{activity.duration}</span>
             </div>
           )}
-          {(() => { const d = sanitizeActivityText(activity.description); return d && !compact ? (
-            <p className={cn(
-              "text-xs text-muted-foreground leading-relaxed",
-              !canViewPremium && "blur-sm pointer-events-none select-none"
-            )}>{d}</p>
-          ) : null; })()}
+          {(() => {
+            const d = sanitizeActivityText(activity.description)
+              || sanitizeActivityText((activity as any)?.personalization?.whyThisFits);
+            return d && !compact ? (
+              <p className={cn(
+                "text-xs text-muted-foreground leading-relaxed",
+                !canViewPremium && "blur-sm pointer-events-none select-none"
+              )}>{d}</p>
+            ) : null;
+          })()}
           {(() => {
             const locN = activity.location?.name?.trim();
             const dedupLocName = (locN && locN !== activityTitle) ? locN : '';
@@ -11731,13 +11739,17 @@ function ActivityRow({
                       </span>
                     </div>
                   )}
-                  {/* Description — hidden in compact mode */}
-                  {(() => { const d = sanitizeActivityText(activity.description); return d && !compact ? (
-                    <p className={cn(
-                      "text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed",
-                      !canViewPremium && "blur-sm pointer-events-none select-none"
-                    )}>{d}</p>
-                  ) : null; })()}
+                  {/* Description — hidden in compact mode; falls back to whyThisFits */}
+                  {(() => {
+                    const d = sanitizeActivityText(activity.description)
+                      || sanitizeActivityText((activity as any)?.personalization?.whyThisFits);
+                    return d && !compact ? (
+                      <p className={cn(
+                        "text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed",
+                        !canViewPremium && "blur-sm pointer-events-none select-none"
+                      )}>{d}</p>
+                    ) : null;
+                  })()}
                   {/* High-cost booking guidance helper */}
                   {!compact && (activity as any)?.metadata?.booking_guidance_required && (
                     <p className="text-xs italic text-amber-700 dark:text-amber-300 mt-1">

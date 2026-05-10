@@ -1296,7 +1296,7 @@ Generate activities for this day following ALL constraints above.`;
                             },
                             required: ["amount", "currency"]
                           },
-                          description: { type: "string" },
+                          description: { type: "string", minLength: 40, description: "1–2 sentences explaining WHY this specific place — what makes it worth the visit. For dining: house specialty / atmosphere / reservation tip. Never generic ('great food', 'nice spot'). REQUIRED." },
                           tags: { type: "array", items: { type: "string" }, minItems: 5 },
                           bookingRequired: { type: "boolean" },
                           transportation: {
@@ -1347,7 +1347,7 @@ Generate activities for this day following ALL constraints above.`;
                             required: ["tags", "whyThisFits", "confidence"]
                           }
                         },
-                        required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "bookingRequired", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
+                        required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "description", "bookingRequired", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
                       }
                     },
                     accommodationNotes: { type: "array", items: { type: "string" }, description: "2-3 accommodation tips for this destination (e.g. best neighborhoods to stay, hotel recommendations, booking tips)" },

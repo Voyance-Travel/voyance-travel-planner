@@ -36,6 +36,7 @@ import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
 import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
 import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../../_shared/prompt-leak-scrub.ts';
 import { scrubActivity, formatOps, opsHadChange } from '../../_shared/scrub-activity.ts';
+import { ensureDayDiningDescriptions } from '../../_shared/dining-description-backfill.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 import { pickTransitFallback } from '../../_shared/transit-mode.ts';
 
@@ -2827,6 +2828,26 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         action: 'scrub_activity',
         before: formatOps(ops),
         after: 'cleaned',
+      });
+    }
+  }
+
+  // --- 10b-post. DINING DESCRIPTION BACKFILL ---
+  // Fill blank "why this place" copy on dining cards from the inline-fallback
+  // DB (name match) → personalization.whyThisFits → leave blank for UI fallback.
+  // Runs after §10b scrub so that descriptions blanked by prompt-leak/fragment
+  // strip can still be recovered from whyThisFits. See plan.md (Venue
+  // descriptions on food cards).
+  {
+    const liveActs = activities.filter((a: any) => !lockedIds.has(a?.id));
+    const c = ensureDayDiningDescriptions(liveActs, resolvedDestination);
+    if (c.fallback + c.whyThisFits > 0) {
+      console.log(`[DINING_DESC_BACKFILL] day=${dayNumber} dest="${resolvedDestination || 'unknown'}" fallback=${c.fallback} whyThisFits=${c.whyThisFits} scanned=${c.scanned} path=repair-day`);
+      repairs.push({
+        code: FAILURE_CODES.TITLE_LABEL_LEAK,
+        action: 'dining_desc_backfill',
+        before: `scanned=${c.scanned}`,
+        after: `fallback=${c.fallback} whyThisFits=${c.whyThisFits}`,
       });
     }
   }

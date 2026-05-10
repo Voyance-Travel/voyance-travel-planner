@@ -172,9 +172,13 @@ export function LiveActivityCard({
               {sanitizeActivityName(activity.name, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}
             </h4>
             
-            {(() => { const d = sanitizeActivityText(activity.description); return d ? (
-              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{d}</p>
-            ) : null; })()}
+            {(() => {
+              const d = sanitizeActivityText(activity.description)
+                || sanitizeActivityText((activity as any)?.personalization?.whyThisFits);
+              return d ? (
+                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{d}</p>
+              ) : null;
+            })()}
 
             {activity.location && (
               <div className="flex items-center gap-1 mt-2 text-sm text-muted-foreground">
