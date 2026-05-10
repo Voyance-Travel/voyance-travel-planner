@@ -721,6 +721,10 @@ serve(async (req) => {
       deductResult = await deductFIFO(supabaseAdmin, user.id, cost);
     } catch (err: unknown) {
       const error = err as Error & { code?: string; required?: number; available?: number };
+      // Roll back the claim row so the user can retry with the same key.
+      if (claimRowId) {
+        await supabaseAdmin.from('credit_ledger').delete().eq('id', claimRowId).catch(() => {});
+      }
       if (error.code === 'INSUFFICIENT_CREDITS') {
         // Mark pending charge as failed (no credits taken)
         if (pendingChargeId) {
