@@ -5756,6 +5756,36 @@ export type Database = {
         }
         Relationships: []
       }
+      stripe_webhook_log: {
+        Row: {
+          error_message: string | null
+          event_id: string
+          event_type: string
+          id: string
+          payload: Json | null
+          received_at: string
+          result: string | null
+        }
+        Insert: {
+          error_message?: string | null
+          event_id: string
+          event_type: string
+          id?: string
+          payload?: Json | null
+          received_at?: string
+          result?: string | null
+        }
+        Update: {
+          error_message?: string | null
+          event_id?: string
+          event_type?: string
+          id?: string
+          payload?: Json | null
+          received_at?: string
+          result?: string | null
+        }
+        Relationships: []
+      }
       suggestion_votes: {
         Row: {
           created_at: string
