@@ -1960,14 +1960,14 @@
     },
     "escape_artist": {
       "name": "Escape Artist",
-      "category": "RESTORER",
+      "category": "EXPLORER",
       "required": {
-        "restoration_need": { "min": 0.5 },
-        "novelty_seeking": { "min": 0.5 }
+        "autonomy_preference": { "min": 0.7 }
       },
       "boosters": {
-        "restoration_need": 1.2,
-        "novelty_seeking": 1.0,
+        "autonomy_preference": 1.5,
+        "pace": 0.6,
+        "adventure": 0.5,
         "flexibility": 0.8
       },
       "penalties": {
