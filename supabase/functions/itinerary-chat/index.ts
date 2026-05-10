@@ -20,6 +20,21 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ── Prompt-injection sanitizer ──────────────────────────────────────────────
+// User-controlled strings (activity titles, destination, traveler names, etc.)
+// are interpolated into the system-prompt context message. Strip backticks,
+// angle brackets (prevents tag forgery), control chars, and collapse newlines
+// so injected "SYSTEM OVERRIDE: …" payloads become inert single-line data.
+const SANITIZE_MAX = 200;
+const sanitizePromptInput = (s: unknown, max = SANITIZE_MAX): string =>
+  String(s ?? '')
+    .replace(/[`<>]/g, '')
+    .replace(/\r/g, '')
+    .replace(/\n+/g, ' ')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim()
+    .slice(0, max);
+
 const log = (step: string, details?: unknown) => {
   console.log(`[ITINERARY-CHAT] ${step}`, details ? JSON.stringify(details) : '');
 };
