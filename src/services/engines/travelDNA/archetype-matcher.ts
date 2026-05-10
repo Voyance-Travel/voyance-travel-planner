@@ -435,7 +435,17 @@ export function matchArchetypes(
   }
 
   const primary = matches[0];
-  const secondary = matches.length > 1 && matches[1].score > 0 ? matches[1] : null;
+
+  // Apply 30% same-category penalty for secondary candidates
+  const secondaryCandidates = matches.slice(1).map(m => ({
+    ...m,
+    adjustedScore: m.category === primary.category ? m.score * 0.7 : m.score,
+  }));
+  secondaryCandidates.sort((a, b) => b.adjustedScore - a.adjustedScore);
+
+  const secondary = secondaryCandidates.find(m =>
+    !isForbiddenPair(primary.id, m.id) && m.adjustedScore > 0
+  ) ?? null;
 
   return {
     primary,
