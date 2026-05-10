@@ -26,15 +26,40 @@ const USER_DATA_TABLES = [
   'trip_activities',
   'trip_hotels',
   'trip_flights',
+  'trip_blogs',
+  'trip_chat_messages',
+  'trip_day_intents',
+  'trip_memories',
+  'trip_ratings',
+  'trip_reviews',
+  'trip_suggestion_votes',
+  'trip_suggestions',
+  'trip_action_usage',
   'trips',
   'trip_intents',
   'trip_cost_tracking',
-  
+
   // Activity & feedback
   'activity_feedback',
   'itinerary_customization_requests',
   'itinerary_templates',
-  
+
+  // Guides (children before parents)
+  'guide_favorites',
+  'guide_content_links',
+  'guide_activity_reviews',
+  'guide_manual_entries',
+  'saved_guides',
+  'travel_guides',
+  'community_guides',
+  'guides',
+
+  // Payments / billing
+  'iap_transactions',
+  'credit_purchases',
+  'pending_credit_charges',
+  'group_budget_transactions',
+
   // User data
   'achievement_unlocks',
   'consent_records',
@@ -51,6 +76,7 @@ const USER_DATA_TABLES = [
   'quiz_sessions',
   'rate_limits',
   'saved_items',
+  'suggestion_votes',
   'travel_dna_history',
   'travel_dna_profiles',
   'user_credit_bonuses',
@@ -60,12 +86,31 @@ const USER_DATA_TABLES = [
   'user_preference_insights',
   'user_preferences',
   'user_usage',
+  'user_badges',
+  'user_social_links',
+  'user_tiers',
+  'referral_codes',
+  'push_tokens',
+  'founding_member_tracker',
+  'free_tier_status',
+  'chat_idempotency_cache',
+  'invite_failure_log',
   'voyance_events',
-  
+
   // Core user tables (delete last)
   'user_roles',
   'user_id_mappings',
   'profiles',
+]
+
+/**
+ * Tables whose user-owning column is NOT named `user_id`.
+ * Each entry is deleted by matching any of the listed columns to the user id.
+ */
+const SPECIAL_COLUMN_TABLES: Array<{ table: string; columns: string[] }> = [
+  { table: 'friendships', columns: ['requester_id', 'addressee_id'] },
+  { table: 'group_budgets', columns: ['owner_id'] },
+  { table: 'guide_reports', columns: ['reporter_id'] },
 ]
 
 /**

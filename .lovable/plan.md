@@ -1,45 +1,58 @@
-## RS.L2 — Trip duplicate-prevention guard
+## RS.L3 — Account-deletion cascade audit
 
 ### Findings
-Two trip insert call sites:
-- `src/services/supabase/trips.ts::createTrip` (lines 224–252) — primary path used by Setup flow.
-- `src/services/voyanceAPI.ts::createTrip` (lines 180–196) — secondary path used by older flows.
 
-Both `INSERT` directly with no dedup window. A double-click fires two requests; both succeed → two rows, two trips on the dashboard.
+`USER_DATA_TABLES` in `delete-my-account/index.ts` already covers ~48 tables incl. `trip_collaborators` and `trip_notifications`. DB inventory revealed **~36 tables with a user-owning column missing from the list**.
+
+Three categories:
+
+**A. Add to cascade (delete user's rows):**
+`iap_transactions`, `community_guides`, `guides`, `guide_favorites`, `guide_content_links`, `guide_activity_reviews`, `guide_manual_entries`, `saved_guides`, `travel_guides`, `trip_blogs`, `trip_chat_messages`, `trip_day_intents`, `trip_memories`, `trip_ratings`, `trip_reviews`, `trip_suggestions`, `trip_suggestion_votes`, `trip_action_usage`, `suggestion_votes`, `user_badges`, `user_social_links`, `user_tiers`, `referral_codes`, `push_tokens`, `pending_credit_charges`, `credit_purchases`, `founding_member_tracker`, `free_tier_status`, `chat_idempotency_cache`, `invite_failure_log`, `group_budget_transactions`.
+
+**B. Special columns (not `user_id`):**
+- `friendships` → `requester_id` and `addressee_id` (delete on either).
+- `group_budgets` → `owner_id`.
+- `guide_reports` → `reporter_id`.
+
+**C. Intentionally retained (audit/observability — keep raw, NULL out user_id later if needed):**
+`audit_logs`, `client_errors`, `page_events`, `voyance_events` (already in list — re-evaluate but keep for v1).
 
 ### Plan
 
-Add a 30-second dedup window in **both** files immediately before the `.insert(...)`:
+Single-file edit to `supabase/functions/delete-my-account/index.ts`:
 
+**1. Extend `USER_DATA_TABLES`** with the 31 category-A tables. Order: child→parent (guides children before `guides`, trip_* children before `trips` already present). Insert into existing groupings.
+
+**2. Add a small `SPECIAL_COLUMN_TABLES` array** for the 3 non-`user_id` cases:
 ```ts
-// Guard against double-click duplicate creation (RS.L2)
-const dedupWindowIso = new Date(Date.now() - 30_000).toISOString();
-const { data: recent } = await supabase
-  .from('trips')
-  .select('*')                     // full row so we can return a Trip without a second fetch
-  .eq('user_id', userId)
-  .eq('name', input.name)
-  .eq('destination', input.destination)
-  .eq('start_date', input.start_date)
-  .gt('created_at', dedupWindowIso)
-  .order('created_at', { ascending: false })
-  .limit(1)
-  .maybeSingle();
+const SPECIAL_COLUMN_TABLES: Array<{ table: string; columns: string[] }> = [
+  { table: 'friendships', columns: ['requester_id', 'addressee_id'] },
+  { table: 'group_budgets', columns: ['owner_id'] },
+  { table: 'guide_reports', columns: ['reporter_id'] },
+];
+```
 
-if (recent) {
-  console.warn('[createTrip] Duplicate request detected — returning existing trip', { tripId: recent.id });
-  return transformTrip(recent as TripRow);   // voyanceAPI returns its mapped BackendTrip equivalent
+**3. After the existing `for (table of USER_DATA_TABLES)` loop**, add:
+```ts
+for (const { table, columns } of SPECIAL_COLUMN_TABLES) {
+  for (const col of columns) {
+    try {
+      const { error } = await supabase.from(table).delete().eq(col, userId);
+      if (error) console.warn(`[delete-my-account] Warning deleting from ${table}.${col}: ${error.message}`);
+    } catch (err) {
+      console.warn(`[delete-my-account] Could not delete from ${table}.${col}: ${err}`);
+    }
+  }
 }
 ```
 
-Notes per file:
-- `trips.ts`: re-use existing `transformTrip` mapper. `userId`/`input` already in scope.
-- `voyanceAPI.ts`: build the `BackendTrip` object from `recent` using the same field mapping that already exists at lines 200+ — extract that mapper into a small local helper to avoid duplication, or inline.
+The existing per-table `try/catch` already swallows errors from columns that don't exist, so a stale entry won't break deletion.
 
 ### Out of scope
-- DB-level UNIQUE constraint (would force schema change + handle conflict errors; client guard alone closes the double-click case which is the reported symptom).
-- The 6 other call sites that wrap these two services (`createTripFromParsed`, `MysteryGetawayModal`, `ManualTripPasteEntry`, `TripForm`, `voyance.ts`, agency CRM) — they all funnel through one of the two services above, so guarding both services is sufficient.
-- Button-level disabled-while-pending state (orthogonal frontend hardening; this guard works regardless).
+- Converting any of these to DB-level `ON DELETE CASCADE` (would require migrations + auth.users FK audit; v1.x compliance pass).
+- Anonymizing audit/observability tables (`audit_logs`, `client_errors`, `page_events`) — intentional retention for ops/legal.
+- Storage objects owned by user (avatars, photos) — separate ticket.
 
 ### Verification
-`grep -rc "Duplicate request detected" src/services` ≥ 2 (one per file).
+- `grep -c "trip_collaborators\|friendships\|trip_notifications" supabase/functions/delete-my-account/index.ts` ≥ 3 (expected 3+ after change).
+- `iap_transactions` and `friendships` both appear in the file.
