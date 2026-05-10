@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { getFullArchetypeContext, type ArchetypeContext } from './archetype-data.ts';
-import { resolvePrimaryArchetype } from '../_shared/dna-resolve.ts';
+import { resolvePrimaryArchetype, resolveSecondaryArchetype } from '../_shared/dna-resolve.ts';
 
 // =============================================================================
 // TYPES
@@ -37,6 +37,12 @@ export interface TravelerProfile {
   
   /** Full archetype context with all data needed for prompt building */
   archetypeContext: ArchetypeContext;
+
+  /** Secondary archetype name — null when not set. Used for "deepening" day assignment. */
+  secondaryArchetype: string | null;
+
+  /** Full secondary archetype context — null when no secondary or when secondary == primary. */
+  secondaryArchetypeContext: ArchetypeContext | null;
   
   /** Trait scores with defaults of 0 */
   traitScores: TraitScores;
