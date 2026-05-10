@@ -645,6 +645,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       console.error('Logout error:', error);
     }
+
+    // Notify other tabs to clear their session immediately (belt + braces with the
+    // SIGNED_OUT auth listener, in case the listener races with this call).
+    try { bcRef.current?.postMessage({ type: 'auth:signout' }); } catch { /* noop */ }
     
     // Clean up legacy localStorage keys to prevent stale token issues
     const legacyKeys = [
