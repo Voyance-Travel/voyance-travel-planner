@@ -3143,8 +3143,19 @@ export function EditorialItinerary({
     }
 
     toast.success('Flight order updated');
+
+    // Cascade + dayMode recompute (recomputeDayModes runs inside cascade)
+    try {
+      const { runCascadeAndPersist } = await import('@/services/cascadeTransportToItinerary');
+      const { getTripCities } = await import('@/services/tripCitiesService');
+      const cities = await getTripCities(tripId);
+      await runCascadeAndPersist(tripId, days, updatedSelection, cities);
+    } catch (cascadeErr) {
+      console.warn('[reorderFlightLegs] cascade skipped:', cascadeErr);
+    }
+
     await Promise.resolve(onBookingAdded?.());
-  }, [flightSelection, tripId, onBookingAdded]);
+  }, [flightSelection, tripId, onBookingAdded, days]);
 
 
   // Handle transport mode change for a specific activity route segment
