@@ -1,58 +1,95 @@
-## Problem
+## Goal
 
-`ItineraryAssistant.handleActionApply` shows `toast.success('Action applied')` (line 528) whenever `executeAction(...)` resolves with `result.success === true`. But the persistence inside the executor silently swallows failures, so the user can see the success toast even when nothing reached the database.
+Close the activity-feedback feedback loop: pull the user's recent ratings into trip generation so the prompt steers toward consistently-loved categories and away from consistently-disliked ones.
 
-Two leak paths:
+## Schema reality check (deviates from request — heads up)
 
-1. **Executor swallows save errors.** `updateTripItinerary` (`src/services/itineraryActionExecutor.ts:868`) is `void`. It calls `save-itinerary` via `supabase.functions.invoke`, and on error just `console.error`s. All five callers (`executeRewriteDayAction`, `executeSwapAction`, `executeRegenerateAction`, `executeFilterAction`, `executePacingAction`) `await updateTripItinerary(...)` then return `success: true` regardless of whether the row was written.
-2. **Some action types have no executor-side persistence at all.** They hand `updatedDays` back to the caller and rely entirely on the parent. The parent (`TripDetail.tsx:3626` `onItineraryUpdate`) only calls `setTrip(...)` — no DB write. If the user navigates away before another save, the change is lost.
+The `activity_feedback` table doesn't match the column names/values in your message. Real schema:
 
-The user-visible symptom is identical in both cases: green toast, no persisted change.
+- `rating` is `text` with `CHECK rating IN ('loved','liked','neutral','disliked')` — **not a 1–5 integer**. So `gte('rating', 1)` / `>= 4` / `<= 2` won't compile or filter correctly.
+- `tags` → actually `feedback_tags text[]`
+- `notes` → actually `feedback_text text`
+- There's also an `activity_category` column worth using as a fallback when `activity_type` is null.
 
-## Fix
+I'll preserve the spirit of the request (top-5 loved / top-5 disliked by category, last 50, injected into prompt) while using the real columns. Confirm before I implement if you'd rather migrate `rating` to integer instead.
 
-Treat persistence as part of the action contract. Surface failures all the way back to the toast.
+## Implementation
 
-### 1. `src/services/itineraryActionExecutor.ts`
+### 1. `supabase/functions/generate-itinerary/action-generate-trip.ts`
 
-- Change `updateTripItinerary` signature to `Promise<{ success: boolean; error?: string }>`.
-  - Return `{ success: true }` after a successful `save-itinerary` invocation.
-  - Return `{ success: false, error }` on `saveError`, fetch error, or thrown exception. Keep the existing `console.error`s.
-  - Keep the existing "no raw fallback" comment intact.
-  - Local trips (no row in `trips`) detected via `fetchError` of code `PGRST116` or empty `trip` → treat as `{ success: true, local: true }` so the local‑storage write path stays unaffected.
-- In every caller that currently does `await updateTripItinerary(tripId, updatedDays)`, capture the result. If `!success`, return:
-  ```
-  { success: false, message: 'Changes could not be saved. Please try again.', error: persistResult.error, updatedDays }
-  ```
-  Affected functions: `executeRewriteDayAction`, `executeSwapAction`, `executeRegenerateAction`, `executeFilterAction`, `executePacingAction` (all 5 sites at lines 379, 510, 572, 686, 819).
-- Keep `updatedDays` on the failure result so the UI can still reflect the optimistic change but mark the message as failed (consistent with the existing "failed" status the message gets).
+Right after the `trip_learnings` block (immediately after line 445, inside the same `try`/`catch` neighborhood), add a new sub-step **10b. Activity feedback signals**:
 
-### 2. `src/components/itinerary/ItineraryAssistant.tsx`
+```ts
+// 10b. Activity feedback signals (loved/disliked categories from prior ratings)
+try {
+  const { data: recentFeedback } = await supabase
+    .from('activity_feedback')
+    .select('rating, activity_type, activity_category, created_at')
+    .eq('user_id', userId)
+    .in('rating', ['loved', 'liked', 'disliked'])
+    .order('created_at', { ascending: false })
+    .limit(50);
 
-- In `handleActionApply`, after `executeAction`, only run the success branch (sortedDays state update, cost sync, "Action applied" toast, diff message) when `result.success === true`. The structure already branches on this; today the bug is upstream — the executor lies. Once the executor returns `success: false` on persistence failure, this branch flips automatically and the existing `toast.error('Action failed', { description: result.message })` fires.
-- Add a small explicit guard: if the executor returns `success: false` but still includes `updatedDays`, do **not** call `setCurrentDays`, `updateLocalTripItinerary`, `onItineraryUpdate`, or the activity-cost sync — we don't want optimistic UI to mask an unsaved state. The user retries via the existing retry button on line 779.
-- Refund the credits already spent for `creditAction` (REGENERATE_DAY / SWAP_ACTIVITY) when persistence fails, since the failure is on our side. Use the existing `spendCredits` mutation; refund is done by emitting the inverse via the established refund helper if one exists, otherwise fall back to a `console.warn` — confirm pattern by checking whether `refundCredits` / `spendCredits.refund` exists in `useCredits` before wiring (see clarification below).
+  const tally = (rows: Array<{ activity_type: string | null; activity_category: string | null }>) => {
+    const counts: Record<string, number> = {};
+    for (const r of rows) {
+      const key = (r.activity_type || r.activity_category || '').trim().toLowerCase();
+      if (!key) continue;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([k]) => k);
+  };
 
-### 3. `src/pages/TripDetail.tsx`
+  const rows = recentFeedback ?? [];
+  const loved = tally(rows.filter(r => r.rating === 'loved' || r.rating === 'liked'));
+  const disliked = tally(rows.filter(r => r.rating === 'disliked'));
 
-No code change required. The existing `onItineraryUpdate` parent callback stays as a sibling-state sync. Persistence is now the executor's responsibility, and on failure the executor will not have set `success: true`, so the parent state update simply won't happen (per item 2).
+  if (rows.length > 0 && (loved.length > 0 || disliked.length > 0)) {
+    enrichmentContext.behavioralPreferences = {
+      consistentlyLoved: loved,
+      consistentlyDisliked: disliked,
+      sampleSize: rows.length,
+    };
+    enrichmentContext.behavioralPreferencesPrompt =
+      `\n## 🎯 PAST BEHAVIORAL SIGNALS (from ${rows.length} prior activity ratings)\n` +
+      `- Strongly favor: ${loved.join(', ') || 'no clear pattern yet'}\n` +
+      `- Actively avoid (unless directly requested): ${disliked.join(', ') || 'no clear pattern yet'}\n`;
+    console.log(`[generate-trip] Behavioral signals: loved=[${loved.join('|')}] disliked=[${disliked.join('|')}] from ${rows.length} ratings`);
+  }
+} catch (afErr) {
+  console.warn('[generate-trip] Activity feedback signals failed (non-blocking):', afErr);
+}
+```
 
-## Out of scope
+Both an **object** (`behavioralPreferences`, kept on `enrichmentContext` for metadata/telemetry per your spec) and a **string** (`behavioralPreferencesPrompt`, what compile-prompt actually injects, matching the pattern used by every other enrichment field).
 
-- Direct UI mutations elsewhere in `EditorialItinerary.tsx` already flow through `safeUpdateItineraryData` per the established constraint; that path is untouched.
-- The executor's `save-itinerary` call itself is unchanged — same backend pipeline, same meal guard / sweep / normalization.
-- No DB migration.
+### 2. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
+
+Add one line in the existing `gc.*` push chain (right after the line that pushes `pastTripLearnings`, around line 831):
+
+```ts
+if (gc.behavioralPreferencesPrompt) promptParts.push(gc.behavioralPreferencesPrompt as string);
+```
+
+This keeps the established convention (every enrichment field is gated by a `Prompt` string and pushed in compile-prompt).
 
 ## Verification
 
-- Unit-style: simulate `save-itinerary` returning an error and confirm `executeRewriteDayAction` returns `{ success: false, message: 'Changes could not be saved...' }`.
-- Manual: in chat, trigger a swap on a trip whose `save-itinerary` is failing (e.g. offline). Expect red "Action failed" toast and the message status badge flipping to "failed", **not** "Action applied".
-- Lint: existing `no-raw-itinerary-writes` test still passes (no new raw writes added).
+- `rg -n "behavioralPreferences" supabase/functions/` → 4 hits (object assign, string assign, log line, compile-prompt push). User asked for ≥2; we'll have 4.
+- Manual: pick a test user with ≥3 `activity_feedback` rows, kick off a generation, grep edge logs for `[generate-trip] Behavioral signals: loved=[...]`. Then check the metadata column on the resulting trip — `metadata.generation_context.behavioralPreferences.consistentlyLoved` should be populated.
+- Existing functions (`trip_learnings`, `recentlyUsedActivities`) are untouched.
 
-## Memory
+## Out of scope
 
-Add `mem://constraints/itinerary/chat-action-persistence-contract` and reference it from the index Core block: "AI chat actions: executor must surface DB save failures; never toast success on a silent persistence drop."
+- No DB migration. We use the existing text-enum `rating`. If you want a true 1–5 numeric scale, that's a separate change touching the table, the feedback UI, and the constraint.
+- We're not weighting by `feedback_tags` or `feedback_text` yet — only category counts. Easy to layer on later if you want sentiment-style signals.
+- Recency decay (e.g. weight last-7-days higher) skipped; the `LIMIT 50` + recency `ORDER BY` is the only recency control.
 
-## Clarification needed
+## Confirm
 
-Does `useCredits` (or whatever hook `spendCredits` comes from) already expose a refund path for failed actions? If yes, I'll wire it; if no, I'll leave a `[CREDIT_REFUND_PENDING]` console warning and skip refund this pass — your call.
+1. Treat `rating='loved'` and `rating='liked'` together as the "loved bucket"? (default in plan: yes, both count as loved)
+2. Use `activity_category` as a fallback when `activity_type` is null? (default: yes)
+3. OK to skip `feedback_tags` / `feedback_text` for this pass? (default: yes)
