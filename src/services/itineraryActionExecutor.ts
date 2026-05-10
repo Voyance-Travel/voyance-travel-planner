@@ -865,7 +865,13 @@ function sortActivitiesChronologically(days: ItineraryDay[]): ItineraryDay[] {
 // DATABASE UPDATE
 // ============================================================================
 
-async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]): Promise<void> {
+interface PersistResult {
+  success: boolean;
+  error?: string;
+  local?: boolean;
+}
+
+async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]): Promise<PersistResult> {
   // Run client-side meal compliance guard before saving (async — uses real venue names)
   try {
     const { enforceItineraryMealComplianceAsync } = await import('@/utils/mealGuard');
@@ -904,8 +910,19 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
       .maybeSingle();
 
     if (fetchError) {
+      // Local trips have no row in `trips` — treat absent row as a local-only
+      // success so the localStorage write path (handled by the caller) is the
+      // canonical persist site. Anything else is a real persistence failure.
+      if ((fetchError as any).code === 'PGRST116') {
+        return { success: true, local: true };
+      }
       console.error('[ActionExecutor] Error fetching trip:', fetchError);
-      return;
+      return { success: false, error: fetchError.message || 'fetch_failed' };
+    }
+
+    if (!trip) {
+      // No row → local trip. See note above.
+      return { success: true, local: true };
     }
 
     const currentData = (trip?.itinerary_data as Record<string, unknown>) || {};
@@ -930,13 +947,17 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
       // error so the caller (UI layer) can re-render or retry instead of
       // silently persisting dirty data.
       console.error('[ActionExecutor] Backend save failed (no raw fallback):', saveError);
-    } else {
-      console.log('[ActionExecutor] Trip itinerary saved via backend (normalized + meal-guarded)');
+      return { success: false, error: saveError.message || 'save_failed' };
     }
-  } catch (err) {
+    console.log('[ActionExecutor] Trip itinerary saved via backend (normalized + meal-guarded)');
+    return { success: true };
+  } catch (err: any) {
     console.error('[ActionExecutor] Update error:', err);
+    return { success: false, error: err?.message || 'persist_exception' };
   }
 }
+
+const PERSIST_FAILURE_MESSAGE = 'Changes could not be saved. Please try again.';
 
 /**
  * Update localStorage for local trips
