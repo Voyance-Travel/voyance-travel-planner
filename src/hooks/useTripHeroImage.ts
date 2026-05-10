@@ -35,6 +35,13 @@ interface UseTripHeroImageResult {
    * Detects blank/tiny images that load successfully but contain no content
    */
   onLoad: (e: React.SyntheticEvent<HTMLImageElement>) => void;
+  /** Photo attribution (currently only populated for Unsplash-sourced API photos) */
+  attribution?: {
+    photographer: string;
+    photographer_url?: string;
+    source_url?: string;
+    source: 'unsplash';
+  };
 }
 
 /**
@@ -78,6 +85,7 @@ export function useTripHeroImage({
   const [apiImageUrl, setApiImageUrl] = useState<string | null>(null);
   const [apiFetched, setApiFetched] = useState(false);
   const [apiFailed, setApiFailed] = useState(false);
+  const [apiAttribution, setApiAttribution] = useState<UseTripHeroImageResult['attribution']>(undefined);
   const [isLoading, setIsLoading] = useState(false);
 
   const curatedImages = getCuratedImages(destination);
@@ -153,6 +161,14 @@ export function useTripHeroImage({
         setApiFetched(true);
         if (result?.url) {
           setApiImageUrl(result.url);
+          if (result.source === 'unsplash' && result.photographer) {
+            setApiAttribution({
+              photographer: result.photographer,
+              photographer_url: result.photographer_url ?? undefined,
+              source_url: result.source_url ?? undefined,
+              source: 'unsplash',
+            });
+          }
         } else {
           setApiFailed(true);
         }
@@ -326,5 +342,7 @@ export function useTripHeroImage({
     source,
     onError,
     onLoad,
+    // Only surface attribution when the active source is the API fetch (Unsplash)
+    attribution: source === 'api' && !apiFailed ? apiAttribution : undefined,
   };
 }

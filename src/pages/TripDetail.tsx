@@ -269,7 +269,7 @@ export default function TripDetail() {
   const [activeCity, setActiveCity] = useState<string | null>(null);
   // Use per-city destination for multi-city trips, fall back to overall trip destination
   const heroDestination = activeCity || trip?.destination || '';
-  const { imageUrl: heroImageUrl, onError: onHeroError, onLoad: onHeroLoad } = useTripHeroImage({
+  const { imageUrl: heroImageUrl, onError: onHeroError, onLoad: onHeroLoad, attribution: heroAttribution } = useTripHeroImage({
     destination: heroDestination,
     seededHeroUrl: activeCity ? null : seededHeroUrl, // Don't use seeded hero for per-city resolution
     tripId: activeCity ? undefined : trip?.id, // Don't write-back per-city heroes to trip metadata
@@ -2462,6 +2462,29 @@ export default function TripDetail() {
             <ArrowLeft className="w-4 h-4" />
           </Button>
         </div>
+        {/* Photo attribution (Unsplash ToS) */}
+        {heroAttribution && (
+          <div className="absolute bottom-1 right-2 z-10 text-[10px] sm:text-xs text-white/80 drop-shadow-md">
+            Photo by{' '}
+            <a
+              href={heroAttribution.photographer_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-white"
+            >
+              {heroAttribution.photographer}
+            </a>{' '}
+            on{' '}
+            <a
+              href={heroAttribution.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-white"
+            >
+              Unsplash
+            </a>
+          </div>
+        )}
       </div>
       
       {/* Journey Breadcrumb — only for linked journey trips */}

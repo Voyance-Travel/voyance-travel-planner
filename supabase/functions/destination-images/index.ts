@@ -16,7 +16,7 @@ interface DestinationImage {
   url: string;
   alt: string;
   type: "hero" | "gallery" | "activity";
-  source: "curated" | "google_places" | "tripadvisor" | "wikimedia" | "lovable_ai" | "fallback";
+  source: "curated" | "google_places" | "tripadvisor" | "wikimedia" | "lovable_ai" | "fallback" | "unsplash";
   width?: number;
   height?: number;
   attribution?: string;
@@ -24,6 +24,10 @@ interface DestinationImage {
   photoReference?: string;
   /** Internal: true only when the photo was already cached in storage (no Google photo download). */
   cacheHit?: boolean;
+  // Unsplash attribution (only set when source === 'unsplash')
+  photographer?: string;
+  photographer_url?: string;
+  source_url?: string;
 }
 
 interface RequestParams {
@@ -360,6 +364,78 @@ function hasMismatchedContent(category: string, altTextOrName: string): boolean 
     }
   }
   return false;
+}
+
+// =============================================================================
+// TIER 2A: UNSPLASH FALLBACK (Free, professionally curated, destination heroes)
+// Used BEFORE Google Places for destination heroes — Unsplash returns iconic
+// landmark photos rather than random user uploads. ToS requires attribution
+// + utm_source/utm_medium params on photographer + Unsplash links.
+// =============================================================================
+const UNSPLASH_UTM = "utm_source=voyance&utm_medium=referral";
+
+function withUtm(url: string): string {
+  if (!url) return url;
+  return url.includes("?") ? `${url}&${UNSPLASH_UTM}` : `${url}?${UNSPLASH_UTM}`;
+}
+
+async function tryUnsplashFallback(destination: string): Promise<DestinationImage | null> {
+  const accessKey = Deno.env.get("UNSPLASH_ACCESS_KEY");
+  if (!accessKey) return null;
+  if (!destination || destination.trim().length < 2) return null;
+
+  const query = encodeURIComponent(`${destination} landmark`);
+  const url = `https://api.unsplash.com/search/photos?query=${query}&per_page=5&orientation=landscape&order_by=relevant`;
+
+  try {
+    const response = await fetch(url, {
+      headers: { Authorization: `Client-ID ${accessKey}` },
+    });
+    if (!response.ok) {
+      console.warn(`[unsplash] HTTP ${response.status} for "${destination}"`);
+      return null;
+    }
+    const data = await response.json();
+    const results = Array.isArray(data?.results) ? data.results : [];
+
+    const qualityResults = results.filter(
+      (r: any) => (r?.width ?? 0) >= 1920 && (r?.likes ?? 0) >= 50
+    );
+    if (qualityResults.length === 0) {
+      console.log(`[unsplash] no quality results for "${destination}" (${results.length} raw)`);
+      return null;
+    }
+
+    const best = qualityResults.sort((a: any, b: any) => (b.likes ?? 0) - (a.likes ?? 0))[0];
+    const photographerName = best?.user?.name || "Unsplash";
+    const photographerUrl = best?.user?.links?.html
+      ? withUtm(best.user.links.html)
+      : "";
+    const sourceUrl = best?.links?.html ? withUtm(best.links.html) : "";
+    const rawUrl = best?.urls?.raw || best?.urls?.regular;
+    if (!rawUrl) return null;
+
+    console.log(
+      `[unsplash] hit dest="${destination}" likes=${best.likes} photographer="${photographerName}"`
+    );
+
+    return {
+      id: `unsplash-${best.id}`,
+      url: `${rawUrl}&w=1920&q=80&fit=crop`,
+      alt: best?.alt_description || `${destination} landmark`,
+      type: "hero",
+      source: "unsplash",
+      width: best?.width,
+      height: best?.height,
+      attribution: `Photo by ${photographerName} on Unsplash`,
+      photographer: photographerName,
+      photographer_url: photographerUrl,
+      source_url: sourceUrl,
+    };
+  } catch (err) {
+    console.error("[unsplash] fetch failed", err);
+    return null;
+  }
 }
 
 // =============================================================================
@@ -1456,6 +1532,25 @@ async function fetchImageTiered(
       }
     } catch (sharedErr) {
       console.warn('[Images] Shared-table lookup failed:', sharedErr);
+    }
+  }
+
+  // TIER 2A: Unsplash (destination heroes only — free, professionally curated)
+  // Runs BEFORE Google Places so iconic landmark photos win over random user uploads.
+  if (entityType === 'destination') {
+    const unsplashImage = await tryUnsplashFallback(destination);
+    if (unsplashImage) {
+      const persistentUnsplash = await ensurePersistentStorageUrl(
+        unsplashImage,
+        entityType,
+        venueName,
+        destination
+      );
+      await cacheImage(supabase, entityType, cleanName, destination, persistentUnsplash, 0.85);
+      if (cleanName !== venueName) {
+        await cacheImage(supabase, entityType, venueName, destination, persistentUnsplash, 0.85);
+      }
+      return persistentUnsplash;
     }
   }
 

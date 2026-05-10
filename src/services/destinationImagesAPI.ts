@@ -128,11 +128,14 @@ export interface DestinationImage {
   url: string;
   alt: string;
   type: 'hero' | 'gallery' | 'activity';
-  source: 'database' | 'google_places' | 'fallback';
+  source: 'database' | 'google_places' | 'fallback' | 'unsplash';
   tags?: string[];
   width?: number | null;
   height?: number | null;
   photographer?: string | null;
+  photographer_url?: string | null;
+  source_url?: string | null;
+  attribution?: string | null;
 }
 
 export interface GetImagesParams {
