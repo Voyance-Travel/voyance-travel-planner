@@ -15,6 +15,8 @@ export interface ConsumerTripPdfData {
   startDate: string;
   endDate: string;
   travelers: number;
+  /** ISO 4217 code (e.g. 'EUR', 'GBP'). Used as a fallback when an activity cost has no currency set. */
+  tripCurrency?: string;
   days?: EditorialDay[];
   unlockedDayNumbers?: Set<number>;
   flights?: Array<{
