@@ -1,112 +1,117 @@
-## Bug
+## Goal
 
-Editing an activity (e.g. adding a cost) has two broken behaviors that share one root function — `handleUpdateActivity` at `src/components/itinerary/EditorialItinerary.tsx:5606-5635`.
+Add a 90-day TTL to AI destination enrichment so London-style content refreshes ~quarterly instead of being permanent. Cost stays effectively zero (~$0.004/destination/year).
 
-```ts
-const handleUpdateActivity = useCallback((dayIndex, activityIndex, updates) => {
-  setDays(prev => prev.map((day, dIdx) => {
-    if (dIdx !== dayIndex) return day;
-    const updatedActivities = day.activities.map((activity, aIdx) => {
-      if (aIdx !== activityIndex) return activity;
-      return {
-        ...activity,
-        ...updates,
-        isLocked: true,                     // ← bug 2: force-locks every edit
-        time: updates.startTime || activity.startTime || activity.time,
-      };
-    });
-    // (sort if time changed)
-    return { ...day, activities: updatedActivities };
-  }));
-  setHasChanges(true);
-  setEditActivityModal(null);
-  toast.success('Activity updated');
-}, []);                                     // ← bug 1: no syncBudgetFromDays
-```
+## Current state
 
-### Bug 1 — Cost edit doesn't propagate to budget / payments / cost summaries
-
-- **Where it writes:** React state only (`setDays`).
-- **Where rollups read:** the `activity_costs` table (and the `v_trip_total` / `v_payments_summary` views built on top of it).
-- **Why "top of card" looks stale too:** `getActivityCostInfo` and the per-card cost banner pull from the `activity_costs` snapshot via `useTripFinancialSnapshot` — see mem://constraints/payments/single-resolver-manual-fold and mem://technical/finance/ui-total-cost-fallback-logic. The card's *inline* cost line is state-driven and updates; everything aggregated (header total, Budget tab, Payments tab) reads the snapshot and stays at the old value until the next regeneration or refetch.
-- **Already-correct comparator:** every other mutation site in this file (`syncBudgetFromDays` callsites at 4032, 4210, 4394, plus the swap path at 4061) calls `syncBudgetFromDays(updatedDays)` after `setDays(...)`. That helper writes the `activity_costs` row, prunes orphan rows, and dispatches the `booking-changed` event the snapshot/Payments tab listen for. **Edit is the only mutation that skips it.**
-- **Autosave is not enough.** `save-itinerary` writes `trips.itinerary_data` (JSON) and the `itinerary_activities` mirror, but `activity_costs` is the canonical-cost table and is only refreshed by `syncBudgetFromDays`. No cost rollup will move until that runs.
-
-### Bug 2 — Every edit auto-locks the activity (and feels like the itinerary itself locks)
-
-- Line 5614 sets `isLocked: true` on every payload — even when the user only edited a cost or title and never touched the lock toggle.
-- The user's "kept unlocking and saving / then it locked the itinerary" is the visible symptom of fighting this auto-lock against:
-  1. The dedicated `handleActivityLock` toggle (line 4636) the user actually clicks.
-  2. Any propagation that treats a fully-locked day as a hard-anchor / blocked day for AI repairs (per mem://features/itinerary/universal-locking-and-persistence-protocol). Once enough activities flip to `isLocked: true` from edits, the day looks locked to downstream features.
-- Lock should be the explicit responsibility of the Lock button, not a side-effect of every save.
-
-## Fix — narrow, frontend-only
-
-### 1. Capture next state and call `syncBudgetFromDays`
+`supabase/functions/enrich-destination/index.ts:51` short-circuits on any non-null `dest.enriched_at`, so once a destination is enriched it never refreshes. There's no expiry column.
 
 ```ts
-const handleUpdateActivity = useCallback((dayIndex, activityIndex, updates) => {
-  let nextDays: EditorialDay[] = [];
-  setDays(prev => {
-    nextDays = prev.map((day, dIdx) => {
-      if (dIdx !== dayIndex) return day;
-      const updatedActivities = day.activities.map((activity, aIdx) => {
-        if (aIdx !== activityIndex) return activity;
-        return {
-          ...activity,
-          ...updates,
-          // Preserve current lock state unless the caller explicitly changed it.
-          isLocked: 'isLocked' in updates ? updates.isLocked : activity.isLocked,
-          time: updates.startTime || activity.startTime || activity.time,
-        };
-      });
-      if (updates.startTime || updates.endTime) {
-        updatedActivities.sort(/* existing comparator */);
-      }
-      return { ...day, activities: updatedActivities };
-    });
-    return nextDays;
-  });
-  setHasChanges(true);
-  // Mirror the swap / generated-days code paths so cost rollups refresh.
-  syncBudgetFromDays(nextDays);
-  setEditActivityModal(null);
-  toast.success('Activity updated');
-}, [syncBudgetFromDays]);
+if (dest.enriched_at) {
+  return jsonResponse({ success: true, skipped: true, reason: "already_enriched" });
+}
 ```
 
-That single addition closes bug 1 because:
-- `syncBudgetFromDays` upserts `activity_costs` with the new amount/basis (manual basis takes precedence per the existing logic).
-- It then dispatches `booking-changed` → `useTripFinancialSnapshot` invalidates → header total + Budget tab + Payments tab pick up the new value without a refresh.
-- Autosave (3 s debounce) still runs as today and persists the cost into `trips.itinerary_data` for the next page load.
+The success path at line 211-227 sets `enriched_at` and patches text fields, then **inserts** AI activities into `public.activities` (line 256-258). The activities table has no source/expiry column and no unique constraint on `(destination_id, name)`. Re-running enrichment today would duplicate activity rows — so the TTL fix has to handle that.
 
-### 2. Stop auto-locking on edit
+## Changes
 
-Replace `isLocked: true` (line 5614) with `isLocked: 'isLocked' in updates ? updates.isLocked : activity.isLocked`.
+### 1. Migration — add expiry column
 
-That keeps the activity in whatever lock state the user chose. The Lock button at line 4636 (`handleActivityLock`) remains the only thing that mutates lock state, which matches the universal-locking memory ("locked = manually added/edited/extracted/pinned" — but "edited" already means the lock toggle was clicked, not "every text update").
+```sql
+ALTER TABLE public.destinations
+  ADD COLUMN IF NOT EXISTS enrichment_expires_at TIMESTAMPTZ;
 
-If product wants edited activities to lock by default, that's an explicit opt-in we can build later — a checkbox in the edit modal — not a silent default that fights every other interaction.
+-- Backfill existing rows so the next click after deploy refreshes them on schedule,
+-- not all at once. Stagger over the next 90 days based on enriched_at.
+UPDATE public.destinations
+SET enrichment_expires_at = enriched_at + INTERVAL '90 days'
+WHERE enriched_at IS NOT NULL
+  AND enrichment_expires_at IS NULL;
+```
+
+No RLS change (`destinations` is publicly readable; service-role writes from the edge function).
+
+### 2. Update the guard in `enrich-destination/index.ts`
+
+Replace the `if (dest.enriched_at) { return ... }` block (line 51-57) with:
+
+```ts
+const now = new Date();
+const expiresAt = dest.enrichment_expires_at ? new Date(dest.enrichment_expires_at) : null;
+const isExpired = !expiresAt || expiresAt.getTime() <= now.getTime();
+const isFresh = !!dest.enriched_at && !isExpired;
+
+if (isFresh) {
+  log("Already enriched (fresh)", { destinationId, expires_at: dest.enrichment_expires_at });
+  return new Response(
+    JSON.stringify({ success: true, skipped: true, reason: "already_enriched" }),
+    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+const isRefresh = !!dest.enriched_at && isExpired;
+log(isRefresh ? "Refreshing (TTL expired)" : "First enrichment", { destinationId });
+```
+
+### 3. Set the expiry on success
+
+In the update payload (line 211-213) add:
+
+```ts
+const enrichedAt = new Date();
+const newExpiresAt = new Date(enrichedAt.getTime() + 90 * 24 * 60 * 60 * 1000);
+const updatePayload: Record<string, unknown> = {
+  enriched_at: enrichedAt.toISOString(),
+  enrichment_expires_at: newExpiresAt.toISOString(),
+};
+```
+
+### 4. Don't duplicate activities on refresh
+
+The current code unconditionally `INSERT`s AI activities. For a TTL refresh we need to either skip or de-dupe. Simplest correct option: on refresh, **only insert activities whose `name` doesn't already exist for this destination**. That preserves any user-curated rows and avoids duplicates.
+
+Right before the existing insert block (line 246):
+
+```ts
+if (aiActivities.length > 0) {
+  let rowsToInsert = aiActivities;
+
+  if (isRefresh) {
+    const { data: existing } = await supabaseClient
+      .from("activities")
+      .select("name")
+      .eq("destination_id", destinationId);
+    const existingNames = new Set((existing ?? []).map(r => (r.name ?? "").toLowerCase().trim()));
+    rowsToInsert = aiActivities.filter(a => !existingNames.has((a.name ?? "").toLowerCase().trim()));
+    log("Refresh activity dedupe", { proposed: aiActivities.length, new: rowsToInsert.length });
+  }
+
+  if (rowsToInsert.length > 0) {
+    const activityRows = rowsToInsert.map(/* unchanged */);
+    // …existing insert
+  }
+}
+```
+
+This keeps refreshes additive (new attractions get added; old rows stay). If product later wants a hard "wipe + reseed" semantic, that's a separate decision — additive is the safer default.
 
 ### Out of scope
 
-- No backend changes. `save-itinerary` and `activity_costs` plumbing already work correctly when `syncBudgetFromDays` is invoked.
-- No schema changes.
-- No changes to `handleUpdateActivityTime` (line 5501) — it already runs the cascade through other paths; we can verify in passing but it's not the reported bug.
-- No changes to the lock button or the universal-locking pipeline.
+- Photos already have a 60-day TTL via `curated_images.expires_at` — no change.
+- Cross-tab dedup race (worst case: 2 calls instead of 1) — not worth fixing.
+- `seedCuratedToDb()` redundant upserts in `imagePrefetch.ts` — separate cleanup.
+- Manual "force refresh" admin tool — not needed; TTL handles it automatically.
 
-### Verification
+## Verification
 
-1. Open an activity → set cost to $42 → Save.
-   - Card cost line shows $42 ✓ (worked before).
-   - Day header total ✓, Budget tab ✓, Payments tab ✓ all reflect the new $42 within ~1 s (booking-changed dispatch).
-   - Network: a `POST` to `activity_costs` (or its upsert RPC, whichever `syncBudgetFromDays` uses) fires immediately, then the autosave fires 3 s later for `itinerary_data`.
-2. Refresh the page → cost still $42 in every place.
-3. Edit a different field (e.g. title) → activity does **not** auto-lock; existing lock state preserved. Click the Lock button → activity locks. Click again → unlocks.
-4. Edit an unlocked activity many times in a row → never locks.
-5. Edit a manually-locked activity → stays locked (unless the caller passes `isLocked: false`).
+1. Run migration → `enrichment_expires_at` exists; existing enriched rows have a backfilled expiry 90 days after their `enriched_at`.
+2. Click an unenriched destination → AI call fires, both `enriched_at` and `enrichment_expires_at` populate, `enrichment_expires_at ≈ enriched_at + 90 days`.
+3. Click the same destination again immediately → edge function returns `skipped: true, reason: "already_enriched"`, **no** AI call (check `[ENRICH-DEST] Already enriched (fresh)` log).
+4. Manually `UPDATE destinations SET enrichment_expires_at = now() - interval '1 day' WHERE id = …` → next click triggers a refresh, log shows `Refreshing (TTL expired)`, expiry advances 90 days, no duplicate activity rows (verify `SELECT count(*), name FROM activities WHERE destination_id = … GROUP BY name HAVING count(*) > 1` returns zero rows).
+5. Annual cost projection per destination: 4 calls × ~$0.001 = ~$0.004/year. ✓
 
-### Files
+## Files
 
-- `src/components/itinerary/EditorialItinerary.tsx` (single function, ~5 lines changed: capture `nextDays`, replace the `isLocked: true` line, add `syncBudgetFromDays(nextDays)` call, add dependency).
-- No other files touched.
+- New migration (adds `enrichment_expires_at`, backfills).
+- `supabase/functions/enrich-destination/index.ts` — guard, update payload, refresh dedupe (~30 lines changed total).

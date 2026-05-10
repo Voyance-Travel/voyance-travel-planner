@@ -3109,6 +3109,7 @@ export type Database = {
           dynamic_weather: Json | null
           emergency_numbers: Json | null
           enriched_at: string | null
+          enrichment_expires_at: string | null
           enrichment_priority: number | null
           enrichment_status: Json | null
           featured: boolean | null
@@ -3163,6 +3164,7 @@ export type Database = {
           dynamic_weather?: Json | null
           emergency_numbers?: Json | null
           enriched_at?: string | null
+          enrichment_expires_at?: string | null
           enrichment_priority?: number | null
           enrichment_status?: Json | null
           featured?: boolean | null
@@ -3217,6 +3219,7 @@ export type Database = {
           dynamic_weather?: Json | null
           emergency_numbers?: Json | null
           enriched_at?: string | null
+          enrichment_expires_at?: string | null
           enrichment_priority?: number | null
           enrichment_status?: Json | null
           featured?: boolean | null
