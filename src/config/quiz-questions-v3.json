@@ -1437,7 +1437,7 @@
       "category": "EXPLORER",
       "required": {
         "cultural_depth": { "min": 0.7 },
-        "learning_focus": { "min": 0.5 }
+        "learning_focus": { "min": 0.5, "max": 0.7 }
       },
       "boosters": {
         "cultural_depth": 1.5,
@@ -1448,7 +1448,8 @@
       "penalties": {
         "bucket_list": { "above": 0.7, "weight": -0.8 },
         "pace": { "above": 0.7, "weight": -0.5 },
-        "status_seeking": { "above": 0.6, "weight": -0.6 }
+        "status_seeking": { "above": 0.6, "weight": -0.6 },
+        "learning_focus": { "above": 0.8, "weight": -1.5 }
       }
     },
     "urban_nomad": {
@@ -1487,7 +1488,8 @@
       "penalties": {
         "status_seeking": { "above": 0.5, "weight": -1.0 },
         "food_focus": { "above": 0.7, "weight": -0.5 },
-        "art_focus": { "above": 0.6, "weight": -0.5 }
+        "art_focus": { "above": 0.6, "weight": -0.5 },
+        "nature_orientation": { "below": 0.5, "weight": -1.0 }
       }
     },
     "digital_explorer": {
@@ -1577,14 +1579,16 @@
     },
     "community_builder": {
       "name": "The Purpose Voyager",
-      "category": "CONNECTOR",
-      "required": {
-        "ethics_focus": { "min": 0.6 },
-        "cultural_depth": { "min": 0.5 }
-      },
+      "category": "ACHIEVER",
+      "required": {},
+      "requiredAny": [
+        { "experience_accumulation": { "min": 0.6 } },
+        { "bucket_list": { "min": 0.6 } }
+      ],
       "boosters": {
-        "ethics_focus": 1.5,
-        "cultural_depth": 1.0,
+        "experience_accumulation": 1.0,
+        "bucket_list": 0.8,
+        "social_sharing": 0.4,
         "social_energy": 0.6,
         "learning_focus": 0.5
       },
@@ -1622,7 +1626,6 @@
       "boosters": {
         "adventure": 1.5,
         "pace": 1.0,
-        "nature_orientation": 0.6,
         "morning_energy": 0.6
       },
       "penalties": {
@@ -1635,11 +1638,14 @@
       "name": "The Passport Collector",
       "category": "ACHIEVER",
       "required": {
-        "niche_interest": { "min": 0.7 }
+        "collection_drive": { "min": 0.6 },
+        "novelty_seeking": { "min": 0.5 }
       },
       "boosters": {
-        "niche_interest": 2.0,
-        "learning_focus": 0.8,
+        "collection_drive": 1.5,
+        "novelty_seeking": 1.0,
+        "bucket_list": 0.5,
+        "niche_interest": 0.4,
         "planning": 0.6
       },
       "penalties": {
@@ -1692,12 +1698,15 @@
       "name": "The Wellness Devotee",
       "category": "RESTORER",
       "required": {
-        "restoration_need": { "min": 0.7 },
-        "planning": { "min": 0.4 }
+        "escape_need": { "min": 0.6 },
+        "restoration_need": { "min": 0.6 }
       },
       "boosters": {
+        "escape_need": 1.2,
         "restoration_need": 1.5,
-        "planning": 0.8,
+        "healing_focus": 0.5,
+        "food_focus": 0.4,
+        "spirituality": 0.4,
         "quality_intrinsic": 0.6
       },
       "penalties": {
@@ -1876,11 +1885,11 @@
       "name": "The Restoration Seeker",
       "category": "TRANSFORMER",
       "required": {
-        "healing_focus": { "min": 0.7 }
+        "healing_focus": { "min": 0.6 }
       },
       "boosters": {
         "healing_focus": 2.0,
-        "restoration_need": 1.0,
+        "restoration_need": 0.5,
         "spirituality": 0.6
       },
       "penalties": {
@@ -1951,14 +1960,14 @@
     },
     "escape_artist": {
       "name": "Escape Artist",
-      "category": "RESTORER",
+      "category": "EXPLORER",
       "required": {
-        "restoration_need": { "min": 0.5 },
-        "novelty_seeking": { "min": 0.5 }
+        "autonomy_preference": { "min": 0.7 }
       },
       "boosters": {
-        "restoration_need": 1.2,
-        "novelty_seeking": 1.0,
+        "autonomy_preference": 1.5,
+        "pace": 0.6,
+        "adventure": 0.5,
         "flexibility": 0.8
       },
       "penalties": {

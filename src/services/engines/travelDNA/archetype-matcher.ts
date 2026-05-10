@@ -77,6 +77,7 @@ interface ArchetypeProfile {
   name: string;
   category: string;
   required: Record<string, TraitRequirement>;
+  requiredAny?: Array<Record<string, TraitRequirement>>;
   boosters: Record<string, number>;
   penalties: Record<string, PenaltyRule>;
   lifeStageBonus?: Record<string, number>;
@@ -271,8 +272,31 @@ function calculateArchetypeScore(
     }
   }
 
+  // requiredAny: at least one group must have all its traits met (OR-of-AND-groups)
+  const requiredAny = profile.requiredAny || [];
+  if (requiredAny.length > 0) {
+    let anyGroupMet = false;
+    for (const group of requiredAny) {
+      const groupOk = Object.entries(group).every(([trait, req]) => {
+        const v = scores[trait];
+        return typeof v === 'number' && isFinite(v) && meetsRequirement(v, req);
+      });
+      if (groupOk) {
+        anyGroupMet = true;
+        for (const trait of Object.keys(group)) {
+          if (!matchedRequirements.includes(trait)) matchedRequirements.push(trait);
+        }
+        // Award full gate budget for satisfying the OR-group, parity with required AND-gates
+        score += 30;
+        traitProximities.push(1.0);
+        break;
+      }
+    }
+    if (!anyGroupMet) requiredMet = false;
+  }
+
   // If any required trait is not met, disqualify this archetype
-  if (!requiredMet && Object.keys(required).length > 0) {
+  if (!requiredMet && (Object.keys(required).length > 0 || requiredAny.length > 0)) {
     return {
       id: archetypeId,
       name: profile.name,
