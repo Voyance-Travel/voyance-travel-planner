@@ -129,6 +129,7 @@ export interface TripStats {
   completedTrips: number;
   upcomingTrips: number;
   draftTrips: number;
+  otherTrips: number;
   totalCountries: number;
   totalCities: number;
   countriesVisited: string[];
