@@ -9947,25 +9947,6 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
           </div>
         )}
       </div>
-
-      {/* Refresh Day results sheet — surfaces refresh-day diagnostics + accept/reject */}
-      <RefreshDaySheet
-        open={refreshSheetDay !== null && !!refreshResults[refreshSheetDay]}
-        onOpenChange={(open) => {
-          if (!open) setRefreshSheetDay(null);
-        }}
-        result={refreshSheetDay !== null ? refreshResults[refreshSheetDay] || null : null}
-        onAcceptAll={(changes) => {
-          if (refreshSheetDay === null) return;
-          const idx = days.findIndex((d: any) => d.dayNumber === refreshSheetDay);
-          if (idx >= 0) handleApplyRefreshChanges(idx, changes);
-        }}
-        onAcceptSelected={(changes) => {
-          if (refreshSheetDay === null) return;
-          const idx = days.findIndex((d: any) => d.dayNumber === refreshSheetDay);
-          if (idx >= 0) handleApplyRefreshChanges(idx, changes);
-        }}
-      />
     </div>
   );
 }
