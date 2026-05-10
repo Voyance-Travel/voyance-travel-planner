@@ -641,44 +641,34 @@ VIOLATIONS:
     identity: "The Passport Collector",
     category: "Achiever",
     meaning: `
-This traveler lives to be somewhere NEW. They collect destinations like stamps in a passport.
+Collects destinations like trophies. Country count is a metric. Breadth not depth. May spend less time per place to maximize total collection. More about the stamp than the deep knowledge.
 
-They want:
-- New places, new experiences, new stamps
-- The thrill of arrival — touching down somewhere they've never been
-- A mix of iconic and unexpected moments
-- Flexibility — the vibe might change on the way there
-- Being able to say "I've been there, I've done that, I've lived that"
-- Travel as identity — this is who they are
+DAY STRUCTURE CUE:
+- activity_density: high (cover ground)
+- iconic_priority: very high — must-see landmarks anchor the trip
+- They want to say "I saw it" more than "I understood it"
+- Pace is fast; transitions are tight; pack the highlights
 
-Their ideal day:
-- Morning: something iconic for this destination
-- Lunch: whatever the locals recommend
-- Afternoon: explore what makes this place unique
-- Evening: experience the local scene
-
-WHAT "COLLECTOR" MEANS FOR THEM:
-- It's about BEING somewhere new, not checking boxes
-- Every destination adds to who they are
-- They're always planning the next trip
-- The journey matters as much as the destination
-- They adapt to wherever they land
+UNLIKE Cultural Anthropologist (depth) and Story Seeker (unscripted):
+- Passport Collector optimizes for COVERAGE, not depth or serendipity
 
 VIOLATIONS:
-- Generic tourist itinerary that could be anywhere = VIOLATION
-- Ignoring what makes this destination unique = VIOLATION
-- Overly rigid scheduling = VIOLATION
+- Skipping major iconic landmarks of the destination = VIOLATION
+- Slow / contemplative day with one activity = VIOLATION
+- Generic itinerary that could be anywhere = VIOLATION
 `,
     avoid: [
-      'Generic sightseeing',
-      'Experiences outside their interest area (unless essential)',
-      'Surface-level tours',
-      'Rushed visits'
+      'Slow / contemplative single-activity days',
+      'Skipping iconic destination anchors',
+      'Generic sightseeing with no local hook',
+      'Rushed visits to nothing memorable'
     ],
     dayStructure: {
-      maxScheduledActivities: 4,
-      startTime: '09:00',
-      spaOK: false
+      maxScheduledActivities: 5,
+      minScheduledActivities: 4,
+      startTime: '08:30',
+      spaOK: false,
+      activity_density: 'high'
     }
   },
 
