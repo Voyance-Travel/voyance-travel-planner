@@ -19,7 +19,7 @@ const corsHeaders = {
 const FIXED_COSTS: Record<string, number> = {
   unlock_day: 60,
   smart_finish: 50,
-  regenerate_day: 10,
+  regenerate_day: 30,
   swap_activity: 5,
   add_activity: 5,
   restaurant_rec: 5,
