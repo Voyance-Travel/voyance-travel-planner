@@ -245,6 +245,16 @@ export default function MicroDisambiguation({
       // Full recalculation — updates archetypes, tone tags, everything
       await recalculateDNAFromPreferences(userId);
 
+      // Persist resolution to DB so it follows the user across devices/browsers
+      await supabase
+        .from('travel_dna_profiles')
+        .update({
+          disambiguation_resolved_at: new Date().toISOString(),
+          disambiguation_question_id: question.id,
+          disambiguation_answer_id: selectedAnswer,
+        })
+        .eq('user_id', userId);
+
       localStorage.setItem(dismissKey, 'true');
       setIsResolved(true);
       toast.success('Thanks! Your profile has been refined.');
