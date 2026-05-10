@@ -22,6 +22,7 @@ export interface TripStats {
   planned: { count: number; trips: TripSummary[]; };
   completed: { count: number; trips: TripSummary[]; };
   drafts: { count: number; trips: TripSummary[]; };
+  other: { count: number; trips: TripSummary[]; };
   total: number;
 }
 
