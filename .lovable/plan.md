@@ -1,36 +1,70 @@
-## Cross-tab sign-out sync via BroadcastChannel
+## Atomic quiz-completion write via Postgres RPC
 
-**Problem:** Sign-out in tab A doesn't propagate to tab B until next reload. `AuthContext.tsx` only listens to Supabase's per-tab `onAuthStateChange`.
+**Problem:** `setPreferences` in `src/contexts/AuthContext.tsx` (lines 740–760) does two upserts back-to-back:
+1. `user_preferences` upsert with `quiz_completed: true` → throws on error.
+2. `profiles` upsert with `quiz_completed: true` → logs and swallows the error.
 
-### Change: `src/contexts/AuthContext.tsx`
+If write #2 fails, the two rows disagree on quiz status. `transformProfile` currently OR's the two flags, so the practical user-visible damage is small — but the invariant "both rows agree" is silently violated, and any future code path that reads only `profiles.quiz_completed` (e.g. server-side gating, a future RLS policy, an analytics export) will misclassify the user.
 
-Inside the existing `useEffect` (line 227, the same effect that subscribes to `onAuthStateChange`), open a `BroadcastChannel('voyance-auth')` and:
+The cleanest fix is **one transaction**, not two upserts that both throw. Postgres can do that via a `SECURITY DEFINER` function; PostgREST cannot wrap two table calls in a transaction.
 
-1. **Outbound** — when this tab observes a real `SIGNED_OUT` event from Supabase (the existing `if (event === 'SIGNED_OUT')` branch around line 282), `bc.postMessage({ type: 'auth:signout' })`. Also broadcast from the `logout()` method at line 545 right after `supabase.auth.signOut()` resolves, so the message goes out even if the listener races.
-2. **Inbound** — `bc.onmessage` handler:
-   - If `type === 'auth:signout'`: clear local state the same way the SIGNED_OUT branch does — `currentUserIdRef.current = null`, `setSession(null)`, `setUser(null)`, reset the singleton cache (`sg.initialized = false; sg.cachedUser = null; sg.cachedSession = null`), and call `supabase.auth.signOut({ scope: 'local' })` so this tab's stored token is wiped without re-broadcasting (use `scope: 'local'` to avoid hitting the server again — the originating tab already revoked the refresh token globally).
-   - Skip if the tab is already signed out (no `session`) to avoid noisy redirects.
-3. **Loop guard** — use a module-level `isHandlingRemoteSignout` ref so the local `SIGNED_OUT` event triggered by step 2's `signOut({ scope: 'local' })` doesn't re-broadcast and ping-pong.
-4. **Cleanup** — add `bc.close()` to the existing `return () => { … }` cleanup at line 446.
+### Migration: `complete_quiz` RPC
 
-### Optional sign-in mirror (low priority)
+New function `public.complete_quiz(_prefs jsonb)`:
 
-Same channel, `type: 'auth:signin'` on `SIGNED_IN`. Receiving tabs call `supabase.auth.getSession()` to pick up the new session from shared localStorage and re-run `loadUserData`. **Not in scope** unless the user wants tab B to auto-sign-in after tab A logs in — defer; the urgent issue is sign-out propagation on shared devices.
+- Runs as `SECURITY DEFINER`, `SET search_path = public`.
+- Reads `auth.uid()`; raises `exception 'not_authenticated'` if null.
+- In a single statement block (implicit transaction):
+  1. `INSERT INTO user_preferences (user_id, quiz_completed, completed_at, budget_tier, travel_pace, accommodation_style, planning_preference, interests, travel_companions, travel_vibes, traveler_type, primary_goal) VALUES (auth.uid(), true, now(), …) ON CONFLICT (user_id) DO UPDATE SET … ` — only set columns whose key is present in `_prefs` (use `coalesce(_prefs->>'budget','user_preferences.budget_tier')` style, or build the column list dynamically with `jsonb_object_keys`).
+  2. `INSERT INTO profiles (id, quiz_completed, updated_at) VALUES (auth.uid(), true, now()) ON CONFLICT (id) DO UPDATE SET quiz_completed = true, updated_at = now()`.
+- Returns `void` (or `jsonb` with `{ ok: true }` for clarity).
+- `GRANT EXECUTE ON FUNCTION public.complete_quiz(jsonb) TO authenticated;`
+- No grant to `anon`.
 
-### Browser support / fallback
+Because both upserts run inside the same function call, Postgres wraps them in a single transaction: if the `profiles` upsert fails, the `user_preferences` upsert rolls back. Atomic.
 
-`BroadcastChannel` is supported on all current evergreen browsers and recent Safari (15.4+). For older Safari, add a thin fallback: subscribe to `window.addEventListener('storage', …)` and watch for the Supabase auth key being deleted (`e.key?.startsWith('sb-') && e.key.endsWith('-auth-token') && e.newValue === null`) — same handler as the BroadcastChannel inbound. Wrap the channel construction in `typeof BroadcastChannel !== 'undefined'`.
+### Client change: `src/contexts/AuthContext.tsx` — `setPreferences`
+
+Replace the two `supabase.from(...).upsert(...)` blocks with one call:
+
+```ts
+const { error } = await supabase.rpc('complete_quiz', {
+  _prefs: {
+    budget: preferences.budget ?? null,
+    pace: preferences.pace ?? null,
+    accommodation: preferences.accommodation ?? null,
+    planning: preferences.planning ?? null,
+    interests: preferences.interests ?? null,
+    travel_companions: preferences.travel_companions ?? null,
+    travel_vibes: preferences.travel_vibes ?? null,
+    traveler_type: preferences.traveler_type ?? null,
+    primary_goal: preferences.primary_goal ?? null,
+  },
+});
+if (error) {
+  console.error('[Auth] Error completing quiz:', error);
+  throw error;
+}
+```
+
+Then update local state as before. Keep the `console.log('[Auth] Preferences saved successfully')`.
+
+The `user_id`/`auth.uid()` is read server-side, so it doesn't need to be in the payload.
+
+### What's intentionally NOT in scope
+
+- No changes to `transformProfile`'s OR fallback — keeping it is harmless and actually nice belt-and-braces.
+- No changes to `updateUser` (single-table write, already throws).
+- No retry/repair job for already-divergent rows. If the user wants a one-time fix-up of historical drift (any user where `user_preferences.quiz_completed = true` but `profiles.quiz_completed` is false/null), call that out and add a tiny `UPDATE profiles SET quiz_completed = true …` data fix as a separate step.
 
 ### Verification
 
-- Open the app in tabs A and B, both signed-in to the same account.
-- In tab A click Logout. Within ~1s, tab B's `user` and `session` go null and routing redirects to landing/login.
-- Reload tab B — it stays signed-out (storage was wiped).
-- Sign in tab A, sign in tab B. Sign out tab A → tab B clears. No infinite loop in either tab's console.
-- Older browser without `BroadcastChannel`: storage-event fallback fires the same clear path.
+- Quiz finish on a fresh user → both rows have `quiz_completed = true` and the call succeeds.
+- Force the `profiles` upsert to fail (e.g. temporarily revoke `profiles` permissions in a staging DB) → RPC errors, **`user_preferences` row is unchanged** (atomic rollback), client surfaces the error toast instead of silently swallowing it.
+- Re-running the quiz on an existing user upserts cleanly without duplicate-key errors.
+- RLS unchanged; no new direct-table grants needed because the RPC runs as definer.
 
 ### Files touched
 
-- `src/contexts/AuthContext.tsx` only.
-
-No backend, no migration, no new dependency.
+- New migration: `complete_quiz(jsonb)` function + grant.
+- `src/contexts/AuthContext.tsx` — `setPreferences` body only (no signature change).
