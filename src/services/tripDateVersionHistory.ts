@@ -24,6 +24,10 @@ export interface TripDateVersion {
   hotel_selection: unknown;
   created_at: string;
   created_by_action: string | null;
+  restored_at?: string | null;
+  times_restored?: number | null;
+  label?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 /**
