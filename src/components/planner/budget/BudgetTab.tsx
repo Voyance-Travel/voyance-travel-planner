@@ -1009,10 +1009,10 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-baseline gap-2">
+            <div className={cn("flex items-baseline gap-2", isGenerating && "opacity-70 animate-pulse")}>
               <span className={cn(
                 "text-2xl font-bold",
-                snapshot.budgetRemainingCents < 0 ? "text-destructive" : "text-emerald-600"
+                isGenerating ? "text-muted-foreground" : (snapshot.budgetRemainingCents < 0 ? "text-destructive" : "text-emerald-600")
               )}>
                 {formatCurrency(snapshot.budgetRemainingCents)}
               </span>
