@@ -1301,6 +1301,7 @@ VIOLATIONS:
 // =============================================================================
 
 const TRANSFORMER_ARCHETYPES: Record<string, ArchetypeDefinition> = {
+  // TODO: when ArchetypeDefinition adds affinity/timePreferences/diningPolicy fields, expand per the Mindful Voyager v2 spec.
   eco_ethicist: {
     identity: "The Mindful Voyager",
     category: "Transformer",
@@ -1335,16 +1336,29 @@ VIOLATIONS:
 - Single-use plastic = VIOLATION
 `,
     avoid: [
-      'Chain hotels/restaurants',
-      'High-carbon activities',
-      'Over-touristed sites',
+      'Chain hotels/restaurants and global brands',
+      'High-carbon / high-emission optional activities (helicopter tours, jet ski, race cars)',
+      'Over-touristed sites and mass-tourism photo-op venues',
       'Single-use plastic venues',
       'Exploitative tourism',
-      'Cruise ships'
+      'Cruise ship excursions',
+      'Animal exploitation experiences (elephant riding, tiger temples, captive dolphin shows)',
+      'Fast fashion shopping districts'
+    ],
+    prefer: [
+      'Locally-owned restaurants and cafes',
+      'B-corp certified or family-run hotels',
+      'Community-based tourism experiences',
+      'Sustainable food (farm-to-table, foraging, local producers)',
+      'Cultural immersion with local guides',
+      'Nature reserves with conservation focus',
+      'Public transit and walking'
     ],
     dayStructure: {
+      minScheduledActivities: 3,
       maxScheduledActivities: 4,
-      startTime: '08:00',
+      startTime: '08:30',
+      michelinOK: false,
       spaOK: false
     }
   },
