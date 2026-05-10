@@ -11,6 +11,12 @@ interface DestinationData {
   description?: string | null;
 }
 
+// Module-level dedup — shared across all hook instances in this tab.
+// Prevents duplicate enrich-destination invocations when multiple components
+// mount the same destination simultaneously. Cross-tab dedup is handled by
+// the DB-side `enriched_at` guard inside the enrich-destination function.
+const enrichInFlight = new Map<string, Promise<void>>();
+
 /**
  * Detects "thin" database destinations and triggers AI enrichment.
  * Returns enrichment state so the page can show a shimmer/loading indicator.

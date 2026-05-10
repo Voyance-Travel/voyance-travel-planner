@@ -1,39 +1,33 @@
-## RS.M10 — Cache lookup-destination-insights (90-day TTL)
+## RS.M11 — Module-level dedup for `useDestinationEnrichment`
 
-The function currently calls Perplexity on every invocation. Sibling lookups (events, advisory) cache. Insights data (language, voltage, emergency #, timezone, water) is essentially static, so a 90-day cache is safe and a big cost win.
+The hook currently dedups per-instance via `triggeredRef`, so two simultaneous mounts of the same destination (multi-tab UI, parent + child both mounting, fast remounts) each fire `enrich-destination`. The DB `enriched_at` guard catches it server-side, but we still pay the round-trip + LLM call.
 
-### 1. Migration: `destination_insights_cache`
+The user's snippet is a simplification — the real hook also tracks `isEnriching` / `enrichmentDone` state, runs a thinness check, and invalidates 3 react-query keys on success. The plan keeps all that and only changes the gating layer.
 
-```sql
-CREATE TABLE IF NOT EXISTS public.destination_insights_cache (
-  destination text PRIMARY KEY,
-  insights jsonb NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  expires_at timestamptz NOT NULL DEFAULT now() + interval '90 days'
-);
-ALTER TABLE public.destination_insights_cache ENABLE ROW LEVEL SECURITY;
-GRANT ALL ON public.destination_insights_cache TO service_role;
-```
+### Change — `src/hooks/useDestinationEnrichment.ts`
 
-No public RLS policy — only the edge function (service role) reads/writes. Authenticated/anon clients have no access by default once RLS is on, which is the desired posture.
+1. Add module-level dedup map at top of file (above the hook):
+   ```ts
+   // Shared across all hook instances in this tab. Cross-tab dedup is handled
+   // by the DB-side `enriched_at` guard inside the enrich-destination function.
+   const enrichInFlight = new Map<string, Promise<void>>();
+   ```
 
-Cache key: `${destination}|${country ?? ''}` lowercased — country is part of the request and changes the lookup, so it must be part of the key (different "Springfield"s).
+2. Inside the `useEffect`, after the existing thinness check passes, key by `dbDestination.id.toLowerCase()`:
+   - If `enrichInFlight.has(key)` → bail out (no state flip, no invoke). The other mount will invalidate queries on completion, and react-query's shared cache will deliver the result to this mount.
+   - Otherwise create the promise, store it in the map, and `delete` in `finally`. Wrap the existing `enrich()` body so the map cleanup is guaranteed.
 
-### 2. Edge function changes — `supabase/functions/lookup-destination-insights/index.ts`
+3. Keep `triggeredRef` as the per-instance guard (prevents the same mount from re-firing on unrelated re-renders before the module map is populated). Both guards coexist.
 
-- Add Supabase admin client (using `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`, same pattern as the other lookup functions).
-- Build `cacheKey = `${destination}|${country ?? ''}`.toLowerCase()`.
-- **Cache read** before the Perplexity call: select `insights, expires_at` where `destination = cacheKey` and `expires_at > now()`. On hit, return the cached payload in the same shape the function currently emits (`{ success, data, destination, citations }`) with a `cached: true` flag, and skip cost tracking.
-- **Cache write** after a successful Perplexity parse: upsert `{ destination: cacheKey, insights: <full success payload>, created_at, expires_at: now + 90d }`. Failures are logged and ignored — never block the response.
-- Cost tracker still runs on cache miss only.
+4. No change to the return shape, the thinness logic, or the invalidation keys.
 
 ### Verification
 
-- `grep -c "destination_insights_cache" supabase/functions/lookup-destination-insights/index.ts` ≥ 2 (read + upsert).
-- Manually invoke twice for the same destination; second call returns `cached: true` with no Perplexity log line.
+- `grep -c "enrichInFlight\|Map<string, Promise<void>>" src/hooks/useDestinationEnrichment.ts` ≥ 1 (expect 3+).
+- Manual: open two destination tabs simultaneously for an unenriched city → only one `enrich-destination` invocation in network tab.
 
 ### Out of scope
 
-- Backfilling existing destinations.
-- Cache invalidation UI / admin tools.
-- Touching the other lookup functions.
+- Cross-tab dedup (handled by DB).
+- Refactoring the thinness heuristic.
+- Changing the enrich-destination function itself.
