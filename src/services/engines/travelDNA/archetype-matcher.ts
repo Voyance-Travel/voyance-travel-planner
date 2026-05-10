@@ -272,8 +272,30 @@ function calculateArchetypeScore(
     }
   }
 
+  // requiredAny: at least one group must have all its traits met (OR-of-AND-groups)
+  const requiredAny = profile.requiredAny || [];
+  if (requiredAny.length > 0) {
+    let anyGroupMet = false;
+    for (const group of requiredAny) {
+      const groupOk = Object.entries(group).every(([trait, req]) => {
+        const v = scores[trait];
+        return typeof v === 'number' && isFinite(v) && meetsRequirement(v, req);
+      });
+      if (groupOk) {
+        anyGroupMet = true;
+        for (const trait of Object.keys(group)) {
+          if (!matchedRequirements.includes(trait)) matchedRequirements.push(trait);
+        }
+        // Award gate points equivalent to one required trait
+        score += 30 / Math.max(1, Object.keys(group).length + Object.keys(required).length);
+        break;
+      }
+    }
+    if (!anyGroupMet) requiredMet = false;
+  }
+
   // If any required trait is not met, disqualify this archetype
-  if (!requiredMet && Object.keys(required).length > 0) {
+  if (!requiredMet && (Object.keys(required).length > 0 || requiredAny.length > 0)) {
     return {
       id: archetypeId,
       name: profile.name,
