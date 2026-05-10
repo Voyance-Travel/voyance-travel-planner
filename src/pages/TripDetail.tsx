@@ -269,7 +269,7 @@ export default function TripDetail() {
   const [activeCity, setActiveCity] = useState<string | null>(null);
   // Use per-city destination for multi-city trips, fall back to overall trip destination
   const heroDestination = activeCity || trip?.destination || '';
-  const { imageUrl: heroImageUrl, onError: onHeroError, onLoad: onHeroLoad } = useTripHeroImage({
+  const { imageUrl: heroImageUrl, onError: onHeroError, onLoad: onHeroLoad, attribution: heroAttribution } = useTripHeroImage({
     destination: heroDestination,
     seededHeroUrl: activeCity ? null : seededHeroUrl, // Don't use seeded hero for per-city resolution
     tripId: activeCity ? undefined : trip?.id, // Don't write-back per-city heroes to trip metadata
