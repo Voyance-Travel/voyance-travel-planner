@@ -2603,11 +2603,8 @@ export function EditorialItinerary({
         if ((firstResult.issues || []).length === 0) {
           toast.info(`Day ${day.dayNumber} timing already looks clean.`);
         } else {
-          toast(`Day ${day.dayNumber} has no auto-fixable timing issues. Review the suggestions below.`, { icon: 'ℹ️' });
-          requestAnimationFrame(() => {
-            const el = document.getElementById(`refresh-diff-${day.dayNumber}`);
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          });
+          setRefreshSheetDay(day.dayNumber);
+          toast(`Day ${day.dayNumber} has no auto-fixable timing issues. Review the suggestions.`, { icon: 'ℹ️' });
         }
         return;
       }
