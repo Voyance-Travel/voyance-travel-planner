@@ -376,7 +376,10 @@ async function executeRewriteDayAction(
 
   const updatedDays = [...currentDays];
   updatedDays[dayIndex] = mergedDay;
-  await updateTripItinerary(tripId, updatedDays);
+  const persistResult = await updateTripItinerary(tripId, updatedDays);
+  if (!persistResult.success) {
+    return { success: false, message: PERSIST_FAILURE_MESSAGE, error: persistResult.error, updatedDays };
+  }
 
   const restoredSuffix = lockGuard.violations > 0
     ? ` (restored ${lockGuard.violations} locked item${lockGuard.violations === 1 ? '' : 's'} the AI tried to change)`
@@ -507,7 +510,10 @@ async function executeSwapAction(
     { type: 'added', dayNumber: target_day, activityTitle: bestAlternative.name, category: bestAlternative.category, costAfter },
   ];
 
-  await updateTripItinerary(tripId, updatedDays);
+  const swapPersist = await updateTripItinerary(tripId, updatedDays);
+  if (!swapPersist.success) {
+    return { success: false, message: PERSIST_FAILURE_MESSAGE, error: swapPersist.error, updatedDays };
+  }
 
   return {
     success: true,
@@ -569,7 +575,10 @@ async function executeRegenerateAction(
 
   const updatedDays = [...currentDays];
   updatedDays[dayIndex] = { ...day, ...data.day, activities: regenActivities };
-  await updateTripItinerary(tripId, updatedDays);
+  const regenPersist = await updateTripItinerary(tripId, updatedDays);
+  if (!regenPersist.success) {
+    return { success: false, message: PERSIST_FAILURE_MESSAGE, error: regenPersist.error, updatedDays };
+  }
 
   const regenRestoredSuffix = regenLockGuard.violations > 0
     ? ` (restored ${regenLockGuard.violations} locked item${regenLockGuard.violations === 1 ? '' : 's'} the AI tried to change)`
@@ -683,7 +692,10 @@ async function executePacingAction(
 
   const updatedDays = [...currentDays];
   updatedDays[dayIndex] = { ...day, activities: updatedActivities };
-  await updateTripItinerary(tripId, updatedDays);
+  const pacingPersist = await updateTripItinerary(tripId, updatedDays);
+  if (!pacingPersist.success) {
+    return { success: false, message: PERSIST_FAILURE_MESSAGE, error: pacingPersist.error, updatedDays };
+  }
 
   return {
     success: true,
@@ -816,7 +828,10 @@ async function executeFilterAction(
     updatedDays[dayIndex] = { ...day, activities: updatedActivities };
   }
 
-  await updateTripItinerary(tripId, updatedDays);
+  const filterPersist = await updateTripItinerary(tripId, updatedDays);
+  if (!filterPersist.success) {
+    return { success: false, message: PERSIST_FAILURE_MESSAGE, error: filterPersist.error, updatedDays };
+  }
 
   return {
     success: true,
@@ -865,7 +880,13 @@ function sortActivitiesChronologically(days: ItineraryDay[]): ItineraryDay[] {
 // DATABASE UPDATE
 // ============================================================================
 
-async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]): Promise<void> {
+interface PersistResult {
+  success: boolean;
+  error?: string;
+  local?: boolean;
+}
+
+async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]): Promise<PersistResult> {
   // Run client-side meal compliance guard before saving (async — uses real venue names)
   try {
     const { enforceItineraryMealComplianceAsync } = await import('@/utils/mealGuard');
@@ -904,8 +925,19 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
       .maybeSingle();
 
     if (fetchError) {
+      // Local trips have no row in `trips` — treat absent row as a local-only
+      // success so the localStorage write path (handled by the caller) is the
+      // canonical persist site. Anything else is a real persistence failure.
+      if ((fetchError as any).code === 'PGRST116') {
+        return { success: true, local: true };
+      }
       console.error('[ActionExecutor] Error fetching trip:', fetchError);
-      return;
+      return { success: false, error: fetchError.message || 'fetch_failed' };
+    }
+
+    if (!trip) {
+      // No row → local trip. See note above.
+      return { success: true, local: true };
     }
 
     const currentData = (trip?.itinerary_data as Record<string, unknown>) || {};
@@ -930,13 +962,17 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
       // error so the caller (UI layer) can re-render or retry instead of
       // silently persisting dirty data.
       console.error('[ActionExecutor] Backend save failed (no raw fallback):', saveError);
-    } else {
-      console.log('[ActionExecutor] Trip itinerary saved via backend (normalized + meal-guarded)');
+      return { success: false, error: saveError.message || 'save_failed' };
     }
-  } catch (err) {
+    console.log('[ActionExecutor] Trip itinerary saved via backend (normalized + meal-guarded)');
+    return { success: true };
+  } catch (err: any) {
     console.error('[ActionExecutor] Update error:', err);
+    return { success: false, error: err?.message || 'persist_exception' };
   }
 }
+
+const PERSIST_FAILURE_MESSAGE = 'Changes could not be saved. Please try again.';
 
 /**
  * Update localStorage for local trips

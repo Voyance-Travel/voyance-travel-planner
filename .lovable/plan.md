@@ -1,84 +1,58 @@
-## Bug 8: AI chat doesn't verify lock preservation
+## Problem
 
-The chat path silently violates locks because three things are wrong:
+`ItineraryAssistant.handleActionApply` shows `toast.success('Action applied')` (line 528) whenever `executeAction(...)` resolves with `result.success === true`. But the persistence inside the executor silently swallows failures, so the user can see the success toast even when nothing reached the database.
 
-1. **Flag mismatch.** Every lock check in `itineraryActionExecutor.ts` reads only `a.isLocked`. The Universal Locking Protocol uses `isLocked`, `locked`, `is_locked`, `lock_state === 'locked'`, plus source flags `user/manual/extracted/pinned`. A row locked via the editor's "Lock" toggle (which sets `locked: true` and/or `lock_state: 'locked'`) is invisible to the chat executor → swap/filter/regenerate happily replaces it.
-2. **AI sees the wrong shape.** `ItineraryAssistant.tsx:130` only forwards `isLocked: a.isLocked` to the model. The system prompt asks the AI to "preserve_locked" but the AI literally cannot tell which rows are locked when only `lock_state` is set.
-3. **No post-write verification.** `executeRewriteDayAction` and `executeRegenerateAction` send `keepActivities` IDs to the edge function and trust the response. If the backend drops or mutates a locked row, nothing notices.
+Two leak paths:
 
-### Fix
+1. **Executor swallows save errors.** `updateTripItinerary` (`src/services/itineraryActionExecutor.ts:868`) is `void`. It calls `save-itinerary` via `supabase.functions.invoke`, and on error just `console.error`s. All five callers (`executeRewriteDayAction`, `executeSwapAction`, `executeRegenerateAction`, `executeFilterAction`, `executePacingAction`) `await updateTripItinerary(...)` then return `success: true` regardless of whether the row was written.
+2. **Some action types have no executor-side persistence at all.** They hand `updatedDays` back to the caller and rely entirely on the parent. The parent (`TripDetail.tsx:3626` `onItineraryUpdate`) only calls `setTrip(...)` — no DB write. If the user navigates away before another save, the change is lost.
 
-**1. Single shared lock helper.** Export `isActivityLocked(act)` from `src/lib/itinerary/persistDayContract.ts` (the existing `isLockedRow` already covers all flags + sources — promote it to an exported `isActivityLocked` and re-use). The signature: `(a: any) => boolean`.
+The user-visible symptom is identical in both cases: green toast, no persisted change.
 
-**2. Replace every flag check in `itineraryActionExecutor.ts`** with `isActivityLocked`:
-- Line 241 (`rewrite_day` keepActivities filter)
-- Line 378 (`swap` pre-check)
-- Line 486 (`regenerate_day` keepActivities filter)
-- Line 546 (`pacing more_relaxed` removal pick)
-- Line 681 (`filter` per-activity skip)
+## Fix
 
-**3. Forward full lock state to the AI.** In `ItineraryAssistant.tsx`, the per-activity payload becomes:
-```ts
-isLocked: isActivityLocked(a),
-```
-so the AI's `preserve_locked` instruction has correct ground truth across all three lock representations.
+Treat persistence as part of the action contract. Surface failures all the way back to the toast.
 
-**4. Post-write lock-violation guard for day-level rewrites.** Add a shared verifier in the executor:
+### 1. `src/services/itineraryActionExecutor.ts`
 
-```ts
-function verifyLocksPreserved(
-  before: Activity[],
-  after: Activity[],
-  dayNumber: number,
-): { restored: Activity[]; violations: number } {
-  const lockedBefore = before.filter(isActivityLocked);
-  let violations = 0;
-  const matched = new Set<number>();
-  const result = [...after];
+- Change `updateTripItinerary` signature to `Promise<{ success: boolean; error?: string }>`.
+  - Return `{ success: true }` after a successful `save-itinerary` invocation.
+  - Return `{ success: false, error }` on `saveError`, fetch error, or thrown exception. Keep the existing `console.error`s.
+  - Keep the existing "no raw fallback" comment intact.
+  - Local trips (no row in `trips`) detected via `fetchError` of code `PGRST116` or empty `trip` → treat as `{ success: true, local: true }` so the local‑storage write path stays unaffected.
+- In every caller that currently does `await updateTripItinerary(tripId, updatedDays)`, capture the result. If `!success`, return:
+  ```
+  { success: false, message: 'Changes could not be saved. Please try again.', error: persistResult.error, updatedDays }
+  ```
+  Affected functions: `executeRewriteDayAction`, `executeSwapAction`, `executeRegenerateAction`, `executeFilterAction`, `executePacingAction` (all 5 sites at lines 379, 510, 572, 686, 819).
+- Keep `updatedDays` on the failure result so the UI can still reflect the optimistic change but mark the message as failed (consistent with the existing "failed" status the message gets).
 
-  for (const locked of lockedBefore) {
-    const idx = result.findIndex(a =>
-      (locked.id && a.id === locked.id) ||
-      (activityTitle(a) === activityTitle(locked) && (a.startTime || a.time) === (locked.startTime || locked.time))
-    );
-    if (idx === -1) {
-      // Backend dropped a locked row — re-insert verbatim.
-      result.push({ ...locked });
-      violations++;
-    } else if (matched.has(idx)) {
-      violations++;
-    } else {
-      // Force the original locked snapshot to win over any AI mutation.
-      result[idx] = { ...locked };
-      matched.add(idx);
-    }
-  }
-  if (violations > 0) {
-    console.warn(`[LOCK_VIOLATION] day=${dayNumber} restored=${violations} (chat executor)`);
-  }
-  return { restored: result, violations };
-}
-```
+### 2. `src/components/itinerary/ItineraryAssistant.tsx`
 
-Call it inside `executeRewriteDayAction` and `executeRegenerateAction` immediately after the backend returns and before `mergeAccommodationActivities` / `updateTripItinerary`. When `violations > 0`, append to the result message: `"(restored N locked item${plural} the AI tried to change)"` so the toast user-facing text surfaces silently dropped rows.
+- In `handleActionApply`, after `executeAction`, only run the success branch (sortedDays state update, cost sync, "Action applied" toast, diff message) when `result.success === true`. The structure already branches on this; today the bug is upstream — the executor lies. Once the executor returns `success: false` on persistence failure, this branch flips automatically and the existing `toast.error('Action failed', { description: result.message })` fires.
+- Add a small explicit guard: if the executor returns `success: false` but still includes `updatedDays`, do **not** call `setCurrentDays`, `updateLocalTripItinerary`, `onItineraryUpdate`, or the activity-cost sync — we don't want optimistic UI to mask an unsaved state. The user retries via the existing retry button on line 779.
+- Refund the credits already spent for `creditAction` (REGENERATE_DAY / SWAP_ACTIVITY) when persistence fails, since the failure is on our side. Use the existing `spendCredits` mutation; refund is done by emitting the inverse via the established refund helper if one exists, otherwise fall back to a `console.warn` — confirm pattern by checking whether `refundCredits` / `spendCredits.refund` exists in `useCredits` before wiring (see clarification below).
 
-**5. Also harden `executeFilterAction`** — its `if (activity.isLocked) continue` is the only guard inside the loop; switching to `isActivityLocked` is sufficient (no post-write needed since each swap is per-activity).
+### 3. `src/pages/TripDetail.tsx`
 
-### Verification
+No code change required. The existing `onItineraryUpdate` parent callback stays as a sibling-state sync. Persistence is now the executor's responsibility, and on failure the executor will not have set `success: true`, so the parent state update simply won't happen (per item 2).
 
-- Lock an activity via UI (sets `lock_state: 'locked'` only). Ask chat "rewrite Day 2." Expect: locked item still in place, toast notes restoration if backend tried.
-- Lock via legacy `isLocked: true`. Same flow. Same outcome.
-- Manual/extracted rows (`source: 'user'/'extracted'`) — chat "swap my dinner on Day 3" returns "is locked and cannot be swapped".
-- Filter "make it vegan" with one locked dining row — that row is skipped, others swap.
-- Console shows `[LOCK_VIOLATION] day=N restored=K (chat executor)` if and only if backend tried to drop a locked row.
-- `bunx vitest run no-raw-itinerary-writes` still passes.
+## Out of scope
 
-### Files
+- Direct UI mutations elsewhere in `EditorialItinerary.tsx` already flow through `safeUpdateItineraryData` per the established constraint; that path is untouched.
+- The executor's `save-itinerary` call itself is unchanged — same backend pipeline, same meal guard / sweep / normalization.
+- No DB migration.
 
-- `src/lib/itinerary/persistDayContract.ts` (export `isActivityLocked`)
-- `src/services/itineraryActionExecutor.ts` (5 flag-check replacements + `verifyLocksPreserved` in two executors)
-- `src/components/itinerary/ItineraryAssistant.tsx` (single line: payload uses `isActivityLocked(a)`)
+## Verification
 
-### Memory
+- Unit-style: simulate `save-itinerary` returning an error and confirm `executeRewriteDayAction` returns `{ success: false, message: 'Changes could not be saved...' }`.
+- Manual: in chat, trigger a swap on a trip whose `save-itinerary` is failing (e.g. offline). Expect red "Action failed" toast and the message status badge flipping to "failed", **not** "Action applied".
+- Lint: existing `no-raw-itinerary-writes` test still passes (no new raw writes added).
 
-After implementation, save a constraint memory `mem://constraints/itinerary/chat-executor-lock-preservation` describing the helper + post-write verifier so future chat-action additions don't re-introduce the bug.
+## Memory
+
+Add `mem://constraints/itinerary/chat-action-persistence-contract` and reference it from the index Core block: "AI chat actions: executor must surface DB save failures; never toast success on a silent persistence drop."
+
+## Clarification needed
+
+Does `useCredits` (or whatever hook `spendCredits` comes from) already expose a refund path for failed actions? If yes, I'll wire it; if no, I'll leave a `[CREDIT_REFUND_PENDING]` console warning and skip refund this pass — your call.
