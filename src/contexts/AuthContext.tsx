@@ -223,6 +223,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pendingOAuthSessionRef = useRef<any>(null);
   // Track current user ID to skip redundant SIGNED_IN events for the same user
   const currentUserIdRef = useRef<string | null>(null);
+  // Cross-tab sign-out sync (BroadcastChannel + storage-event fallback)
+  const bcRef = useRef<BroadcastChannel | null>(null);
+  // Loop guard: when handling a remote signout, the local SIGNED_OUT event from
+  // signOut({ scope: 'local' }) must NOT re-broadcast (would ping-pong tabs).
+  const isHandlingRemoteSignoutRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -283,6 +288,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         currentUserIdRef.current = null;
         setSession(null);
         setUser(null);
+        // Broadcast to other tabs unless this signout was itself triggered by a remote broadcast
+        if (!isHandlingRemoteSignoutRef.current) {
+          try { bcRef.current?.postMessage({ type: 'auth:signout' }); } catch { /* noop */ }
+        }
+        isHandlingRemoteSignoutRef.current = false;
         return;
       }
 
@@ -337,6 +347,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })();
       }
     });
+
+    // Cross-tab sign-out sync — propagate logout from any tab to all others.
+    const handleRemoteSignout = async () => {
+      if (isHandlingRemoteSignoutRef.current) return;
+      isHandlingRemoteSignoutRef.current = true;
+      try {
+        // Wipe this tab's session locally without re-broadcasting or hitting the server.
+        // The originating tab already revoked the refresh token globally.
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => { /* noop */ });
+      } finally {
+        if (isMounted) {
+          const sg2 = getAuthSingleton();
+          sg2.initialized = false;
+          sg2.cachedUser = null;
+          sg2.cachedSession = null;
+          currentUserIdRef.current = null;
+          setSession(null);
+          setUser(null);
+        }
+        isHandlingRemoteSignoutRef.current = false;
+      }
+    };
+
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        const bc = new BroadcastChannel('voyance-auth');
+        bcRef.current = bc;
+        bc.onmessage = (e) => {
+          if (e?.data?.type === 'auth:signout') {
+            void handleRemoteSignout();
+          }
+        };
+      } catch { /* noop */ }
+    }
+
+    // Storage-event fallback (older Safari, and as a backup): Supabase clears
+    // its `sb-*-auth-token` localStorage key on signOut, which fires `storage` in other tabs.
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      if (e.key.startsWith('sb-') && e.key.endsWith('-auth-token') && e.newValue === null) {
+        void handleRemoteSignout();
+      }
+    };
+    window.addEventListener('storage', onStorage);
 
     // INITIAL load - this controls isLoading
     const initializeAuth = async () => {
@@ -451,6 +505,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loadingTimeoutRef.current = null;
       }
       subscription.unsubscribe();
+      window.removeEventListener('storage', onStorage);
+      try { bcRef.current?.close(); } catch { /* noop */ }
+      bcRef.current = null;
     };
   }, []);
 
@@ -588,6 +645,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       console.error('Logout error:', error);
     }
+
+    // Notify other tabs to clear their session immediately (belt + braces with the
+    // SIGNED_OUT auth listener, in case the listener races with this call).
+    try { bcRef.current?.postMessage({ type: 'auth:signout' }); } catch { /* noop */ }
     
     // Clean up legacy localStorage keys to prevent stale token issues
     const legacyKeys = [
