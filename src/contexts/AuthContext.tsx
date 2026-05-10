@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, ReactNode } fro
 import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { logLogin, logSignup, logLogout, logOAuthLogin } from '@/services/authAuditAPI';
+import { toast } from 'sonner';
 
 export interface User {
   id: string;
