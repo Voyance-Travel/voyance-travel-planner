@@ -58,6 +58,44 @@ export function normalizeEntityId(name: string | undefined | null): string {
     .slice(0, 80);
 }
 
+// ============ METADATA SCHEMA ENFORCEMENT ============
+
+const ALLOWED_METADATA_KEYS = new Set([
+  // Core event context
+  'page', 'referrer', 'feature', 'action', 'target',
+  // Trip context
+  'trip_id', 'destination', 'day_number', 'activity_id',
+  // Search context
+  'query', 'result_count', 'selected_index',
+  // Timing
+  'duration_ms', 'time_to_action_ms',
+  // User segment
+  'tier', 'archetype', 'cohort',
+  // Existing internal callers in this file
+  'source', 'category', 'reason', 'weight', 'stage', 'abandoned_at',
+]);
+
+function sanitizeMetadata(raw: Record<string, unknown> | undefined | null): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object') return {};
+  const clean: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!ALLOWED_METADATA_KEYS.has(key)) {
+      console.warn('[behaviorTracking] Dropping non-whitelisted metadata key:', key);
+      continue;
+    }
+    if (typeof value === 'string' && /(?:ignore previous|system prompt|SYSTEM:|<\|im_start\|>)/i.test(value)) {
+      console.warn('[behaviorTracking] Dropping suspicious metadata value for key:', key);
+      continue;
+    }
+    if (typeof value === 'string' && value.length > 500) {
+      clean[key] = value.slice(0, 500);
+    } else {
+      clean[key] = value;
+    }
+  }
+  return clean;
+}
+
 // ============ DEBOUNCE CACHE ============
 // Prevent duplicate tracking within short windows
 
@@ -105,6 +143,7 @@ async function trackEvent(event: TrackingEvent): Promise<void> {
       .maybeSingle();
     
     const now = new Date().toISOString();
+    const safeMeta = sanitizeMetadata(event.metadata);
     
     if (existing) {
       // Update existing record - increment interaction count
@@ -123,11 +162,11 @@ async function trackEvent(event: TrackingEvent): Promise<void> {
           interaction_count: newCount,
           metadata: {
             ...existingMetadata,
-            ...event.metadata,
+            ...safeMeta,
             last_interaction_at: now,
             interaction_history: [
               ...interactionHistory,
-              { at: now, ...event.metadata }
+              { at: now, ...safeMeta }
             ]
           },
           feedback_tags: event.feedback_tags || existing.feedback_tags,
@@ -146,7 +185,7 @@ async function trackEvent(event: TrackingEvent): Promise<void> {
           interaction_count: 1,
           feedback_tags: event.feedback_tags,
           metadata: {
-            ...event.metadata,
+            ...safeMeta,
             first_interaction_at: now,
             last_interaction_at: now,
           },

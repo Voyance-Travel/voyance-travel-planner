@@ -1,60 +1,67 @@
-## RS.L10 — Canonical entity_id normalization
+## RS.L11 — Behavior metadata schema enforcement
 
-### File: `src/services/behaviorTrackingService.ts`
+Add a whitelist-based sanitizer for metadata in `src/services/behaviorTrackingService.ts` to prevent arbitrary keys (and prompt-injection–shaped strings) from being persisted to `user_enrichment.metadata`.
 
-Three free-text→entity_id derivations currently use inconsistent ad-hoc normalization (some use `_` joiners, none strip diacritics or punctuation), so "New York City", "new york city", and "New-York City" track as different entities and aggregations under-count.
-
-### Changes
-
-**1. Add helper near the top of the file** (after imports, before existing exports):
+### 1. Add helper near top of file (after `normalizeEntityId`)
 
 ```ts
-/**
- * Canonical normalization for entity IDs in behavior events.
- * "New York City", "new york city", "NEW YORK CITY" → "new-york-city"
- *
- * Use everywhere an entity_id is derived from a free-text name to ensure
- * cross-event aggregation works. Inconsistent normalization tracks the same
- * entity as multiple distinct values, breaking the analytics it's meant to feed.
- */
-export function normalizeEntityId(name: string | undefined | null): string {
-  if (!name) return '';
-  return name
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 80);
+const ALLOWED_METADATA_KEYS = new Set([
+  // Core event context
+  'page', 'referrer', 'feature', 'action', 'target',
+  // Trip context
+  'trip_id', 'destination', 'day_number', 'activity_id',
+  // Search context
+  'query', 'result_count', 'selected_index',
+  // Timing
+  'duration_ms', 'time_to_action_ms',
+  // User segment
+  'tier', 'archetype', 'cohort',
+  // Existing internal callers in this file
+  'source', 'category', 'reason', 'weight', 'stage', 'abandoned_at',
+]);
+
+function sanitizeMetadata(raw: Record<string, unknown> | undefined | null): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object') return {};
+  const clean: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!ALLOWED_METADATA_KEYS.has(key)) {
+      console.warn('[behaviorTracking] Dropping non-whitelisted metadata key:', key);
+      continue;
+    }
+    if (typeof value === 'string' && /(?:ignore previous|system prompt|SYSTEM:|<\|im_start\|>)/i.test(value)) {
+      console.warn('[behaviorTracking] Dropping suspicious metadata value for key:', key);
+      continue;
+    }
+    if (typeof value === 'string' && value.length > 500) {
+      clean[key] = value.slice(0, 500);
+    } else {
+      clean[key] = value;
+    }
+  }
+  return clean;
 }
 ```
 
-**2. Replace the three ad-hoc derivations:**
+Note on whitelist: the spec list omits keys this file already writes (`source`, `category`, `reason`, `weight`, `stage`, `abandoned_at`). Adding them prevents the sanitizer from silently dropping legitimate internal tracking. Out of scope: `last_interaction_at`, `first_interaction_at`, `interaction_history` are server-derived and merged after sanitization, so they don't need to be whitelisted.
 
-- **Line 153** (`trackDestinationSearch`):
-  - Before: `entity_id: normalized.replace(/\s+/g, '_'),`
-  - After: `entity_id: normalizeEntityId(destination),`
-  - Also drop the now-redundant local `normalized` (still need the length guard — keep it as `if (!destination || destination.trim().length < 2) return;`).
+### 2. Wrap user-supplied metadata at the two insert/update sites
 
-- **Line 171** (`trackDestinationInterest`):
-  - Before: `const entityId = \`${city.toLowerCase()}_${country.toLowerCase()}\`.replace(/\s+/g, '_');`
-  - After: `const entityId = normalizeEntityId(\`${city} ${country}\`);` (single hyphenated id, e.g. `new-york-united-states`).
+`trackEnrichment` (around lines 120–153) is the single low-level writer; sanitize `event.metadata` once at the top of the function so both branches benefit:
 
-- **Line 318** (`trackCategoryInteraction`):
-  - Before: `const normalizedCategory = category.toLowerCase().replace(/\s+/g, '_');`
-  - After: `const normalizedCategory = normalizeEntityId(category);`
+```ts
+const safeMeta = sanitizeMetadata(event.metadata);
+```
 
-**3. Out of scope:**
-- Line 355 `${activityCategory}_${newSlot}` — slot is already an internal token (`early_morning` etc.); leaving it alone preserves the time_slot enum format. Not a free-text input.
-- Lines 194/215/244/278/300/378 — those receive an `activityId` that is already a stable id (uuid/string), not free text. No change.
+Then replace `...event.metadata` (lines 126, 130, 149) with `...safeMeta` and `{ at: now, ...safeMeta }`.
 
-### Verification
+This covers all higher-level callers (`trackDestinationSearch`, `trackDestinationInterest`, `trackCategoryInteraction`, etc.) since they all funnel through `trackEnrichment`.
 
-- `grep -c "normalizeEntityId" src/services/behaviorTrackingService.ts` ≥ 4 (definition + 3 call sites; user threshold ≥ 2).
-- TypeScript build clean.
+### 3. Verify
 
-### Note on existing data
+```
+grep -c "sanitizeMetadata\|ALLOWED_METADATA_KEYS" src/services/behaviorTrackingService.ts
+```
+Expect ≥ 2 (definition of set + helper + 1 call site = 3+).
 
-This changes the on-the-wire format from `new_york_city` to `new-york-city`. Existing rows in the analytics table keep their old ids; only events emitted after deploy use the new format. Acceptable per the user's stated goal (current data is already broken by inconsistency).
+### Files touched
+- `src/services/behaviorTrackingService.ts` — add helper, sanitize once inside `trackEnrichment`.
