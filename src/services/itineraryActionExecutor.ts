@@ -575,7 +575,10 @@ async function executeRegenerateAction(
 
   const updatedDays = [...currentDays];
   updatedDays[dayIndex] = { ...day, ...data.day, activities: regenActivities };
-  await updateTripItinerary(tripId, updatedDays);
+  const regenPersist = await updateTripItinerary(tripId, updatedDays);
+  if (!regenPersist.success) {
+    return { success: false, message: PERSIST_FAILURE_MESSAGE, error: regenPersist.error, updatedDays };
+  }
 
   const regenRestoredSuffix = regenLockGuard.violations > 0
     ? ` (restored ${regenLockGuard.violations} locked item${regenLockGuard.violations === 1 ? '' : 's'} the AI tried to change)`
