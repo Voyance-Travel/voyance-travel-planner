@@ -173,7 +173,7 @@ export function trackDestinationSearch(
   trackEvent({
     enrichment_type: 'destination_search',
     entity_type: 'destination',
-    entity_id: normalized.replace(/\s+/g, '_'),
+    entity_id: normalizeEntityId(destination),
     entity_name: destination,
     metadata: { 
       query: destination,
