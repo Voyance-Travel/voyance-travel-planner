@@ -1,26 +1,43 @@
-## Context
+## Status: Already Implemented — No Changes Required
 
-The pairing coherence rules described in the request are **already implemented** in `src/services/engines/travelDNA/archetype-matcher.ts`:
+The secondary-archetype flavoring feature is fully present in `supabase/functions/generate-itinerary/generation-core.ts` and reaches the LLM system prompt.
 
-- 30% same-category penalty for secondary candidates (lines 461–466)
-- `FORBIDDEN_PAIRS` Set + `isForbiddenPair()` helper (lines 17–36)
-- Forbidden-pair filter on secondary selection (lines 468–470)
+### Existing implementation
 
-However, two entries in the existing `FORBIDDEN_PAIRS` Set use a stale archetype ID `purpose_voyager` that does not exist anywhere else in the codebase. The canonical ID (used in `archetype-profiles.ts`, `quizMapping.ts`, `archetype-group-mapping.ts`, narratives, reveals, voices, constraints, etc.) is `community_builder` (display name: "The Purpose Voyager"). As written, those two forbidden pairs never trigger because the matcher emits `community_builder`, not `purpose_voyager`.
+**Lines 799–802** — secondary archetype resolution (with self-equality guard so an accidentally-duplicated primary doesn't double-flavor):
+```ts
+const secondaryArchetypeSlug = context.travelerDNA?.secondaryArchetype;
+const secondaryArchetypeDef = secondaryArchetypeSlug && secondaryArchetypeSlug !== context.travelerDNA?.primaryArchetype
+  ? getArchetypeDefinition(secondaryArchetypeSlug)
+  : null;
+```
 
-## Change
+**Lines 803–808** — flavor block matching the requested copy (name, identity, "1–2 activities", "subtle seasoning, never a contradiction", Luxury Luminary × Story Seeker example):
+```ts
+const secondaryFlavor = secondaryArchetypeDef
+  ? `\n\nSECONDARY DNA: ${secondaryArchetypeDef.name} — ${secondaryArchetypeDef.identity}.\n` +
+    `Across the full trip, include 1–2 activities or moments that lean into this secondary identity. ` +
+    `Treat it as subtle seasoning, never as a contradiction to the primary archetype's day structure, variety caps, or avoid list. ` +
+    `Example: primary=Luxury Luminary + secondary=Story Seeker → mostly curated high-end experiences, but swap one Michelin night for an "underground jazz bar locals know."`
+  : '';
+```
 
-In `src/services/engines/travelDNA/archetype-matcher.ts`, inside the `FORBIDDEN_PAIRS` Set:
+**Line 895** — `${secondaryFlavor}` interpolated into `generationHierarchy`.
 
-- Line 21: `'sanctuary_seeker:purpose_voyager'` → `'sanctuary_seeker:community_builder'`
-- Line 26: `'slow_traveler:purpose_voyager'` → `'slow_traveler:community_builder'`
+**Line 908** — `generationHierarchy` interpolated into the final `systemPrompt` sent to the LLM (line 906).
 
-No other edits — the rest of the spec (penalty logic, helper, filter, full pair list) already matches the requested implementation exactly.
+### Minor naming deltas vs. the spec (intentional, keep as-is)
 
-## Verification
+- `secondaryArchetypeSlug` instead of `secondaryArchetype` — avoids shadowing the optional context field
+- Self-equality guard `slug !== primaryArchetype` — prevents nonsensical "secondary = primary" flavor
+- Em-dash format `Name — identity` instead of split lines — same content
 
-- `grep -c FORBIDDEN_PAIRS src/services/engines/travelDNA/archetype-matcher.ts` ≥ 1 (currently 2)
-- `rg purpose_voyager src/ supabase/` returns no hits after the fix
-- 14 forbidden pairs total, all using canonical IDs from `archetype-profiles.ts`
-- Sanctuary Seeker × Adrenaline Architect pairing test: secondary falls through to next candidate (already works)
-- Slow Traveler × Sanctuary Seeker (both Restorer): secondary picks non-Restorer due to 30% penalty unless gap is large (already works)
+### Verification (no code change needed)
+
+- `rg -n "SECONDARY DNA|secondaryFlavor" supabase/functions/generate-itinerary/generation-core.ts` already returns 2 hits (definition + interpolation)
+- `secondaryFlavor` reaches the system prompt via: `secondaryFlavor` → `generationHierarchy` (line 895) → `systemPrompt` (line 908)
+- Manual QA: generate a Luxury Luminary + Story Seeker trip and confirm 1–2 underground/local-tip moments appear; check edge function logs for the literal string `SECONDARY DNA:` in the prompt
+
+### Recommendation
+
+Close this task as a no-op. If the user wants to expand the feature (e.g., make it stronger, log a sentinel, or add it to the day-level prompt as well), that's a separate change to scope.
