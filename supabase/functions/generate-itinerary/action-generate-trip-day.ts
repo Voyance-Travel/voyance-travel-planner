@@ -1798,6 +1798,23 @@ async function _handleGenerateTripDayInner(
               pool_size: _perDayPool.length,
               source: 'generate-trip-day:final-per-day',
             };
+
+            // Step 8 was deferred earlier in universalQualityPass when dinner
+            // was required-but-missing. Now that meal-guard has injected it,
+            // re-run runStep8 so the day terminates on a hotel-return card.
+            // Idempotent: short-circuits if last activity already STAY/return.
+            if (dayNumber < totalDays) {
+              try {
+                const { runStep8 } = await import('./universal-quality-pass.ts');
+                const _hotelForReturn = cityInfo?.hotelName || tripHotelName || undefined;
+                const _beforeLen = dayResult.activities.length;
+                runStep8(dayResult.activities, dayNumber - 1, _hotelForReturn);
+                if (dayResult.activities.length > _beforeLen) {
+                  dayResult.metadata.quality.hotel_return_post_meal_guard = true;
+                  console.log(`[QUALITY] Day ${dayNumber}: re-ran Step 8 after meal-guard — hotel-return appended`);
+                }
+              } catch (_e) { /* non-blocking */ }
+            }
           } else {
             console.log(`[MEAL_AUDIT] day=${dayNumber} required=[${_fmgPolicy.requiredMeals.join(',')}] detected=[${_detectedPre.join(',')}] missing=[] pool=${_perDayPool.length} source="generate-trip-day:final-per-day" (no-op)`);
           }
