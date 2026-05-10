@@ -23,6 +23,36 @@ const PRODUCT_CONFIG: Record<string, {
   'com.voyancetravel.club.adventurer': { credits: 2400, bonusCredits: 800, type: 'club', tier: 'adventurer' },
 };
 
+// Apple status code → user-friendly message + retryability hint for the FE
+const APPLE_STATUS_MESSAGES: Record<number, { msg: string; userActionable: boolean }> = {
+  21000: { msg: 'Receipt could not be read by Apple. Please try again.', userActionable: true },
+  21002: { msg: 'Receipt data was malformed. Please contact support.', userActionable: false },
+  21003: { msg: 'Receipt authentication failed. Please try restoring your purchases.', userActionable: true },
+  21004: { msg: 'Shared secret mismatch. Please contact support.', userActionable: false },
+  21005: { msg: 'Apple is temporarily unavailable. Please try again in a few minutes.', userActionable: true },
+  21006: { msg: 'This subscription has expired.', userActionable: false },
+  21007: { msg: 'Sandbox receipt sent to production — should auto-retry.', userActionable: false },
+  21008: { msg: 'Production receipt sent to sandbox — should auto-retry.', userActionable: false },
+  21010: { msg: 'Apple cannot find this user account. Please contact support.', userActionable: false },
+};
+
+function appleStatusError(status: number) {
+  const friendly = APPLE_STATUS_MESSAGES[status] || {
+    msg: `Apple receipt validation returned status ${status}. Please contact support.`,
+    userActionable: false,
+  };
+  return jsonResponse(
+    {
+      success: false,
+      error: friendly.msg,
+      code: `APPLE_STATUS_${status}`,
+      userActionable: friendly.userActionable,
+      appleStatus: status,
+    },
+    400,
+  );
+}
+
 /**
  * Fetch with exponential backoff retry on transient failures.
  * Apple's verifyReceipt can return 500/503 under load, or the connection
@@ -140,11 +170,11 @@ Deno.serve(async (req) => {
         const sandboxResult = await sandboxResponse.json();
         if (sandboxResult.status !== 0) {
           console.error('[validate-iap-receipt] Apple validation failed:', sandboxResult.status);
-          return errorResponse(`Apple receipt validation failed: ${sandboxResult.status}`, 400);
+          return appleStatusError(sandboxResult.status);
         }
       } else if (appleResult.status !== 0) {
         console.error('[validate-iap-receipt] Apple validation failed:', appleResult.status);
-        return errorResponse(`Apple receipt validation failed: ${appleResult.status}`, 400);
+        return appleStatusError(appleResult.status);
       }
     } else {
       console.warn('[validate-iap-receipt] No receipt data or shared secret - proceeding with trust (dev mode)');
