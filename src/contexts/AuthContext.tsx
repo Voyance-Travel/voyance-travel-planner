@@ -223,6 +223,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pendingOAuthSessionRef = useRef<any>(null);
   // Track current user ID to skip redundant SIGNED_IN events for the same user
   const currentUserIdRef = useRef<string | null>(null);
+  // Cross-tab sign-out sync (BroadcastChannel + storage-event fallback)
+  const bcRef = useRef<BroadcastChannel | null>(null);
+  // Loop guard: when handling a remote signout, the local SIGNED_OUT event from
+  // signOut({ scope: 'local' }) must NOT re-broadcast (would ping-pong tabs).
+  const isHandlingRemoteSignoutRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
