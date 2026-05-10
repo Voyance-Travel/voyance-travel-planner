@@ -149,13 +149,13 @@ export function getActionDisplayInfo(action: { type: string; params: Record<stri
         title: `Regenerate Day ${action.params.target_day}`,
         description: action.params.new_focus as string || 'Create a new itinerary for this day',
         icon: 'refresh',
-        creditCost: 10,
+        creditCost: 30,
       };
     case 'propose_change': {
       const wouldCall = action.params.would_call as string | undefined;
       const creditMap: Record<string, number> = {
-        rewrite_day: 10,
-        regenerate_day: 10,
+        rewrite_day: 30,
+        regenerate_day: 30,
         suggest_activity_swap: 5,
         adjust_day_pacing: 5,
         apply_filter: 5,
