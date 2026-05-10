@@ -11,6 +11,7 @@ import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { recalculateArchetype } from '@/services/engines/travelDNA/recalculateArchetype';
 
 interface Archetype {
   id: string;
