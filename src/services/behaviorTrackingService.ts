@@ -338,7 +338,7 @@ export function trackCategoryInteraction(
   category: string,
   action: 'click' | 'save' | 'remove' | 'complete'
 ): void {
-  const normalizedCategory = category.toLowerCase().replace(/\s+/g, '_');
+  const normalizedCategory = normalizeEntityId(category);
   const weight = action === 'remove' ? -1 : action === 'complete' ? 2 : 1;
   
   trackEvent({
