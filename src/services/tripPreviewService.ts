@@ -183,10 +183,21 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 /**
  * Hook for generating trip previews
  */
-export function useGenerateTripPreview() {
+export function useGenerateTripPreview(
+  params?: Pick<GeneratePreviewParams, 'destination' | 'startDate' | 'endDate'>,
+) {
   return useMutation({
     mutationFn: generateTripPreview,
-    mutationKey: ['generate-trip-preview'],
+    // HIGH-6: discriminate by previewType + destination + dates so a Quick
+    // result can never be served when Full is requested (and vice-versa),
+    // and so switching destinations/dates allocates a fresh mutation slot.
+    mutationKey: [
+      'preview',
+      'quick',
+      params?.destination ?? '',
+      params?.startDate ?? '',
+      params?.endDate ?? '',
+    ],
   });
 }
 
