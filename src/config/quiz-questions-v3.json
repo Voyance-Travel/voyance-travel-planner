@@ -1992,6 +1992,6 @@
     { "step": 7, "label": "Priorities", "questions": ["q13_upgrade", "q14_meaningful"] },
     { "step": 8, "label": "Social", "questions": ["q15_meeting", "q16_environment"] },
     { "step": 9, "label": "Companions", "questions": ["q17_companions", "q18_wellbeing"] },
-    { "step": 10, "label": "You", "questions": ["q19_lifestage", "q20_quality", "q21_values"] }
+    { "step": 10, "label": "You", "questions": ["q19_lifestage", "q20_quality", "q21_values", "q22_accomplishment", "q23_recharge"] }
   ]
 }
