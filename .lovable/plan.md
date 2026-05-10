@@ -1,90 +1,42 @@
-## Goal
 
-After the new matcher gates ship, every existing `travel_dna_profiles` row should re-run through the canonical TS matcher exactly once so primary/secondary archetypes reflect the new logic. We avoid building a duplicate Deno-side matcher (memory: *"TS `matchArchetypes` is the only archetype matcher — never port to SQL"*) and we avoid surprising inactive users with silent assignment changes.
+## Context
 
-**Approach: soft rollout via a one-shot per-user recalc on next visit, plus an optional admin sweep for proactive convergence.**
+Gate definitions are not in `archetype-matcher.ts` itself — they live in `src/config/quiz-questions-v3.json` under `archetypeProfiles`, and the matcher reads them via `archetypeProfiles[id]`. Reviewing each archetype against the spec, **most gates already match** (likely from the earlier matcher rebuild). Only one archetype needs a real edit; the rest are already in spec.
 
-The user's spec edge function (`supabase/functions/recalculate-all-dna/index.ts`) is **not** built, because `recalculateArchetype` and `recalculateDNAFromPreferences` import frontend-only modules (`@/integrations/supabase/client`, `archetype-matcher.ts`) and porting them to `_shared/` would create a second matcher.
+## Per-archetype reconciliation
 
-## Files & changes
+| Archetype (slug) | Spec change | Current state | Action |
+|---|---|---|---|
+| `community_builder` (Purpose Voyager) | category=achiever, requiredAny experience_accumulation≥0.6 OR bucket_list≥0.6, social_sharing 0.4 booster, drop ethics_focus/cultural_depth gate | category=ACHIEVER, requiredAny exactly as spec'd, social_sharing:0.4 already booster, no ethics_focus/cultural_depth gate | ✅ no change needed |
+| `collection_curator` (Passport Collector) | required collection_drive≥0.6 + novelty_seeking≥0.5; bucket_list 0.5 booster; niche_interest soft-only | matches exactly (niche_interest 0.4 booster, not required) | ✅ no change needed |
+| `escape_artist` | category=explorer, required autonomy_preference≥0.7, drop restoration_need gate | category=EXPLORER, only autonomy_preference≥0.7 required, no restoration_need gate | ✅ no change needed |
+| `retreat_regular` | required escape_need≥0.6 + restoration_need≥0.6 + wellness boosters | matches exactly | ✅ no change needed |
+| `wilderness_pioneer` | required nature_orientation≥0.7, adventure≥0.5; -1.0 penalty for high city/urban | gates match; "urban" encoded as `nature_orientation below 0.5 weight -1.0` (trait is "Urban 0 → Wilderness 1") | ✅ no change needed |
+| `adrenaline_architect` | required adventure≥0.7, pace≥0.6, no nature gate | matches exactly | ✅ no change needed |
+| `healing_journeyer` | healing_focus≥0.6 (lowered from 0.7); restoration_need 0.5 booster | required healing_focus:0.6, restoration_need:0.5 booster | ✅ no change needed |
+| `cultural_anthropologist` | cultural_depth≥0.7, learning_focus 0.5–0.7 cap, -1.5 penalty above 0.8 | matches exactly | ✅ no change needed |
+| `sabbatical_scholar` | learning_focus≥0.7, cultural_depth≥0.5, planning≥0.4 | matches exactly | ✅ no change needed |
 
-### 1. Migration — add a recalc flag
+## The single edit
 
-`supabase/migrations/<ts>_dna_recalc_flag.sql`:
+**`community_builder` boosters trim** — spec lists only `social_sharing: 0.4` as the secondary booster. Current config also keeps `social_energy: 0.6` and `learning_focus: 0.5` as boosters. Spec says "Keep existing booster scoring untouched UNLESS specifically noted" — and the secondary-booster section *is* a specific note for this archetype. To make Purpose Voyager identity-focused (experience accumulation + sharing) and stop bleeding into Sabbatical Scholar / Social Butterfly territory:
 
-```sql
-ALTER TABLE public.travel_dna_profiles
-  ADD COLUMN IF NOT EXISTS dna_recalc_needed_at TIMESTAMPTZ;
+- Remove `social_energy: 0.6` and `learning_focus: 0.5` from `community_builder.boosters`
+- Keep `experience_accumulation: 1.0`, `bucket_list: 0.8`, `social_sharing: 0.4`
 
-COMMENT ON COLUMN public.travel_dna_profiles.dna_recalc_needed_at IS
-  'When non-null, client should re-run recalculateArchetype() on next load and clear this. Set by gate-change rollouts.';
-
--- Mark every existing profile for recalc (one-shot)
-UPDATE public.travel_dna_profiles
-SET dna_recalc_needed_at = NOW()
-WHERE dna_recalc_needed_at IS NULL;
-```
-
-Existing RLS already covers the column (user-scoped policies on `user_id`).
-
-### 2. Client trigger — `src/services/engines/travelDNA/recalculateArchetype.ts`
-
-Extend with a thin wrapper that reads the flag, recalcs, and clears it:
-
-```ts
-export async function recalculateIfNeeded(userId: string): Promise<RecalculateResult | { success: true; skipped: true }> {
-  const { data } = await supabase
-    .from("travel_dna_profiles")
-    .select("dna_recalc_needed_at, primary_archetype_name")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (!data?.dna_recalc_needed_at) return { success: true, skipped: true };
-
-  const before = data.primary_archetype_name;
-  const result = await recalculateArchetype(userId);
-
-  await supabase
-    .from("travel_dna_profiles")
-    .update({ dna_recalc_needed_at: null })
-    .eq("user_id", userId);
-
-  if (result.success && result.primary !== before) {
-    console.log(`[recalculateIfNeeded] shift user=${userId} ${before} → ${result.primary}`);
-  }
-  return result;
-}
-```
-
-### 3. Wire the trigger on app entry
-
-In `src/App.tsx` (or `useAuthSession`/main authenticated layout — wherever the user-bound effect for "load profile on auth" lives), call `recalculateIfNeeded(userId)` once when a session is detected. Fire-and-forget (never blocks UI). Show a one-time `sonner` toast on shift: *"Your Travel DNA has been refined."*
-
-### 4. Optional: admin sweep page (skippable for now)
-
-`src/pages/admin/DNARecalcSweep.tsx` — admin-only route that:
-- Pages through `travel_dna_profiles` where `dna_recalc_needed_at IS NOT NULL` (limit 200/page).
-- For each row, calls `recalculateArchetype(userId)`, clears the flag, accumulates shift counts.
-- Renders running totals: `total | recalculated | unchanged | failed | top 20 shifts`.
-
-Gated by existing admin role check (`has_role(auth.uid(), 'admin')`). Lets you converge inactive users on demand without an edge function.
-
-## Why not the spec's edge function
-
-- `recalculateDNAFromPreferences` (in `src/utils/quizMapping.ts`) and `recalculateArchetype` (in `src/services/engines/travelDNA/`) both import `@/integrations/supabase/client` and `archetype-matcher.ts`. Neither resolves under Deno without a port.
-- The matcher contains tension resolvers, forbidden pairs, category penalty, and (newly added) pair-specific disambiguation logic — duplicating it server-side guarantees drift on the next gate change.
-- Soft rollout converges on every active user within days and gives you the same shift telemetry via `[recalculateIfNeeded] shift …` logs in browser/edge logs.
+This is the only behavioral delta in the spec that isn't already in the config.
 
 ## Verification
 
-- After migration: `SELECT count(*) FROM travel_dna_profiles WHERE dna_recalc_needed_at IS NOT NULL;` equals previous total profile count.
-- Sign in with a known account → check console: `[recalculateArchetype]` runs once; subsequent loads are silent (`skipped:true`).
-- Spot-check 3–5 users: row's `primary_archetype_name` updated and `dna_recalc_needed_at IS NULL` post-visit.
-- After ~2 weeks (or via admin sweep): `SELECT count(*)` of remaining flagged rows ≈ inactive-user count.
-- Zero rows with `primary_archetype_name IS NULL` (the matcher always returns a primary; if it fails it leaves the existing value untouched).
+1. Reload quiz config; build/typecheck (no TS shape change — JSON only).
+2. Synthetic profile A: `experience_accumulation=0.7, social_sharing=0.5` → `community_builder` primary.
+3. Synthetic profile B: `collection_drive=0.7, novelty_seeking=0.6` → `collection_curator` primary.
+4. Synthetic profile C: `autonomy_preference=0.8, pace=0.7` → `escape_artist` primary, category EXPLORER.
+5. Synthetic profile D: `escape_need=0.7, restoration_need=0.7` → `retreat_regular` primary.
+6. Spot-check that the existing `dna_recalc_needed_at` flag still triggers `recalculateIfNeeded` on next visit so live users converge on the trimmed boosters.
 
-## Out of scope
+## Files touched
 
-- Deno-side matcher port.
-- Forced bulk recalc for inactive users (admin sweep covers this if needed).
-- Notification email about the shift (toast only).
+- `src/config/quiz-questions-v3.json` — single 3-line edit inside `archetypeProfiles.community_builder.boosters`.
+
+No changes to `archetype-matcher.ts`, `recalculateArchetype.ts`, or any frontend component.
