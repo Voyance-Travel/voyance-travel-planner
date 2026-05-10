@@ -8318,6 +8318,14 @@ export function EditorialItinerary({
             })(),
             bookingRequired: conciergeActivity.bookingRequired,
             bookingUrl: conciergeActivity.bookingUrl || conciergeActivity.website,
+            // Source aiNotes from live `days` so the sheet reflects post-save state
+            aiNotes: (() => {
+              for (const day of days) {
+                const live = day.activities?.find(a => a.id === conciergeActivity.id);
+                if (live) return live.aiNotes || [];
+              }
+              return conciergeActivity.aiNotes || [];
+            })(),
           }}
           dayDate={conciergeDayDate}
           dayTitle={conciergeDayTitle}
