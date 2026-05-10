@@ -124,7 +124,7 @@ export function useSpendCredits() {
           throw new Error(data.error);
         }
 
-        return data;
+        return { ...data, idempotencyKey } as SpendCreditsResponse & { idempotencyKey: string };
       } finally {
         pendingRef.current = null;
       }
