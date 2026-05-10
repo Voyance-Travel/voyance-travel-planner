@@ -429,44 +429,52 @@ export class CostTracker {
   }
   
   /**
-   * Calculate estimated cost and save to database
+   * Calculate estimated cost and save to database.
+   *
+   * Cache-hit rows ($0 cost, no billable units) ARE persisted with
+   * `is_cache_hit = true` so the dashboard can compute cache ROI. Rows
+   * with no work AND no cache-hit signal (i.e. an opened-but-unused
+   * tracker) are still skipped to avoid noise.
    */
   async save(): Promise<void> {
     try {
       const durationMs = Date.now() - this.startTime;
-      
+
       // Calculate estimated cost
       const tokenCost = calculateTokenCost(
         this.entry.model,
         this.entry.input_tokens,
         this.entry.output_tokens
       );
-      
-      const googleCost = 
-        (this.entry.google_places_calls || 0) * 0.032 +  // Advanced SKU
-        (this.entry.google_geocoding_calls || 0) * 0.005 +
-        (this.entry.google_photos_calls || 0) * 0.007 +
-        (this.entry.google_routes_calls || 0) * 0.005;
-      
-      const otherCost = 
-        (this.entry.perplexity_calls || 0) * 0.005;
-      
+
+      const googleCost =
+        (this.entry.google_places_calls         || 0) * GOOGLE_API_PRICING.places_text_search.perCall +
+        (this.entry.google_place_details_calls  || 0) * GOOGLE_API_PRICING.places_details.perCall +
+        (this.entry.google_geocoding_calls      || 0) * GOOGLE_API_PRICING.geocoding.perCall +
+        (this.entry.google_photos_calls         || 0) * GOOGLE_API_PRICING.photos.perCall +
+        (this.entry.google_routes_calls         || 0) * GOOGLE_API_PRICING.routes.perCall;
+
+      const otherCost =
+        (this.entry.perplexity_calls || 0) * OTHER_API_PRICING.perplexity.perCall;
+
       const estimatedCost = tokenCost + googleCost + otherCost;
 
-      // Skip $0 rows: if no billable units were recorded, don't write a noise row.
-      // This dropped 850 rows/day (76% of destination_images traffic) on Apr 30.
       const billableUnits =
         (this.entry.input_tokens || 0) +
         (this.entry.output_tokens || 0) +
         (this.entry.google_places_calls || 0) +
+        (this.entry.google_place_details_calls || 0) +
         (this.entry.google_photos_calls || 0) +
         (this.entry.google_geocoding_calls || 0) +
         (this.entry.google_routes_calls || 0) +
         (this.entry.amadeus_calls || 0) +
         (this.entry.perplexity_calls || 0);
 
-      if (billableUnits === 0 && estimatedCost === 0) {
-        // Cache hit / fallback / no work performed — skip persisting.
+      const isCacheHit = !!this.entry.is_cache_hit || (billableUnits === 0 && estimatedCost === 0);
+
+      // Skip persistence only when nothing happened AND no cache-hit was claimed.
+      // Cache-hit rows MUST be persisted so the dashboard can show caching ROI.
+      if (billableUnits === 0 && estimatedCost === 0 && !this.entry.is_cache_hit) {
         return;
       }
 
@@ -474,17 +482,21 @@ export class CostTracker {
         .from('trip_cost_tracking')
         .insert({
           ...this.entry,
+          is_cache_hit: isCacheHit,
           estimated_cost_usd: estimatedCost,
           duration_ms: durationMs,
         });
-      
+
       if (error) {
         console.error('[cost-tracker] Failed to save:', error);
       } else {
-        console.log(`[cost-tracker] Saved: ${this.entry.action_type} | ` +
-          `tokens: ${this.entry.input_tokens}/${this.entry.output_tokens} | ` +
-          `cost: $${estimatedCost.toFixed(6)} | ` +
-          `duration: ${durationMs}ms`);
+        console.log(
+          `[cost-tracker] Saved: ${this.entry.action_type} | ` +
+          `tokens: ${this.entry.input_tokens}/${this.entry.output_tokens} (${this.entry.token_source}) | ` +
+          `cost: $${estimatedCost.toFixed(6)}${isCacheHit ? ' (CACHE HIT)' : ''} | ` +
+          `attempt: ${this.entry.attempt_id?.slice(0, 8)}${this.entry.retry_of ? ` (retry of ${this.entry.retry_of.slice(0, 8)})` : ''} | ` +
+          `duration: ${durationMs}ms`
+        );
       }
     } catch (err) {
       console.error('[cost-tracker] Error saving:', err);
@@ -497,10 +509,20 @@ export class CostTracker {
 // =============================================================================
 
 /**
- * Create a new cost tracker for an action
+ * Create a new cost tracker for an action.
+ *
+ * @param actionType - the action being tracked (e.g. 'generate-trip-day')
+ * @param model      - AI model identifier (defaults to gemini-3-flash-preview)
+ * @param opts.retryOf - if this attempt is a retry of a prior tracker, pass its `attempt_id`
+ *                       (returned by `tracker.getAttemptId()`); the dashboard then uses
+ *                       `WHERE retry_of IS NULL` to compute first-attempt cost totals.
  */
-export function trackCost(actionType: string, model?: string): CostTracker {
-  return new CostTracker(actionType, model);
+export function trackCost(
+  actionType: string,
+  model?: string,
+  opts: TrackerOptions = {},
+): CostTracker {
+  return new CostTracker(actionType, model, opts);
 }
 
 /**
