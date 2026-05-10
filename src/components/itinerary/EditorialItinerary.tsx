@@ -2777,7 +2777,8 @@ export function EditorialItinerary({
   // Otherwise users who navigate away or close the sheet quickly lose the note,
   // which also wastes AI tokens when they regenerate the same tip later.
   const persistDaysImmediately = useCallback(async (nextDays: EditorialDay[]) => {
-    if (!effectiveIsEditable) return;
+    // Note: gating on editability is handled at the UI level (the save button
+    // is only rendered when the sheet is interactive); we always persist here.
     try {
       const itineraryData: Record<string, unknown> = {
         days: JSON.parse(JSON.stringify(nextDays)),
