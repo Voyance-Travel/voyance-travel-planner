@@ -132,25 +132,47 @@ export default function OnboardConversation() {
 
       try {
         // Map traits to the format expected by the database
+        // Helper: clamp trait score to canonical [-10, 10] range used by the
+        // personalization engine. Any out-of-range value here would poison generation.
+        const clamp = (n: number) => Math.max(-10, Math.min(10, n));
+
         const traitScores = {
-          planning: analysis.traits.planning === 'structured' ? 7 : analysis.traits.planning === 'flexible' ? 0 : -5,
-          social: analysis.traits.social === 'social' ? 7 : analysis.traits.social === 'small-group' ? 2 : -5,
-          comfort: analysis.traits.comfort === 'luxury' ? 7 : analysis.traits.comfort === 'moderate' ? 2 : -4,
-          pace: analysis.traits.pace === 'active' ? 7 : analysis.traits.pace === 'balanced' ? 2 : -4,
-          authenticity:
-            analysis.traits.authenticity === 'local-immersion'
-              ? 8
-              : analysis.traits.authenticity === 'balanced'
-                ? 3
-                : -2,
-          adventure:
-            analysis.traits.adventure === 'thrill-seeking'
-              ? 8
-              : analysis.traits.adventure === 'moderate'
-                ? 3
-                : -3,
-          budget: analysis.traits.comfort === 'budget' ? 7 : analysis.traits.comfort === 'moderate' ? 2 : -5,
-          transformation: 3, // Default middle value
+          planning: clamp(analysis.traits.planning === 'structured' ? 7 : analysis.traits.planning === 'flexible' ? 0 : -5),
+          social: clamp(analysis.traits.social === 'social' ? 7 : analysis.traits.social === 'small-group' ? 2 : -5),
+          comfort: clamp(analysis.traits.comfort === 'luxury' ? 7 : analysis.traits.comfort === 'moderate' ? 2 : -4),
+          pace: clamp(analysis.traits.pace === 'active' ? 7 : analysis.traits.pace === 'balanced' ? 2 : -4),
+          authenticity: clamp(analysis.traits.authenticity === 'local-immersion' ? 8 : analysis.traits.authenticity === 'balanced' ? 3 : -2),
+          adventure: clamp(analysis.traits.adventure === 'thrill-seeking' ? 8 : analysis.traits.adventure === 'moderate' ? 3 : -3),
+          budget: clamp(analysis.traits.comfort === 'budget' ? 7 : analysis.traits.comfort === 'moderate' ? 2 : -5),
+          // CULTURAL — derived from authenticity + the curiosity/depth the user describes.
+          // High cultural = cares about history, language, customs, local rituals.
+          // Low cultural = wants the destination as a backdrop, not an immersion.
+          cultural: clamp((() => {
+            const auth = analysis.traits.authenticity;
+            const baseFromAuth = auth === 'local-immersion' ? 7 : auth === 'balanced' ? 2 : -3;
+            const culturalKeywords = ['museum', 'history', 'ruin', 'monument', 'temple', 'church', 'mosque', 'synagogue', 'gallery', 'heritage', 'tradition', 'language', 'local guide', 'archaeological', 'art'];
+            const hits = [...(analysis.whatWorked || []), ...(analysis.whatFailed || [])]
+              .join(' ')
+              .toLowerCase();
+            const culturalSignal = culturalKeywords.filter(kw => hits.includes(kw)).length;
+            return baseFromAuth + Math.min(3, culturalSignal);
+          })()),
+          // TRANSFORMATION — derived from a combination of authenticity, adventure, and
+          // explicit transformation/growth language.
+          transformation: clamp((() => {
+            const auth = analysis.traits.authenticity;
+            const adv = analysis.traits.adventure;
+            let base = 0;
+            if (auth === 'local-immersion') base += 3;
+            if (adv === 'thrill-seeking') base += 3;
+            else if (adv === 'moderate') base += 1;
+            const transformKeywords = ['changed me', 'perspective', 'growth', 'challenge myself', 'push myself', 'reset', 'reflect', 'discover', 'become', 'transform', 'pilgrimage', 'soul-searching', 'sabbatical', 'gap year'];
+            const hits = [...(analysis.whatWorked || []), ...(analysis.whatFailed || [])]
+              .join(' ')
+              .toLowerCase();
+            const transformSignal = transformKeywords.filter(kw => hits.includes(kw)).length;
+            return base + Math.min(4, transformSignal * 2);
+          })()),
         };
 
         const nowIso = new Date().toISOString();
