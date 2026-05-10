@@ -261,7 +261,20 @@ export async function updateTrip(tripId: string, updates: Partial<{
   originCity: string;
   budgetTier: string;
   status: string;
-}>): Promise<BackendTrip> {
+}>, options?: { allowDateChange?: boolean }): Promise<BackendTrip> {
+  // Footgun guard: changing start_date/end_date here without reshaping
+  // itinerary_data orphans activities outside the new window. The correct
+  // path is TripDateEditor → TripDetail.handleDateChange (archives removed
+  // days, renumbers, and updates trip_cities + hotel selection atomically).
+  if ((updates.startDate || updates.endDate) && !options?.allowDateChange) {
+    throw new Error(
+      '[voyanceAPI.updateTrip] Refusing to change start_date/end_date directly — ' +
+      'this orphans activities outside the new window. Use TripDateEditor → ' +
+      'TripDetail.handleDateChange, or pass { allowDateChange: true } if you ' +
+      'have already reshaped itinerary_data.'
+    );
+  }
+
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
   
