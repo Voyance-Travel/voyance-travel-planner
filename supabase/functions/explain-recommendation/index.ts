@@ -94,13 +94,11 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .single();
 
-    // Resolve archetype with fallback
-    let archetype = 'balanced_story_collector';
-    if (travelDNA?.primary_archetype_name) {
-      archetype = travelDNA.primary_archetype_name;
-    } else if (travelDNA?.travel_dna_v2 && (travelDNA.travel_dna_v2 as any).primary_archetype_name) {
-      archetype = (travelDNA.travel_dna_v2 as any).primary_archetype_name;
-    }
+    // Resolve archetype via shared helper; preserve this caller's specific default.
+    const resolvedDna = resolvePrimaryArchetype(travelDNA as any);
+    const archetype = resolvedDna.source === 'default'
+      ? 'balanced_story_collector'
+      : resolvedDna.archetype;
 
     // Format archetype name for display
     const archetypeName = archetype
