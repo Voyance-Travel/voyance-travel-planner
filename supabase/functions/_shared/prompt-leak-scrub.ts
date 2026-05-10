@@ -36,6 +36,22 @@ export const RESERVATION_LABEL_LEAK_RE =
 export const ORPHAN_EMPTY_LABEL_RE =
   /(?:^|(?<=[.!?]\s)|\n)\s*[A-Za-z][A-Za-z][A-Za-z ]{1,40}\s*:\s*[.\u2026]?\s*(?=$|\n|[.!?]\s|[A-Z])/g;
 
+// Slot-name placeholders the LLM occasionally echoes verbatim into description /
+// tips / notes instead of replacing them: "(FLEX_WINDOW)", "(INTEREST_SLOT)",
+// "(slot)", "(AESTHETIC slot)", "(NARRATIVE_MOOD)", etc. Mirrors
+// persist-day-contract::PROMPT_ARTIFACT_RE and the UI artifact regex for
+// system-wide coverage. Two-regex pattern (test/replace) per
+// mem://technical/itinerary/stateful-regex-strip-bug.
+export const SLOT_PLACEHOLDER_LEAK_TEST_RE =
+  /\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder|TBD)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)/i;
+export const SLOT_PLACEHOLDER_LEAK_RE =
+  /\s*\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder|TBD)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)\s*/gi;
+
+// Requirement-prose leak: "This satisfies your 'Deep Context' requirement."
+// Catches the model echoing prompt's requirement language as flavor text.
+export const REQUIREMENT_PROSE_LEAK_RE =
+  /\s*\bThis\s+(?:satisfies|fulfills|fulfils|meets)\s+(?:your|the)\s+['"\u201C\u201D][^'"\u201C\u201D]{1,60}['"\u201C\u201D]?\s+(?:requirement|criterion|criteria|need)s?\s*\.?\s*/gi;
+
 const BODY_FIELDS = [
   'description',
   'tips',
@@ -55,6 +71,8 @@ function scrubString(s: unknown): string | null {
   const after = s
     .replace(RESERVATION_LABEL_LEAK_RE, '')
     .replace(ORPHAN_EMPTY_LABEL_RE, '')
+    .replace(SLOT_PLACEHOLDER_LEAK_RE, '')
+    .replace(REQUIREMENT_PROSE_LEAK_RE, '')
     .replace(/\s{2,}/g, ' ')
     .replace(/\s+\./g, '.')
     .trim();
@@ -95,7 +113,13 @@ export function hasBodyPromptLeak(act: any): { field: string } | null {
     // Reset lastIndex on the global regex before each .test()
     RESERVATION_LABEL_LEAK_RE.lastIndex = 0;
     ORPHAN_EMPTY_LABEL_RE.lastIndex = 0;
-    if (RESERVATION_LABEL_LEAK_RE.test(v) || ORPHAN_EMPTY_LABEL_RE.test(v)) {
+    REQUIREMENT_PROSE_LEAK_RE.lastIndex = 0;
+    if (
+      RESERVATION_LABEL_LEAK_RE.test(v) ||
+      ORPHAN_EMPTY_LABEL_RE.test(v) ||
+      SLOT_PLACEHOLDER_LEAK_TEST_RE.test(v) ||
+      REQUIREMENT_PROSE_LEAK_RE.test(v)
+    ) {
       return { field: key };
     }
   }
@@ -229,7 +253,13 @@ export function hasTitleLeak(act: any): { field: string } | null {
     if (typeof v !== 'string' || !v) continue;
     RESERVATION_LABEL_LEAK_RE.lastIndex = 0;
     ORPHAN_EMPTY_LABEL_RE.lastIndex = 0;
-    if (RESERVATION_LABEL_LEAK_RE.test(v) || ORPHAN_EMPTY_LABEL_RE.test(v)) {
+    REQUIREMENT_PROSE_LEAK_RE.lastIndex = 0;
+    if (
+      RESERVATION_LABEL_LEAK_RE.test(v) ||
+      ORPHAN_EMPTY_LABEL_RE.test(v) ||
+      SLOT_PLACEHOLDER_LEAK_TEST_RE.test(v) ||
+      REQUIREMENT_PROSE_LEAK_RE.test(v)
+    ) {
       return { field: key };
     }
   }
