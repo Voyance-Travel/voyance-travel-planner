@@ -9618,6 +9618,42 @@ export type Database = {
         }
         Relationships: []
       }
+      public_customer_reviews: {
+        Row: {
+          archetype: string | null
+          created_at: string | null
+          id: string | null
+          is_featured: boolean | null
+          photo_consent: boolean | null
+          rating: number | null
+          review_text: string | null
+          reviewer_display: string | null
+          trip_destination: string | null
+        }
+        Insert: {
+          archetype?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_featured?: boolean | null
+          photo_consent?: boolean | null
+          rating?: number | null
+          review_text?: string | null
+          reviewer_display?: never
+          trip_destination?: string | null
+        }
+        Update: {
+          archetype?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_featured?: boolean | null
+          photo_consent?: boolean | null
+          rating?: number | null
+          review_text?: string | null
+          reviewer_display?: never
+          trip_destination?: string | null
+        }
+        Relationships: []
+      }
       trip_budget_summary: {
         Row: {
           budget_allocations: Json | null
