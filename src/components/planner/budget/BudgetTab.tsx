@@ -346,6 +346,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     isOverBudget,
     warningLevel,
     isLoading,
+    isGenerating,
     formattedBudget,
     formattedRemaining,
     updateSettings,
@@ -630,7 +631,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       )}
 
       {/* Over-budget Warning Banner — snapshot is the only source (hidden in manual mode and on empty-itinerary failure) */}
-      {!isManualMode && !isEmptyItineraryFailure && (() => {
+      {!isManualMode && !isEmptyItineraryFailure && !isGenerating && (() => {
         const showWarning = settings?.budget_warnings_enabled !== false
           && settings?.budget_warning_threshold !== 'off'
           && (snapshotStatus === 'red' || (snapshotStatus === 'yellow' && settings?.budget_warning_threshold !== 'red_only'));
@@ -650,7 +651,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       })()}
 
       {/* Over-budget diagnostic banner — decomposes the overage and offers one-click fixes (hidden in manual mode) */}
-      {!isManualMode && (() => {
+      {!isManualMode && !isGenerating && (() => {
         const budgetCents = settings?.budget_total_cents || 0;
         if (budgetCents <= 0 || !summary || snapshot.tripTotalCents <= budgetCents) return null;
 
@@ -782,7 +783,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       })()}
 
 
-      {!isManualMode && hasBudget && summary && isCoachEligible({ days: itineraryDays as any, tripStatus, generationFailureReason }) && (() => {
+      {!isManualMode && !isGenerating && hasBudget && summary && isCoachEligible({ days: itineraryDays as any, tripStatus, generationFailureReason }) && (() => {
         // Compute per-category overruns (planned - allocated, in cents) and
         // translate BudgetCategory → Coach's user-facing labels.
         const CATEGORY_LABEL_MAP: Record<BudgetCategory, string> = {
@@ -934,13 +935,21 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-baseline gap-2">
+            <div className={cn("flex items-baseline gap-2 flex-wrap", isGenerating && "opacity-70 animate-pulse")}>
               <span className={cn(
                 "text-2xl font-bold",
-                snapshot.tripTotalCents > (settings?.budget_total_cents || Infinity) ? "text-destructive" : "text-foreground"
+                !isGenerating && snapshot.tripTotalCents > (settings?.budget_total_cents || Infinity) ? "text-destructive" : "text-foreground"
               )}>
                 {formatCurrency(snapshot.tripTotalCents)}
               </span>
+              {isGenerating && (
+                <span
+                  className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                  aria-live="polite"
+                >
+                  Calculating…
+                </span>
+              )}
               {(settings?.budget_currency || 'USD') !== 'USD' && rateDisclosure(settings?.budget_currency || 'USD') && (
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
@@ -959,21 +968,27 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                   </Tooltip>
                 </TooltipProvider>
               )}
-              {(settings?.budget_total_cents || 0) > 0 && (
+              {!isGenerating && (settings?.budget_total_cents || 0) > 0 && (
                 <span className="text-xs text-muted-foreground">
                   ({Math.round((snapshot.tripTotalCents / (settings?.budget_total_cents || 1)) * 100)}%)
                 </span>
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Estimated total for {travelers} traveler{travelers !== 1 ? 's' : ''}
-              {travelers > 1 && snapshot.tripTotalCents > 0 && (
-                <> · {formatCurrency(Math.floor(snapshot.tripTotalCents / travelers / 100) * 100)}/person</>
+              {isGenerating ? (
+                <>Estimating costs as your itinerary is generated…</>
+              ) : (
+                <>
+                  Estimated total for {travelers} traveler{travelers !== 1 ? 's' : ''}
+                  {travelers > 1 && snapshot.tripTotalCents > 0 && (
+                    <> · {formatCurrency(Math.floor(snapshot.tripTotalCents / travelers / 100) * 100)}/person</>
+                  )}
+                </>
               )}
             </p>
-            <Progress 
-              value={Math.min((settings?.budget_total_cents || 0) > 0 ? (snapshot.tripTotalCents / (settings!.budget_total_cents || 1)) * 100 : 0, 100)} 
-              className="h-2 mt-3"
+            <Progress
+              value={Math.min((settings?.budget_total_cents || 0) > 0 ? (snapshot.tripTotalCents / (settings!.budget_total_cents || 1)) * 100 : 0, 100)}
+              className={cn("h-2 mt-3", isGenerating && "opacity-50")}
             />
             {snapshot.paidCents > 0 && (
               <p className="text-xs text-muted-foreground mt-2">
@@ -994,10 +1009,10 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-baseline gap-2">
+            <div className={cn("flex items-baseline gap-2", isGenerating && "opacity-70 animate-pulse")}>
               <span className={cn(
                 "text-2xl font-bold",
-                snapshot.budgetRemainingCents < 0 ? "text-destructive" : "text-emerald-600"
+                isGenerating ? "text-muted-foreground" : (snapshot.budgetRemainingCents < 0 ? "text-destructive" : "text-emerald-600")
               )}>
                 {formatCurrency(snapshot.budgetRemainingCents)}
               </span>

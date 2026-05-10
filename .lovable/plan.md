@@ -1,37 +1,56 @@
 ## Goal
-Eliminate the EUR rate drift (0.86 vs 0.92) and any future divergence by making the FX table a single shared module read by both the frontend and the edge function.
+Stop the misleading "$400 → $700 → $900 → $1,100" climb during itinerary generation. The numbers are correct snapshots of a partial trip — we just need to label them as in-progress so the user understands.
 
-## Constraint
-Edge functions (Deno) cannot import from `src/lib/...`, and `src/` should not import from `supabase/functions/<name>/...`. The realistic SOT location is `supabase/functions/_shared/`, which Vite can resolve from the frontend and Deno can resolve from edge code.
+## Source of truth
+`trips.itinerary_status` (existing enum: `not_started | queued | generating | partial | ready | failed`).
+`isGenerating === true` ⇔ status ∈ `{queued, generating, partial}`. Everything else (including `not_started` and `failed`) is `false`.
+
+Why this over an activity-cost row count: the status field is already authoritative, set by `itineraryAPI.ts` at start/end of generation, and avoids guessing "expected" totals on multi-city/manual trips.
 
 ## Changes
 
-### 1. New shared module: `supabase/functions/_shared/exchange-rates.ts`
-- Export `RATES_AS_OF`, `RATES_AS_OF_LABEL`, `EXCHANGE_RATES_FROM_USD` (the canonical 2026-05-04 table currently in `src/lib/currency.ts`, EUR=0.86).
-- Export helpers `convertFromUSD(amount, ccy)`, `convertToUSD(amount, ccy)`, `hasRate(ccy)` derived from the same table (TO_USD = 1 / FROM_USD).
-- No Deno-only or Vite-only APIs — pure TS constants + functions.
+### 1. `src/services/tripBudgetService.ts` — `getBudgetSummary` (~lines 614-683)
+- Add `isGenerating: boolean` to the `BudgetSummary` return type (and the interface declaration above the function — find with rg).
+- Inside `getBudgetSummary`, after fetching settings & ledger, do a lightweight read:
+  ```ts
+  const { data: tripRow } = await supabase
+    .from('trips')
+    .select('itinerary_status')
+    .eq('id', tripId)
+    .maybeSingle();
+  const isGenerating = ['queued', 'generating', 'partial'].includes(tripRow?.itinerary_status ?? '');
+  ```
+- Include `isGenerating` in the returned object.
+- One extra query per summary fetch is acceptable; summary is React-Query–cached.
 
-### 2. `src/lib/currency.ts`
-- Delete the inline `EXCHANGE_RATES_FROM_USD` table, `convertFromUSD`, `convertToUSD`, `hasRate`, `RATES_AS_OF`, `RATES_AS_OF_LABEL`.
-- Re-export them from `../../supabase/functions/_shared/exchange-rates.ts` so existing `import { … } from '@/lib/currency'` call sites keep working unchanged.
-- Keep `formatCurrency`, `formatMoneyFromUsdCents`, `rateDisclosure` here (display concerns, frontend-only).
+### 2. `src/hooks/useTripBudget.ts` (lines 76-96, return shape)
+- Extend `UseTripBudgetReturn` with `isGenerating: boolean`.
+- Derive `isGenerating = summary?.isGenerating ?? false` and include it in the returned object.
+- Also: shrink the React Query `staleTime` for the summary to ~5 s while `isGenerating` is true, by passing `refetchInterval: isGenerating ? 4000 : false` so the flag (and totals) refresh as generation progresses. Stop polling once status flips to `ready`.
 
-### 3. `supabase/functions/generate-itinerary/currency-utils.ts`
-- Delete the local `EXCHANGE_RATES_TO_USD` table and the local `convertToUSD` body.
-- Re-export `convertToUSD` from `../_shared/exchange-rates.ts`. Provide a thin `EXCHANGE_RATES_TO_USD` shim (derived from `EXCHANGE_RATES_FROM_USD`) for back-compat with the two call sites that import the constant by name (`generation-core.ts`, `action-generate-day.ts`), so we don't have to touch them.
-- Keep `normalizeCostToUSD`, `deriveIntelligenceFields`, `isRecurringEvent` exactly as-is — those are unrelated logic.
+### 3. UI — `src/components/planner/budget/BudgetTab.tsx`
+The visible climbing total is on the progress bar / "used / remaining" row in this tab. Two surgical edits:
+
+- Pull `isGenerating` from `useTripBudget`.
+- Where the trip total / used amount is rendered (the progress bar block — find by ripgrep on `formattedBudget` / `usedPercent`):
+  - When `isGenerating` is `true`, render a small inline pill **"Calculating…"** next to the total and apply `animate-pulse` + `opacity-70` to the numeric values, plus dampen the progress-fill color to `bg-muted` instead of the warning gradient.
+  - Suppress the over-budget warning banner (`isOverBudget`) while `isGenerating` so we don't fire a red alert on a half-built itinerary. Also gate the Coach (`isCoachEligible(…)` block) on `!isGenerating`.
+- Leave the "Loading budget…" full-page spinner alone — it's for the initial fetch, not generation.
+
+Other consumers (`EditorialItinerary.tsx` only reads `settings`, so no change there. `tripBudgetCompanionsAPI.ts` does not consume `summary`.) are unaffected.
 
 ### 4. Verification
-- `rg "EXCHANGE_RATES_(TO|FROM)_USD\s*[:=]\s*\{" src supabase/functions` → expect only the one definition in `_shared/exchange-rates.ts`.
-- `rg "EUR:\s*0\.92"` → expect 0 matches.
-- Run the existing `src/lib/trip-pricing.test.ts` and any currency-touching tests.
-- Spot-check a EUR trip in preview: F&D card total and trip-total header should now agree.
+- Start a fresh trip generation: BudgetTab progress bar dims, "Calculating…" pill appears, no over-budget toast fires.
+- After `itinerary_status='ready'`: pill disappears, totals stable, polling stops (verify no recurring `tripBudgetSummary` queries in the network tab).
+- Manual / build-myself trips (status stays `not_started`): pill never shown — pre-existing behavior preserved.
+- Failed generation (`failed`): pill cleared, totals shown as final.
 
 ### Out of scope
-- Refreshing rate values (they stay at the 2026-05-04 levels currently in `src/lib/currency.ts`).
-- Touching `formatCurrency` in `src/services/tripPaymentsAPI.ts` (independent helper).
-- Adding a live FX feed.
+- Adding new DB columns or migrations (the enum already exists).
+- Smoothing the climb itself (it's correct data, just unlabeled).
+- Touching budget Coach internals beyond the eligibility gate.
 
 ## Files touched
-- New: `supabase/functions/_shared/exchange-rates.ts`
-- Edited: `src/lib/currency.ts`, `supabase/functions/generate-itinerary/currency-utils.ts`
+- `src/services/tripBudgetService.ts` (return type + 1 query)
+- `src/hooks/useTripBudget.ts` (return shape + conditional `refetchInterval`)
+- `src/components/planner/budget/BudgetTab.tsx` (pill + dim + gates)
