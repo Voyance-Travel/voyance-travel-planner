@@ -286,8 +286,9 @@ function calculateArchetypeScore(
         for (const trait of Object.keys(group)) {
           if (!matchedRequirements.includes(trait)) matchedRequirements.push(trait);
         }
-        // Award gate points equivalent to one required trait
-        score += 30 / Math.max(1, Object.keys(group).length + Object.keys(required).length);
+        // Award full gate budget for satisfying the OR-group, parity with required AND-gates
+        score += 30;
+        traitProximities.push(1.0);
         break;
       }
     }
