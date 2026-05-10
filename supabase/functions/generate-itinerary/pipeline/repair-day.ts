@@ -36,6 +36,12 @@ import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
 import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
 import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../../_shared/prompt-leak-scrub.ts';
 import { scrubActivity, formatOps, opsHadChange } from '../../_shared/scrub-activity.ts';
+import {
+  CATEGORY_PRICE_CEILINGS,
+  inferSubcategory,
+  extractPerPersonPrice,
+  shouldSkipPriceSanity,
+} from '../_shared/category-price-bounds.ts';
 import { ensureDayDiningDescriptions } from '../../_shared/dining-description-backfill.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 import { pickTransitFallback } from '../../_shared/transit-mode.ts';
