@@ -512,7 +512,11 @@ function ActivityCard({
               </span>
             </div>
           )}
-          <p className="text-xs mt-1 opacity-80">{sanitizeActivityText(activity.description)}</p>
+          {(() => {
+            const d = sanitizeActivityText(activity.description)
+              || sanitizeActivityText((activity as any)?.personalization?.whyThisFits);
+            return d ? <p className="text-xs mt-1 opacity-80">{d}</p> : null;
+          })()}
           <div className="flex items-center gap-2 mt-2">
             <MapPin className="h-3 w-3 opacity-60" />
             <span className="text-xs opacity-60">
