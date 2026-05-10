@@ -175,6 +175,12 @@ OUTPUT FORMAT (JSON only, no markdown):
     }
 
     const aiResponse = await response.json();
+    try {
+      costTracker.recordAiUsage(aiResponse);
+      await costTracker.save();
+    } catch (e) {
+      console.error("[discover-proactive] cost tracker save failed:", e);
+    }
     const content = aiResponse.choices?.[0]?.message?.content;
 
     if (!content) {
