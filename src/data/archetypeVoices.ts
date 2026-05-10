@@ -71,20 +71,20 @@ export const archetypeVoiceStyles: Record<string, ArchetypeVoiceStyle> = {
 
   cultural_anthropologist: {
     descriptionPrefix: {
-      cultural: "This is where you'll understand what makes this place tick.",
-      dining: "Eat what the locals eat. Food tells the story.",
-      sightseeing: "Look past the surface. The real story is in the details.",
-      shopping: "Local artisans, traditional crafts. This is the authentic stuff.",
-      nature: "This landscape shaped the culture. See how.",
-      entertainment: "Local performance, local story. This is the real thing.",
+      cultural: "A cultural anchor for the trip — not the whole day, just enough.",
+      dining: "A long, leisurely meal — part of the cultural picture, not a pit stop.",
+      sightseeing: "Worth understanding, not just photographing.",
+      shopping: "Local craft and neighborhood finds, on the way to lunch.",
+      nature: "A walk that gives you a sense of how the place is laid out.",
+      entertainment: "A real local moment, not a staged tourist set piece.",
     },
     paceNotes: {
-      morning: "Start where the locals start. Coffee, conversation.",
-      afternoon: "This is when the neighborhood reveals itself.",
-      evening: "The city transforms. Watch how people live here.",
+      morning: "One cultural anchor — a tour, museum, or guided walk.",
+      afternoon: "Free time. Wander, shop, sit somewhere.",
+      evening: "Family-run dinner with a story behind it.",
     },
-    diningNotes: "No tourist menus. We've found where the locals actually eat.",
-    toneDescriptor: "curious, observant, seeking authentic understanding",
+    diningNotes: "Real neighborhood places. The trattoria with the regulars, not the menu in four languages.",
+    toneDescriptor: "curious but balanced — wants context without turning the trip into a lecture",
   },
 
   luxury_luminary: {
@@ -179,20 +179,20 @@ export const archetypeVoiceStyles: Record<string, ArchetypeVoiceStyle> = {
 
   beach_therapist: {
     descriptionPrefix: {
-      cultural: "A quick visit, then back to the beach.",
-      dining: "Seafood with a view. Toes in the sand.",
-      sightseeing: "Coastal views are the only views that matter.",
-      wellness: "Ocean sounds, salt air, pure restoration.",
-      nature: "Beach walks, tide pools, the rhythm of the waves.",
+      cultural: "A short, water-adjacent stop — then back toward the shore.",
+      dining: "Seafood, sea breeze, no rush.",
+      sightseeing: "If it's not near the water, keep it brief.",
+      wellness: "Salt air and waves do most of the work here.",
+      nature: "Coastline, tide pools, a long slow walk along the shore.",
       entertainment: "Sunset cocktails. The ocean is the show.",
     },
     paceNotes: {
-      morning: "Beach is best before it gets crowded.",
-      afternoon: "Siesta, swim, repeat. This is the rhythm.",
-      evening: "Sunset on the beach. There's nothing else.",
+      morning: "Slow start near the water — swim before the heat.",
+      afternoon: "Active or restful, your call — but stay close to the water.",
+      evening: "Wind down with the waves. Dinner with feet near sand.",
     },
-    diningNotes: "Fresh catch, ocean views. The simpler the better.",
-    toneDescriptor: "coastal, restorative, salt-and-sun healing",
+    diningNotes: "Fresh, local, simple — and ideally with a view of the water.",
+    toneDescriptor: "calm, water-anchored, unhurried",
   },
 
   // Default fallback voice
