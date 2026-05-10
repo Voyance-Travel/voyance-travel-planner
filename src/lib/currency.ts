@@ -20,7 +20,7 @@ export {
   convertToUSD,
   hasRate,
 } from '../../supabase/functions/_shared/exchange-rates';
-import { EXCHANGE_RATES_FROM_USD, RATES_AS_OF_LABEL } from '../../supabase/functions/_shared/exchange-rates';
+import { EXCHANGE_RATES_FROM_USD, RATES_AS_OF_LABEL, convertFromUSD } from '../../supabase/functions/_shared/exchange-rates';
 
 /**
  * Format a whole-currency-unit amount using Intl. Always renders whole units
