@@ -1,35 +1,25 @@
-## RS.M4 — Split onboarding save error paths
+## RS.M5 — Global per-trip version-history prune
 
-**File:** `src/pages/OnboardConversation.tsx`
+Adds a daily-scheduled, global cap of **30 versions per trip** on `public.itinerary_versions`, on top of the existing per-(trip, day) cap of 10 enforced by the `trg_cleanup_old_itinerary_versions` trigger. Long, heavily-edited multi-week trips can currently hold 10 × N days × M edits worth of history; this bounds total trip rows.
 
-The race-condition guard already exists (lines 124–129) and the `try/catch/finally` correctly clears `savingInProgressRef` (line 214). Only the **error reporting** is currently merged into one branch.
+### Inspection findings
+- `public.itinerary_versions` exists; columns include `trip_id`, `day_number`, `version_number`, `is_current`, `created_at`. RLS owner-scoped.
+- Existing `cleanup_old_itinerary_versions()` AFTER-INSERT trigger keeps the 10 newest per `(trip_id, day_number)` by `version_number DESC`. No global cap.
+- `pg_cron` and `pg_net` extensions are both already installed. No URL/anon-key needed for this job (pure SQL call), so it ships in a migration safely.
 
-### Current (lines 200–205)
-```ts
-const result = data as { success?: boolean; error?: string } | null;
-if (error || !result?.success) {
-  console.error('[OnboardConversation] save_onboarding_dna failed', { error, data });
-  toast.error('Failed to save your Travel DNA. Please try again.');
-  return;
-}
-```
+### Migration: `supabase/migrations/<ts>_version_history_global_prune.sql`
 
-A single toast hides whether the RPC layer failed (network / auth / function missing) or the function ran and returned `success:false` (DB write rejection inside the SECURITY DEFINER body).
-
-### Change
-Replace lines 200–205 with two distinct branches matching the spec:
-
-1. **`error` truthy → RPC layer error.** Log `[OnboardConversation] save_onboarding_dna RPC error` with the error object, toast `Couldn't save your Travel DNA: ${error.message}. Please try again.`, return.
-2. **`!result?.success` → DB write inside RPC failed.** Log `[OnboardConversation] save_onboarding_dna returned failure` with the data payload, toast `Save failed: ${result?.error || 'unknown error'}. Please try again.`, return.
-
-The success path (`toast.success` + `navigate`) and the outer `catch (err)` / `finally` (which already clears both flags) stay as-is. The race-condition guard at 124–129 already matches the spec; no changes there.
+1. **`public.prune_itinerary_versions_per_trip()`** — `SECURITY DEFINER`, `search_path = public`, returns `jsonb`. Uses a CTE with `row_number() OVER (PARTITION BY trip_id ORDER BY created_at DESC)` and deletes rows where `rn > 30`. Exposes `{pruned, ran_at}`.
+2. **Safety addition** (small deviation from the literal spec): exclude `is_current = true` rows from deletion. Two reasons: a) the `idx_itinerary_versions_current` index implies callers rely on at least one current row per `(trip_id, day_number)`; b) on a 30-day trip with frequent edits, an unlucky created_at ordering could otherwise prune a current row. Final predicate: `rn > 30 AND COALESCE(is_current, false) = false`.
+3. Permissions: `REVOKE ALL ... FROM PUBLIC; GRANT EXECUTE ... TO service_role;`
+4. Schedule: `cron.schedule('prune-itinerary-versions-daily', '0 3 * * *', $$SELECT public.prune_itinerary_versions_per_trip()$$);` — guarded with a pre-check that unschedules any prior job of the same name so re-running the migration is idempotent.
 
 ### Out of scope
-- The RPC contract itself (DNA-2 `save_onboarding_dna` atomic 3-table write) — already shipped.
-- Refactoring the trait-scoring block (lines 134–176).
-- Changing the redirect target on success.
+- Touching the existing per-day trigger (`cleanup_old_itinerary_versions` / `trg_cleanup_old_itinerary_versions`) — keep both layers.
+- Backfill prune of rows already in the table — the first cron run will handle it.
+- Surfacing run results in app UI.
 
 ### Verification
-- `grep -c "save_onboarding_dna RPC error\|returned failure" src/pages/OnboardConversation.tsx` → ≥ 2.
-- Manual: simulating network failure surfaces the RPC-error toast with `error.message`; a `success:false` RPC payload surfaces the in-function failure toast with the function's `error` field.
-- The race guard still releases on every exit path (return / throw / success) via the existing `finally`.
+- `ls supabase/migrations/ | grep version_history_global_prune` returns the new file.
+- After approval: `supabase.read_query` `SELECT proname FROM pg_proc WHERE proname='prune_itinerary_versions_per_trip'` → 1 row.
+- Manual smoke (optional): seed >30 rows for one `trip_id`, call `SELECT public.prune_itinerary_versions_per_trip();`, expect remaining count = 30 (plus any preserved `is_current`).
