@@ -1,79 +1,55 @@
-## Stop exposing reviewer emails in `customer_reviews`
+## RLS audit — no tables found with RLS disabled
 
 ### Findings
 
-- Table `public.customer_reviews` has columns `id, user_id, name, email, rating, review_text, trip_destination, archetype, is_featured, is_approved, photo_consent, created_at, updated_at`.
-- Current policies:
-  - SELECT `Approved reviews are publicly visible` — `is_approved = true`, `{public}` ← leaks `email` (and `name`, `user_id`)
-  - SELECT `Users can view their own reviews` — owner-only
-  - INSERT `Authenticated users can submit own reviews`
-  - UPDATE `Users can update their own reviews`
-- Frontend usage: `customer_reviews` is only **written** (`src/components/reviews/ReviewCapturePopup.tsx` inserts a review and prefills the form from `user.email`). **No frontend code reads `customer_reviews` for display** — confirmed by ripgrep. So removing public read access of PII causes zero UI breakage. No public testimonial component currently queries this table.
-- Other places `email` is referenced are unrelated (auth user, profiles delete flows).
+Running the user's exact query against `pg_class` returned **0 rows** — every table in the `public` schema already has RLS enabled, including `generation_logs` (`relrowsecurity = true`). The two scanner findings reporting `generation_logs` as RLS-disabled are **stale** (already remediated in a prior migration).
 
-### Approach
+### Adjacent issue worth fixing
 
-Use Approach A from the request (view-based), but skip the join — the table already has its own denormalized `name` column. Lock the base table to owner-only reads and expose a sanitized view for any future public testimonial UI.
+The Supabase linter still reports 5 INFO-level `RLS Enabled No Policy` warnings. RLS is on, but no policies exist — i.e., the table is currently **deny-all** to anon/auth (only service role can read/write). That's safe but signals intent should be made explicit. The tables are:
+
+| Table | Purpose | Recommended policy |
+|---|---|---|
+| `chat_idempotency_cache` | Server-side idempotency keys for chat actions | service-role only (explicit) |
+| `destination_insights_cache` | Server-cached AI destination insights | service-role only |
+| `google_places_search_cache` | Server-cached Google Places lookups | service-role only |
+| `stripe_webhook_log` | Stripe webhook delivery log | service-role only |
+| `travel_intel_locks` | Server-side mutex for travel-intel generation | service-role only |
+
+All five are server-only caches/logs — no client code reads them. Adding an explicit `TO service_role USING (true) WITH CHECK (true)` policy clears the lint without loosening security (service role bypasses RLS anyway; this is purely documentation/lint silencing).
 
 ### Migration
 
 ```sql
--- 1. Remove the over-broad public SELECT policy
-DROP POLICY "Approved reviews are publicly visible" ON public.customer_reviews;
-
--- Owner SELECT policy ("Users can view their own reviews") is retained — owners
--- can still read their own email (self-data).
-
--- 2. Lock down column privileges as belt-and-braces (in case a future policy
---    re-broadens public read access, email + user_id stay revoked).
-REVOKE SELECT (email, user_id) ON public.customer_reviews FROM anon, authenticated;
-
--- 3. Public-safe view for displaying approved testimonials
-CREATE OR REPLACE VIEW public.public_customer_reviews
-WITH (security_invoker = true) AS
-SELECT
-  id,
-  -- Mask name: first character + "***" (e.g., "Jane Doe" -> "J***")
-  CASE
-    WHEN name IS NULL OR length(btrim(name)) = 0 THEN 'Anonymous'
-    ELSE substring(btrim(name) FROM 1 FOR 1) || '***'
-  END                                    AS reviewer_display,
-  rating,
-  review_text,
-  trip_destination,
-  archetype,
-  is_featured,
-  photo_consent,
-  created_at
-FROM public.customer_reviews
-WHERE is_approved = true;
-
--- The view runs with caller privileges. To let anon/auth read approved rows
--- through the view without granting them table SELECT on the base table,
--- add a dedicated permissive SELECT policy scoped to the columns the view
--- actually exposes (email/user_id are still revoked at the column-grant level
--- AND not selected by the view).
-CREATE POLICY "Approved reviews readable via view"
-  ON public.customer_reviews
-  FOR SELECT
-  TO anon, authenticated
-  USING (is_approved = true);
-
-GRANT SELECT ON public.public_customer_reviews TO anon, authenticated;
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'chat_idempotency_cache',
+    'destination_insights_cache',
+    'google_places_search_cache',
+    'stripe_webhook_log',
+    'travel_intel_locks'
+  ] LOOP
+    EXECUTE format(
+      'CREATE POLICY "Service role full access" ON public.%I
+         FOR ALL TO service_role USING (true) WITH CHECK (true)', t);
+  END LOOP;
+END $$;
 ```
-
-Why both the new policy and the column-level REVOKE: the policy is needed so the view (security_invoker) can read approved rows under the caller's role; the column REVOKE guarantees that even if a client SELECTs the base table directly, `email` and `user_id` are denied at the privilege layer — independent of RLS.
 
 ### Verification
 
-1. Anonymous `select * from customer_reviews` → permission denied on `email`/`user_id` (or empty/error from PostgREST). Approved rows readable only by selecting non-PII columns.
-2. Anonymous `select * from public_customer_reviews` → approved rows, no email, name masked.
-3. Authenticated non-owner same as above.
-4. Owner `select email from customer_reviews where user_id = auth.uid()` → still works via the retained owner-SELECT policy + default grant to row owner.
-5. Insert path (`ReviewCapturePopup`) unchanged — INSERT policy unaffected.
+1. Re-run the user's RLS-disabled query → still 0 rows.
+2. Re-run `supabase--linter` → the 5 `RLS Enabled No Policy` INFO warnings drop off.
+3. App functions unchanged — no client code touches these tables, service role still has full access.
 
 ### Files
 
-- New migration: `supabase/migrations/<ts>_lock_customer_reviews_pii.sql`
+- New migration: `supabase/migrations/<ts>_explicit_service_role_policies.sql`
 
-No frontend changes — there is no existing public-read consumer of this table.
+No code changes — these tables are read/written only by edge functions using the service role.
+
+### Note on the stale scanner findings
+
+The two `generation_logs` / `SUPA_rls_disabled_in_public` findings in the security panel are no longer accurate (DB state has been remediated). After this migration is applied, recommend running a fresh security scan so they clear out.
