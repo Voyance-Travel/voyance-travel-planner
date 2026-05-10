@@ -85,6 +85,16 @@ export function useSpendCredits() {
       try {
         const apiAction = ACTION_MAP[params.action] || params.action.toLowerCase();
 
+        // Auto-generate an idempotency key if the caller didn't pass one.
+        // Server now requires it for ALL credit spends (closes double-charge
+        // race on low-value actions like ai_message, swap_activity, etc.).
+        // The key is generated once per mutationFn invocation, so react-query
+        // retries of a single user action collapse to one charge.
+        const existingKey = (params.metadata?.idempotencyKey as string | undefined);
+        const idempotencyKey =
+          existingKey ??
+          `${apiAction}:${params.tripId ?? 'no-trip'}:${user.id}:${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+
         const { data, error } = await supabase.functions.invoke('spend-credits', {
           body: {
             action: apiAction,
@@ -92,7 +102,7 @@ export function useSpendCredits() {
             activityId: params.activityId,
             dayIndex: params.dayIndex,
             creditsAmount: params.creditsAmount,
-            metadata: params.metadata,
+            metadata: { ...params.metadata, idempotencyKey },
           },
         });
 

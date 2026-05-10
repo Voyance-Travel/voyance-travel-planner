@@ -2575,6 +2575,7 @@ export type Database = {
           created_at: string
           credits_delta: number
           id: string
+          idempotency_key: string | null
           is_free_credit: boolean
           metadata: Json | null
           notes: string | null
@@ -2592,6 +2593,7 @@ export type Database = {
           created_at?: string
           credits_delta: number
           id?: string
+          idempotency_key?: string | null
           is_free_credit?: boolean
           metadata?: Json | null
           notes?: string | null
@@ -2609,6 +2611,7 @@ export type Database = {
           created_at?: string
           credits_delta?: number
           id?: string
+          idempotency_key?: string | null
           is_free_credit?: boolean
           metadata?: Json | null
           notes?: string | null
