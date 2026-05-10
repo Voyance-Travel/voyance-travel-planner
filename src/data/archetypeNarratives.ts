@@ -130,25 +130,23 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     id: 'cultural_anthropologist',
     name: 'The Cultural Anthropologist',
     category: 'EXPLORER',
-    hookLine: "You don't just visit places, you become them.",
-    coreDescription: "While others see monuments, you see meaning. Your travels are doctoral dissertations in humanity, written in small cafés and local markets. You speak the universal language of curiosity.",
+    hookLine: "You don't just visit a place — you want to understand it",
+    coreDescription: "You want a vacation, but you also want to know where you are. Not in a grad-school way — in a 'I had a great trip AND I learned what built this city' way. You'll happily spend half a day on a cultural tour or a guided neighborhood walk, then go shopping and have a long lunch. The trip should leave you with a real sense of the place's bones, history, and culture, balanced with everything else that makes a trip a trip.",
     whatThisMeans: [
-      "You value authentic connections over tourist attractions",
-      "You learn basic phrases in every language you encounter",
-      "You'd rather eat street food with locals than dine alone in luxury",
-      "You keep journals full of human stories, not just places"
+      "1-2 cultural tour or museum activities per trip — not all day, every day",
+      "You're curious about local context but not on a learning marathon",
+      "Food and shopping are part of the cultural experience, not a distraction from it"
     ],
     superpowers: [
-      "Building bridges across cultural divides",
-      "Finding extraordinary in ordinary moments",
-      "Creating connections that transcend language"
+      "Asks the right questions",
+      "Notices details others miss",
+      "Comes back with stories that have substance"
     ],
     growthEdges: [
-      "Sometimes comfort has its place too",
-      "Not every meal needs a story",
-      "Fellow travelers have wisdom to share"
+      "Sometimes wants to learn more than the trip allows for",
+      "Can over-research and miss the spontaneous moments"
     ],
-    perfectTripPreview: "You become part of the places you visit.",
+    perfectTripPreview: "Morning at the Borghese, leisurely lunch in Trastevere, afternoon free to wander, dinner at a family-run trattoria with a story",
     emoji: "🌍"
   },
   urban_nomad: {
@@ -417,50 +415,46 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     id: 'community_builder',
     name: 'The Purpose Voyager',
     category: 'CONNECTOR',
-    hookLine: "Travel should enrich the places you visit, not just your photo album.",
-    coreDescription: "You travel with a conscience. You seek out local businesses, guides from the community, and experiences that create connection rather than consumption. Your presence should matter in a good way.",
+    hookLine: "You've been everywhere — and everyone asks you for advice",
+    coreDescription: "You don't just travel — you accumulate. Every city stamped, every hidden gem uncovered becomes part of your authority. You're the one friends text before any trip because you've actually been there. You don't just want to visit places — you want to KNOW them well enough to be the expert. Your passport isn't a document; it's a résumé. And you're nowhere near done.",
     whatThisMeans: [
-      "You research how to support local communities before visiting",
-      "You avoid chain restaurants and hotels when possible",
-      "You learn basic phrases to connect more genuinely",
-      "You feel uncomfortable with overtourism"
+      "Higher activity density — you cover a lot",
+      "Mix of iconic must-dos AND insider spots so you can recommend both",
+      "You take notes you'll share later"
     ],
     superpowers: [
-      "Finding community-positive experiences",
-      "Building meaningful local connections",
-      "Traveling in a way that gives back"
+      "Knows the actual best spot in any city",
+      "Connects friends to perfect-fit travel",
+      "Authority through real experience"
     ],
     growthEdges: [
-      "Sometimes convenience is okay",
-      "Not every choice needs to be ethical perfection",
-      "Enjoying yourself isn't selfish"
+      "Can prioritize coverage over presence",
+      "Friends sometimes want recommendations you haven't lived yet"
     ],
-    perfectTripPreview: "You leave places better than you found them.",
+    perfectTripPreview: "Iconic morning landmark, lunch at the place no tourist knows, afternoon off-the-beaten-path neighborhood, dinner everyone will Instagram",
     emoji: "🤝"
   },
   story_seeker: {
     id: 'story_seeker',
     name: 'The Story Seeker',
     category: 'CONNECTOR',
-    hookLine: "Every person is a book you haven't read yet.",
-    coreDescription: "You travel to collect stories, not stamps. The people you meet matter more than the places you see. You leave every destination richer in connections than photographs.",
+    hookLine: "You travel for the moments you couldn't have planned",
+    coreDescription: "You don't travel for the postcard moments. You travel for the stories no one would believe — the midnight swim, the local who invited you to dinner, the detour that became the whole trip. Polished AI itineraries make you nervous. You want unscripted, raw, 'you had to be there' energy. Your best memories are from saying yes to things you couldn't have planned.",
     whatThisMeans: [
-      "You strike up conversations with strangers",
-      "Local guides become friends",
-      "You remember names, not just places",
-      "Your travel photos feature people, not just landscapes"
+      "At least one wildcard, free-form local discovery block per trip",
+      "You'd skip the famous landmark for the local-only spot",
+      "Memories matter more than completion"
     ],
     superpowers: [
-      "Making instant, genuine connections",
-      "Drawing out stories from anyone",
-      "Creating a global network of friends"
+      "Says yes to unexpected invitations",
+      "Finds the actual local hangouts",
+      "Comes home with the stories everyone wants to hear"
     ],
     growthEdges: [
-      "Some journeys are meant to be solo",
-      "Nature speaks if you listen",
-      "Solitude can be nourishing"
+      "Can over-romanticize chaos",
+      "Sometimes misses the iconic stuff worth seeing"
     ],
-    perfectTripPreview: "You collect moments that change you.",
+    perfectTripPreview: "Morning market with no plan, follow the smell of bread to a bakery, end up at a backyard concert someone mentioned, sleep when tired",
     emoji: "📖"
   },
   escape_artist: {
@@ -617,25 +611,23 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     id: 'collection_curator',
     name: 'The Passport Collector',
     category: 'ACHIEVER',
-    hookLine: "Countries collected, stamps earned.",
-    coreDescription: "You're on a mission to see the world, systematically. Whether it's every country, every continent, or every UNESCO site, you approach travel as a magnificent collection to complete.",
+    hookLine: "Your map is your scoreboard",
+    coreDescription: "You count countries the way other people count years. Each new stamp matters. You'd rather hit three new places than spend a week in one. Breadth, not depth. The number on your passport is the metric — and you're optimizing for it. You don't need to be the expert; you just need to have been there.",
     whatThisMeans: [
-      "You track your travel statistics",
-      "Border crossings excite you",
-      "You've visited countries others haven't heard of",
-      "The map on your wall has more pins than blank spaces"
+      "Trips designed to maximize new-country/new-city count",
+      "Iconic landmarks anchor each visit (the proof you were there)",
+      "Less time per destination — coverage is the win"
     ],
     superpowers: [
-      "Geographic knowledge that impresses",
-      "Efficient multi-country logistics",
-      "Stories from truly obscure places"
+      "Logistically efficient",
+      "Always knows what flight deal makes the next country possible",
+      "Has the receipts for everywhere"
     ],
     growthEdges: [
-      "Depth can matter more than breadth",
-      "Some countries deserve more than a flyby",
-      "Quality of experience over quantity of stamps"
+      "Sometimes trades depth for breadth in a way you regret later",
+      "Can rush past the magic in pursuit of the next stamp"
     ],
-    perfectTripPreview: "You go where few others venture.",
+    perfectTripPreview: "3-country, 6-day route hitting the must-see iconic site in each — passport stamped, photos taken, on to the next",
     emoji: "🗺️"
   },
   status_seeker: {
@@ -667,50 +659,46 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     id: 'retreat_regular',
     name: 'The Wellness Devotee',
     category: 'RESTORER',
-    hookLine: "Wellness isn't a trend, it's a lifestyle.",
-    coreDescription: "You don't vacation, you retreat. Yoga camps, detox programs, silent retreats: travel is your commitment to becoming your best self. You return transformed, not just rested.",
+    hookLine: "You travel to disappear from your life",
+    coreDescription: "You travel TO escape — from the inbox, the noise, the obligations. You want to retreat from your normal life. Mostly stillness inside the retreat property — spa, meditation, yoga, real food, quiet space. But unlike someone who never leaves, you'll surface for one real day outside. Then back to the cocoon. The combo of escape + sanctuary + wellness is the whole point.",
     whatThisMeans: [
-      "You've done juice cleanses in exotic locations",
-      "Meditation is part of your travel routine",
-      "You research wellness programs like others research hotels",
-      "Your packing includes yoga mats and journals"
+      "70-80% of the trip happens at the retreat/property",
+      "One day outside the retreat for a real adventure",
+      "Wellness amenities are non-negotiable: spa, meditation, yoga, or healthy dining"
     ],
     superpowers: [
-      "Prioritizing true self-care",
-      "Finding transformation through travel",
-      "Returning as an upgraded version of yourself"
+      "Returns to life genuinely restored",
+      "Knows when to log off",
+      "Builds rituals that travel with you"
     ],
     growthEdges: [
-      "Sometimes indulgence is wellness too",
-      "Not every trip needs a program",
-      "Relaxation can be unstructured"
+      "Can over-isolate and miss the place you traveled to",
+      "Same retreat-style trips can blur together"
     ],
-    perfectTripPreview: "You return transformed, not just rested.",
+    perfectTripPreview: "Mountain retreat with daily yoga, two spa treatments, one day at a local market and lunch in town, then back to the cocoon",
     emoji: "🧖"
   },
   beach_therapist: {
     id: 'beach_therapist',
     name: 'The Beach Therapist',
     category: 'RESTORER',
-    hookLine: "Salt water heals everything.",
-    coreDescription: "The ocean is your therapist, the beach your couch. You understand the healing power of waves, sand, and horizon. Vitamin Sea is your prescription, and you fill it often.",
+    hookLine: "Water is your home",
+    coreDescription: "You're water. That's it. Give you the ocean, a lake, a river at sunset — and everything else falls into place. You don't need the fanciest hotel or the most packed itinerary. You need to hear waves. You need salt air or still water or the feeling of sand giving way under your feet. Other people plan trips around cities or food or culture. You plan around the water. Always have.",
     whatThisMeans: [
-      "You judge destinations by their beaches",
-      "You own an impressive collection of swimwear",
-      "Ocean sounds are your sleep soundtrack",
-      "You've found paradise in multiple countries"
+      "Water is accessible every day of the trip",
+      "Hotel is waterfront or walkable to water",
+      "Activities anchor around morning swim, sunset by the water"
     ],
     superpowers: [
-      "Finding the perfect beach anywhere",
-      "Total relaxation in coastal settings",
-      "Returning sun-kissed and soul-restored"
+      "Resets faster than anyone in saltwater",
+      "Knows the difference between swim beaches and view beaches",
+      "Brings the calm"
     ],
     growthEdges: [
-      "Mountains have their own magic",
-      "Cities offer unexpected restoration",
-      "Adventure can coexist with beach time"
+      "Can struggle on landlocked trips",
+      "Sometimes underrates the inland gems near coastal spots"
     ],
-    perfectTripPreview: "Salt water and sunshine heal everything.",
+    perfectTripPreview: "Wake to ocean view, morning swim, beach lunch, sunset dinner with feet in sand — repeat",
     emoji: "🏖️"
   },
   art_aficionado: {
@@ -854,25 +842,23 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     id: 'sabbatical_scholar',
     name: 'The Immersion Seeker',
     category: 'TRANSFORMER',
-    hookLine: "Taking time off to find time on.",
-    coreDescription: "You've carved out extended time to travel with purpose. Language immersion, creative projects, or deep rest: your sabbatical is an investment in your next chapter.",
+    hookLine: "Your vacation is your education",
+    coreDescription: "Other people travel to relax. You travel to learn. Every meal, hotel, museum, walking tour is part of the curriculum. Your hotel is historically significant. Your dinner reservation is at the place that invented the dish. Your guide is the one who literally wrote the book. Vacation is class — and you're the eager student.",
     whatThisMeans: [
-      "You've planned a significant career break",
-      "Learning is central to your travels",
-      "You rent apartments, not hotel rooms",
-      "You return with new skills and perspectives"
+      "Almost every activity has an educational angle",
+      "You'd choose a context-rich place over a luxurious one",
+      "You actually read the museum placards"
     ],
     superpowers: [
-      "Long-term planning and commitment",
-      "Deep immersion in new environments",
-      "Returning transformed and renewed"
+      "Deep retention of cultural context",
+      "Connects history across destinations",
+      "Best travel companion for trivia"
     ],
     growthEdges: [
-      "You don't need months to find meaning",
-      "Weekend trips can be transformative too",
-      "Structure isn't always the enemy"
+      "Can be intense for travel partners who want to relax",
+      "Sometimes forgets to just enjoy the meal"
     ],
-    perfectTripPreview: "You return with new skills and perspectives.",
+    perfectTripPreview: "Boutique hotel in a 17th-century palazzo, private guided tour with a historian, dinner at the restaurant that taught Florence what carbonara was",
     emoji: "📚"
   },
   healing_journeyer: {
