@@ -588,14 +588,21 @@ export function ItineraryAssistant({
           }]);
         }
       } else {
-        toast.error('Action failed', {
+        await refundOnFailure('execution_failed', result.error || result.message);
+        toast.error(spendContext ? 'Action failed — credits refunded' : 'Action failed', {
           id: actionId,
           description: result.message,
         });
       }
     } catch (error) {
       console.error('[ItineraryAssistant] Action execution error:', error);
-      
+
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      // Don't refund on insufficient-credits throw — no charge was made
+      if (errMsg !== 'Insufficient credits') {
+        await refundOnFailure('execution_threw', errMsg);
+      }
+
       setMessages(prev => prev.map(msg => {
         if (msg.id === messageId && msg.actions) {
           const newActions = [...msg.actions];
@@ -605,10 +612,15 @@ export function ItineraryAssistant({
         return msg;
       }));
 
-      toast.error('Failed to execute action', {
-        id: actionId,
-        description: error instanceof Error ? error.message : 'Unknown error',
-      });
+      toast.error(
+        spendContext && errMsg !== 'Insufficient credits'
+          ? 'Failed to execute action — credits refunded'
+          : 'Failed to execute action',
+        {
+          id: actionId,
+          description: errMsg,
+        }
+      );
     } finally {
       setIsExecuting(false);
       setExecutingActionId(null);
