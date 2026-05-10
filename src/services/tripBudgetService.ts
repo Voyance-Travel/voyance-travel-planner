@@ -696,6 +696,7 @@ export async function getBudgetSummary(tripId: string, totalDays?: number): Prom
     status: calculateBudgetStatus(usedPercent),
     
     dailyTargetCents: dailyTarget.baseline,
+    isGenerating,
   };
 }
 
