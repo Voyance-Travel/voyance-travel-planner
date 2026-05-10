@@ -541,10 +541,32 @@ ${travelers.map((t: TravelerArchetype) => `- ${formatArchetypeName(t.archetype)}
 - **Social calibration**: ${blendedGuidance.socialLevel}
 
 ### DAY ASSIGNMENTS
-${dayAssignments.length > 0 
-  ? dayAssignments.map(d => `- Day ${d.dayNumber}: ${d.theme} (${d.primaryArchetype === 'group' ? 'Group day' : `Favoring ${formatArchetypeName(d.primaryArchetype)}`})`).join('\n')
+${dayAssignments.length > 0
+  ? dayAssignments.map(d => {
+      const kind = d.kind ?? (d.primaryArchetype === 'group' ? 'group' : 'primary');
+      if (kind === 'group') {
+        return `- Day ${d.dayNumber}: ${d.theme} (Group day)`;
+      }
+      const travelerName = d.travelerId
+        ? travelers.find(t => t.travelerId === d.travelerId)?.name
+        : undefined;
+      const owner = travelerName ? `${travelerName}'s ` : '';
+      if (kind === 'deepening') {
+        return `- Day ${d.dayNumber}: ${d.theme} (Deepening — leaning toward ${owner}secondary ${formatArchetypeName(d.primaryArchetype)}; primary day-structure rules still apply)`;
+      }
+      return `- Day ${d.dayNumber}: ${d.theme} (Favoring ${owner ? owner : ''}${formatArchetypeName(d.primaryArchetype)})`;
+    }).join('\n')
   : 'No specific day assignments - balance throughout'}
 `;
+
+  const hasDeepening = dayAssignments.some(d => (d.kind ?? '') === 'deepening');
+  if (hasDeepening) {
+    prompt += `
+### DEEPENING DAY DIRECTIVE
+On any "Deepening" day above, bias activity selection toward the named secondary archetype's affinity (its preferred experiences and tone), but continue to honor every group avoid item and the daily structure / pace rules of the day's traveler. A deepening day is a flavor shift, not a constraint override — checkout, meal cadence, and pacing rules still apply.
+`;
+  }
+
 
   if (conflicts.length > 0) {
     prompt += `
