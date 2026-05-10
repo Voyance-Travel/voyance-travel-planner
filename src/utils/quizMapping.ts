@@ -856,7 +856,7 @@ export async function saveTravelDNA(
     secondary_archetype_name: dna.secondary_archetype_name,
     dna_confidence_score: dna.dna_confidence_score,
     dna_rarity: dna.dna_rarity,
-    trait_scores: mergedTraits,
+    trait_scores: mergedTraits as unknown as Json,
     tone_tags: dna.tone_tags ?? null,
     emotional_drivers: dna.emotional_drivers ?? null,
     perfect_trip_preview: (dna as { perfect_trip_preview?: string | null })?.perfect_trip_preview ?? null,
