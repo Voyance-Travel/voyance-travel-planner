@@ -6044,6 +6044,24 @@ export type Database = {
           },
         ]
       }
+      travel_intel_locks: {
+        Row: {
+          expires_at: string
+          lock_key: string
+          locked_at: string
+        }
+        Insert: {
+          expires_at: string
+          lock_key: string
+          locked_at?: string
+        }
+        Update: {
+          expires_at?: string
+          lock_key?: string
+          locked_at?: string
+        }
+        Relationships: []
+      }
       trip_action_usage: {
         Row: {
           action_type: string
@@ -9837,6 +9855,7 @@ export type Database = {
       cleanup_expired_search_cache: { Args: never; Returns: number }
       cleanup_expired_venues: { Args: never; Returns: number }
       cleanup_rate_limits: { Args: never; Returns: undefined }
+      cleanup_stale_intel_locks: { Args: never; Returns: undefined }
       consume_free_edit: { Args: { p_user_id: string }; Returns: Json }
       deduct_credits_fifo: {
         Args: { p_cost: number; p_user_id: string }

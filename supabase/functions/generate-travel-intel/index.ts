@@ -79,12 +79,70 @@ serve(async (req) => {
       }
     }
 
+    // ── Acquire generation lock so concurrent callers don't all hit Perplexity ──
+    const lockKey = tripId ? `travel_intel_${tripId}` : null;
+    let lockAcquired = false;
+
+    if (lockKey && !forceRefresh) {
+      const { error: claimErr } = await supabaseAdmin
+        .from('travel_intel_locks')
+        .insert({
+          lock_key: lockKey,
+          locked_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 30_000).toISOString(),
+        });
+
+      if (claimErr && (claimErr as { code?: string }).code === '23505') {
+        // Another caller is generating. Poll the cache for up to 25s.
+        console.log(`[travel-intel] Lock held by peer for ${tripId}, waiting…`);
+        for (let i = 0; i < 25; i++) {
+          await new Promise(r => setTimeout(r, 1000));
+          const { data: retryCache } = await supabaseAdmin
+            .from('travel_intel_cache')
+            .select('intel_data, destination, start_date, end_date, request_params')
+            .eq('trip_id', tripId)
+            .single();
+
+          if (
+            retryCache?.intel_data &&
+            retryCache.destination === destination &&
+            retryCache.start_date === startDate &&
+            retryCache.end_date === endDate
+          ) {
+            return new Response(
+              JSON.stringify({
+                success: true,
+                data: retryCache.intel_data,
+                destination: country ? `${destination}, ${country}` : destination,
+                dates: { startDate, endDate },
+                cached: true,
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+        console.warn(`[travel-intel] Peer lock holder for ${tripId} did not produce cache; proceeding ourselves.`);
+      } else if (claimErr) {
+        console.warn('[travel-intel] Lock insert failed, continuing without lock:', claimErr);
+      } else {
+        lockAcquired = true;
+      }
+    }
+
+    const releaseLock = async () => {
+      if (lockAcquired && lockKey) {
+        await supabaseAdmin.from('travel_intel_locks').delete().eq('lock_key', lockKey);
+        lockAcquired = false;
+      }
+    };
+
     // ── No cache hit — call Perplexity ──
     const costTracker = trackCost('generate_travel_intel', 'perplexity/sonar-pro');
 
     const apiKey = Deno.env.get('PERPLEXITY_API_KEY');
     if (!apiKey) {
       console.error('PERPLEXITY_API_KEY not configured');
+      await releaseLock();
       return new Response(
         JSON.stringify({ success: false, error: 'Search API not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -223,12 +281,14 @@ Focus on:
       console.error('Perplexity API error:', response.status, errorText);
 
       if (response.status === 429) {
+        await releaseLock();
         return new Response(
           JSON.stringify({ success: false, error: 'Rate limit exceeded, please try again later' }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
+      await releaseLock();
       return new Response(
         JSON.stringify({ success: false, error: 'Search failed' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -290,6 +350,7 @@ Focus on:
           }
         }
 
+        await releaseLock();
         return new Response(
           JSON.stringify({
             success: true,
@@ -307,12 +368,15 @@ Focus on:
       console.error('Raw content length:', content.length, 'first 500 chars:', content.substring(0, 500));
     }
 
+    await releaseLock();
     return new Response(
       JSON.stringify({ success: false, error: 'Travel intelligence is temporarily unavailable. Please try again.' }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error generating travel intel:', error);
+    // Best-effort lock cleanup; lockKey/lockAcquired are out of scope here, so
+    // rely on the periodic cleanup_stale_intel_locks() job for residual rows.
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
