@@ -531,7 +531,7 @@ async function executeRegenerateAction(
 
   const day = currentDays[dayIndex];
   const keepActivities = day.activities
-    .filter(a => a.isLocked || isProtectedActivity(a) || isMealActivity(a))
+    .filter(a => isActivityLocked(a) || isProtectedActivity(a) || isMealActivity(a))
     .map(a => a.id)
     .filter(Boolean);
 
