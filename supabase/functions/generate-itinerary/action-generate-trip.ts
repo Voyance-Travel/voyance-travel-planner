@@ -13,6 +13,7 @@
 import { corsHeaders, type ActionContext, verifyTripAccess } from './action-types.ts';
 import { GenerationTimer } from './generation-timer.ts';
 import { harvestAnchorsFromDays } from './anchor-guard.ts';
+import { resolvePrimaryArchetype } from '../_shared/dna-resolve.ts';
 
 // Imported enrichment modules (compute once-per-trip context)
 import { loadTravelerProfile } from './profile-loader.ts';
