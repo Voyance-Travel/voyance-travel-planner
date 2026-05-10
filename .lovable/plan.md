@@ -1,42 +1,44 @@
 
-## Context
+## Reconciliation result: no changes required
 
-Gate definitions are not in `archetype-matcher.ts` itself — they live in `src/config/quiz-questions-v3.json` under `archetypeProfiles`, and the matcher reads them via `archetypeProfiles[id]`. Reviewing each archetype against the spec, **most gates already match** (likely from the earlier matcher rebuild). Only one archetype needs a real edit; the rest are already in spec.
+`supabase/functions/generate-itinerary/archetype-constraints.ts` was already brought up to spec in an earlier pass. Every item the spec asks for is already present. Confirming line-by-line:
 
-## Per-archetype reconciliation
+### Category moves — already applied
 
-| Archetype (slug) | Spec change | Current state | Action |
-|---|---|---|---|
-| `community_builder` (Purpose Voyager) | category=achiever, requiredAny experience_accumulation≥0.6 OR bucket_list≥0.6, social_sharing 0.4 booster, drop ethics_focus/cultural_depth gate | category=ACHIEVER, requiredAny exactly as spec'd, social_sharing:0.4 already booster, no ethics_focus/cultural_depth gate | ✅ no change needed |
-| `collection_curator` (Passport Collector) | required collection_drive≥0.6 + novelty_seeking≥0.5; bucket_list 0.5 booster; niche_interest soft-only | matches exactly (niche_interest 0.4 booster, not required) | ✅ no change needed |
-| `escape_artist` | category=explorer, required autonomy_preference≥0.7, drop restoration_need gate | category=EXPLORER, only autonomy_preference≥0.7 required, no restoration_need gate | ✅ no change needed |
-| `retreat_regular` | required escape_need≥0.6 + restoration_need≥0.6 + wellness boosters | matches exactly | ✅ no change needed |
-| `wilderness_pioneer` | required nature_orientation≥0.7, adventure≥0.5; -1.0 penalty for high city/urban | gates match; "urban" encoded as `nature_orientation below 0.5 weight -1.0` (trait is "Urban 0 → Wilderness 1") | ✅ no change needed |
-| `adrenaline_architect` | required adventure≥0.7, pace≥0.6, no nature gate | matches exactly | ✅ no change needed |
-| `healing_journeyer` | healing_focus≥0.6 (lowered from 0.7); restoration_need 0.5 booster | required healing_focus:0.6, restoration_need:0.5 booster | ✅ no change needed |
-| `cultural_anthropologist` | cultural_depth≥0.7, learning_focus 0.5–0.7 cap, -1.5 penalty above 0.8 | matches exactly | ✅ no change needed |
-| `sabbatical_scholar` | learning_focus≥0.7, cultural_depth≥0.5, planning≥0.4 | matches exactly | ✅ no change needed |
+| Archetype | Spec | File (line) |
+|---|---|---|
+| `community_builder` | `achiever` | `category: "Achiever"` (line 464) ✅ |
+| `escape_artist` | `explorer` | `category: "Explorer"` (line 987) ✅ |
+| `eco_ethicist` | `transformer` | `category: "Transformer"` (line 1252) ✅ |
 
-## The single edit
+(File uses TitleCase per the `ArchetypeDefinition` type union — semantically identical to the lowercase casing used in the spec.)
 
-**`community_builder` boosters trim** — spec lists only `social_sharing: 0.4` as the secondary booster. Current config also keeps `social_energy: 0.6` and `learning_focus: 0.5` as boosters. Spec says "Keep existing booster scoring untouched UNLESS specifically noted" — and the secondary-booster section *is* a specific note for this archetype. To make Purpose Voyager identity-focused (experience accumulation + sharing) and stop bleeding into Sabbatical Scholar / Social Butterfly territory:
+### Identity + meaning rewrites — already in place (verbatim)
 
-- Remove `social_energy: 0.6` and `learning_focus: 0.5` from `community_builder.boosters`
-- Keep `experience_accumulation: 1.0`, `bucket_list: 0.8`, `social_sharing: 0.4`
+| Archetype | Line | Status |
+|---|---|---|
+| `cultural_anthropologist` | 53–90 | ✅ Spec text + `cultural_activity_ratio: 0.2-0.3` already present |
+| `sabbatical_scholar` | 1438–1471 | ✅ Spec text + `educational_activity_ratio: 0.8` already present |
+| `story_seeker` | 496–535 | ✅ Spec text + `unscripted_activity_minimum: 1` already present |
+| `community_builder` | 462–494 | ✅ Spec text + `activity_density: 'high'`, `mix: { iconic: 0.6, hidden: 0.4 }` |
+| `collection_curator` | 640–673 | ✅ Spec text + `activity_density: 'high'` |
+| `beach_therapist` | 825–876 | ✅ Spec text + `requiresWaterDaily: true`, `hotelRequirement: 'walkable_to_water'` |
+| `retreat_regular` | 781–823 | ✅ Spec text + `retreat_property_time_ratio: [0.7, 0.8]`, `outside_retreat_days: 1`, `required_amenities: ['spa','meditation','yoga','healthy_dining']`, `hotelRequirement: 'retreat_property'` |
 
-This is the only behavioral delta in the spec that isn't already in the config.
+### Missing archetype `eco_ethicist` — already defined (line 1250–1337)
 
-## Verification
+Already has, and slightly exceeds, the spec definition: identity/meaning, full `avoid` + `prefer` lists, `dayStructure { minScheduled: 3, maxScheduled: 4, michelinOK: false, spaOK: false, pace: 'moderate', startTime: '08:30' }`, full `affinity` (high/medium/low/never), `timePreferences`, `diningPolicy { michelinAllowed: false, preferLocal: true, minLocalShare: 0.8 }`, `hotelRequirement: 'eco_certified'`. Nothing missing.
 
-1. Reload quiz config; build/typecheck (no TS shape change — JSON only).
-2. Synthetic profile A: `experience_accumulation=0.7, social_sharing=0.5` → `community_builder` primary.
-3. Synthetic profile B: `collection_drive=0.7, novelty_seeking=0.6` → `collection_curator` primary.
-4. Synthetic profile C: `autonomy_preference=0.8, pace=0.7` → `escape_artist` primary, category EXPLORER.
-5. Synthetic profile D: `escape_need=0.7, restoration_need=0.7` → `retreat_regular` primary.
-6. Spot-check that the existing `dna_recalc_needed_at` flag still triggers `recalculateIfNeeded` on next visit so live users converge on the trimmed boosters.
+### No-op recommendation
 
-## Files touched
+The spec is already shipped in this file. **No edits needed**. Note: the spec also mentions "rename internal references where safe" for the Purpose Voyager display name — per the `mem://constraints` rule and your earlier guidance, the slug stays `community_builder`; only the display `identity: "The Purpose Voyager"` (line 463) reflects the rename, which is already in place.
 
-- `src/config/quiz-questions-v3.json` — single 3-line edit inside `archetypeProfiles.community_builder.boosters`.
+### Verification (read-only — no file changes)
 
-No changes to `archetype-matcher.ts`, `recalculateArchetype.ts`, or any frontend component.
+If you want runtime confirmation rather than a file diff:
+
+1. **Mindful Voyager test trip** — generate trip with `eco_ethicist` primary; assert no chain restaurants, no animal-tourism keywords, ≥80% local dining via existing `diningPolicy.minLocalShare`.
+2. **Beach Therapist test trip** — generate; assert each day has ≥1 water activity (`requiresWaterDaily`) and hotel matches `walkable_to_water`.
+3. **Retreat Regular test trip** — generate 5-day; assert exactly 1 outside-retreat day and ≥70% on-property time.
+
+If any of those three fail at runtime, the bug is in the generator's enforcement of these flags, not in `archetype-constraints.ts`. Happy to dig into the enforcement layer next if you want.
