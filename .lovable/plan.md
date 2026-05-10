@@ -78,3 +78,19 @@ After the recompute writes, dispatch the existing `itinerary-data-changed` (or w
 4. Reorder flight legs → dayMode for last day flips between `early_departure` / `full_exploration` accordingly.
 5. Open an existing trip generated before this fix → one-shot back-fill runs, dayModes update once.
 6. Manually-edited days (future `dayMode_locked`) are untouched.
+
+---
+
+## Implementation summary
+
+Implemented the plan:
+
+1. **`src/lib/itinerary/deriveMealPolicy.ts`** (new) — client port of the server meal-policy thresholds.
+2. **`src/lib/itinerary/recomputeDayModes.ts`** (new) — pure helper that re-derives `metadata.quality.{dayMode, meal_policy_at_generation}` for Day 1 / last day from `flight_selection`. Respects future `dayMode_locked` flag.
+3. **`src/services/cascadeTransportToItinerary.ts`** — `runCascadeAndPersist` now always calls `recomputeDayModes` (even when no activity timing changes), so every flight-write path that goes through cascade auto-syncs dayModes.
+4. **`src/components/itinerary/EditorialItinerary.tsx`** — `handleReorderFlightLegs` now invokes `runCascadeAndPersist` after persisting the new order, so leg reorders trigger dayMode recompute.
+5. **`src/pages/TripDetail.tsx`** — one-shot back-fill effect runs once per trip, stamping `metadata.dayMode_backfilled_at`. Closes the gap for trips generated before this fix.
+
+Already-correct paths (no edit needed):
+- `handleMarkFlightLeg` already calls cascade.
+- `AddBookingInline` already calls cascade after writing `flight_selection`.
