@@ -1206,14 +1206,94 @@ serve(async (req) => {
       }
 
       // ========================================
-      // Subscription created/updated — observability only.
-      //   Initial grants are handled by checkout.session.completed.
-      //   Mid-cycle plan upgrades/downgrades are not supported in v1.
+      // Subscription created/updated — RS.M.P5
+      //   - active/trialing → upsert tier (no-downgrade) + stamp status columns
+      //   - past_due / incomplete* → status-only stamp (Stripe retries ~3 weeks)
+      //   - canceled / unpaid → mirror subscription.deleted: revoke club credits,
+      //     force-downgrade tier to free, sync balance cache.
+      //   Initial credit grants stay owned by checkout.session.completed.
       // ========================================
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const sub = event.data.object as Stripe.Subscription;
-        log("Subscription event (no-op for v1)", { subId: sub.id, type: event.type, status: sub.status });
+
+        // Resolve user_id (metadata first, customer-email fallback — same pattern as deleted)
+        let userId = (sub.metadata?.user_id || sub.metadata?.userId) as string | undefined;
+        if (!userId) {
+          const fb = await resolveUserIdFromCustomer(supabaseAdmin, stripe, sub.customer as string);
+          if (fb) {
+            console.warn(`[STRIPE-WEBHOOK] ${event.type}: resolved userId via customer.email fallback`, JSON.stringify({ subId: sub.id, userId: fb }));
+            userId = fb;
+          }
+        }
+        if (!userId) {
+          log(`${event.type}: cannot resolve userId — skipping`, { subId: sub.id });
+          break;
+        }
+
+        const status = sub.status;
+        const tier = (sub.metadata?.tier || sub.metadata?.club_tier || 'voyager') as string;
+        const periodEndIso = sub.current_period_end
+          ? new Date(sub.current_period_end * 1000).toISOString()
+          : null;
+
+        if (status === 'active' || status === 'trialing') {
+          // Upgrade-only path; checkout.session.completed already handled the grant.
+          await upsertUserTier(supabaseAdmin, userId, tier);
+
+          await supabaseAdmin.from('user_tiers').update({
+            stripe_subscription_id: sub.id,
+            subscription_status: status,
+            current_period_end: periodEndIso,
+            updated_at: new Date().toISOString(),
+          }).eq('user_id', userId);
+
+          log("Subscription active/trialing — tier + status updated", { userId, tier, status, subId: sub.id });
+
+        } else if (status === 'past_due' || status === 'incomplete' || status === 'incomplete_expired') {
+          // Don't revoke benefits — Stripe retries renewals for ~3 weeks. UI shows "needs attention".
+          await supabaseAdmin.from('user_tiers').update({
+            subscription_status: status,
+            current_period_end: periodEndIso,
+            updated_at: new Date().toISOString(),
+          }).eq('user_id', userId);
+
+          log("Subscription needs attention — flagged for UI notice", { userId, status, subId: sub.id });
+
+        } else if (status === 'canceled' || status === 'unpaid') {
+          // Treat like deleted: revoke club credits, force-downgrade, sync balance.
+          const { error: zeroErr } = await supabaseAdmin
+            .from('credit_purchases')
+            .update({ remaining: 0, updated_at: new Date().toISOString() })
+            .eq('user_id', userId)
+            .in('credit_type', ['club_base', 'club_bonus']);
+          if (zeroErr) logError(`${event.type}: failed to zero club credits`, JSON.stringify(zeroErr));
+
+          await supabaseAdmin.from('credit_ledger').insert({
+            user_id: userId,
+            transaction_type: 'subscription_cancel',
+            credits_delta: 0,
+            is_free_credit: false,
+            action_type: 'subscription_updated_canceled',
+            notes: `Subscription ${sub.id} transitioned to ${status} — credits revoked`,
+            metadata: { stripe_subscription_id: sub.id, status },
+          });
+
+          await upsertUserTier(supabaseAdmin, userId, 'free', { allowDowngrade: true });
+          await supabaseAdmin.from('user_tiers').update({
+            subscription_status: status,
+            current_period_end: periodEndIso,
+            updated_at: new Date().toISOString(),
+          }).eq('user_id', userId);
+
+          await syncBalanceCache(supabaseAdmin, userId);
+          log("Subscription canceled/unpaid — credits revoked", { userId, status, subId: sub.id });
+
+        } else {
+          // paused, etc. — observe only
+          log("Subscription event — observed (no action)", { userId, status, subId: sub.id });
+        }
+
         break;
       }
 
