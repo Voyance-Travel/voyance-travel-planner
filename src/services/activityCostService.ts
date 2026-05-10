@@ -432,6 +432,19 @@ export async function syncActivitiesToCostTable(
     cost_reference_id: a.costReferenceId || null,
   }));
 
+  // [CPP_DOUBLE_COUNT] sanity gate — fire once per suspicious row in the batch.
+  // Best-effort: doesn't block the upsert.
+  for (const r of rows) {
+    void assertCppLooksPerPerson({
+      activityId: r.activity_id,
+      cpp: r.cost_per_person_usd,
+      numTravelers: r.num_travelers,
+      category: r.category,
+      source: r.source,
+      costReferenceId: r.cost_reference_id,
+    });
+  }
+
   // ─── ORPHAN-RESCUE PRE-PASS (RS.M.B2) ─────────────────────────────────
   // For incoming rows whose activity_id has no existing activity_costs row,
   // attempt to migrate paid state from a stale same-(day, category) orphan
