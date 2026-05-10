@@ -98,10 +98,21 @@ export async function getTripStats(): Promise<TripStats> {
   if (error) throw new Error(error.message);
   
   const now = new Date();
-  const planned: TripSummary[] = [];
-  const completed: TripSummary[] = [];
-  const drafts: TripSummary[] = [];
-  
+  type Bucket = 'planned' | 'completed' | 'drafts' | 'other';
+  const buckets: Record<Bucket, TripSummary[]> = {
+    planned: [], completed: [], drafts: [], other: [],
+  };
+
+  const classify = (trip: { status: string | null; start_date: string | null; end_date: string | null }): Bucket => {
+    if (trip.status === 'draft') return 'drafts';
+    if (trip.status === 'completed') return 'completed';
+    if (trip.start_date && parseLocalDate(trip.start_date) > now) return 'planned';
+    if (trip.end_date && parseLocalDate(trip.end_date) < now) return 'completed';
+    if (trip.status === 'planning' || !trip.status) return 'planned';
+    // Unrecognized status — surface in `other` instead of silently bucketing.
+    return 'other';
+  };
+
   (trips || []).forEach(trip => {
     const summary: TripSummary = {
       id: trip.id,
@@ -110,24 +121,14 @@ export async function getTripStats(): Promise<TripStats> {
       endDate: trip.end_date,
       status: trip.status,
     };
-    
-    if (trip.status === 'draft') {
-      drafts.push(summary);
-    } else if (trip.status === 'completed') {
-      completed.push(summary);
-    } else if (trip.start_date && parseLocalDate(trip.start_date) > now) {
-      planned.push(summary);
-    } else if (trip.end_date && parseLocalDate(trip.end_date) < now) {
-      completed.push(summary);
-    } else {
-      planned.push(summary);
-    }
+    buckets[classify(trip)].push(summary);
   });
-  
+
   return {
-    planned: { count: planned.length, trips: planned },
-    completed: { count: completed.length, trips: completed },
-    drafts: { count: drafts.length, trips: drafts },
+    planned: { count: buckets.planned.length, trips: buckets.planned },
+    completed: { count: buckets.completed.length, trips: buckets.completed },
+    drafts: { count: buckets.drafts.length, trips: buckets.drafts },
+    other: { count: buckets.other.length, trips: buckets.other },
     total: trips?.length || 0,
   };
 }
