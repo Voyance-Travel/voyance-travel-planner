@@ -31,7 +31,7 @@ serve(async (req) => {
     }
 
     // Check cache first (24-hour TTL for hours/prices)
-    const cacheKey = buildCacheKey('attraction', attractionName, destination);
+    const cacheKey = buildCacheKey('attraction', attractionName, destination, travelDate || 'any');
     const cached = await getCached<{ data: unknown; citations?: unknown }>(cacheKey);
     if (cached) {
       return new Response(
