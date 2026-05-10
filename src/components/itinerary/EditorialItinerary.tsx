@@ -2772,31 +2772,102 @@ export function EditorialItinerary({
     setConciergeOpen(true);
   }, [days]);
 
-  // AI Note save/delete handlers
-  const handleSaveAINote = useCallback((activityId: string, note: AISavedNote) => {
-    setDays(prev => prev.map(day => ({
-      ...day,
-      activities: day.activities.map(act => {
-        if (act.id !== activityId) return act;
-        const existing = act.aiNotes || [];
-        // Dedup by content
-        if (existing.some(n => n.content === note.content)) return act;
-        return { ...act, aiNotes: [...existing, note] };
-      }),
-    })));
-    setHasChanges(true);
-  }, []);
+  // Keep conciergeActivity in sync with `days` while the sheet is open so
+  // saved AI notes appear immediately without closing/reopening the sheet.
+  useEffect(() => {
+    if (!conciergeOpen || !conciergeActivity) return;
+    for (const day of days) {
+      const live = day.activities?.find(a => a.id === conciergeActivity.id);
+      if (live && live !== conciergeActivity) {
+        setConciergeActivity(live as EditorialActivity);
+        return;
+      }
+    }
+  }, [days, conciergeOpen, conciergeActivity]);
 
-  const handleDeleteAINote = useCallback((activityId: string, noteId: string) => {
-    setDays(prev => prev.map(day => ({
-      ...day,
-      activities: day.activities.map(act => {
-        if (act.id !== activityId) return act;
-        return { ...act, aiNotes: (act.aiNotes || []).filter(n => n.id !== noteId) };
-      }),
-    })));
+  // AI Note save/delete handlers
+  // IMPORTANT: persist immediately (don't rely on the 3 s autosave debounce).
+  // Otherwise users who navigate away or close the sheet quickly lose the note,
+  // which also wastes AI tokens when they regenerate the same tip later.
+  const persistDaysImmediately = useCallback(async (nextDays: EditorialDay[]) => {
+    // Note: gating on editability is handled at the UI level (the save button
+    // is only rendered when the sheet is interactive); we always persist here.
+    try {
+      const itineraryData: Record<string, unknown> = {
+        days: JSON.parse(JSON.stringify(nextDays)),
+        status: 'ready',
+        optionSelections,
+        savedAt: new Date().toISOString(),
+      };
+      if (parsedMetadata) {
+        itineraryData.metadata = { ...parsedMetadata, lastUpdated: new Date().toISOString() };
+      }
+      const { data: existingTrip } = await supabase
+        .from('trips').select('id').eq('id', tripId).maybeSingle();
+      if (existingTrip) {
+        const { error } = await supabase.functions.invoke('generate-itinerary', {
+          body: { action: 'save-itinerary', tripId, itinerary: itineraryData },
+        });
+        if (!error) {
+          setHasChanges(false);
+          setLastSaved(new Date());
+        }
+      } else {
+        // localStorage demo trips
+        const localStorageKey = 'voyance_demo_trips';
+        const demoTripsRaw = localStorage.getItem(localStorageKey);
+        const demoTrips = demoTripsRaw ? JSON.parse(demoTripsRaw) : {};
+        demoTrips[tripId] = {
+          ...(demoTrips[tripId] || {}),
+          id: tripId,
+          itinerary_data: itineraryData,
+          itinerary_status: 'ready',
+          updated_at: new Date().toISOString(),
+        };
+        localStorage.setItem(localStorageKey, JSON.stringify(demoTrips));
+        setHasChanges(false);
+        setLastSaved(new Date());
+      }
+    } catch (e) {
+      // Leave hasChanges=true so the autosave timer retries as a safety net.
+      console.warn('[AI note] immediate persist failed; autosave will retry', e);
+    }
+  }, [tripId, optionSelections, parsedMetadata]);
+
+  const handleSaveAINote = useCallback(async (activityId: string, note: AISavedNote) => {
+    let nextDays: EditorialDay[] = [];
+    setDays(prev => {
+      nextDays = prev.map(day => ({
+        ...day,
+        activities: day.activities.map(act => {
+          if (act.id !== activityId) return act;
+          const existing = act.aiNotes || [];
+          // Dedup by content
+          if (existing.some(n => n.content === note.content)) return act;
+          return { ...act, aiNotes: [...existing, note] };
+        }),
+      }));
+      return nextDays;
+    });
     setHasChanges(true);
-  }, []);
+    await persistDaysImmediately(nextDays);
+  }, [persistDaysImmediately]);
+
+  const handleDeleteAINote = useCallback(async (activityId: string, noteId: string) => {
+    let nextDays: EditorialDay[] = [];
+    setDays(prev => {
+      nextDays = prev.map(day => ({
+        ...day,
+        activities: day.activities.map(act => {
+          if (act.id !== activityId) return act;
+          return { ...act, aiNotes: (act.aiNotes || []).filter(n => n.id !== noteId) };
+        }),
+      }));
+      return nextDays;
+    });
+    setHasChanges(true);
+    await persistDaysImmediately(nextDays);
+  }, [persistDaysImmediately]);
 
   // Build saved note content set for current concierge activity
   // Derive from `days` state (not the stale `conciergeActivity` snapshot) so the
@@ -8260,6 +8331,14 @@ export function EditorialItinerary({
             })(),
             bookingRequired: conciergeActivity.bookingRequired,
             bookingUrl: conciergeActivity.bookingUrl || conciergeActivity.website,
+            // Source aiNotes from live `days` so the sheet reflects post-save state
+            aiNotes: (() => {
+              for (const day of days) {
+                const live = day.activities?.find(a => a.id === conciergeActivity.id);
+                if (live) return live.aiNotes || [];
+              }
+              return conciergeActivity.aiNotes || [];
+            })(),
           }}
           dayDate={conciergeDayDate}
           dayTitle={conciergeDayTitle}
