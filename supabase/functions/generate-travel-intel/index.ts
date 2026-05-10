@@ -142,6 +142,7 @@ serve(async (req) => {
     const apiKey = Deno.env.get('PERPLEXITY_API_KEY');
     if (!apiKey) {
       console.error('PERPLEXITY_API_KEY not configured');
+      await releaseLock();
       return new Response(
         JSON.stringify({ success: false, error: 'Search API not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -280,12 +281,14 @@ Focus on:
       console.error('Perplexity API error:', response.status, errorText);
 
       if (response.status === 429) {
+        await releaseLock();
         return new Response(
           JSON.stringify({ success: false, error: 'Rate limit exceeded, please try again later' }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
+      await releaseLock();
       return new Response(
         JSON.stringify({ success: false, error: 'Search failed' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -347,6 +350,7 @@ Focus on:
           }
         }
 
+        await releaseLock();
         return new Response(
           JSON.stringify({
             success: true,
@@ -364,12 +368,15 @@ Focus on:
       console.error('Raw content length:', content.length, 'first 500 chars:', content.substring(0, 500));
     }
 
+    await releaseLock();
     return new Response(
       JSON.stringify({ success: false, error: 'Travel intelligence is temporarily unavailable. Please try again.' }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error generating travel intel:', error);
+    // Best-effort lock cleanup; lockKey/lockAcquired are out of scope here, so
+    // rely on the periodic cleanup_stale_intel_locks() job for residual rows.
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
