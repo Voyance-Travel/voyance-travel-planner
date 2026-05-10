@@ -1488,7 +1488,8 @@
       "penalties": {
         "status_seeking": { "above": 0.5, "weight": -1.0 },
         "food_focus": { "above": 0.7, "weight": -0.5 },
-        "art_focus": { "above": 0.6, "weight": -0.5 }
+        "art_focus": { "above": 0.6, "weight": -0.5 },
+        "nature_orientation": { "below": 0.5, "weight": -1.0 }
       }
     },
     "digital_explorer": {
