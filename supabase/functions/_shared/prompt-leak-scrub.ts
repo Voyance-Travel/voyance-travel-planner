@@ -253,7 +253,13 @@ export function hasTitleLeak(act: any): { field: string } | null {
     if (typeof v !== 'string' || !v) continue;
     RESERVATION_LABEL_LEAK_RE.lastIndex = 0;
     ORPHAN_EMPTY_LABEL_RE.lastIndex = 0;
-    if (RESERVATION_LABEL_LEAK_RE.test(v) || ORPHAN_EMPTY_LABEL_RE.test(v)) {
+    REQUIREMENT_PROSE_LEAK_RE.lastIndex = 0;
+    if (
+      RESERVATION_LABEL_LEAK_RE.test(v) ||
+      ORPHAN_EMPTY_LABEL_RE.test(v) ||
+      SLOT_PLACEHOLDER_LEAK_TEST_RE.test(v) ||
+      REQUIREMENT_PROSE_LEAK_RE.test(v)
+    ) {
       return { field: key };
     }
   }
