@@ -140,6 +140,9 @@ export async function restoreTripDateVersion(
       })
       .eq('id', version.id);
 
+    return {
+      success: true,
+      snapshot: {
         startDate: version.start_date,
         endDate: version.end_date,
         dayCount: version.day_count,
