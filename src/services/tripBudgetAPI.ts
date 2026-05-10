@@ -294,7 +294,23 @@ export async function addTripExpense(input: {
     .single();
 
   if (error) throw new Error(error.message);
-  
+
+  // RS.M.B5 — Solo trip split bloat guard.
+  // If the trip has 1 or fewer members, splits are useless: the paid_by user is
+  // the only owner. Future inline-split callers must respect this contract too.
+  const { count: memberCount } = await supabase
+    .from('trip_members')
+    .select('id', { count: 'exact', head: true })
+    .eq('trip_id', input.tripId);
+
+  if (!memberCount || memberCount <= 1) {
+    console.log('[tripBudget] Solo trip — skipping expense_splits creation', {
+      tripId: input.tripId,
+      expenseId: data.id,
+    });
+    // Fall through to return; no splits side-effect to skip in this function today.
+  }
+
   return {
     id: data.id,
     tripId: data.trip_id,
@@ -383,10 +399,33 @@ export async function setExpenseSplits(
   expenseId: string,
   splits: { memberId: string; amount: number; percentage?: number }[]
 ): Promise<void> {
-  // Delete existing splits
+  // Delete existing splits (also lets a multi→solo member transition self-clean)
   await supabase.from('expense_splits').delete().eq('expense_id', expenseId);
 
-  // Insert new splits
+  // RS.M.B5 — Solo trip split bloat guard.
+  // Resolve the owning trip so we can count members. Solo trips skip insert.
+  const { data: expenseRow } = await supabase
+    .from('trip_expenses')
+    .select('trip_id')
+    .eq('id', expenseId)
+    .maybeSingle();
+
+  if (expenseRow?.trip_id) {
+    const { count: memberCount } = await supabase
+      .from('trip_members')
+      .select('id', { count: 'exact', head: true })
+      .eq('trip_id', expenseRow.trip_id);
+
+    if (!memberCount || memberCount <= 1) {
+      console.log('[tripBudget] Solo trip — skipping expense_splits creation', {
+        tripId: expenseRow.trip_id,
+        expenseId,
+      });
+      return;
+    }
+  }
+
+  // Insert new splits (multi-member trips only)
   if (splits.length > 0) {
     const { error } = await supabase.from('expense_splits').insert(
       splits.map(s => ({
