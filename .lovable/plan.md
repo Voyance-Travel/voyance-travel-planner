@@ -1,55 +1,46 @@
-## RLS audit — no tables found with RLS disabled
+## Lock down `route_cache` writes to service role only
 
-### Findings
+**Current state:** `route_cache` has a single policy `"Service role full access"` targeting `{public}` with `USING (true)` for ALL commands — anon and authenticated can read AND write, enabling cache poisoning.
 
-Running the user's exact query against `pg_class` returned **0 rows** — every table in the `public` schema already has RLS enabled, including `generation_logs` (`relrowsecurity = true`). The two scanner findings reporting `generation_logs` as RLS-disabled are **stale** (already remediated in a prior migration).
-
-### Adjacent issue worth fixing
-
-The Supabase linter still reports 5 INFO-level `RLS Enabled No Policy` warnings. RLS is on, but no policies exist — i.e., the table is currently **deny-all** to anon/auth (only service role can read/write). That's safe but signals intent should be made explicit. The tables are:
-
-| Table | Purpose | Recommended policy |
-|---|---|---|
-| `chat_idempotency_cache` | Server-side idempotency keys for chat actions | service-role only (explicit) |
-| `destination_insights_cache` | Server-cached AI destination insights | service-role only |
-| `google_places_search_cache` | Server-cached Google Places lookups | service-role only |
-| `stripe_webhook_log` | Stripe webhook delivery log | service-role only |
-| `travel_intel_locks` | Server-side mutex for travel-intel generation | service-role only |
-
-All five are server-only caches/logs — no client code reads them. Adding an explicit `TO service_role USING (true) WITH CHECK (true)` policy clears the lint without loosening security (service role bypasses RLS anyway; this is purely documentation/lint silencing).
-
-### Migration
+**Migration:**
 
 ```sql
-DO $$
-DECLARE t text;
-BEGIN
-  FOREACH t IN ARRAY ARRAY[
-    'chat_idempotency_cache',
-    'destination_insights_cache',
-    'google_places_search_cache',
-    'stripe_webhook_log',
-    'travel_intel_locks'
-  ] LOOP
-    EXECUTE format(
-      'CREATE POLICY "Service role full access" ON public.%I
-         FOR ALL TO service_role USING (true) WITH CHECK (true)', t);
-  END LOOP;
-END $$;
+-- Drop the misconfigured catch-all policy
+DROP POLICY IF EXISTS "Service role full access" ON public.route_cache;
+
+-- Ensure RLS is on (it is, but assert)
+ALTER TABLE public.route_cache ENABLE ROW LEVEL SECURITY;
+
+-- Public read (cache values non-sensitive; lets edge + client reuse)
+CREATE POLICY "route_cache_public_read"
+  ON public.route_cache
+  FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
+-- Explicit service-role write policy (clears lint; service_role bypasses RLS anyway)
+CREATE POLICY "route_cache_service_role_write"
+  ON public.route_cache
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- Belt-and-suspenders: revoke table-level write grants from client roles
+REVOKE INSERT, UPDATE, DELETE ON public.route_cache FROM anon;
+REVOKE INSERT, UPDATE, DELETE ON public.route_cache FROM authenticated;
 ```
 
-### Verification
+**Why this shape**
+- The existing policy literally named "Service role full access" was applied to `{public}` (all roles) instead of `{service_role}` — the user-quoted exact bug. Replacing it removes the write path for anon/authenticated.
+- No new write policy for anon/authenticated → all client writes denied by RLS.
+- `REVOKE` adds a second gate at the GRANT layer in case a future policy is added by mistake.
+- Service role bypasses RLS, so all edge functions using `SUPABASE_SERVICE_ROLE_KEY` continue to insert/update/delete cache entries unchanged.
 
-1. Re-run the user's RLS-disabled query → still 0 rows.
-2. Re-run `supabase--linter` → the 5 `RLS Enabled No Policy` INFO warnings drop off.
-3. App functions unchanged — no client code touches these tables, service role still has full access.
+**Verification after apply**
+1. `SELECT count(*) FROM route_cache` as anon → succeeds.
+2. `INSERT INTO route_cache ...` as anon/authenticated → 403 / RLS violation.
+3. Run a trip generation that triggers route lookup → cache writes succeed via service role; cache hits work on subsequent client reads.
+4. Re-check Supabase security panel → `route_cache_fully_public` / `route_cache_public` findings clear.
 
-### Files
-
-- New migration: `supabase/migrations/<ts>_explicit_service_role_policies.sql`
-
-No code changes — these tables are read/written only by edge functions using the service role.
-
-### Note on the stale scanner findings
-
-The two `generation_logs` / `SUPA_rls_disabled_in_public` findings in the security panel are no longer accurate (DB state has been remediated). After this migration is applied, recommend running a fresh security scan so they clear out.
+**No code changes needed** — `route_cache` is only written from edge functions using the service-role key.
