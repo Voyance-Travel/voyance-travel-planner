@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { getFullArchetypeContext, type ArchetypeContext } from './archetype-data.ts';
+import { resolvePrimaryArchetype } from '../_shared/dna-resolve.ts';
 
 // =============================================================================
 // TYPES
