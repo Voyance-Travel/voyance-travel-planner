@@ -170,6 +170,92 @@ serve(async (req) => {
 
     console.log(`[generate-itinerary] Action: ${action}`);
 
+    // ====================================================================
+    // PROOF-OF-CHARGE GATE — blocks $$$ abuse via direct edge calls
+    // Service-role self-chain bypasses (originating call already cleared gate).
+    // See .lovable/plan.md (proof-of-charge gate).
+    // ====================================================================
+    const PAID_GENERATION_ACTIONS = ['generate-trip', 'generate-full', 'generate-day', 'regenerate-day'];
+    if (!isServiceRoleCall && PAID_GENERATION_ACTIONS.includes(action)) {
+      const tripId = (params as any)?.tripId;
+      if (!tripId) {
+        console.warn(`[generate-itinerary] Paid action ${action} missing tripId — rejecting`);
+        return new Response(
+          JSON.stringify({ success: false, error: 'tripId required for generation actions', code: 'MISSING_TRIP_ID' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Map edge action → spend-credits action label(s) (proof of charge)
+      const SPEND_ACTIONS_BY_EDGE: Record<string, string[]> = {
+        'generate-trip': ['trip_generation'],
+        'generate-full': ['trip_generation'],
+        'regenerate-day': ['regenerate_day', 'unlock_day'],
+        'generate-day': ['regenerate_day', 'unlock_day'],
+      };
+      const allowedSpendActions = SPEND_ACTIONS_BY_EDGE[action] || [];
+
+      const tenMinAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+
+      const [balanceRes, tierRes, chargeRes] = await Promise.all([
+        supabase
+          .from('credit_balances')
+          .select('purchased_credits, free_credits')
+          .eq('user_id', authResult.userId)
+          .maybeSingle(),
+        supabase
+          .from('user_tiers')
+          .select('tier')
+          .eq('user_id', authResult.userId)
+          .maybeSingle(),
+        supabase
+          .from('pending_credit_charges')
+          .select('id, status, action, created_at')
+          .eq('user_id', authResult.userId)
+          .eq('trip_id', tripId)
+          .in('action', allowedSpendActions)
+          .in('status', ['pending', 'completed'])
+          .gte('created_at', tenMinAgo)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      const charge = chargeRes.data;
+      const totalCredits =
+        (balanceRes.data?.purchased_credits ?? 0) + (balanceRes.data?.free_credits ?? 0);
+      const tier = tierRes.data?.tier ?? 'free';
+
+      if (!charge) {
+        console.warn(
+          `[generate-itinerary] No proof-of-charge for user=${authResult.userId} trip=${tripId} action=${action} ` +
+          `tier=${tier} balance=${totalCredits} — blocking`
+        );
+        if (totalCredits <= 0 && tier === 'free') {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'Free tier credits exhausted. Upgrade to continue generating trips.',
+              code: 'TIER_LIMIT_EXCEEDED',
+            }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Generation must be initiated through the app (no charge record found).',
+            code: 'GENERATION_NOT_AUTHORIZED',
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(
+        `[generate-itinerary] Proof-of-charge OK: charge=${charge.id} action=${charge.action} status=${charge.status}`
+      );
+    }
+
     // Rate limit check
     const rateCheck = await checkRateLimit(supabase, authResult.userId, action);
     if (!rateCheck.allowed) {
