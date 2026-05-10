@@ -2327,6 +2327,7 @@ export function EditorialItinerary({
   const [refreshResults, setRefreshResults] = useState<Record<number, RefreshResult>>({});
   const { isRefreshing: isRefreshingDay, refreshDay } = useRefreshDay();
   const [refreshingDayNumber, setRefreshingDayNumber] = useState<number | null>(null);
+  const [refreshSheetDay, setRefreshSheetDay] = useState<number | null>(null);
 
   // Notify parent of refresh state changes
   useEffect(() => {
