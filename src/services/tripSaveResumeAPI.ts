@@ -149,7 +149,15 @@ export async function saveTripProgress(
   input: SaveTripInput
 ): Promise<SaveTripResponse> {
   const headers = await getAuthHeader();
-  const sessionId = sessionStorage.getItem('trip_session_id') || `session-${Date.now()}`;
+  // Use the trip ID as the canonical session anchor — one session per trip per
+  // user. Prevents the race where two concurrent saves use different session IDs
+  // and the server's "latest" logic gets confused.
+  const sessionId = tripId
+    ? `trip-${tripId}`
+    : sessionStorage.getItem('trip_session_id') || crypto.randomUUID();
+  if (!tripId) {
+    sessionStorage.setItem('trip_session_id', sessionId);
+  }
   
   const response = await fetch(`${API_BASE_URL}/api/v1/trips/${tripId}/save`, {
     method: 'POST',
@@ -177,8 +185,13 @@ export async function resumeTrip(
   input: ResumeTripInput = {}
 ): Promise<ResumeTripResponse> {
   const headers = await getAuthHeader();
-  const sessionId = `session-${Date.now()}`;
-  sessionStorage.setItem('trip_session_id', sessionId);
+  // Deterministic per-trip session anchor — must match saveTripProgress.
+  const sessionId = tripId
+    ? `trip-${tripId}`
+    : sessionStorage.getItem('trip_session_id') || crypto.randomUUID();
+  if (!tripId) {
+    sessionStorage.setItem('trip_session_id', sessionId);
+  }
 
   const response = await fetch(`${API_BASE_URL}/api/v1/trips/${tripId}/resume`, {
     method: 'POST',
@@ -221,7 +234,13 @@ export async function getTripSaveStatus(tripId: string): Promise<SaveStatusRespo
  */
 export async function getSessionStatus(tripId: string): Promise<SessionStatusResponse> {
   const headers = await getAuthHeader();
-  const sessionId = sessionStorage.getItem('trip_session_id') || `session-${Date.now()}`;
+  // Deterministic per-trip session anchor — must match saveTripProgress / resumeTrip.
+  const sessionId = tripId
+    ? `trip-${tripId}`
+    : sessionStorage.getItem('trip_session_id') || crypto.randomUUID();
+  if (!tripId) {
+    sessionStorage.setItem('trip_session_id', sessionId);
+  }
 
   const response = await fetch(`${API_BASE_URL}/api/v1/trips/${tripId}/session-status`, {
     headers: {
