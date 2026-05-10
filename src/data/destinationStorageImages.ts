@@ -6,7 +6,7 @@
  * New Orleans uses bundled local assets (src/assets/destinations/).
  */
 
-const STORAGE_BASE = 'https://jsxplunjjvxuejeouwob.supabase.co/storage/v1/object/public/trip-photos/destination';
+const STORAGE_BASE = 'https://jsxplunjjvxuejeouwob.supabase.co/storage/v1/object/public/destination-images/destination';
 
 function img(slug: string, index: number): string {
   return `${STORAGE_BASE}/${slug}-${index}.jpg`;
