@@ -101,22 +101,45 @@ export async function restoreTripDateVersion(
       return { success: false, error: 'No date version to restore' };
     }
 
-    // Delete this version (pop from stack)
+    // Snapshot the CURRENT trip dates BEFORE applying the restore, so the
+    // pre-restore state is preserved as a new history row. Older versions
+    // are intentionally NOT deleted — full history is retained for audit.
+    try {
+      const { data: trip } = await supabase
+        .from('trips')
+        .select('start_date, end_date, itinerary_data, hotel_selection')
+        .eq('id', tripId)
+        .single();
+
+      if (trip) {
+        const dayCount = Array.isArray((trip.itinerary_data as Record<string, unknown> | null)?.days)
+          ? (((trip.itinerary_data as Record<string, unknown>).days) as unknown[]).length
+          : 0;
+        await supabase.from('trip_date_versions').insert({
+          trip_id: tripId,
+          start_date: trip.start_date,
+          end_date: trip.end_date,
+          day_count: dayCount,
+          itinerary_data: (trip.itinerary_data ?? null) as unknown as Json,
+          hotel_selection: (trip.hotel_selection ?? null) as unknown as Json,
+          created_by_action: 'pre_restore_snapshot',
+          label: 'Pre-restore snapshot',
+          metadata: { auto_snapshot: true, before_restore_of: version.id } as unknown as Json,
+        });
+      }
+    } catch (snapErr) {
+      console.warn('[TripDateVersion] Pre-restore snapshot failed (non-fatal):', snapErr);
+    }
+
+    // Mark the restored version (keep it in history; bump counter)
     await supabase
       .from('trip_date_versions')
-      .delete()
+      .update({
+        restored_at: new Date().toISOString(),
+        times_restored: (version.times_restored ?? 0) + 1,
+      })
       .eq('id', version.id);
 
-    // Clean up all older snapshots to prevent stale session artifacts
-    await supabase
-      .from('trip_date_versions')
-      .delete()
-      .eq('trip_id', tripId)
-      .lt('created_at', version.created_at);
-
-    return {
-      success: true,
-      snapshot: {
         startDate: version.start_date,
         endDate: version.end_date,
         dayCount: version.day_count,
