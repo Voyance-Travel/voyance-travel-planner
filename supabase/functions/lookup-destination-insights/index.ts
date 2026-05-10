@@ -1,5 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { trackCost } from "../_shared/cost-tracker.ts";
+
+const supabaseAdmin = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+  { auth: { persistSession: false } }
+);
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,7 +45,27 @@ serve(async (req) => {
     }
 
     const locationContext = country ? `${destination}, ${country}` : destination;
+    const cacheKey = `${destination}|${country ?? ''}`.toLowerCase();
     console.log(`Looking up destination insights for ${locationContext}`);
+
+    // Cache check (90-day TTL — language/voltage/emergency don't change)
+    try {
+      const { data: cached } = await supabaseAdmin
+        .from('destination_insights_cache')
+        .select('insights, expires_at')
+        .eq('destination', cacheKey)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+      if (cached?.insights) {
+        console.log(`destination_insights_cache HIT for ${cacheKey}`);
+        return new Response(
+          JSON.stringify({ ...cached.insights, cached: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } catch (cacheErr) {
+      console.warn('destination_insights_cache read failed:', cacheErr);
+    }
 
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
@@ -135,13 +162,26 @@ RULES:
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const insightsData = JSON.parse(jsonMatch[0]);
+        const payload = {
+          success: true,
+          data: insightsData,
+          destination: locationContext,
+          citations: data.citations,
+        };
+        // Cache the result (90-day TTL)
+        try {
+          const now = new Date();
+          await supabaseAdmin.from('destination_insights_cache').upsert({
+            destination: cacheKey,
+            insights: payload,
+            created_at: now.toISOString(),
+            expires_at: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+          });
+        } catch (cacheWriteErr) {
+          console.warn('destination_insights_cache write failed:', cacheWriteErr);
+        }
         return new Response(
-          JSON.stringify({ 
-            success: true, 
-            data: insightsData, 
-            destination: locationContext,
-            citations: data.citations 
-          }),
+          JSON.stringify(payload),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
