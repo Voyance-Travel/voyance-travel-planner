@@ -2347,6 +2347,22 @@ async function _handleGenerateTripDayInner(
       arrivalTime24: isFirstDayLoop ? savedArrivalTime24 : undefined,
       departureTime24: isLastDayLoop ? savedDepartureTime24 : undefined,
     });
+
+    // RS.M.I3: cache the meal policy used during multi-day generation so the
+    // health engine fires consistently. Mirrors action-generate-day.ts:336-346.
+    // Written before the requiredMeals.length===0 early-continue so pure
+    // exploration days carry the cache too.
+    updatedDays[i].metadata = updatedDays[i].metadata || {};
+    updatedDays[i].metadata.quality = updatedDays[i].metadata.quality || {};
+    updatedDays[i].metadata.quality.meal_policy_at_generation = {
+      dayMode: policy.dayMode,
+      requiredMeals: policy.requiredMeals,
+      isFullExplorationDay: policy.isFullExplorationDay,
+      arrivalTime24: isFirstDayLoop ? (savedArrivalTime24 ?? null) : null,
+      departureTime24: isLastDayLoop ? (savedDepartureTime24 ?? null) : null,
+      generated_at: new Date().toISOString(),
+    };
+
     if (policy.requiredMeals.length === 0) {
       _harvestDining(d.activities);
       continue;
