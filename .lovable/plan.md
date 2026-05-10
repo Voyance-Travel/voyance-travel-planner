@@ -1,76 +1,36 @@
-## MED-1: Server-side memory upload validation
+## Cross-tab sign-out sync via BroadcastChannel
 
-**Problem:** `src/services/tripMemoriesAPI.ts` uploads directly from the client to the `trip-memories` storage bucket. Any file type or size can be pushed via DevTools — frontend checks are cosmetic.
+**Problem:** Sign-out in tab A doesn't propagate to tab B until next reload. `AuthContext.tsx` only listens to Supabase's per-tab `onAuthStateChange`.
 
-**Approach:** Move uploads through a new edge function `upload-trip-memory` that enforces validation server-side, then lock down the bucket so only the service role can write.
+### Change: `src/contexts/AuthContext.tsx`
 
-### New edge function `supabase/functions/upload-trip-memory/index.ts`
+Inside the existing `useEffect` (line 227, the same effect that subscribes to `onAuthStateChange`), open a `BroadcastChannel('voyance-auth')` and:
 
-- Accept `multipart/form-data` with: `file`, `tripId`, optional `activityId`, `activityName`, `caption`, `locationName`, `dayNumber`.
-- Auth: validate JWT, resolve `user.id`. Confirm the trip belongs to the user (or they're a collaborator).
-- Validation:
-  - **Size:** reject `> 10 MB` (configurable constant).
-  - **MIME:** allowlist `image/jpeg`, `image/png`, `image/webp`, `image/heic` only.
-  - **Magic-byte sniff:** read first 12 bytes and verify against the claimed MIME (JPEG `FF D8 FF`, PNG `89 50 4E 47`, WEBP `RIFF…WEBP`, HEIC `ftypheic/heix/mif1`). Reject mismatches — this is the real "easy to bypass via DevTools" defense.
-  - **Dimensions sanity:** decode header; reject if width or height > 12000px or < 16px.
-- **EXIF strip:** re-encode via `Image` decode → `image/jpeg` or `image/webp` re-encode using a Deno-compatible image lib (`https://deno.land/x/imagescript`). This drops GPS/EXIF metadata implicitly. Keep orientation by applying it before strip.
-- Upload sanitized buffer with service-role client to `trip-memories/{userId}/{tripId}/{timestamp}.{ext}`.
-- Insert `trip_memories` row (same shape as today).
-- Return `{ memory, signedUrl }`.
+1. **Outbound** — when this tab observes a real `SIGNED_OUT` event from Supabase (the existing `if (event === 'SIGNED_OUT')` branch around line 282), `bc.postMessage({ type: 'auth:signout' })`. Also broadcast from the `logout()` method at line 545 right after `supabase.auth.signOut()` resolves, so the message goes out even if the listener races.
+2. **Inbound** — `bc.onmessage` handler:
+   - If `type === 'auth:signout'`: clear local state the same way the SIGNED_OUT branch does — `currentUserIdRef.current = null`, `setSession(null)`, `setUser(null)`, reset the singleton cache (`sg.initialized = false; sg.cachedUser = null; sg.cachedSession = null`), and call `supabase.auth.signOut({ scope: 'local' })` so this tab's stored token is wiped without re-broadcasting (use `scope: 'local'` to avoid hitting the server again — the originating tab already revoked the refresh token globally).
+   - Skip if the tab is already signed out (no `session`) to avoid noisy redirects.
+3. **Loop guard** — use a module-level `isHandlingRemoteSignout` ref so the local `SIGNED_OUT` event triggered by step 2's `signOut({ scope: 'local' })` doesn't re-broadcast and ping-pong.
+4. **Cleanup** — add `bc.close()` to the existing `return () => { … }` cleanup at line 446.
 
-Standard CORS, zod validation on form fields, structured error responses.
+### Optional sign-in mirror (low priority)
 
-### Client change
+Same channel, `type: 'auth:signin'` on `SIGNED_IN`. Receiving tabs call `supabase.auth.getSession()` to pick up the new session from shared localStorage and re-run `loadUserData`. **Not in scope** unless the user wants tab B to auto-sign-in after tab A logs in — defer; the urgent issue is sign-out propagation on shared devices.
 
-`tripMemoriesAPI.uploadMemory` switches from direct `supabase.storage.upload` + `from('trip_memories').insert` to a single `supabase.functions.invoke('upload-trip-memory', { body: formData })` call. Keep the existing client-side pre-check as UX (fast feedback) but it is no longer the security boundary.
+### Browser support / fallback
 
-### Storage policy migration
-
-Migration to revoke client INSERT/UPDATE on `storage.objects` for bucket `trip-memories` (keep SELECT for owner via signed URLs only — current pattern). Service role retains full access. Existing DELETE policy stays so `deleteMemory` still works (or move delete into the edge function too — small follow-up, not required for this fix).
+`BroadcastChannel` is supported on all current evergreen browsers and recent Safari (15.4+). For older Safari, add a thin fallback: subscribe to `window.addEventListener('storage', …)` and watch for the Supabase auth key being deleted (`e.key?.startsWith('sb-') && e.key.endsWith('-auth-token') && e.newValue === null`) — same handler as the BroadcastChannel inbound. Wrap the channel construction in `typeof BroadcastChannel !== 'undefined'`.
 
 ### Verification
 
-- Upload a real JPEG → success.
-- Rename `evil.exe` → `evil.jpg` and upload → 400 `INVALID_FILE_TYPE` (magic-byte mismatch).
-- 25 MB image → 400 `FILE_TOO_LARGE`.
-- JPEG with GPS EXIF → uploaded file has EXIF stripped (verify with `exiftool` on download).
-- Direct `supabase.storage.from('trip-memories').upload(...)` from browser console → 403 from RLS.
-
----
-
-## MED-2: Strip userId from production console logs
-
-Three log lines leak `user.id` to edge logs. Wrap each behind a debug guard rather than `NODE_ENV` (Deno edge functions don't set `NODE_ENV`; use a project convention).
-
-Use a small shared helper `supabase/functions/_shared/debug-log.ts`:
-
-```ts
-const DEBUG = Deno.env.get('DEBUG_LOGS') === 'true';
-export const debugLog = (...args: unknown[]) => { if (DEBUG) console.log(...args); };
-```
-
-Then update:
-
-- `supabase/functions/generate-trip-preview/index.ts:271` — replace `console.log(... User: ${userId || 'anon'})` with either `debugLog(...)` or strip the userId entirely:
-  `console.log(\`[generate-trip-preview] ✓ Generated ${cappedDays}-day preview for ${destination}\`);` and move the userId-tagged line behind `debugLog`.
-- `supabase/functions/generate-full-preview/index.ts:245` — same treatment, drop `| User: ${userId}` from the always-on log; keep a `debugLog` variant for local debugging.
-- `supabase/functions/chat-trip-planner/index.ts:304` — remove `console.log("[chat-trip-planner] Authenticated user:", user.id);` (auth success doesn't need a log line) or replace with `debugLog`.
-
-No behavior change; logs in production stop carrying PII.
-
-### Verification
-
-- Deploy, trigger each function, check edge logs: no UUIDs appear in default output.
-- Set `DEBUG_LOGS=true` secret locally → userId-tagged lines reappear.
-
----
+- Open the app in tabs A and B, both signed-in to the same account.
+- In tab A click Logout. Within ~1s, tab B's `user` and `session` go null and routing redirects to landing/login.
+- Reload tab B — it stays signed-out (storage was wiped).
+- Sign in tab A, sign in tab B. Sign out tab A → tab B clears. No infinite loop in either tab's console.
+- Older browser without `BroadcastChannel`: storage-event fallback fires the same clear path.
 
 ### Files touched
 
-- New: `supabase/functions/upload-trip-memory/index.ts`
-- New: `supabase/functions/_shared/debug-log.ts`
-- New migration: lock down `trip-memories` bucket write policies
-- Edit: `src/services/tripMemoriesAPI.ts` (uploadMemory only)
-- Edit: `supabase/functions/generate-trip-preview/index.ts` (line 271)
-- Edit: `supabase/functions/generate-full-preview/index.ts` (line 245)
-- Edit: `supabase/functions/chat-trip-planner/index.ts` (line 304)
+- `src/contexts/AuthContext.tsx` only.
+
+No backend, no migration, no new dependency.
