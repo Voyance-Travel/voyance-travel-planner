@@ -156,6 +156,44 @@ export default function TripDetail() {
     tripRef.current = trip;
   }, [trip]);
 
+  // One-shot back-fill: if a trip has flight_selection but its days were
+  // generated/saved before the dayMode-from-flights sync existed, recompute
+  // and persist Day 1 / last-day metadata.quality.dayMode once. Subsequent
+  // flight changes flow through runCascadeAndPersist which handles this
+  // automatically.
+  const dayModeBackfillRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!trip || !tripId) return;
+    if (dayModeBackfillRef.current === tripId) return;
+    const itinerary = trip.itinerary_data as any;
+    const days = itinerary?.days;
+    const flightSel = trip.flight_selection as any;
+    if (!flightSel || !Array.isArray(days) || days.length === 0) return;
+    const meta = (trip.metadata as Record<string, unknown> | null) || {};
+    if ((meta as any).dayMode_backfilled_at) {
+      dayModeBackfillRef.current = tripId;
+      return;
+    }
+    dayModeBackfillRef.current = tripId;
+    (async () => {
+      try {
+        const { recomputeDayModes } = await import('@/lib/itinerary/recomputeDayModes');
+        const result = recomputeDayModes(days, flightSel);
+        if (result.changed) {
+          const { saveItineraryOptimistic } = await import('@/services/itineraryOptimisticUpdate');
+          await saveItineraryOptimistic(tripId, { ...itinerary, days: result.updatedDays });
+          console.log('[TripDetail] dayMode back-filled for days:', result.changedDayNumbers);
+        }
+        await supabase
+          .from('trips')
+          .update({ metadata: { ...meta, dayMode_backfilled_at: new Date().toISOString() } as any })
+          .eq('id', tripId);
+      } catch (err) {
+        console.warn('[TripDetail] dayMode back-fill skipped:', err);
+      }
+    })();
+  }, [trip, tripId]);
+
   // Mark/unmark flights or hotel as "booked elsewhere" — persists to trip.metadata
   const handleMarkBookedElsewhere = async (
     field: 'flights' | 'hotel' | undefined,
