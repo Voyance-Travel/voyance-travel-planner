@@ -2819,7 +2819,7 @@ export function EditorialItinerary({
       // Leave hasChanges=true so the autosave timer retries as a safety net.
       console.warn('[AI note] immediate persist failed; autosave will retry', e);
     }
-  }, [tripId, optionSelections, parsedMetadata, effectiveIsEditable]);
+  }, [tripId, optionSelections, parsedMetadata]);
 
   const handleSaveAINote = useCallback(async (activityId: string, note: AISavedNote) => {
     let nextDays: EditorialDay[] = [];
