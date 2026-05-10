@@ -143,6 +143,7 @@ async function trackEvent(event: TrackingEvent): Promise<void> {
       .maybeSingle();
     
     const now = new Date().toISOString();
+    const safeMeta = sanitizeMetadata(event.metadata);
     
     if (existing) {
       // Update existing record - increment interaction count
@@ -161,11 +162,11 @@ async function trackEvent(event: TrackingEvent): Promise<void> {
           interaction_count: newCount,
           metadata: {
             ...existingMetadata,
-            ...event.metadata,
+            ...safeMeta,
             last_interaction_at: now,
             interaction_history: [
               ...interactionHistory,
-              { at: now, ...event.metadata }
+              { at: now, ...safeMeta }
             ]
           },
           feedback_tags: event.feedback_tags || existing.feedback_tags,
@@ -184,7 +185,7 @@ async function trackEvent(event: TrackingEvent): Promise<void> {
           interaction_count: 1,
           feedback_tags: event.feedback_tags,
           metadata: {
-            ...event.metadata,
+            ...safeMeta,
             first_interaction_at: now,
             last_interaction_at: now,
           },
