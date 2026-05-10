@@ -1,98 +1,87 @@
-# Barcelona Diagnosis — Ship B1, B2, B3
+# Security Round R1–R6: Actually-Apply Fixes
 
-Three bugs from the Barcelona run. B1 and B2 are regressions in existing pipelines; B3 is new. All work is in `supabase/functions/generate-itinerary/` — no frontend changes.
+Three findings have been "fixed" in prior rounds without the substantive step landing (column-restricted policy was only renamed; Realtime policy is still `USING(true)`; SECURITY DEFINER list was enumerated but not revoked). This plan executes every step end-to-end with verification, in two migrations + one edge-function batch.
 
----
+Confirmed via DB inspection:
+- `customer_reviews` still has policy `Anon can read approved reviews (column-restricted)` with `qual=(is_approved=true)` — RLS only, no column filter, no view, no REVOKE.
+- `realtime.messages` policy is literally `USING (true)`.
+- `trip_collaborators` has **no** email column — the email leak the linter flagged lives on **`trip_members`** (and `trip_invites`).
+- Frontend already queries `trip_collaborators` in 13 files but none need an email; only `trip_members` reads need a view.
 
-## B1 — Meal injection actually fires (CRITICAL)
+## R1 — customer_reviews PII (ERROR)
 
-**Symptom:** Barcelona day scored 45/100 with 5 named meal violations. Florence ~80% meal coverage, Barcelona ~30%. Detection works (`personalization-enforcer.ts` raises `missing_meal`, health engine surfaces it), but the meal-guard injector in `day-validation.ts` (tag `meal-guard`) isn't deterministically reaching every day.
+Migration:
+1. Drop every anon-readable policy on `customer_reviews` (dynamic loop over `pg_policies`).
+2. Create `public_customer_reviews` view (`security_barrier=true`) selecting only id, trip_id, rating, review_text, helpful_count, created_at, and a derived `reviewer_display` (display_name or masked initial). No email, no user_id.
+3. `GRANT SELECT ON public_customer_reviews TO anon, authenticated`.
+4. `REVOKE SELECT ON customer_reviews FROM anon, PUBLIC`. Add owner-only `customer_reviews_owner_read` policy for authenticated.
 
-**Root causes to address:**
+Frontend: `src/components/reviews/ReviewCapturePopup.tsx` is the only `from('customer_reviews')` caller and writes the user's own review — keep as-is (authenticated owner write).
 
-1. **Policy-cache gap on multi-day path.** `action-generate-trip-day.ts` writes `metadata.quality.meal_policy_at_generation` per day (lines 1827, 2374), and `action-save-itinerary.ts` reads it (line 305) to decide whether to re-run meal-guard at save time. The full-trip path (`action-generate-trip.ts` / `action-generate-full.ts`) does not consistently write this metadata, so save-time meal-guard short-circuits and Barcelona escapes with no injection. Mirror the same write into the full-trip pipeline so every persisted day carries the policy snapshot.
-2. **Meal-guard not always invoked post-generation.** `action-generate-trip-day.ts:1704` runs a belt-and-braces meal-guard per day. The equivalent block is missing from the multi-day full-trip generator. Add the same per-day meal-guard call after each day is produced, before universalQualityPass Step 8 hotel-return injection (Step 8 already defers when dinner is required-but-missing).
-3. **Prompt under-specifies meal density.** `compile-prompt.ts` lists meals as guidance, not as a hard requirement keyed to dayMode. Add an explicit `HARD REQUIREMENT — MEALS` block with the late_arrival / early_departure / midday_arrival / normal branches and an explicit ban on "snack inside another activity counts as a meal."
+## R2 — Realtime topic scoping (ERROR)
 
-**Files touched:**
-- `supabase/functions/generate-itinerary/action-generate-trip.ts` and/or `action-generate-full.ts` — write `metadata.quality.meal_policy_at_generation` per day; invoke per-day meal-guard then re-run Step 8 (mirrors `action-generate-trip-day.ts:1704–1827`).
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — `HARD REQUIREMENT — MEALS` block.
-- `supabase/functions/generate-itinerary/day-validation.ts` — confirm meal-guard returns injected meal cards even when a non-meal activity overlaps the canonical slot (fallback DB ordering, not new logic).
+Migration:
+1. `DROP POLICY realtime_authenticated_only ON realtime.messages`.
+2. Create `realtime_trip_subscriptions`: a `CASE` on `realtime.topic()` matching `trip:{uuid}` → exists in `trips` as owner OR accepted `trip_collaborators` row; `user:{uuid}` → uid match; explicit allowlist (`system:*`, `public:health`); else false.
+3. Audit `supabase.channel(` callsites in `src/` to confirm topic format. If any callsite uses a non-conforming topic, normalize it before migration ships.
 
-**Verification:**
-- Generate 3-day Barcelona (normal arrival + 15:30 departure on Day 3). Every day has breakfast/lunch/dinner cards; Day 3 has breakfast + lunch only.
-- Health score ≥ 80; `personalization-enforcer` reports zero `missing_meal`.
-- Log line `[generate-trip] post-meal-guard meals injected=N` present on every day.
+## R3 — 10 unauthenticated paid-API edge functions (ERROR)
 
----
+Apply standard JWT-validation prelude (mirroring `weather`/`suggest-landmarks`) to:
 
-## B2 — Hotel-return on every non-departure day
+`nearby-suggestions`, `fetch-reviews`, `recommend-restaurants`, `airport-transfers`, `flight-status`, `lookup-local-events`, `lookup-travel-advisory`, `viator-search`, `viator-product`, `viator-availability`.
 
-**Symptom:** Barcelona Day 2 ends at Paradiso Speakeasy 00:20; no hotel-return appended.
+Also sweep additional paid callers in the same batch: `enrich-attraction`, `enrich-destination`, `lookup-destination-insights`, `lookup-activity-url`, `lookup-restaurant-url`, `suggest-hotel-swaps`, `mapkit-token` (sensitive token — auth required).
 
-**Root cause:** `runStep8` in `universal-quality-pass.ts:83` only injects a hotel-return when the last activity ends `14:00–23:59` (line 102). A speakeasy ending at 00:20 falls outside that window and is silently skipped (line 105 logs the skip). The window was designed to suppress pre-dawn phantoms but doesn't handle legit post-midnight nightlife.
+Pattern injected at top of each handler after CORS preflight:
+```ts
+const authHeader = req.headers.get('Authorization');
+if (!authHeader?.startsWith('Bearer ')) return json({error:'Authentication required'}, 401);
+const supa = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } });
+const { data: { user }, error } = await supa.auth.getUser();
+if (error || !user) return json({error:'Invalid token'}, 401);
+```
 
-**Fix:**
-- Extend `runStep8` to accept `endTime` in `00:00–02:30` **only when** the prior activity's `category` is nightlife/bar/entertainment AND `start_time` ≥ 21:00 (i.e., a continuous late-evening session that bled past midnight). In that case, anchor the return-to-hotel transit at the speakeasy end-time and clamp via existing `clampBookendEndTime` (Day-End Hotel-Return Bookend memory: clamp ≤ 23:59 has to be relaxed for this case — emit the card with same-day end-time even if it spills, OR record it on the following day's activities[0] as `accommodation`). Pick same-day with `endTime` clamped to last activity end + 25min and let UI's existing ghost-hotel filter handle the bleed.
-- Confirm `shouldAppendHotelReturn`-style preconditions: skip if departure day, skip if last activity is already accommodation/hotel_return, skip if last activity is airport/station transport. These exist implicitly; tighten into a single guard.
-- Default `transitMode = 'taxi'` for late-night (after 22:30) returns, with cost from existing taxi cost helper.
+Cost tracker `trackCost(...)` already present in most; keep as-is.
 
-**Files touched:**
-- `supabase/functions/generate-itinerary/universal-quality-pass.ts` — relax `runStep8` time-floor; add late-nightlife branch.
-- `supabase/functions/generate-itinerary/__tests__/hotel-return-bookend.test.ts` — add Day 2 / 00:20 nightlife case.
+`destination-images` deliberately left anon-readable (public hero images for share previews) — flag to the user before changing; will note as accepted risk in security memory if user agrees.
 
-**Verification:**
-- Florence Day 1 nightlife case (existing test) still passes.
-- New test: speakeasy 22:30–00:20 → repair appends taxi return ~00:25–00:50, marked transport/hotel_return.
-- Airport transfer last activity → no hotel-return appended.
-- Departure day → no hotel-return appended.
+## R4 — trip_members email exposure (WARNING)
 
----
+Migration:
+1. Create `public_trip_members` view: id, trip_id, user_id, role, accepted_at, created_at, joined display_name/avatar from `profiles`; **no email**.
+2. `GRANT SELECT ON public_trip_members TO authenticated`.
+3. Replace permissive collaborator-read policy on `trip_members` with:
+   - owner-only SELECT (`trips.user_id = auth.uid()`),
+   - self-row SELECT (`user_id = auth.uid()`).
+4. Frontend: `grep` `from('trip_members')` callsites; non-owner UIs that just need display info → `public_trip_members`; invite-management UIs stay on base table (owner sees emails of who they invited).
 
-## B3 — Per-category price sanity check (NEW)
+Same treatment for `trip_invites` if it surfaces emails to non-owners (verify policies first).
 
-**Symptom:** Pastelería Hofmann (pastry shop) priced at €120/pp for breakfast. Real range €5–25. AI hallucinated or cross-contaminated from Hofmann's tasting-menu restaurant.
+## R5 — parse-document-text auth + size cap (WARNING)
 
-**Plan:**
+`supabase/functions/parse-document-text/index.ts`: add JWT check (R3 pattern), enforce `MAX_SIZE = 5 * 1024 * 1024` and restrict MIME to `text/plain`, `application/pdf`. Same pattern for any other `parse-*` paid-API caller (`parse-booking-confirmation`, `parse-travel-story`, `parse-trip-input`).
 
-1. **Add `CATEGORY_PRICE_CEILINGS` table** in a new shared file `supabase/functions/generate-itinerary/_shared/category-price-bounds.ts` with `{min, max, currency: 'USD'}` per subcategory (pastry, coffee_shop, breakfast_casual, lunch_casual, lunch_mid, lunch_fine_dining, dinner_casual, dinner_mid, dinner_fine_dining, walking_tour, museum, guided_tour_premium, metro_ticket, taxi_short, taxi_airport). Use values from the prompt brief verbatim.
-2. **Add `inferSubcategory(activity)` helper** in the same file. Uses `category` + meal slot + keyword regex over title/venue_name (`pastr|bakery|patisserie` → `pastry`; `michelin|tasting menu|chef.{0,3}counter` → `*_fine_dining`; `coffee|café|espresso` → `coffee_shop`; etc.). Returns `null` for unknown — checks are skipped, never throw.
-3. **Add `checkPlausiblePricing(day)` validator** in `pipeline/validate-day.ts`. Returns `PRICE_IMPLAUSIBLE` (severity `error`) or `PRICE_TOO_LOW` (severity `warning`) violations with `{activityId, subcategory, observed, ceiling}` metadata. Skip rows where `cost.basis` is `user|user_override|booked` (respect Universal Locking + user overrides). Skip walking legs ($0 by policy) and verified Michelin rows (existing fine-dining floor logic in `sanitization.ts` already handles them — defer to those tiers).
-4. **Add `repairImplausiblePricing(day, violations)` in `pipeline/repair-day.ts`.** Step order: run after §10b sanitization, before validation gate. Behavior:
-   - For `PRICE_IMPLAUSIBLE`: substitute median `(min+max)/2`, write to `cost.amount` AND mirror to `price_per_person` / `estimated_price_per_person` / `price` (table-driven cost-architecture parity per `cost-repair-jsonb-parity` memory). Set `cost.priceSource = 'category_median_substitute'`, store `cost.originalAmount` for audit. Log `[REPAIR_PRICE_SUBSTITUTE] day=N venue=… subcat=… orig=… median=…`.
-   - For `PRICE_TOO_LOW`: leave as-is, surface only in repair telemetry (no auto-bump — could mask legit cheap finds).
-5. **Mirror into `action-repair-costs.ts`** so the standalone cost-repair entrypoint applies the same ceilings (parity with bar-cap repair parity memory). Same logging sentinel.
-6. **Lint guard:** add unit test ensuring fine-dining tasting menus at appropriate venues are not flagged (e.g., Disfrutar €250 dinner_fine_dining stays).
+## R6 — SECURITY DEFINER revoke pass (WARNING)
 
-**Files touched:**
-- `supabase/functions/generate-itinerary/_shared/category-price-bounds.ts` (new)
-- `supabase/functions/generate-itinerary/pipeline/validate-day.ts`
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
-- `supabase/functions/generate-itinerary/action-repair-costs.ts`
-- New tests: `pipeline/price-sanity.test.ts`
+Migration: per-function REVOKE pass.
+1. Enumerate `pg_proc` SECURITY DEFINER functions in `public`.
+2. Classify each by reading `prosrc`:
+   - **User-callable** (contains `auth.uid()` and is invoked from client RPCs `get_consumer_shared_trip`, `get_shared_trip_payload`, public counters, `get_intake_account` — already allow-listed in prior migration): keep `authenticated` grant.
+   - **Service-only** (no auth check, mutates system state, called only by edge functions/triggers): `REVOKE EXECUTE … FROM PUBLIC, anon, authenticated; GRANT EXECUTE … TO service_role`.
+3. Apply REVOKEs in the same migration so the linter actually clears.
 
-**Verification:**
-- Barcelona pastry breakfast: AI returns €120/pp → repair substitutes €14 median, logs `[REPAIR_PRICE_SUBSTITUTE] subcat=pastry orig=120 median=14`.
-- Disfrutar tasting menu €250/pp → no flag (under fine-dining €350 ceiling).
-- Metro ticket €2.40 → no flag.
-- User manually edited a $300 breakfast → respected, no auto-substitute (basis=user).
-- `trip_payments` row reflects the substituted amount; `cost_change_log` carries the delta (per silent-repair-attribution memory).
+## Verification (after each step)
 
----
+- `curl` anon `customer_reviews` → 401/empty; `public_customer_reviews` → rows without `email`; `?select=email` → error.
+- Two-user Realtime sub test on `trip:{owned}` vs `trip:{not-owned}`.
+- `curl` each fixed edge function without Authorization → 401; with token → 200.
+- Re-run Supabase linter: customer_reviews PII, Realtime, trip_members, SECURITY DEFINER, parse-document findings should all clear.
+- Update security memory documenting accepted-risk for any intentionally-public function (e.g. `destination-images`).
 
-## Memory updates after ship
+## Technical notes
 
-Two new memories to add post-merge:
-
-1. **`mem://constraints/itinerary/meal-guard-policy-cache-parity`** — Full-trip + multi-day paths MUST write `metadata.quality.meal_policy_at_generation` and run post-meal-guard Step 8 retry (mirrors `action-generate-trip-day.ts:1704–1827`). Closes Barcelona 30% meal coverage regression. Sentinel: `[generate-trip] post-meal-guard meals injected=N` on every day.
-2. **`mem://constraints/itinerary/per-category-price-sanity`** — `CATEGORY_PRICE_CEILINGS` + `checkPlausiblePricing` validator + `repairImplausiblePricing` substitute median; respects basis=user/booked and existing fine-dining floors. Sentinel: `[REPAIR_PRICE_SUBSTITUTE]`. Closes "€120/pp Hofmann pastry" pattern.
-
-Update **Core** index entry for hotel-return: change Day-End Hotel-Return Bookend description to note new late-nightlife window 00:00–02:30 with prior-activity nightlife guard.
-
----
-
-## Ship order
-
-1. B1 (meal injection parity) — unblocks density score.
-2. B2 (hotel-return late-nightlife) — small, isolated.
-3. B3 (price sanity) — new, lands behind a feature flag `PRICE_SANITY_ENABLED=true` (env, default on) so we can disable instantly if a category ceiling proves too tight on a luxury archetype.
+- All DB changes ship as **two migrations** (R1+R2+R4+R6 in one schema migration; storage/policy adjustments isolated). Frontend query swaps ship in same loop after migrations apply.
+- Edge functions R3 + R5 ship as a single batched edit set (~14 files) — uniform prelude, no business-logic changes.
+- No changes to `src/integrations/supabase/client.ts` or `types.ts` (auto-generated).
+- Will ask the user one clarifying question before executing: confirm whether `destination-images` (and any other anon-public function discovered during R3 sweep) should remain anon-readable for share-link previews, or be auth-gated.
