@@ -73,6 +73,7 @@ const fmtShort = (s: string) => { try { return format(new Date(s), 'EEE, MMM d')
 
 // ── Main export ──────────────────────────────────────────────
 export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promise<void> {
+  const { tripCurrency } = data;
   const pdf = new jsPDF('p', 'mm', 'a4');
   let pageNum = 0;
 
