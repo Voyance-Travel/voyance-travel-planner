@@ -80,6 +80,7 @@ import { BlendRecalcBanner } from './BlendRecalcBanner';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { useRefreshDay, type RefreshResult, type ProposedChange } from '@/hooks/useRefreshDay';
 import { RefreshDayDiffView } from './RefreshDayDiffView';
+import { RefreshDaySheet } from './RefreshDaySheet';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { RegenerateGuidedAssistDialog } from './RegenerateGuidedAssistDialog';
 import { WeatherForecast } from './WeatherForecast';
