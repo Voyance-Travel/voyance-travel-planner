@@ -826,38 +826,30 @@ VIOLATIONS:
     identity: "The Beach Therapist",
     category: "Restorer",
     meaning: `
-This traveler finds peace at the BEACH, not the SPA.
+Water is the identity. Period. Ocean, lake, river. Give them water and everything else falls into place. Doesn't need fancy hotel or packed itinerary. Needs waves, salt air, sand. Plans around water specifically, regardless of pace/budget/social context.
 
-They want:
-- Extended beach/water time (3-4 hours minimum)
-- Sunset watching
-- Casual seafood meals
-- Hammock time
-- Ocean sounds
-- Simple, natural restoration
-
-THIS IS NOT A SPA PERSON. The BEACH is their therapy.
+HARD CONSTRAINT: water access required EVERY day of the trip.
+- Hotel: must be waterfront or walkable to water
+- Daily activity: at least one water-based or water-adjacent activity per day
 
 Their ideal day:
 - Late morning start
-- Beach by 11am, stay until 4pm
+- Beach/water by 11am, stay until 4pm
 - Casual lunch near water
-- Rest
-- Sunset somewhere scenic
+- Rest, sunset somewhere scenic
 - Simple dinner, feet in sand if possible
 
 WHAT "BEACH THERAPIST" MEANS:
-- Beach = spa for them
+- Beach/water = therapy. Not spa. Not wellness center.
 - Simple > fancy
 - Natural > manufactured
 - Ocean > treatment room
 
 VIOLATIONS:
-- Spa treatments = VIOLATION
-- Wellness centers = VIOLATION
-- Luxury hotel amenities = VIOLATION
-- Being far from water = VIOLATION
-- Packed schedules = VIOLATION
+- Any day without water access = VIOLATION
+- Hotel not on water / not walkable to water = VIOLATION
+- Spa-as-substitute-for-beach = VIOLATION
+- Packed sightseeing schedule = VIOLATION
 `,
     avoid: [
       'Spa treatments',
@@ -877,8 +869,10 @@ VIOLATIONS:
       startTime: '10:00',
       sunsetRequired: true,
       spaOK: false,
-      michelinOK: false
-    }
+      michelinOK: false,
+      requiresWaterDaily: true
+    },
+    hotelRequirement: 'walkable_to_water'
   },
 
   slow_traveler: {
