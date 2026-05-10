@@ -42,6 +42,8 @@ interface UseTripBudgetReturn {
   // Loading states
   isLoading: boolean;
   isUpdating: boolean;
+  /** True while itinerary generation is still populating activity_costs. */
+  isGenerating: boolean;
   
   // Computed
   hasBudget: boolean;
