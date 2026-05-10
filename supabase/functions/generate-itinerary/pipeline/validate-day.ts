@@ -19,6 +19,12 @@ import type { RequiredMeal } from '../meal-policy.ts';
 import { hasBodyPromptLeak, hasTitleLeak } from '../../_shared/prompt-leak-scrub.ts';
 import { WALK_HARD_DISTANCE_METERS, WALK_HARD_DURATION_MINUTES } from '../../_shared/transit-mode.ts';
 import { isTransitActivity } from '../../_shared/transit-detect.ts';
+import {
+  CATEGORY_PRICE_CEILINGS,
+  inferSubcategory,
+  extractPerPersonPrice,
+  shouldSkipPriceSanity,
+} from '../_shared/category-price-bounds.ts';
 
 // =============================================================================
 // GENERIC VENUE PATTERNS — placeholders the AI sometimes generates
