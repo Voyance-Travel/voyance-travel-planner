@@ -15,6 +15,8 @@ export interface ConsumerTripPdfData {
   startDate: string;
   endDate: string;
   travelers: number;
+  /** ISO 4217 code (e.g. 'EUR', 'GBP'). Used as a fallback when an activity cost has no currency set. */
+  tripCurrency?: string;
   days?: EditorialDay[];
   unlockedDayNumbers?: Set<number>;
   flights?: Array<{
@@ -71,6 +73,7 @@ const fmtShort = (s: string) => { try { return format(new Date(s), 'EEE, MMM d')
 
 // ── Main export ──────────────────────────────────────────────
 export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promise<void> {
+  const { tripCurrency } = data;
   const pdf = new jsPDF('p', 'mm', 'a4');
   let pageNum = 0;
 
@@ -387,7 +390,22 @@ export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promis
           const metaParts: string[] = [];
           if (locationName) metaParts.push(locationName);
           if (act.duration) metaParts.push(act.duration);
-          if (act.cost?.amount) metaParts.push(`${act.cost.currency || '$'}${act.cost.amount}`);
+          if (act.cost?.amount && act.cost.amount > 0) {
+            // Render with the proper currency symbol/code. Falls back to the trip's
+            // currency, then USD, but never the literal '$' that masks non-USD trips.
+            const currency = (act.cost.currency || tripCurrency || 'USD').toUpperCase();
+            const symbol = (() => {
+              switch (currency) {
+                case 'USD': case 'CAD': case 'AUD': return '$';
+                case 'EUR': return '€';
+                case 'GBP': return '£';
+                case 'JPY': return '¥';
+                case 'CHF': return 'CHF ';
+                default: return `${currency} `;
+              }
+            })();
+            metaParts.push(`${symbol}${act.cost.amount}`);
+          }
 
           // Estimate activity height
           const descLines = act.description ? wrapText(act.description, CW - 30, 9) : [];
