@@ -71,6 +71,29 @@ const PAGE_BOTTOM = PH - 18;
 const fmtLong = (s: string) => { try { return format(new Date(s), 'EEEE, MMMM d, yyyy'); } catch { return s; } };
 const fmtShort = (s: string) => { try { return format(new Date(s), 'EEE, MMM d'); } catch { return s; } };
 
+// ── Image URL safety ─────────────────────────────────────────
+/**
+ * Returns true only for image URLs that won't expire — safe to embed in a PDF
+ * the user will keep for years.
+ *
+ * Permanent: our cached copies on Supabase Storage, Cloudinary, etc.
+ * Expiring:  raw Google Places photo media URLs (token-bearing).
+ *
+ * Unknown hosts return false (conservative — better to omit than serve a
+ * broken image later). Future photo-embedding code MUST filter through this:
+ *   const safePhotos = (act.photos || [])
+ *     .map((p: any) => (typeof p === 'string' ? p : p?.url))
+ *     .filter(isPermanentImageUrl);
+ */
+export const isPermanentImageUrl = (url: string | undefined | null): boolean => {
+  if (!url) return false;
+  if (url.includes('supabase.co/storage') || url.includes('supabase.in/storage')) return true;
+  if (url.includes('cloudinary.com')) return true;
+  if (url.includes('googleusercontent.com') && url.includes('photoreference=')) return false;
+  if (url.includes('places.googleapis.com')) return false;
+  return false;
+};
+
 // ── Main export ──────────────────────────────────────────────
 export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promise<void> {
   const { tripCurrency } = data;
