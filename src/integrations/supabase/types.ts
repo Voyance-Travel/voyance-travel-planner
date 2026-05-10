@@ -4659,27 +4659,36 @@ export type Database = {
       iap_transactions: {
         Row: {
           created_at: string | null
+          credits_granted: number | null
           id: string
           product_id: string
+          raw_receipt: Json | null
           status: string | null
           transaction_id: string
           user_id: string
+          verified_at: string | null
         }
         Insert: {
           created_at?: string | null
+          credits_granted?: number | null
           id?: string
           product_id: string
+          raw_receipt?: Json | null
           status?: string | null
           transaction_id: string
           user_id: string
+          verified_at?: string | null
         }
         Update: {
           created_at?: string | null
+          credits_granted?: number | null
           id?: string
           product_id?: string
+          raw_receipt?: Json | null
           status?: string | null
           transaction_id?: string
           user_id?: string
+          verified_at?: string | null
         }
         Relationships: []
       }
