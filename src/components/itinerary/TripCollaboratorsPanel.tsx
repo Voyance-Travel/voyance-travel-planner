@@ -212,15 +212,34 @@ export function TripCollaboratorsPanel({
   const handleTogglePreferences = async (collaborator: TripCollaborator) => {
     setUpdatingPreferences(collaborator.id);
     const newValue = !(collaborator.include_preferences ?? true);
+
     const { error } = await supabase
       .from('trip_collaborators')
       .update({ include_preferences: newValue })
       .eq('id', collaborator.id);
+
     if (error) {
       toast.error('Failed to update preference setting');
-    } else {
-      toast.success(newValue ? 'Preferences will be included' : 'Preferences excluded from blend');
+      setUpdatingPreferences(null);
+      return;
     }
+
+    // Both directions change the blend — toggling OFF must remove the
+    // collaborator's influence too. Server short-circuits if itinerary_status
+    // !== 'ready' (e.g. trip not generated yet, or another regen in progress).
+    toast.success(
+      newValue
+        ? 'Preferences included — re-blending itinerary now…'
+        : 'Preferences excluded — re-blending itinerary now…',
+      { duration: 5000 }
+    );
+
+    supabase.functions
+      .invoke('regenerate-on-blend-change', { body: { tripId } })
+      .catch((err) => {
+        console.error('[collaborators] blend regen invoke failed', err);
+      });
+
     setUpdatingPreferences(null);
   };
 

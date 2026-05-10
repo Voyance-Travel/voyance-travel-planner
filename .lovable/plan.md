@@ -1,91 +1,73 @@
-## Auto-include joining traveler in already-generated trips
+## Auto re-blend itinerary when a collaborator's `include_preferences` toggles
 
-**Problem.** When user B accepts an invite to a trip that has already been generated, `accept_trip_invite` adds them to `trip_collaborators` but the itinerary stays unchanged. Today only the manual `BlendRecalcBanner` (which the owner has to notice and click) ever picks up the new DNA. The joiner sees no reflection of their preferences and support gets confused tickets.
+**Problem.** `handleTogglePreferences` in `TripCollaboratorsPanel.tsx` (lines 212–225) only writes `include_preferences` to `trip_collaborators` and shows a toast that *implies* the itinerary will update. No regeneration ever fires. The trip keeps the old blend until the owner notices `BlendRecalcBanner` and clicks "Regenerate".
 
-**Goal.** After a successful `accept_trip_invite` against a trip whose `itinerary_status = 'ready'`, automatically recompute the blended DNA and regenerate the itinerary, showing the joiner a clear "blending you in…" status while it runs.
+**Goal.** Toggling preferences ON or OFF should automatically re-blend the itinerary, with a clear toast and the existing in-flight UI taking over for the joiner/owner.
 
-### Constraint check (why we can't ship the literal snippet)
+### Why we don't ship the literal snippet
 
-The proposed call `supabase.functions.invoke('generate-itinerary', { body: { action: 'regenerate-trip-with-blend', includeNewTraveler: userId } })` cannot work as written:
+Same constraints as the join-flow change we just landed:
 
-1. **Action does not exist.** `generate-itinerary` only dispatches `generate-full | generate-trip | generate-day | regenerate-day | generate-trip-day | get-trip | save-itinerary | get-itinerary | toggle-activity-lock | sync-itinerary-tables | repair-trip-costs`.
-2. **Proof-of-charge gate** in `generate-itinerary/index.ts` (lines 200–257) blocks any regeneration unless a `pending_credit_charges` row exists for `(user_id, trip_id, action)` in the last 10 minutes. The joiner is not the trip owner and has no charge — request will 403 with `GENERATION_NOT_AUTHORIZED`.
-3. **Field name.** The trip-level status column is `trips.itinerary_status` (enum: `not_started|queued|generating|partial|ready|failed`), not `trips.generation_status`. `generation_status` lives on `trip_cities` per leg.
-4. **Rate-limit rule** for default actions is 20/min/user — fine for a single accept, but accept-loops on a flaky network could trip it.
+1. `generate-itinerary` has no action `regenerate-trip-with-blend`.
+2. The proof-of-charge gate would 403 the call (toggler isn't necessarily the owner; even when they are, no charge exists).
+3. The trip-level status column is `trips.itinerary_status`, not `generation_status`.
 
-We'll therefore add a small dedicated **service-trusted edge function** that performs the regen on the joiner's behalf, then call it from `AcceptInvite.tsx`.
+We already built the right primitive last turn: **`supabase/functions/regenerate-on-blend-change`** validates the caller, flips `itinerary_status` to `generating`, then chains to `generate-trip` with the owner's `userId` via service-role bypass. We reuse it here.
 
 ### Implementation
 
-**1. New edge function `supabase/functions/regenerate-on-blend-change/index.ts`**
+**`src/components/itinerary/TripCollaboratorsPanel.tsx` — `handleTogglePreferences` only.**
 
-Responsibilities:
-- Validate caller's JWT and resolve `userId`.
-- Validate request body with Zod: `{ tripId: string (uuid) }`.
-- Verify the caller is either the trip owner OR an accepted row in `trip_collaborators` for that trip (RLS-safe service-role read with explicit ownership check). Reject otherwise.
-- Read the trip; abort early if `itinerary_status !== 'ready'` (no point regenerating a trip mid-generation or unbuilt). Return `{ skipped: true, reason }`.
-- **Recompute `blended_dna`** server-side: load all accepted collaborators with `include_preferences=true` + the owner, fetch their `travel_dna` rows, run the same shared blending logic that `action-generate-trip.ts` uses (lines around 350–360 + `pipeline/compile-prompt.ts` 1061). Update `trips.blended_dna` and `trips.blended_dna_snapshot` so `BlendRecalcBanner` will hide on next render.
-- **Insert a system-attributed `pending_credit_charges` row** (action `regenerate_blend_join`, status `completed`, amount `0`, owner_user_id = trip owner) so the proof-of-charge gate downstream is satisfied without billing the joiner. Cost policy mirrors the existing "system action" pattern used by other internal flows.
-- **Chain to `handleGenerateTrip`** (the multi-day regen entry point already used by `action-generate-trip.ts`): either invoke directly via internal function call, or `supabase.functions.invoke('generate-itinerary', { body: { action: 'generate-trip', tripId, mode: 'regenerate' }, headers: { Authorization: 'Bearer <SERVICE_ROLE_KEY>' } })` so it bypasses the user-facing gates (the dispatcher already accepts a service-role bearer, see `index.ts` lines 103–120).
-- Set `itinerary_status` back to `generating` immediately on entry so the UI shows the right state, and let `handleGenerateTrip` flip it to `ready` on completion.
-- Return `{ ok: true, queued: true }`. The actual generation runs to completion in the background like every other regen; we don't block the HTTP response on it.
-
-CORS + JWT validation per project conventions; `verify_jwt = false` is fine because we validate manually.
-
-**2. `src/pages/AcceptInvite.tsx` — handler change (around line 269–277)**
-
-Replace the success branch with:
+Replace lines 212–225 with:
 
 ```ts
-if (result?.success) {
-  clearPendingInviteToken();
-  setAccepted(true);
+const handleTogglePreferences = async (collaborator: TripCollaborator) => {
+  setUpdatingPreferences(collaborator.id);
+  const newValue = !(collaborator.include_preferences ?? true);
 
-  // Check if this trip is already generated and needs a blend refresh
-  if (!result.alreadyMember && result.tripId) {
-    const { data: tripRow } = await supabase
-      .from('trips')
-      .select('itinerary_status')
-      .eq('id', result.tripId)
-      .maybeSingle();
+  const { error } = await supabase
+    .from('trip_collaborators')
+    .update({ include_preferences: newValue })
+    .eq('id', collaborator.id);
 
-    if (tripRow?.itinerary_status === 'ready') {
-      toast.success("You've joined the trip! Blending in your preferences…", { duration: 5000 });
-      // Fire-and-forget: server returns immediately and runs regen in background
-      supabase.functions
-        .invoke('regenerate-on-blend-change', { body: { tripId: result.tripId } })
-        .catch(err => logger.error('[invite] blend regen invoke failed', err));
-    } else {
-      toast.success("You've joined the trip!");
-    }
-  } else {
-    toast.success(result.alreadyMember ? "You're already a member!" : "You've joined the trip!");
+  if (error) {
+    toast.error('Failed to update preference setting');
+    setUpdatingPreferences(null);
+    return;
   }
 
-  setTimeout(() => navigate(`/trip/${result.tripId}`), 1500);
-}
+  // Both directions change the blend — toggling OFF must remove the influence too.
+  const message = newValue
+    ? 'Preferences included — re-blending itinerary now…'
+    : 'Preferences excluded — re-blending itinerary now…';
+  toast.success(message, { duration: 5000 });
+
+  // Fire-and-forget. Server short-circuits if itinerary_status !== 'ready'
+  // (e.g. trip not generated yet, or another regen in progress).
+  supabase.functions
+    .invoke('regenerate-on-blend-change', { body: { tripId } })
+    .catch((err) => {
+      console.error('[collaborators] blend regen invoke failed', err);
+    });
+
+  setUpdatingPreferences(null);
+};
 ```
 
-When the user lands on `/trip/:id`, the trip's `itinerary_status` will be `generating` and the existing generation-progress UI already covers the in-flight state. `BlendRecalcBanner` resolves itself once `blended_dna_snapshot` matches the new collaborator set.
-
-**3. Idempotency / race protection**
-
-- `regenerate-on-blend-change` short-circuits if `itinerary_status === 'generating'` (returns `{ skipped: true, reason: 'in_progress' }`). Two simultaneous joins can't double-trigger.
-- If the joiner closes the tab before the invoke flushes, `BlendRecalcBanner` is the safety net — owner sees the prompt next time they open the trip.
+Notes:
+- `tripId` is already a prop on this component (line 84/66).
+- The fire-and-forget pattern matches `AcceptInvite.tsx`. We don't await — the existing trip-detail generation-progress UI takes over once `itinerary_status` flips to `generating`.
+- No DB writes other than the existing `update`. No new edge function, no migration.
+- If the trip was never generated (`itinerary_status !== 'ready'`), the server returns `{ skipped: true, reason }` and the toast is the only visible effect — appropriate, since there's nothing to re-blend yet.
 
 ### Verification
 
-1. Owner A (Cultural Anthropologist) generates a 4-day Rome trip. Confirm `itinerary_status='ready'`, `blended_dna.isBlended=false`.
-2. Invite user B (Adrenaline Architect). B accepts.
-3. Toast: *"Blending in your preferences…"*. AcceptInvite navigates to `/trip/:id` with `itinerary_status='generating'` and progress UI visible.
-4. After regen completes, inspect `trips.blended_dna` — `travelerProfiles` array contains both users, weights 0.5/0.5 (matches the even-split rule shipped earlier). At least 1–2 days should pivot toward adventure activities (climbing wall, food-tour with cycling, etc.).
-5. Invite user C and accept — toast appears, regen runs again, weights are 0.33 each.
-6. Re-accept (e.g. via stale invite link) returns `alreadyMember: true` with no regen — confirm no second invoke fires.
-7. Force `itinerary_status='generating'` manually, then accept → server returns `{skipped:true}`; client toast falls back to plain "You've joined".
+1. Trip already generated, two collaborators (B + C). Owner toggles B's preferences OFF → toast "Preferences excluded — re-blending itinerary now…", trip page shows generating progress, after regen `blended_dna.travelerProfiles` no longer contains B.
+2. Toggle B back ON → toast with the include copy, regen runs, B reappears in the blend with even-split weight (matches the 1/N rule shipped earlier).
+3. Toggle on a draft trip (`itinerary_status='not_started'`) → server returns skipped, no regen runs, no error surfaces.
+4. Rapid double-toggle → second invoke hits the in-progress short-circuit (returns `{skipped:true, reason:'in_progress'}`); no double-spend, no double regen.
 
 ### Files touched
 
-- **New:** `supabase/functions/regenerate-on-blend-change/index.ts`
-- **Edited:** `src/pages/AcceptInvite.tsx` (success branch only)
-- **No DB migration required** — `pending_credit_charges` already supports system rows; reuses existing columns.
-- No changes to `accept_trip_invite` RPC, no changes to `generate-itinerary` dispatcher beyond the existing service-role bypass.
+- **Edited:** `src/components/itinerary/TripCollaboratorsPanel.tsx` (one function)
+- No backend changes — reuses `regenerate-on-blend-change` deployed last turn.
