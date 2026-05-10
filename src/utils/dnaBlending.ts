@@ -39,12 +39,11 @@ export interface BlendedDnaResult {
 
 /**
  * Blend multiple travelers' DNA trait scores into a unified profile.
- * 
+ *
  * Rules:
- * - Owner gets 50% weight
- * - Remaining 50% split equally among companions with includePreferences=true
- * - Companions with includePreferences=false are excluded
- * - If no companions have includePreferences=true, returns 100% owner DNA
+ * - Each included traveler gets an equal share (1 / N), regardless of who owns the trip.
+ * - Companions with includePreferences=false are excluded from N.
+ * - If no companions have includePreferences=true, returns 100% owner DNA.
  */
 export function blendTravelDna(travelers: TravelerDnaInput[]): BlendedDnaResult {
   const owner = travelers.find(t => t.isOwner);

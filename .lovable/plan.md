@@ -1,75 +1,62 @@
-## OAuth account-merge confirmation toast
+## Even-split group DNA blending
 
-**Problem:** When an existing email/password user signs in with Google (same email), Supabase silently links the OAuth identity to the existing account. The user sees no acknowledgement and often opens a support ticket thinking they have two accounts or that their data is gone.
+**Problem:** `blendTravelDna` in `src/utils/dnaBlending.ts` gives the trip owner a fixed 50% weight and splits the other 50% across companions. With 3 travelers the owner has 50% influence vs 25%/25% for companions; with 4 it's 50% vs 16.7%×3. Itineraries skew toward the owner's archetype.
 
-**Goal:** Show a one-time, friendly toast — *"We've connected your Google account to your existing Voyance account. You can now sign in either way."* — exactly once per merge event, then never again for that user/provider pair.
+**Goal:** Equal per-traveler weight regardless of who created the trip — 50/50 for 2, 33.3/33.3/33.3 for 3, 25/25/25/25 for 4.
 
-### Detection: in `src/contexts/AuthContext.tsx`
+### Change
 
-The OAuth-completion path is the existing `SIGNED_IN` branch (around line 309–337) where `provider !== 'email'` is already detected for `logOAuthLogin`. Extend that block:
-
-1. Read `newSession.user.identities` (array of `{ provider, identity_data, created_at, last_sign_in_at, … }` returned by Supabase Auth).
-2. Treat it as a merge-just-happened when **all** are true:
-   - There are ≥ 2 distinct identities.
-   - One identity has `provider === 'email'` (the pre-existing password account).
-   - One identity has `provider === <oauth-provider>` matching `newSession.user.app_metadata.provider` (e.g. `google` or `apple`).
-   - The OAuth identity's `created_at` is **after** the email identity's `created_at` (so the OAuth one was added later — true merge, not OAuth-first signup).
-   - A localStorage flag `voyance_merge_notified:{userId}:{provider}` is **not** present.
-3. If all true: show a sonner toast with a clear message and a 6 s duration, then write the localStorage flag.
+In `src/utils/dnaBlending.ts`, the blending branch (lines ~90–129, after the early returns):
 
 ```ts
-const provider = newSession.user.app_metadata?.provider;
-const identities = newSession.user.identities ?? [];
-if (provider && provider !== 'email' && identities.length >= 2) {
-  const emailId  = identities.find(i => i.provider === 'email');
-  const oauthId  = identities.find(i => i.provider === provider);
-  const flagKey  = `voyance_merge_notified:${newSession.user.id}:${provider}`;
-  if (
-    emailId && oauthId &&
-    new Date(oauthId.created_at) > new Date(emailId.created_at) &&
-    !localStorage.getItem(flagKey)
-  ) {
-    const label = provider === 'google' ? 'Google'
-                : provider === 'apple'  ? 'Apple'
-                : provider.charAt(0).toUpperCase() + provider.slice(1);
-    toast.success(`Your ${label} account is now linked to your Voyance account`, {
-      description: 'You can sign in with either email/password or ' + label + ' from now on.',
-      duration: 6000,
-    });
-    localStorage.setItem(flagKey, new Date().toISOString());
-  }
+// Even split across owner + included companions
+const totalTravelers = 1 + includedCompanions.length;
+const evenWeight = 1 / totalTravelers;
+
+// Collect all trait keys
+const allTraitKeys = new Set<string>();
+Object.keys(owner.traitScores).forEach(k => allTraitKeys.add(k));
+includedCompanions.forEach(c => Object.keys(c.traitScores).forEach(k => allTraitKeys.add(k)));
+
+// Blend traits — every traveler weighted equally
+const blendedTraits: Record<string, number> = {};
+for (const key of allTraitKeys) {
+  const ownerScore = (owner.traitScores[key] ?? 0) * evenWeight;
+  const companionSum = includedCompanions.reduce(
+    (sum, c) => sum + (c.traitScores[key] ?? 0) * evenWeight,
+    0
+  );
+  blendedTraits[key] = Math.round(ownerScore + companionSum);
 }
+
+const travelerProfiles = [
+  { userId: owner.userId, name: owner.name, archetypeId: owner.archetypeId, isOwner: true,  weight: evenWeight },
+  ...includedCompanions.map(c => ({
+    userId: c.userId, name: c.name, archetypeId: c.archetypeId, isOwner: false, weight: evenWeight,
+  })),
+];
+
+return {
+  blendedTraits,
+  dominantArchetype: owner.archetypeId,   // tie-break only; influence is even
+  travelerProfiles,
+  blendMethod: 'weighted_average',
+  ownerWeight: evenWeight,                 // now reports the actual share
+  isBlended: true,
+};
 ```
 
-Place it inside the existing `if (event === 'SIGNED_IN' && newSession?.user) { … }` block, right after `logOAuthLogin(provider)` is fired (~line 333). The check is cheap and synchronous; no extra API call is needed because `identities` is already in the session.
+### Notes / scope
 
-### Why not a server-side notification?
-
-The merge is implicit in Supabase Auth — there's no `account.linked` webhook or DB row that flips. The session's `identities` array is the single source of truth and is already on the client at the moment of OAuth return, so client-side detection is the simplest correct path.
-
-### Edge cases handled
-
-- **OAuth-first user** (no email identity): `emailId` is undefined → no toast. ✅
-- **Returning Google user** (already merged in a previous session): localStorage flag set on first occurrence → suppressed forever. ✅
-- **OAuth identity created at the same time as email identity** (signed up via OAuth and then added password later): the time-ordering check handles this correctly — only the *later* identity's appearance triggers a toast, and we only fire when OAuth was the later one. (We could optionally do the inverse — toast when password is added to an OAuth account — but Supabase doesn't have a `user.addPassword` flow in this app, so skip.)
-- **Cleared localStorage / new device:** the flag is per-device, so a user who clears storage may see the toast once more. Acceptable; the message is friendly, not alarming.
-- **SSR / no `localStorage`:** wrapped in a `typeof localStorage !== 'undefined'` guard for safety, even though this is client-only code.
-
-### Toast styling
-
-Use the project's existing `sonner` import (`import { toast } from 'sonner'`). No new dependencies. The existing `<Toaster />` is already mounted in `App.tsx`.
-
-### Files touched
-
-- `src/contexts/AuthContext.tsx` — single insertion in the `SIGNED_IN` branch, plus a `toast` import if not already present.
-
-No backend change, no migration, no new edge function. Pure client.
+- **Doc comment update** at line ~40–48 to say *"Each included traveler gets an equal share (1 / N). Companions with `includePreferences=false` are excluded from the count."*
+- **`ownerWeight` field on `BlendedDnaResult`** is kept for type/back-compat but now carries the actual even-split share. Audit confirms no external consumer compares it against `0.5`; only this file writes it and `BlendedProfilesCard` doesn't read it.
+- **`dominantArchetype`** stays as the owner's archetype — it's only used as a tie-break label for the blended profile, not as a weighting input. (If you'd rather pick by highest blended-trait match, that's a separate change.)
+- **Early-return branches** (no owner / no included companions) are unchanged — they already represent 100%-single-traveler cases where even-split degenerates correctly.
+- **No other files** need editing. `BlendedProfilesCard.tsx` only consumes `blendedTraits` + `travelerProfiles[].weight`, both of which update automatically.
 
 ### Verification
 
-1. Create an account with email/password, sign out.
-2. On the same browser, click "Sign in with Google" using the same email → Supabase merges → toast appears once.
-3. Sign out, sign in with Google again → no toast.
-4. Sign in with email/password → no toast.
-5. Clear `voyance_merge_notified:*` keys → next OAuth sign-in shows the toast again (expected).
-6. Brand-new Google-first signup (no prior email account) → no toast.
+1. **Unit-shape sanity:** with owner pace=8 and two companions pace=2, pace=2 → blended pace = round((8+2+2)/3) = 4 (was 5 under old math).
+2. **3-traveler trip** (Cultural Anthropologist + Adrenaline Architect + Zen Seeker): inspect `BlendedProfilesCard` — each traveler row should display 33% weight; generated itinerary mixes museum/adventure/wellness instead of museum-dominant.
+3. **2-traveler trip:** weights show 50/50 (unchanged behavior).
+4. **Companion with `includePreferences=false`:** excluded from N, remaining travelers split evenly (e.g. owner + 2 companions where 1 opts out → 50/50 between owner and the 1 included companion).
