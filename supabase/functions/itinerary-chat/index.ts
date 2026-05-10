@@ -26,6 +26,7 @@ const corsHeaders = {
 // angle brackets (prevents tag forgery), control chars, and collapse newlines
 // so injected "SYSTEM OVERRIDE: …" payloads become inert single-line data.
 const SANITIZE_MAX = 200;
+const DAILY_CHAT_CAP = 50;
 const sanitizePromptInput = (s: unknown, max = SANITIZE_MAX): string =>
   String(s ?? '')
     .replace(/[`<>]/g, '')
@@ -483,6 +484,29 @@ serve(async (req) => {
       const token = authHeader.replace("Bearer ", "");
       const { data: { user } } = await supabase.auth.getUser(token);
       userId = user?.id || null;
+    }
+
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: 'Authentication required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Ad-hoc daily cap: 50 itinerary-chat calls per user per rolling 24h.
+    // Counted off the existing trip_cost_tracking writes (action_type='itinerary_chat').
+    const { count: chatCount24h } = await supabase
+      .from('trip_cost_tracking')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('action_type', 'itinerary_chat')
+      .gte('created_at', new Date(Date.now() - 86_400_000).toISOString());
+
+    if ((chatCount24h ?? 0) >= DAILY_CHAT_CAP) {
+      return new Response(
+        JSON.stringify({ error: 'Daily AI chat limit reached', code: 'DAILY_CAP_EXCEEDED' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     const body = await req.json();
