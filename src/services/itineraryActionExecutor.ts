@@ -376,7 +376,10 @@ async function executeRewriteDayAction(
 
   const updatedDays = [...currentDays];
   updatedDays[dayIndex] = mergedDay;
-  await updateTripItinerary(tripId, updatedDays);
+  const persistResult = await updateTripItinerary(tripId, updatedDays);
+  if (!persistResult.success) {
+    return { success: false, message: PERSIST_FAILURE_MESSAGE, error: persistResult.error, updatedDays };
+  }
 
   const restoredSuffix = lockGuard.violations > 0
     ? ` (restored ${lockGuard.violations} locked item${lockGuard.violations === 1 ? '' : 's'} the AI tried to change)`
