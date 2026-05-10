@@ -75,7 +75,11 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
     enabled: enabled && !!tripId,
   });
   
-  // Fetch summary (now derived from activity_costs)
+  // Fetch summary (now derived from activity_costs).
+  // While the itinerary generator is still writing activity_costs rows the
+  // summary total visibly climbs ($400 → $700 → $900 → …). We poll faster
+  // during generation so the "Calculating…" state clears promptly when
+  // status flips to ready.
   const {
     data: summary,
     isLoading: summaryLoading,
@@ -84,8 +88,10 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
     queryKey: ['tripBudgetSummary', tripId, totalDays],
     queryFn: () => getBudgetSummary(tripId, totalDays),
     enabled: enabled && !!tripId,
+    refetchInterval: (query) =>
+      query.state.data?.isGenerating ? 4000 : false,
   });
-  
+
   // Fetch ledger (now derived from activity_costs)
   const {
     data: ledger = [],
