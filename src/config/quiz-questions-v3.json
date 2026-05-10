@@ -1,7 +1,7 @@
 {
   "version": "3.1.0",
   "metadata": {
-    "totalQuestions": 21,
+    "totalQuestions": 23,
     "estimatedTime": "5-6 minutes",
     "targetArchetypes": 29,
     "traitDimensions": 30
@@ -1292,6 +1292,109 @@
           }
         }
       ]
+    },
+    {
+      "id": "q22_accomplishment",
+      "step": 10,
+      "category": "Purpose",
+      "prompt": "When you've been somewhere, what feels most like accomplishment?",
+      "type": "single",
+      "feedback": {
+        "q22a": "The trusted source friends ask.",
+        "q22b": "Collector's instinct.",
+        "q22c": "Story-first traveler.",
+        "q22d": "Present-moment traveler."
+      },
+      "answers": [
+        {
+          "id": "q22a",
+          "label": "Knowing it well enough that friends ask me for advice on their trips",
+          "traits": {
+            "experience_accumulation": 0.9,
+            "social_sharing": 0.85,
+            "cultural_depth": 0.4
+          }
+        },
+        {
+          "id": "q22b",
+          "label": "Adding it to my country count or passport stamp collection",
+          "traits": {
+            "collection_drive": 0.9,
+            "bucket_list": 0.6,
+            "novelty_seeking": 0.5
+          }
+        },
+        {
+          "id": "q22c",
+          "label": "Having a story I'll be telling for years",
+          "traits": {
+            "experience_seeking": 0.8,
+            "novelty_seeking": 0.6,
+            "social_sharing": 0.4
+          }
+        },
+        {
+          "id": "q22d",
+          "label": "Just being there in the moment — no need to mark it",
+          "traits": {
+            "restoration_need": 0.5,
+            "spirituality": 0.4,
+            "pace": 0.2
+          }
+        }
+      ]
+    },
+    {
+      "id": "q23_recharge",
+      "step": 10,
+      "category": "Restoration",
+      "prompt": "When you need to recharge from your normal life, what kind of trip works?",
+      "type": "single",
+      "feedback": {
+        "q23a": "Untraceable solo escape.",
+        "q23b": "Sanctuary mode.",
+        "q23c": "Slow wander.",
+        "q23d": "Beach reset."
+      },
+      "answers": [
+        {
+          "id": "q23a",
+          "label": "I disappear solo — friends don't always know where I am",
+          "traits": {
+            "autonomy_preference": 0.9,
+            "escape_need": 0.7,
+            "solo_preference": 0.85
+          }
+        },
+        {
+          "id": "q23b",
+          "label": "I retreat to one place, mostly stay there, get spa/yoga/healthy food",
+          "traits": {
+            "escape_need": 0.85,
+            "restoration_need": 0.8,
+            "healing_focus": 0.6,
+            "spirituality": 0.4
+          }
+        },
+        {
+          "id": "q23c",
+          "label": "I move at my own slow pace through somewhere new",
+          "traits": {
+            "pace": 0.2,
+            "restoration_need": 0.5,
+            "flexibility": 0.6
+          }
+        },
+        {
+          "id": "q23d",
+          "label": "I need a beach. Just water, sand, and stillness.",
+          "traits": {
+            "nature_orientation": 0.5,
+            "restoration_need": 0.7,
+            "pace": 0.3
+          }
+        }
+      ]
     }
   ],
   "traitDefinitions": {
@@ -1324,7 +1427,9 @@
     "social_sharing":          { "dimension": "social",     "range": [0, 1], "default": 0.4, "description": "Tendency to share travel knowledge and give recommendations to others" },
     "collection_drive":        { "dimension": "motivation", "range": [0, 1], "default": 0.3, "description": "Tracks destinations/countries as a collection metric" },
     "escape_need":             { "dimension": "motivation", "range": [0, 1], "default": 0.4, "description": "Travels specifically to escape normal life (distinct from general restoration)" },
-    "autonomy_preference":     { "dimension": "social",     "range": [0, 1], "default": 0.4, "description": "Prefers solo, autonomous travel; resists group obligations" }
+    "autonomy_preference":     { "dimension": "social",     "range": [0, 1], "default": 0.4, "description": "Prefers solo, autonomous travel; resists group obligations" },
+    "experience_seeking":      { "dimension": "motivation", "range": [0, 1], "default": 0.4, "description": "Drive to collect memorable stories and standout moments" },
+    "solo_preference":         { "dimension": "social",     "range": [0, 1], "default": 0.3, "description": "Prefers traveling alone over any companion configuration" }
   },
   "archetypeProfiles": {
     "cultural_anthropologist": {
