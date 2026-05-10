@@ -828,7 +828,10 @@ async function executeFilterAction(
     updatedDays[dayIndex] = { ...day, activities: updatedActivities };
   }
 
-  await updateTripItinerary(tripId, updatedDays);
+  const filterPersist = await updateTripItinerary(tripId, updatedDays);
+  if (!filterPersist.success) {
+    return { success: false, message: PERSIST_FAILURE_MESSAGE, error: filterPersist.error, updatedDays };
+  }
 
   return {
     success: true,
