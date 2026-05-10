@@ -726,7 +726,7 @@ async function executeFilterAction(
 
     for (let actIndex = 0; actIndex < day.activities.length; actIndex++) {
       const activity = day.activities[actIndex];
-      if (activity.isLocked) continue;
+      if (isActivityLocked(activity)) continue;
       if (isProtectedActivity(activity)) continue;
 
       const diningOnly = normalizedScope === 'dining_only' || filter_type === 'dietary';
