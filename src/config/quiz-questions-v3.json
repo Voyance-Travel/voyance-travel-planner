@@ -1626,7 +1626,6 @@
       "boosters": {
         "adventure": 1.5,
         "pace": 1.0,
-        "nature_orientation": 0.6,
         "morning_energy": 0.6
       },
       "penalties": {
@@ -1639,11 +1638,14 @@
       "name": "The Passport Collector",
       "category": "ACHIEVER",
       "required": {
-        "niche_interest": { "min": 0.7 }
+        "collection_drive": { "min": 0.6 },
+        "novelty_seeking": { "min": 0.5 }
       },
       "boosters": {
-        "niche_interest": 2.0,
-        "learning_focus": 0.8,
+        "collection_drive": 1.5,
+        "novelty_seeking": 1.0,
+        "bucket_list": 0.5,
+        "niche_interest": 0.4,
         "planning": 0.6
       },
       "penalties": {
