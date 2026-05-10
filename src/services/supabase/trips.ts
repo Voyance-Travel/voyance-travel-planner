@@ -224,6 +224,26 @@ async function getCurrentUserId(): Promise<string> {
 export async function createTrip(input: TripCreateInput): Promise<Trip> {
   const userId = await getCurrentUserId();
 
+  // RS.L2 — Guard against double-click duplicate creation: if an identical-shape
+  // trip was created in the last 30s, return that instead of inserting again.
+  const dedupWindowIso = new Date(Date.now() - 30_000).toISOString();
+  const { data: recent } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('name', input.name)
+    .eq('destination', input.destination)
+    .eq('start_date', input.start_date)
+    .gt('created_at', dedupWindowIso)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (recent) {
+    console.warn('[createTrip] Duplicate request detected — returning existing trip', { tripId: recent.id });
+    return transformTrip(recent as TripRow);
+  }
+
   const { data, error } = await supabase
     .from('trips')
     .insert({

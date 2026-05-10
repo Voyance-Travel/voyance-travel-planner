@@ -176,7 +176,58 @@ export async function createTrip(input: {
   // Get user's current plan tier for ownership tracking
   const { data: entitlements } = await supabase.functions.invoke('get-entitlements');
   const ownerPlanTier = entitlements?.plans?.[0] || 'free';
-  
+
+  type TripRowLite = {
+    id: string;
+    user_id: string;
+    name: string;
+    destination: string;
+    status: string;
+    trip_type: string | null;
+    start_date: string;
+    end_date: string;
+    travelers: number | null;
+    budget_tier: string | null;
+    origin_city: string | null;
+    created_at: string;
+    updated_at: string;
+  };
+
+  const toBackendTrip = (row: TripRowLite): BackendTrip => ({
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    destination: row.destination,
+    status: row.status as TripStatus,
+    tripType: row.trip_type || undefined,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    travelers: row.travelers || undefined,
+    budgetRange: row.budget_tier as BudgetPreference | undefined,
+    departureCity: row.origin_city || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+
+  // RS.L2 — Guard against double-click duplicate creation
+  const dedupWindowIso = new Date(Date.now() - 30_000).toISOString();
+  const { data: recent } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('name', input.name)
+    .eq('destination', input.destination)
+    .eq('start_date', input.startDate)
+    .gt('created_at', dedupWindowIso)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (recent) {
+    console.warn('[createTrip] Duplicate request detected — returning existing trip', { tripId: recent.id });
+    return toBackendTrip(recent as unknown as TripRowLite);
+  }
+
   const { data, error } = await supabase
     .from('trips')
     .insert({
@@ -194,24 +245,10 @@ export async function createTrip(input: {
     })
     .select()
     .single();
-  
+
   if (error) throw new Error(error.message);
-  
-  return {
-    id: data.id,
-    userId: data.user_id,
-    name: data.name,
-    destination: data.destination,
-    status: data.status as TripStatus,
-    tripType: data.trip_type || undefined,
-    startDate: data.start_date,
-    endDate: data.end_date,
-    travelers: data.travelers || undefined,
-    budgetRange: data.budget_tier as BudgetPreference | undefined,
-    departureCity: data.origin_city || undefined,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-  };
+
+  return toBackendTrip(data as unknown as TripRowLite);
 }
 
 export async function updateTrip(tripId: string, updates: Partial<{
