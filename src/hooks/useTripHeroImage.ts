@@ -35,6 +35,13 @@ interface UseTripHeroImageResult {
    * Detects blank/tiny images that load successfully but contain no content
    */
   onLoad: (e: React.SyntheticEvent<HTMLImageElement>) => void;
+  /** Photo attribution (currently only populated for Unsplash-sourced API photos) */
+  attribution?: {
+    photographer: string;
+    photographer_url?: string;
+    source_url?: string;
+    source: 'unsplash';
+  };
 }
 
 /**
