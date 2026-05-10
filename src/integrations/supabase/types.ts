@@ -9887,7 +9887,7 @@ export type Database = {
       claim_first_trip_benefit: { Args: { p_user_id: string }; Returns: Json }
       cleanup_expired_search_cache: { Args: never; Returns: number }
       cleanup_expired_venues: { Args: never; Returns: number }
-      cleanup_rate_limits: { Args: never; Returns: undefined }
+      cleanup_rate_limits: { Args: never; Returns: Json }
       cleanup_stale_intel_locks: { Args: never; Returns: undefined }
       consume_free_edit: { Args: { p_user_id: string }; Returns: Json }
       deduct_credits_fifo: {
