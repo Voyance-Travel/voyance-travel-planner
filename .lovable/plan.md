@@ -1,32 +1,35 @@
-## RS.M3 — Consolidate DNA archetype resolution
+## RS.M4 — Split onboarding save error paths
 
-### New file: `supabase/functions/_shared/dna-resolve.ts`
+**File:** `src/pages/OnboardConversation.tsx`
 
-Exports `DnaProfileLike` interface and `resolvePrimaryArchetype(profile)` returning `{ archetype, source }`. Sources extended slightly beyond the spec to preserve existing behavior:
+The race-condition guard already exists (lines 124–129) and the `try/catch/finally` correctly clears `savingInProgressRef` (line 214). Only the **error reporting** is currently merged into one branch.
 
-- `'canonical'` — `profile.primary_archetype_name`
-- `'v2_blob'` — `profile.travel_dna_v2.primary_archetype_name`
-- `'v2_matches'` — `profile.travel_dna_v2.archetype_matches[0].name`
-- `'legacy_matches'` — `profile.archetype_matches[0].name` (top-level legacy column; profile-loader currently differentiates this from v2_matches)
-- `'default'` — returns `'Explorer'`
+### Current (lines 200–205)
+```ts
+const result = data as { success?: boolean; error?: string } | null;
+if (error || !result?.success) {
+  console.error('[OnboardConversation] save_onboarding_dna failed', { error, data });
+  toast.error('Failed to save your Travel DNA. Please try again.');
+  return;
+}
+```
 
-`DnaProfileLike` includes `archetype_matches?: Array<{archetype_id?, name?}> | null` at the top level so `legacy_matches` is typed.
+A single toast hides whether the RPC layer failed (network / auth / function missing) or the function ran and returned `success:false` (DB write rejection inside the SECURITY DEFINER body).
 
-### Wire-up — real fallback chains (3 sites)
+### Change
+Replace lines 200–205 with two distinct branches matching the spec:
 
-1. **`generate-itinerary/profile-loader.ts` lines 211–245** — replace the 4-tier `if/else if` chain with a single `resolvePrimaryArchetype(travelDNA)` call. Map source → existing `archetypeSource` (`'canonical'` | `'travel_dna_blob'` | `'v2_matches'` | `'legacy_matches'` | `'fallback'`) and `dataCompleteness` deltas (20/15/10/10/0). The "no archetype" warning still fires when `source === 'default'`. Net: identical behavior, single chain definition.
+1. **`error` truthy → RPC layer error.** Log `[OnboardConversation] save_onboarding_dna RPC error` with the error object, toast `Couldn't save your Travel DNA: ${error.message}. Please try again.`, return.
+2. **`!result?.success` → DB write inside RPC failed.** Log `[OnboardConversation] save_onboarding_dna returned failure` with the data payload, toast `Save failed: ${result?.error || 'unknown error'}. Please try again.`, return.
 
-2. **`explain-recommendation/index.ts` lines 92–101** — replace the canonical→v2_blob chain with the helper. Keep the `.select('primary_archetype_name, travel_dna_v2, archetype_matches')` query as-is (helper consumes all three).
+The success path (`toast.success` + `navigate`) and the outer `catch (err)` / `finally` (which already clears both flags) stay as-is. The race-condition guard at 124–129 already matches the spec; no changes there.
 
-3. **`generate-itinerary/action-generate-trip.ts` line 373** — replace the inline `dna.primary_archetype_name || (dna.travel_dna_v2 as any)?.primary_archetype_name || 'balanced_story_collector'`. Use helper, but keep the `'balanced_story_collector'` default for this caller (it diverges from the global `'Explorer'` default). Implementation: `const r = resolvePrimaryArchetype(dna); const archetype = r.source === 'default' ? 'balanced_story_collector' : r.archetype;`
-
-### Out of scope (intentional no-ops)
-
-- **`mid-trip-dna/index.ts`** — already shipped without the chain (legacy predictions mode was removed; only `daily-briefing` remains, which uses `metadata.interestCategories`, not archetype).
-- **Canonical-only readers** (`_shared/traveler-dna.ts`, `mystery-trip-logistics`, `suggest-mystery-trips`, `generate-guide-editorial`, `context-audit.ts`, `preference-context.ts`, `user-context-normalization.ts`, `prompt-library.ts`) — these either select only `primary_archetype_name` or already use a different consolidation path. Migrating them is mechanical refactor without behavior change; defer to a follow-up if desired. The verification target (`grep -rln "resolvePrimaryArchetype" supabase/functions ≥ 2`) is met by the helper file + 3 wire-up sites = 4.
+### Out of scope
+- The RPC contract itself (DNA-2 `save_onboarding_dna` atomic 3-table write) — already shipped.
+- Refactoring the trait-scoring block (lines 134–176).
+- Changing the redirect target on success.
 
 ### Verification
-
-- `grep -rln "resolvePrimaryArchetype" supabase/functions` → ≥ 2 (expect 4: helper + 3 consumers).
-- Existing test `profile-loader.test.ts` should still pass (behavior unchanged).
-- Manual: a profile with only `travel_dna_v2.primary_archetype_name` still resolves with `source='travel_dna_blob'` (mapped from helper's `'v2_blob'`) and `dataCompleteness += 15`.
+- `grep -c "save_onboarding_dna RPC error\|returned failure" src/pages/OnboardConversation.tsx` → ≥ 2.
+- Manual: simulating network failure surfaces the RPC-error toast with `error.message`; a `success:false` RPC payload surfaces the in-function failure toast with the function's `error` field.
+- The race guard still releases on every exit path (return / throw / success) via the existing `finally`.

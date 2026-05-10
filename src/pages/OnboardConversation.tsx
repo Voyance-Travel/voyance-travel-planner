@@ -198,9 +198,16 @@ export default function OnboardConversation() {
         });
 
         const result = data as { success?: boolean; error?: string } | null;
-        if (error || !result?.success) {
-          console.error('[OnboardConversation] save_onboarding_dna failed', { error, data });
-          toast.error('Failed to save your Travel DNA. Please try again.');
+        if (error) {
+          // Network / RPC layer error (function unreachable, auth, transport)
+          console.error('[OnboardConversation] save_onboarding_dna RPC error', error);
+          toast.error(`Couldn't save your Travel DNA: ${error.message}. Please try again.`);
+          return;
+        }
+        if (!result?.success) {
+          // RPC ran but DB write failed inside the SECURITY DEFINER function
+          console.error('[OnboardConversation] save_onboarding_dna returned failure', data);
+          toast.error(`Save failed: ${result?.error || 'unknown error'}. Please try again.`);
           return;
         }
 
