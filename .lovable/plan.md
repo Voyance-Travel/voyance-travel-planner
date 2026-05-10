@@ -1,61 +1,97 @@
-## NEW.3 — Departure-day chronology validator (post-checkout coherence signal)
+## NEW.4 — Body-field slot-placeholder + requirement-prose scrub in `prompt-leak-scrub.ts`
 
-### Context
+### What's already covered (and where)
 
-The post-checkout pruning logic the user describes already runs as a **repair** in two places:
+Slot tokens like `(FLEX_WINDOW)`, `(AESTHETIC slot)`, `(INTEREST_SLOT)` already get stripped in **titles/names** by:
 
-1. `repair-day.ts` §14b "POST-CHECKOUT COHERENCE PRUNE" (lines 3234–3290) — drops non-logistics activities scheduled after the last `checkout` row on departure days, then re-runs `repairDepartureSequence`.
-2. `_shared/post-checkout-prune.ts::pruneNonLogisticsAfterCheckout` — save-time twin called from `action-save-itinerary.ts:141`.
+- `supabase/functions/_shared/persist-day-contract.ts` (`PROMPT_ARTIFACT_RE`, drop-row gate)
+- `supabase/functions/_shared/persist-itinerary.ts` (`stripPromptArtifactsInTitles`)
+- `supabase/functions/generate-itinerary/sanitization.ts:1236–1239`
+- UI: `src/utils/activityNameSanitizer.ts::stripPromptArtifacts` (titles) + `PROMPT_ARTIFACT_REPLACE_RE` chained in `sanitizeActivityText` (body text)
+- UI: `src/utils/itineraryParser.ts` + `src/utils/textSanitizer.ts`
 
-What's **missing** is a matching **validator** in `validate-day.ts`. Today no `ValidationResult` is emitted for this condition, so:
+What's **NOT** covered today: the shared `_shared/prompt-leak-scrub.ts` body-field scrub (`scrubBodyPromptLeaks`) — which is the canonical boundary called by **validate-day**, **repair-day §10b**, **action-save-itinerary `normalizeDays`** (via `scrubActivity`). If `(FLEX_WINDOW)` or `This satisfies your 'Deep Context' requirement.` leaks into a `description`/`tips`/`notes` string, none of the existing scrubs run there — only title-side scrubs and the UI text scrub catch it. That means the leak persists in the JSON until render time.
 
-- The failure never appears in `repair_log` / health-score / `[VALIDATION_GATE]` telemetry.
-- The repair in §14b only fires because `isDepartureDay` is true — not because a validator flagged it. That means cases where §14b is short-circuited (early returns, skipped repair runs, manual edits without save) are caught only at save-time, with no upstream signal.
+The user's request closes that gap.
 
-A dedicated validator closes that observability gap and lets `applyValidationGate` block bad days that somehow slip past §14b.
+### Decision: reuse the existing artifact regex shape, not the narrow allowlist
 
-### Decision: reuse `LOGISTICS_SEQUENCE`, not a new code
+The user's spec proposes a new regex `\(\s*(?:FLEX_WINDOW|INTEREST_SLOT|AESTHETIC|TIME[\s_-]?SLOT|MEAL[\s_-]?SLOT|slot|placeholder|TBD)\b[^)]*\)`. That's narrower than the existing system's regex (`persist-day-contract::PROMPT_ARTIFACT_RE` and the UI mirror), which catches **any** `(LABEL slot)`, `(LABEL placeholder)`, AND any bare `(ALLCAPS_WITH_UNDERSCORE)` token. Using the same shape here keeps system-wide coverage uniform — a new label like `(NARRATIVE_MOOD)` is already handled by the broader pattern, but would slip past the narrow allowlist.
 
-The user's spec uses `FAILURE_CODES.DEPARTURE_SEQUENCE`, which **does not exist**. Existing failure code `LOGISTICS_SEQUENCE` already covers departure-day sequencing (`checkLogisticsSequence`, repair-day §11, §14b all tag it). Adding a parallel `DEPARTURE_SEQUENCE` code would fragment telemetry and require new wiring in `validation-gate.ts` for no semantic gain. The validator below emits `LOGISTICS_SEQUENCE` with a `field: 'startTime'` discriminator and a distinct message, so dashboards still distinguish "post-checkout leak" from generic departure-order issues via message string.
+Per `mem://technical/itinerary/stateful-regex-strip-bug`, we keep **two regexes** (one non-global for `.test()`, one `/g` for `.replace()`) so stateful `lastIndex` doesn't cause intermittent no-ops in `hasBodyPromptLeak`.
 
 ### Changes
 
-**1. `supabase/functions/generate-itinerary/pipeline/validate-day.ts`**
+**1. `supabase/functions/_shared/prompt-leak-scrub.ts`** — additions only.
 
-Add `checkDepartureChronology(activities, isLastDay, results)` (matches user's spec but emits `LOGISTICS_SEQUENCE`). Detection logic mirrors `pruneNonLogisticsAfterCheckout` so validator and repair agree on what "post-checkout leak" means:
+Add (alongside `RESERVATION_LABEL_LEAK_RE` / `ORPHAN_EMPTY_LABEL_RE`):
 
-- Find LAST `checkout` row (`category === 'accommodation'` + `/check[\s-]?out|checkout/`).
-- For every activity after it that is NOT departure logistics (uses the same "departure logistics" classification as the existing pruner: airport/station/terminal/departure/flight/train/return-home in title, OR `category` in `transport|transit|logistics`), push:
-  ```ts
-  { code: FAILURE_CODES.LOGISTICS_SEQUENCE, severity: 'critical',
-    message: `Activity "${a.title}" is scheduled after final checkout — should be removed or moved before checkout`,
-    activityIndex: i, field: 'startTime', autoRepairable: true }
-  ```
-- Skip locked/userAdded/userEdited/extracted/pinned/isManual rows (universal locking parity with §14b and save-time prune).
-
-Wire into the validator chain right after the existing `checkLogisticsSequence` call (line 145):
 ```ts
-if (isLastDay) {
-  checkLogisticsSequence(activities, returnDepartureTime24, results);
-  checkDepartureChronology(activities, isLastDay, results);
-}
+// Slot-name placeholders the LLM occasionally echoes verbatim into description /
+// tips / notes instead of replacing them: "(FLEX_WINDOW)", "(INTEREST_SLOT)",
+// "(slot)", "(AESTHETIC slot)", "(NARRATIVE_MOOD)", etc.
+// Mirrors persist-day-contract::PROMPT_ARTIFACT_RE and the UI artifact regex
+// for system-wide coverage. Two-regex pattern guards against stateful-regex bug.
+export const SLOT_PLACEHOLDER_LEAK_TEST_RE =
+  /\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder|TBD)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)/i;
+export const SLOT_PLACEHOLDER_LEAK_RE =
+  /\s*\(\s*(?:(?:[A-Z][A-Z0-9 _-]{1,30}\s+)?(?:slot|placeholder|TBD)|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\s*\)\s*/gi;
+
+// Requirement-prose leak: "This satisfies your 'Deep Context' requirement."
+// Catches the model echoing back the prompt's requirement language as flavor text.
+export const REQUIREMENT_PROSE_LEAK_RE =
+  /\s*\bThis\s+(?:satisfies|fulfills|fulfils|meets)\s+(?:your|the)\s+['"“”][^'"“”]{1,60}['"“”]?\s+(?:requirement|criterion|criteria|need)s?\s*\.?\s*/gi;
 ```
 
-**2. `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — no change needed.
+Chain both into `scrubString` (line 55–60):
 
-§14b already mutates the day in place and pushes `LOGISTICS_SEQUENCE` repair entries with `action: 'pruned_post_checkout_non_logistics'`. The new validator's emitted results will be cleared by §14b on the same pass; if §14b is somehow skipped, the save-time `pruneNonLogisticsAfterCheckout` is the final net (mem://constraints/itinerary/post-checkout-save-time-sweep).
+```ts
+const after = s
+  .replace(RESERVATION_LABEL_LEAK_RE, '')
+  .replace(ORPHAN_EMPTY_LABEL_RE, '')
+  .replace(SLOT_PLACEHOLDER_LEAK_RE, '')        // NEW
+  .replace(REQUIREMENT_PROSE_LEAK_RE, '')       // NEW
+  .replace(/\s{2,}/g, ' ')
+  .replace(/\s+\./g, '.')
+  .trim();
+```
 
-**3. No new failure code, no migration, no edge function deploys** beyond the validate-day rebuild that ships with `generate-itinerary`.
+Extend `hasBodyPromptLeak` (line 90–103) and `hasTitleLeak` (line 225–242) detectors to also test `SLOT_PLACEHOLDER_LEAK_TEST_RE` and `REQUIREMENT_PROSE_LEAK_RE` — using the dedicated non-global TEST variant for the slot regex so `.lastIndex` state never causes a false negative.
+
+This automatically propagates to:
+- `validate-day.ts` → `hasBodyPromptLeak` / `hasTitleLeak` flag the leak
+- `repair-day.ts` §10b → `scrubBodyPromptLeaks` / `scrubTitleLeaks` strip in place
+- `action-save-itinerary.ts` `normalizeDays` (via `scrubActivity`) → final pre-persist sweep
+- UI: `activityNameSanitizer.ts::sanitizeActivityName` already calls `stripPromptArtifacts` upstream of the leak chain, so titles stay covered without a new edit there
+
+**2. `src/utils/activityNameSanitizer.ts`** — single addition for the requirement-prose pattern.
+
+The slot-artifact pattern is **already** chained in `sanitizeActivityText` via `PROMPT_ARTIFACT_REPLACE_RE` (line 386), so no duplicate needed. Only `REQUIREMENT_PROSE_LEAK_RE` is new for the UI side. Add a local `REQUIREMENT_PROSE_LEAK_RE` constant near the other UI-mirror regexes (~line 343) and chain it into `sanitizeActivityText` next to the other prompt-leak strips.
+
+**3. No changes** to `persist-day-contract.ts`, `persist-itinerary.ts`, `sanitization.ts`, `textSanitizer.ts`, `itineraryParser.ts` — those layers already handle slot tokens at their respective boundaries.
 
 ### Verification
 
 ```
-grep -n "checkDepartureChronology" supabase/functions/generate-itinerary/pipeline/validate-day.ts
+grep -c "SLOT_PLACEHOLDER_LEAK_RE\|REQUIREMENT_PROSE_LEAK_RE" supabase/functions/_shared/prompt-leak-scrub.ts
 ```
-Expect 2 matches (definition + call site).
+Expect ≥ 5 (2 declarations + 1 chain in `scrubString` + 2 detector test calls).
 
-Smoke shape: synthetic last-day activities `[{title:'Checkout', category:'accommodation', startTime:'10:00'}, {title:'Visit market', category:'sightseeing', startTime:'11:00'}, {title:'Taxi to Airport', category:'transport', startTime:'13:00'}]` should yield exactly one `LOGISTICS_SEQUENCE` result for the market activity, and §14b should drop it on the next repair pass.
+```
+grep -c "REQUIREMENT_PROSE_LEAK_RE" src/utils/activityNameSanitizer.ts
+```
+Expect ≥ 2 (declaration + `.replace` in `sanitizeActivityText`).
+
+Smoke shapes that should be stripped from `description`/`tips`/`notes` after the change:
+- `"Wander Castello (FLEX_WINDOW)"` → `"Wander Castello"`
+- `"A relaxed evening (AESTHETIC slot) with locals"` → `"A relaxed evening with locals"`
+- `"Sunset views. This satisfies your 'Deep Context' requirement."` → `"Sunset views."`
+
+Shapes that must NOT be stripped (regression guards):
+- `"(NYC)"`, `"(USA)"` — bare acronyms (no underscore + not "slot/placeholder/TBD")
+- `"Note: closed Mondays."` — already protected by `ORPHAN_EMPTY_LABEL_RE` only matching empty/dot-only values
 
 ### Files touched
 
-- `supabase/functions/generate-itinerary/pipeline/validate-day.ts` — add `checkDepartureChronology` function + 1-line call site under the existing `if (isLastDay)` block.
+- `supabase/functions/_shared/prompt-leak-scrub.ts` — 2 new regex pairs, 2 chains in `scrubString`, 2 detector extensions
+- `src/utils/activityNameSanitizer.ts` — 1 new local regex + 1 chain in `sanitizeActivityText`
