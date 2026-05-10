@@ -151,7 +151,7 @@ export default function OnboardConversation() {
             const auth = analysis.traits.authenticity;
             const baseFromAuth = auth === 'local-immersion' ? 7 : auth === 'balanced' ? 2 : -3;
             const culturalKeywords = ['museum', 'history', 'ruin', 'monument', 'temple', 'church', 'mosque', 'synagogue', 'gallery', 'heritage', 'tradition', 'language', 'local guide', 'archaeological', 'art'];
-            const hits = [...(analysis.whatWorked || []), ...(analysis.whatFailed || [])]
+            const hits = [story, followUpAnswer, analysis.reasoning || '']
               .join(' ')
               .toLowerCase();
             const culturalSignal = culturalKeywords.filter(kw => hits.includes(kw)).length;
