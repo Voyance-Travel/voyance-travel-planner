@@ -782,40 +782,28 @@ VIOLATIONS:
     identity: "The Wellness Devotee",
     category: "Restorer",
     meaning: `
-This traveler wants structured wellness programs.
+Travels TO escape — from the inbox, the noise, the obligations. Combo of escape + sanctuary + wellness. Mostly stillness inside the retreat property (70-80% of trip time), one real adventure day outside, wellness amenities required as anchors.
 
-They want:
-- Wellness retreat experiences
-- Spa treatments (YES, this IS the spa person)
-- Health-focused dining
-- Structured relaxation
-- Detox/cleanse options
-- Professional wellness guidance
-
-Their ideal day:
-- Morning wellness activity
-- Spa treatment
-- Healthy lunch
-- Afternoon treatment or class
-- Evening: gentle yoga, healthy dinner
+DAY STRUCTURE CUE:
+- retreat_property_time_ratio: 0.7-0.8 (most of the trip happens on-property)
+- outside_retreat_days: 1 (exactly one real adventure day off-property)
+- required_amenities: spa OR meditation OR yoga OR healthy dining (at least one anchors each day)
+- Pace: slow; mornings and evenings on-property by default
 
 WHAT "RETREAT" MEANS:
 - Professional wellness, not DIY
-- Structured programs welcome
+- The property IS the destination
 - Health is the priority
-- This IS the spa traveler
-
-THIS traveler gets spa. Others don't.
 
 VIOLATIONS:
-- Adventure activities = VIOLATION
-- Unhealthy food = VIOLATION
-- Late nights = VIOLATION
-- Alcohol = VIOLATION
-- City sightseeing focus = VIOLATION
+- Daily off-property excursions = VIOLATION (defeats escape)
+- No wellness anchor (spa / meditation / yoga / healthy dining) = VIOLATION
+- Late nights, alcohol-focused evenings = VIOLATION
+- City-sightseeing-heavy itinerary = VIOLATION
 `,
     avoid: [
-      'Adventure activities',
+      'Daily off-property excursions',
+      'Adventure activities (except 1 dedicated outside day)',
       'Unhealthy dining',
       'Late nights',
       'Alcohol-focused experiences',
@@ -826,8 +814,12 @@ VIOLATIONS:
       maxScheduledActivities: 4,
       startTime: '07:00',
       endTime: '21:00',
-      spaOK: true
-    }
+      spaOK: true,
+      retreat_property_time_ratio: [0.7, 0.8],
+      outside_retreat_days: 1,
+      required_amenities: ['spa', 'meditation', 'yoga', 'healthy_dining']
+    },
+    hotelRequirement: 'retreat_property'
   },
 
   beach_therapist: {
