@@ -9024,22 +9024,31 @@ export type Database = {
       }
       user_tiers: {
         Row: {
+          current_period_end: string | null
           first_purchase_at: string | null
           highest_purchase: string | null
+          stripe_subscription_id: string | null
+          subscription_status: string | null
           tier: string
           updated_at: string | null
           user_id: string
         }
         Insert: {
+          current_period_end?: string | null
           first_purchase_at?: string | null
           highest_purchase?: string | null
+          stripe_subscription_id?: string | null
+          subscription_status?: string | null
           tier?: string
           updated_at?: string | null
           user_id: string
         }
         Update: {
+          current_period_end?: string | null
           first_purchase_at?: string | null
           highest_purchase?: string | null
+          stripe_subscription_id?: string | null
+          subscription_status?: string | null
           tier?: string
           updated_at?: string | null
           user_id?: string
