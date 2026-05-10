@@ -37,47 +37,39 @@ const memoriesKeys = {
 };
 
 async function uploadMemory(input: UploadMemoryInput): Promise<TripMemory> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  // Frontend sanity (UX only — real validation is server-side)
+  const MAX_BYTES = 10 * 1024 * 1024;
+  const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+  if (input.file.size > MAX_BYTES) {
+    throw new Error('File is too large (max 10 MB)');
+  }
+  if (input.file.type && !ALLOWED.includes(input.file.type.toLowerCase())) {
+    throw new Error('Unsupported image type — please use JPEG, PNG, or WEBP');
+  }
 
-  // Upload file to storage
-  const fileExt = input.file.name.split('.').pop();
-  const fileName = `${user.id}/${input.tripId}/${Date.now()}.${fileExt}`;
+  const formData = new FormData();
+  formData.append('file', input.file);
+  formData.append('tripId', input.tripId);
+  if (input.activityId) formData.append('activityId', input.activityId);
+  if (input.activityName) formData.append('activityName', input.activityName);
+  if (input.caption) formData.append('caption', input.caption);
+  if (input.locationName) formData.append('locationName', input.locationName);
+  if (input.dayNumber != null) formData.append('dayNumber', String(input.dayNumber));
 
-  const { error: uploadError } = await supabase.storage
-    .from('trip-memories')
-    .upload(fileName, input.file, {
-      cacheControl: '3600',
-      upsert: false,
-    });
+  const { data, error } = await supabase.functions.invoke('upload-trip-memory', {
+    body: formData,
+  });
 
-  if (uploadError) throw uploadError;
-
-  // Generate signed URL (valid for 1 hour)
-  const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-    .from('trip-memories')
-    .createSignedUrl(fileName, 3600);
-
-  if (signedUrlError || !signedUrlData?.signedUrl) throw signedUrlError || new Error('Failed to create signed URL');
-
-  // Insert metadata record — store the storage path, not the URL
-  const { data, error } = await supabase
-    .from('trip_memories')
-    .insert({
-      user_id: user.id,
-      trip_id: input.tripId,
-      activity_id: input.activityId || null,
-      activity_name: input.activityName || null,
-      image_url: fileName,  // Store storage path, not public URL
-      caption: input.caption || null,
-      location_name: input.locationName || null,
-      day_number: input.dayNumber || null,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data as TripMemory;
+  if (error) {
+    // Edge function returns structured JSON errors; surface the message if present.
+    const message =
+      (data as { error?: string } | null)?.error ||
+      (error as { message?: string }).message ||
+      'Upload failed';
+    throw new Error(message);
+  }
+  if (!data?.memory) throw new Error('Upload failed');
+  return data.memory as TripMemory;
 }
 
 async function fetchTripMemories(tripId: string): Promise<TripMemory[]> {

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { debugLog } from "../_shared/debug-log.ts";
 // traveler-dna is imported dynamically to prevent cold-start crashes
 let fetchTravelerDNA: any = null;
 let buildCompactDNASummary: any = null;
@@ -301,7 +302,7 @@ serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    console.log("[chat-trip-planner] Authenticated user:", user.id);
+    debugLog("[chat-trip-planner] Authenticated user:", user.id);
 
     const { messages } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");

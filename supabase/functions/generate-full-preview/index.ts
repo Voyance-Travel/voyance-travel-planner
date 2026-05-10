@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost } from "../_shared/cost-tracker.ts";
 import { cachedGooglePlacesTextSearch as googlePlacesTextSearch } from "../_shared/google-api.ts";
+import { debugLog } from "../_shared/debug-log.ts";
 
 /**
  * Generate Full Preview - "Full Preview, No Details" Model
@@ -242,7 +243,8 @@ Respond in JSON format:
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    console.log(`[generate-full-preview] Generating ${cappedDays}-day preview for ${destination} | User: ${userId}`);
+    console.log(`[generate-full-preview] Generating ${cappedDays}-day preview for ${destination}`);
+    debugLog(`[generate-full-preview] user=${userId}`);
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

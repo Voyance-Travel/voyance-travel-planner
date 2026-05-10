@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { debugLog } from "../_shared/debug-log.ts";
 
 /**
  * Generate Trip Preview - AI-Only (Optimized Free Tier)
@@ -268,7 +269,8 @@ Respond in JSON format:
 
     await costTracker.save();
 
-    console.log(`[generate-trip-preview] ✓ Generated ${cappedDays}-day preview for ${destination} | User: ${userId || 'anon'}`);
+    console.log(`[generate-trip-preview] ✓ Generated ${cappedDays}-day preview for ${destination}`);
+    debugLog(`[generate-trip-preview] user=${userId || 'anon'}`);
 
     return new Response(
       JSON.stringify({
