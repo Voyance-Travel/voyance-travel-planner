@@ -71,6 +71,8 @@ function scrubString(s: unknown): string | null {
   const after = s
     .replace(RESERVATION_LABEL_LEAK_RE, '')
     .replace(ORPHAN_EMPTY_LABEL_RE, '')
+    .replace(SLOT_PLACEHOLDER_LEAK_RE, '')
+    .replace(REQUIREMENT_PROSE_LEAK_RE, '')
     .replace(/\s{2,}/g, ' ')
     .replace(/\s+\./g, '.')
     .trim();
