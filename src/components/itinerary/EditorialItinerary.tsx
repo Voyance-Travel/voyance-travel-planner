@@ -4990,7 +4990,7 @@ export function EditorialItinerary({
 
       const activityTime = parseTimeToMinutes(copiedActivity.startTime || copiedActivity.time);
 
-      return prev.map((day, idx) => {
+      const updated = prev.map((day, idx) => {
         if (idx !== toDayIndex) return day;
         const newActivities = [...day.activities];
         let insertIndex = newActivities.length;
@@ -5004,10 +5004,12 @@ export function EditorialItinerary({
         newActivities.splice(insertIndex, 0, copiedActivity);
         return { ...day, activities: newActivities };
       });
+      syncBudgetFromDays(updated);
+      return updated;
     });
     setHasChanges(true);
     toast.success(`Copied to Day ${toDayIndex + 1}`);
-  }, []);
+  }, [syncBudgetFromDays]);
 
   const handleActivityRemove = useCallback((dayIndex: number, activityId: string) => {
     const activity = days[dayIndex]?.activities.find(a => a.id === activityId);
