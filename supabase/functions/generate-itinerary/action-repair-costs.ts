@@ -469,7 +469,7 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
       // €120/pp). Runs after Michelin floor + bar cap so fine-dining and
       // drinks paths take precedence. Skips locked/user/booked rows.
       if (
-        process.env.PRICE_SANITY_ENABLED !== 'false' &&
+        Deno.env.get('PRICE_SANITY_ENABLED') !== 'false' &&
         source !== 'michelin_floor' &&
         source !== 'bar_cap_repair' &&
         source !== 'ticketed_attraction_floor' &&
