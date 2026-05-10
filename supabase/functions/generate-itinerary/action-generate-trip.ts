@@ -371,7 +371,10 @@ export async function handleGenerateTrip(
           const companionTraitsList: Record<string, number>[] = [];
           
           for (const dna of (companionDnaRows || [])) {
-            const archetype = dna.primary_archetype_name || (dna.travel_dna_v2 as any)?.primary_archetype_name || 'balanced_story_collector';
+            const resolvedCompanion = resolvePrimaryArchetype(dna as any);
+            const archetype = resolvedCompanion.source === 'default'
+              ? 'balanced_story_collector'
+              : resolvedCompanion.archetype;
             travelersList.push({ travelerId: dna.user_id, name: profileMap.get(dna.user_id) || 'Guest', archetype, isPrimary: false });
             const rawScores = dna.trait_scores || (dna.travel_dna_v2 as any)?.trait_scores || {};
             companionTraitsList.push({
