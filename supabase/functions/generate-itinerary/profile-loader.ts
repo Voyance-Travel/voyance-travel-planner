@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { getFullArchetypeContext, type ArchetypeContext } from './archetype-data.ts';
+import { resolvePrimaryArchetype } from '../_shared/dna-resolve.ts';
 
 // =============================================================================
 // TYPES
@@ -210,37 +211,34 @@ export async function loadTravelerProfile(
   
   let archetype = DEFAULT_ARCHETYPE;
   let archetypeSource: TravelerProfile['archetypeSource'] = 'fallback';
-  
+
   if (travelDNA) {
-    // Priority 1: Canonical column (most reliable)
-    if (travelDNA.primary_archetype_name) {
-      archetype = travelDNA.primary_archetype_name;
-      archetypeSource = 'canonical';
-      dataCompleteness += 20;
-    }
-    // Priority 2: travel_dna_v2 blob (fixed: was incorrectly referencing travel_dna)
-    else if ((travelDNA.travel_dna_v2 as any)?.primary_archetype_name) {
-      archetype = (travelDNA.travel_dna_v2 as any).primary_archetype_name;
-      archetypeSource = 'travel_dna_blob';
-      dataCompleteness += 15;
-    }
-    // Priority 3: v2 archetype matches
-    else if (Array.isArray(travelDNA.travel_dna_v2?.archetype_matches) && 
-             travelDNA.travel_dna_v2.archetype_matches[0]?.name) {
-      archetype = travelDNA.travel_dna_v2.archetype_matches[0].name;
-      archetypeSource = 'v2_matches';
-      dataCompleteness += 10;
-    }
-    // Priority 4: Legacy archetype_matches
-    else if (Array.isArray(travelDNA.archetype_matches) && 
-             travelDNA.archetype_matches[0]?.name) {
-      archetype = travelDNA.archetype_matches[0].name;
-      archetypeSource = 'legacy_matches';
-      dataCompleteness += 10;
-    }
-    // Fallback
-    else {
-      warnings.push('No archetype found in Travel DNA, using fallback');
+    const resolved = resolvePrimaryArchetype(travelDNA as any);
+    switch (resolved.source) {
+      case 'canonical':
+        archetype = resolved.archetype;
+        archetypeSource = 'canonical';
+        dataCompleteness += 20;
+        break;
+      case 'v2_blob':
+        archetype = resolved.archetype;
+        archetypeSource = 'travel_dna_blob';
+        dataCompleteness += 15;
+        break;
+      case 'v2_matches':
+        archetype = resolved.archetype;
+        archetypeSource = 'v2_matches';
+        dataCompleteness += 10;
+        break;
+      case 'legacy_matches':
+        archetype = resolved.archetype;
+        archetypeSource = 'legacy_matches';
+        dataCompleteness += 10;
+        break;
+      case 'default':
+      default:
+        warnings.push('No archetype found in Travel DNA, using fallback');
+        break;
     }
   }
   
