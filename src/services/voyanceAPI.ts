@@ -177,7 +177,23 @@ export async function createTrip(input: {
   const { data: entitlements } = await supabase.functions.invoke('get-entitlements');
   const ownerPlanTier = entitlements?.plans?.[0] || 'free';
 
-  const toBackendTrip = (row: typeof data): BackendTrip => ({
+  type TripRowLite = {
+    id: string;
+    user_id: string;
+    name: string;
+    destination: string;
+    status: string;
+    trip_type: string | null;
+    start_date: string;
+    end_date: string;
+    travelers: number | null;
+    budget_tier: string | null;
+    origin_city: string | null;
+    created_at: string;
+    updated_at: string;
+  };
+
+  const toBackendTrip = (row: TripRowLite): BackendTrip => ({
     id: row.id,
     userId: row.user_id,
     name: row.name,
@@ -209,7 +225,7 @@ export async function createTrip(input: {
 
   if (recent) {
     console.warn('[createTrip] Duplicate request detected — returning existing trip', { tripId: recent.id });
-    return toBackendTrip(recent as typeof data);
+    return toBackendTrip(recent as unknown as TripRowLite);
   }
 
   const { data, error } = await supabase
@@ -231,22 +247,8 @@ export async function createTrip(input: {
     .single();
 
   if (error) throw new Error(error.message);
-  
-  return {
-    id: data.id,
-    userId: data.user_id,
-    name: data.name,
-    destination: data.destination,
-    status: data.status as TripStatus,
-    tripType: data.trip_type || undefined,
-    startDate: data.start_date,
-    endDate: data.end_date,
-    travelers: data.travelers || undefined,
-    budgetRange: data.budget_tier as BudgetPreference | undefined,
-    departureCity: data.origin_city || undefined,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-  };
+
+  return toBackendTrip(data as unknown as TripRowLite);
 }
 
 export async function updateTrip(tripId: string, updates: Partial<{
