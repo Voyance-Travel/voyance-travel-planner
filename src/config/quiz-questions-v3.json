@@ -1588,9 +1588,7 @@
       "boosters": {
         "experience_accumulation": 1.0,
         "bucket_list": 0.8,
-        "social_sharing": 0.4,
-        "social_energy": 0.6,
-        "learning_focus": 0.5
+        "social_sharing": 0.4
       },
       "penalties": {
         "status_seeking": { "above": 0.5, "weight": -1.0 },
