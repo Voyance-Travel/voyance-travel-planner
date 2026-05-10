@@ -5973,7 +5973,7 @@ export function EditorialItinerary({
                           );
                           await generateConsumerTripPdf({
                             tripName: `Trip to ${destination}`,
-                            destination, startDate, endDate, travelers, days, unlockedDayNumbers,
+                            destination, startDate, endDate, travelers, tripCurrency, days, unlockedDayNumbers,
                             flights: allFlightLegs.length > 0 ? allFlightLegs.map((leg, i) => ({
                               airline: leg.airline || '',
                               departureTime: leg.departure?.time || '',
