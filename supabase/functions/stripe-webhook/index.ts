@@ -1382,7 +1382,17 @@ serve(async (req) => {
       }
 
       default:
+        webhookResult = 'unhandled';
         log("Unhandled event type", { type: event.type });
+    }
+
+    // RS.L4 — record final outcome of the event.
+    try {
+      await supabaseAdmin.from('stripe_webhook_log')
+        .update({ result: webhookResult })
+        .eq('event_id', event.id);
+    } catch (updateErr) {
+      log('stripe_webhook_log result update failed (non-fatal)', updateErr);
     }
 
     return new Response(JSON.stringify({ received: true }), {
@@ -1392,6 +1402,14 @@ serve(async (req) => {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : undefined;
     log("CRITICAL ERROR", { message, stack });
+    // Best-effort: record the error against the event row if we got that far.
+    try {
+      if (supabaseAdmin && event?.id) {
+        await supabaseAdmin.from('stripe_webhook_log')
+          .update({ result: 'error', error_message: message })
+          .eq('event_id', event.id);
+      }
+    } catch { /* swallow — never mask the real error */ }
     // Return 500 so Stripe retries automatically (up to 3 days, exponential backoff).
     // Idempotency guards (credit_ledger, group_unlocks, trip_purchases) prevent duplicate fulfillment on retry.
     return new Response(JSON.stringify({ received: false, error: 'fulfillment_failed', details: message }), {
@@ -1399,3 +1417,4 @@ serve(async (req) => {
     });
   }
 });
+
