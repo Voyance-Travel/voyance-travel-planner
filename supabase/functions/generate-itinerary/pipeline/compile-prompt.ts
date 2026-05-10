@@ -727,6 +727,16 @@ ${flightContext.hotelName ? `9. RETURN TO HOTEL (REQUIRED as LAST activity) — 
 
 ${mealRequirementsBlock}
 
+🚨 HARD REQUIREMENT — MEALS (B1, Barcelona Diagnosis)
+${dayMealPolicy.dayMode === 'late_arrival' ? '- ZERO meals required (late-arrival flexibility). Only include meals if they fit naturally.' : ''}
+${dayMealPolicy.dayMode === 'early_departure' ? '- ONE meal required: breakfast before departure.' : ''}
+${dayMealPolicy.dayMode === 'midday_arrival' || dayMealPolicy.dayMode === 'midday_departure' ? '- TWO meals required (lunch + dinner OR breakfast + lunch — follow the meal policy above).' : ''}
+${(dayMealPolicy.dayMode === 'normal' || dayMealPolicy.dayMode === 'full' || dayMealPolicy.isFullExplorationDay) ? '- THREE meals required: BREAKFAST (7:30–10:30), LUNCH (12:00–14:30), DINNER (19:00–22:00).' : ''}
+- Each required meal MUST be its own discrete activity card with category "dining".
+- A coffee, snack, vermouth, gelato, or "grab a pastry" mentioned INSIDE another activity's description does NOT count as a meal. Only standalone "dining" cards count.
+- Dropping a required meal causes the day to fail validation and forces an expensive regeneration. Build the day's geography and timing AROUND the meal slots, not the other way around.
+- The required count above is the floor, not the ceiling. Adding an extra optional meal (e.g., a 16:00 coffee stop) is fine, but never below the floor.
+
 TRANSIT RULES:
 - Between EVERY pair of consecutive stops, include transit info
 ${resolvedTransportModes.length > 0 ? `- USER'S PREFERRED MODES: ${resolvedTransportModes.join(', ')} — use ONLY these modes` : '- For walks >10 min: create a separate transport activity entry'}
