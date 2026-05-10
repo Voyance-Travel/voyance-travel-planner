@@ -47,14 +47,22 @@ serve(async (req) => {
       });
     }
 
-    // Skip if already enriched
-    if (dest.enriched_at) {
-      log("Already enriched", { destinationId, enriched_at: dest.enriched_at });
+    // TTL-aware skip: only short-circuit if enriched AND not expired
+    const now = new Date();
+    const expiresAt = dest.enrichment_expires_at ? new Date(dest.enrichment_expires_at) : null;
+    const isExpired = !expiresAt || expiresAt.getTime() <= now.getTime();
+    const isFresh = !!dest.enriched_at && !isExpired;
+
+    if (isFresh) {
+      log("Already enriched (fresh)", { destinationId, expires_at: dest.enrichment_expires_at });
       return new Response(JSON.stringify({ success: true, skipped: true, reason: "already_enriched" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const isRefresh = !!dest.enriched_at && isExpired;
+    log(isRefresh ? "Refreshing (TTL expired)" : "First enrichment", { destinationId });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
