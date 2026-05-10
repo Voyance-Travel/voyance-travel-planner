@@ -2715,6 +2715,7 @@ export type Database = {
           source: string
           thumbnail_url: string | null
           updated_at: string | null
+          user_report_count: number
           vote_count: number | null
           vote_score: number | null
         }
@@ -2736,6 +2737,7 @@ export type Database = {
           source: string
           thumbnail_url?: string | null
           updated_at?: string | null
+          user_report_count?: number
           vote_count?: number | null
           vote_score?: number | null
         }
@@ -2757,6 +2759,7 @@ export type Database = {
           source?: string
           thumbnail_url?: string | null
           updated_at?: string | null
+          user_report_count?: number
           vote_count?: number | null
           vote_score?: number | null
         }
@@ -4677,6 +4680,39 @@ export type Database = {
           status?: string | null
           transaction_id?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      image_quality_log: {
+        Row: {
+          basic_check_result: Json | null
+          created_at: string
+          destination: string | null
+          id: string
+          image_url: string
+          llm_score: number | null
+          rejected_reason: string | null
+          source: string | null
+        }
+        Insert: {
+          basic_check_result?: Json | null
+          created_at?: string
+          destination?: string | null
+          id?: string
+          image_url: string
+          llm_score?: number | null
+          rejected_reason?: string | null
+          source?: string | null
+        }
+        Update: {
+          basic_check_result?: Json | null
+          created_at?: string
+          destination?: string | null
+          id?: string
+          image_url?: string
+          llm_score?: number | null
+          rejected_reason?: string | null
+          source?: string | null
         }
         Relationships: []
       }
