@@ -170,11 +170,11 @@ Deno.serve(async (req) => {
         const sandboxResult = await sandboxResponse.json();
         if (sandboxResult.status !== 0) {
           console.error('[validate-iap-receipt] Apple validation failed:', sandboxResult.status);
-          return errorResponse(`Apple receipt validation failed: ${sandboxResult.status}`, 400);
+          return appleStatusError(sandboxResult.status);
         }
       } else if (appleResult.status !== 0) {
         console.error('[validate-iap-receipt] Apple validation failed:', appleResult.status);
-        return errorResponse(`Apple receipt validation failed: ${appleResult.status}`, 400);
+        return appleStatusError(appleResult.status);
       }
     } else {
       console.warn('[validate-iap-receipt] No receipt data or shared secret - proceeding with trust (dev mode)');
