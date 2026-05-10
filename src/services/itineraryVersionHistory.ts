@@ -334,6 +334,9 @@ export function formatVersionLabel(version: ItineraryVersion): string {
     case 'manual_save':
       actionLabel = 'Saved';
       break;
+    case 'pre_restore_snapshot':
+      actionLabel = 'Pre-restore snapshot';
+      break;
     default:
       if (version.created_by_action?.startsWith('restored_from_v')) {
         actionLabel = 'Restored';
