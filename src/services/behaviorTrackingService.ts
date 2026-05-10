@@ -35,6 +35,29 @@ export interface TrackingEvent {
   feedback_tags?: string[];
 }
 
+// ============ ENTITY ID NORMALIZATION ============
+
+/**
+ * Canonical normalization for entity IDs in behavior events.
+ * "New York City", "new york city", "NEW YORK CITY" → "new-york-city"
+ *
+ * Use everywhere an entity_id is derived from a free-text name to ensure
+ * cross-event aggregation works. Inconsistent normalization tracks the same
+ * entity as multiple distinct values, breaking the analytics it's meant to feed.
+ */
+export function normalizeEntityId(name: string | undefined | null): string {
+  if (!name) return '';
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')  // strip diacritics
+    .replace(/[^a-z0-9\s-]/g, '')      // strip punctuation
+    .replace(/\s+/g, '-')               // spaces → hyphen
+    .replace(/-+/g, '-')                // collapse repeated hyphens
+    .replace(/^-|-$/g, '')              // trim leading/trailing hyphens
+    .slice(0, 80);
+}
+
 // ============ DEBOUNCE CACHE ============
 // Prevent duplicate tracking within short windows
 
