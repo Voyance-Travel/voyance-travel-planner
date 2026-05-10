@@ -1320,6 +1320,76 @@ serve(async (req) => {
         break;
       }
 
+      // ========================================
+      // Recurring invoice failed — RS.1
+      //   Mark tier as past_due during retry window; downgrade to free on final attempt.
+      // ========================================
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const subscriptionId = typeof (invoice as any).subscription === 'string'
+          ? (invoice as any).subscription as string
+          : ((invoice as any).subscription?.id as string | undefined);
+        if (!subscriptionId) {
+          log('invoice.payment_failed: no subscription on invoice — skipping', { invoiceId: invoice.id });
+          break;
+        }
+
+        const sub = await stripe.subscriptions.retrieve(subscriptionId);
+        let userId = (sub.metadata?.user_id || sub.metadata?.userId) as string | undefined;
+        if (!userId) {
+          const fb = await resolveUserIdFromCustomer(supabaseAdmin, stripe, sub.customer as string);
+          if (fb) {
+            console.warn(`[STRIPE-WEBHOOK] invoice.payment_failed: resolved userId via customer.email fallback`, JSON.stringify({ subId: sub.id, userId: fb }));
+            userId = fb;
+          }
+        }
+        if (!userId) {
+          logError('invoice.payment_failed missing user_id', { subscriptionId, invoiceId: invoice.id });
+          break;
+        }
+
+        const attemptCount = (invoice as any).attempt_count ?? 0;
+        const nextAttemptTs = (invoice as any).next_payment_attempt as number | null | undefined;
+        const isFinalAttempt = attemptCount >= 4 || sub.status === 'canceled' || sub.status === 'unpaid';
+
+        const metadata = {
+          payment_failed_at: new Date().toISOString(),
+          attempt_count: attemptCount,
+          next_retry_at: nextAttemptTs ? new Date(nextAttemptTs * 1000).toISOString() : null,
+          stripe_subscription_id: sub.id,
+          stripe_invoice_id: invoice.id,
+        };
+
+        if (isFinalAttempt) {
+          // Revoke club credits + force-downgrade to free (mirror cancellation flow).
+          const { error: zeroErr } = await supabaseAdmin
+            .from('credit_purchases')
+            .update({ remaining: 0, updated_at: new Date().toISOString() })
+            .eq('user_id', userId)
+            .in('credit_type', ['club_base', 'club_bonus']);
+          if (zeroErr) logError('invoice.payment_failed: failed to zero club credits', JSON.stringify(zeroErr));
+
+          await upsertUserTier(supabaseAdmin, userId, 'free', { allowDowngrade: true });
+          await supabaseAdmin.from('user_tiers').update({
+            subscription_status: 'past_due',
+            metadata,
+            updated_at: new Date().toISOString(),
+          }).eq('user_id', userId);
+          await syncBalanceCache(supabaseAdmin, userId);
+          log('invoice.payment_failed — final attempt, downgraded to free', { userId, subId: sub.id, attemptCount });
+        } else {
+          await supabaseAdmin.from('user_tiers').update({
+            subscription_status: 'past_due',
+            metadata,
+            updated_at: new Date().toISOString(),
+          }).eq('user_id', userId);
+          log('invoice.payment_failed — flagged past_due, awaiting retry', { userId, subId: sub.id, attemptCount, nextRetryAt: metadata.next_retry_at });
+        }
+
+        // TODO: trigger email notification once template is ready.
+        break;
+      }
+
       case "payment_intent.payment_failed": {
         const pi = event.data.object as Stripe.PaymentIntent;
         const lastErr = pi.last_payment_error;
