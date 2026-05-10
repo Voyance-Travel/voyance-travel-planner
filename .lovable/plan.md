@@ -1,55 +1,46 @@
-# Bump regenerate-day price 10 → 30
+## Goal
 
-## Architecture note (important — what is and isn't a price)
+Lock down `supabase/functions/enrich-destination/index.ts`: require auth, rate-limit by IP and user, and record AI cost so it shows up in the admin spend dashboard.
 
-The repo distinguishes between **headline price** (charged after the per-trip free quota is exhausted) and **free quotas** (how many regens/swaps/etc. are free per trip per tier). Greps for `regenerate_day` surface both:
+## Changes (single file)
 
-- **Headline price** = the integer the user actually pays per regen. Stored in 4 places, all currently `10`.
-- **Free quotas** (`TIER_CAPS`, `FLEX_CAPS_BY_DAYS`, `GROUP_UNLOCK_TIERS.caps`, `GROUP_CAPS`, `TIER_FREE_CAPS`) — values like `1/2/3/5` or `8/12/20`. These are **counts of free regens per trip**, NOT prices. **Do not touch.**
+`supabase/functions/enrich-destination/index.ts`
 
-Server `spend-credits/index.ts` resolves cost via `cost = FIXED_COSTS[action]` (line 599), and the `REFUNDABLE_COSTS` block already keeps `REGENERATE_DAY: 0` to defer to the original ledger row — that stays `0` (intentional, per memory: defensive-refund pattern). No migration needed.
+1. **Imports** — add:
+   - `checkDbRateLimit` from `../_shared/db-rate-limiter.ts`
+   - `trackCost` from `../_shared/cost-tracker.ts`
 
-## Files to change (all 4 sites, identical bump 10 → 30)
+2. **Move the service-role Supabase client creation above the auth check** (currently created at line 29, inside the request body branch) so it's available for `auth.getUser` and the rate-limiter.
 
-### 1. `src/config/pricing.ts:19`
-```ts
-REGENERATE_DAY: 30,         // Regenerate a day (after free quota/trip) — half of generation rate
-```
+3. **Auth gate (after CORS preflight, before `req.json()`):**
+   - Reject missing/non-Bearer `Authorization` → 401 `UNAUTHORIZED`.
+   - Call `supabase.auth.getUser(token)`. On error/no user → 401 `AUTH_INVALID`.
+   - Capture `user.id` for downstream rate-limit + cost-tracker.
 
-### 2. `supabase/functions/spend-credits/index.ts:22` (the server authority — billing source of truth)
-```ts
-regenerate_day: 30,
-```
+4. **Rate limits** (uses existing `rate_limits` table via `checkDbRateLimit`):
+   - IP key from `cf-connecting-ip` → `x-forwarded-for` → `'unknown'`.
+   - Per-IP: `10/min` and `50/hour` (two checks against endpoints `enrich-destination:ip:min` and `enrich-destination:ip:hour`).
+   - Per-user: `20/min` and `100/hour` (endpoints `enrich-destination:user:min` and `enrich-destination:user:hour`).
+   - Any rejection → 429 `RATE_LIMIT` with `retryAfter` (seconds derived from the violated window).
+   - Run rate-limit checks **after** auth so anonymous traffic never touches the table.
 
-### 3. `src/services/itineraryChatAPI.ts:152, 157, 158`
-The chat assistant displays `creditCost` on proposed actions. Bump three values:
-- Line 152 (`regenerate_day` action's `creditCost`): `10 → 30`
-- Line 157 (`rewrite_day` in `creditMap`): `10 → 30`
-- Line 158 (`regenerate_day` in `creditMap`): `10 → 30`
+5. **Cost tracking** around the AI call:
+   - Before `fetch(...)`: `const tracker = trackCost('enrich_destination', 'google/gemini-2.5-flash').setUserId(user.id);` (the actual API uses chained setters; the spec's positional form doesn't exist in `cost-tracker.ts`).
+   - After a successful `aiResponse.json()`: `tracker.recordAiUsage(aiData);` then `await tracker.save();`.
+   - On the AI failure branches (429/402/other non-OK and parse failures): no `save()` call — we only bill for actual usage.
+   - `trip_id` stays unset (not known in this function).
 
-(`rewrite_day` shares the `REGENERATE_DAY` server action — same price.)
+6. **Behavior preserved** for: TTL fresh-skip (still returns 200 before the AI call so it doesn't burn rate-limit budget unnecessarily — order: auth → rate-limit → fetch dest → fresh-skip → AI). Rationale: rate-limit must come before any DB read on this hot path so abusers can't fan out fresh-skip lookups either.
 
-### 4. `src/config/unitEconomics.ts:162`
-Admin unit-economics dashboard reference. Cosmetic but must match for margin reporting:
-```ts
-regenerate_day: { credits: 30, costMin: 0.02, costMax: 0.08, desc: 'Regenerate a day' },
-```
+## Out of scope
 
-## UI text scan
-
-No hardcoded "10 credits" string for regenerate-day exists. UI surfaces (`UpgradePrompt`, `OutOfCreditsModal`, `CreditNudge`, `OutOfFreeActionsModal`, `InlineModifier`) all read `CREDIT_COSTS.REGENERATE_DAY` or use the `creditCost` field from `itineraryChatAPI.ts`, so they'll auto-update once #1 and #3 land.
-
-## Out of scope (and why)
-
-- `TIER_CAPS` (1/2/3/5) — free **quotas per trip**, not prices.
-- `FLEX_CAPS_BY_DAYS` / `TIER_FREE_CAPS` (1/2/3/4/5) — free **quotas**.
-- `GROUP_UNLOCK_TIERS.caps.regenerate_day` (8/12/20) — group-share **quotas**.
-- `GROUP_CAPS` (8/12/20) — same group quotas, edge mirror.
-- `REFUNDABLE_COSTS.REGENERATE_DAY: 0` — intentional sentinel for defensive refund (reads original ledger row).
+- No schema migrations (uses existing `rate_limits` and `trip_cost_tracking`).
+- No `verify_jwt` toml change — keep `verify_jwt = false`; auth is enforced in code (matches project convention).
+- No frontend changes; verified there are no in-repo callers, so adding the `Authorization` header is not required anywhere else (any caller using `supabase.functions.invoke` already attaches the session token).
 
 ## Verification
 
-1. Click "Regenerate day" on a trip past its free quota → confirmation/CreditNudge shows **30 credits**.
-2. Approve → balance drops by 30; `credit_ledger` row has `amount = -30`, `action = 'regenerate_day'`.
-3. From AI chat, accept a `rewrite_day` proposal → same 30-credit deduction.
-4. Hard-fail the regen (force generation_failed) → existing refund path returns +30 (defensive lookup reads the new amount, not a stale 10).
+- `curl` with no Authorization → 401.
+- `curl` with valid token → 200 (or fresh-skip 200).
+- 11 rapid POSTs from one session → 11th returns 429.
+- After a successful enrichment, `select * from trip_cost_tracking where action_type='enrich_destination' order by created_at desc limit 1;` shows a row with input/output tokens populated.

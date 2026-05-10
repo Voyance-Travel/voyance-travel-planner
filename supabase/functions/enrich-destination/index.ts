@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { checkDbRateLimit } from "../_shared/db-rate-limiter.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,27 +12,72 @@ const log = (step: string, details?: unknown) => {
   console.log(`[ENRICH-DEST] ${step}${details ? ` - ${JSON.stringify(details)}` : ''}`);
 };
 
+const json = (body: unknown, status: number) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { destinationId } = await req.json();
-    if (!destinationId) {
-      return new Response(JSON.stringify({ success: false, error: "destinationId required", code: "MISSING_PARAM" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    log("Starting enrichment", { destinationId });
-
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { persistSession: false } }
     );
+
+    // ---------- 1. AUTH GATE ----------
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return json({ success: false, error: "Authentication required", code: "UNAUTHORIZED" }, 401);
+    }
+    const token = authHeader.replace("Bearer ", "");
+    const { data: userData, error: authError } = await supabaseClient.auth.getUser(token);
+    if (authError || !userData?.user) {
+      return json({ success: false, error: "Invalid token", code: "AUTH_INVALID" }, 401);
+    }
+    const user = userData.user;
+
+    // ---------- 2. RATE LIMITS ----------
+    const ip =
+      req.headers.get("cf-connecting-ip") ||
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "unknown";
+
+    const rateChecks: Array<{
+      key: string;
+      endpoint: string;
+      rule: { maxRequests: number; windowMs: number };
+      retryAfter: number;
+    }> = [
+      { key: ip, endpoint: "enrich-destination:ip:min", rule: { maxRequests: 10, windowMs: 60_000 }, retryAfter: 60 },
+      { key: ip, endpoint: "enrich-destination:ip:hour", rule: { maxRequests: 50, windowMs: 3_600_000 }, retryAfter: 3600 },
+      { key: user.id, endpoint: "enrich-destination:user:min", rule: { maxRequests: 20, windowMs: 60_000 }, retryAfter: 60 },
+      { key: user.id, endpoint: "enrich-destination:user:hour", rule: { maxRequests: 100, windowMs: 3_600_000 }, retryAfter: 3600 },
+    ];
+
+    for (const c of rateChecks) {
+      const r = await checkDbRateLimit(supabaseClient, c.key, c.endpoint, c.rule, user.id);
+      if (!r.allowed) {
+        log("Rate limit exceeded", { endpoint: c.endpoint, key: c.key, count: r.count });
+        return json(
+          { success: false, error: "Rate limit exceeded", code: "RATE_LIMIT", retryAfter: c.retryAfter },
+          429,
+        );
+      }
+    }
+
+    // ---------- Body ----------
+    const { destinationId } = await req.json();
+    if (!destinationId) {
+      return json({ success: false, error: "destinationId required", code: "MISSING_PARAM" }, 400);
+    }
+
+    log("Starting enrichment", { destinationId, userId: user.id });
 
     // Fetch destination
     const { data: dest, error: destErr } = await supabaseClient
@@ -41,10 +88,7 @@ serve(async (req) => {
 
     if (destErr || !dest) {
       log("Destination not found", { destinationId, error: destErr?.message });
-      return new Response(JSON.stringify({ success: false, error: "Destination not found", code: "NOT_FOUND" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ success: false, error: "Destination not found", code: "NOT_FOUND" }, 404);
     }
 
     // TTL-aware skip: only short-circuit if enriched AND not expired
@@ -55,10 +99,7 @@ serve(async (req) => {
 
     if (isFresh) {
       log("Already enriched (fresh)", { destinationId, expires_at: dest.enrichment_expires_at });
-      return new Response(JSON.stringify({ success: true, skipped: true, reason: "already_enriched" }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ success: true, skipped: true, reason: "already_enriched" }, 200);
     }
 
     const isRefresh = !!dest.enriched_at && isExpired;
@@ -66,10 +107,7 @@ serve(async (req) => {
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ success: false, error: "AI key not configured", code: "CONFIG_ERROR" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ success: false, error: "AI key not configured", code: "CONFIG_ERROR" }, 500);
     }
 
     const prompt = `You are a world-class travel writer creating destination content for a premium travel planning platform called Voyance.
@@ -107,6 +145,9 @@ Generate 8-12 activities covering diverse categories. Use real venue names and a
 IMPORTANT: Return ONLY valid JSON, no markdown, no code fences.`;
 
     log("Calling AI gateway");
+
+    // ---------- 3. COST TRACKING ----------
+    const tracker = trackCost("enrich_destination", "google/gemini-2.5-flash").setUserId(user.id);
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -167,26 +208,21 @@ IMPORTANT: Return ONLY valid JSON, no markdown, no code fences.`;
       log("AI gateway error", { status: aiResponse.status, body: errText });
 
       if (aiResponse.status === 429) {
-        return new Response(JSON.stringify({ success: false, error: "Rate limited, try again later", code: "RATE_LIMITED" }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return json({ success: false, error: "Rate limited, try again later", code: "RATE_LIMITED" }, 429);
       }
       if (aiResponse.status === 402) {
-        return new Response(JSON.stringify({ success: false, error: "AI credits exhausted", code: "PAYMENT_REQUIRED" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return json({ success: false, error: "AI credits exhausted", code: "PAYMENT_REQUIRED" }, 402);
       }
 
-      return new Response(JSON.stringify({ success: false, error: "AI generation failed", code: "AI_ERROR" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ success: false, error: "AI generation failed", code: "AI_ERROR" }, 500);
     }
 
     const aiData = await aiResponse.json();
     log("AI response received");
+
+    // Record token usage and persist cost row.
+    tracker.recordAiUsage(aiData);
+    await tracker.save();
 
     // Extract tool call result
     let enriched: Record<string, unknown>;
@@ -204,18 +240,14 @@ IMPORTANT: Return ONLY valid JSON, no markdown, no code fences.`;
       }
     } catch (parseErr) {
       log("Failed to parse AI response", { error: String(parseErr) });
-      return new Response(JSON.stringify({ success: false, error: "Failed to parse AI response", code: "PARSE_ERROR" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ success: false, error: "Failed to parse AI response", code: "PARSE_ERROR" }, 500);
     }
 
-    log("Parsed enrichment data", { 
+    log("Parsed enrichment data", {
       tipCount: (enriched.local_tips as string[])?.length,
       activityCount: (enriched.activities as unknown[])?.length,
     });
 
-    // Update destination with enriched content
     // Update destination with enriched content + 90-day TTL
     const enrichedAt = new Date();
     const newExpiresAt = new Date(enrichedAt.getTime() + 90 * 24 * 60 * 60 * 1000);
@@ -240,10 +272,7 @@ IMPORTANT: Return ONLY valid JSON, no markdown, no code fences.`;
 
     if (updateErr) {
       log("Failed to update destination", { error: updateErr.message });
-      return new Response(JSON.stringify({ success: false, error: "Failed to save enrichment", code: "DB_ERROR" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ success: false, error: "Failed to save enrichment", code: "DB_ERROR" }, 500);
     }
 
     // Insert activities
@@ -299,19 +328,13 @@ IMPORTANT: Return ONLY valid JSON, no markdown, no code fences.`;
 
     log("Enrichment complete", { destinationId });
 
-    return new Response(JSON.stringify({ 
-      success: true, 
+    return json({
+      success: true,
       enriched: true,
       activitiesAdded: aiActivities.length,
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    }, 200);
   } catch (err) {
     log("Unhandled error", { error: String(err) });
-    return new Response(JSON.stringify({ success: false, error: "Internal error", code: "INTERNAL_ERROR" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ success: false, error: "Internal error", code: "INTERNAL_ERROR" }, 500);
   }
 });
