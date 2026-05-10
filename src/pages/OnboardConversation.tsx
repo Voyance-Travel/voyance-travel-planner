@@ -175,71 +175,37 @@ export default function OnboardConversation() {
           })()),
         };
 
-        const nowIso = new Date().toISOString();
+        // Atomic 3-table save via SECURITY DEFINER RPC. Either all three writes
+        // succeed (travel_dna_profiles + profiles.quiz_completed + user_preferences)
+        // or none do — no more partial onboarding state.
+        const { data, error } = await supabase.rpc('save_onboarding_dna', {
+          p_user_id: user.id,
+          p_primary_archetype: analysis.primaryArchetype.name,
+          p_secondary_archetype: analysis.secondaryArchetype?.name ?? null,
+          p_confidence: Math.round(analysis.confidence),
+          p_trait_scores: traitScores,
+          p_preferences: {
+            travel_pace: analysis.traits.pace,
+            travel_companion:
+              analysis.traits.social === 'solo'
+                ? 'solo'
+                : analysis.traits.social === 'social'
+                  ? 'friends'
+                  : 'partner',
+            planning_preference: analysis.traits.planning,
+            budget_tier: analysis.traits.comfort,
+          },
+        });
 
-        // Save to travel_dna_profiles (schema-safe columns only)
-        const { error: dnaError } = await supabase
-          .from('travel_dna_profiles')
-          .upsert(
-            [
-              {
-                user_id: user.id,
-                primary_archetype_name: analysis.primaryArchetype.name,
-                secondary_archetype_name: analysis.secondaryArchetype?.name ?? null,
-                dna_confidence_score: Math.round(analysis.confidence),
-                trait_scores: traitScores,
-                calculated_at: nowIso,
-                updated_at: nowIso,
-              },
-            ],
-            { onConflict: 'user_id' }
-          );
+        const result = data as { success?: boolean; error?: string } | null;
+        if (error || !result?.success) {
+          console.error('[OnboardConversation] save_onboarding_dna failed', { error, data });
+          toast.error('Failed to save your Travel DNA. Please try again.');
+          return;
+        }
 
-        if (dnaError) throw dnaError;
-
-        // Ensure profile row exists + mark as completed (prevents silent "0 rows updated")
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert(
-            [
-              {
-                id: user.id,
-                quiz_completed: true,
-                updated_at: nowIso,
-              },
-            ],
-            { onConflict: 'id' }
-          );
-
-        if (profileError) throw profileError;
-
-        // Map traits to user_preferences format
-        const { error: prefError } = await supabase
-          .from('user_preferences')
-          .upsert(
-            [
-              {
-                user_id: user.id,
-                travel_pace: analysis.traits.pace,
-                travel_companions: [
-                  analysis.traits.social === 'solo'
-                    ? 'solo'
-                    : analysis.traits.social === 'social'
-                      ? 'friends'
-                      : 'partner',
-                ],
-                planning_preference: analysis.traits.planning,
-                budget_tier: analysis.traits.comfort,
-                updated_at: nowIso,
-              },
-            ],
-            { onConflict: 'user_id' }
-          );
-
-        if (prefError) throw prefError;
-
-      toast.success('Your Travel DNA has been saved!');
-      navigate(ROUTES.PROFILE.VIEW);
+        toast.success('Your Travel DNA has been saved!');
+        navigate(ROUTES.PROFILE.VIEW);
     } catch (error) {
       console.error('[OnboardConversation] Save error:', error);
       toast.error('Failed to save your Travel DNA. Please try again.');
