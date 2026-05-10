@@ -1,142 +1,112 @@
 ## Bug
 
-AI Concierge "Save as note" flips React state and shows the toast, but the note disappears after closing the sheet, on refresh, and on reopen. The Stack Overflow trace is right about the symptom but **wrong about the storage target** for this codebase — activities here live in `trips.itinerary_data.days[*].activities[*]` (JSONB), not in a `trip_activities` table.
-
-## Trace (verified against actual code)
-
-| Step | What happens | Where |
-|---|---|---|
-| Save click | `handleSaveNote` → `onSaveNote(activity.id, note)` | `ActivityConciergeSheet.tsx:241-264` |
-| Handler | `setDays(...)` adds `aiNotes` to the matching activity, then `setHasChanges(true)` | `EditorialItinerary.tsx:2776-2788` |
-| Persist | **No direct DB write.** Autosave `useEffect` fires 3 s after `hasChanges` flips, calls `save-itinerary` edge action with the full `days` blob | `EditorialItinerary.tsx:3992-4064` |
-| Sheet props | The activity object passed to `<ActivityConciergeSheet>` is hand-mapped; **`aiNotes` is omitted** from that object | `EditorialItinerary.tsx:8246-8263` |
-| Read back | `parseSingleActivity` spreads raw `...activityData` first, so `aiNotes` survives parse | `src/utils/itineraryParser.ts:415-462` |
-| Backend save | `normalizeDays` / `scrubActivity` mutate in place; nothing strips `aiNotes`. `persistTripItinerary` writes the full payload to `trips.itinerary_data` | `supabase/functions/generate-itinerary/action-save-itinerary.ts:122-156, 821-843` |
-
-### Why the user sees the note disappear
-
-There are **three real failure modes**, in priority order:
-
-1. **3-second autosave race.** The user clicks Save → toast → X out within 3 s → leaves the page (or any refetch fires a fingerprint-id-only mismatch path). If the autosave timer didn't fire, the note never reached the DB. On reload it's gone.
-
-2. **Parent-driven reset wipes uncommitted aiNotes.** `initialDaysFingerprint` at `EditorialItinerary.tsx:2227-2242` keys only on `dayNumber/date/activity.id` — so a parent refetch that returns the *same activity ids* never triggers `setDays(initialDays)`. Good. **But** `setHasChanges(false)` runs immediately after autosave succeeds, and the next parent refetch *will* pass through if the fingerprint differs for any unrelated reason (e.g. a new activity added elsewhere) — at which point the parent's `initialDays` overwrites `days`. If the parent fetched before the autosave reached the DB, the new `initialDays` has no `aiNotes` and the in-memory note is dropped.
-
-3. **Sheet doesn't know about saved notes.** Lines 8246-8263 build a flattened activity object for the sheet that **omits `aiNotes`**. The "saved indicator" relies on `conciergeSavedNoteContents` (computed from `days[]`), which works *within session* — but the sheet's internal scroll-to-saved-note / highlight code (and any feature that reads `activity.aiNotes` directly) sees an empty array.
-
-The card's inline `<AISavedNotes>` block at line 11413 reads `activity.aiNotes` from the day state, so it *should* show after save. If the user reports it doesn't appear visibly even before closing, the card likely re-rendered from a stale `activityToRender` (line 10405) — which is the raw `activity` and should be fine, so this is probably a perception issue caused by the note disappearing on the next refetch (failure mode 1 or 2).
-
-## Fix — narrow, three layers
-
-### 1. Persist immediately (kill the 3-second race)
-
-Change `handleSaveAINote` and `handleDeleteAINote` (`EditorialItinerary.tsx:2775-2799`) to `async`. After the `setDays` state update, **await** a save call instead of relying on the autosave timer.
-
-Use the existing `save-itinerary` edge action so the note travels through the same normalization pipeline as everything else (no schema change, no new RLS):
+Editing an activity (e.g. adding a cost) has two broken behaviors that share one root function — `handleUpdateActivity` at `src/components/itinerary/EditorialItinerary.tsx:5606-5635`.
 
 ```ts
-const handleSaveAINote = useCallback(async (activityId, note) => {
+const handleUpdateActivity = useCallback((dayIndex, activityIndex, updates) => {
+  setDays(prev => prev.map((day, dIdx) => {
+    if (dIdx !== dayIndex) return day;
+    const updatedActivities = day.activities.map((activity, aIdx) => {
+      if (aIdx !== activityIndex) return activity;
+      return {
+        ...activity,
+        ...updates,
+        isLocked: true,                     // ← bug 2: force-locks every edit
+        time: updates.startTime || activity.startTime || activity.time,
+      };
+    });
+    // (sort if time changed)
+    return { ...day, activities: updatedActivities };
+  }));
+  setHasChanges(true);
+  setEditActivityModal(null);
+  toast.success('Activity updated');
+}, []);                                     // ← bug 1: no syncBudgetFromDays
+```
+
+### Bug 1 — Cost edit doesn't propagate to budget / payments / cost summaries
+
+- **Where it writes:** React state only (`setDays`).
+- **Where rollups read:** the `activity_costs` table (and the `v_trip_total` / `v_payments_summary` views built on top of it).
+- **Why "top of card" looks stale too:** `getActivityCostInfo` and the per-card cost banner pull from the `activity_costs` snapshot via `useTripFinancialSnapshot` — see mem://constraints/payments/single-resolver-manual-fold and mem://technical/finance/ui-total-cost-fallback-logic. The card's *inline* cost line is state-driven and updates; everything aggregated (header total, Budget tab, Payments tab) reads the snapshot and stays at the old value until the next regeneration or refetch.
+- **Already-correct comparator:** every other mutation site in this file (`syncBudgetFromDays` callsites at 4032, 4210, 4394, plus the swap path at 4061) calls `syncBudgetFromDays(updatedDays)` after `setDays(...)`. That helper writes the `activity_costs` row, prunes orphan rows, and dispatches the `booking-changed` event the snapshot/Payments tab listen for. **Edit is the only mutation that skips it.**
+- **Autosave is not enough.** `save-itinerary` writes `trips.itinerary_data` (JSON) and the `itinerary_activities` mirror, but `activity_costs` is the canonical-cost table and is only refreshed by `syncBudgetFromDays`. No cost rollup will move until that runs.
+
+### Bug 2 — Every edit auto-locks the activity (and feels like the itinerary itself locks)
+
+- Line 5614 sets `isLocked: true` on every payload — even when the user only edited a cost or title and never touched the lock toggle.
+- The user's "kept unlocking and saving / then it locked the itinerary" is the visible symptom of fighting this auto-lock against:
+  1. The dedicated `handleActivityLock` toggle (line 4636) the user actually clicks.
+  2. Any propagation that treats a fully-locked day as a hard-anchor / blocked day for AI repairs (per mem://features/itinerary/universal-locking-and-persistence-protocol). Once enough activities flip to `isLocked: true` from edits, the day looks locked to downstream features.
+- Lock should be the explicit responsibility of the Lock button, not a side-effect of every save.
+
+## Fix — narrow, frontend-only
+
+### 1. Capture next state and call `syncBudgetFromDays`
+
+```ts
+const handleUpdateActivity = useCallback((dayIndex, activityIndex, updates) => {
   let nextDays: EditorialDay[] = [];
   setDays(prev => {
-    nextDays = prev.map(day => ({
-      ...day,
-      activities: day.activities.map(act => {
-        if (act.id !== activityId) return act;
-        const existing = act.aiNotes || [];
-        if (existing.some(n => n.content === note.content)) return act;
-        return { ...act, aiNotes: [...existing, note] };
-      }),
-    }));
+    nextDays = prev.map((day, dIdx) => {
+      if (dIdx !== dayIndex) return day;
+      const updatedActivities = day.activities.map((activity, aIdx) => {
+        if (aIdx !== activityIndex) return activity;
+        return {
+          ...activity,
+          ...updates,
+          // Preserve current lock state unless the caller explicitly changed it.
+          isLocked: 'isLocked' in updates ? updates.isLocked : activity.isLocked,
+          time: updates.startTime || activity.startTime || activity.time,
+        };
+      });
+      if (updates.startTime || updates.endTime) {
+        updatedActivities.sort(/* existing comparator */);
+      }
+      return { ...day, activities: updatedActivities };
+    });
     return nextDays;
   });
   setHasChanges(true);
-
-  // Immediate persistence — bypass the 3 s autosave debounce.
-  // Skip for localStorage demo trips (no edge function path).
-  try {
-    const { data: existing } = await supabase
-      .from('trips').select('id').eq('id', tripId).maybeSingle();
-    if (existing) {
-      await supabase.functions.invoke('generate-itinerary', {
-        body: {
-          action: 'save-itinerary',
-          tripId,
-          itinerary: { days: nextDays, status: 'ready', optionSelections, savedAt: new Date().toISOString() },
-        },
-      });
-      setHasChanges(false);
-      setLastSaved(new Date());
-    }
-  } catch (e) {
-    // Leave hasChanges=true so the autosave timer retries
-    console.warn('[AI note] immediate persist failed; will retry via autosave', e);
-  }
-}, [tripId, optionSelections]);
+  // Mirror the swap / generated-days code paths so cost rollups refresh.
+  syncBudgetFromDays(nextDays);
+  setEditActivityModal(null);
+  toast.success('Activity updated');
+}, [syncBudgetFromDays]);
 ```
 
-Mirror the same pattern in `handleDeleteAINote`.
+That single addition closes bug 1 because:
+- `syncBudgetFromDays` upserts `activity_costs` with the new amount/basis (manual basis takes precedence per the existing logic).
+- It then dispatches `booking-changed` → `useTripFinancialSnapshot` invalidates → header total + Budget tab + Payments tab pick up the new value without a refresh.
+- Autosave (3 s debounce) still runs as today and persists the cost into `trips.itinerary_data` for the next page load.
 
-For localStorage demo trips, fall back to the same write block the autosave uses (lines 4040-4056) so demo users also get instant persistence.
+### 2. Stop auto-locking on edit
 
-### 2. Pass `aiNotes` into the sheet's activity prop
+Replace `isLocked: true` (line 5614) with `isLocked: 'isLocked' in updates ? updates.isLocked : activity.isLocked`.
 
-`EditorialItinerary.tsx:8246-8263` — add `aiNotes: conciergeActivity.aiNotes` to the mapped object. Source it from the **live** day (so it reflects post-save state), not the snapshot:
+That keeps the activity in whatever lock state the user chose. The Lock button at line 4636 (`handleActivityLock`) remains the only thing that mutates lock state, which matches the universal-locking memory ("locked = manually added/edited/extracted/pinned" — but "edited" already means the lock toggle was clicked, not "every text update").
 
-```ts
-activity={{
-  id: conciergeActivity.id,
-  // ...existing fields...
-  aiNotes: (() => {
-    for (const day of days) {
-      const live = day.activities?.find(a => a.id === conciergeActivity.id);
-      if (live) return live.aiNotes || [];
-    }
-    return conciergeActivity.aiNotes || [];
-  })(),
-}}
-```
-
-This guarantees the sheet sees current notes when it reopens — the existing `savedNoteContents` Set keeps working as the bookmark-icon source. Then update `ActivityConciergeSheet`'s `ConciergeActivity` type (`ActivityConciergeSheet.tsx:43-56` area) to accept the optional `aiNotes` field.
-
-### 3. Refresh `conciergeActivity` snapshot when `days` updates while sheet is open
-
-The `conciergeActivity` state is set once at open time (`EditorialItinerary.tsx:2763`). After saving, the sheet's outer reference is stale. Add a `useEffect` that, when the sheet is open, re-derives `conciergeActivity` from `days` whenever `days` changes for the open activity's id:
-
-```ts
-useEffect(() => {
-  if (!conciergeOpen || !conciergeActivity) return;
-  for (const day of days) {
-    const live = day.activities?.find(a => a.id === conciergeActivity.id);
-    if (live && live !== conciergeActivity) {
-      setConciergeActivity(live);
-      return;
-    }
-  }
-}, [days, conciergeOpen, conciergeActivity]);
-```
-
-This makes save → reopen-without-closing show the just-saved note inside the sheet.
+If product wants edited activities to lock by default, that's an explicit opt-in we can build later — a checkbox in the edit modal — not a silent default that fights every other interaction.
 
 ### Out of scope
 
-- No new `trip_activities` table writes — that table is not the source of truth in this app.
-- No new schema, no migration, no RLS changes (notes ride inside `itinerary_data` JSONB which already has policies).
-- No backend changes — `save-itinerary` already preserves unknown activity fields end-to-end.
-- No changes to autosave debounce; it stays as a safety net.
-
-### Why this fixes "bad pricing" too
-
-Layer 1 is the price-leak fix: every saved note is committed to the DB before the user has a chance to navigate away, so the regenerate-and-pay-twice path goes away.
+- No backend changes. `save-itinerary` and `activity_costs` plumbing already work correctly when `syncBudgetFromDays` is invoked.
+- No schema changes.
+- No changes to `handleUpdateActivityTime` (line 5501) — it already runs the cascade through other paths; we can verify in passing but it's not the reported bug.
+- No changes to the lock button or the universal-locking pipeline.
 
 ### Verification
 
-1. Save a note → DevTools Network shows `POST .../generate-itinerary` with `action: 'save-itinerary'` *immediately*, not after 3 s.
-2. Save → close sheet → hard refresh → note still on card.
-3. Save → reopen sheet (without closing) → bookmark stays "saved", note is in the saved-notes list in the sheet.
-4. Delete a note → refresh → stays deleted.
-5. Demo trips: localStorage entry contains `aiNotes` after save, survives reload.
+1. Open an activity → set cost to $42 → Save.
+   - Card cost line shows $42 ✓ (worked before).
+   - Day header total ✓, Budget tab ✓, Payments tab ✓ all reflect the new $42 within ~1 s (booking-changed dispatch).
+   - Network: a `POST` to `activity_costs` (or its upsert RPC, whichever `syncBudgetFromDays` uses) fires immediately, then the autosave fires 3 s later for `itinerary_data`.
+2. Refresh the page → cost still $42 in every place.
+3. Edit a different field (e.g. title) → activity does **not** auto-lock; existing lock state preserved. Click the Lock button → activity locks. Click again → unlocks.
+4. Edit an unlocked activity many times in a row → never locks.
+5. Edit a manually-locked activity → stays locked (unless the caller passes `isLocked: false`).
 
 ### Files
 
-- `src/components/itinerary/EditorialItinerary.tsx` — async save/delete handlers, sheet prop hydration, snapshot refresh effect
-- `src/components/itinerary/ActivityConciergeSheet.tsx` — extend `ConciergeActivity` type with optional `aiNotes`
-- (no other files; backend, schema, parser, types/itinerary.ts are already correct)
+- `src/components/itinerary/EditorialItinerary.tsx` (single function, ~5 lines changed: capture `nextDays`, replace the `isLocked: true` line, add `syncBudgetFromDays(nextDays)` call, add dependency).
+- No other files touched.
