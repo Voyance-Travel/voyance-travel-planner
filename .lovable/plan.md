@@ -1,70 +1,75 @@
-## Atomic quiz-completion write via Postgres RPC
+## OAuth account-merge confirmation toast
 
-**Problem:** `setPreferences` in `src/contexts/AuthContext.tsx` (lines 740–760) does two upserts back-to-back:
-1. `user_preferences` upsert with `quiz_completed: true` → throws on error.
-2. `profiles` upsert with `quiz_completed: true` → logs and swallows the error.
+**Problem:** When an existing email/password user signs in with Google (same email), Supabase silently links the OAuth identity to the existing account. The user sees no acknowledgement and often opens a support ticket thinking they have two accounts or that their data is gone.
 
-If write #2 fails, the two rows disagree on quiz status. `transformProfile` currently OR's the two flags, so the practical user-visible damage is small — but the invariant "both rows agree" is silently violated, and any future code path that reads only `profiles.quiz_completed` (e.g. server-side gating, a future RLS policy, an analytics export) will misclassify the user.
+**Goal:** Show a one-time, friendly toast — *"We've connected your Google account to your existing Voyance account. You can now sign in either way."* — exactly once per merge event, then never again for that user/provider pair.
 
-The cleanest fix is **one transaction**, not two upserts that both throw. Postgres can do that via a `SECURITY DEFINER` function; PostgREST cannot wrap two table calls in a transaction.
+### Detection: in `src/contexts/AuthContext.tsx`
 
-### Migration: `complete_quiz` RPC
+The OAuth-completion path is the existing `SIGNED_IN` branch (around line 309–337) where `provider !== 'email'` is already detected for `logOAuthLogin`. Extend that block:
 
-New function `public.complete_quiz(_prefs jsonb)`:
-
-- Runs as `SECURITY DEFINER`, `SET search_path = public`.
-- Reads `auth.uid()`; raises `exception 'not_authenticated'` if null.
-- In a single statement block (implicit transaction):
-  1. `INSERT INTO user_preferences (user_id, quiz_completed, completed_at, budget_tier, travel_pace, accommodation_style, planning_preference, interests, travel_companions, travel_vibes, traveler_type, primary_goal) VALUES (auth.uid(), true, now(), …) ON CONFLICT (user_id) DO UPDATE SET … ` — only set columns whose key is present in `_prefs` (use `coalesce(_prefs->>'budget','user_preferences.budget_tier')` style, or build the column list dynamically with `jsonb_object_keys`).
-  2. `INSERT INTO profiles (id, quiz_completed, updated_at) VALUES (auth.uid(), true, now()) ON CONFLICT (id) DO UPDATE SET quiz_completed = true, updated_at = now()`.
-- Returns `void` (or `jsonb` with `{ ok: true }` for clarity).
-- `GRANT EXECUTE ON FUNCTION public.complete_quiz(jsonb) TO authenticated;`
-- No grant to `anon`.
-
-Because both upserts run inside the same function call, Postgres wraps them in a single transaction: if the `profiles` upsert fails, the `user_preferences` upsert rolls back. Atomic.
-
-### Client change: `src/contexts/AuthContext.tsx` — `setPreferences`
-
-Replace the two `supabase.from(...).upsert(...)` blocks with one call:
+1. Read `newSession.user.identities` (array of `{ provider, identity_data, created_at, last_sign_in_at, … }` returned by Supabase Auth).
+2. Treat it as a merge-just-happened when **all** are true:
+   - There are ≥ 2 distinct identities.
+   - One identity has `provider === 'email'` (the pre-existing password account).
+   - One identity has `provider === <oauth-provider>` matching `newSession.user.app_metadata.provider` (e.g. `google` or `apple`).
+   - The OAuth identity's `created_at` is **after** the email identity's `created_at` (so the OAuth one was added later — true merge, not OAuth-first signup).
+   - A localStorage flag `voyance_merge_notified:{userId}:{provider}` is **not** present.
+3. If all true: show a sonner toast with a clear message and a 6 s duration, then write the localStorage flag.
 
 ```ts
-const { error } = await supabase.rpc('complete_quiz', {
-  _prefs: {
-    budget: preferences.budget ?? null,
-    pace: preferences.pace ?? null,
-    accommodation: preferences.accommodation ?? null,
-    planning: preferences.planning ?? null,
-    interests: preferences.interests ?? null,
-    travel_companions: preferences.travel_companions ?? null,
-    travel_vibes: preferences.travel_vibes ?? null,
-    traveler_type: preferences.traveler_type ?? null,
-    primary_goal: preferences.primary_goal ?? null,
-  },
-});
-if (error) {
-  console.error('[Auth] Error completing quiz:', error);
-  throw error;
+const provider = newSession.user.app_metadata?.provider;
+const identities = newSession.user.identities ?? [];
+if (provider && provider !== 'email' && identities.length >= 2) {
+  const emailId  = identities.find(i => i.provider === 'email');
+  const oauthId  = identities.find(i => i.provider === provider);
+  const flagKey  = `voyance_merge_notified:${newSession.user.id}:${provider}`;
+  if (
+    emailId && oauthId &&
+    new Date(oauthId.created_at) > new Date(emailId.created_at) &&
+    !localStorage.getItem(flagKey)
+  ) {
+    const label = provider === 'google' ? 'Google'
+                : provider === 'apple'  ? 'Apple'
+                : provider.charAt(0).toUpperCase() + provider.slice(1);
+    toast.success(`Your ${label} account is now linked to your Voyance account`, {
+      description: 'You can sign in with either email/password or ' + label + ' from now on.',
+      duration: 6000,
+    });
+    localStorage.setItem(flagKey, new Date().toISOString());
+  }
 }
 ```
 
-Then update local state as before. Keep the `console.log('[Auth] Preferences saved successfully')`.
+Place it inside the existing `if (event === 'SIGNED_IN' && newSession?.user) { … }` block, right after `logOAuthLogin(provider)` is fired (~line 333). The check is cheap and synchronous; no extra API call is needed because `identities` is already in the session.
 
-The `user_id`/`auth.uid()` is read server-side, so it doesn't need to be in the payload.
+### Why not a server-side notification?
 
-### What's intentionally NOT in scope
+The merge is implicit in Supabase Auth — there's no `account.linked` webhook or DB row that flips. The session's `identities` array is the single source of truth and is already on the client at the moment of OAuth return, so client-side detection is the simplest correct path.
 
-- No changes to `transformProfile`'s OR fallback — keeping it is harmless and actually nice belt-and-braces.
-- No changes to `updateUser` (single-table write, already throws).
-- No retry/repair job for already-divergent rows. If the user wants a one-time fix-up of historical drift (any user where `user_preferences.quiz_completed = true` but `profiles.quiz_completed` is false/null), call that out and add a tiny `UPDATE profiles SET quiz_completed = true …` data fix as a separate step.
+### Edge cases handled
 
-### Verification
+- **OAuth-first user** (no email identity): `emailId` is undefined → no toast. ✅
+- **Returning Google user** (already merged in a previous session): localStorage flag set on first occurrence → suppressed forever. ✅
+- **OAuth identity created at the same time as email identity** (signed up via OAuth and then added password later): the time-ordering check handles this correctly — only the *later* identity's appearance triggers a toast, and we only fire when OAuth was the later one. (We could optionally do the inverse — toast when password is added to an OAuth account — but Supabase doesn't have a `user.addPassword` flow in this app, so skip.)
+- **Cleared localStorage / new device:** the flag is per-device, so a user who clears storage may see the toast once more. Acceptable; the message is friendly, not alarming.
+- **SSR / no `localStorage`:** wrapped in a `typeof localStorage !== 'undefined'` guard for safety, even though this is client-only code.
 
-- Quiz finish on a fresh user → both rows have `quiz_completed = true` and the call succeeds.
-- Force the `profiles` upsert to fail (e.g. temporarily revoke `profiles` permissions in a staging DB) → RPC errors, **`user_preferences` row is unchanged** (atomic rollback), client surfaces the error toast instead of silently swallowing it.
-- Re-running the quiz on an existing user upserts cleanly without duplicate-key errors.
-- RLS unchanged; no new direct-table grants needed because the RPC runs as definer.
+### Toast styling
+
+Use the project's existing `sonner` import (`import { toast } from 'sonner'`). No new dependencies. The existing `<Toaster />` is already mounted in `App.tsx`.
 
 ### Files touched
 
-- New migration: `complete_quiz(jsonb)` function + grant.
-- `src/contexts/AuthContext.tsx` — `setPreferences` body only (no signature change).
+- `src/contexts/AuthContext.tsx` — single insertion in the `SIGNED_IN` branch, plus a `toast` import if not already present.
+
+No backend change, no migration, no new edge function. Pure client.
+
+### Verification
+
+1. Create an account with email/password, sign out.
+2. On the same browser, click "Sign in with Google" using the same email → Supabase merges → toast appears once.
+3. Sign out, sign in with Google again → no toast.
+4. Sign in with email/password → no toast.
+5. Clear `voyance_merge_notified:*` keys → next OAuth sign-in shows the toast again (expected).
+6. Brand-new Google-first signup (no prior email account) → no toast.
