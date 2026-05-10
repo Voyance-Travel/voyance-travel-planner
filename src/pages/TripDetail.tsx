@@ -2462,6 +2462,29 @@ export default function TripDetail() {
             <ArrowLeft className="w-4 h-4" />
           </Button>
         </div>
+        {/* Photo attribution (Unsplash ToS) */}
+        {heroAttribution && (
+          <div className="absolute bottom-1 right-2 z-10 text-[10px] sm:text-xs text-white/80 drop-shadow-md">
+            Photo by{' '}
+            <a
+              href={heroAttribution.photographer_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-white"
+            >
+              {heroAttribution.photographer}
+            </a>{' '}
+            on{' '}
+            <a
+              href={heroAttribution.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-white"
+            >
+              Unsplash
+            </a>
+          </div>
+        )}
       </div>
       
       {/* Journey Breadcrumb — only for linked journey trips */}
