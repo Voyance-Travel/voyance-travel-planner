@@ -13,6 +13,28 @@
 
 import quizConfig from '@/config/quiz-questions-v3.json';
 
+// Forbidden secondary-archetype pairings (psychologically incoherent combinations)
+const FORBIDDEN_PAIRS = new Set<string>([
+  'sanctuary_seeker:adrenaline_architect',
+  'sanctuary_seeker:bucket_list_conqueror',
+  'sanctuary_seeker:digital_explorer',
+  'sanctuary_seeker:purpose_voyager',
+  'retreat_regular:adrenaline_architect',
+  'retreat_regular:digital_explorer',
+  'zen_seeker:bucket_list_conqueror',
+  'slow_traveler:bucket_list_conqueror',
+  'slow_traveler:purpose_voyager',
+  'slow_traveler:urban_nomad',
+  'healing_journeyer:adrenaline_architect',
+  'healing_journeyer:bucket_list_conqueror',
+  'escape_artist:social_butterfly',
+  'escape_artist:family_architect',
+]);
+
+function isForbiddenPair(a: string, b: string): boolean {
+  return FORBIDDEN_PAIRS.has(`${a}:${b}`) || FORBIDDEN_PAIRS.has(`${b}:${a}`);
+}
+
 // Type definitions
 export interface TraitScores {
   pace: number;
