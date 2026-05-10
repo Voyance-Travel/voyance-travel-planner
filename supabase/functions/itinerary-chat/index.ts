@@ -26,6 +26,7 @@ const corsHeaders = {
 // angle brackets (prevents tag forgery), control chars, and collapse newlines
 // so injected "SYSTEM OVERRIDE: …" payloads become inert single-line data.
 const SANITIZE_MAX = 200;
+const DAILY_CHAT_CAP = 50;
 const sanitizePromptInput = (s: unknown, max = SANITIZE_MAX): string =>
   String(s ?? '')
     .replace(/[`<>]/g, '')
