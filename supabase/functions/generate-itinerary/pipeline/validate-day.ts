@@ -143,6 +143,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   // --- LOGISTICS_SEQUENCE (departure day only) ---
   if (isLastDay) {
     checkLogisticsSequence(activities, returnDepartureTime24, results);
+    checkDepartureChronology(activities, isLastDay, results);
   }
 
   // --- DUPLICATE_CONCEPT (trip-wide) ---
