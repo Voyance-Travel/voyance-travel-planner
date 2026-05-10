@@ -1,68 +1,49 @@
-## RS.L8 — Hardened `cleanup_rate_limits()` with table-existence guard
+## RS.L9 — Bounded airport search query
 
-The existing function (migration `20260203000820`) returns `void` and also cleans `daily_usage`. The user's hardened body only covers `rate_limits` — applying it verbatim would silently drop the `daily_usage` cleanup. The plan keeps that side effect to avoid regressing the cron.
+Note: RS.L8 was already completed in the previous turn (cleanup_rate_limits hardened + cron rescheduled). This plan covers RS.L9 only.
 
-### New migration
+### File: `src/services/locationSearchAPI.ts` (lines 160-165)
 
-`supabase/migrations/<timestamp>_cleanup_rate_limits_hardened.sql`
+The current "regular search" branch in `searchAirports` does a triple-column `ilike '%q%'` against the `airports` table, which forces a full table scan on every keystroke. Adding a length guard plus a prefix-match path for short queries keeps the call cheap and lets the `code` index do the work.
 
-```sql
-CREATE OR REPLACE FUNCTION public.cleanup_rate_limits()
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_deleted_rl int := 0;
-  v_deleted_du int := 0;
-BEGIN
-  -- Defensive: check the rate_limits table exists. Without this, a rename
-  -- or out-of-order migration causes the cron to silently error every run.
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.tables
-    WHERE table_schema = 'public' AND table_name = 'rate_limits'
-  ) THEN
-    RETURN jsonb_build_object('success', false, 'reason', 'rate_limits_table_missing');
-  END IF;
+### Change
 
-  DELETE FROM public.rate_limits
-  WHERE created_at < now() - interval '24 hours';
-  GET DIAGNOSTICS v_deleted_rl = ROW_COUNT;
+Replace the body at lines 160-165 with:
 
-  -- Preserve existing behavior: also prune daily_usage history (>7 days).
-  IF EXISTS (
-    SELECT 1 FROM information_schema.tables
-    WHERE table_schema = 'public' AND table_name = 'daily_usage'
-  ) THEN
-    DELETE FROM public.daily_usage
-    WHERE usage_date < CURRENT_DATE - INTERVAL '7 days';
-    GET DIAGNOSTICS v_deleted_du = ROW_COUNT;
-  END IF;
+```ts
+// Otherwise, regular search.
+// Reject queries shorter than 2 chars — single-letter wildcards match
+// thousands of airports and force a full table scan.
+const trimmed = (query ?? '').trim();
+if (trimmed.length < 2) {
+  return [];
+}
 
-  RETURN jsonb_build_object(
-    'success', true,
-    'deleted_rate_limits', v_deleted_rl,
-    'deleted_daily_usage', v_deleted_du,
-    'ran_at', now()
-  );
-EXCEPTION
-  WHEN OTHERS THEN
-    RETURN jsonb_build_object('success', false, 'error', SQLERRM, 'sqlstate', SQLSTATE);
-END $$;
+// 2-char queries: prefix-match the code column only (uses the index on `code`).
+// 3+ char queries: also match name/city via contains.
+const filter = trimmed.length === 2
+  ? `code.ilike.${trimmed}%`
+  : `code.ilike.${trimmed}%,name.ilike.%${trimmed}%,city.ilike.%${trimmed}%`;
+
+const { data, error } = await supabase
+  .from('airports')
+  .select('*')
+  .or(filter)
+  .limit(limit);
 ```
 
-### Cron compatibility
-
-The existing cron job runs `SELECT public.cleanup_rate_limits()`. Changing the return type from `void` to `jsonb` does NOT require re-scheduling — `SELECT` of a function that returns `jsonb` works fine; the result is just discarded by cron. No `cron.unschedule` / `cron.schedule` needed.
+Notes:
+- Existing `limit` param (default 20) is preserved — do not hardcode 20.
+- The early-return covers empty/whitespace queries too, replacing the implicit "match everything" behavior.
+- `searchDestinations` already filters to parts with `length >= 2`, so it's not in scope.
 
 ### Verification
 
-- `grep -c "rate_limits_table_missing\|GET DIAGNOSTICS v_deleted" supabase/migrations/*.sql` ≥ 1
-- Manual: invoke `SELECT public.cleanup_rate_limits();` — expect `{"success": true, "deleted_rate_limits": N, ...}`. If `rate_limits` is dropped, expect `{"success": false, "reason": "rate_limits_table_missing"}` instead of an exception.
+- `grep -c "trimmed.length === 2" src/services/locationSearchAPI.ts` ≥ 1
+- Manual: 1-char input → empty array, no network round-trip. 2-char "JF" → matches "JFK". 3+ char "lon" → matches LHR/LCY plus "London"/"Londrina" etc.
 
 ### Out of scope
 
-- Changing the cron schedule
-- Adding observability (e.g. logging into a maintenance table)
-- Touching `daily_usage` retention policy
+- Touching the `metroArea` branch above (already uses `.in('code', …)`).
+- Touching `searchDestinations` or any other function.
+- Adding a debounce or client cache.
