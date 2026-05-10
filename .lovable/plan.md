@@ -1,82 +1,109 @@
-## Bug
+## What's actually true
 
-In `supabase/functions/generate-itinerary/pipeline/persist-day.ts:142-146`, regenerate-day deletes non-locked rows from `itinerary_activities` and re-inserts the new ones — but never touches `activity_costs`. Each per-day regen leaves the previous day's cost rows behind, so the snapshot total drifts upward.
+The user's report says `voyanceAPI.updateTrip()` silently orphans activities when dates change. **The footgun is real but no current consumer code triggers it.** Here's what I found:
 
-The user's secondary claim — *"same fix needed in the full-trip-regen path"* — is **not correct**. `generation-core.ts:3375` already does `delete().eq('trip_id', tripId)` before re-inserting. Full-trip regen is clean. Fix is single-day only.
+- **Consumer date editing (the path users actually click)** goes through `src/components/trip/TripDateEditor.tsx` → `TripDetail.handleDateChange` (lines 1906-2071). That path already:
+  - Snapshots a version for undo (`saveTripDateVersion`).
+  - Re-shapes `itinerary_data.days` for shift/extend/shorten.
+  - **Archives** removed days into `itinerary_data.archivedDays` instead of dropping them.
+  - Writes dates + itinerary atomically via `safeUpdateItineraryData` with sibling fields.
+  - Syncs `trip_cities` via `syncCitiesAfterDateChange`.
+  - Updates hotel check-in/out.
+  - Has flight warnings + day-of-week warnings before applying.
 
-## Why the existing client cleanup isn't enough
+- **`voyanceAPI.updateTrip` (lines 254-304)** does only `UPDATE trips SET …`. It is exported and re-exported via `src/services/voyance.ts`, but no current code calls it with `startDate` or `endDate`. The agent CRM uses `agencyCRM.updateTrip` against a different table (`agency_trips`); `src/services/supabase/trips.ts` has its own `updateTrip` used only for itinerary/flight/hotel selection.
 
-`syncBudgetFromDays` in `EditorialItinerary.tsx` calls `cleanupRemovedActivityCosts(tripId, liveActivityIds)` (`src/services/activityCostService.ts:529`), which does delete orphans. But it only runs on *client-side* mutations (swap, edit, manual cost change, generation completion). For a server-side `regenerate-day` action, the client may never re-mount the editor in a state that re-runs that cleanup before the user opens Budget/Payments — and the issue compounds across multiple regens within the same session. The DB needs to be self-consistent without relying on a follow-up client sync.
+So #2 in the user's bullet list ("Soft: prompt user...") **already exists** in the consumer path. The real gap is the footgun: a future caller (an agent action, an AI tool, a quick-edit modal) could call `voyanceAPI.updateTrip({ startDate, endDate })` without going through `TripDateEditor` and silently orphan activities. Plus there's no detection for trips that already drifted (legacy data, manual SQL edits, race conditions).
 
-## Fix — one site, day-scoped
+#3 in the user's report (handleUpdateActivity cost sync + auto-lock) — already shipped in the previous turn. Nothing to do.
 
-Add a cleanup pass in `persist-day.ts` **after section 6** (where `normalizedActivities` has its final DB-UUID-remapped ids) and before the version save. Cleanup is scoped to the day being persisted so it cannot touch other days' rows.
+## Fix
+
+Two layers, no UX change for users on the happy path.
+
+### Layer 1 — Close the footgun in `voyanceAPI.updateTrip`
+
+In `src/services/voyanceAPI.ts:254-304`, refuse `startDate` / `endDate` updates unless the caller explicitly opts in:
 
 ```ts
-// ── 6.5 Drop activity_costs rows for this day whose activity_id is no longer
-// in the freshly-persisted set. Without this, every regenerate-day leaves
-// orphan cost rows behind and the trip total inflates by the cost of the
-// previous version's activities. (Full-trip regen handles this via
-// generation-core.ts Phase 5's trip-wide delete; per-day regen needs its
-// own day-scoped equivalent.)
-try {
-  const keepIds = normalizedActivities
-    .map((a: any) => a?.id)
-    .filter((v: any): v is string => typeof v === 'string' && v.length > 0);
-
-  // activity_costs.activity_id is TEXT and may carry either the DB UUID or
-  // an external_id depending on which writer ran. The remap in section 6
-  // means normalizedActivities now holds the canonical (DB UUID) form for
-  // freshly-inserted rows, so the keep-set covers both shapes correctly.
-  let q = supabase
-    .from('activity_costs')
-    .delete()
-    .eq('trip_id', tripId)
-    .eq('day_number', dayNumber)
-    .neq('source', 'logistics-sync'); // mirror client cleanup: never touch flight/hotel rows
-
-  if (keepIds.length > 0) {
-    // PostgREST `not in` syntax — quote each id for safety.
-    const list = keepIds.map(id => `"${String(id).replace(/"/g, '\\"')}"`).join(',');
-    q = q.not('activity_id', 'in', `(${list})`);
+export async function updateTrip(tripId: string, updates: Partial<{
+  // ...existing fields
+}>, options?: { allowDateChange?: boolean }): Promise<BackendTrip> {
+  if ((updates.startDate || updates.endDate) && !options?.allowDateChange) {
+    throw new Error(
+      '[voyanceAPI.updateTrip] Refusing to change start_date/end_date directly — ' +
+      'this orphans activities outside the new window. Use TripDateEditor → ' +
+      'TripDetail.handleDateChange (which archives removed days, renumbers, and ' +
+      'updates trip_cities + hotel selection atomically), or pass ' +
+      '{ allowDateChange: true } if you have already reshaped itinerary_data.'
+    );
   }
-
-  const { data: removed, error: cleanupErr } = await q.select('id');
-  if (cleanupErr) {
-    console.error('[persist-day] activity_costs day-cleanup failed (non-fatal):', cleanupErr);
-  } else if (removed && removed.length > 0) {
-    console.log(`[persist-day] Removed ${removed.length} orphan activity_costs rows for day ${dayNumber}`);
-  }
-} catch (err) {
-  console.error('[persist-day] activity_costs cleanup error (non-fatal):', err);
+  // ...rest unchanged
 }
 ```
 
-### Design choices
+This is a runtime guard, not just a comment — prevents future regressions during AI edits, copy-paste, refactors. No current call site passes dates so nothing breaks. The error message points devs to the correct path.
 
-- **Day-scoped, not trip-scoped.** Per-day regen must not delete other days' cost rows. `(trip_id, day_number)` is indexed — fast and safe.
-- **`source != 'logistics-sync'` exclusion** mirrors the client cleanup so that flight/hotel rows are never collateral damage.
-- **Empty `keepIds`** intentionally falls through to "delete every non-logistics row for this day", matching the comment in `cleanupRemovedActivityCosts:533` ("empty list means every non-logistics row is an orphan"). This is the correct semantic when a user regenerates a day into something with zero priced activities.
-- **Non-fatal on error.** Cost cleanup is a hygiene step — a failed delete must not break the regen response. Logged for diagnostics.
-- **Runs after section 6** so the keep-set uses the final post-remap DB UUIDs, matching what any subsequent client `syncBudgetFromDays` will produce. No risk of deleting a row we just wrote.
+### Layer 2 — Detect existing drift on trip load (one-time, free)
+
+Add a pure helper `detectOrphanActivities(trip)` and surface a non-blocking banner if any are found. This catches:
+- Trips whose dates were edited via SQL or before TripDetail.handleDateChange existed.
+- Edge regen races where `itinerary_days.date` falls outside the trip window.
+- Future bugs we don't know about.
+
+**Helper** (new file `src/lib/itinerary/detectOrphanActivities.ts`):
+
+```ts
+export interface OrphanReport {
+  outOfRangeDays: Array<{ dayNumber: number; date: string; activityCount: number }>;
+  beforeStart: number;
+  afterEnd: number;
+  totalActivities: number;
+}
+
+export function detectOrphanActivities(args: {
+  startDate: string;
+  endDate: string;
+  days: Array<{ dayNumber: number; date?: string; activities?: any[] }>;
+}): OrphanReport {
+  // Normalize to local-date YYYY-MM-DD; flag any day with date < start or > end
+  // and ignore days with empty/missing date (they're new blank inserts).
+}
+```
+
+**Surface** (in `TripDetail.tsx`, just below the existing date-change toast block, on initial trip load): when `report.outOfRangeDays.length > 0`, show a soft banner inside `EditorialItinerary`'s header:
+
+```
+⚠ N activities are scheduled outside your trip dates (Jan 1–7).
+   [Shift them into range]  [Archive them]  [Dismiss]
+```
+
+- **Shift them into range**: call `handleDateChange` with `isShiftOnly: true`-equivalent reshape that renumbers orphan days into the available window.
+- **Archive them**: move out-of-range days into `itinerary_data.archivedDays` (same archive bucket the existing shorten flow uses), preserving them for undo.
+- **Dismiss**: write `metadata.orphan_warning_dismissed_at` so the banner doesn't reappear on every refetch; recompute next time the dates change.
+
+No auto-shift, no auto-delete — matches the user's "soft" preference.
 
 ### Out of scope
 
-- Full-trip regen (`generation-core.ts:3375`) — already correct, do not touch.
-- `cleanupRemovedActivityCosts` (client) — unchanged; remains the safety net for client-side mutations.
-- Schema changes — `activity_costs.activity_id` stays `text`; no FK retrofit. (A FK with `ON DELETE CASCADE` would be cleaner long-term but requires a type migration and is bigger than this bug.)
-- Paid-row preservation policy — current cleanup helpers already delete regardless of `is_paid`. Matching that behavior keeps the new cleanup consistent with the rest of the codebase. If product wants paid rows preserved on regen, that's a separate decision that should change both the client cleanup and this new one in the same shot.
+- `agencyCRM.updateTrip` against `agency_trips` — different table, different shape, separate code path. If/when an agent UI starts editing those dates with activities attached, repeat the same pattern there.
+- Server-side trigger to enforce the invariant. The DB-level fix would need a `trips_validate_dates` trigger that joins `itinerary_days`, which is heavier than the user's bug warrants today. Layer 1 + Layer 2 give us 99% of the value at a fraction of the cost.
+- `handleUpdateActivity` (cost sync + auto-lock) — already fixed earlier in this thread.
+
+## Files
+
+- `src/services/voyanceAPI.ts` — add `options.allowDateChange` guard (~10 lines).
+- `src/lib/itinerary/detectOrphanActivities.ts` — new, ~40 lines.
+- `src/components/itinerary/EditorialItinerary.tsx` — add banner row + handlers (~60 lines, presentation-only).
+- `src/pages/TripDetail.tsx` — wire the banner's "Shift" / "Archive" handlers into the existing `handleDateChange` machinery (~30 lines, reuses existing code).
+- No DB migration, no edge-function change.
 
 ### Verification
 
-1. Generate a multi-day trip; note `Budget` total (call it $T).
-2. Regenerate day 2 once → `[persist-day] Removed N orphan activity_costs rows for day 2` appears in logs; total stays ≈ $T (within normal regen variance).
-3. Regenerate day 2 three more times → total still ≈ $T, **not** ≈ 4 × T's day-2 share.
-4. Check DB: `SELECT count(*) FROM activity_costs WHERE trip_id = … AND day_number = 2 AND source <> 'logistics-sync'` equals the number of priced activities currently visible on day 2.
-5. Lock one activity on day 2, regenerate again → locked activity's cost row survives (its id is in `normalizedActivities` via the `uuidRows` path), unlocked cost rows are replaced.
-6. Logistics rows (flight/hotel for day 2 if any): unchanged by cleanup. Verify with `SELECT count(*) … WHERE source = 'logistics-sync'` before vs after.
-
-### Files
-
-- `supabase/functions/generate-itinerary/pipeline/persist-day.ts` — single insert of ~25 lines after section 6.
-- No schema changes, no client changes, no other edge-function changes.
+1. Call `voyanceAPI.updateTrip(id, { startDate: '2026-01-01' })` from a dev console → throws with the guard message.
+2. Same call with `{ allowDateChange: true }` → succeeds (escape hatch).
+3. Manually `UPDATE trips SET end_date = '2026-01-07' WHERE id = …` on a trip with day 8–10 activities; reload TripDetail → banner appears reading "3 days outside your trip dates".
+4. Click "Archive them" → those days move to `archivedDays`, banner clears, totals on Budget/Payments drop accordingly via the existing `cleanupRemovedActivityCosts` path.
+5. Click "Shift them into range" on a trip where the active window has empty days → orphan days renumber into the gap, banner clears.
+6. Click "Dismiss" → banner stays gone across refetches until dates change again.
+7. Existing TripDateEditor flow unchanged — nothing breaks because no consumer call site passes dates to `voyanceAPI.updateTrip` today.
