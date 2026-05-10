@@ -1,54 +1,45 @@
-## RS.M.P6 — Apple IAP receipt-not-found graceful handling
+## RS.L2 — Trip duplicate-prevention guard
 
 ### Findings
-- Two Apple-validation failure paths in `validate-iap-receipt/index.ts`:
-  - Line 142–143: sandbox-retry path returns generic 400.
-  - Line 146–147: production path returns generic 400.
-- Both currently call `errorResponse(...)` from `_shared/cors.ts` which doesn't accept structured fields. Need to switch to `jsonResponse(...)` (already imported) so we can return `{success:false, error, code, userActionable, appleStatus}` plus a 400 status.
+Two trip insert call sites:
+- `src/services/supabase/trips.ts::createTrip` (lines 224–252) — primary path used by Setup flow.
+- `src/services/voyanceAPI.ts::createTrip` (lines 180–196) — secondary path used by older flows.
+
+Both `INSERT` directly with no dedup window. A double-click fires two requests; both succeed → two rows, two trips on the dashboard.
 
 ### Plan
 
-**1. Add a status-message map** at module scope (top of file, after `IAP_PRODUCTS`):
+Add a 30-second dedup window in **both** files immediately before the `.insert(...)`:
 
 ```ts
-// Apple status code → user-friendly message + retryability hint for the FE
-const APPLE_STATUS_MESSAGES: Record<number, { msg: string; userActionable: boolean }> = {
-  21000: { msg: 'Receipt could not be read by Apple. Please try again.', userActionable: true },
-  21002: { msg: 'Receipt data was malformed. Please contact support.', userActionable: false },
-  21003: { msg: 'Receipt authentication failed. Please try restoring your purchases.', userActionable: true },
-  21004: { msg: 'Shared secret mismatch. Please contact support.', userActionable: false },
-  21005: { msg: 'Apple is temporarily unavailable. Please try again in a few minutes.', userActionable: true },
-  21006: { msg: 'This subscription has expired.', userActionable: false },
-  21007: { msg: 'Sandbox receipt sent to production — should auto-retry.', userActionable: false },
-  21008: { msg: 'Production receipt sent to sandbox — should auto-retry.', userActionable: false },
-  21010: { msg: 'Apple cannot find this user account. Please contact support.', userActionable: false },
-};
+// Guard against double-click duplicate creation (RS.L2)
+const dedupWindowIso = new Date(Date.now() - 30_000).toISOString();
+const { data: recent } = await supabase
+  .from('trips')
+  .select('*')                     // full row so we can return a Trip without a second fetch
+  .eq('user_id', userId)
+  .eq('name', input.name)
+  .eq('destination', input.destination)
+  .eq('start_date', input.start_date)
+  .gt('created_at', dedupWindowIso)
+  .order('created_at', { ascending: false })
+  .limit(1)
+  .maybeSingle();
 
-function appleStatusError(status: number) {
-  const friendly = APPLE_STATUS_MESSAGES[status] || {
-    msg: `Apple receipt validation returned status ${status}. Please contact support.`,
-    userActionable: false,
-  };
-  return jsonResponse(
-    {
-      success: false,
-      error: friendly.msg,
-      code: `APPLE_STATUS_${status}`,
-      userActionable: friendly.userActionable,
-      appleStatus: status,
-    },
-    400,
-  );
+if (recent) {
+  console.warn('[createTrip] Duplicate request detected — returning existing trip', { tripId: recent.id });
+  return transformTrip(recent as TripRow);   // voyanceAPI returns its mapped BackendTrip equivalent
 }
 ```
 
-**2. Replace both failure returns** (lines 142–143 and 146–147) with `return appleStatusError(<status>);`. Keep the `console.error` log lines for observability.
-
-### Verification
-- `grep -c "APPLE_STATUS_MESSAGES\|userActionable" supabase/functions/validate-iap-receipt/index.ts` ≥ 2 (will hit ~5).
-- Smoke test isn't possible from the sandbox without a real Apple receipt, but the response shape is unit-checkable: any non-zero `appleResult.status` → 400 with the new payload.
+Notes per file:
+- `trips.ts`: re-use existing `transformTrip` mapper. `userId`/`input` already in scope.
+- `voyanceAPI.ts`: build the `BackendTrip` object from `recent` using the same field mapping that already exists at lines 200+ — extract that mapper into a small local helper to avoid duplication, or inline.
 
 ### Out of scope
-- Frontend rendering of the `userActionable` flag (separate ticket — backend just returns the contract).
-- Status-21006 special handling (auto-mark subscription expired) — out of scope; current ticket is messaging only.
-- Changes to `errorResponse` helper — leaving it in place for other callers.
+- DB-level UNIQUE constraint (would force schema change + handle conflict errors; client guard alone closes the double-click case which is the reported symptom).
+- The 6 other call sites that wrap these two services (`createTripFromParsed`, `MysteryGetawayModal`, `ManualTripPasteEntry`, `TripForm`, `voyance.ts`, agency CRM) — they all funnel through one of the two services above, so guarding both services is sufficient.
+- Button-level disabled-while-pending state (orthogonal frontend hardening; this guard works regardless).
+
+### Verification
+`grep -rc "Duplicate request detected" src/services` ≥ 2 (one per file).
