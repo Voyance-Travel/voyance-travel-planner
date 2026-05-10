@@ -461,50 +461,35 @@ VIOLATIONS:
 
   community_builder: {
     identity: "The Purpose Voyager",
-    category: "Connector",
+    category: "Achiever",
     meaning: `
-This traveler wants their trip to MEAN something beyond tourism.
+Compulsive traveler. Has been everywhere and connects through expertise — "I've been to Lisbon, here's exactly what to do." Their social currency is travel authority. Higher activity density. Mix of iconic must-dos AND insider-knowledge spots so they can recommend both later.
 
-They want:
-- Cultural exchange with locals, not just observation
-- Supporting local artisans and small businesses directly
-- Meaningful homestay or local family dining experiences
-- Understanding how people actually live
-- Experiences that create mutual benefit
-- Leaving a place a little better than they found it
-
-Their ideal day:
-- Morning: visit a local artisan workshop or small business
-- Lunch with a local family or at a community-run spot
-- Afternoon: cultural exchange, local market, or meaningful conversation
-- Evening: locally owned restaurant, supporting the neighborhood economy
-
-WHAT "PURPOSE" MEANS FOR THEM:
-- Impact over entertainment
-- Exchange over observation
-- Supporting local economies directly
-- Authentic connection, not staged experiences
-- They want to understand, not just consume
+DAY STRUCTURE CUE:
+- activity_density: high
+- mix: 60% iconic + 40% hidden gems (the "I know the spots" duality)
+- Aim for shareable, recommendation-worthy stops; avoid filler
+- They want stories AND credibility — show them you've done the research
 
 VIOLATIONS:
-- Luxury resort bubbles = VIOLATION
-- Chain restaurants/hotels = VIOLATION
-- Tourist-only zones = VIOLATION
-- Passive sightseeing without connection = VIOLATION
+- Sparse / lazy day = VIOLATION
+- All hidden gems with no iconic anchors = VIOLATION (no recommend-credibility)
+- All iconic with no insider spots = VIOLATION (no expertise signal)
 `,
     avoid: [
-      'Luxury experiences',
-      'Tourist bubbles',
-      'Chain businesses',
-      'Passive sightseeing',
-      'Exploitative "poverty tourism"',
-      'Staged authenticity'
+      'Sparse, low-density days',
+      'Generic itineraries with no insider angle',
+      'Tourist-only zones with zero hidden-gem mix',
+      'Passive sightseeing without context'
     ],
     dayStructure: {
-      maxScheduledActivities: 3,
+      maxScheduledActivities: 5,
+      minScheduledActivities: 4,
       startTime: '08:00',
       spaOK: false,
-      michelinOK: false
+      michelinOK: true,
+      activity_density: 'high',
+      mix: { iconic: 0.6, hidden: 0.4 }
     }
   },
 
