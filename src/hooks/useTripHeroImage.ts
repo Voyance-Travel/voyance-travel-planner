@@ -161,6 +161,14 @@ export function useTripHeroImage({
         setApiFetched(true);
         if (result?.url) {
           setApiImageUrl(result.url);
+          if (result.source === 'unsplash' && result.photographer) {
+            setApiAttribution({
+              photographer: result.photographer,
+              photographer_url: result.photographer_url ?? undefined,
+              source_url: result.source_url ?? undefined,
+              source: 'unsplash',
+            });
+          }
         } else {
           setApiFailed(true);
         }
