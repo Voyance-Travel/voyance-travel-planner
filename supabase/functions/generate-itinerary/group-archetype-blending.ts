@@ -20,6 +20,12 @@ export interface TravelerArchetype {
   name?: string;
   archetype: string;
   isPrimary: boolean; // The trip owner/planner
+  /**
+   * Optional secondary archetype identity. When set and distinct from `archetype`,
+   * the day assigner may allocate up to one "deepening" middle day per traveler
+   * to bias activities toward this secondary's affinity. Null/undefined skips it.
+   */
+  secondaryArchetype?: string | null;
 }
 
 export interface BlendingResult {
@@ -52,9 +58,14 @@ export interface BlendedGuidance {
 
 export interface DayArchetypeAssignment {
   dayNumber: number;
+  /** For deepening days, this is the secondary archetype id; for primary days, the traveler's primary; for group days, 'group'. */
   primaryArchetype: string;
   theme: string;
   rationale: string;
+  /** Discriminator. Missing = legacy ('group' if primaryArchetype === 'group', else 'primary'). */
+  kind?: 'group' | 'primary' | 'deepening';
+  /** For 'primary' and 'deepening' days, the traveler whose archetype the day is favoring. */
+  travelerId?: string;
 }
 
 export interface ArchetypeConflict {
@@ -149,8 +160,15 @@ export async function blendGroupArchetypes(
 ): Promise<BlendingResult> {
   console.log(`[GroupBlend] Blending ${travelers.length} travelers' archetypes`);
   
-  // If only one traveler, no blending needed
-  if (travelers.length <= 1) {
+  // Solo trip + no usable secondary → no blending needed (legacy fast path).
+  // Solo trip WITH a distinct secondary still falls through so a deepening day
+  // can be allocated.
+  const soloHasSecondary =
+    travelers.length === 1 &&
+    !!travelers[0]?.secondaryArchetype &&
+    travelers[0].secondaryArchetype !== travelers[0].archetype;
+
+  if (travelers.length <= 1 && !soloHasSecondary) {
     const archetype = travelers[0]?.archetype || 'flexible_wanderer';
     return {
       blendedGuidance: {
@@ -284,44 +302,132 @@ function assignDaysToArchetypes(
   travelers: TravelerArchetype[],
   totalDays: number
 ): DayArchetypeAssignment[] {
-  if (travelers.length <= 1) return [];
-  
-  const assignments: DayArchetypeAssignment[] = [];
-  const archetypes = travelers.map(t => t.archetype);
-  const primaryArchetype = travelers.find(t => t.isPrimary)?.archetype || archetypes[0];
-  
-  // Day 1 and last day are always "group" days
-  // Middle days rotate between archetypes
-  for (let day = 1; day <= totalDays; day++) {
-    if (day === 1) {
-      assignments.push({
-        dayNumber: 1,
-        primaryArchetype: 'group',
-        theme: 'Arrival & Orientation',
-        rationale: 'First day focuses on group settling in together',
-      });
-    } else if (day === totalDays) {
-      assignments.push({
-        dayNumber: day,
-        primaryArchetype: 'group',
-        theme: 'Departure & Last Experiences',
-        rationale: 'Last day keeps everyone together',
-      });
-    } else {
-      // Rotate through archetypes for middle days
-      const archetypeIndex = (day - 2) % archetypes.length;
-      const todayArchetype = archetypes[archetypeIndex];
-      
-      assignments.push({
-        dayNumber: day,
-        primaryArchetype: todayArchetype,
-        theme: getArchetypeDayTheme(todayArchetype),
-        rationale: `This day prioritizes ${formatArchetypeName(todayArchetype)}'s preferences`,
-      });
+  // Single-traveler trips with no secondary: nothing to assign (status quo).
+  // Single-traveler with a secondary: still allow a deepening day.
+  const travelersWithSecondary = travelers.filter(
+    t => t.secondaryArchetype && t.secondaryArchetype !== t.archetype
+  );
+  if (travelers.length <= 1 && travelersWithSecondary.length === 0) return [];
+
+  if (totalDays <= 0) return [];
+
+  // Allocate slot array: 0=group day, 1..N-2 candidate middle days, N-1=group.
+  const assignments: (DayArchetypeAssignment | null)[] = new Array(totalDays).fill(null);
+
+  // Day 1 — always group (arrival)
+  assignments[0] = {
+    dayNumber: 1,
+    primaryArchetype: 'group',
+    theme: 'Arrival & Orientation',
+    rationale: 'First day focuses on group settling in together',
+    kind: 'group',
+  };
+
+  // Last day — always group (departure). Skip when totalDays === 1.
+  if (totalDays >= 2) {
+    assignments[totalDays - 1] = {
+      dayNumber: totalDays,
+      primaryArchetype: 'group',
+      theme: 'Departure & Last Experiences',
+      rationale: 'Last day keeps everyone together',
+      kind: 'group',
+    };
+  }
+
+  // Middle slots: indices 1 .. totalDays-2 (1-based day = index+1)
+  const middleIndices: number[] = [];
+  for (let i = 1; i <= totalDays - 2; i++) middleIndices.push(i);
+
+  // Need at least 1 middle day for any non-group assignment.
+  if (middleIndices.length === 0) {
+    return assignments.filter((a): a is DayArchetypeAssignment => a !== null);
+  }
+
+  // STEP A — Primaries first (round-robin). Multi-traveler trips only.
+  // Single-traveler trips skip primary assignment (status quo: middle days were
+  // implicit primary). The deepening day still gets allocated below.
+  let primaryDays = 0;
+  if (travelers.length > 1) {
+    const primaryQueue = [...travelers];
+    let cursor = 0;
+    for (const idx of middleIndices) {
+      const t = primaryQueue[cursor % primaryQueue.length];
+      assignments[idx] = {
+        dayNumber: idx + 1,
+        primaryArchetype: t.archetype,
+        theme: getArchetypeDayTheme(t.archetype),
+        rationale: `This day prioritizes ${formatArchetypeName(t.archetype)}'s preferences`,
+        kind: 'primary',
+        travelerId: t.travelerId,
+      };
+      cursor++;
+      primaryDays++;
     }
   }
-  
-  return assignments;
+
+  // STEP B — Deepening days replace existing primary slots when slack exists.
+  // Slack = middle days minus the number needed to give each traveler at least
+  // one primary day. For a 2-traveler 5-day trip, middle=3, slack=1 → exactly
+  // one deepening day. For 3-traveler 5-day trip, middle=3, slack=0 → none.
+  // For single-traveler trips, all middle days are slack.
+  const minPrimariesNeeded = travelers.length > 1 ? Math.min(travelers.length, middleIndices.length) : 0;
+  const slack = middleIndices.length - minPrimariesNeeded;
+
+  if (slack > 0 && travelersWithSecondary.length > 0) {
+    // Prefer middle of the trip first (splice from middle of remaining slot list).
+    const remainingSlots = [...middleIndices];
+    const seenSecondary = new Set<string>(); // dedup same-secondary-across-travelers
+    let deepeningPlaced = 0;
+
+    for (const t of travelersWithSecondary) {
+      if (deepeningPlaced >= slack) break;
+      if (remainingSlots.length === 0) break;
+
+      const sec = t.secondaryArchetype!;
+      if (seenSecondary.has(sec)) {
+        console.log(`[GroupBlend] Skipped duplicate secondary ${sec} for traveler ${t.travelerId}`);
+        continue;
+      }
+
+      // Pick the middle of the remaining slots list.
+      const slotIdx = remainingSlots.splice(Math.floor(remainingSlots.length / 2), 1)[0];
+
+      assignments[slotIdx] = {
+        dayNumber: slotIdx + 1,
+        primaryArchetype: sec,
+        theme: getArchetypeDayTheme(sec),
+        rationale:
+          `Deepening day leaning toward ${t.name || 'this traveler'}'s secondary identity ` +
+          `(${formatArchetypeName(sec)}) — keep within the group's avoid list, but bias ` +
+          `activity selection toward this archetype's affinity.`,
+        kind: 'deepening',
+        travelerId: t.travelerId,
+      };
+      seenSecondary.add(sec);
+      deepeningPlaced++;
+    }
+  }
+
+  // STEP C — single-traveler trips: any middle slots NOT replaced by deepening
+  // stay null. The legacy contract returned `[]` for single-traveler trips, so
+  // emit `kind: 'primary'` only for the deepening case (already handled above).
+  // Drop nulls before returning.
+  const final = assignments.filter((a): a is DayArchetypeAssignment => a !== null);
+
+  const counts = final.reduce(
+    (acc, a) => {
+      const k = a.kind ?? (a.primaryArchetype === 'group' ? 'group' : 'primary');
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+  console.log(
+    `[GroupBlend] Day assignments: P=${counts.primary ?? 0} primary, ` +
+    `D=${counts.deepening ?? 0} deepening, G=${counts.group ?? 0} group`
+  );
+
+  return final;
 }
 
 function identifyConflicts(
@@ -435,10 +541,32 @@ ${travelers.map((t: TravelerArchetype) => `- ${formatArchetypeName(t.archetype)}
 - **Social calibration**: ${blendedGuidance.socialLevel}
 
 ### DAY ASSIGNMENTS
-${dayAssignments.length > 0 
-  ? dayAssignments.map(d => `- Day ${d.dayNumber}: ${d.theme} (${d.primaryArchetype === 'group' ? 'Group day' : `Favoring ${formatArchetypeName(d.primaryArchetype)}`})`).join('\n')
+${dayAssignments.length > 0
+  ? dayAssignments.map(d => {
+      const kind = d.kind ?? (d.primaryArchetype === 'group' ? 'group' : 'primary');
+      if (kind === 'group') {
+        return `- Day ${d.dayNumber}: ${d.theme} (Group day)`;
+      }
+      const travelerName = d.travelerId
+        ? travelers.find(t => t.travelerId === d.travelerId)?.name
+        : undefined;
+      const owner = travelerName ? `${travelerName}'s ` : '';
+      if (kind === 'deepening') {
+        return `- Day ${d.dayNumber}: ${d.theme} (Deepening — leaning toward ${owner}secondary ${formatArchetypeName(d.primaryArchetype)}; primary day-structure rules still apply)`;
+      }
+      return `- Day ${d.dayNumber}: ${d.theme} (Favoring ${owner ? owner : ''}${formatArchetypeName(d.primaryArchetype)})`;
+    }).join('\n')
   : 'No specific day assignments - balance throughout'}
 `;
+
+  const hasDeepening = dayAssignments.some(d => (d.kind ?? '') === 'deepening');
+  if (hasDeepening) {
+    prompt += `
+### DEEPENING DAY DIRECTIVE
+On any "Deepening" day above, bias activity selection toward the named secondary archetype's affinity (its preferred experiences and tone), but continue to honor every group avoid item and the daily structure / pace rules of the day's traveler. A deepening day is a flavor shift, not a constraint override — checkout, meal cadence, and pacing rules still apply.
+`;
+  }
+
 
   if (conflicts.length > 0) {
     prompt += `
@@ -505,6 +633,9 @@ export { formatArchetypeName, getCompatibilityScore };
 
 // =============================================================================
 // TRAIT SCORE BLENDING - Shared algorithm for owner + companions
+// TODO(secondary-blend-v1.1): consider 0.3× secondary trait weighting once
+// deepening-day signal is validated. For now, secondaries influence day
+// assignment + prompt only; trait math stays owner-50/companions-50.
 // =============================================================================
 
 const BLEND_TRAIT_KEYS = ['pace', 'budget', 'social', 'planning', 'comfort', 'authenticity', 'adventure', 'cultural', 'transformation'];

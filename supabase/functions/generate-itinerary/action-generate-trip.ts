@@ -13,7 +13,7 @@
 import { corsHeaders, type ActionContext, verifyTripAccess } from './action-types.ts';
 import { GenerationTimer } from './generation-timer.ts';
 import { harvestAnchorsFromDays } from './anchor-guard.ts';
-import { resolvePrimaryArchetype } from '../_shared/dna-resolve.ts';
+import { resolvePrimaryArchetype, resolveSecondaryArchetype } from '../_shared/dna-resolve.ts';
 
 // Imported enrichment modules (compute once-per-trip context)
 import { loadTravelerProfile } from './profile-loader.ts';
@@ -367,7 +367,13 @@ export async function handleGenerateTrip(
           const { data: profileRows } = await supabase.from('profiles').select('id, display_name, handle').in('id', [userId, ...companionUserIds]);
           const profileMap = new Map((profileRows || []).map((p: any) => [p.id, p.display_name || p.handle || 'Guest']));
           
-          const travelersList: TravelerArchetype[] = [{ travelerId: userId, name: profileMap.get(userId) || 'You', archetype: tripProfile.archetype, isPrimary: true }];
+          const travelersList: TravelerArchetype[] = [{
+            travelerId: userId,
+            name: profileMap.get(userId) || 'You',
+            archetype: tripProfile.archetype,
+            isPrimary: true,
+            secondaryArchetype: tripProfile.secondaryArchetype ?? null,
+          }];
           const companionTraitsList: Record<string, number>[] = [];
           
           for (const dna of (companionDnaRows || [])) {
@@ -375,7 +381,18 @@ export async function handleGenerateTrip(
             const archetype = resolvedCompanion.source === 'default'
               ? 'balanced_story_collector'
               : resolvedCompanion.archetype;
-            travelersList.push({ travelerId: dna.user_id, name: profileMap.get(dna.user_id) || 'Guest', archetype, isPrimary: false });
+            const resolvedSecondary = resolveSecondaryArchetype(dna as any);
+            const secondaryArchetype =
+              resolvedSecondary.archetype && resolvedSecondary.archetype !== archetype
+                ? resolvedSecondary.archetype
+                : null;
+            travelersList.push({
+              travelerId: dna.user_id,
+              name: profileMap.get(dna.user_id) || 'Guest',
+              archetype,
+              isPrimary: false,
+              secondaryArchetype,
+            });
             const rawScores = dna.trait_scores || (dna.travel_dna_v2 as any)?.trait_scores || {};
             companionTraitsList.push({
               pace: Number(rawScores.pace ?? 0), budget: Number(rawScores.budget ?? 0),
@@ -385,7 +402,11 @@ export async function handleGenerateTrip(
             });
           }
           
-          if (travelersList.length > 1) {
+          // Run blender when there's more than one traveler OR when the solo
+          // traveler has a distinct secondary archetype (deepening day path).
+          const soloHasSecondary =
+            travelersList.length === 1 && !!travelersList[0].secondaryArchetype;
+          if (travelersList.length > 1 || soloHasSecondary) {
             const blendResult = await blendGroupArchetypes(travelersList, totalDays, destination);
             enrichmentContext.groupBlendingPrompt = blendResult.promptSection;
             

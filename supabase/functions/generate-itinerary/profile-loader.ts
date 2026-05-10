@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { getFullArchetypeContext, type ArchetypeContext } from './archetype-data.ts';
-import { resolvePrimaryArchetype } from '../_shared/dna-resolve.ts';
+import { resolvePrimaryArchetype, resolveSecondaryArchetype } from '../_shared/dna-resolve.ts';
 
 // =============================================================================
 // TYPES
@@ -37,6 +37,12 @@ export interface TravelerProfile {
   
   /** Full archetype context with all data needed for prompt building */
   archetypeContext: ArchetypeContext;
+
+  /** Secondary archetype name — null when not set. Used for "deepening" day assignment. */
+  secondaryArchetype: string | null;
+
+  /** Full secondary archetype context — null when no secondary or when secondary == primary. */
+  secondaryArchetypeContext: ArchetypeContext | null;
   
   /** Trait scores with defaults of 0 */
   traitScores: TraitScores;
@@ -255,6 +261,23 @@ export async function loadTravelerProfile(
   // =========================================================================
   
   const archetypeContext = getFullArchetypeContext(archetype, destination);
+
+  // Resolve secondary archetype (optional — null is valid).
+  // Only build context when a real, distinct secondary exists.
+  let secondaryArchetype: string | null = null;
+  let secondaryArchetypeContext: ArchetypeContext | null = null;
+  if (travelDNA) {
+    const sec = resolveSecondaryArchetype(travelDNA as any);
+    if (sec.archetype && sec.archetype !== archetype) {
+      secondaryArchetype = sec.archetype;
+      secondaryArchetypeContext = getFullArchetypeContext(sec.archetype, destination);
+      console.log(`[profile-loader] ✓ Secondary archetype: ${secondaryArchetype} (source: ${sec.source})`);
+    } else if (sec.archetype && sec.archetype === archetype) {
+      console.log(`[profile-loader] Secondary archetype matches primary (${archetype}); ignoring.`);
+    } else {
+      console.log(`[profile-loader] Secondary archetype: none`);
+    }
+  }
   
   // =========================================================================
   // STEP 5: Resolve Trait Scores with Defaults
@@ -350,6 +373,8 @@ export async function loadTravelerProfile(
   const profile: TravelerProfile = {
     archetype,
     archetypeContext,
+    secondaryArchetype,
+    secondaryArchetypeContext,
     traitScores,
     budgetTier,
     interests,
