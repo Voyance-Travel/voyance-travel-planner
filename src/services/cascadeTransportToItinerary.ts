@@ -572,8 +572,16 @@ export async function runCascadeAndPersist(
 ): Promise<boolean> {
   try {
     const result = await cascadeAllTransport(tripId, itineraryDays, flightSelection, tripCities);
-    
-    if (!result.changed) return false;
+
+    // Always recompute per-day meal policy / dayMode from current flight_selection.
+    // The health engine reads metadata.quality.dayMode to decide which meals are
+    // required; without this, post-generation flight edits silently miss
+    // missing-meal warnings on real arrival/departure days.
+    const { recomputeDayModes } = await import('@/lib/itinerary/recomputeDayModes');
+    const baseDays = result.changed ? result.updatedDays : itineraryDays;
+    const recompute = recomputeDayModes(baseDays, flightSelection);
+
+    if (!result.changed && !recompute.changed) return false;
 
     // Persist updated days
     const { data: tripData } = await supabase
@@ -584,8 +592,8 @@ export async function runCascadeAndPersist(
 
     if (tripData?.itinerary_data) {
       const itineraryData = tripData.itinerary_data as any;
-      itineraryData.days = result.updatedDays;
-      
+      itineraryData.days = recompute.updatedDays;
+
       const { saveItineraryOptimistic } = await import('@/services/itineraryOptimisticUpdate');
       const saveResult = await saveItineraryOptimistic(tripId, itineraryData);
       if (!saveResult.success && saveResult.error === 'version_conflict') {
@@ -594,8 +602,11 @@ export async function runCascadeAndPersist(
     }
 
     // Show toast notifications
-    showCascadeToasts(result.changes);
-    
+    if (result.changed) showCascadeToasts(result.changes);
+    if (recompute.changed) {
+      console.log('[cascade] dayMode recomputed for days:', recompute.changedDayNumbers);
+    }
+
     return true;
   } catch (err) {
     console.error('[cascade] Failed to apply transport cascade:', err);
