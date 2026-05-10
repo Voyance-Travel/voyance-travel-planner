@@ -459,8 +459,51 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         }
       }
 
+      // ── B3: Per-category price ceiling sanity ──
+      // Catches AI-hallucinated prices like Pastelería Hofmann (pastry shop
+      // €120/pp). Runs after Michelin floor + bar cap so fine-dining and
+      // drinks paths take precedence. Skips locked/user/booked rows.
+      if (
+        process.env.PRICE_SANITY_ENABLED !== 'false' &&
+        source !== 'michelin_floor' &&
+        source !== 'bar_cap_repair' &&
+        source !== 'ticketed_attraction_floor' &&
+        source !== 'user' &&
+        source !== 'user_override' &&
+        source !== 'booked'
+      ) {
+        try {
+          const probe = {
+            title,
+            name: title,
+            category,
+            subcategory,
+            venue_name: venueName,
+            startTime: activity.start_time || activity.startTime,
+            start_time: activity.start_time || activity.startTime,
+            tags: activity.tags,
+          };
+          if (!shouldSkipPriceSanity(probe)) {
+            const subcat = inferSubcategory(probe);
+            if (subcat) {
+              const bound = CATEGORY_PRICE_CEILINGS[subcat];
+              if (bound && costPerPerson > bound.max) {
+                const median = Math.round((bound.min + bound.max) / 2);
+                console.warn(`[REPAIR_PRICE_SUBSTITUTE] (repair-costs) "${title}" subcat=${subcat} orig=${costPerPerson} median=${median}`);
+                costPerPerson = median;
+                source = 'category_median_substitute';
+                wasCorrected = true;
+                corrected++;
+              }
+            }
+          }
+        } catch (e) {
+          // Defensive: never let sanity check abort repair pipeline.
+          console.warn('[REPAIR_PRICE_SUBSTITUTE] probe failed (non-blocking):', e);
+        }
+      }
 
-      // Write-time guard: free venues and walking transport must be $0.
+
       // The DB trigger enforces this too, but normalizing here keeps the
       // returned payload consistent and avoids a useless DB round-trip.
       const titleLowerForGuard = (title || '').toLowerCase().trim();
