@@ -3136,10 +3136,39 @@ export default function TripDetail() {
                          </div>
                        </div>
                      </div>
-                   )}
+                    )}
 
-                   <ErrorBoundary>
-                  <EditorialItinerary
+                    {/* Orphan-activity reconciliation banner */}
+                    {orphanReport && !isPreviewMode && (
+                      <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground">
+                            {orphanReport.outOfRangeDays.length} day{orphanReport.outOfRangeDays.length === 1 ? '' : 's'} ({orphanReport.totalActivities} activit{orphanReport.totalActivities === 1 ? 'y' : 'ies'}) outside your trip dates
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Trip runs {trip.start_date} – {trip.end_date}.
+                            {orphanReport.beforeStart > 0 && ` ${orphanReport.beforeStart} before start.`}
+                            {orphanReport.afterEnd > 0 && ` ${orphanReport.afterEnd} after end.`}
+                            {' '}Pick what to do with them.
+                          </p>
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            <Button size="sm" onClick={handleShiftOrphans} className="gap-1.5">
+                              Shift into range
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={handleArchiveOrphans}>
+                              Archive
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={handleDismissOrphans}>
+                              Dismiss
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <ErrorBoundary>
+
                   tripId={trip.id}
                   destination={trip.destination}
                   destinationCountry={
