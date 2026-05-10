@@ -412,6 +412,30 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           hotelName: savedHotelName,
         });
         itineraryDays[i] = { ...itineraryDays[i], activities: itineraryDays[i].activities };
+
+        // Save-time hotel-return safety net — covers manual edits, undo/redo,
+        // and any generation that escaped the earlier Step 8 + post-meal-guard
+        // retries. Skip departure day; idempotent via runStep8's own guard.
+        if (!isLastDay && Array.isArray(itineraryDays[i].activities) && itineraryDays[i].activities.length > 0) {
+          const acts = itineraryDays[i].activities;
+          const nonLogistics = acts.filter((a: any) => {
+            const cat = String(a?.category || '').toLowerCase();
+            return !['transport', 'transit', 'transportation', 'transfer', 'logistics', 'walking', 'taxi', 'rideshare', 'metro'].includes(cat);
+          });
+          if (nonLogistics.length > 0) {
+            try {
+              const { runStep8 } = await import('./universal-quality-pass.ts');
+              const _beforeLen = acts.length;
+              runStep8(acts, dayNumber - 1, savedHotelName);
+              if (acts.length > _beforeLen) {
+                console.log(`[QUALITY] day=${dayNumber} save-time hotel-return appended`);
+                itineraryDays[i].metadata = itineraryDays[i].metadata || {};
+                itineraryDays[i].metadata.quality = itineraryDays[i].metadata.quality || {};
+                itineraryDays[i].metadata.quality.hotel_return_save_time = true;
+              }
+            } catch (_e) { /* non-blocking */ }
+          }
+        }
       } catch (_e) { /* non-blocking */ }
 
       // Always update trip-wide blocked set after this day so later days
