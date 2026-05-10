@@ -1,10 +1,33 @@
-## No-op: skip rate limiting on `discover-proactive`
+## Add cost tracking to `discover-proactive`
 
-Per project policy, the backend doesn't have rate-limiting primitives yet, and the standing rule is to not add ad-hoc rate limiting to endpoints. The spec's "existing rate-limit infrastructure (DB-backed, see itinerary-chat for pattern)" doesn't actually exist in this codebase — building it would be a from-scratch implementation that the policy explicitly defers until proper infra is in place.
+Wire the shared `trackCost` helper into `supabase/functions/discover-proactive/index.ts` so this endpoint's AI usage shows up alongside other tracked actions.
 
-### Action
-- Do **not** modify `supabase/functions/discover-proactive/index.ts`.
-- No new `rate_limits` table, no `checkRateLimit` helper.
+### Signature note
 
-### When to revisit
-When the platform ships a shared rate-limit primitive, this endpoint (and others like `itinerary-chat`, `generate-itinerary`) can be wired up in one pass against that shared infra.
+The spec passes `userId` and `tripId` directly into `trackCost(...)`, but the actual helper signature in `_shared/cost-tracker.ts` is `trackCost(actionType, model?)` and uses `setUserId()` / `setTripId()` (this is how `itinerary-chat` does it). I'll follow the existing pattern.
+
+### Changes (single file)
+
+`supabase/functions/discover-proactive/index.ts`:
+
+1. Add import:
+   ```ts
+   import { trackCost } from "../_shared/cost-tracker.ts";
+   ```
+2. Before the `fetch("https://ai.gateway.lovable.dev/...")` call (~line 126), instantiate:
+   ```ts
+   const costTracker = trackCost('discover_proactive', 'google/gemini-2.5-flash');
+   if (userId) costTracker.setUserId(userId);
+   if (tripId) costTracker.setTripId(tripId);
+   ```
+   `userId`/`tripId` will be pulled from the request body / auth header — I'll read the existing handler to use whatever's already in scope (extending the `ProactiveRequest` type if needed, matching how other functions resolve the user from the JWT).
+3. After the AI response is parsed successfully (~line 155, after `aiResponse = await response.json()`):
+   ```ts
+   costTracker.recordAiUsage(aiResponse);
+   await costTracker.save();
+   ```
+   Wrapped so a save failure doesn't break the user response (logged only).
+
+### Out of scope
+
+No rate limiting (already decided), no other behavior changes.

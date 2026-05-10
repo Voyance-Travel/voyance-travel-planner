@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,6 +21,7 @@ interface ProactiveRequest {
     travelerProfiles: Array<{ userId: string; name: string; archetypeId: string; isOwner: boolean; weight: number }>;
     isBlended: boolean;
   };
+  tripId?: string;
 }
 
 serve(async (req: Request) => {
@@ -28,7 +31,22 @@ serve(async (req: Request) => {
 
   try {
     const body: ProactiveRequest = await req.json();
-    const { destination, archetype, dayNumber, dayActivities, tripDates, budgetTier, interests, timeOfDay, blendedDna } = body;
+    const { destination, archetype, dayNumber, dayActivities, tripDates, budgetTier, interests, timeOfDay, blendedDna, tripId } = body;
+
+    // Resolve userId from JWT (best-effort, optional)
+    let userId: string | null = null;
+    try {
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader) {
+        const supaUrl = Deno.env.get("SUPABASE_URL");
+        const anon = Deno.env.get("SUPABASE_ANON_KEY");
+        if (supaUrl && anon) {
+          const sb = createClient(supaUrl, anon, { global: { headers: { Authorization: authHeader } } });
+          const { data } = await sb.auth.getUser();
+          userId = data.user?.id ?? null;
+        }
+      }
+    } catch (_) { /* ignore */ }
 
     if (!destination || !archetype) {
       return new Response(
@@ -123,6 +141,10 @@ OUTPUT FORMAT (JSON only, no markdown):
   "hiddenGems": [...]
 }`;
 
+    const costTracker = trackCost('discover_proactive', 'google/gemini-2.5-flash');
+    if (userId) costTracker.setUserId(userId);
+    if (tripId) costTracker.setTripId(tripId);
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -153,6 +175,12 @@ OUTPUT FORMAT (JSON only, no markdown):
     }
 
     const aiResponse = await response.json();
+    try {
+      costTracker.recordAiUsage(aiResponse);
+      await costTracker.save();
+    } catch (e) {
+      console.error("[discover-proactive] cost tracker save failed:", e);
+    }
     const content = aiResponse.choices?.[0]?.message?.content;
 
     if (!content) {
