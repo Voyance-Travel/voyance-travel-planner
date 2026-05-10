@@ -128,9 +128,15 @@ export const MODEL_PRICING = {
 // Google API pricing (per call) - March 2025 per-SKU free tiers
 // WARNING: At 60 trips × 40-60 calls/trip = 2,400-3,600 calls/period
 // FREE TIER STATUS: UNKNOWN - must check Google Cloud Console billing
+//
+// DASHBOARD QUERY GUIDANCE:
+//   Cost totals (exclude retries):     WHERE retry_of IS NULL
+//   Reliability (count all attempts):  no filter
+//   Cache ROI:                          WHERE is_cache_hit = true
+//   Token quality:                      GROUP BY token_source ('api'|'estimate'|'unknown')
 export const GOOGLE_API_PRICING = {
   places_text_search: { perCall: 0.032, freeTierMonthly: 5000 },  // Google Advanced SKU (was 0.017 — incorrect)
-  places_details: { perCall: 0.017, freeTierMonthly: 5000 },
+  places_details: { perCall: 0.017, freeTierMonthly: 5000 },      // Basic Place Details SKU
   geocoding: { perCall: 0.005, freeTierMonthly: 10000 },
   photos: { perCall: 0.007, freeTierMonthly: 10000 },
   routes: { perCall: 0.005, freeTierMonthly: 5000 },
@@ -183,23 +189,47 @@ export function estimateTokens(content: string): number {
 }
 
 /**
- * Extract token counts from Lovable AI Gateway response.
- * The gateway returns usage data in the response.
+ * Source of token counts:
+ *   'api'      — provider returned precise usage (prompt_tokens / promptTokenCount)
+ *   'estimate' — counts derived from content length heuristic
+ *   'unknown'  — no AI usage recorded on this row
  */
-export function extractTokenUsage(aiResponse: any): { inputTokens: number; outputTokens: number } {
+export type TokenSource = 'api' | 'estimate' | 'unknown';
+
+/**
+ * Extract token counts from an AI response, tagging whether the count came
+ * from the provider's API (`source: 'api'`) or was estimated (`source: 'estimate'`).
+ *
+ * Supports both OpenAI-style (`usage.prompt_tokens` / `usage.completion_tokens`)
+ * and Gemini-style (`usageMetadata.promptTokenCount` / `candidatesTokenCount`).
+ */
+export function extractTokenUsage(aiResponse: any): {
+  inputTokens: number;
+  outputTokens: number;
+  source: TokenSource;
+} {
   const usage = aiResponse?.usage;
-  if (usage) {
+  const meta = aiResponse?.usageMetadata;
+
+  const apiInput =
+    usage?.prompt_tokens ?? usage?.input_tokens ?? meta?.promptTokenCount ?? null;
+  const apiOutput =
+    usage?.completion_tokens ?? usage?.output_tokens ?? meta?.candidatesTokenCount ?? null;
+
+  if (apiInput !== null && apiOutput !== null) {
     return {
-      inputTokens: usage.prompt_tokens || 0,
-      outputTokens: usage.completion_tokens || 0,
+      inputTokens: apiInput || 0,
+      outputTokens: apiOutput || 0,
+      source: 'api',
     };
   }
-  
+
   // Fallback: estimate from content if usage not provided
   const content = aiResponse?.choices?.[0]?.message?.content || '';
   return {
     inputTokens: 0, // Can't estimate input without original prompt
     outputTokens: estimateTokens(content),
+    source: 'estimate',
   };
 }
 
