@@ -342,5 +342,7 @@ export function useTripHeroImage({
     source,
     onError,
     onLoad,
+    // Only surface attribution when the active source is the API fetch (Unsplash)
+    attribution: source === 'api' && !apiFailed ? apiAttribution : undefined,
   };
 }
