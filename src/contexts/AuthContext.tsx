@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, ReactNode } fro
 import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { logLogin, logSignup, logLogout, logOAuthLogin } from '@/services/authAuditAPI';
+import { toast } from 'sonner';
 
 export interface User {
   id: string;
@@ -332,6 +333,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const provider = newSession.user.app_metadata?.provider;
             if (provider && provider !== 'email') {
               logOAuthLogin(provider).catch(console.error);
+
+              // One-time toast when OAuth identity was linked to a pre-existing email/password account.
+              try {
+                const identities = newSession.user.identities ?? [];
+                const emailId = identities.find((i: any) => i.provider === 'email');
+                const oauthId = identities.find((i: any) => i.provider === provider);
+                if (
+                  emailId && oauthId && identities.length >= 2 &&
+                  emailId.created_at && oauthId.created_at &&
+                  new Date(oauthId.created_at).getTime() > new Date(emailId.created_at).getTime() &&
+                  typeof localStorage !== 'undefined'
+                ) {
+                  const flagKey = `voyance_merge_notified:${newSession.user.id}:${provider}`;
+                  if (!localStorage.getItem(flagKey)) {
+                    const label = provider === 'google' ? 'Google'
+                      : provider === 'apple' ? 'Apple'
+                      : provider.charAt(0).toUpperCase() + provider.slice(1);
+                    toast.success(`Your ${label} account is now linked to your Voyance account`, {
+                      description: `You can sign in with either email/password or ${label} from now on.`,
+                      duration: 6000,
+                    });
+                    localStorage.setItem(flagKey, new Date().toISOString());
+                  }
+                }
+              } catch (e) {
+                console.warn('[Auth] merge-toast detection failed', e);
+              }
             }
 
             const { profile, preferences } = await loadUserData(newSession.user);
