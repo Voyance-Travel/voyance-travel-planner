@@ -2832,6 +2832,26 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 10b-post. DINING DESCRIPTION BACKFILL ---
+  // Fill blank "why this place" copy on dining cards from the inline-fallback
+  // DB (name match) → personalization.whyThisFits → leave blank for UI fallback.
+  // Runs after §10b scrub so that descriptions blanked by prompt-leak/fragment
+  // strip can still be recovered from whyThisFits. See plan.md (Venue
+  // descriptions on food cards).
+  {
+    const liveActs = activities.filter((a: any) => !lockedIds.has(a?.id));
+    const c = ensureDayDiningDescriptions(liveActs, resolvedDestination);
+    if (c.fallback + c.whyThisFits > 0) {
+      console.log(`[DINING_DESC_BACKFILL] day=${dayNumber} dest="${resolvedDestination || 'unknown'}" fallback=${c.fallback} whyThisFits=${c.whyThisFits} scanned=${c.scanned} path=repair-day`);
+      repairs.push({
+        code: FAILURE_CODES.TITLE_LABEL_LEAK,
+        action: 'dining_desc_backfill',
+        before: `scanned=${c.scanned}`,
+        after: `fallback=${c.fallback} whyThisFits=${c.whyThisFits}`,
+      });
+    }
+  }
+
   // --- 10c. TRUNCATED_SENTENCE: trim to last sentence boundary ---
   // Mirrors validate-day's checkSentenceCompleteness. Trim mid-sentence tails
   // back to the last [.!?…] when ≥40 chars of complete sentence remain;
