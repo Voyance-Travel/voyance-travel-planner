@@ -1,38 +1,85 @@
-## P1.3 — `pre_restore_snapshot` audit
+## P1.4 — `getTripStats` exclusive buckets + `other`
 
-### Findings
+### What the spec changes
 
-**Both parts of the spec are already in place, and the migration in the spec is not applicable.**
+Today (`src/services/userAPI.ts:182-277`), the three counts are **independent filter passes**, so a trip can land in multiple buckets:
 
-1. **Enum migration — NOT NEEDED.** The spec assumes `created_by_action` is an enum named `itinerary_version_action`. It isn't. In `public.itinerary_versions`:
+- `completedTrips` — `status==='completed'` OR `end_date < now`
+- `upcomingTrips` — not completed AND (`end_date ≥ now` OR `start_date ≥ now`)
+- `draftTrips` — `status === 'draft'` (regardless of dates)
 
-   ```
-   created_by_action | text |  | (nullable, no default)
-   ```
+A draft trip with a future `start_date` is counted in **both** `upcoming` and `draft`. There is no catch-all, and the three numbers can sum to more than `totalTrips`.
 
-   It's a plain `text` column, so no `ALTER TYPE … ADD VALUE 'pre_restore_snapshot'` is required (and running one would fail — the type does not exist). Other code already writes free-form values like `'manual_save'`, `'regenerate'`, `'swap'`, `'restored_from_v12'`, etc.
+The spec switches to **mutually exclusive** buckets evaluated in priority order, plus a fourth `other` for trips that match none, plus a DEV sum-equals-total assertion.
 
-2. **Pre-restore snapshot insert — ALREADY WIRED.** `src/services/itineraryVersionHistory.ts` `restoreVersion(...)` (lines 138–225) already:
-   - reads the current `is_current = true` row,
-   - inserts a new row with `created_by_action: 'pre_restore_snapshot'` and `day_metadata.label = 'Pre-restore snapshot'`, `auto_snapshot: true`, `before_restore_of_version: versionNumber`,
-   - aborts the restore if the snapshot insert fails (prevents data loss),
-   - then inserts the restore row tagged `restored_from_v{n}`.
+### Behavior change to flag
 
-3. **Verify command result.** `grep -rn "pre_restore_snapshot" supabase/migrations/ src/services/` currently returns **1** match (in `src/services/itineraryVersionHistory.ts`), not ≥2, because no migration file references it — and none is required, since the column is `text`. The spec's expected count assumes the enum path.
+Under the spec's priority (`ended → upcoming → draft → other`):
+
+- A trip with `status='draft'` and future `start_date` → now `upcoming`, no longer `draft`. Profile's "drafts" tile drops; "upcoming" rises by the same amount.
+- A trip with no dates and `status='completed'` → now `other` (the spec drops the explicit `status==='completed'` short-circuit). Profile's "completed" tile may drop.
+- A trip with no dates and no draft/planning status (e.g. `status='active'`, `'archived'`) → now `other` (was previously invisible).
+
+This is a real visible change on `src/pages/Profile.tsx`. It is also the explicit goal of the ticket (catch the leftovers), but worth naming.
 
 ### Plan
 
-A. **Close P1.3 as already-shipped.** Add an audit note to `.lovable/plan.md` recording:
-   - column is `text` not enum → migration skipped intentionally,
-   - code path already snapshots current state before restore,
-   - verify-grep expected count adjusted to ≥1 in `src/services/`.
+1. **Rewrite the bucketing block (lines ~196–218)** as a single mutually exclusive loop:
 
-   No code or DB changes.
+   ```ts
+   const buckets = {
+     completed: [] as typeof allTrips,
+     upcoming:  [] as typeof allTrips,
+     draft:     [] as typeof allTrips,
+     other:     [] as typeof allTrips,
+   };
 
-B. **(Optional, only if you want it.)** Tighten `formatVersionLabel` in `itineraryVersionHistory.ts` to render `pre_restore_snapshot` as `"Pre-restore snapshot"` instead of falling through to `"Modified"`. Pure UI label, ~3 lines added to the existing `switch`.
+   for (const t of allTrips) {
+     let key: keyof typeof buckets;
+     if (t.status === 'completed' || (t.end_date && parseLocalDate(t.end_date) < now)) {
+       key = 'completed';
+     } else if (t.start_date && parseLocalDate(t.start_date) >= now) {
+       key = 'upcoming';
+     } else if (t.end_date && parseLocalDate(t.end_date) >= now) {
+       // currently ongoing (started, not yet ended)
+       key = 'upcoming';
+     } else if (t.status === 'draft' || t.status === 'planning') {
+       key = 'draft';
+     } else {
+       key = 'other';
+     }
+     buckets[key].push(t);
+   }
 
-C. **Reject — you actually want an enum.** If the intent is to lock `created_by_action` down to a known set of values, that's a larger migration (create enum, backfill all existing text values into the enum, alter column type, update every writer). I can scope that separately if you want — it's not what the spec described.
+   if (import.meta.env.DEV) {
+     const sum = buckets.completed.length + buckets.upcoming.length + buckets.draft.length + buckets.other.length;
+     console.assert(sum === allTrips.length, `[getTripStats] sum ${sum} != total ${allTrips.length}`);
+   }
+   ```
 
-### Recommendation
+   Notes vs. the literal spec snippet:
+   - Keep `parseLocalDate` (existing util) instead of raw `new Date()` — matches the rest of the file's timezone-safe handling.
+   - Preserve today's "completed if `status==='completed'`" short-circuit so post-trip recap counts don't regress on date-less trips.
+   - Preserve today's "ongoing trip is upcoming" behavior (`end_date ≥ now` with no future start).
+   - Use plain arrays (`buckets.X.length`) — the `count + trips` shape in the spec is unused by the rest of the function.
 
-**A + B.** A closes the ticket honestly; B is the only meaningful behavior change still on the table for this item, and it's cosmetic.
+2. **Update downstream references** to read from buckets:
+   - `completedTrips` (variable) → `buckets.completed`
+   - `upcomingTrips` (variable) → `buckets.upcoming`
+   - `draftTrips` (variable) → `buckets.draft`
+   - `completedTrips.length` → `buckets.completed.length`, etc. (lines 221–249, 259–275).
+
+3. **Extend `TripStats` interface** (line 127) with `otherTrips: number` and populate it in the return object so Profile or future pages can read the leftover count. No consumer breaks — purely additive.
+
+4. **No change** to `TripStatsSummary`, `getTripStatsSummary`, or `Profile.tsx`. Profile only reads `completedTrips`/`upcomingTrips`/`draftTrips`/`totalTrips`, which still exist with the same names.
+
+### Verify
+
+- `grep -c "other:" src/services/userAPI.ts` → expect ≥1 (bucket key + `otherTrips: buckets.other.length`).
+- DEV console: load Profile, confirm no `[getTripStats] sum != total` assertion fires across a fixture user with mixed statuses.
+
+### Files touched
+
+- `src/services/userAPI.ts` — `TripStats` interface (1 line), `getTripStats` body (~30 lines).
+
+No DB migration, no consumer edits, no UI work.
