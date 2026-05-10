@@ -55,3 +55,32 @@ export function resolvePrimaryArchetype(
 
   return { archetype: 'Explorer', source: 'default' };
 }
+
+/**
+ * Resolve the SECONDARY archetype from a DNA row, if any.
+ * Returns null when no secondary is set (this is a valid outcome — secondary is optional).
+ * Fallback chain mirrors `resolvePrimaryArchetype`:
+ *   canonical column → travel_dna_v2 blob → null
+ * Note: archetype_matches[1] is intentionally NOT consulted here. The matcher's
+ * #2 candidate isn't a true "secondary identity" — only the explicitly stored
+ * secondary_archetype_name counts.
+ */
+export function resolveSecondaryArchetype(
+  profile: DnaProfileLike | null | undefined
+): { archetype: string | null; source: 'canonical' | 'v2_blob' | 'default' } {
+  if (!profile) return { archetype: null, source: 'default' };
+
+  if (profile.secondary_archetype_name) {
+    return { archetype: profile.secondary_archetype_name, source: 'canonical' };
+  }
+
+  const v2 = profile.travel_dna_v2 as
+    | (DnaProfileLike['travel_dna_v2'] & { secondary_archetype_name?: string | null })
+    | null
+    | undefined;
+  if (v2?.secondary_archetype_name) {
+    return { archetype: v2.secondary_archetype_name, source: 'v2_blob' };
+  }
+
+  return { archetype: null, source: 'default' };
+}
