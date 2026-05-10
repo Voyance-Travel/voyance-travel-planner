@@ -348,6 +348,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    // Cross-tab sign-out sync — propagate logout from any tab to all others.
+    const handleRemoteSignout = async () => {
+      if (isHandlingRemoteSignoutRef.current) return;
+      isHandlingRemoteSignoutRef.current = true;
+      try {
+        // Wipe this tab's session locally without re-broadcasting or hitting the server.
+        // The originating tab already revoked the refresh token globally.
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => { /* noop */ });
+      } finally {
+        if (isMounted) {
+          const sg2 = getAuthSingleton();
+          sg2.initialized = false;
+          sg2.cachedUser = null;
+          sg2.cachedSession = null;
+          currentUserIdRef.current = null;
+          setSession(null);
+          setUser(null);
+        }
+        isHandlingRemoteSignoutRef.current = false;
+      }
+    };
+
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        const bc = new BroadcastChannel('voyance-auth');
+        bcRef.current = bc;
+        bc.onmessage = (e) => {
+          if (e?.data?.type === 'auth:signout') {
+            void handleRemoteSignout();
+          }
+        };
+      } catch { /* noop */ }
+    }
+
+    // Storage-event fallback (older Safari, and as a backup): Supabase clears
+    // its `sb-*-auth-token` localStorage key on signOut, which fires `storage` in other tabs.
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      if (e.key.startsWith('sb-') && e.key.endsWith('-auth-token') && e.newValue === null) {
+        void handleRemoteSignout();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
     // INITIAL load - this controls isLoading
     const initializeAuth = async () => {
       try {
