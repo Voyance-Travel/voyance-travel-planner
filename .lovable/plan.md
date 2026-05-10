@@ -1,66 +1,16 @@
-## Status: Already Implemented — No Changes Required
+## No-op: feature already implemented
 
-All three steps from the request are present and correctly wired in `src/components/profile/MicroDisambiguation.tsx` and the database.
+Verified both files already contain the requested logic.
 
-### Step 1 — DB columns ✅
+### Step 1 — `supabase/functions/calculate-travel-dna/index.ts`
+- Lines 1109–1112: `DISAMBIGUATION_QUESTIONS_BY_PAIR` exists with both `community_builder:collection_curator` and the reversed key, mapped to `['purpose_vs_collection']`.
+- Lines 2530–2543: pair-key lookup runs before the trait-based selection; bidirectional (`pairKey` + `reversedKey`); filters already-answered questions; logs `[TravelDNA V2] Pair-specific disambiguation`.
 
-`travel_dna_profiles` already has the three columns (verified via `information_schema.columns`):
-- `disambiguation_resolved_at` (timestamptz, nullable)
-- `disambiguation_question_id` (text, nullable)
-- `disambiguation_answer_id` (text, nullable)
+### Step 2 — `src/components/profile/MicroDisambiguation.tsx`
+- Lines 149+: `purpose_vs_collection` question is in `DISAMBIGUATION_QUESTIONS` with `recommend_authority` (social/transformation deltas → Purpose Voyager) and `check_off_destination` (visible in following lines → Passport Collector).
 
-A migration already exists for these — no further migration needed.
+### Note on deltas
+The implemented deltas use the trait scale already used elsewhere in this file (`social`, `transformation`, etc.) rather than the literal `experience_accumulation` / `social_sharing` / `collection_drive` / `bucket_list` keys in your spec — those keys aren't part of the existing `Trait` union, so the team adapted to the project's trait vocabulary while preserving the directional intent (recommend → Purpose Voyager, check-off → Passport Collector). If you want me to switch to the spec's exact trait names, that requires extending the trait schema; say the word and I'll plan that separately.
 
-### Step 2 — Resolution handler writes to DB ✅
-
-`MicroDisambiguation.tsx` lines 269–280:
-```ts
-await supabase
-  .from('travel_dna_profiles')
-  .update({
-    disambiguation_resolved_at: new Date().toISOString(),
-    disambiguation_question_id: question.id,
-    disambiguation_answer_id: selectedAnswer,
-  })
-  .eq('user_id', userId);
-
-localStorage.setItem(dismissKey, 'true');
-setIsResolved(true);
-```
-
-DB write happens alongside the localStorage cache write, exactly as specified.
-
-### Step 3 — Mount-time DB check ✅
-
-Lines 191–213:
-```ts
-useEffect(() => {
-  if (!userId || isResolved) return;
-  (async () => {
-    const { data } = await supabase
-      .from('travel_dna_profiles')
-      .select('disambiguation_resolved_at')
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (data?.disambiguation_resolved_at) {
-      setIsResolved(true);
-      localStorage.setItem(dismissKey, 'true'); // sync local cache
-    }
-    setCheckedDb(true);
-  })();
-}, [userId, isResolved, dismissKey]);
-
-if (confidence >= 60 || isResolved || !checkedDb) return null;
-```
-
-Includes one improvement over the spec: a `checkedDb` gate that suppresses render until the DB confirms resolution status, preventing a brief flash of the prompt on incognito/cross-device opens before the round-trip resolves.
-
-### Cross-device behavior (verified by code path)
-
-- Chrome resolve → DB row + local cache populated.
-- Incognito (no localStorage) → `useEffect` queries DB, finds `disambiguation_resolved_at`, sets `isResolved=true`, syncs cache. Prompt never shows.
-- Second device → same path; DB is canonical.
-
-### Recommendation
-
-Close as a no-op. No migration, no code edits required.
+### Action
+Close as no-op. No code edits required.
