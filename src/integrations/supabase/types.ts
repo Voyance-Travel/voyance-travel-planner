@@ -7513,6 +7513,7 @@ export type Database = {
           pacing_feedback: string | null
           pain_points: Json | null
           skipped_activities: Json | null
+          summary_source: string | null
           tips_for_others: string | null
           travel_party_notes: string | null
           trip_id: string
@@ -7536,6 +7537,7 @@ export type Database = {
           pacing_feedback?: string | null
           pain_points?: Json | null
           skipped_activities?: Json | null
+          summary_source?: string | null
           tips_for_others?: string | null
           travel_party_notes?: string | null
           trip_id: string
@@ -7559,6 +7561,7 @@ export type Database = {
           pacing_feedback?: string | null
           pain_points?: Json | null
           skipped_activities?: Json | null
+          summary_source?: string | null
           tips_for_others?: string | null
           travel_party_notes?: string | null
           trip_id?: string
