@@ -1579,14 +1579,16 @@
     },
     "community_builder": {
       "name": "The Purpose Voyager",
-      "category": "CONNECTOR",
-      "required": {
-        "ethics_focus": { "min": 0.6 },
-        "cultural_depth": { "min": 0.5 }
-      },
+      "category": "ACHIEVER",
+      "required": {},
+      "requiredAny": [
+        { "experience_accumulation": { "min": 0.6 } },
+        { "bucket_list": { "min": 0.6 } }
+      ],
       "boosters": {
-        "ethics_focus": 1.5,
-        "cultural_depth": 1.0,
+        "experience_accumulation": 1.0,
+        "bucket_list": 0.8,
+        "social_sharing": 0.4,
         "social_energy": 0.6,
         "learning_focus": 0.5
       },
