@@ -2140,6 +2140,107 @@ export default function TripDetail() {
     }
   }, [tripId, trip, queryClient]);
 
+  // ───── Orphan-activity reconciliation ─────
+  // Surfaces activities whose date.day fell outside [start_date, end_date]
+  // (legacy data, SQL edits, regen races). User picks shift / archive / dismiss.
+  const orphanReport = useMemo(() => {
+    if (!trip) return null;
+    const meta = (trip.metadata as Record<string, unknown> | null) || {};
+    const datesFingerprint = `${trip.start_date}|${trip.end_date}`;
+    if (meta.orphan_warning_dismissed_at && meta.orphan_warning_dismissed_for === datesFingerprint) {
+      return null;
+    }
+    const days = ((trip.itinerary_data as Record<string, unknown>)?.days as any[]) || [];
+    const report = detectOrphanActivities({
+      startDate: trip.start_date,
+      endDate: trip.end_date,
+      days,
+    });
+    return report.outOfRangeDays.length > 0 ? report : null;
+  }, [trip]);
+
+  const handleArchiveOrphans = useCallback(async () => {
+    if (!trip || !tripId || !orphanReport) return;
+    const metadata = trip.itinerary_data as Record<string, unknown> | null;
+    const allDays = [...((metadata?.days as any[]) || [])];
+    const orphanNumbers = new Set(orphanReport.outOfRangeDays.map(d => d.dayNumber));
+    const archived = allDays.filter((d: any) => orphanNumbers.has(d?.dayNumber));
+    const kept = allDays.filter((d: any) => !orphanNumbers.has(d?.dayNumber));
+    kept.sort((a: any, b: any) => String(a?.date || '').localeCompare(String(b?.date || '')));
+    const renumbered = kept.map((d: any, idx: number) => ({ ...d, dayNumber: idx + 1 }));
+    const updatedItinerary = {
+      ...(metadata || {}),
+      days: renumbered,
+      archivedDays: [...(((metadata?.archivedDays as any[]) || [])), ...archived],
+    };
+    setTrip(prev => prev ? { ...prev, itinerary_data: updatedItinerary as any } : null);
+    try {
+      const safeRes = await safeUpdateItineraryData(tripId, updatedItinerary as any);
+      if (safeRes?.error) throw safeRes.error;
+      toast.success(`Archived ${archived.length} day${archived.length === 1 ? '' : 's'} outside your trip dates`);
+      queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+    } catch (err) {
+      console.error('[TripDetail] Archive orphans failed:', err);
+      toast.error('Failed to archive orphan days');
+    }
+  }, [trip, tripId, orphanReport, queryClient]);
+
+  const handleShiftOrphans = useCallback(async () => {
+    if (!trip || !tripId || !orphanReport) return;
+    const metadata = trip.itinerary_data as Record<string, unknown> | null;
+    const allDays = [...((metadata?.days as any[]) || [])];
+    const start = parseLocalDate(trip.start_date);
+    const windowLen = differenceInDays(parseLocalDate(trip.end_date), start) + 1;
+    allDays.sort((a: any, b: any) => String(a?.date || '').localeCompare(String(b?.date || '')));
+    const fits = allDays.slice(0, windowLen);
+    const overflow = allDays.slice(windowLen);
+    const renumbered = fits.map((d: any, idx: number) => ({
+      ...d,
+      dayNumber: idx + 1,
+      date: format(addDays(start, idx), 'yyyy-MM-dd'),
+    }));
+    const updatedItinerary = {
+      ...(metadata || {}),
+      days: renumbered,
+      ...(overflow.length > 0
+        ? { archivedDays: [...(((metadata?.archivedDays as any[]) || [])), ...overflow] }
+        : {}),
+    };
+    setTrip(prev => prev ? { ...prev, itinerary_data: updatedItinerary as any } : null);
+    try {
+      const safeRes = await safeUpdateItineraryData(tripId, updatedItinerary as any);
+      if (safeRes?.error) throw safeRes.error;
+      toast.success(
+        overflow.length > 0
+          ? `Shifted into range; archived ${overflow.length} overflow day${overflow.length === 1 ? '' : 's'}`
+          : 'Shifted activities into your trip dates'
+      );
+      queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+    } catch (err) {
+      console.error('[TripDetail] Shift orphans failed:', err);
+      toast.error('Failed to shift orphan days');
+    }
+  }, [trip, tripId, orphanReport, queryClient]);
+
+  const handleDismissOrphans = useCallback(async () => {
+    if (!trip || !tripId) return;
+    const datesFingerprint = `${trip.start_date}|${trip.end_date}`;
+    const nextMetadata = {
+      ...((trip.metadata as Record<string, unknown> | null) || {}),
+      orphan_warning_dismissed_at: new Date().toISOString(),
+      orphan_warning_dismissed_for: datesFingerprint,
+    };
+    setTrip(prev => prev ? { ...prev, metadata: nextMetadata as any } : null);
+    try {
+      await supabase
+        .from('trips')
+        .update({ metadata: nextMetadata as any, updated_at: new Date().toISOString() } as any)
+        .eq('id', tripId);
+    } catch (err) {
+      console.error('[TripDetail] Dismiss orphans failed:', err);
+    }
+  }, [trip, tripId]);
+
   // Handle applying hotel-based swap suggestions to itinerary
   const handleApplySwaps = useCallback((swaps: SwapSuggestion[]) => {
     if (!trip) return;
