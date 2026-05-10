@@ -593,44 +593,99 @@ serve(async (req) => {
       return errorResponse('Invalid action', 'INVALID_ACTION', 400, { validActions: [...Object.keys(FIXED_COSTS), ...VARIABLE_COST_ACTIONS] });
     }
 
-    // ── Idempotency check: skip duplicate charges ──
+    // ── Idempotency: required for ALL credit spends ──
+    // Closes the double-charge window for low-value actions (ai_message,
+    // swap_activity, add_activity, regenerate_day, etc.). The unique partial
+    // index on credit_ledger(user_id, idempotency_key) is what actually
+    // enforces uniqueness — the SELECT below is just a fast path for the
+    // already-committed case.
     const idempotencyKey = metadata?.idempotencyKey as string | undefined;
-
-    // High-value actions MUST provide an idempotency key — protects against
-    // duplicate charges on retries for the four most expensive flows.
-    const HIGH_VALUE_ACTIONS_REQUIRING_KEY = ['trip_generation', 'smart_finish', 'hotel_optimization', 'regenerate_trip'];
-    if (HIGH_VALUE_ACTIONS_REQUIRING_KEY.includes(action) && !idempotencyKey) {
+    if (!idempotencyKey) {
       return errorResponse(
-        'metadata.idempotencyKey is required for high-value actions',
+        'metadata.idempotencyKey is required for all credit spends',
         'MISSING_IDEMPOTENCY_KEY',
         400,
-        { action, requiredFor: HIGH_VALUE_ACTIONS_REQUIRING_KEY }
+        { action }
       );
     }
 
-    if (idempotencyKey && tripId) {
+    // Fast path: already-committed duplicate (different request, same key).
+    {
       const { data: existing } = await supabaseAdmin
         .from('credit_ledger')
-        .select('id, credits_delta')
+        .select('id, credits_delta, created_at')
         .eq('user_id', user.id)
-        .eq('action_type', action)
-        .eq('trip_id', tripId)
-        .contains('metadata', { idempotencyKey })
-        .limit(1);
-      if (existing && existing.length > 0) {
-        console.log('[spend-credits] Idempotent hit — returning cached result for key:', idempotencyKey);
+        .eq('idempotency_key', idempotencyKey)
+        .maybeSingle();
+      if (existing) {
+        console.log('[spend-credits] Idempotent hit (fast path) for key:', idempotencyKey);
         const balance = await syncBalanceCache(supabaseAdmin, user.id);
         return new Response(
           JSON.stringify({
             success: true,
-            spent: Math.abs(existing[0].credits_delta),
+            spent: Math.abs(existing.credits_delta),
             action,
             idempotent: true,
+            duplicate: true,
+            originalSpendAt: existing.created_at,
             newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+    }
+
+    // ── Claim-first: insert a placeholder ledger row keyed by idempotency_key.
+    // The unique partial index makes this atomic across concurrent invocations:
+    // exactly one request wins; losers get 23505 and return the cached result.
+    // Only the winner proceeds to deductFIFO, so no compensating refund needed.
+    let claimRowId: string | null = null;
+    {
+      const { data: claim, error: claimErr } = await supabaseAdmin
+        .from('credit_ledger')
+        .insert({
+          user_id: user.id,
+          transaction_type: 'spend',
+          credits_delta: 0, // placeholder; updated after successful deduction
+          is_free_credit: false,
+          action_type: action,
+          trip_id: tripId || null,
+          idempotency_key: idempotencyKey,
+          notes: `${action.replace(/_/g, ' ')} (pending)`,
+          metadata: { ...metadata, idempotencyKey, status: 'pending' },
+        })
+        .select('id')
+        .single();
+
+      if (claimErr) {
+        // 23505 = unique_violation on (user_id, idempotency_key) — race lost.
+        const pgCode = (claimErr as { code?: string }).code;
+        if (pgCode === '23505') {
+          const { data: original } = await supabaseAdmin
+            .from('credit_ledger')
+            .select('id, credits_delta, created_at')
+            .eq('user_id', user.id)
+            .eq('idempotency_key', idempotencyKey)
+            .maybeSingle();
+          console.log('[spend-credits] Idempotent hit (claim race) for key:', idempotencyKey);
+          const balance = await syncBalanceCache(supabaseAdmin, user.id);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              spent: original ? Math.abs(original.credits_delta) : 0,
+              action,
+              idempotent: true,
+              duplicate: true,
+              originalSpendAt: original?.created_at,
+              newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.error('[spend-credits] Claim row insert failed:', claimErr);
+        return errorResponse('Failed to record spend claim', 'CLAIM_FAILED', 500);
+      }
+      claimRowId = claim!.id as string;
     }
 
     // ── Create pending charge record for high-value actions (safety net) ──
