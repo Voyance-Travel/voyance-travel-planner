@@ -5151,7 +5151,41 @@ export function EditorialItinerary({
   }, [guidedAssistDayIndex, isPaid, spendCredits, tripId]);
 
   // Internal regenerate handler (after credit check passed)
-  const handleDayRegenerateInternal = useCallback(async (dayIndex: number, guidedPreferences?: string) => {
+  const handleDayRegenerateInternal = useCallback(async (
+    dayIndex: number,
+    guidedPreferences?: string,
+    spendContext?: { idempotencyKey?: string; pendingChargeId?: string | null },
+  ) => {
+    // Refund REGENERATE_DAY credits when generation hard-fails or returns
+    // a placeholder day (action-generate-day.ts buildPlaceholderDay path).
+    // Idempotent server-side via pendingChargeId + originalIdempotencyKey.
+    const refundRegenCredits = async (reason: string, errorMessage?: string) => {
+      if (!spendContext?.idempotencyKey) return;
+      try {
+        await supabase.functions.invoke('spend-credits', {
+          body: {
+            action: 'REFUND',
+            tripId,
+            metadata: {
+              originalAction: 'regenerate_day',
+              pendingChargeId: spendContext.pendingChargeId ?? undefined,
+              reason,
+              ...(errorMessage ? { errorMessage } : {}),
+            },
+            originalIdempotencyKey: spendContext.idempotencyKey,
+          },
+        });
+      } catch (refundErr) {
+        console.error('[Regenerate] Refund failed:', refundErr);
+      }
+    };
+    const isFailedDay = (d: unknown): boolean => {
+      const day = d as { activities?: unknown[]; metadata?: { quality?: { generation_failed?: boolean } } } | null | undefined;
+      if (!day) return true;
+      if (!Array.isArray(day.activities) || day.activities.length === 0) return true;
+      if (day.metadata?.quality?.generation_failed === true) return true;
+      return false;
+    };
     const day = days[dayIndex];
     if (!day) return;
 
