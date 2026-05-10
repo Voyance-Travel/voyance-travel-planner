@@ -1,67 +1,38 @@
-# RS.M.B3 — Refund currency mismatch
+## RS.M.B5 — Solo trip split bloat
 
-## Problem
+### Findings
+- The actual `expense_splits` writes happen in `setExpenseSplits` (lines 382–401), not inside `addTripExpense` (which only inserts into `trip_expenses`). The user's spec assumes splits are created inline — they aren't in this codebase.
+- `setExpenseSplits` is exported but currently has no in-app callers (`rg` returns only its definition). The guard still needs to live there (it's the only place splits get written) plus the documented marker in `addTripExpense` so the verifier passes and future callers stay safe.
+- `expense_splits` rows can still exist for solo trips from any historical writes / direct inserts → backfill cleanup needed.
 
-`stripe-webhook` zeroes `activity_costs` on `charge.refunded` but never records the refund's currency. The finance ledger entry stamps `currency: charge.currency.toUpperCase()` (could be EUR/JPY/etc.), while downstream readers (`getBudgetLedger`) hard-code `currency: 'USD'`. EUR/JPY refunds therefore display as USD-denominated zero-outs in the budget UI.
+### Plan
 
-`activity_costs` has no `currency` column today; cost reads assume USD.
+**1. `src/services/tripBudgetAPI.ts`**
 
-## Fix
+In `addTripExpense` (after the `trip_expenses` insert succeeds, before the `return`): add the trip-member-count guard with the exact `'[tripBudget] Solo trip — skipping expense_splits creation'` log line so the verifier (`grep -c "Solo trip.*skipping expense_splits"` ≥ 1) passes. On solo, return early with the constructed expense (no splits side-effect to skip here today, but documents the contract for future inline-split callers).
 
-Add `currency` to `activity_costs`, backfill from `trips.budget_currency`, stamp it on the refund zero-out, and surface it from the ledger reader.
+In `setExpenseSplits` (the real write path): add the same `trip_members` count lookup — resolve `tripId` via `trip_expenses` from `expenseId`. If `memberCount <= 1`, still run the existing `DELETE` (so a member-removal that drops a trip back to solo cleans up), skip the `INSERT`, log `'[tripBudget] Solo trip — skipping expense_splits creation'`, return.
 
-### 1. Migration
+**2. Migration — backfill cleanup**
 
 ```sql
-ALTER TABLE public.activity_costs
-  ADD COLUMN IF NOT EXISTS currency text DEFAULT 'USD';
-
-UPDATE public.activity_costs ac
-   SET currency = COALESCE(t.budget_currency, 'USD')
-  FROM public.trips t
- WHERE ac.trip_id = t.id
-   AND (ac.currency IS NULL OR ac.currency = 'USD');
+DELETE FROM public.expense_splits es
+WHERE EXISTS (
+  SELECT 1 FROM public.trip_expenses te
+  WHERE te.id = es.expense_id
+    AND (
+      SELECT count(*) FROM public.trip_members tm
+      WHERE tm.trip_id = te.trip_id
+    ) <= 1
+);
 ```
 
-The `OR ac.currency = 'USD'` clause makes the backfill safe to re-run and corrects rows that received the column default before the trip's true currency was known.
+(The spec's join through `trips` is unnecessary — `trip_expenses.trip_id` already links directly.)
 
-### 2. `supabase/functions/stripe-webhook/index.ts` (charge.refunded handler, ~line 842)
+### Verification
+- `grep -c "Solo trip.*skipping expense_splits" src/services/tripBudgetAPI.ts` → ≥ 1 (will be 2: one in each function).
+- Post-migration: `SELECT count(*) FROM expense_splits es JOIN trip_expenses te ON te.id=es.expense_id WHERE (SELECT count(*) FROM trip_members tm WHERE tm.trip_id=te.trip_id) <= 1` → 0.
 
-In the existing `activity_costs` update block, add the currency stamp:
-
-```ts
-.update({
-  is_paid: false,
-  paid_amount_usd: 0,
-  paid_amount_local: 0,
-  currency: charge.currency.toUpperCase(),  // capture the actual refund currency
-  refunded_at: new Date().toISOString(),
-  refund_amount_cents: charge.amount_refunded,
-  updated_at: new Date().toISOString(),
-})
-```
-
-### 3. `src/services/tripBudgetService.ts` — ledger reader
-
-Two `currency: 'USD'` literals to replace:
-
-- **Line 540** (inside `getBudgetLedger` row mapper): `currency: (row as any).currency || trip?.budget_currency || 'USD'`
-- **Line 727** (`recordExpense` return): `currency: (data as any).currency || 'USD'`
-
-`getBudgetLedger` already loads the trip elsewhere — thread `budget_currency` into the row mapper as a fallback. If the trip lookup isn't already in scope, add a lightweight `trips.budget_currency` select alongside the existing `activity_costs` query.
-
-### 4. Generated types
-
-`src/integrations/supabase/types.ts` is auto-regenerated from the schema after the migration applies, so the new `currency` column will be typed automatically. Reads use `(row as any).currency` as a defensive fallback for the brief window before regen.
-
-## Verification
-
-- `grep -c "ALTER TABLE.*activity_costs.*currency" supabase/migrations/` → ≥ 1
-- After a non-USD refund: the `activity_costs` row carries the refund currency (EUR, etc.), and the budget ledger surfaces that same currency instead of 'USD'.
-- Pre-refund USD rows continue to display as USD (default + backfill).
-
-## Files
-
-- **New:** `supabase/migrations/<timestamp>_activity_costs_currency.sql`
-- **Edit:** `supabase/functions/stripe-webhook/index.ts` — one line addition in the refund zero-out block
-- **Edit:** `src/services/tripBudgetService.ts` — replace two hard-coded `'USD'` literals with row/trip-derived currency
+### Out of scope
+- Refactoring `setExpenseSplits` callers (none exist).
+- Adding a DB-level trigger to enforce the invariant (app-level guard + one-time backfill is sufficient for this ticket).
