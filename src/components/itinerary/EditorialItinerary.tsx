@@ -2772,6 +2772,19 @@ export function EditorialItinerary({
     setConciergeOpen(true);
   }, [days]);
 
+  // Keep conciergeActivity in sync with `days` while the sheet is open so
+  // saved AI notes appear immediately without closing/reopening the sheet.
+  useEffect(() => {
+    if (!conciergeOpen || !conciergeActivity) return;
+    for (const day of days) {
+      const live = day.activities?.find(a => a.id === conciergeActivity.id);
+      if (live && live !== conciergeActivity) {
+        setConciergeActivity(live as EditorialActivity);
+        return;
+      }
+    }
+  }, [days, conciergeOpen, conciergeActivity]);
+
   // AI Note save/delete handlers
   // IMPORTANT: persist immediately (don't rely on the 3 s autosave debounce).
   // Otherwise users who navigate away or close the sheet quickly lose the note,
