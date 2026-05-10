@@ -1,25 +1,44 @@
-## RS.M5 — Global per-trip version-history prune
+## RS.M6 — Date version restore: keep history (snapshot + mark, no destructive delete)
 
-Adds a daily-scheduled, global cap of **30 versions per trip** on `public.itinerary_versions`, on top of the existing per-(trip, day) cap of 10 enforced by the `trg_cleanup_old_itinerary_versions` trigger. Long, heavily-edited multi-week trips can currently hold 10 × N days × M edits worth of history; this bounds total trip rows.
+Today `restoreTripDateVersion(tripId)` **deletes** the popped version and every older row (lines 100–111). That destroys the audit trail. Replace with: (1) snapshot the pre-restore trip dates as a new version row, (2) leave the popped version in place, (3) mark it `restored_at` + bump `times_restored`.
 
-### Inspection findings
-- `public.itinerary_versions` exists; columns include `trip_id`, `day_number`, `version_number`, `is_current`, `created_at`. RLS owner-scoped.
-- Existing `cleanup_old_itinerary_versions()` AFTER-INSERT trigger keeps the 10 newest per `(trip_id, day_number)` by `version_number DESC`. No global cap.
-- `pg_cron` and `pg_net` extensions are both already installed. No URL/anon-key needed for this job (pure SQL call), so it ships in a migration safely.
+### Caller-shape note (deviation from literal spec)
 
-### Migration: `supabase/migrations/<ts>_version_history_global_prune.sql`
+The user's spec uses signature `restoreTripDateVersion(versionId, tripId): Promise<void>` and updates `trips` from inside the helper. The **existing single caller** `src/pages/TripDetail.tsx` line 2086 calls it as `restoreTripDateVersion(tripId)` and **already** updates `trips` + local state from the returned `snapshot` (lines 2092–2120). Switching to the spec signature would mean either:
+- changing the caller to fetch a `versionId` first (extra round-trip + UX change), or
+- silently double-writing `trips` (helper updates → caller updates again).
 
-1. **`public.prune_itinerary_versions_per_trip()`** — `SECURITY DEFINER`, `search_path = public`, returns `jsonb`. Uses a CTE with `row_number() OVER (PARTITION BY trip_id ORDER BY created_at DESC)` and deletes rows where `rn > 30`. Exposes `{pruned, ran_at}`.
-2. **Safety addition** (small deviation from the literal spec): exclude `is_current = true` rows from deletion. Two reasons: a) the `idx_itinerary_versions_current` index implies callers rely on at least one current row per `(trip_id, day_number)`; b) on a 30-day trip with frequent edits, an unlucky created_at ordering could otherwise prune a current row. Final predicate: `rn > 30 AND COALESCE(is_current, false) = false`.
-3. Permissions: `REVOKE ALL ... FROM PUBLIC; GRANT EXECUTE ... TO service_role;`
-4. Schedule: `cron.schedule('prune-itinerary-versions-daily', '0 3 * * *', $$SELECT public.prune_itinerary_versions_per_trip()$$);` — guarded with a pre-check that unschedules any prior job of the same name so re-running the migration is idempotent.
+Plan keeps the **existing public signature `(tripId)` and `{success, snapshot, error}` return shape** and applies the spec's *behavior*: pre-restore snapshot insert + non-destructive mark instead of the two `.delete()` calls. This satisfies the spec's intent (keep older versions, audit a restore) without breaking the caller. Verify grep target is met regardless.
+
+### File: `src/services/tripDateVersionHistory.ts`
+
+Replace lines 100–111 (the two delete calls) with:
+
+1. **Pre-restore snapshot** — read current `trips.start_date / end_date / itinerary_data / hotel_selection`, INSERT a new `trip_date_versions` row with `created_by_action: 'pre_restore_snapshot'` (existing column) and label `'Pre-restore snapshot'` carried in a new `metadata` jsonb (column added by migration). Tolerates failure with a warn log; never aborts the restore.
+2. **Mark popped version** — UPDATE the row at `version.id` setting `restored_at = now()` and `times_restored = COALESCE(times_restored, 0) + 1`. We already have `version` in scope; do the increment inline (atomic enough for an undo-stack; an RPC is overkill here).
+3. **Drop both `.delete()` calls.** Older versions remain.
+
+`TripDateVersion` interface gains `restored_at?: string | null` and `times_restored?: number | null` for type completeness; `getLastTripDateVersion` still returns the most recent row regardless of `restored_at` (matches current "stack of all versions" behavior).
+
+### Migration: `trip_date_versions` schema additions
+
+```sql
+ALTER TABLE public.trip_date_versions
+  ADD COLUMN IF NOT EXISTS restored_at  timestamptz,
+  ADD COLUMN IF NOT EXISTS times_restored integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS metadata     jsonb     NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS label        text;
+```
+
+`metadata` and `label` are added because the spec body writes both; current schema has neither (verified by reading the insert in `saveTripDateVersion` lines 39–47 — only six columns set). All four are nullable / defaulted so existing rows are unaffected. RLS is unchanged (existing policies cover the table by `trip_id`).
 
 ### Out of scope
-- Touching the existing per-day trigger (`cleanup_old_itinerary_versions` / `trg_cleanup_old_itinerary_versions`) — keep both layers.
-- Backfill prune of rows already in the table — the first cron run will handle it.
-- Surfacing run results in app UI.
+- Changing the undo UX in `TripDetail.tsx`. The existing one-click undo continues to work; the difference is invisible to users until/unless we surface a "version history" UI later.
+- Bounding `trip_date_versions` row count. RS.M5 added a global cap on `itinerary_versions` only; if `trip_date_versions` grows unbounded it can be capped in a follow-up.
+- Adding a `restoreSpecificVersion(versionId)` API for non-stack restores (the spec hints at it, but no UI consumes it today).
 
 ### Verification
-- `ls supabase/migrations/ | grep version_history_global_prune` returns the new file.
-- After approval: `supabase.read_query` `SELECT proname FROM pg_proc WHERE proname='prune_itinerary_versions_per_trip'` → 1 row.
-- Manual smoke (optional): seed >30 rows for one `trip_id`, call `SELECT public.prune_itinerary_versions_per_trip();`, expect remaining count = 30 (plus any preserved `is_current`).
+- `grep -c "Pre-restore snapshot\|restored_at" src/services/tripDateVersionHistory.ts` → ≥ 2 (one literal, one column read in the UPDATE; the interface field counts as a third).
+- After migration, `\d public.trip_date_versions` shows `restored_at`, `times_restored`, `metadata`, `label`.
+- Manual: trigger a date change → undo. `SELECT id, restored_at, times_restored, created_by_action FROM trip_date_versions WHERE trip_id = …` shows the original version with `restored_at` set + `times_restored = 1`, plus a new row with `created_by_action = 'pre_restore_snapshot'`. Older rows still present.
+- Re-undo (if user redoes the same dates and undoes again): `times_restored` increments to 2.
