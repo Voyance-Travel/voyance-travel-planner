@@ -1,55 +1,83 @@
 ## Problem
 
-`action-generate-day.ts` (single-day refresh) caches `metadata.quality.meal_policy_at_generation` at line 336. The multi-day generator in `action-generate-trip-day.ts` derives the same policy but never persists it. Health panel reads from this metadata key — so day-refreshed trips report meal violations correctly, but multi-day-generated trips silently pass.
+`useGenerateTripPreview` (Quick) and `useGenerateFullPreview` (Full) both register with React Query using **static string** `mutationKey`s:
+
+- `src/services/tripPreviewService.ts:189` → `mutationKey: ['generate-trip-preview']`
+- `src/services/fullPreviewService.ts:150` → `mutationKey: ['generate-full-preview']`
+
+Because the keys do not include `previewType`/`destination`/`startDate`/`endDate`, every call from any consumer with the same hook shares the same mutation slot. When a user generates a Quick preview for `Paris 2026-06-01..06-05` and then immediately requests a Full preview (or switches destinations), other components subscribed to the same hook can read the prior cached `data` and render a stale Quick preview while the new Full request is in-flight. This is the HIGH-6 carryover from build (7).
 
 ## Fix
 
-Mirror the `action-generate-day.ts:336-346` write in two places inside `supabase/functions/generate-itinerary/action-generate-trip-day.ts`.
+Make the `mutationKey` a function of `(previewType, destination, startDate, endDate)` so each unique request gets its own cache slot and previously-resolved Quick state cannot be served when Full is requested (and vice-versa).
 
-### Site A — final per-day guard (~after line 1803)
-
-Right after the `if/else` meal_audit block that closes at line 1803, insert (unconditional, sibling of the audit assignment):
+### `src/services/tripPreviewService.ts` (~line 186-191)
 
 ```ts
-dayResult.metadata = dayResult.metadata || {};
-dayResult.metadata.quality = dayResult.metadata.quality || {};
-dayResult.metadata.quality.meal_policy_at_generation = {
-  dayMode: _fmgPolicy.dayMode,
-  requiredMeals: _fmgPolicy.requiredMeals,
-  isFullExplorationDay: _fmgPolicy.isFullExplorationDay,
-  arrivalTime24: _isFirstDay ? (savedArrTime24Hoisted ?? null) : null,
-  departureTime24: _isLastDay ? (savedDepTime24Hoisted ?? null) : null,
-  generated_at: new Date().toISOString(),
-};
+export function useGenerateTripPreview() {
+  return useMutation({
+    mutationFn: generateTripPreview,
+    mutationKey: ['preview', 'quick'] as const,
+  });
+}
 ```
 
-Written unconditionally (not gated on `!alreadyCompliant`) to match `action-generate-day.ts` behavior — the cache must exist even when generation produced a compliant day.
-
-### Site B — multi-day finalization loop (~line 2335, right after `policy` is derived)
-
-In the loop at lines 2322-2371, immediately after `deriveMealPolicy(...)` returns `policy` and **before** the `if (policy.requiredMeals.length === 0) { … continue; }` early-return, insert:
+Change `mutationFn` wrapper so the per-call key is set via `useMutation`'s `mutationKey` factory pattern. Concretely, expose an overload that accepts the request and constructs the discriminated key. The simplest in-place change:
 
 ```ts
-updatedDays[i].metadata = updatedDays[i].metadata || {};
-updatedDays[i].metadata.quality = updatedDays[i].metadata.quality || {};
-updatedDays[i].metadata.quality.meal_policy_at_generation = {
-  dayMode: policy.dayMode,
-  requiredMeals: policy.requiredMeals,
-  isFullExplorationDay: policy.isFullExplorationDay,
-  arrivalTime24: isFirstDayLoop ? (savedArrivalTime24 ?? null) : null,
-  departureTime24: isLastDayLoop ? (savedDepartureTime24 ?? null) : null,
-  generated_at: new Date().toISOString(),
-};
+export function useGenerateTripPreview(params?: Pick<GeneratePreviewParams, 'destination' | 'startDate' | 'endDate'>) {
+  return useMutation({
+    mutationFn: generateTripPreview,
+    mutationKey: [
+      'preview',
+      'quick',
+      params?.destination ?? '',
+      params?.startDate ?? '',
+      params?.endDate ?? '',
+    ],
+  });
+}
 ```
 
-Placed before the `requiredMeals.length === 0` early-continue so even pure-exploration days carry the cache (health engine needs to know "policy was applied, no meals required" vs. "never recorded").
+### `src/services/fullPreviewService.ts` (~line 147-152)
+
+Mirror the same pattern with `'full'` discriminator:
+
+```ts
+export function useGenerateFullPreview(params?: Pick<FullPreviewRequest, 'destination' | 'startDate' | 'endDate'>) {
+  return useMutation({
+    mutationFn: generateFullPreview,
+    mutationKey: [
+      'preview',
+      'full',
+      params?.destination ?? '',
+      params?.startDate ?? '',
+      params?.endDate ?? '',
+    ],
+  });
+}
+```
+
+The `'trip'` slot in the user's discriminator union (`'quick' | 'full' | 'trip'`) is reserved — no third hook exists today, but the namespace shape `['preview', <type>, …]` accommodates it without future churn.
+
+### Update call sites
+
+Pass the current request's `destination`/`startDate`/`endDate` into the hooks so the key changes when the user switches trips:
+
+- `src/components/home/DestinationEntry.tsx`
+- `src/components/home/QuickPreviewDisplay.tsx`
+- any other consumer of `useGenerateTripPreview` / `useGenerateFullPreview`
+
+Where the hook is called before those values are known, `params` stays `undefined` and the key falls back to `['preview', '<type>', '', '', '']` — still discriminated by type, which alone fixes the Quick↔Full cross-pollution.
 
 ## Verification
 
-1. `rg -n "meal_policy_at_generation" supabase/functions/generate-itinerary/` → 3 write sites (was 1).
-2. Generate a fresh multi-day trip; confirm `itinerary_data.days[i].metadata.quality.meal_policy_at_generation` is populated for every day, including days where `requiredMeals` is empty.
-3. Confirm health panel now flags meal violations on multi-day-generated trips that previously passed silently.
+1. `rg -n "mutationKey" src/services/tripPreviewService.ts src/services/fullPreviewService.ts` → keys include `'preview'` namespace + type + dest + dates.
+2. Manual repro: generate Quick preview for Destination A → switch to Destination B and request Full preview → confirm UI never flashes A's Quick result during B's Full in-flight.
+3. React Query devtools: each unique (type, dest, dates) tuple shows as its own mutation entry.
 
 ## Out of scope
 
-No changes to `action-generate-day.ts`, no changes to the health engine, no schema/migration changes.
+- No server-side cache changes (no DB-level preview cache exists today).
+- No changes to `generateTripPreview` / `generateFullPreview` request bodies.
+- No new third "trip" preview hook — namespace is reserved only.
