@@ -21,6 +21,7 @@ interface ProactiveRequest {
     travelerProfiles: Array<{ userId: string; name: string; archetypeId: string; isOwner: boolean; weight: number }>;
     isBlended: boolean;
   };
+  tripId?: string;
 }
 
 serve(async (req: Request) => {
