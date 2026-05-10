@@ -127,7 +127,7 @@ export function ItineraryAssistant({
         category: a.category,
         time: a.time || a.startTime || '',
         cost: typeof a.cost === 'number' ? a.cost : (a.cost as { amount?: number })?.amount,
-        isLocked: a.isLocked,
+        isLocked: isActivityLocked(a),
       })),
     })),
     accommodationInfo,
