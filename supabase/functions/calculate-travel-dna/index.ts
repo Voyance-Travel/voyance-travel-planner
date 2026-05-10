@@ -1102,6 +1102,15 @@ const DISAMBIGUATION_QUESTIONS_BY_TRAIT: Record<Trait, string[]> = {
   transformation: ['traveler_type', 'interests', 'activities'],
 };
 
+// Pair-specific disambiguation questions, served by MicroDisambiguation modal
+// (not the quiz). Keys are bidirectional `${primary}:${secondary}`.
+// TODO: archetype slug `community_builder` displays as "Purpose Voyager" —
+// confusion source. Consider unifying in a future schema migration.
+const DISAMBIGUATION_QUESTIONS_BY_PAIR: Record<string, string[]> = {
+  'community_builder:collection_curator': ['purpose_vs_collection'],
+  'collection_curator:community_builder': ['purpose_vs_collection'],
+};
+
 // ============================================================================
 // TENSION RESOLVERS - One-liners for common profile contradictions
 // ============================================================================
