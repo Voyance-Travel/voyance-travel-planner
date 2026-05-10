@@ -16,7 +16,7 @@ interface DestinationImage {
   url: string;
   alt: string;
   type: "hero" | "gallery" | "activity";
-  source: "curated" | "google_places" | "tripadvisor" | "wikimedia" | "lovable_ai" | "fallback";
+  source: "curated" | "google_places" | "tripadvisor" | "wikimedia" | "lovable_ai" | "fallback" | "unsplash";
   width?: number;
   height?: number;
   attribution?: string;
@@ -24,6 +24,10 @@ interface DestinationImage {
   photoReference?: string;
   /** Internal: true only when the photo was already cached in storage (no Google photo download). */
   cacheHit?: boolean;
+  // Unsplash attribution (only set when source === 'unsplash')
+  photographer?: string;
+  photographer_url?: string;
+  source_url?: string;
 }
 
 interface RequestParams {
