@@ -27,7 +27,22 @@ export interface ArchetypeDefinition {
     beachTimeMin?: string;
     sunsetRequired?: boolean;
     walkingExpected?: boolean;
+    // v3 extensions (additive, optional)
+    pace?: 'slow' | 'moderate' | 'fast';
+    cultural_activity_ratio?: [number, number];
+    educational_activity_ratio?: number;
+    unscripted_activity_minimum?: number;
+    activity_density?: 'low' | 'moderate' | 'high';
+    mix?: { iconic: number; hidden: number };
+    retreat_property_time_ratio?: [number, number];
+    outside_retreat_days?: number;
+    required_amenities?: string[];
+    requiresWaterDaily?: boolean;
   };
+  hotelRequirement?: 'waterfront' | 'walkable_to_water' | 'eco_certified' | 'retreat_property';
+  affinity?: { high: string[]; medium: string[]; low: string[]; never: string[] };
+  timePreferences?: { startTime: string; peakEnergy: string; preference: string };
+  diningPolicy?: { michelinAllowed: boolean; preferLocal: boolean; minLocalShare: number };
 }
 
 // =============================================================================
