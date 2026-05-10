@@ -220,6 +220,20 @@ export async function upsertActivityCost(params: {
     return null;
   }
 
+  // [CPP_DOUBLE_COUNT] sanity gate. Catches writers that pass a TOTAL value
+  // (cpp × nt) into cost_per_person_usd. Symptom: end-user budget inflates by
+  // ×num_travelers because the schema's generated column re-multiplies.
+  // We only warn (don't block) — protected floors like Michelin can legitimately
+  // exceed reference high × 3.
+  await assertCppLooksPerPerson({
+    activityId: params.activity_id,
+    cpp: params.cost_per_person_usd,
+    numTravelers: params.num_travelers || 1,
+    category: params.category,
+    source: params.source,
+    costReferenceId: params.cost_reference_id || null,
+  });
+
   const { data, error } = await supabase
     .from('activity_costs')
     .upsert(
