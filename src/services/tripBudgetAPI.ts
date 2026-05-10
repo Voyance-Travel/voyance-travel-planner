@@ -294,7 +294,23 @@ export async function addTripExpense(input: {
     .single();
 
   if (error) throw new Error(error.message);
-  
+
+  // RS.M.B5 — Solo trip split bloat guard.
+  // If the trip has 1 or fewer members, splits are useless: the paid_by user is
+  // the only owner. Future inline-split callers must respect this contract too.
+  const { count: memberCount } = await supabase
+    .from('trip_members')
+    .select('id', { count: 'exact', head: true })
+    .eq('trip_id', input.tripId);
+
+  if (!memberCount || memberCount <= 1) {
+    console.log('[tripBudget] Solo trip — skipping expense_splits creation', {
+      tripId: input.tripId,
+      expenseId: data.id,
+    });
+    // Fall through to return; no splits side-effect to skip in this function today.
+  }
+
   return {
     id: data.id,
     tripId: data.trip_id,
