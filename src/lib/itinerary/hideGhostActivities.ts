@@ -38,6 +38,13 @@ export function isGhostActivity(a: any): boolean {
   if (source === 'user' || source === 'manual' || source === 'extracted' || source === 'pinned') {
     return false;
   }
+  // B2: late-nightlife bookend is intentionally a post-midnight hotel return
+  // (e.g., taxi home from a speakeasy ending 00:20). Exempt from pre-dawn
+  // suppression — runStep8 only emits these when the prior activity is
+  // unambiguous nightlife starting ≥21:00.
+  if (source === 'late_nightlife_bookend') return false;
+  const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
+  if (tags.includes('late_nightlife_bookend')) return false;
 
   const title = String(a.title || a.name || '');
 
