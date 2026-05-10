@@ -108,6 +108,64 @@ export function validateCostUpdate(
   return { valid: true };
 }
 
+/**
+ * [CPP_DOUBLE_COUNT] write-time sanity gate.
+ *
+ * Logs an error when a writer hands us a value that looks like a TOTAL
+ * (cost_per_person × num_travelers) rather than a per-person value. Without
+ * this, the schema's `total_cost_usd GENERATED ALWAYS AS (cpp × nt)` column
+ * silently re-multiplies, inflating the user's budget by ×num_travelers.
+ *
+ * Heuristic: cpp > reference high × 3 AND source is not a known protected
+ * floor (michelin_floor, ticketed_attraction_floor, user_override, …).
+ * Cost-floor sources can legitimately exceed the band.
+ */
+const PROTECTED_FLOOR_SOURCES = new Set([
+  'michelin_floor',
+  'ticketed_attraction_floor',
+  'auto_corrected',
+  'reference_fallback',
+  'bar_cap_repair',
+  'user',
+  'user_override',
+  'logistics-sync',
+  'free_venue',
+]);
+
+async function assertCppLooksPerPerson(args: {
+  activityId: string;
+  cpp: number;
+  numTravelers: number;
+  category: string;
+  source?: string;
+  costReferenceId: string | null;
+}): Promise<void> {
+  if (args.cpp <= 0 || args.numTravelers < 2) return;
+  if (args.source && PROTECTED_FLOOR_SOURCES.has(args.source)) return;
+
+  let high: number | null = null;
+  if (args.costReferenceId) {
+    const { data } = await supabase
+      .from('cost_reference')
+      .select('cost_high_usd')
+      .eq('id', args.costReferenceId)
+      .maybeSingle();
+    high = (data as any)?.cost_high_usd ?? null;
+  }
+  if (high == null) {
+    // Fall back to the frontend category cap as a soft ceiling.
+    high = CATEGORY_CAPS[args.category] ?? GLOBAL_CAP;
+  }
+  if (args.cpp > high * 3) {
+    console.error(
+      `[CPP_DOUBLE_COUNT?] activity=${args.activityId} cpp=$${args.cpp} ` +
+      `nt=${args.numTravelers} ref_high=$${high} source=${args.source ?? 'reference'} ` +
+      `→ likely caller wrote total instead of per-person. ` +
+      `Schema's generated total_cost_usd column will re-multiply by num_travelers, ` +
+      `inflating user budget by ×${args.numTravelers}.`
+    );
+  }
+
 // ─── View Queries (read-only, canonical totals) ──────────────
 
 export async function getTripTotal(tripId: string): Promise<TripTotal | null> {
