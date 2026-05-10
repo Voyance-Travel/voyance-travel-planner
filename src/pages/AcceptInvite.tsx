@@ -270,8 +270,36 @@ export default function AcceptInvite() {
         logger.info('[invite] Accept succeeded', { tripId: result.tripId, alreadyMember: result.alreadyMember });
         clearPendingInviteToken();
         setAccepted(true);
-        toast.success(result.alreadyMember ? 'You\'re already a member!' : 'You\'ve joined the trip!');
-        
+
+        // If joining a trip that's already generated, fire a blended regeneration
+        // so the new traveler's preferences are reflected. Server-side function
+        // handles authorization + service-role bypass; the joiner is not billed.
+        let blendingTriggered = false;
+        if (!result.alreadyMember && result.tripId) {
+          try {
+            const { data: tripRow } = await supabase
+              .from('trips')
+              .select('itinerary_status')
+              .eq('id', result.tripId)
+              .maybeSingle();
+
+            if ((tripRow as any)?.itinerary_status === 'ready') {
+              blendingTriggered = true;
+              supabase.functions
+                .invoke('regenerate-on-blend-change', { body: { tripId: result.tripId } })
+                .catch((err) => logger.error('[invite] blend regen invoke failed', err));
+            }
+          } catch (e) {
+            logger.warn('[invite] blend status check failed (non-blocking)', e);
+          }
+        }
+
+        if (blendingTriggered) {
+          toast.success("You've joined the trip! Blending in your preferences…", { duration: 5000 });
+        } else {
+          toast.success(result.alreadyMember ? "You're already a member!" : "You've joined the trip!");
+        }
+
         setTimeout(() => {
           navigate(`/trip/${result.tripId}`);
         }, 1500);
