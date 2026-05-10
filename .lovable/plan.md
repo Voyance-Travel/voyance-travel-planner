@@ -1,33 +1,40 @@
-## Add cost tracking to `discover-proactive`
+## Add JWT auth gate to `activity-concierge`
 
-Wire the shared `trackCost` helper into `supabase/functions/discover-proactive/index.ts` so this endpoint's AI usage shows up alongside other tracked actions.
-
-### Signature note
-
-The spec passes `userId` and `tripId` directly into `trackCost(...)`, but the actual helper signature in `_shared/cost-tracker.ts` is `trackCost(actionType, model?)` and uses `setUserId()` / `setTripId()` (this is how `itinerary-chat` does it). I'll follow the existing pattern.
+Currently `supabase/functions/activity-concierge/index.ts` has no authentication — any unauthenticated caller can invoke the AI gateway. Add a JWT check at the top of the handler.
 
 ### Changes (single file)
 
-`supabase/functions/discover-proactive/index.ts`:
+`supabase/functions/activity-concierge/index.ts`:
 
 1. Add import:
    ```ts
-   import { trackCost } from "../_shared/cost-tracker.ts";
+   import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
    ```
-2. Before the `fetch("https://ai.gateway.lovable.dev/...")` call (~line 126), instantiate:
+2. Inside `serve()`, after the CORS preflight (after line 119), before the `try` body parses JSON:
    ```ts
-   const costTracker = trackCost('discover_proactive', 'google/gemini-2.5-flash');
-   if (userId) costTracker.setUserId(userId);
-   if (tripId) costTracker.setTripId(tripId);
+   const authHeader = req.headers.get("Authorization");
+   if (!authHeader?.startsWith("Bearer ")) {
+     return new Response(
+       JSON.stringify({ error: "Authentication required" }),
+       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+     );
+   }
+   const supabase = createClient(
+     Deno.env.get("SUPABASE_URL")!,
+     Deno.env.get("SUPABASE_ANON_KEY")!
+   );
+   const { data: { user }, error: authError } = await supabase.auth.getUser(
+     authHeader.replace("Bearer ", "")
+   );
+   if (authError || !user) {
+     return new Response(
+       JSON.stringify({ error: "Invalid token" }),
+       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+     );
+   }
    ```
-   `userId`/`tripId` will be pulled from the request body / auth header — I'll read the existing handler to use whatever's already in scope (extending the `ProactiveRequest` type if needed, matching how other functions resolve the user from the JWT).
-3. After the AI response is parsed successfully (~line 155, after `aiResponse = await response.json()`):
-   ```ts
-   costTracker.recordAiUsage(aiResponse);
-   await costTracker.save();
-   ```
-   Wrapped so a save failure doesn't break the user response (logged only).
+   Note: spec writes `headers: corsHeaders` for the 401 responses, but every other response in this file uses `{ ...corsHeaders, "Content-Type": "application/json" }` for JSON — I'll follow the file's convention so the client parses errors correctly.
 
 ### Out of scope
 
-No rate limiting (already decided), no other behavior changes.
+No rate limiting, no other behavior changes. The function will continue to deploy with `verify_jwt = false` (Lovable default) — the in-code check is what enforces auth.
