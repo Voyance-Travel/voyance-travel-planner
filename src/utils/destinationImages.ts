@@ -464,6 +464,159 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=1200', // Temple Bar
     'https://images.unsplash.com/photo-1548808247-cf0eab34b0e3?w=1200', // Dublin cityscape
   ],
+
+  // Europe gaps
+  'venice': [
+    'https://images.unsplash.com/photo-1514890547357-a9ee288728e0?w=1200', // Grand Canal gondolas
+    'https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=1200', // San Marco from water
+    'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=1200', // Grand Canal sunset
+  ],
+  'naples': [
+    'https://images.unsplash.com/photo-1601581875309-fafbf2d3ed3a?w=1200', // Bay of Naples + Vesuvius
+    'https://images.unsplash.com/photo-1624486270197-eed47e0c25b8?w=1200', // Naples waterfront
+    'https://images.unsplash.com/photo-1597211684565-dca64d72bdfe?w=1200', // Vesuvius backdrop
+  ],
+  'stockholm': [
+    'https://images.unsplash.com/photo-1509356843151-3e7d96241e11?w=1200', // Gamla Stan waterfront
+    'https://images.unsplash.com/photo-1518457607834-6e8d80c183c5?w=1200', // Stockholm old town
+    'https://images.unsplash.com/photo-1601986313629-d63730eb91e2?w=1200', // Riddarholmen skyline
+  ],
+  'helsinki': [
+    'https://images.unsplash.com/photo-1538332576228-eb5b4c4de6f5?w=1200', // Helsinki Cathedral
+    'https://images.unsplash.com/photo-1596384903629-c8226e0fa67f?w=1200', // Senate Square
+    'https://images.unsplash.com/photo-1605108721212-87d34b3a2167?w=1200', // Suomenlinna view
+  ],
+  'oslo': [
+    'https://images.unsplash.com/photo-1601745367689-2f2d76d31a90?w=1200', // Oslo Opera House
+    'https://images.unsplash.com/photo-1601824522969-2c3f1eb9f9a3?w=1200', // Oslo fjord
+    'https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?w=1200', // Oslo waterfront
+  ],
+  'athens': [
+    'https://images.unsplash.com/photo-1555993539-1732b0258235?w=1200', // Acropolis golden hour
+    'https://images.unsplash.com/photo-1603565816030-6b389eeb23cb?w=1200', // Parthenon
+    'https://images.unsplash.com/photo-1503152394-c571994fd383?w=1200', // Athens cityscape
+  ],
+  'madrid': [
+    'https://images.unsplash.com/photo-1543783207-ec64e4d95325?w=1200', // Plaza Mayor / Royal Palace
+    'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=1200', // Madrid skyline
+    'https://images.unsplash.com/photo-1581873372796-635b67ca2008?w=1200', // Gran Via
+  ],
+  'granada': [
+    'https://images.unsplash.com/photo-1591019479261-1a103585c559?w=1200', // Alhambra
+    'https://images.unsplash.com/photo-1549144511-f099e773c147?w=1200', // Alhambra at sunset
+    'https://images.unsplash.com/photo-1559511260-66a654ae982a?w=1200', // Granada with Sierra Nevada
+  ],
+  'sevilla': [
+    'https://images.unsplash.com/photo-1559535332-db9b07f0d0d7?w=1200', // Plaza de España
+    'https://images.unsplash.com/photo-1559630929-ebf1d1ff5b1f?w=1200', // Seville cathedral
+    'https://images.unsplash.com/photo-1559683586-91e7e87e93c0?w=1200', // Plaza de España arches
+  ],
+  'cinque-terre': [
+    'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=1200', // Manarola cliff village
+    'https://images.unsplash.com/photo-1534445967719-8ae7b972b1a5?w=1200', // Vernazza harbor
+    'https://images.unsplash.com/photo-1518730518541-d0843268c287?w=1200', // Riomaggiore colors
+  ],
+  'nice': [
+    'https://images.unsplash.com/photo-1533614767277-3ad97b73d33e?w=1200', // Promenade des Anglais
+    'https://images.unsplash.com/photo-1604584460898-cb29f6478b1b?w=1200', // Nice old town
+    'https://images.unsplash.com/photo-1589489873954-026d3f1c4e2c?w=1200', // Nice coastline
+  ],
+  'geneva': [
+    'https://images.unsplash.com/photo-1573497019236-17f8177b81e8?w=1200', // Lake Geneva + Jet d'Eau
+    'https://images.unsplash.com/photo-1573497019418-b400bb3ab074?w=1200', // Geneva lakeside
+    'https://images.unsplash.com/photo-1603415526960-f7e0328c63b1?w=1200', // Geneva skyline
+  ],
+  'brussels': [
+    'https://images.unsplash.com/photo-1559113202-c916b8e44373?w=1200', // Grand Place
+    'https://images.unsplash.com/photo-1605552055839-fa8b3c1601c5?w=1200', // Grand Place facades
+    'https://images.unsplash.com/photo-1546706887-a24d420dc1d2?w=1200', // Brussels rooftops
+  ],
+  'bruges': [
+    'https://images.unsplash.com/photo-1558551649-e44c8f992010?w=1200', // Bruges canal
+    'https://images.unsplash.com/photo-1559564484-0a93cd7d54c5?w=1200', // Belfry tower
+    'https://images.unsplash.com/photo-1591128122302-228014a18e21?w=1200', // Bruges canal houses
+  ],
+
+  // Asia gaps
+  'shanghai': [
+    'https://images.unsplash.com/photo-1545893835-abaa50cbe628?w=1200', // Bund skyline night
+    'https://images.unsplash.com/photo-1548919973-5cef591cdbc9?w=1200', // Pudong skyline
+    'https://images.unsplash.com/photo-1474181487882-5abf3f0ba6c2?w=1200', // Shanghai river
+  ],
+  'beijing': [
+    'https://images.unsplash.com/photo-1508804185872-d7badad00f7d?w=1200', // Great Wall
+    'https://images.unsplash.com/photo-1547981609-4b6bfe67ca0b?w=1200', // Forbidden City
+    'https://images.unsplash.com/photo-1584646098378-0874589d76b1?w=1200', // Temple of Heaven
+  ],
+  'phuket': [
+    'https://images.unsplash.com/photo-1589394815804-964ed0be2eb5?w=1200', // Phang Nga limestone
+    'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=1200', // Phuket beach
+    'https://images.unsplash.com/photo-1552733407-5d5c46c3bb3b?w=1200', // Phi Phi cliffs
+  ],
+  'manila': [
+    'https://images.unsplash.com/photo-1518509562904-e7ef99cddc85?w=1200', // Manila bay sunset
+    'https://images.unsplash.com/photo-1573161037428-4b95587e8d4f?w=1200', // Intramuros
+    'https://images.unsplash.com/photo-1555901215-2167b6e13ff7?w=1200', // Manila skyline
+  ],
+  'mumbai': [
+    'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=1200', // Gateway of India
+    'https://images.unsplash.com/photo-1566552881560-0be862a7c445?w=1200', // Marine Drive
+    'https://images.unsplash.com/photo-1595658658481-d53d3f999875?w=1200', // Mumbai cityscape
+  ],
+  'delhi': [
+    'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=1200', // India Gate
+    'https://images.unsplash.com/photo-1564507592333-c60657eea523?w=1200', // Taj Mahal
+    'https://images.unsplash.com/photo-1597040663332-cc2da3afca3a?w=1200', // Humayun's Tomb
+  ],
+
+  // Americas gaps
+  'quito': [
+    'https://images.unsplash.com/photo-1568454537842-d933259bb258?w=1200', // Quito historic center
+    'https://images.unsplash.com/photo-1583551395541-e8d33d3a4b34?w=1200', // Basilica del Voto
+    'https://images.unsplash.com/photo-1569255443422-ae0184a3f0e9?w=1200', // Quito old town
+  ],
+  'lima': [
+    'https://images.unsplash.com/photo-1531968455001-5c5272a41129?w=1200', // Lima Plaza Mayor
+    'https://images.unsplash.com/photo-1580619305218-8423a7ef79b4?w=1200', // Miraflores coast
+    'https://images.unsplash.com/photo-1526392060635-9d6019884377?w=1200', // Lima cathedral
+  ],
+  'santiago': [
+    'https://images.unsplash.com/photo-1543158266-0066955047b0?w=1200', // Santiago + Andes
+    'https://images.unsplash.com/photo-1594387303547-15a521b0fe0d?w=1200', // Andes backdrop
+    'https://images.unsplash.com/photo-1605548109579-9f64e5b4c620?w=1200', // Santiago skyline
+  ],
+  'toronto': [
+    'https://images.unsplash.com/photo-1517090504586-fde19ea6066f?w=1200', // CN Tower skyline
+    'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=1200', // Toronto waterfront
+    'https://images.unsplash.com/photo-1517935706615-2717063c2225?w=1200', // CN Tower close
+  ],
+  'montreal': [
+    'https://images.unsplash.com/photo-1519178614-68673b201f36?w=1200', // Old Port
+    'https://images.unsplash.com/photo-1507992781348-310259076fe0?w=1200', // Montreal skyline
+    'https://images.unsplash.com/photo-1559682468-a6a29e7d9517?w=1200', // Notre-Dame Basilica
+  ],
+
+  // Middle East gaps
+  'tel-aviv': [
+    'https://images.unsplash.com/photo-1544866092-1935c5ef2a8f?w=1200', // Tel Aviv beach skyline
+    'https://images.unsplash.com/photo-1550041006-89c970067acd?w=1200', // Tel Aviv coast
+    'https://images.unsplash.com/photo-1558180077-09f158c76707?w=1200', // Tel Aviv promenade
+  ],
+  'jerusalem': [
+    'https://images.unsplash.com/photo-1544971587-1eb5d6f2d6e5?w=1200', // Old City walls
+    'https://images.unsplash.com/photo-1552423314-cf29ab68ad73?w=1200', // Dome of the Rock
+    'https://images.unsplash.com/photo-1531253450048-e342e4eea9fc?w=1200', // Jerusalem rooftops
+  ],
+  'amman': [
+    'https://images.unsplash.com/photo-1580837119756-563d608dd119?w=1200', // Roman amphitheater
+    'https://images.unsplash.com/photo-1601999805500-d5ca7f2af0c2?w=1200', // Amman citadel
+    'https://images.unsplash.com/photo-1586105449897-20b5efeb3233?w=1200', // Amman cityscape
+  ],
+  'beirut': [
+    'https://images.unsplash.com/photo-1565008576549-57569a49371f?w=1200', // Pigeon Rocks
+    'https://images.unsplash.com/photo-1572883454114-1cf0031ede2a?w=1200', // Beirut corniche
+    'https://images.unsplash.com/photo-1568322445389-f64ac2515020?w=1200', // Beirut waterfront
+  ],
 };
 
 
