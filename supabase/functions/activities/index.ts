@@ -164,7 +164,6 @@ async function searchDatabase(
 }
 
 serve(async (req) => {
-serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
