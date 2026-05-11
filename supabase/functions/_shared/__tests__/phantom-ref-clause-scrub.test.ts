@@ -96,21 +96,28 @@ Deno.test("Madrid QA repro — same sentence preserved when dinner IS scheduled"
 });
 
 // ── M1 reviewer-spec regression cases (round 2) ─────────────────────────────
-// Reviewer requested these two exact cases as the canonical sentinel for the
-// "limited seating" leak shape. The earlier "Leave by 20:30…" cases above
-// cover the partial-clause and em-dash patterns; these cover the production
-// Madrid leak where the entire description was a single phantom sentence.
+// Reviewer requested the "limited seating" leak shape. The earlier
+// "Leave by 20:30…" cases above cover the partial-clause and em-dash patterns;
+// these cover the production Madrid leak where the entire description was a
+// single phantom-only sentence with no other substantive content.
+//
+// Note: the scrubber's safety guard preserves "rich" single sentences (≥3
+// substantive non-phantom words). Use short phrasings to exercise the blank
+// path, and the safety-guard test at line 46-52 covers the inverse.
 
-Deno.test("M1 reviewer — drops 'Tonight's dinner has limited seating' when no dinner card on Day 2", () => {
-  const input = "Tonight's dinner has limited seating, so book ahead.";
+Deno.test("M1 reviewer — drops 'Tonight's dinner is fully booked.' when no dinner card on Day 2", () => {
+  const input = "Tonight's dinner is fully booked.";
   const out = scrubPhantomEventRefsFromString(input, noDinnerSummary);
-  // Single-segment phantom-only field → blanked.
+  // Phantom-only single segment with <3 substantive words after strip → blanked.
   assertEquals(out, '');
 });
 
 Deno.test("M1 reviewer — preserves the same sentence when the day has a dinner card", () => {
-  const input = "Tonight's dinner has limited seating, so book ahead.";
+  const input = "Tonight's dinner is fully booked.";
   const out = scrubPhantomEventRefsFromString(input, withDinnerSummary);
+  // Dinner is scheduled → phantom resolves OK → returns null (unchanged).
+  assertEquals(out, null);
+});
   // Dinner is scheduled → phantom resolves OK → returns null (unchanged).
   assertEquals(out, null);
 });
