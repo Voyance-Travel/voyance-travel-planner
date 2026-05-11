@@ -397,6 +397,21 @@ const PHANTOM_REF_PATTERNS: Array<{
       return tokenize(noun).some((w) => s.keywords.has(w));
     },
   },
+  // Bug 3 — bare prep-verb meal references without a determiner.
+  // "Freshen Up before anniversary dinner", "prep for dinner", "heading to brunch".
+  // Resolves only when the day actually contains the named meal slot
+  // (post meal-guard injections, the summary reflects every scheduled card).
+  {
+    re: /\b(?:before|after|for|prep(?:aring|are)?\s+for|ahead\s+of|en\s+route\s+to|on\s+the\s+way\s+to|heading\s+to|towards?)\s+(?:[a-z][\w-]+\s+){0,3}?(breakfast|brunch|lunch|dinner|supper|nightcap)\b/gi,
+    resolves: (m, s) => {
+      const meal = (m[1] || '').toLowerCase();
+      if (meal === 'breakfast' || meal === 'brunch') return s.hasBreakfast || s.hasBrunch;
+      if (meal === 'lunch') return s.hasLunch;
+      if (meal === 'dinner' || meal === 'supper') return s.hasDinner;
+      if (meal === 'nightcap') return s.hasNightcap;
+      return false;
+    },
+  },
 ];
 
 function sentenceHasPhantomRef(sentence: string, summary: DayScheduleSummary): boolean {
