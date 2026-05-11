@@ -1749,13 +1749,16 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
   try {
     const body: OptimizeRequest = await req.json();
     const {
       tripId,
       destination,
       days,
-      userId,
       currency = 'USD',
       travelers = 1,
       nights = 1,
