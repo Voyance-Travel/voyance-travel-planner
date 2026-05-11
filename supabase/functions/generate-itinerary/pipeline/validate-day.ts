@@ -179,7 +179,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkPunctuationOnlyFields(activities, results);
   checkSentenceCompleteness(activities, results);
   checkPriceDuplication(activities, results);
-  checkWalkOverThreshold(activities, results);
+  checkWalkOverThreshold(activities, results, budgetTier);
   checkCategoryVenueCoherence(activities, results);
   checkPhantomEventRefs(activities, results);
 
