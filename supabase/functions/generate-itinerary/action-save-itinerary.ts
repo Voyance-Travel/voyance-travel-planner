@@ -438,6 +438,25 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
               itineraryDays[i].metadata = itineraryDays[i].metadata || {};
               itineraryDays[i].metadata.quality = itineraryDays[i].metadata.quality || {};
               itineraryDays[i].metadata.quality.hotel_return_save_time = true;
+            } else {
+              // Monitoring signal: bookend skipped despite a non-terminal last
+              // card. runStep8's own guards (airport/STAY/return) should have
+              // accepted everything else; this fires only when the day is
+              // genuinely terminated already.
+              const last = acts[acts.length - 1] || {};
+              const lastCatU = String(last?.category || '').toUpperCase();
+              const lastTitleU = String(last?.title || '');
+              const isTerminalAlready =
+                lastCatU === 'STAY' ||
+                lastCatU === 'ACCOMMODATION' ||
+                /return.*hotel|back.*hotel|return\s+to/i.test(lastTitleU) ||
+                (/\b(airport|station|terminal|gate)\b/i.test(lastTitleU) &&
+                  /TRANSPORT|TRANSIT|TRAVEL|LOGISTICS/.test(lastCatU));
+              if (!isTerminalAlready) {
+                console.warn(
+                  `[SAVE_QUALITY] day=${dayNumber} WARNING: bookend injection skipped despite non-terminal last activity "${lastTitleU}" end="${last?.end_time || last?.endTime || ''}"`,
+                );
+              }
             }
           } catch (_e) { /* non-blocking */ }
         }

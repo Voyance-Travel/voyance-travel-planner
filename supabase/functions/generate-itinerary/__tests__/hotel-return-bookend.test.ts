@@ -24,10 +24,13 @@ Deno.test('runStep8 appends hotel-return when last activity ends 16:30 (was belo
   assertEquals(lastCat(acts), 'accommodation');
 });
 
-Deno.test('runStep8 still skips when last activity ends 13:00 (below 14:00 floor)', () => {
+Deno.test('runStep8 now injects synthesized bookend even for 13:00 early-close (was skip)', () => {
+  // Behavior change: bookend-edge-cases hardening — early-close terminal cards
+  // get a synthesized bookend clamped to 19:00 floor instead of being skipped.
   const acts = [mkAct({ title: 'Quick Lunch', startTime: '12:00', endTime: '13:00' })];
   runStep8(acts, 0, 'Hotel Cipriani');
-  assertEquals(acts.length, 1);
+  assertEquals(acts.length, 2);
+  assertEquals(lastCat(acts), 'accommodation');
 });
 
 Deno.test('runStep8 idempotent: no-op when day already ends on STAY/return', () => {

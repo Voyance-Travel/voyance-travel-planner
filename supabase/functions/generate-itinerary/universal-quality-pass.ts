@@ -108,9 +108,12 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
   }
 
   const candidate = lastActivity?.end_time || lastActivity?.endTime || '';
+  const startRaw = lastActivity?.start_time || lastActivity?.startTime || '';
   const m = String(candidate).match(/(\d{1,2}):(\d{2})/);
+  const sm = String(startRaw).match(/(\d{1,2}):(\d{2})/);
   let startTime24: string | null = null;
   let lateNightBleed = false;
+  let synthesized = false;
   if (m) {
     const h = parseInt(m[1], 10);
     // Standard floor 14:00–23:59. Day-1 arrival pattern often ends mid-afternoon
@@ -122,8 +125,6 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
       // B2: late-nightlife bleed. Only accept when the prior activity is
       // unambiguously evening nightlife (start ≥ 21:00) so we don't bless a
       // genuinely broken card.
-      const startRaw = lastActivity?.start_time || lastActivity?.startTime || '';
-      const sm = String(startRaw).match(/(\d{1,2}):(\d{2})/);
       const startHour = sm ? parseInt(sm[1], 10) : -1;
       const titleNightlife = LATE_NIGHTLIFE_TITLE_RE.test(lastTitle);
       const catNightlife = LATE_NIGHTLIFE_CATS.has(lastCat);
@@ -133,9 +134,67 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
       }
     }
   }
+  // Synthesis fallback — terminal card has missing/malformed/early end_time.
+  // The airport/STAY/return short-circuits above already excluded logistics
+  // tails, so reaching here means the day's last card is a normal activity
+  // that just lacks a usable end_time inside the standard 14:00–23:59 window.
+  // Derive an end_time from start+duration → clamp into [19:00, 23:30] →
+  // inject as a synthesized bookend so every non-departure day terminates
+  // on a hotel return.
   if (!startTime24) {
-    console.warn(`[QUALITY] Skipped hotel return injection on Day ${dayIndex + 1}: last activity ends at "${candidate}" (need 14:00–23:59 or post-midnight nightlife bleed)`);
-    return;
+    const parseDurationMins = (a: any): number | null => {
+      if (typeof a?.durationMinutes === 'number' && a.durationMinutes > 0) return a.durationMinutes;
+      const d = a?.duration;
+      if (typeof d === 'number' && d > 0) return d;
+      if (typeof d === 'string') {
+        const s = d.trim().toLowerCase();
+        const hm = s.match(/(\d+)\s*h(?:ours?)?\s*(\d+)?/);
+        if (hm) {
+          const hh = parseInt(hm[1], 10);
+          const mm = hm[2] ? parseInt(hm[2], 10) : 0;
+          return hh * 60 + mm;
+        }
+        const colon = s.match(/^(\d+):(\d+)$/);
+        if (colon) return parseInt(colon[1], 10) * 60 + parseInt(colon[2], 10);
+        const min = s.match(/(\d+)\s*(?:min|mins|minutes|m)\b/);
+        if (min) return parseInt(min[1], 10);
+        const bare = s.match(/^(\d+)$/);
+        if (bare) return parseInt(bare[1], 10);
+      }
+      return null;
+    };
+    let derivedMins: number;
+    if (m) {
+      // end_time existed but was outside acceptance window (e.g., 13:00 early lunch).
+      derivedMins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + 30;
+    } else if (sm) {
+      const sH = parseInt(sm[1], 10);
+      const sM = parseInt(sm[2], 10);
+      const dur = parseDurationMins(lastActivity) ?? 60;
+      derivedMins = sH * 60 + sM + dur;
+    } else {
+      // No usable times anywhere on the activity — scan the day for the latest
+      // known time and floor at 19:00.
+      let latest = -1;
+      for (const a of result) {
+        const t = a?.end_time || a?.endTime || a?.start_time || a?.startTime || '';
+        const mm = String(t).match(/(\d{1,2}):(\d{2})/);
+        if (mm) {
+          const v = parseInt(mm[1], 10) * 60 + parseInt(mm[2], 10);
+          if (v > latest) latest = v;
+        }
+      }
+      derivedMins = latest >= 0 ? latest + 30 : 19 * 60;
+    }
+    // Clamp into the standard bookend window so downstream clamps + UI ghost
+    // filter behave normally.
+    if (derivedMins < 19 * 60) derivedMins = 19 * 60;
+    if (derivedMins > 23 * 60 + 30) derivedMins = 23 * 60 + 30;
+    const sh2 = Math.floor(derivedMins / 60);
+    const sm2 = derivedMins % 60;
+    startTime24 = `${String(sh2).padStart(2, '0')}:${String(sm2).padStart(2, '0')}`;
+    synthesized = true;
+    console.log(`[QUALITY] Day ${dayIndex + 1}: hotel return injected with synthesized end_time (was unparseable)`);
   }
   const [sh, smin] = startTime24.split(':').map((n) => parseInt(n, 10));
   const rawEnd = sh * 60 + smin + 25; // 25-min taxi default for late nights
@@ -161,8 +220,8 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
     is_free: true,
     price_per_person: 0,
     skipEnrichment: true,
-    source: lateNightBleed ? 'late_nightlife_bookend' : 'bookend-validator',
-    tags: lateNightBleed ? ['hotel', 'rest', 'late_nightlife_bookend'] : ['hotel', 'rest'],
+    source: lateNightBleed ? 'late_nightlife_bookend' : (synthesized ? 'bookend-synthesized' : 'bookend-validator'),
+    tags: lateNightBleed ? ['hotel', 'rest', 'late_nightlife_bookend'] : (synthesized ? ['hotel', 'rest', 'synthesized'] : ['hotel', 'rest']),
   };
   // For standard daytime returns, route through the shared bookend clamp so
   // the 23:59 cap lives in exactly one place. Skip for the late-night-bleed
