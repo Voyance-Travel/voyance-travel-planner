@@ -1,35 +1,29 @@
-## send-push lockdown — verification + memorialize
+## Three AI-Gateway functions — already remediated, memorialize only
 
-### Live verification (just run)
+### Live verification (just curled)
 
-| Request | Result |
+| Function | Unauth POST result |
 |---|---|
-| `POST /send-push` no Authorization | **403** `Forbidden — service-role auth required` ✅ |
-| `POST /send-push` Bearer **anon key** | **403** `Forbidden — service-role auth required` ✅ |
-| Bearer **service-role** | Path exercised in prod by `send-trip-reminders` + `trip-notifications` (no destructive curl from agent) |
+| `/analyze-itinerary` | **401** `{"error":"Authentication required","code":"UNAUTHORIZED"}` ✅ |
+| `/discover-proactive` | **401** `{"error":"Authentication required","code":"UNAUTHORIZED"}` ✅ |
+| `/budget-coach` | **401** `{"error":"Authentication required","code":"UNAUTHORIZED"}` ✅ |
 
-### Caller audit
+### Code audit (current state)
 
-- `src/` callers: **zero** matches for `send-push` ✅
-- Internal callers (both already use `SUPABASE_SERVICE_ROLE_KEY` bearer):
-  - `supabase/functions/send-trip-reminders/index.ts:541`
-  - `supabase/functions/trip-notifications/index.ts:354` (where `supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")`)
+All three already use `parseAuth` + Pattern B cost attribution exactly as the finding requests:
 
-### Code state
+| Function | parseAuth gate | setUserId | setTripId | recordAiUsage + save |
+|---|---|---|---|---|
+| `budget-coach` | L78 | L393 | L394 | L418–419 |
+| `analyze-itinerary` | L34 | L129 | n/a (pre-trip) | L130–131 |
+| `discover-proactive` | L33 | L135 | L136 | L169–170 |
 
-`supabase/functions/send-push/index.ts` already has the exact gate from the finding (lines ~199–207): post-CORS-preflight constant-equality check against `SUPABASE_SERVICE_ROLE_KEY`, returning `403 { error: 'Forbidden — service-role auth required', code: 'FORBIDDEN' }`. **No code changes needed.**
+`discover-proactive` no longer contains the "best-effort, optional" `try { authHeader }` pattern — it's a hard reject. The only `optional` matches in `budget-coach` are inside the system-prompt copy ("optional museums beyond the daily anchor"), not auth code.
 
 ### Action — memorialize only
 
-1. **Create `mem://constraints/security/send-push-service-role-only.md`** documenting:
-   - send-push is service-role ONLY (push notifications are server-triggered: trip generation complete, reminder cron, booking confirmed — never user-triggered)
-   - 403 returned for missing/anon/user-JWT Authorization
-   - Two known internal callers (send-trip-reminders, trip-notifications) — both must continue passing `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
-   - Frontend `src/` MUST NEVER call `supabase.functions.invoke('send-push')`. Any future user-triggered push (e.g. "send test notification") must go through a separate authed endpoint that internally invokes send-push with service-role
-   - Verified curl matrix (the table above)
+1. **Extend `mem://constraints/security/edge-function-auth-required.md`** (the existing R3 "Paid-API Auth + Cost Attribution" entry) to add these three functions to the covered-functions list, bumping the count from 10 → 13. Add a note that `discover-proactive` previously used a "best-effort, optional" auth pattern that was a silent vulnerability and must never be reintroduced for paid-API endpoints — read the JWT and reject, or don't read it at all and stay public; never read-and-ignore.
 
-2. **Update `mem://index.md`** — add R9 reference line linking to the new constraint (preserve all existing content).
+2. **No new R-number entry** — this is a coverage extension of the existing constraint, not a new pattern.
 
-3. **Mark the security finding as fixed** via `security--manage_security_finding` (operation `mark_as_fixed`) referencing the in-place service-role gate + caller audit.
-
-No migration. No edge function edits. No frontend changes.
+3. **No code changes, no migration, no security-finding tool call** (the finding doesn't appear in the live scanner results — it was raised in chat).
