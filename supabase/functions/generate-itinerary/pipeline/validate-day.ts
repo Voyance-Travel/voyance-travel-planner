@@ -1197,6 +1197,32 @@ function checkWalkOverThreshold(activities: StrictActivityMinimal[], results: Va
     const titleStartsWalk = /^\s*(?:walk|walking|stroll)\b/i.test(act.title || act.name || '');
     const isWalkLike = method === 'walk' || method === 'walking' || (method === '' && titleStartsWalk);
     if (!isWalkLike) continue;
+
+    // Cross-water guard — short walks can still cross impassable water bodies
+    // (Bosphorus, East River, SF Bay, Thames). Fires regardless of distance/
+    // duration so a "15-min walk Topkapi → Çiya across the Bosphorus" is
+    // caught even when it sneaks under the 30min/1500m threshold.
+    const fromCoords = extractCoords((act as any)?.transportation?.from)
+      || extractCoords(activities[i - 1] || {});
+    const toCoords = extractCoords((act as any)?.transportation?.to)
+      || extractCoords(activities[i + 1] || {})
+      || extractCoords((act as any)?.location || {});
+    if (fromCoords && toCoords) {
+      const crossing = detectWaterCrossing(fromCoords, toCoords);
+      if (crossing) {
+        results.push({
+          code: FAILURE_CODES.WALK_OVER_THRESHOLD,
+          severity: 'critical',
+          message: `Walk "${act.title}" crosses ${crossing.reason} — must be ferry/taxi`,
+          activityIndex: i,
+          field: 'transportation',
+          autoRepairable: true,
+          meta: { waterCrossing: crossing },
+        });
+        continue; // already flagged; don't double-emit on duration/distance
+      }
+    }
+
     let dur = Number(t.durationMinutes);
     let dist = Number(t.distanceMeters);
     // Parse string durations like "1h 6m", "66 min", "1:06" — try transport
