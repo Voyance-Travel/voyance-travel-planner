@@ -1,83 +1,96 @@
-## Problem
+## Root cause
 
-Madrid trip `8a8599b0…1b1d` confirms the bug:
+Querying the three test trips in the DB confirms the failure shape:
 
-- **`activity_costs` table:** 1 row total — only the $1,800 hotel.
-- **Itinerary JSON:** 16 activities, 7 priced (~€470/pp × 2 travelers + hotel ≈ $2,700+ real spend).
-- **Budget tab "Trip Expenses":** shows the misc-reserve sliver (~$160) because the resolver returns ~$1,800 hotel that the user has hidden via the include-hotel toggle, and only the spending-money reserve survives.
+| Trip | Day | Last activity | endTime | Bookend? |
+|---|---|---|---|---|
+| Madrid | 1 | Romantic Dinner at Botín | 22:45 | ✓ Return added 22:45–23:15 |
+| Madrid | 2 | Freshen up at Ritz (mid-evening accommodation) | 21:40 | ✗ none — but at-hotel, "works" |
+| **Florence** | **1** | **Secluded Nightcap at Bulli & Balene** | **00:10** | **✗ MISSING** |
+| **Florence** | **2** | **Birthday Nightcap at Fusion Bar** | **22:55** | **✗ MISSING** |
+| Florence | 3 | Freshen up at hotel | 18:05 | ✗ none — at-hotel |
+| **Barcelona** | **2** | **Nightcap at Paradiso Speakeasy** | **00:20** | **✗ MISSING** |
+| Barcelona | 1 | Wander El Born | 21:50 | ✓ Return added 21:50–22:20 |
 
-The architecture is already correct on paper — `useTripFinancialSnapshot` → `resolveCanonicalCostRows` → `activity_costs` is the single source of truth. The actual bug is **upstream**: the per-day chain generator did not write `activity_costs` rows for the priced JSON activities on this trip, so the budget tracker has nothing to read for dining / activities / transit.
+The pattern is **days that end on a late nightcap / drinks card**, not "Day 1 across all cities". Madrid Day 1 actually works because it ends on dinner.
 
-There is already a one-shot **auto-backfill** in `useTripFinancialSnapshot.ts` that calls `sync-trip-cost-table` to repair legacy trips, but its trigger condition is too narrow:
+The existing `runStep8` in `universal-quality-pass.ts` already has a late-nightlife-bleed branch (per the **Late-Nightlife Hotel Return** memory) and a save-time net in `action-save-itinerary.ts`. Both call paths exist. So why isn't a card landing?
+
+Two leaks:
+
+### Leak A — pre-dawn strip eats the late-nightlife bookend it just emitted
+
+`_shared/predawn-hotel-strip.ts::stripPreDawnHotelReturns` removes **any** card with `startTime < 05:00` whose category is `accommodation` (or whose title matches `return to|hotel|...`). The just-pushed late-nightlife bookend is exactly that:
 
 ```ts
-// current (line ~310)
-if (canonical.totalCents === 0 && liveActivities.some(a => a.jsonCost > 0)) {
-  // fire sync-trip-cost-table
-}
+{ category: 'accommodation', startTime: '00:10', source: 'late_nightlife_bookend' }
 ```
 
-For this Madrid trip `canonical.totalCents = 180,000¢` (the hotel row exists), so the guard never fires and the dining/activities rows never get backfilled. This is the recurring "$160 vs $3,600" symptom.
+`runStep8` pushes the card at line 173, then `stripPreDawnHotelReturns(result, …)` at line 416 immediately strips it. The same strip runs in `terminalCleanup` and `persist-day` and `action-sync-tables` — each one wipes the legitimate bleed bookend. **Florence Day 1 (00:10 nightcap)** and **Barcelona Day 2 (00:20 speakeasy)** are killed here.
+
+### Leak B — Florence Day 2 (22:55 nightcap) — missed by save-time net
+
+This day's last endTime is 22:55, **not** pre-dawn, so Leak A doesn't apply. Tracing:
+
+1. Day requires dinner (luxury archetype, full day) → Step 8 deferred.
+2. Meal-guard couldn't add a real dinner → no card injected.
+3. Post-meal-guard runStep8 retry in `action-generate-trip-day.ts:1808` only runs when `mealsInjected > 0` (need to verify the gate condition).
+4. Save-time net at `action-save-itinerary.ts:432` runs unconditionally — should fix it. **Need to confirm** whether the `nonLogistics` filter or some other guard is short-circuiting on a day whose only "non-logistics" card is `relaxation` / `activity` (nightcap). The filter only excludes transport categories so it should pass; suggests the post-meal-guard retry gate is the one being missed.
 
 ## Fix
 
-### 1. Broaden the auto-backfill trigger — `src/hooks/useTripFinancialSnapshot.ts`
+### 1. Make the pre-dawn strip source-aware (`_shared/predawn-hotel-strip.ts`)
 
-Replace the strict `totalCents === 0` gate with a **coverage** check that detects "JSON has priced activities that don't have a matching `activity_costs` row":
+Skip cards that the bookend pipeline just minted as legitimate post-midnight:
 
 ```ts
-const pricedJsonIds = new Set(
-  liveActivities.filter(a => a.jsonCost > 0).map(a => a.id)
-);
-const coveredIds = new Set(
-  (costs || [])
-    .filter(c => c.activity_id && (c.cost_per_person_usd || 0) > 0)
-    .map(c => String(c.activity_id))
-);
-const uncoveredPriced = [...pricedJsonIds].filter(id => !coveredIds.has(id));
-const coverageRatio = pricedJsonIds.size > 0
-  ? 1 - (uncoveredPriced.length / pricedJsonIds.size)
-  : 1;
-
-if (
-  !backfillFiredRef.current &&
-  pricedJsonIds.size > 0 &&
-  coverageRatio < 0.5     // >50% of priced JSON activities have no cost row
-) {
-  backfillFiredRef.current = true;
-  // fire sync-trip-cost-table (existing call)
-}
+const src = String(act?.source || '').toLowerCase();
+if (src === 'late_nightlife_bookend') continue;
+const tags = Array.isArray(act?.tags) ? act.tags.map(String) : [];
+if (tags.includes('late_nightlife_bookend')) continue;
 ```
 
-Sentinel log: `[useTripFinancialSnapshot] activity_costs coverage <X%> for trip <id> (uncovered=<N>) — triggering backfill`.
+This change is local to the strip function and inherits to all 5 call sites (`universal-quality-pass`, `action-save-itinerary`, `action-sync-tables`, `persist-day`, `action-generate-trip-day`). Sentinel: bump existing `[predawn-strip]` log to include `(skipped:N late_nightlife_bookend)`.
 
-### 2. Verify `sync-trip-cost-table` actually writes the rows
+### 2. Force save-time net to run on every non-departure day
 
-`supabase/functions/sync-trip-cost-table/index.ts` should already be wired to `writeActivityCostsFromItinerary` (per the existing **Activity Costs Write Parity (M6)** memory). Confirm:
+The save-time block at `action-save-itinerary.ts:422` already runs unconditionally per day. Audit and tighten:
 
-- It iterates every day's activities, not only Day 0.
-- It writes `cost_per_person_usd` from `activity.cost.amount` (or numeric `cost`) when `>0`.
-- It writes both `dining` and `activity` categories so the breakdown later sorts into Food / Activities / Transit.
+- Drop the `nonLogistics.length > 0` guard or relax it — a day whose only cards are transport is a degenerate edge that still benefits from a hotel-return anchor when it ends mid-evening.
+- After `runStep8` runs, log explicit reason when nothing was appended (already exists via `runStep8`'s own `[QUALITY] Skipped hotel return injection on Day N`).
 
-If anything is missing (e.g. it only syncs hotel/flight), extend it to mirror the per-day chain's full write loop.
+### 3. Tighten the post-meal-guard retry gate (`action-generate-trip-day.ts` ~1804)
 
-### 3. Add a diagnostic counter to the canonical resolver — `src/services/canonicalCostRows.ts`
+Verify and ensure `runStep8` runs when:
+- Step 8 was deferred earlier (track via `metadata.quality.step8_deferred = true`), AND
+- The day still lacks a hotel-return terminal card.
 
-Already returns `effectiveTotalCents` and per-category breakdowns. Add an explicit `pricedJsonRescueCents` field that captures the "JSON rescue" path so we can tell when the snapshot is leaning on the rescue (sign of unwritten rows). Surface in dev console only.
+Currently the retry appears gated on meal injection success; should instead be gated on "Step 8 was previously deferred". One-liner: set the deferral flag in `universal-quality-pass.ts:404` and read it here.
 
-### 4. UI smoke-check — `src/components/planner/budget/BudgetTab.tsx`
+### 4. Add scenario coverage (`supabase/functions/generate-itinerary/__tests__/hotel-return-bookend.test.ts`)
 
-No code change needed if (1) and (2) are correct. The card already reads `snapshot.tripTotalCents`, `byCategory` is already exposed via `getBudgetSummary`. After the backfill fires once, refetch will pick up the real numbers.
+Three new fixtures:
+- Day ending 00:10 with `nightcap` title — bookend present, **not** stripped by predawn pass.
+- Day ending 22:55 with `nightcap` title and dinner-required defer — bookend appended by save-time net.
+- Day ending with `Freshen up at <Hotel>` mid-evening — no duplicate bookend (current behavior preserved).
 
-## Verification
+### 5. Memory update
 
-1. Reload the Madrid trip dashboard — backfill fires, `activity_costs` populates from JSON, "Trip Expenses" jumps from `$160` → `$2,700+`.
-2. `psql -c "SELECT category, COUNT(*), SUM(cost_per_person_usd*num_travelers) FROM activity_costs WHERE trip_id='8a8599b0-…' GROUP BY category;"` shows `hotel`, `dining`, `activity` rows.
-3. Generate a fresh 3-day trip — `activity_costs` is populated at generation time (pre-existing M6 path), backfill never fires.
-4. **Memory update:** add a constraint note `Budget Snapshot Coverage Backfill` referencing the new gate condition + sentinel log so future debugging finds it.
+Append a new constraint:
+> **Predawn-Strip Source Allowlist** — `stripPreDawnHotelReturns` MUST exempt cards tagged `source='late_nightlife_bookend'` (or `tags` containing same). Otherwise the legitimate post-midnight return injected by `runStep8`'s late-nightlife branch is eaten by the very next pass. Sentinel: `[predawn-strip] day=N kept N cards (skipped:K late_nightlife_bookend)`.
 
 ## Out of scope
 
-- No changes to `BudgetTab.tsx` UI — already correct.
-- No changes to `tripBudgetService.getBudgetSummary` math — also already correct.
-- The user's prompt's `mapToBudgetCategory` shape is already implemented as `toBudgetCategory` in `tripBudgetService.ts`.
+- Not introducing a brand-new `appendHotelReturn` function — `runStep8` already exists and is wired correctly. Replacing it would duplicate logic and break the 4 call-site contract.
+- Not touching the at-hotel detection (Madrid Day 2 "freshen up" / Florence Day 3 "freshen up at hotel") — already correct via `lastCat==='ACCOMMODATION'`.
+- Not changing departure-day handling — already covered by `dayIndex < totalDays - 1` gate.
+
+## Verification
+
+1. Re-run Florence/Barcelona/Madrid scenario tests in `scenario.test.ts`.
+2. Manual DB query after re-generation:
+   ```
+   psql -c "SELECT day, last_title, last_end FROM (...) WHERE last_end > '21:00';"
+   ```
+   Every non-departure day should have a `Return to <Hotel>` row as the final activity.
+3. Console grep for `[predawn-strip]` lines to confirm `late_nightlife_bookend` cards survive.
