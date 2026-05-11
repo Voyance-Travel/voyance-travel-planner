@@ -2682,7 +2682,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       activities.length = 0;
       activities.push(...res.activities);
       for (const r of res.repairs) {
-        repairs.push({ code: FAILURE_CODES.MEAL_TIMING ?? FAILURE_CODES.MISSING_SLOT, action: r.type });
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: r.type });
         console.log(`[FRESHEN_UP_POSITION] ${r.message}`);
       }
     }
