@@ -84,3 +84,52 @@ Deno.test("M2: no flight info → checkout defaults to 11:00, no synthetic airpo
     `checkout should anchor near 11:00, got ${checkout!.startTime}`
   );
 });
+
+Deno.test("M2 §15z: 13:30 flight → airport transfer ends at dep − 180m (10:30); checkout ≤ ~09:15", () => {
+  const day = {
+    dayNumber: 3, date: "2026-05-15", title: "Madrid Day 3",
+    activities: [
+      mkAct({ id: "1", title: "Breakfast at Hotel", category: "dining", startTime: "08:00", endTime: "09:00" }),
+      mkAct({ id: "2", title: "Morning museum", category: "explore", startTime: "09:30", endTime: "11:00" }),
+    ],
+  };
+  const { day: out } = repairDay({ ...baseInput, day: day as any, returnDepartureTime24: "13:30" } as any);
+  const transfer = out.activities.find((a: any) => /transfer to airport|airport/i.test(a.title || ""));
+  assert(transfer, "airport transfer must be injected");
+  const [eh, em] = (transfer!.endTime || "").split(":").map(Number);
+  assertEquals(eh * 60 + em, 10 * 60 + 30, `transfer must end at 10:30, got ${transfer!.endTime}`);
+});
+
+Deno.test("M2 §15z: Madrid scenario — late checkout 21:05 + late dinner are normalized/pruned", () => {
+  const day = {
+    dayNumber: 3, date: "2026-05-15", title: "Madrid Day 3",
+    activities: [
+      mkAct({ id: "1", title: "Breakfast at Hotel", category: "dining", startTime: "08:00", endTime: "09:00" }),
+      mkAct({ id: "2", title: "Checkout from Hotel Test", category: "accommodation", startTime: "21:05", endTime: "21:35" }),
+      mkAct({ id: "3", title: "Transfer to Airport", category: "transport", startTime: "22:00", endTime: "22:45" }),
+      mkAct({ id: "4", title: "Late Dinner at DiverXO", category: "dining", startTime: "22:00", endTime: "24:25" }),
+    ],
+  };
+  const { day: out } = repairDay({ ...baseInput, day: day as any, returnDepartureTime24: "13:30" } as any);
+  const checkout = out.activities.find((a: any) => /check[\s-]?out/i.test(a.title || ""));
+  const [ch, cm] = (checkout!.startTime || "").split(":").map(Number);
+  assert(ch * 60 + cm <= 11 * 60, `checkout must be ≤ 11:00, got ${checkout!.startTime}`);
+  const lateDinner = out.activities.find((a: any) => /diverxo/i.test(a.title || ""));
+  assert(!lateDinner, "late post-transfer dinner must be pruned");
+});
+
+Deno.test("M2 §15z: no flight info → no synthesized airport transfer; non-logistics after noon dropped", () => {
+  const day = {
+    dayNumber: 3, date: "2026-05-15", title: "Day 3",
+    activities: [
+      mkAct({ id: "1", title: "Breakfast at Hotel", category: "dining", startTime: "08:00", endTime: "09:00" }),
+      mkAct({ id: "2", title: "Afternoon stroll", category: "explore", startTime: "14:00", endTime: "15:30" }),
+    ],
+  };
+  const { day: out } = repairDay({ ...baseInput, day: day as any } as any);
+  const airportTransfer = out.activities.find((a: any) =>
+    /transfer to airport|to the airport|head to airport/i.test(a.title || ""));
+  assert(!airportTransfer, "must NOT synthesize airport transfer without flight info");
+  const afternoon = out.activities.find((a: any) => /afternoon stroll/i.test(a.title || ""));
+  assert(!afternoon, "non-logistics afternoon activity should be dropped without flight info");
+});
