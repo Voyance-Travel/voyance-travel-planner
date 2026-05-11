@@ -1,66 +1,67 @@
-# X1 — Service-only table lockdown (5 tables)
+# X2 — Fix `trip_intents` INSERT privilege escalation
 
 ## Problem
-Linter flagged `stripe_webhook_log` for relying on Postgres default-deny rather than an explicit policy. Same shape as W2 (`customer_review_contacts`). Four sibling cache/log tables created in the same batch share the issue. All five are server-only by design — no frontend or non-service-role caller exists.
+Current INSERT policy:
+```
+WITH CHECK ((EXISTS (SELECT 1 FROM trips WHERE trips.id = trip_intents.trip_id AND trips.user_id = auth.uid())) OR (user_id = auth.uid()))
+```
+The `OR (user_id = auth.uid())` branch lets any authenticated user insert a row into ANY trip's intents simply by setting `user_id` to themselves. Active exploit path → injection of intents into other users' trips.
 
-## Pre-deploy verification (already done)
-`rg` for `from('<table>')` shows:
-- 0 matches in `src/` (frontend never touches these — good)
-- All matches in `supabase/functions/` use service-role clients (`supabaseAdmin` / `idemSupabase`) — safe under the new policy because service_role bypasses RLS
+## Verification of existing policies (queried)
+| cmd | policy | gate |
+|---|---|---|
+| SELECT | Users can view intents for their trips | trip owner only ✓ |
+| INSERT | Users can insert intents for their trips | **trip owner OR self-id (broken)** |
+| UPDATE | Users can update intents for their trips | trip owner only ✓ |
+| DELETE | Users can delete intents for their trips | trip owner only ✓ |
 
-Affected files (read-only, no changes needed):
-- `stripe-webhook/index.ts` (3 calls)
-- `itinerary-chat/index.ts` (2 calls)
-- `lookup-destination-insights/index.ts` (2 calls)
-- `generate-travel-intel/index.ts` (2 calls)
+Only INSERT has the broken OR. UPDATE/DELETE are already strict.
+
+## Caller audit
+| Caller | Auth context | Risk |
+|---|---|---|
+| `src/contexts/TripPlannerContext.tsx:413` upsert | User session, trip just created by same user | Owner branch passes — safe |
+| `supabase/functions/itinerary-chat/index.ts:981` upsert | `serviceSupabase` (service role) | Bypasses RLS — safe |
+| `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts:345` select | service-role client | Bypasses RLS — safe |
+
+No legitimate caller depends on the broken OR branch.
 
 ## Migration
 
-Single migration applying both layers to all 5 tables:
-1. `stripe_webhook_log`
-2. `chat_idempotency_cache`
-3. `destination_insights_cache`
-4. `google_places_search_cache`
-5. `travel_intel_locks`
-
-For each table:
-- `REVOKE ALL ... FROM anon, authenticated, PUBLIC` — strips inherited grants
-- `CREATE POLICY "<table>_deny_non_service" AS RESTRICTIVE FOR ALL TO anon, authenticated USING (false) WITH CHECK (false)` — RESTRICTIVE is AND-ed with permissive policies, so a future accidental permissive policy still cannot expose data
-
-service_role policies + grants from prior migrations remain untouched (service_role bypasses RLS).
-
-DO-block loop over the table array for both steps.
-
-## Verification (post-migration)
-
-A. Grants check — expect 0 rows:
 ```sql
-SELECT table_name, grantee, privilege_type
-FROM information_schema.role_table_grants
-WHERE table_name IN ('stripe_webhook_log','chat_idempotency_cache','destination_insights_cache','google_places_search_cache','travel_intel_locks')
-  AND grantee IN ('anon','authenticated','PUBLIC');
+DROP POLICY IF EXISTS "Users can insert intents for their trips" ON public.trip_intents;
+
+CREATE POLICY "Users can insert intents for their trips"
+ON public.trip_intents
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.trips
+    WHERE trips.id = trip_intents.trip_id
+      AND trips.user_id = auth.uid()
+  )
+  OR EXISTS (
+    SELECT 1 FROM public.trip_collaborators tc
+    WHERE tc.trip_id = trip_intents.trip_id
+      AND tc.user_id = auth.uid()
+      AND tc.accepted_at IS NOT NULL
+  )
+);
 ```
 
-B. Policy presence — expect 2 rows per table (1 PERMISSIVE service_role + 1 RESTRICTIVE deny):
-```sql
-SELECT tablename, policyname, permissive
-FROM pg_policies
-WHERE tablename IN ('stripe_webhook_log','chat_idempotency_cache','destination_insights_cache','google_places_search_cache','travel_intel_locks')
-ORDER BY tablename, policyname;
-```
+Note: scoped to `TO authenticated` (was `public`) — anon never had a path here anyway.
 
-C. Re-run `supabase--linter` — `stripe_webhook_log` finding resolved + 3 sibling warnings (`chat_idempotency_cache`, `destination_insights_cache`, `google_places_search_cache`) also clear.
-
-D. Functional sanity: stripe-webhook insert path + itinerary-chat idempotency upsert continue to work (service_role bypasses RLS).
+## Verification post-migration
+1. `pg_policies` shows new WITH CHECK has no `(user_id = auth.uid())` standalone branch.
+2. As user A (no relation to trip T owned by user B): insert `{trip_id: T, user_id: A, …}` → RLS error (expected).
+3. As trip owner: insert succeeds.
+4. As accepted collaborator: insert succeeds.
+5. As pending collaborator (`accepted_at IS NULL`): insert fails (expected).
+6. Linter: `trip_intents_insert_weak_check` finding clears.
 
 ## Memory
+No new constraint memory needed — this is a one-off RLS tightening, not a recurring pattern. Mark security finding `trip_intents_insert_weak_check` as fixed with the migration ref.
 
-Create `mem://constraints/security/service-only-tables`:
-> Five tables are service-role-only: `stripe_webhook_log`, `chat_idempotency_cache`, `destination_insights_cache`, `google_places_search_cache`, `travel_intel_locks`. Each has (1) RLS enabled, (2) permissive `Service role full access` policy for service_role, (3) RESTRICTIVE deny policy for anon + authenticated, (4) no table-level GRANTs to anon/authenticated/PUBLIC. Any new service-only cache/log table MUST follow this pattern. Frontend must never `supabase.from(...)` these tables.
-
-Add Core index line referencing the new memory.
-
-Mark security finding `stripe_webhook_log_no_authenticated_read` (and the 3 sibling cache warnings) as fixed.
-
-## Out of scope
-The other security findings in the panel (trip_intents INSERT, send-push no-auth, AI endpoints no-auth, activities/transfer-pricing no-auth, trip_notifications JWT-claim check, agency_documents visibility) — separate fixes, not part of this migration.
+## Out of scope (flag, do not fix here)
+SELECT/UPDATE/DELETE on `trip_intents` are owner-only, but the new INSERT permits accepted collaborators. This means a collaborator can write an intent they cannot then read/update/delete via client (service-role reads in `compile-prompt.ts` still see it, so the intent still influences generation — the desired effect). If full collaborator parity is wanted later, add collaborator branches to the other three policies in a follow-up. Current behavior matches user's spec exactly.
