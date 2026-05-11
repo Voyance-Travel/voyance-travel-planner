@@ -23,6 +23,29 @@ export const MAX_WALK_DURATION_MINUTES = 15;
 export const WALK_HARD_DISTANCE_METERS = 1500;
 export const WALK_HARD_DURATION_MINUTES = 30;
 
+/**
+ * Tier-aware walk ceiling. Luxury / luminary / splurge / premium audiences
+ * should not be routed across districts on foot — tighter cap surfaces
+ * shorter walks (≥20 min OR ≥1000 m) to the WALK_OVER_THRESHOLD repair so
+ * they get swapped to metro/taxi via `pickTransitTier`.
+ *
+ * Single source of truth for tier→threshold mapping. Used by
+ * `pipeline/validate-day.ts::checkWalkOverThreshold`.
+ */
+export const WALK_LUXURY_DISTANCE_METERS = 1000;
+export const WALK_LUXURY_DURATION_MINUTES = 20;
+
+export function isLuxuryTier(budgetTier?: string | null): boolean {
+  const t = String(budgetTier || '').toLowerCase().trim();
+  return t === 'luxury' || t === 'luminary' || t === 'splurge' || t === 'premium';
+}
+
+export function walkThresholdsFor(budgetTier?: string | null): { duration: number; distance: number } {
+  return isLuxuryTier(budgetTier)
+    ? { duration: WALK_LUXURY_DURATION_MINUTES, distance: WALK_LUXURY_DISTANCE_METERS }
+    : { duration: WALK_HARD_DURATION_MINUTES, distance: WALK_HARD_DISTANCE_METERS };
+}
+
 export type TransitMethod = 'walk' | 'metro' | 'uber';
 
 export interface TransitTier {

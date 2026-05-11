@@ -17,7 +17,7 @@ import {
 } from '../day-validation.ts';
 import type { RequiredMeal } from '../meal-policy.ts';
 import { hasBodyPromptLeak, hasTitleLeak, buildDayScheduleSummary, detectPhantomEventRefs } from '../../_shared/prompt-leak-scrub.ts';
-import { WALK_HARD_DISTANCE_METERS, WALK_HARD_DURATION_MINUTES } from '../../_shared/transit-mode.ts';
+import { WALK_HARD_DISTANCE_METERS, WALK_HARD_DURATION_MINUTES, walkThresholdsFor, isLuxuryTier } from '../../_shared/transit-mode.ts';
 import { isTransitActivity } from '../../_shared/transit-detect.ts';
 import {
   CATEGORY_PRICE_CEILINGS,
@@ -97,6 +97,9 @@ export interface ValidateDayInput {
 
   /** Destination city for demonym validation */
   destination?: string;
+
+  /** Budget tier — drives tier-aware walk thresholds (luxury/luminary/splurge/premium → 20m/1000m, else 30m/1500m). */
+  budgetTier?: string;
 }
 
 // =============================================================================
@@ -112,7 +115,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   const { day, dayNumber, isFirstDay, isLastDay, hasHotel, hotelName,
     arrivalTime24, returnDepartureTime24, requiredMeals, previousDays,
     avoidList, dietaryRestrictions, mustDoActivities,
-    isHotelChange, previousHotelName, destination } = input;
+    isHotelChange, previousHotelName, destination, budgetTier } = input;
 
   const activities = day.activities || [];
 
@@ -176,7 +179,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkPunctuationOnlyFields(activities, results);
   checkSentenceCompleteness(activities, results);
   checkPriceDuplication(activities, results);
-  checkWalkOverThreshold(activities, results);
+  checkWalkOverThreshold(activities, results, budgetTier);
   checkCategoryVenueCoherence(activities, results);
   checkPhantomEventRefs(activities, results);
 
@@ -1172,10 +1175,13 @@ function checkPriceDuplication(activities: StrictActivityMinimal[], results: Val
 
 /**
  * WALK_OVER_THRESHOLD — any transit card with method=walk/walking that
- * exceeds 30 min OR 1500 m. Critical so validation-gate fires even if
- * repair-day is bypassed.
+ * exceeds the tier-aware ceiling. Standard: 30 min / 1500 m. Luxury cohort
+ * (luxury/luminary/splurge/premium): 20 min / 1000 m. Critical so the
+ * validation gate fires even if repair-day is bypassed.
  */
-function checkWalkOverThreshold(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+function checkWalkOverThreshold(activities: StrictActivityMinimal[], results: ValidationResult[], budgetTier?: string): void {
+  const { duration: durCap, distance: distCap } = walkThresholdsFor(budgetTier);
+  const tierLabel = isLuxuryTier(budgetTier) ? 'luxury' : 'standard';
   for (let i = 0; i < activities.length; i++) {
     const act = activities[i] as any;
     if (!isTransitActivity(act)) continue;
@@ -1223,11 +1229,11 @@ function checkWalkOverThreshold(activities: StrictActivityMinimal[], results: Va
     if (!Number.isFinite(dist) || dist < 0) dist = 0;
     // Both unknown — can't evaluate. Default to NOT firing (conservative).
     if ((!Number.isFinite(dur) || dur <= 0) && dist <= 0) continue;
-    if (dur <= WALK_HARD_DURATION_MINUTES && dist <= WALK_HARD_DISTANCE_METERS) continue;
+    if (dur <= durCap && dist <= distCap) continue;
     results.push({
       code: FAILURE_CODES.WALK_OVER_THRESHOLD,
       severity: 'critical',
-      message: `Transit "${act.title}" is walk for ${dur}min / ${dist}m — exceeds ${WALK_HARD_DURATION_MINUTES}min/${WALK_HARD_DISTANCE_METERS}m threshold`,
+      message: `Transit "${act.title}" is walk for ${dur}min / ${dist}m — exceeds ${tierLabel} ceiling ${durCap}min/${distCap}m`,
       activityIndex: i,
       field: 'transportation',
       autoRepairable: true,

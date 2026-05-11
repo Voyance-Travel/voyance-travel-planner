@@ -1233,6 +1233,7 @@ export async function handleGenerateDay(
           mustDoActivities: mustDoList,
           isHotelChange: resolvedIsHotelChange,
           previousHotelName: resolvedPreviousHotelName,
+          budgetTier: budgetTier || undefined,
         };
 
         const validationResults = validateDay(validationInput);
