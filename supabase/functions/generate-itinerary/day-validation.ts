@@ -139,11 +139,17 @@ const DINING_CATEGORIES = ['dining', 'restaurant', 'food', 'cafe', 'meal'];
 // activity matching these is NOT counted as a real meal — the guard must
 // replace it with a named venue. This is the load-bearing fix that keeps
 // "Lunch — pick a restaurant" from satisfying compliance and surviving save.
-const PLACEHOLDER_MEAL_TITLE_RE = /[—\-:]\s*pick a (restaurant|caf[eé])\b|^pick a (restaurant|caf[eé])\b|—\s*find a (venue|restaurant|spot)\b/i;
+// Matches every variant the pipeline emits: "Lunch — pick a restaurant",
+// "find a venue/restaurant/spot", and the scrub-activity-emitted
+// "find a local option/spot/place/cafe/café/restaurant in <city>".
+const PLACEHOLDER_MEAL_TITLE_RE = /[—\-:]\s*pick a (restaurant|caf[eé])\b|^pick a (restaurant|caf[eé])\b|—\s*find a (?:\w+\s+)?(venue|restaurant|spot|option|place|caf[eé])\b/i;
 
 function isPlaceholderMealActivity(activity: any): boolean {
   const meta = (activity?.metadata || {}) as Record<string, unknown>;
+  // preserveAsManualPick is also a sentinel — it exists so the user sees a
+  // visible "find a place" slot, but it does NOT satisfy meal compliance.
   if (meta.needsVenuePick === true || meta.unverified_venue === true) return true;
+  if (meta.preserveAsManualPick === true) return true;
   if (activity?.needsVenuePick === true) return true;
   const title = (activity?.title || '').toString();
   const venue = (activity?.location?.name || activity?.venue_name || '').toString();
@@ -1151,39 +1157,62 @@ export function enforceRequiredMealsFinalGuard(
       } catch (_e) { /* fallback DB lookup failed, continue */ }
     }
 
-    // TRY 4 (true last resort): regional/global emergency fallback — guaranteed real, named venue.
+    // TRY 4 (true last resort): regional/global emergency fallback. May
+    // return a real venue OR a `needsVenuePick` sentinel when the city pool
+    // is empty (Bruges/Naples-class destinations). Either way we MUST emit
+    // a card — silent deletion is the bug we're fighting.
+    let isSentinelInjection = false;
     if (!venueName) {
       const emergency = resolveAnyMealFallback(destination, mealType, new Set<string>(usedVenueNamesForInjection));
-      venueName = `${label} at ${emergency.name}`;
+      isSentinelInjection = emergency.needsVenuePick === true;
+      venueName = isSentinelInjection ? emergency.name : `${label} at ${emergency.name}`;
       venueAddress = emergency.address;
       venueDescription = emergency.description || '';
       usedVenueNamesForInjection.add(emergency.name.toLowerCase());
-      usedRealVenue = true;
-      console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Used regional/global emergency fallback "${emergency.name}" for ${mealType} in "${destination}"`);
+      usedRealVenue = !isSentinelInjection;
+      if (isSentinelInjection) {
+        console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: NO city-matched venue for ${mealType} in "${destination}" — emitting visible needsVenuePick slot (preserveAsManualPick)`);
+      } else {
+        console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Used regional/global emergency fallback "${emergency.name}" for ${mealType} in "${destination}"`);
+      }
     }
 
-    const rawTitle = venueName!.startsWith(label) ? venueName! : `${label}: ${venueName}`;
+    const rawTitle = isSentinelInjection
+      ? venueName!
+      : (venueName!.startsWith(label) ? venueName! : `${label}: ${venueName}`);
     // Dedupe accidental "Dinner at Dinner — pick a restaurant" / "Dinner: Dinner — ..." double-labels
     const dedupedTitle = rawTitle
       .replace(new RegExp(`^${label}\\s+at\\s+${label}\\b\\s*[—\\-:]?\\s*`, 'i'), `${label} — `)
       .replace(new RegExp(`^${label}\\s*[:\\-]\\s*${label}\\b\\s*[—\\-:]?\\s*`, 'i'), `${label} — `);
-    result.push({
+    const injected: any = {
       id: crypto.randomUUID(),
       title: dedupedTitle,
       startTime: slot.start,
       endTime: slot.end,
       category: 'dining',
       location: { name: venueName!, address: venueAddress },
-      cost: { amount: slot.cost, currency, source: 'meal_guard_fallback' } as any,
+      cost: { amount: isSentinelInjection ? 0 : slot.cost, currency, source: 'meal_guard_fallback' } as any,
       description: venueDescription,
       tags: ['dining', mealType, 'meal-guard'],
       bookingRequired: false,
       transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency }, instructions: 'Short walk from the previous activity' },
       tips: usedRealVenue
         ? `Check opening hours before heading over — some spots close for afternoon breaks.`
-        : `Ask a local or check recent reviews to find a great spot nearby.`,
+        : `Ask the concierge or a local for a great ${mealType} spot nearby.`,
       needsRefinement: !usedRealVenue,
-    } as StrictActivityMinimal);
+    };
+    if (isSentinelInjection) {
+      // preserveAsManualPick keeps this slot visible to the user across
+      // nuclearDiningStrip / terminalCleanup. needsVenuePick keeps it from
+      // satisfying meal compliance on the next pass.
+      injected.metadata = {
+        needsVenuePick: true,
+        unverified_venue: true,
+        preserveAsManualPick: true,
+      };
+      injected.cost_per_person = 0;
+    }
+    result.push(injected as StrictActivityMinimal);
   }
 
   // Sort by startTime

@@ -373,6 +373,9 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
                 saveFallbackVenues.push({ name: v.name, address: v.address || destination, mealType: 'any' });
               }
             }
+            if (saveFallbackVenues.length < 3) {
+              console.warn(`[VENUE_POOL_THIN] dest="${destination}" count=${saveFallbackVenues.length} — meal-guard will fall through to needsVenuePick sentinels (preserveAsManualPick)`);
+            }
           }
         } catch (_e) { /* non-blocking */ }
         const result = enforceRequiredMealsFinalGuard(
@@ -490,6 +493,66 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
 
     if (mealGuardInjections > 0) {
       console.log(`[save-itinerary] Meal guard total: ${mealGuardInjections} meals injected across trip`);
+      (itinerary as any).days = itineraryDays;
+    }
+
+    // ── STEP 2.6: MEAL PERSIST INVARIANT ──────────────────────────
+    // Closing assertion AFTER terminalCleanup / nuclearDiningStrip have run.
+    // If any required meal is still missing, inject a visible
+    // preserveAsManualPick sentinel — silent deletion is the bug we're fighting.
+    // See mem://constraints/itinerary/meal-persist-invariant
+    {
+      const destForInvariant =
+        (currentTrip as any)?.destination || (trip as any)?.destination || 'the destination';
+      const SLOT_TIMES: Record<RequiredMeal, { start: string; end: string }> = {
+        breakfast: { start: '08:30', end: '09:30' },
+        lunch:     { start: '12:30', end: '13:30' },
+        dinner:    { start: '19:30', end: '21:00' },
+      };
+      for (let i = 0; i < itineraryDays.length; i++) {
+        const day = itineraryDays[i];
+        if (!day?.activities || !Array.isArray(day.activities)) continue;
+        const dayNumber = day.dayNumber || (i + 1);
+        const isFirstDay = dayNumber === 1;
+        const isLastDay = dayNumber === totalDays;
+        const cachedPolicy = (day as any)?.metadata?.quality?.meal_policy_at_generation;
+        const policy = (cachedPolicy && Array.isArray(cachedPolicy.requiredMeals))
+          ? ({ requiredMeals: cachedPolicy.requiredMeals as RequiredMeal[] } as any)
+          : deriveMealPolicy({
+              dayNumber, totalDays, isFirstDay, isLastDay,
+              arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
+              departureTime24: isLastDay ? savedDepartureTime24 : undefined,
+            });
+        if (!policy.requiredMeals?.length) continue;
+        const detected = detectMealSlots(day.activities);
+        const stillMissing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
+        if (stillMissing.length === 0) continue;
+        console.warn(`[MEAL_PERSIST_FAIL] day=${dayNumber} missing=[${stillMissing.join(',')}] dest="${destForInvariant}" — injecting preserveAsManualPick sentinels`);
+        for (const meal of stillMissing) {
+          const label = meal.charAt(0).toUpperCase() + meal.slice(1);
+          const slot = SLOT_TIMES[meal];
+          day.activities.push({
+            id: crypto.randomUUID(),
+            title: `${label} — find a local spot in ${destForInvariant}`,
+            startTime: slot.start,
+            endTime: slot.end,
+            category: 'dining',
+            location: { name: `${label} — find a local spot in ${destForInvariant}`, address: destForInvariant },
+            cost: { amount: 0, currency: 'USD', source: 'meal_persist_invariant' },
+            cost_per_person: 0,
+            description: `No vetted ${meal} venue available — ask the concierge or pick a local favourite on arrival.`,
+            tags: ['dining', meal, 'meal-guard', 'manual-pick'],
+            bookingRequired: false,
+            transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+            tips: `Ask the concierge or a local for a great ${meal} spot nearby.`,
+            needsRefinement: true,
+            metadata: { needsVenuePick: true, unverified_venue: true, preserveAsManualPick: true },
+          } as any);
+        }
+        // Re-sort by startTime so the new card lands in the right place.
+        day.activities.sort((a: any, b: any) => parseTimeToMinutes(a.startTime || a.start_time || a.time)
+          - parseTimeToMinutes(b.startTime || b.start_time || b.time));
+      }
       (itinerary as any).days = itineraryDays;
     }
   }
