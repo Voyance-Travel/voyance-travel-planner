@@ -1861,6 +1861,15 @@ async function _handleGenerateTripDayInner(
               source: 'generate-trip-day:final-per-day',
             };
 
+            // Post-guard description backstop — meal guard injects empty-description
+            // sentinels; refill before save so users never see blank dining blurbs.
+            const { fillAfterMealGuard } = await import('../_shared/post-meal-guard-fill.ts');
+            await fillAfterMealGuard(
+              dayResult.activities as any[],
+              cityInfo?.cityName || destination,
+              dayNumber,
+              'generate-trip-day:final-per-day',
+            );
           } else {
             console.log(`[MEAL_AUDIT] day=${dayNumber} required=[${_fmgPolicy.requiredMeals.join(',')}] detected=[${_detectedPre.join(',')}] missing=[] pool=${_perDayPool.length} source="generate-trip-day:final-per-day" (no-op)`);
           }
