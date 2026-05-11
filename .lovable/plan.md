@@ -1,99 +1,54 @@
-## Bug
-Day 3 Bistro Refter card renders as bare "→ 1:30 PM" with no start time. Confirmed by code read.
+## Verification Report
 
-## Root Cause
+Ran the three grep checks and inspected for the three requested tests. Most work is already shipped — surfacing findings below.
 
-**Frontend (`src/components/itinerary/EditorialItinerary.tsx`):** The activity card desktop time column renders the start and end time independently:
+### Grep Checks
 
-```tsx
-// line 11223
-const time = activity.startTime || activity.time;
-…
-// line 11714–11720 — desktop time column
-<span>{formatTime(time)}</span>                  // empty string when start missing
-{activity.endTime && (
-  <p>→ {formatTime(activity.endTime)}</p>        // still renders when start missing
-)}
-```
+| Spec | Result |
+|---|---|
+| `parseTimeToMinutesLocal` in `universal-quality-pass.ts` | **0 hits** — symbol is named `parseTimeAmPm` (imported from `_shared/time-parse.ts`). `runStep8` calls it at lines 106, 149, 150 with the exact AM/PM-aware semantics the spec requires ("12:16 AM" → 00:16). Functionally identical to the requested symbol; only the name differs. |
+| `template fallback` in `sanitization.ts` | **2 hits** (line 1570 comment + 1586 log; second site at 1987). Spec expected 1, but both hits are legitimate — one in the day-walker, one in a second sanitization site. |
+| `cannot fit before referenced dinner anchor` in `pipeline/repair-day.ts` | **1 hit** at line 1950. ✅ |
 
-`formatTime(undefined)` returns `""`, so the start line collapses to blank but the end line still draws "→ 1:30 PM". The clean-preview branch (line 11380) already short-circuits correctly (`if (start && end) … if (start) … return null`); only the editable/desktop column is broken.
+### Test Coverage
 
-**Data layer (`supabase/functions/generate-itinerary/action-save-itinerary.ts::normalizeDays`):** No normalization gate ensures `startTime` is present when `endTime` is. AI/repair paths can persist `{ startTime: null/undefined, endTime: "13:30", durationMinutes: 60 }` and that lands in `trips.itinerary_data` unchanged.
+All three requested test cases **already exist** and pass (`deno test --no-check`, 28/28 pass):
 
-## Fix Strategy
+1. **`12:16 AM nightcap → bookend`** — `__tests__/hotel-return-bookend.test.ts:161`
+   `Deno.test('runStep8 (AM/PM): nightcap endTime "12:16 AM" → late_nightlife_bookend appended (Bruges repro)')` covers exactly the scenario (startTime `10:30 PM`, endTime `12:16 AM`, category `nightlife`).
 
-### (a) Frontend rendering guard — `src/components/itinerary/EditorialItinerary.tsx`
+2. **`Dining description sanitizes to empty → template fallback`** — `__tests__/dining-description-rescue.test.ts:11`
+   `Deno.test('dining card: over-stripped description gets template fallback')` asserts `desc.length >= 30` after sanitization empties the original.
 
-Update the desktop time column (~lines 11713–11732) so the end-time line is only rendered when start exists. Behavior:
+3. **`Freshen-up after bike tour, 15m gap → dropped`** — `__tests__/freshen-up-pre-dinner.test.ts:33`
+   `Deno.test('§7b-bis: pre-dinner freshen-up after bike tour with 15m gap → dropped')` asserts the freshen-up card is removed because `gap=15m < required 65m`.
 
-- If `time && endTime` → render `formatTime(time)` and below it `→ formatTime(endTime)` (current correct behavior).
-- If `time && !endTime` → render only start time + duration (already current behavior).
-- If `!time && endTime` → render duration only (suppress the orphan "→ end" line). Also suppress the click-to-edit affordance because the card has no anchor time to edit from.
-- If neither → render placeholder dash `—` (today renders an empty span which collapses layout).
+### Live Bruges Trip Generation (Item 1)
 
-Implementation: wrap the existing block in `time ? (…current jsx…) : (<DurationOnly />)`. No business-logic change.
+This requires generating a real trip in preview — only the user can do this. After they generate, the five card-level checks (hotel-return on every non-departure day, dining descriptions ≥15 chars, hard-reload persistence, bike-tour→dinner gap ≥30m, dining start+end visible) can be eyeballed.
 
-### (b) Save-time normalization — `supabase/functions/generate-itinerary/action-save-itinerary.ts`
+## Proposed Work
 
-Inside `normalizeDays` (line 124), add a per-activity normalization pass BEFORE the sort (line 132) and BEFORE `scrubActivity`/dedup runs. For each activity:
+Two small, optional follow-ups — both no-risk:
 
-```
-const start = a.startTime || a.start_time || a.time;
-const end   = a.endTime   || a.end_time;
-const dur   = Number(a.durationMinutes || a.duration_minutes) || null;
+### 1. Rename `parseTimeAmPm` → `parseTimeToMinutesLocal` (optional)
 
-if (!start && end && dur && dur > 0) {
-  const endMin = parseTimeToMinutes(end);
-  if (endMin !== null) {
-    const startMin = Math.max(0, endMin - dur);
-    const computed = minutesToHHMM(startMin);
-    a.startTime = computed;
-    a.start_time = computed;
-    a.time = computed;
-    console.log(`[NORMALIZE_START] day=${dayNumber} title="${a.title || a.name || ''}" computed=${computed} from end=${end} dur=${dur}`);
-  }
-}
-```
+Pure ergonomic rename so the verification grep passes. Touches:
+- `supabase/functions/_shared/time-parse.ts` — `export function parseTimeAmPm` → `parseTimeToMinutesLocal`, keep a backward-compat alias `export { parseTimeToMinutesLocal as parseTimeAmPm }`.
+- ~15 call sites across `universal-quality-pass.ts`, `repair-day.ts`, `clamp-bookend.ts`, etc. (mechanical find/replace).
 
-Locked / userAdded / userEdited / extracted / pinned / isManual cards are exempt (mirror the standard guards) — never recompute a user-anchored time. Only fills when `startTime` is genuinely missing; never overwrites an existing value.
+**Recommendation: skip the rename.** The current name is more descriptive ("AM/PM-aware") and the grep convention is informational, not a contract. If you want, I can update the verification spec to grep for `parseTimeAmPm` instead.
 
-If `!start && end && !dur` (no duration to subtract) we cannot safely compute — leave as-is and let the frontend's (a) guard render duration-less fallback. Log once with sentinel `[NORMALIZE_START_SKIPPED] reason=no_duration`.
+### 2. Document parity in the verification memory (optional)
 
-### (c) Mirror normalization in `pipeline/repair-day.ts` final timing pass
+Append a note to `mem://constraints/itinerary/start-time-normalization` (or a new short entry) clarifying that the AM/PM-aware parser used by `runStep8` is `parseTimeAmPm`, and that future verifications should grep for it. Keeps future agents from re-flagging this as a missing implementation.
 
-`enforceTimingAndBuffers` already runs at repair-day §16 + save-itinerary STEP 2.9 (per `mem://technical/itinerary/pre-save-timing-cascade`). Add the same `start = end − dur` fill inside the helper's pre-walk so repair-time doesn't emit `null`-start rows in the first place. Both layers (b) and (c) are needed: (c) catches AI output; (b) catches optimistic patches / chat-executor writes / legacy data.
+### 3. No-op for tests
 
-## Verification
+All three tests already exist and pass. No new test files needed.
 
-**Static:**
-- `rg "NORMALIZE_START\b" supabase/functions/generate-itinerary/action-save-itinerary.ts` → ≥1 hit
-- `rg "NORMALIZE_START\b" supabase/functions/_shared/` → ≥1 hit (helper path)
-- `rg "→ \{formatTime\(activity.endTime\)\}" src/components/itinerary/EditorialItinerary.tsx` → 0 hits (the unguarded orphan is gone)
+## Recommendation
 
-**Unit test (new `supabase/functions/generate-itinerary/__tests__/normalize-start-time.test.ts`):**
-- Day with `{ startTime: null, endTime: "13:30", durationMinutes: 60 }` → `normalizeDays` yields `startTime === "12:30"`.
-- Same shape with `isLocked: true` → start remains `null` (locks exempt).
-- `{ startTime: null, endTime: "13:30", durationMinutes: 0 }` → start remains `null`; sentinel `NORMALIZE_START_SKIPPED` logged.
+**Approve option 2 only** (memory note). Skip the rename. Then run the live Bruges generation yourself and report any card-level regressions — those can't be verified without actually generating a trip.
 
-**Visual check:**
-- Load Bruges trip Day 3 in preview → Bistro Refter card no longer shows orphan "→ 1:30 PM". Either it now shows correct `12:30 → 1:30 PM` (post-save normalization) or shows duration-only fallback (pre-save legacy data).
-
-**No existing tests touched** beyond the new file.
-
-## Memory
-
-New entry `mem://constraints/itinerary/start-time-normalization`:
-
-> Activity cards MUST never persist with `endTime` set and `startTime` null. `normalizeDays` (action-save-itinerary) + `enforceTimingAndBuffers` (pre-save cascade) compute `startTime = endTime − durationMinutes` when start is missing and duration is positive. Locked/user/manual/extracted/pinned rows exempt. Frontend `EditorialItinerary.tsx` desktop time column also guards: when start is missing, render duration-only and suppress orphan "→ end" line. Sentinels: `[NORMALIZE_START]` (filled), `[NORMALIZE_START_SKIPPED] reason=no_duration` (couldn't fill). Closes Bruges "Bistro Refter shows only → 1:30 PM".
-
-Add a Core line referencing it and add to the index Memories list.
-
-## Files Changed
-
-- `src/components/itinerary/EditorialItinerary.tsx` — desktop time column guard (~line 11714)
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — `normalizeDays` start-fill loop
-- `supabase/functions/_shared/<timing-cascade file>` — same fill inside `enforceTimingAndBuffers`
-- `supabase/functions/generate-itinerary/__tests__/normalize-start-time.test.ts` — new
-- `mem://constraints/itinerary/start-time-normalization` — new
-
-No DB, RLS, or prompt changes.
+If you'd rather rename for grep parity, say "rename" and I'll do the mechanical migration in build mode.
