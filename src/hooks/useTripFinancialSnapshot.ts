@@ -91,7 +91,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // session-to-session drift and a permanent "Reconciling…" mismatch.
     const { data: tripData } = await supabase
       .from('trips')
-      .select('budget_total_cents, budget_include_hotel, budget_include_flight, budget_allocations, itinerary_data')
+      .select('budget_total_cents, budget_include_hotel, budget_include_flight, budget_allocations, itinerary_data, travelers, destination, budget_tier')
       .eq('id', tripId)
       .single();
 
