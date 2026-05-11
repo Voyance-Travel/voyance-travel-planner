@@ -641,34 +641,90 @@ export function parseItineraryDays(
     .map((day, idx) => parseSingleDay(day, idx, tripStartDate));
   
   // === LAYER 2: HARD DEDUPLICATION — by dayNumber AND by date ===
-  
-  // Step 1: Deduplicate by dayNumber — keep entry with more activities
+  //
+  // Bruges meal-loss fix: when collapsing duplicate days, salvage any dining
+  // activities from the discarded duplicate so meal cards are never silently
+  // lost. The Payments tab reads raw `activity_costs` rows (no dedup), so any
+  // dining row dropped here is exactly what causes the "Payments shows 7,
+  // itinerary shows fewer" mismatch.
+  const DINING_DAY_CAT_RE = /(dining|food|restaurant|breakfast|lunch|dinner|brunch|cafe|café)/i;
+  const isDiningAct = (a: any) =>
+    DINING_DAY_CAT_RE.test(String(a?.category || '')) ||
+    DINING_DAY_CAT_RE.test(String(a?.title || ''));
+  const actKey = (a: any) =>
+    `${String(a?.title || '').toLowerCase().trim()}|${String(a?.startTime || '').trim()}`;
+  const salvageDining = (winner: ParsedDay, loser: ParsedDay): number => {
+    if (!loser?.activities?.length) return 0;
+    const winnerKeys = new Set((winner.activities || []).map(actKey));
+    const merged = [...(winner.activities || [])];
+    let rescued = 0;
+    for (const a of loser.activities) {
+      if (!isDiningAct(a)) continue;
+      const k = actKey(a);
+      if (winnerKeys.has(k)) continue;
+      merged.push(a);
+      winnerKeys.add(k);
+      rescued++;
+    }
+    if (rescued > 0) {
+      // Re-sort chronologically by startTime where possible.
+      merged.sort((x, y) => {
+        const sx = String(x?.startTime || '99:99');
+        const sy = String(y?.startTime || '99:99');
+        return sx.localeCompare(sy);
+      });
+      winner.activities = merged;
+      console.warn(`[itineraryParser] Salvaged ${rescued} dining card(s) from duplicate day ${loser.dayNumber}`);
+    }
+    return rescued;
+  };
+
+  // Step 1: Deduplicate by dayNumber — keep entry with more activities, but
+  // salvage dining cards from the discarded duplicate.
   const byDayNumber = new Map<number, ParsedDay>();
   for (const day of parsedDays) {
     const existing = byDayNumber.get(day.dayNumber);
-    if (!existing || (day.activities?.length || 0) > (existing.activities?.length || 0)) {
+    if (!existing) {
       byDayNumber.set(day.dayNumber, day);
+      continue;
+    }
+    const dayActs = day.activities?.length || 0;
+    const exActs = existing.activities?.length || 0;
+    if (dayActs > exActs) {
+      salvageDining(day, existing);
+      byDayNumber.set(day.dayNumber, day);
+    } else {
+      salvageDining(existing, day);
     }
   }
   let deduped = Array.from(byDayNumber.values());
-  
-  // Step 2: Deduplicate by date — if two days share the same date, keep the one with more activities
+
+  // Step 2: Deduplicate by date — same salvage logic.
   const byDate = new Map<string, ParsedDay>();
   for (const day of deduped) {
     const dateKey = day.date || `fallback-day-${day.dayNumber}`;
     const existing = byDate.get(dateKey);
-    if (!existing || (day.activities?.length || 0) > (existing.activities?.length || 0)) {
+    if (!existing) {
       byDate.set(dateKey, day);
+      continue;
+    }
+    const dayActs = day.activities?.length || 0;
+    const exActs = existing.activities?.length || 0;
+    if (dayActs > exActs) {
+      salvageDining(day, existing);
+      byDate.set(dateKey, day);
+    } else {
+      salvageDining(existing, day);
     }
   }
   deduped = Array.from(byDate.values());
-  
+
   // Step 3: Sort chronologically and re-number sequentially (1, 2, 3...)
   deduped.sort((a, b) => {
     if (a.date && b.date) return new Date(a.date).getTime() - new Date(b.date).getTime();
     return a.dayNumber - b.dayNumber;
   });
-  
+
   if (deduped.length < parsedDays.length) {
     console.warn(`[itineraryParser] Deduplicated ${parsedDays.length - deduped.length} duplicate day(s)`);
   }
