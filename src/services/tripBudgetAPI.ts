@@ -85,21 +85,35 @@ export interface BudgetSummary {
 
 export async function getTripMembers(tripId: string): Promise<TripMember[]> {
   // R5: Cross-member reads MUST go through public_trip_members (no email).
-  // Trip owners' management UIs that need email read trip_members directly
-  // (owner SELECT policy still allows it).
-  const { data, error } = await supabase
-    .from('public_trip_members')
-    .select('*')
-    .eq('trip_id', tripId)
-    .order('role', { ascending: false });
+  // Trip owners + self also get a base-table read (owner sees all, non-owner sees
+  // only their own row) so emails appear where the caller is authorized to see them.
+  const [viewRes, baseRes] = await Promise.all([
+    supabase
+      .from('public_trip_members')
+      .select('*')
+      .eq('trip_id', tripId)
+      .order('role', { ascending: false }),
+    supabase
+      .from('trip_members')
+      .select('id, email')
+      .eq('trip_id', tripId),
+  ]);
 
-  if (error) throw new Error(error.message);
+  if (viewRes.error) throw new Error(viewRes.error.message);
 
-  return (data || []).map((row: Record<string, unknown>) => ({
+  // baseRes may legitimately error/return [] for non-owners on rows they can't see.
+  const emailById = new Map<string, string>();
+  if (!baseRes.error && baseRes.data) {
+    for (const row of baseRes.data as Array<{ id: string; email: string | null }>) {
+      if (row.email) emailById.set(row.id, row.email);
+    }
+  }
+
+  return (viewRes.data || []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
     tripId: row.trip_id as string,
     userId: row.user_id as string | null,
-    email: '', // intentionally not exposed via public_trip_members
+    email: emailById.get(row.id as string) ?? '',
     name: (row.name as string | null) ?? (row.member_display as string | null) ?? null,
     role: row.role as TripMemberRole,
     invitedAt: row.invited_at as string,
