@@ -136,9 +136,10 @@ function normalizeDays(days: any[], tripStartDate: string | null, destination?: 
     stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
     clampAllBookends(activities, { dayNumber, label: 'SAVE' });
     // Unified scrub boundary — single entry point.
+    const daySchedule = buildDayScheduleSummary(activities);
     let dayOps: ScrubOps = { ...EMPTY_OPS } as ScrubOps;
     for (const a of activities) {
-      dayOps = addOps(dayOps, scrubActivity(a, { destination }));
+      dayOps = addOps(dayOps, scrubActivity(a, { destination, daySchedule }));
     }
     const diningBackfill = ensureDayDiningDescriptions(activities, destination);
     if (diningBackfill.fallback + diningBackfill.whyThisFits > 0) {
