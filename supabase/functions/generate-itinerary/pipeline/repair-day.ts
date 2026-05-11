@@ -3576,10 +3576,10 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
   // --- 15b. WALK_OVER_THRESHOLD — force walk→taxi/metro on >30min OR >1500m ---
   if (byCode.has(FAILURE_CODES.WALK_OVER_THRESHOLD)) {
-    const indices = (byCode.get(FAILURE_CODES.WALK_OVER_THRESHOLD) || [])
-      .map(vr => vr.activityIndex)
-      .filter((i): i is number => i !== undefined);
-    for (const idx of indices) {
+    const vrs = (byCode.get(FAILURE_CODES.WALK_OVER_THRESHOLD) || [])
+      .filter(vr => typeof vr.activityIndex === 'number');
+    for (const vr of vrs) {
+      const idx = vr.activityIndex as number;
       if (idx < 0 || idx >= activities.length) continue;
       const act = activities[idx] as any;
       if (lockedIds.has(act?.id)) continue;
@@ -3607,9 +3607,22 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           if (Number.isFinite(hav) && hav > 0) derivedDist = hav;
         }
       }
-      const tier = derivedDist > 0
+      let tier: any = derivedDist > 0
         ? pickTransitTier(derivedDist, destName || 'destination')
         : pickTransitFallback(null, curDur, destName);
+
+      // Water-crossing override: pickTransitTier doesn't model ferries.
+      const wc = (vr as any)?.meta?.waterCrossing as { city?: string; reason?: string } | undefined;
+      if (wc) {
+        tier = {
+          method: 'ferry',
+          durationMinutes: Math.max(tier.durationMinutes || 0, 25), // ferry crossing floor
+          costAmount: tier.costAmount > 0 ? tier.costAmount : 5,
+          instructions: `Ferry across ${wc.reason}`,
+          distanceMeters: tier.distanceMeters || derivedDist || 0,
+        };
+      }
+
       if (derivedDist > 0) t.distanceMeters = derivedDist;
       t.method = tier.method;
       t.durationMinutes = tier.durationMinutes;
@@ -3620,10 +3633,12 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         act.cost.amount = tier.costAmount;
         if (!act.cost.currency) act.cost.currency = currency;
       }
-      // Rewrite "Walk to X" → "Taxi to X" / "Metro to X"
+      // Rewrite "Walk to X" → "Ferry / Taxi / Metro to X"
       if (typeof act.title === 'string') {
-        const verb = tier.method === 'metro' ? 'Metro' : 'Taxi';
-        act.title = act.title.replace(/^(?:Walk|Walking)\b/i, verb);
+        const verb = tier.method === 'ferry' ? 'Ferry'
+          : tier.method === 'metro' ? 'Metro'
+          : 'Taxi';
+        act.title = act.title.replace(/^(?:Walk|Walking|Stroll)\b/i, verb);
       }
       const tierLabel = (() => {
         const t = String((input as any).budgetTier || '').toLowerCase().trim();
@@ -3632,10 +3647,13 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       repairs.push({
         code: FAILURE_CODES.WALK_OVER_THRESHOLD,
         activityIndex: idx,
-        action: 'walk_to_taxi',
+        action: wc ? 'walk_to_ferry' : 'walk_to_taxi',
         before,
-        after: { method: tier.method, durationMinutes: tier.durationMinutes, costAmount: tier.costAmount, tier: tierLabel },
+        after: { method: tier.method, durationMinutes: tier.durationMinutes, costAmount: tier.costAmount, tier: tierLabel, waterCrossing: wc?.reason },
       });
+      if (wc) {
+        console.log(`[transit] Day ${dayNumber} downgraded walk → ferry: ${act.title} crosses water boundary (${wc.reason})`);
+      }
       console.log(`[WALK_OVER_THRESHOLD] day=${dayNumber} tier=${tierLabel} idx=${idx} ${before.method} ${curDur}min/${distM}m → ${tier.method} ${tier.durationMinutes}min/$${tier.costAmount}`);
     }
   }
