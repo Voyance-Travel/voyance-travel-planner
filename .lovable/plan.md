@@ -1,39 +1,43 @@
-# Bug 1–4 Verification Report
+# Fix: Google sign-in lands on "Wrong turn" 404
 
-## Grep checks (all ✅)
+## Root cause
 
-| Check | File | Hits |
-|---|---|---|
-| `Rejected false-positive` | `day-validation.ts:180` | 1 ✅ |
-| water-crossing downgrade log | `pipeline/repair-day.ts:3655` | 1 ✅ |
-| `reportRemainingDeadGap*` | `pipeline/fill-dead-gaps.ts:223,260,268,273` | 4 ✅ (helper + afternoon + evening exports) |
+`src/components/auth/SocialLoginButtons.tsx` (line 19) sends Google/Apple OAuth back to `${window.location.origin}/auth/callback`. There is **no `/auth/callback` route registered** in `src/App.tsx` — the React Router catch-all renders `NotFound.tsx`, whose copy starts with the "Wrong turn. This page doesn't exist, but your next trip could…" headline the user is seeing.
 
-## Unit-test coverage (all ✅ — already exist from prior bug fixes)
+The auth session itself is set correctly by `lovable.auth.signInWithOAuth` before the redirect, so `AuthContext.onAuthStateChange` already fires `SIGNED_IN`. The bug is purely a missing route handler — the user is authenticated but stranded on a 404.
 
-| Requested case | Existing test |
-|---|---|
-| `"Freshen Up before anniversary dinner"` (wellness) → no `dinner` slot | `__tests__/meal-detection-false-positives.test.ts:4` |
-| `"Walk to dinner"` (transport) regression guard | covered by `"Walk to lunch"` (transport) at `meal-detection-false-positives.test.ts:11` and `"Heading to brunch"` at line 39 — same code path |
-| Phantom-ref scrubber drops "anniversary dinner" clause when no dinner card | `_shared/__tests__/phantom-ref-clause-scrub.test.ts:124, 132, 140` (3 cases: blank, preserve-with-dinner, semicolon-clause-drop) |
-| 18:42 → 22:00 evening window returns ≥180m | `__tests__/evening-dead-gap.test.ts:11` (198m asserted) plus 17:00→22:30 case at line 44 (240m) |
+## Fix
 
-**No new tests need to be written.** The previously-shipped test files for Bugs 1–4 already cover every case in the verification spec, with "Walk to lunch" / "Heading to brunch" serving as the transport-category regression guard for the "Walk to dinner" pattern (the detector keys on `category === 'transport'` + temporal-modifier prefix, not the specific meal word).
+### 1. Add an `AuthCallback` page (`src/pages/AuthCallback.tsx`)
 
-## Outstanding manual step (cannot run from sandbox)
+- Show a minimal centered "Signing you in…" spinner (re-use `RouteFallback` styling).
+- On mount: read the auth context. As soon as `user` is present (or after a short grace period via `onAuthStateChange`), call `consumeReturnPath('/profile')` and `navigate(returnPath, { replace: true })`.
+- If after ~6 seconds there is still no session, navigate to `/signin?error=oauth_failed` with a toast, so we don't trap users in an infinite spinner when the broker fails silently.
+- Honor a pending invite token: if `popPendingInviteToken()` exists, prefer `/invite/<token>` over the saved return path (mirror existing `AcceptInvite` behavior).
 
-Re-generate Istanbul trip `043d92c7-4bad-49d5-82a8-bc437e459bcf` in the live app and confirm:
+### 2. Register the route in `src/App.tsx`
 
-- **Day 1:** B + L + D scheduled, no 4h+ evening gap (Bug 1 + 4)
-- **Day 2:** B + L + D; "Freshen Up before anniversary dinner" card scrubbed unless real dinner follows; Topkapı → Çiya transit is `ferry` not `walk` (Bugs 2 + 3)
-- **Day 3:** meal count matches departure-day meal-policy
+Add inside the **Auth Routes** block (next to `/signin`, `/signup`):
 
-Edge-function logs to watch for during regen:
+```tsx
+<Route path="/auth/callback" element={<AuthCallback />} />
+```
 
-- `[detectMealSlots] Rejected false-positive …`
-- `[transit] Day N downgraded walk → ferry: … crosses water boundary (…)`
-- `[QUALITY] Day N has Xm unplanned 18:00-22:00`
-- `[SCRUB_PHANTOM_REF] …`
+Public route (no `ProtectedRoute` wrapper) so unauthenticated arrivals during the brief session-write window aren't bounced.
 
-## Recommendation
+### 3. Leave `getAuthRedirectUrl` as-is
 
-Approve this plan to close the verification ticket — all code-level work is done. Re-generate the Istanbul trip from the live preview (or via the trip detail page) to capture the runtime sentinels; share the resulting day-cards if any expected line is missing and I'll diagnose from logs.
+`/auth/callback` is the documented redirect for both the Lovable broker and the custom-domain `supabase.auth.signInWithOAuth` branch — fixing the missing route is the correct change. Native (`voyance://auth/callback`) is already handled separately by `src/lib/native/oauthDeepLink.ts`.
+
+## Out of scope
+
+- No changes to `AuthContext`, `lovable` integration, or Supabase config.
+- No changes to `NotFound.tsx` copy.
+- No new edge functions or migrations.
+
+## Verification
+
+1. Sign in with Google in preview → expect brief "Signing you in…" splash → land on `/profile` (or last-saved path), never on the 404 page.
+2. Console: `[404] Route not found: /auth/callback` warning disappears.
+3. Sign-in via custom domain (`travelwithvoyance.com`) → same behavior (the `isCustomDomain` branch also redirects to `/auth/callback`).
+4. Existing email/password sign-in flow unchanged.
