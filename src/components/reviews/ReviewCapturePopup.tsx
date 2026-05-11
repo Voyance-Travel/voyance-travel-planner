@@ -72,18 +72,33 @@ export function ReviewCapturePopup({
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.from('customer_reviews').insert({
-        user_id: user?.id || null,
-        name: name.trim(),
-        email: email.trim() || null,
-        rating,
-        review_text: reviewText.trim(),
-        trip_destination: tripDestination || null,
-        archetype: archetype || null,
-        photo_consent: photoConsent,
-      });
+      const { data: insertedReview, error } = await supabase
+        .from('customer_reviews')
+        .insert({
+          user_id: user?.id || null,
+          name: name.trim(),
+          rating,
+          review_text: reviewText.trim(),
+          trip_destination: tripDestination || null,
+          archetype: archetype || null,
+          photo_consent: photoConsent,
+        })
+        .select('id')
+        .single();
 
       if (error) throw error;
+
+      // PII isolation: email lives in a separate owner-only table.
+      // See mem://constraints/security/customer-reviews-pii-isolation
+      const trimmedEmail = email.trim();
+      if (trimmedEmail && insertedReview?.id) {
+        const { error: contactError } = await supabase
+          .from('customer_review_contacts')
+          .insert({ review_id: insertedReview.id, email: trimmedEmail });
+        if (contactError) {
+          console.warn('[ReviewCapturePopup] contact email not stored:', contactError.message);
+        }
+      }
 
       setIsSubmitted(true);
       
