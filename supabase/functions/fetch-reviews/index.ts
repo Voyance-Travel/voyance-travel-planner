@@ -4,7 +4,6 @@ import { getCachedPlacesPhotoByResource } from "../_shared/photo-storage.ts";
 import { cacheVenueResult } from "../_shared/venue-cache.ts";
 import { cachedGooglePlacesTextSearch as googlePlacesTextSearch } from "../_shared/google-api.ts";
 import { parseAuth } from "../_shared/require-auth.ts";
-import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
