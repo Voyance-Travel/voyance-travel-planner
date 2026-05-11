@@ -1,68 +1,95 @@
 ## Problem
 
-Madrid Day 3 health panel surfaced `Day 3 has 7h gap before Misión Café` even though the 7h window was the overnight sleep period (Day 2 ~21:40 → Day 3 ~08:30), not an intra-day gap.
+Madrid Day 1 (luxury luminary) routed a 1h 27m / ~3.5km walk Palacio Real → DiverXO. The current hard-walk ceiling (`WALK_HARD_DURATION_MINUTES=30`, `WALK_HARD_DISTANCE_METERS=1500` in `supabase/functions/_shared/transit-mode.ts`) is single-tier — a 25-min / 1200m walk is "fine" for everyone, including a luxury luminary who shouldn't be hoofing it across Centro→Salamanca.
 
-Existing gap loop in `analyzeHealth` (src/components/trip/TripHealthPanel.tsx, lines 137–179) already iterates per-day via `days.forEach`, applies a `dayScopedForGap` filter, and skips wrap-past-midnight + pre-05:00 cards. The leak still happens because:
+The validate→repair→gate cascade is already in place (validate-day.ts §`checkWalkOverThreshold`, repair-day.ts §15b, validation-gate.ts) and `budgetTier` is already plumbed at every `validateDay(...)` call site (`action-generate-day.ts`, `action-generate-trip-day.ts`). What's missing is a tier-aware threshold.
 
-1. The scoping is inlined inside a 200-line forEach, so contributors keep adding pre/post checks against the wrong array (the pattern the comment at line 138 warns against). Refactoring to a named, single-purpose `detectGapsForDay(allActivities, dayNumber)` makes the day-boundary invariant impossible to violate.
-2. Pre-dawn cutoff is hard-coded at `< 05:00`. A leftover Day 3 row with start 05:30–06:00 (e.g. an early-morning ritual mis-tagged from the night before) survives the filter and seeds `prevEnd ≈ 06:00` so a 08:30 first activity reports as a "2.5h gap"; in the Madrid trace the offending row was a 01:30 prevEnd that the wrap+preDawn pair *should* have caught — but only when the row is correctly populated. Belt-and-braces: also drop any candidate whose `startMins < firstSubstantiveStart` after sort, and never report a gap before the day's first user-visible activity.
-3. We pass `realActivities` (already day-scoped by `day.activities`) plus a re-filter by `dayNumber`. We should additionally accept the *flat* activity list as the contract (matching the user's spec) so callers can never accidentally pass a polluted, cross-day array.
+The original 1h 27m / 3.5km case is already caught by the universal hard ceiling (>30m AND >1500m) — that fix shipped in mem://constraints/itinerary/transit-mode-distance-guard. This plan tightens the ceiling for luxury so cases like 25 min / 1.2 km — currently passing — are also flagged for the luxury cohort.
 
 ## Plan
 
-### 1. Extract `detectGapsForDay`
+### 1. Add tier-aware constants — `_shared/transit-mode.ts`
 
-In `src/components/trip/TripHealthPanel.tsx`:
+```ts
+export const WALK_HARD_DISTANCE_METERS = 1500;     // existing
+export const WALK_HARD_DURATION_MINUTES = 30;       // existing
+export const WALK_LUXURY_DISTANCE_METERS = 1000;   // new
+export const WALK_LUXURY_DURATION_MINUTES = 20;     // new
+```
 
-- Add a module-level `detectGapsForDay(allActivities: any[], dayNumber: number, dayMode?: string): HealthIssue[]` that:
-  - Filters by `(a.dayNumber ?? a.day_number) === dayNumber` as the FIRST step (hard day-boundary guard).
-  - Reuses existing `isBookendOrTransit` predicate (lift to module scope alongside).
-  - Drops cards where `endMins > 0 && endMins < startMins` (wrap-past-midnight) and `startMins < 5*60` (pre-dawn residue).
-  - Sorts by `startMins`, walks consecutive pairs, emits `gap-{dayNumber}-{startMins}` issue when delta ≥ 180 min.
-  - Never emits a gap before the first sorted activity (no synthetic `prevEnd = 0`).
-  - Only updates `prevEnd` when `endMins > startMins` (preserves current behavior).
+Add a tiny helper so the tier→threshold mapping has one source of truth:
 
-### 2. Wire into `analyzeHealth`
+```ts
+export function isLuxuryTier(budgetTier?: string | null): boolean {
+  const t = String(budgetTier || '').toLowerCase().trim();
+  return t === 'luxury' || t === 'luminary' || t === 'splurge' || t === 'premium';
+}
+export function walkThresholdsFor(budgetTier?: string | null) {
+  return isLuxuryTier(budgetTier)
+    ? { duration: WALK_LUXURY_DURATION_MINUTES, distance: WALK_LUXURY_DISTANCE_METERS }
+    : { duration: WALK_HARD_DURATION_MINUTES, distance: WALK_HARD_DISTANCE_METERS };
+}
+```
 
-- Replace the inline gap loop (lines 137–179) with:
-  ```ts
-  const gapIssues = detectGapsForDay(activities, dayNum, dayMode);
-  issues.push(...gapIssues);
-  ```
-- Keep `realActivities`, meal, thin-day, conflict, and buffer checks unchanged — scope of this fix is gap detection only.
+Note: per `mem://technical/observability/google-api-centralization` we deliberately do NOT add an async `checkMetroRoute` Google-Directions call inside repair. The existing `pickTransitTier` (haversine-based: walk ≤650m, metro <5km, uber ≥5km) is the canonical metro-vs-taxi decision and runs synchronously after enrichment.
 
-### 3. Tests
+### 2. Plumb `budgetTier` into validator — `pipeline/validate-day.ts`
 
-Add `src/components/trip/__tests__/TripHealthPanel.detectGapsForDay.test.ts` (vitest) covering:
-- Day 2 ending 21:40, Day 3 starting 08:30 → no gap on Day 3 (overnight, cross-day).
-- Day 3 with intra-day 13:00 lunch ending and 20:00 dinner start → emits 7h gap.
-- Day 3 first activity 08:30 with no prior → no gap (no synthetic pre-dawn anchor).
-- Day 3 with a wrap-past-midnight nightcap mis-tagged as day 3 → skipped, no gap.
-- Bookend/transit-only day → no gaps.
-- Polluted input where caller passes the full flat activity list → only day-N rows considered.
+- Add `budgetTier?: string` to `ValidateDayInput` (line ~99).
+- Destructure in `validateDay(...)` (line ~115) and pass into `checkWalkOverThreshold(activities, results, budgetTier)`.
+- Inside `checkWalkOverThreshold`:
+  - Import `walkThresholdsFor` and `isLuxuryTier` from `_shared/transit-mode.ts`.
+  - Resolve `const { duration: durCap, distance: distCap } = walkThresholdsFor(budgetTier);` once.
+  - Replace lines 1226 / 1230 to use `durCap` / `distCap` and stamp `tier: isLuxuryTier(budgetTier) ? 'luxury' : 'standard'` into the result message and (optionally) a new `meta.tier` field on `ValidationResult` (re-uses existing `meta?: any` field if present; otherwise embed in message string).
 
-### 4. Memory
+### 3. Pass `budgetTier` at every call site
 
-Append a one-liner to `mem://index.md` Core under the existing health-engine cluster:
+Four files, each already has `budgetTier` in scope:
 
-> Health-engine gap detection MUST go through `detectGapsForDay(allActivities, dayNumber)` — never iterate a flat or cross-day array. Overnight sleep window (last activity of day N → first activity of day N+1) is never a gap.
+- `action-generate-day.ts` lines 1216–1238 and the post-repair re-validation at line 1296 — add `budgetTier` to both `ValidateDayInput` literals.
+- `action-generate-trip-day.ts` lines 1351 and 1449 — same addition (uses `tripMeta?.budget_tier` already destructured nearby).
 
-And a memory file `mem://constraints/itinerary/health-gap-day-scoping` capturing the day-boundary invariant and the named-function contract.
+### 4. Repair handler — `pipeline/repair-day.ts` §15b (lines 3577–3634)
+
+No structural changes needed: `pickTransitTier` already maps any distance >650m to metro (<5km) or uber (≥5km), which satisfies the user's "metro if available, else taxi" intent without an extra Google call. The luxury 1000m / 20-min ceiling is enforced earlier (validator); once flagged, the existing repair handles the swap and rewrites `Walk to X` → `Metro to X` / `Taxi to X`.
+
+Two small touches:
+
+- Read `budgetTier` from `input` (already accessed elsewhere as `(input as any).budgetTier`) and stamp `repairs.push({ ..., tier: 'luxury' | 'standard' })` plus include the tier in the `[WALK_OVER_THRESHOLD]` console line so post-mortem grep tells us which cohort triggered the repair.
+- No new constants in repair — single source of truth lives in `_shared/transit-mode.ts`.
+
+### 5. Tests — `__tests__/walk-over-threshold.test.ts`
+
+Add three cases to the existing file:
+
+1. `luxury tier flags 25-min / 1200m walk` — same day, `budgetTier: 'luxury'`, expects WALK_OVER_THRESHOLD.
+2. `standard tier does NOT flag 25-min / 1200m walk` — control case, expects no violation.
+3. `in-neighborhood 8-min / 600m walk passes for luxury` — Plaza Mayor → Mercado San Miguel sized hop stays a walk.
+4. `repair on luxury 25-min walk produces metro (1.2km < 5km)` — assert `t.method === 'metro'` and title rewritten to `Metro to ...`.
+
+### 6. Memory
+
+Extend `mem://constraints/itinerary/transit-mode-distance-guard` with the tier-aware addendum (luxury 20m/1000m, standard 30m/1500m) and a one-liner pointer in `mem://index.md` Core under the existing Transit Estimation entry. Do NOT create a new memory file — this is the same constraint family.
 
 ## Out of Scope
 
-- No changes to conflict/buffer/meal/thin-day detection.
-- No changes to server-side density-protocol or repair pipeline.
-- No UI/copy changes in the panel.
+- Archetype-id-based gating (`luxury_luminary` / `status_seeker`). `budgetTier` is the cleaner, already-plumbed signal and covers the 4-tier set (`value` / `moderate` / `luxury` / `luminary`). If the user wants archetype-OR semantics later, `isLuxuryTier` is the one-line extension point.
+- Async metro-route lookups via Google Directions — explicit constraint per `mem://technical/observability/google-api-centralization` and existing `pickTransitTier` already covers the decision.
+- No changes to the 650m sanitizer (`MAX_WALK_DISTANCE_METERS`) — that's the global ceiling for newly-emitted walk cards and tightening it would over-correct for non-luxury tiers.
 
 ## Verification
 
-- Run new vitest file: `bunx vitest run src/components/trip/__tests__/TripHealthPanel.detectGapsForDay.test.ts`.
-- Manual: open a 3-day Madrid trip with Day 2 ending 21:40 and Day 3 starting 08:30 — confirm no `7h gap before Misión Café` warning. Add a synthetic 13:00→20:00 intra-day gap on Day 3 and confirm the warning DOES fire.
+- `bunx vitest run supabase/functions/generate-itinerary/__tests__/walk-over-threshold.test.ts` — all existing + 4 new cases pass.
+- Manual repro: regenerate a luxury Madrid trip with cross-district anchors; confirm no Walk leg >20 min / >1000m, in-neighborhood walks (≤15 min) preserved. Standard-tier control trip still allows up to 30 min / 1500m.
+- Grep `[WALK_OVER_THRESHOLD] day=… tier=luxury` in edge logs after a luxury regeneration.
 
 ## Files Touched
 
-- `src/components/trip/TripHealthPanel.tsx` (extract function + wire-in)
-- `src/components/trip/__tests__/TripHealthPanel.detectGapsForDay.test.ts` (new)
-- `mem://constraints/itinerary/health-gap-day-scoping` (new)
-- `mem://index.md` (one-liner addition)
+- `supabase/functions/_shared/transit-mode.ts` (new constants + helpers)
+- `supabase/functions/generate-itinerary/pipeline/validate-day.ts` (input field + tier-aware `checkWalkOverThreshold`)
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (tier stamping in repair record + log line)
+- `supabase/functions/generate-itinerary/action-generate-day.ts` (pass `budgetTier` into `ValidateDayInput` ×2)
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (pass `budgetTier` into `ValidateDayInput` ×2)
+- `supabase/functions/generate-itinerary/__tests__/walk-over-threshold.test.ts` (4 new cases)
+- `mem://constraints/itinerary/transit-mode-distance-guard` (tier-aware addendum)
+- `mem://index.md` (one-liner update on Transit Estimation Core entry)
