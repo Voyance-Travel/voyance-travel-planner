@@ -35,6 +35,7 @@ import { normalizeVenueName, venueNamesMatch } from './generation-utils.ts';
 import { getDiningConfig } from './dining-config.ts';
 import { normalizeActivityDuration } from './_shared/duration-format.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
+import { parseTime as parseTimeAmPm } from '../_shared/timing-cascade.ts';
 
 // =============================================================================
 // OPTIONS INTERFACE
@@ -98,10 +99,12 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
   // insertion order isn't guaranteed across all upstream paths and the bookend
   // logic must reason about the chronologically last activity.
   const _toMins = (a: any): number => {
+    // AM/PM-aware: "12:16 AM" must read as 00:16, not 12:16. Bare regex would
+    // capture h=12 from "12:16 AM" and silently mis-sort the chronological
+    // tail (root cause of Bruges no-bookend regression).
     const t = String(a?.startTime || a?.start_time || a?.endTime || a?.end_time || '');
-    const m = t.match(/(\d{1,2}):(\d{2})/);
-    if (!m) return -1;
-    return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    const v = parseTimeAmPm(t);
+    return v ?? -1;
   };
   let lastActivity = result[result.length - 1];
   let lastIdx = result.length - 1;
@@ -140,27 +143,34 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
 
   const candidate = lastActivity?.end_time || lastActivity?.endTime || '';
   const startRaw = lastActivity?.start_time || lastActivity?.startTime || '';
-  const m = String(candidate).match(/(\d{1,2}):(\d{2})/);
-  const sm = String(startRaw).match(/(\d{1,2}):(\d{2})/);
+  // AM/PM-aware parse so "12:16 AM" → 00:16 (not 12:00) and "11:45 PM" → 23:45
+  // (not 11:45). Bare /(\d{1,2}):(\d{2})/ silently mis-classified 12-hour
+  // strings, dropping bookends — root cause of Bruges Day-N nightcap regression.
+  const endMinsParsed = parseTimeAmPm(String(candidate));
+  const startMinsParsed = parseTimeAmPm(String(startRaw));
+  const m = endMinsParsed !== null
+    ? { h: Math.floor(endMinsParsed / 60), min: endMinsParsed % 60 }
+    : null;
   let startTime24: string | null = null;
   let lateNightBleed = false;
   let synthesized = false;
   if (m) {
-    const h = parseInt(m[1], 10);
+    const h = m.h;
+    const minStr = String(m.min).padStart(2, '0');
     // Standard floor 14:00–23:59. Day-1 arrival pattern often ends mid-afternoon
     // (e.g., cultural anchor 14:30–16:30) and would otherwise ship without a
     // hotel-return bookend, breaking UX consistency with other days.
     if (h >= 14 && h <= 23) {
-      startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
+      startTime24 = `${String(h).padStart(2, '0')}:${minStr}`;
     } else if (h >= 0 && h <= 2) {
       // B2: late-nightlife bleed. Only accept when the prior activity is
       // unambiguously evening nightlife (start ≥ 21:00) so we don't bless a
       // genuinely broken card.
-      const startHour = sm ? parseInt(sm[1], 10) : -1;
+      const startHour = startMinsParsed !== null ? Math.floor(startMinsParsed / 60) : -1;
       const titleNightlife = LATE_NIGHTLIFE_TITLE_RE.test(lastTitle);
       const catNightlife = LATE_NIGHTLIFE_CATS.has(lastCat);
       if (startHour >= 21 && (titleNightlife || catNightlife)) {
-        startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
+        startTime24 = `${String(h).padStart(2, '0')}:${minStr}`;
         lateNightBleed = true;
       }
     }
