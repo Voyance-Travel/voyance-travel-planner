@@ -133,7 +133,15 @@ export function enforcePersistDayContract<T = any>(
       timeToMins((a as any).start_time) ??
       timeToMins((a as any).time);
     const isPreDawn = startMins !== null && startMins < PRE_DAWN_MAX_MINS;
-    if (isPreDawn && (GHOST_CATEGORIES.has(cat) || HOTEL_RETURN_RE.test(title) || WELLNESS_PLACEHOLDER_RE.test(title))) {
+    // ALLOWLIST: legitimate post-midnight hotel-return injected by runStep8's
+    // late-nightlife-bleed branch (e.g. taxi back from a speakeasy at 00:25).
+    // Without this, persist-day-contract drops the very card we just minted.
+    const _src = String(aa.source || '').toLowerCase();
+    const _tags = Array.isArray(aa.tags) ? aa.tags.map((t: any) => String(t).toLowerCase()) : [];
+    const isLateNightlifeBookend =
+      _src === 'late_nightlife_bookend' || _tags.includes('late_nightlife_bookend');
+    if (isPreDawn && !isLateNightlifeBookend &&
+        (GHOST_CATEGORIES.has(cat) || HOTEL_RETURN_RE.test(title) || WELLNESS_PLACEHOLDER_RE.test(title))) {
       drops.push({ dayNumber: ctx.dayNumber, title, reason: 'ghost-row' });
       continue;
     }
