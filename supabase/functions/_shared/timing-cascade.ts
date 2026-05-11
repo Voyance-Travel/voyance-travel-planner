@@ -230,6 +230,10 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
   const overlapBuffer = opts.overlapBufferMinutes ?? 5;
   const repairs: CascadeRepair[] = [];
 
+  // Pre-walk: fill missing startTime from endTime − durationMinutes so the sort
+  // (and all downstream pair logic) sees a coherent chronology. Mutates input.
+  fillMissingStartTimes(input as any[], { path: 'enforceTimingAndBuffers' });
+
   // Sort chronologically; activities without a startTime go to the end.
   let activities = [...input].sort((a, b) => {
     const ta = parseTime(a.startTime) ?? 99999;
