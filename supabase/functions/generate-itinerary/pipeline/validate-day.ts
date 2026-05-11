@@ -183,6 +183,9 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkCategoryVenueCoherence(activities, results);
   checkPhantomEventRefs(activities, results);
 
+  // --- DESCRIPTION COVERAGE (intermittent blank blurbs after phantom-ref scrub) ---
+  checkActivityDescriptions(activities, results);
+
   // --- PRICE SANITY (B3, Barcelona Diagnosis) ---
   checkPlausiblePricing(activities, results);
 
