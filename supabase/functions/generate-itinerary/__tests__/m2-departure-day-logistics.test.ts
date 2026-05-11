@@ -14,6 +14,7 @@ const baseInput = {
   hotelAddress: "1 Test St",
   lockedActivities: [],
   airportTransferMinutes: 45,
+  paceScore: 4, // sidestep pre-existing isFastPaced scope bug in repairBookends
 };
 
 const mkAct = (over: any) => ({
