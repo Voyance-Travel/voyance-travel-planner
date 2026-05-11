@@ -3633,6 +3633,29 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 15z. FINAL DEPARTURE-DAY LOGISTICS ENFORCEMENT (consolidated) -----------
+  // Last-line-of-defense after every other repair has finished mutating the day.
+  // Guarantees on a true departure day:
+  //   - checkout exists, starts ≤ 11:00 AND ≤ dep − buffer − transferMins − 60
+  //   - airport transfer (when flight info present) ends exactly at dep − buffer
+  //   - no non-logistics, non-locked card starts at/after the airport-transfer start
+  // Universal Locking honored — locked/user/manual/extracted/pinned rows preserved.
+  // Closes the recurring "Florence 16:15 / Barcelona 15:30 / Madrid 21:05" drift.
+  if ((isLastDay || (isLastDayInCity && !isTransitionDay)) && !isHotelChange) {
+    const enforcement = enforceDepartureDayLogistics({
+      activities,
+      dayNumber,
+      hotelName: hotelName || hotelOverride?.name || 'Your Hotel',
+      hotelAddress: hotelAddress || hotelOverride?.address || '',
+      returnDepartureTime24,
+      airportTransferMinutes: input.airportTransferMinutes || 45,
+      isLastDay,
+      lockedIds,
+    });
+    activities = enforcement.activities;
+    repairs.push(...enforcement.repairs);
+  }
+
   // --- 16. FINAL TIMING & TRANSIT-BUFFER PASS (shared with refresh-day) ---------
   // Catches the conflict classes the section-13 cascade misses:
   //   - Same-start collisions (currStart === nextStart)
@@ -3667,6 +3690,203 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     day: { ...input.day, activities },
     repairs,
   };
+}
+
+// =============================================================================
+// FINAL DEPARTURE-DAY LOGISTICS ENFORCEMENT (consolidated)
+// =============================================================================
+
+interface EnforceDepartureDayInput {
+  activities: any[];
+  dayNumber: number;
+  hotelName: string;
+  hotelAddress: string;
+  returnDepartureTime24?: string;
+  airportTransferMinutes: number;
+  isLastDay: boolean;
+  lockedIds: Set<string>;
+}
+
+const HARD_CHECKOUT_CAP_MIN = 11 * 60; // 11:00 AM
+const FLIGHT_BUFFER_MIN = 180;          // international/default
+const TRAIN_BUFFER_MIN = 120;           // intercity rail
+const CHECKOUT_DUR_MIN = 30;
+const PRE_TRANSFER_BUFFER_MIN = 60;     // checkout → transfer slack
+
+const isLockedRow = (a: any, lockedIds: Set<string>): boolean =>
+  Boolean(lockedIds.has(a?.id) || a?.isLocked || a?.userAdded || a?.userEdited
+    || a?.extracted || a?.pinned || a?.isManual);
+
+const isCheckoutRow = (a: any): boolean => {
+  const t = String(a?.title || a?.name || '').toLowerCase();
+  const cat = String(a?.category || '').toLowerCase();
+  return cat === 'accommodation' && /check[\s-]?out|checkout/.test(t);
+};
+
+const isAirportTransferRow = (a: any): boolean => {
+  const t = String(a?.title || a?.name || '').toLowerCase();
+  const cat = String(a?.category || '').toLowerCase();
+  if (!(cat === 'transport' || cat === 'transit' || cat === 'logistics')) return false;
+  return /airport|terminal/.test(t)
+    || /transfer to/.test(t)
+    || /head to airport|taxi to airport|departure transfer/.test(t);
+};
+
+const isLogisticsRow = (a: any): boolean => {
+  const cat = String(a?.category || '').toLowerCase();
+  if (cat === 'flight') return true;
+  if (cat === 'transport' || cat === 'transit' || cat === 'logistics') {
+    const t = String(a?.title || a?.name || '').toLowerCase();
+    return /airport|terminal|station|departure|flight|heading\s+home|security|boarding/.test(t)
+      || /transfer to/.test(t);
+  }
+  if (cat === 'accommodation') {
+    const t = String(a?.title || a?.name || '').toLowerCase();
+    return /check[\s-]?out|checkout/.test(t);
+  }
+  return false;
+};
+
+function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): { activities: any[]; repairs: RepairAction[] } {
+  const repairs: RepairAction[] = [];
+  let activities = [...input.activities];
+  const { dayNumber, hotelName, hotelAddress, returnDepartureTime24, lockedIds } = input;
+  const transferMins = Math.max(15, input.airportTransferMinutes || 45);
+  const buffer = input.isLastDay ? FLIGHT_BUFFER_MIN : TRAIN_BUFFER_MIN;
+  const depMins = returnDepartureTime24 ? parseTimeToMinutes(returnDepartureTime24) ?? null : null;
+  const hasFlight = depMins !== null;
+
+  // Compute target checkout (HARD cap regardless of any other path).
+  let targetCheckoutMin = HARD_CHECKOUT_CAP_MIN;
+  if (hasFlight) {
+    const latestByFlight = (depMins as number) - buffer - transferMins - PRE_TRANSFER_BUFFER_MIN - CHECKOUT_DUR_MIN;
+    targetCheckoutMin = Math.max(7 * 60, Math.min(HARD_CHECKOUT_CAP_MIN, latestByFlight));
+  }
+
+  // 1) Retime or inject CHECKOUT.
+  let checkout = activities.find(isCheckoutRow);
+  if (checkout) {
+    if (!isLockedRow(checkout, lockedIds)) {
+      const cur = parseTimeToMinutes(checkout.startTime || '') ?? null;
+      if (cur === null || cur > targetCheckoutMin || cur < 6 * 60) {
+        const before = `${checkout.startTime}-${checkout.endTime}`;
+        checkout.startTime = minutesToHHMM(targetCheckoutMin);
+        checkout.endTime = minutesToHHMM(targetCheckoutMin + CHECKOUT_DUR_MIN);
+        checkout.durationMinutes = CHECKOUT_DUR_MIN;
+        repairs.push({
+          code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+          action: 'final_enforce_checkout_retime',
+          before,
+          after: `${checkout.startTime}-${checkout.endTime}`,
+        } as any);
+        console.log(`[Repair §15z] Retimed checkout day=${dayNumber} ${before} → ${checkout.startTime}`);
+      }
+    }
+  } else {
+    checkout = {
+      id: `day${dayNumber}-checkout-final-${Date.now()}`,
+      title: `Checkout from ${hotelName}`,
+      name: `Checkout from ${hotelName}`,
+      description: 'Check out, collect luggage, and prepare for departure.',
+      startTime: minutesToHHMM(targetCheckoutMin),
+      endTime: minutesToHHMM(targetCheckoutMin + CHECKOUT_DUR_MIN),
+      category: 'accommodation',
+      type: 'accommodation',
+      location: { name: hotelName, address: hotelAddress },
+      cost: { amount: 0, currency: 'USD' },
+      bookingRequired: false,
+      isLocked: false,
+      durationMinutes: CHECKOUT_DUR_MIN,
+      source: 'repair-final-checkout-enforce',
+    };
+    activities.push(checkout);
+    repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'final_enforce_checkout_inject' } as any);
+    console.log(`[Repair §15z] Injected checkout day=${dayNumber} @ ${checkout.startTime}`);
+  }
+
+  // 2) Retime or inject AIRPORT TRANSFER (only when flight info exists).
+  let transferStartMin: number | null = null;
+  if (hasFlight) {
+    const requiredAtAirportMin = (depMins as number) - buffer;
+    transferStartMin = Math.max(
+      parseTimeToMinutes(checkout.endTime || '') ?? targetCheckoutMin + CHECKOUT_DUR_MIN,
+      requiredAtAirportMin - transferMins,
+    );
+    let transfer = activities.find(isAirportTransferRow);
+    if (transfer) {
+      if (!isLockedRow(transfer, lockedIds)) {
+        const cur = parseTimeToMinutes(transfer.startTime || '') ?? null;
+        if (cur === null || Math.abs(cur - transferStartMin) > 15) {
+          const before = `${transfer.startTime}-${transfer.endTime}`;
+          transfer.startTime = minutesToHHMM(transferStartMin);
+          transfer.endTime = minutesToHHMM(requiredAtAirportMin);
+          transfer.durationMinutes = transferMins;
+          repairs.push({
+            code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+            action: 'final_enforce_transfer_retime',
+            before,
+            after: `${transfer.startTime}-${transfer.endTime}`,
+          } as any);
+          console.log(`[Repair §15z] Retimed airport transfer day=${dayNumber} ${before} → ${transfer.startTime}`);
+        }
+      } else {
+        transferStartMin = parseTimeToMinutes(transfer.startTime || '') ?? transferStartMin;
+      }
+    } else {
+      transfer = {
+        id: `day${dayNumber}-airport-transfer-final-${Date.now()}`,
+        title: `Transfer to Airport`,
+        name: `Transfer to Airport`,
+        description: 'Depart for the airport ahead of your flight.',
+        startTime: minutesToHHMM(transferStartMin),
+        endTime: minutesToHHMM(requiredAtAirportMin),
+        category: 'transport',
+        type: 'transport',
+        location: { name: 'Airport', address: '' },
+        cost: { amount: 0, currency: 'USD' },
+        bookingRequired: false,
+        isLocked: false,
+        durationMinutes: transferMins,
+        source: 'repair-final-transfer-enforce',
+      };
+      activities.push(transfer);
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'final_enforce_transfer_inject' } as any);
+      console.log(`[Repair §15z] Injected airport transfer day=${dayNumber} @ ${transfer.startTime}`);
+    }
+  }
+
+  // 3) Drop any non-logistics, non-locked card at/after the airport-transfer start.
+  //    When no flight info, drop non-logistics cards starting after noon.
+  const cutoffMin = transferStartMin !== null
+    ? transferStartMin
+    : (12 * 60); // no-flight: noon cutoff for any leisure
+  const filtered: any[] = [];
+  for (const a of activities) {
+    if (a === checkout) { filtered.push(a); continue; }
+    if (isLogisticsRow(a)) { filtered.push(a); continue; }
+    if (isLockedRow(a, lockedIds)) { filtered.push(a); continue; }
+    const s = parseTimeToMinutes(a.startTime || '') ?? -1;
+    if (s >= 0 && s >= cutoffMin) {
+      repairs.push({
+        code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+        action: 'final_enforce_dropped_post_transfer',
+        before: `${a.title} @ ${a.startTime}`,
+      } as any);
+      console.log(`[Repair §15z] Dropped post-transfer "${a.title}" (start=${a.startTime}, cutoff=${minutesToHHMM(cutoffMin)})`);
+      continue;
+    }
+    filtered.push(a);
+  }
+  activities = filtered;
+
+  // 4) Final chronological sort.
+  activities.sort((a: any, b: any) => {
+    const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+    const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+    return ta - tb;
+  });
+
+  return { activities, repairs };
 }
 
 // =============================================================================
