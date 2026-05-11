@@ -2147,7 +2147,31 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  // Flush stage logger (non-blocking, non-fatal)
+  // ── FINAL HOTEL-RETURN INVARIANT (post-everything) ───────────────────
+  // runStep8 already ran inside universalQualityPass, but later stages
+  // (final meal guard, gap fill, validation gate, transport collapse,
+  // hotel-address pass, dedup) can leave the day terminating on a
+  // freshen-up / dinner / nightcap / activity with no hotel-return card.
+  // This is THE invariant — every non-departure day MUST end on either:
+  //   (a) a logistics tail (airport/station transfer for the actual
+  //       departure day), or
+  //   (b) a Return-to-Hotel card (regular or late-nightlife).
+  // runStep8 is idempotent: short-circuits when (a) or (b) already holds.
+  if (dayNumber < totalDays && Array.isArray(dayResult?.activities) && dayResult.activities.length > 0) {
+    try {
+      const _hotelForReturn = cityInfo?.hotelName || tripHotelName || undefined;
+      const _beforeLen = dayResult.activities.length;
+      runStep8(dayResult.activities, dayNumber - 1, _hotelForReturn);
+      if (dayResult.activities.length > _beforeLen) {
+        dayResult.metadata = dayResult.metadata || {};
+        dayResult.metadata.quality = dayResult.metadata.quality || {};
+        dayResult.metadata.quality.hotel_return_final_invariant = true;
+        console.log(`[QUALITY] Day ${dayNumber}: FINAL hotel-return invariant appended bookend (post-everything)`);
+      }
+    } catch (_e) { /* non-blocking */ }
+  }
+
+
   try {
     await stageLogger.flush();
     console.log(`[generate-trip-day] ${stageLogger.getSummary()}`);
