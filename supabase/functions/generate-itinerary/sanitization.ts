@@ -1561,35 +1561,7 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       const cleanActName = sanitizeAITextField(act.name, destination);
       act.title = cleanActTitle || cleanActName || `Activity ${idx + 1}`;
       act.name = act.title;
-      if (act.description) {
-        const sanitized = sanitizeAITextField(act.description, destination);
-        if (sanitized && sanitized.length >= 15) {
-          act.description = sanitized;
-        } else {
-          // Sanitization collapsed the description (over-strip of marketing
-          // phrases like "Hidden gem", "Popular with locals", etc). For dining
-          // cards, render a meal+venue+hours template so the card never ships
-          // blank. Output is ≥30 chars + actionable verb so description-fill
-          // (Gemini Flash) treats it as satisfactory and won't re-trigger.
-          const cat = String(act.category || '').toLowerCase();
-          if (cat.includes('dining') || cat.includes('food') || cat.includes('restaurant')) {
-            const venueName = act.location?.name || act.venue_name || extractRestaurantVenueName(act.title || '');
-            const titleStr = String(act.title || '');
-            const mealLabel = /breakfast|brunch/i.test(titleStr) ? 'Breakfast'
-                            : /lunch/i.test(titleStr) ? 'Lunch'
-                            : /dinner|supper/i.test(titleStr) ? 'Dinner'
-                            : 'A meal';
-            if (venueName) {
-              act.description = `${mealLabel} at ${venueName}. ${act.location?.address ? `Located at ${act.location.address}.` : 'Check opening hours before heading over.'}`;
-            } else {
-              act.description = `${mealLabel} at a local spot. Check opening hours and reviews before you go.`;
-            }
-            console.log(`[SANITIZE] Day-walker: replaced empty dining description for "${act.title}" with template fallback`);
-          } else {
-            act.description = undefined;
-          }
-        }
-      }
+      if (act.description) act.description = sanitizeAITextField(act.description, destination) || undefined;
       if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips, destination) || undefined;
       if (act.location && typeof act.location === 'object') {
         if (act.location.name) act.location.name = sanitizeAddress(sanitizeAITextField(act.location.name, destination) || act.location.name);
