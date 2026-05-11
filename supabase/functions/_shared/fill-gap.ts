@@ -73,6 +73,7 @@ export async function proposeGapFiller(
     beforeId, afterId, archetype,
     dietaryRestrictions = [], budgetTier = 'standard', tripCurrency = 'USD',
     avoidIds = [],
+    preferCategory,
   } = input;
 
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
