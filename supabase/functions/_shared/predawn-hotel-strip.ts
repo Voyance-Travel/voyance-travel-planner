@@ -83,6 +83,9 @@ export function stripPreDawnHotelReturns(
     removed++;
   }
 
+  if (skippedLateNightlife > 0) {
+    console.log(`[${label}] day=${context?.dayNumber ?? '?'} kept ${activities.length} cards (skipped:${skippedLateNightlife} late_nightlife_bookend)`);
+  }
   return removed;
 }
 
