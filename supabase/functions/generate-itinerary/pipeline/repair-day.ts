@@ -3878,8 +3878,13 @@ function repairBookends(
   isHotelChange: boolean = false,
   hotelCoordinates?: { lat: number; lng: number },
   resolvedDestination?: string,
+  paceScore: number = 0,
 ): { activities: any[]; repairs: RepairAction[] } {
   const repairs: RepairAction[] = [];
+  // Local fallback — `repairDay` previously relied on closure scope which
+  // crashed at runtime since this is a top-level function. Pre-existing bug
+  // surfaced by M2 tests; keep the original Fast-Paced semantics.
+  const isFastPaced = paceScore >= 4;
 
   const isTransport = (a: any) => (a.category || '').toLowerCase() === 'transport';
   const isAccom = (a: any) => (a.category || '').toLowerCase() === 'accommodation';
