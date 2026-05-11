@@ -84,6 +84,8 @@ export interface ValidationResult {
   field?: string;
   /** Whether a deterministic repair can fix this */
   autoRepairable: boolean;
+  /** Optional structured payload threaded through to repair-day handlers (e.g. waterCrossing context). */
+  meta?: Record<string, unknown>;
 }
 
 // =============================================================================
