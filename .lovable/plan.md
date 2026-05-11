@@ -1,90 +1,68 @@
-## Why Madrid Day 2 still leaked despite the M1 fix
+## Problem
 
-The `scrubPhantomEventRefs` infrastructure already exists (`supabase/functions/_shared/prompt-leak-scrub.ts`, wired into `repair-day.ts §10b` + `action-save-itinerary.ts`). I read the implementation end-to-end. Two structural gaps explain why "Freshen up at Mandarin Oriental Ritz; leave by 20:30 for tonight's Michelin-starred dinner" survived:
+Madrid Day 3 health panel surfaced `Day 3 has 7h gap before Misión Café` even though the 7h window was the overnight sleep period (Day 2 ~21:40 → Day 3 ~08:30), not an intra-day gap.
 
-**Gap A — Single-sentence guard returns null.**
-`scrubPhantomEventRefsFromString` (line 393–405) splits on `(?<=[.!?])\s+` and explicitly bails out for `parts.length < 2`:
-```ts
-if (parts.length < 2) {
-  // Single sentence: only flag — never blank the field.
-  return null;
-}
-```
-The Madrid copy is a **single sentence joined by `;`** (or no terminator at all on the freshen-up line). Splitter sees one part → returns null → nothing stripped. Same for em-dash / en-dash joined clauses ("Freshen up — then leave by 20:30 for tonight's dinner").
+Existing gap loop in `analyzeHealth` (src/components/trip/TripHealthPanel.tsx, lines 137–179) already iterates per-day via `days.forEach`, applies a `dayScopedForGap` filter, and skips wrap-past-midnight + pre-05:00 cards. The leak still happens because:
 
-**Gap B — No prompt-side prevention.**
-The per-activity description prompt in `prompt-library.ts` does not inject the day's actual schedule, so the LLM has no signal that the Michelin dinner was dropped. Scrubbing is the only defense, and Gap A makes it leaky.
-
-The user-requested validator (`DESCRIPTION_GHOST_REFERENCE`) also has no representation in `applyValidationGate`, so we have no telemetry attribution when this fires.
+1. The scoping is inlined inside a 200-line forEach, so contributors keep adding pre/post checks against the wrong array (the pattern the comment at line 138 warns against). Refactoring to a named, single-purpose `detectGapsForDay(allActivities, dayNumber)` makes the day-boundary invariant impossible to violate.
+2. Pre-dawn cutoff is hard-coded at `< 05:00`. A leftover Day 3 row with start 05:30–06:00 (e.g. an early-morning ritual mis-tagged from the night before) survives the filter and seeds `prevEnd ≈ 06:00` so a 08:30 first activity reports as a "2.5h gap"; in the Madrid trace the offending row was a 01:30 prevEnd that the wrap+preDawn pair *should* have caught — but only when the row is correctly populated. Belt-and-braces: also drop any candidate whose `startMins < firstSubstantiveStart` after sort, and never report a gap before the day's first user-visible activity.
+3. We pass `realActivities` (already day-scoped by `day.activities`) plus a re-filter by `dayNumber`. We should additionally accept the *flat* activity list as the contract (matching the user's spec) so callers can never accidentally pass a polluted, cross-day array.
 
 ## Plan
 
-### 1. Prompt-side prevention (Gap B)
+### 1. Extract `detectGapsForDay`
 
-**File:** `supabase/functions/generate-itinerary/prompt-library.ts`
+In `src/components/trip/TripHealthPanel.tsx`:
 
-Add a new section to the day-generation system prompt (and to whichever per-activity description prompt exists in this file) injecting the live day schedule with a HARD RULE:
+- Add a module-level `detectGapsForDay(allActivities: any[], dayNumber: number, dayMode?: string): HealthIssue[]` that:
+  - Filters by `(a.dayNumber ?? a.day_number) === dayNumber` as the FIRST step (hard day-boundary guard).
+  - Reuses existing `isBookendOrTransit` predicate (lift to module scope alongside).
+  - Drops cards where `endMins > 0 && endMins < startMins` (wrap-past-midnight) and `startMins < 5*60` (pre-dawn residue).
+  - Sorts by `startMins`, walks consecutive pairs, emits `gap-{dayNumber}-{startMins}` issue when delta ≥ 180 min.
+  - Never emits a gap before the first sorted activity (no synthetic `prevEnd = 0`).
+  - Only updates `prevEnd` when `endMins > startMins` (preserves current behavior).
 
-```
-HARD RULE — SCHEDULE COHERENCE
-Only reference activities that ALSO appear in this day's schedule below. Do NOT
-write "tonight's dinner / after the museum / leave by 20:30 for X / following
-your tour" unless that exact event is scheduled. If the schedule has no
-dinner, you MUST NOT write "tonight's dinner" anywhere.
+### 2. Wire into `analyzeHealth`
 
-Day schedule (ground truth):
-- 09:00 Breakfast at La Mallorquina
-- 11:00 Prado Museum
-- 18:30 Freshen up at Mandarin Oriental Ritz
-(no dinner scheduled)
-```
+- Replace the inline gap loop (lines 137–179) with:
+  ```ts
+  const gapIssues = detectGapsForDay(activities, dayNum, dayMode);
+  issues.push(...gapIssues);
+  ```
+- Keep `realActivities`, meal, thin-day, conflict, and buffer checks unchanged — scope of this fix is gap detection only.
 
-Built from `buildDayScheduleSummary` + an inline `act.startTime + ' ' + act.title` list — same shape the scrubber already uses. Skip locked/extracted/manual rows so the LLM sees the canonical schedule it's expected to honor.
+### 3. Tests
 
-### 2. Clause-level scrub (Gap A)
+Add `src/components/trip/__tests__/TripHealthPanel.detectGapsForDay.test.ts` (vitest) covering:
+- Day 2 ending 21:40, Day 3 starting 08:30 → no gap on Day 3 (overnight, cross-day).
+- Day 3 with intra-day 13:00 lunch ending and 20:00 dinner start → emits 7h gap.
+- Day 3 first activity 08:30 with no prior → no gap (no synthetic pre-dawn anchor).
+- Day 3 with a wrap-past-midnight nightcap mis-tagged as day 3 → skipped, no gap.
+- Bookend/transit-only day → no gaps.
+- Polluted input where caller passes the full flat activity list → only day-N rows considered.
 
-**File:** `supabase/functions/_shared/prompt-leak-scrub.ts` — `scrubPhantomEventRefsFromString`
+### 4. Memory
 
-- **Split on clause separators** in addition to sentence terminators: `;`, ` — `, ` – ` (em/en dash with surrounding spaces). Track which separator each part used so the rebuilt copy preserves separator style.
-- **Single-segment phantom refs:** if the entire field is one segment AND it contains a phantom ref AND the segment is essentially *only* the phantom ref (≤ 14 words after stripping the ref leaves <3 meaningful tokens), drop the field entirely (return empty string sentinel) and let the dining-description-backfill / UI fallback handle the empty state. Otherwise return the original (current behavior — never blank rich copy).
-- **Multi-clause partial strip:** when only some clauses are phantom, drop them and rejoin with `. ` for sentence boundaries or `; ` for clause boundaries to keep readable English.
+Append a one-liner to `mem://index.md` Core under the existing health-engine cluster:
 
-This preserves the existing safety net ("never destroy single rich sentence") while plugging the dominant Madrid leak shape.
+> Health-engine gap detection MUST go through `detectGapsForDay(allActivities, dayNumber)` — never iterate a flat or cross-day array. Overnight sleep window (last activity of day N → first activity of day N+1) is never a gap.
 
-### 3. Validation-gate code + telemetry (user request #2)
+And a memory file `mem://constraints/itinerary/health-gap-day-scoping` capturing the day-boundary invariant and the named-function contract.
 
-**File:** `supabase/functions/generate-itinerary/pipeline/validate-day.ts` (or wherever `applyValidationGate` lives)
+## Out of Scope
 
-- Register new code `DESCRIPTION_GHOST_REFERENCE` with severity `warning`.
-- Detector: run `buildDayScheduleSummary` once per day, then for each non-locked activity test all body fields with the existing `PHANTOM_REF_PATTERNS`; emit one violation per offending activity carrying `{ activityId, referencedEvent, field }`.
-- Resolution: when fired, run `scrubActivity({ daySchedule })` once; if the scrub couldn't reduce the field (Gap A residual), force-blank that field with a `[VALIDATION_GATE] code=DESCRIPTION_GHOST_REFERENCE action=blanked` log.
-- Sentinel: `[VALIDATION_GATE] DESCRIPTION_GHOST_REFERENCE day=N count=K resolved=K` so we can confirm the M1 fix in production logs.
-
-### 4. Tests
-
-**New file:** `supabase/functions/_shared/__tests__/phantom-ref-clause-scrub.test.ts`
-
-- Madrid Day 2 reproducer: `"Freshen up at Mandarin Oriental Ritz; leave by 20:30 for tonight's Michelin-starred dinner."` with `hasDinner=false` → second clause dropped, first clause survives.
-- Em-dash variant: `"Take a moment to refresh — then leave by 20:30 for tonight's Michelin dinner"` → second clause dropped.
-- Single-segment phantom: `"Leave by 20:30 for tonight's Michelin dinner"` (no other content) → field blanked.
-- Negative: `"Take a moment to refresh"` (no phantom) → unchanged.
-- Negative: `"Tonight's dinner at Coque awaits"` with `hasDinner=true` → unchanged (resolves OK).
-
-**Add to** existing `prompt-leak-scrub.test.ts`: assert `buildDayScheduleSummary` is called by `applyValidationGate` and emits `DESCRIPTION_GHOST_REFERENCE` for the residual case.
-
-### 5. Memory update
-
-Extend `mem://constraints/itinerary/schedule-coherent-copy` with:
-> M2: Clause-level split (`;` / em-dash) + single-segment phantom-ref blanking added to `scrubPhantomEventRefsFromString`. Day-schedule "ground truth" block injected into per-activity description prompt. New validation-gate code `DESCRIPTION_GHOST_REFERENCE` ensures any residual leak is force-blanked + logged. Closes Madrid Day 2 "Freshen up … leave by 20:30 for tonight's Michelin-starred dinner" with no dinner card.
-
-## Out of scope
-
-- No re-prompting / second LLM call for stripped descriptions — the cost/latency trade-off doesn't justify it; UI gracefully handles empty descriptions via the existing dining-description-backfill + whyThisFits chain.
-- No change to `scrubActivity` signature — `daySchedule` already flows through `ScrubContext`.
-- No change to `repair-day.ts §10b` wiring — the upgraded scrubber is automatically picked up.
+- No changes to conflict/buffer/meal/thin-day detection.
+- No changes to server-side density-protocol or repair pipeline.
+- No UI/copy changes in the panel.
 
 ## Verification
 
-1. Unit: `bunx vitest run supabase/functions/_shared/__tests__/phantom-ref-clause-scrub.test.ts`.
-2. Manual: regenerate the Madrid 3-day trip; confirm no description on Day 2 references "tonight's dinner" when the dinner card is absent.
-3. Logs: grep server output for `[SCRUB_PHANTOM_REF]` and `[VALIDATION_GATE] DESCRIPTION_GHOST_REFERENCE` to confirm both layers fire (scrub for typical cases, gate for residuals).
+- Run new vitest file: `bunx vitest run src/components/trip/__tests__/TripHealthPanel.detectGapsForDay.test.ts`.
+- Manual: open a 3-day Madrid trip with Day 2 ending 21:40 and Day 3 starting 08:30 — confirm no `7h gap before Misión Café` warning. Add a synthetic 13:00→20:00 intra-day gap on Day 3 and confirm the warning DOES fire.
+
+## Files Touched
+
+- `src/components/trip/TripHealthPanel.tsx` (extract function + wire-in)
+- `src/components/trip/__tests__/TripHealthPanel.detectGapsForDay.test.ts` (new)
+- `mem://constraints/itinerary/health-gap-day-scoping` (new)
+- `mem://index.md` (one-liner addition)

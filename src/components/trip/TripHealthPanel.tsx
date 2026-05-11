@@ -134,49 +134,9 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
       });
     }
 
-    // Large gap — flag any ≥3h gap between consecutive SAME-DAY substantive activities.
-    // INVARIANT: this loop only inspects pairs (i, i+1) within the current day's array,
-    // so the wake-up window (before first activity) and sleep window (after last activity)
-    // are NEVER flagged as gaps — that's intentional. Do not "fix" by adding pre/post checks.
-    const isBookendOrTransit = (a: any) => {
-      const cat = (a.category || a.type || '').toLowerCase();
-      const title = (a.title || a.name || '').toLowerCase();
-      if (['check-in','check-out','hotel','accommodation','transit','transportation',
-           'transfer','logistics','commute'].includes(cat)) return true;
-      if (/^(return to|walk to|transfer to|drive to|taxi|metro|train|bus|tram)\b/i.test(title)) return true;
-      if (/return to (the )?hotel/i.test(title)) return true;
-      return false;
-    };
-    // Hard guard: only this day's rows, even if caller passed polluted activities.
-    const dayScopedForGap = realActivities.filter(
-      (a: any) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum
-    );
-    const sortedForGap = dayScopedForGap
-      .filter((a: any) => !!a.startTime && !isBookendOrTransit(a))
-      .map((a: any) => {
-        const startMins = parseTime(a.startTime || '00:00');
-        const endMins = parseTime(a.endTime || a.startTime || '00:00');
-        const wrapsMidnight = endMins > 0 && endMins < startMins;
-        const preDawn = startMins < 5 * 60; // before 05:00 = overnight residue
-        return { a, startMins, endMins, skip: wrapsMidnight || preDawn };
-      })
-      .filter((x) => !x.skip)
-      .sort((x, y) => x.startMins - y.startMins);
-    let prevEnd: number | null = null;
-    for (const { a, startMins, endMins } of sortedForGap) {
-      if (prevEnd !== null && startMins - prevEnd >= 180) {
-        const gapHours = Math.floor((startMins - prevEnd) / 60);
-        issues.push({
-          id: `gap-${dayNum}-${startMins}`,
-          severity: 'warning',
-          message: `Day ${dayNum} has ${gapHours}h gap before ${a.title || a.name || 'next activity'}`,
-          fixLabel: 'Fill Gap',
-          fixAction: 'refresh_day',
-          dayNumber: dayNum,
-        });
-      }
-      if (endMins > startMins) prevEnd = endMins;
-    }
+    // Large gap — delegated to module-level detectGapsForDay so the
+    // day-boundary invariant is enforced in one place and can be unit-tested.
+    issues.push(...detectGapsForDay(activities, dayNum));
 
     // Timing conflicts — overlapping activities
     const TRANSIT_CATS = ['transit', 'transportation', 'transfer', 'walking', 'transport', 'commute', 'taxi', 'travel'];
