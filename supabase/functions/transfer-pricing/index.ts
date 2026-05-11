@@ -324,12 +324,18 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
   const costTracker = trackCost('transfer_pricing', 'google_routes');
+  costTracker.setUserId(userId);
 
   try {
     const request: TransferPricingRequest = await req.json();
     const { origin, destination, city, country, airportCode, travelers = 2, date, time, transferType } = request;
-    
+    if (request.tripId) costTracker.setTripId(request.tripId);
+
     if (!origin || !destination || !city) {
       return new Response(
         JSON.stringify({ error: 'origin, destination, and city are required' }),
