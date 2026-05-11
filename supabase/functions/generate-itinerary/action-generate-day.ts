@@ -1363,8 +1363,28 @@ export async function handleGenerateDay(
             normalizedActivities = filled.activities;
             generatedDay.activities = normalizedActivities;
           }
+          // Bug 4 — evening pass (18:00–22:00), prefer dining
+          const { fillEveningDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
+          const filledEve = await fillEveningDeadGaps(normalizedActivities, {
+            destination: resolvedDestination || destination || '',
+            isFirstDay,
+            isLastDay,
+            isLastDayInCity: resolvedIsLastDayInCity,
+            archetype: undefined,
+            dietaryRestrictions: (preferences?.dietaryRestrictions as string[] | undefined) || [],
+            budgetTier: budgetTier || 'standard',
+            tripCurrency: 'USD',
+            lockedIds: lockedIdSet,
+            latestUsableMins: _gdLatestMins,
+            preferCategory: 'dining',
+          });
+          if (filledEve.inserted.length > 0) {
+            console.log(`[pipeline] Day ${dayNumber}: auto-filled ${filledEve.inserted.length} evening dead gap(s)`);
+            normalizedActivities = filledEve.activities;
+            generatedDay.activities = normalizedActivities;
+          }
           // Density observability — flag any remaining ≥3h afternoon gap.
-          const { reportRemainingAfternoonDeadGap } = await import('./pipeline/fill-dead-gaps.ts');
+          const { reportRemainingAfternoonDeadGap, reportRemainingEveningDeadGap } = await import('./pipeline/fill-dead-gaps.ts');
           const remaining = reportRemainingAfternoonDeadGap(normalizedActivities, _gdLatestMins);
           if (remaining >= 180) {
             if (isLastDay) {
@@ -1378,6 +1398,13 @@ export async function handleGenerateDay(
               generatedDay.metadata.quality = generatedDay.metadata.quality || {};
               generatedDay.metadata.quality.unfilled_dead_gap_minutes = remaining;
             }
+          }
+          // Bug 4 — evening reporter
+          const remainingEve = reportRemainingEveningDeadGap(normalizedActivities, _gdLatestMins, dayNumber);
+          if (remainingEve >= 180) {
+            generatedDay.metadata = generatedDay.metadata || {};
+            generatedDay.metadata.quality = generatedDay.metadata.quality || {};
+            generatedDay.metadata.quality.unfilled_evening_gap_minutes = remainingEve;
           }
         } catch (gapErr) {
           console.warn('[pipeline] Dead-gap auto-fill failed (non-blocking):', gapErr);
