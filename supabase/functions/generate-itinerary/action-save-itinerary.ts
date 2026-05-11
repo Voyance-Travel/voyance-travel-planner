@@ -147,7 +147,8 @@ function normalizeDays(days: any[], tripStartDate: string | null, destination?: 
     }
     const pruneResult = pruneNonLogisticsAfterCheckout(activities);
     if (dayOps.titleLeak + dayOps.bodyLeak + dayOps.fragment + dayOps.mealSuffix
-        + dayOps.crossCity + dayOps.countryMismatch + dayOps.mealLabel > 0) {
+        + dayOps.crossCity + dayOps.countryMismatch + dayOps.mealLabel
+        + dayOps.phantomRef > 0) {
       console.log(`[SCRUB_ACTIVITY] day=${dayNumber} dest="${destination || 'unknown'}" ops=${formatOps(dayOps)} path=save-itinerary`);
     }
     if (pruneResult.prunedCount > 0) {
