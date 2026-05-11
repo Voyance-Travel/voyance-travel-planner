@@ -415,6 +415,8 @@ Rules:
         throw new Error(`AI gateway error: ${r.status}`);
       }
       const j = await r.json();
+      costTracker.recordAiUsage(j);
+      await costTracker.save();
       const tc = j.choices?.[0]?.message?.tool_calls?.[0];
       if (!tc?.function?.arguments) return [];
       try { return JSON.parse(tc.function.arguments).suggestions || []; }
