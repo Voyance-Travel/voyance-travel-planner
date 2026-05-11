@@ -118,3 +118,40 @@ Deno.test("M1 reviewer — preserves the same sentence when the day has a dinner
   // Dinner is scheduled → phantom resolves OK → returns null (unchanged).
   assertEquals(out, null);
 });
+
+// ── Bug 3 — bare prep-verb meal references without a determiner ──
+
+Deno.test("Bug 3 — 'Freshen Up before anniversary dinner.' blanks when no dinner card", () => {
+  const out = scrubPhantomEventRefsFromString(
+    "Freshen Up before anniversary dinner.",
+    noDinnerSummary,
+  );
+  assertEquals(out, "");
+});
+
+Deno.test("Bug 3 — 'Freshen Up before anniversary dinner.' preserved when dinner card exists", () => {
+  const out = scrubPhantomEventRefsFromString(
+    "Freshen Up before anniversary dinner.",
+    withDinnerSummary,
+  );
+  assertEquals(out, null);
+});
+
+Deno.test("Bug 3 — semicolon clause with bare 'for anniversary dinner' is dropped", () => {
+  const input = "Freshen up at the Ritz; leave by 20:30 for anniversary dinner.";
+  const out = scrubPhantomEventRefsFromString(input, noDinnerSummary);
+  assertEquals(typeof out, "string");
+  assertEquals(/anniversary dinner/i.test(out as string), false);
+  assertEquals(/freshen up/i.test(out as string), true);
+});
+
+Deno.test("Bug 3 — 'Light walk before lunch at Casa Mono' unchanged when lunch is scheduled", () => {
+  const lunchSummary = buildDayScheduleSummary([
+    { title: "Lunch at Casa Mono", startTime: "13:00", category: "dining", mealSlot: "lunch" },
+  ]);
+  const out = scrubPhantomEventRefsFromString(
+    "Light walk before lunch at Casa Mono.",
+    lunchSummary,
+  );
+  assertEquals(out, null);
+});
