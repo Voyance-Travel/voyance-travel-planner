@@ -1106,7 +1106,10 @@ export function enforceRequiredMealsFinalGuard(
     if (venue) {
       venueName = venue.name;
       venueAddress = venue.address || `${venue.name}, ${destination}`;
-      venueDescription = `${label} at ${venue.name} — a real local spot worth visiting`;
+      // Empty sentinel — post-guard fillMissingDescriptions backstop writes a
+      // verb-led insider blurb. Templates like "real local spot worth visiting"
+      // are NOT acceptable copy on a luxury food product.
+      venueDescription = '';
       usedVenueNamesForInjection.add(venue.name.toLowerCase());
       usedVenueNamesForInjection.add(extractRestaurantVenueName(venue.name));
       usedRealVenue = true;
