@@ -66,35 +66,63 @@ export async function getTripPermission(tripId: string): Promise<TripPermission>
 }
 
 /**
- * Get collaborators for a trip
+ * Get collaborators for a trip.
+ *
+ * Reads the peer-safe `public_trip_collaborators` view (works for owner + every
+ * accepted member) and merges in admin-only fields (`invited_by`,
+ * `include_preferences`) from the base table when the caller has permission.
+ * Owners see those fields for every collaborator; peers see only their own row.
  */
 export async function getTripCollaborators(tripId: string): Promise<TripCollaborator[]> {
-  const { data, error } = await supabase
-    .from('trip_collaborators')
-    .select(`
-      id,
-      trip_id,
-      user_id,
-      permission,
-      invited_by,
-      accepted_at,
-      created_at,
-      include_preferences,
-      profile:profiles!trip_collaborators_user_id_profiles_fkey(id, handle, display_name, avatar_url)
-    `)
+  // 1. Member list — view returns rows for everyone the caller is allowed to see.
+  const { data: viewRows, error: viewErr } = await supabase
+    .from('public_trip_collaborators')
+    .select('id, trip_id, user_id, role, accepted_at, created_at, member_display, avatar_url')
     .eq('trip_id', tripId);
 
-  if (error) {
-    console.error('[TripCollaborators] Error fetching:', error);
-    throw error;
+  if (viewErr) {
+    console.error('[TripCollaborators] Error fetching member list:', viewErr);
+    throw viewErr;
   }
 
-  return (data || []).map(c => ({
-    ...c,
-    permission: c.permission as CollaboratorPermission,
-    include_preferences: c.include_preferences ?? true,
-    profile: c.profile as unknown as Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>,
-  }));
+  // 2. Admin-only fields from the base table (RLS filters: owner sees all, peer sees self).
+  const { data: baseRows } = await supabase
+    .from('trip_collaborators')
+    .select('id, invited_by, include_preferences')
+    .eq('trip_id', tripId);
+
+  const adminById = new Map((baseRows ?? []).map(r => [r.id, r]));
+
+  // 3. Profile details — RLS already permits trip co-members to read each other's profiles.
+  const userIds = (viewRows ?? []).map(r => r.user_id).filter(Boolean) as string[];
+  const profileById = new Map<string, Pick<Profile, 'id' | 'handle' | 'display_name' | 'avatar_url'>>();
+  if (userIds.length) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, handle, display_name, avatar_url')
+      .in('id', userIds);
+    (profiles ?? []).forEach(p => profileById.set(p.id, p));
+  }
+
+  return (viewRows ?? []).map(r => {
+    const adm = adminById.get(r.id);
+    return {
+      id: r.id,
+      trip_id: r.trip_id,
+      user_id: r.user_id,
+      permission: (r.role ?? 'edit') as CollaboratorPermission,
+      invited_by: adm?.invited_by ?? null,
+      accepted_at: r.accepted_at,
+      created_at: r.created_at,
+      include_preferences: adm?.include_preferences ?? true,
+      profile: profileById.get(r.user_id) ?? {
+        id: r.user_id,
+        handle: null,
+        display_name: r.member_display,
+        avatar_url: r.avatar_url,
+      },
+    };
+  });
 }
 
 /**
