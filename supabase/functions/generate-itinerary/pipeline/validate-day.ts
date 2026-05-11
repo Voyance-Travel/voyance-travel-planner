@@ -206,13 +206,14 @@ function checkPlausiblePricing(activities: any[], results: ValidationResult[]): 
     const price = extractPerPersonPrice(act);
     if (price === null) continue;
     if (price < bound.min) {
+      const isPaidFloor = bound.min > 0;
       results.push({
         code: FAILURE_CODES.PRICE_TOO_LOW,
-        severity: 'warning',
+        severity: isPaidFloor ? 'error' : 'warning',
         message: `Price $${price}/pp below typical floor $${bound.min} for ${subcat} ("${act.title || act.name || ''}")`,
         activityIndex: i,
         field: 'cost',
-        autoRepairable: false,
+        autoRepairable: isPaidFloor,
       });
     } else if (price > bound.max) {
       results.push({
