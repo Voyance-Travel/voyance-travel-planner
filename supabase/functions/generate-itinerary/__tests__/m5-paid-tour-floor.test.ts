@@ -78,3 +78,37 @@ Deno.test('M5: bike_tour median is in expected range', () => {
   const median = Math.round((b.min + b.max) / 2);
   assertEquals(median >= 50 && median <= 65, true);
 });
+
+// ── Walking-tour bimodal split (M5 addendum) ──
+
+Deno.test('M5 addendum: guided walking tour detected as walking_tour_paid', () => {
+  const act = { title: 'Guided Walking Tour of Madrid Old Town', category: 'activity' };
+  assertEquals(inferSubcategory(act), 'walking_tour_paid');
+  assertEquals(CATEGORY_PRICE_CEILINGS['walking_tour_paid'].min, 15);
+});
+
+Deno.test('M5 addendum: free walking tour stays walking_tour (min $0)', () => {
+  const act = { title: 'Free Walking Tour of Centre', category: 'activity' };
+  assertEquals(inferSubcategory(act), 'walking_tour');
+  assertEquals(CATEGORY_PRICE_CEILINGS['walking_tour'].min, 0);
+});
+
+Deno.test('M5 addendum: paid food walking tour → walking_tour_paid (paid prefix wins over food)', () => {
+  const act = { title: 'Paid food walking tour of La Latina', category: 'activity' };
+  assertEquals(inferSubcategory(act), 'walking_tour_paid');
+});
+
+Deno.test('M5 addendum: locked premium walking tour at $0 is skipped (Universal Locking)', () => {
+  const act = {
+    title: 'Premium Walking Tour of Toledo',
+    category: 'activity',
+    is_locked: true,
+    cost: { amount: 0, currency: 'USD' },
+  };
+  assertEquals(shouldSkipPriceSanity(act), true);
+});
+
+Deno.test('M5 addendum: bare "walking tour" still falls back to walking_tour (min $0)', () => {
+  const act = { title: 'Walking Tour', category: 'activity' };
+  assertEquals(inferSubcategory(act), 'walking_tour');
+});
