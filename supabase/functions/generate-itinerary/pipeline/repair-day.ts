@@ -1863,25 +1863,60 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     && String((input as any).nextLegCity).toLowerCase().trim() === String(resolvedDestination || '').toLowerCase().trim();
   const needsCheckout = !isHotelChange && !_intoSameCity && (isLastDay || (isLastDayInCity && !isTransitionDay));
   if (needsCheckout && activities.length > 0) {
-    const hasCheckout = activities.some((a: any) => {
+    const existingCheckout = activities.find((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
       const cat = (a.category || '').toLowerCase();
       return cat === 'accommodation' && (
         t.includes('check-out') || t.includes('check out') || t.includes('checkout')
       );
     });
+    const hasCheckout = !!existingCheckout;
+
+    // M2 — Compute target checkout time: capped at 11:00 AM AND early enough
+    // for transfer + airport buffer. This is the single source of truth used
+    // by both the inject path and the retime path below.
+    const transferMinsForCheckout = input.airportTransferMinutes || 45;
+    const flightBufferForCheckout = isLastDay ? 180 : 120; // flight: 3h, train/intercity: 2h
+    const depMinsCheckout = returnDepartureTime24 ? (parseTimeToMinutes(returnDepartureTime24) ?? null) : null;
+    const HARD_CHECKOUT_CAP = 11 * 60; // 11:00 AM is the latest acceptable checkout
+    let targetCheckoutMin: number = HARD_CHECKOUT_CAP;
+    if (isLastDay && depMinsCheckout !== null) {
+      // checkout must finish 30m before transfer departure, transfer arrives at airport
+      // (departure - flightBuffer). So checkoutStart ≤ dep - buffer - transfer - 30 - 30(checkout).
+      const latestByFlight = depMinsCheckout - flightBufferForCheckout - transferMinsForCheckout - 30 - 30;
+      targetCheckoutMin = Math.max(7 * 60, Math.min(HARD_CHECKOUT_CAP, latestByFlight));
+    }
+
+    // Retime an existing checkout if it drifted past the cap (Madrid 21:05, Florence 16:15…)
+    if (hasCheckout && !lockedIds.has(existingCheckout.id) && !existingCheckout.userAdded
+        && !existingCheckout.userEdited && !existingCheckout.extracted && !existingCheckout.pinned
+        && !existingCheckout.isManual) {
+      const curStart = parseTimeToMinutes(existingCheckout.startTime || '') ?? null;
+      if (curStart === null || curStart > targetCheckoutMin) {
+        const before = `${existingCheckout.startTime}-${existingCheckout.endTime}`;
+        existingCheckout.startTime = minutesToHHMM(targetCheckoutMin);
+        existingCheckout.endTime = minutesToHHMM(targetCheckoutMin + 30);
+        existingCheckout.durationMinutes = 30;
+        repairs.push({
+          code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+          action: 'enforced_departure_day_logistics_checkout_retime',
+          before,
+          after: `${existingCheckout.startTime}-${existingCheckout.endTime}`,
+        } as any);
+        console.log(`[Repair §8 M2] Retimed late checkout to ${existingCheckout.startTime} (target=${minutesToHHMM(targetCheckoutMin)}, dep=${returnDepartureTime24 || 'none'})`);
+        // Re-sort after retime
+        activities.sort((a: any, b: any) => {
+          const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+          const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+          return ta - tb;
+        });
+      }
+    }
 
     if (!hasCheckout) {
       const coHotelName = hotelOverride?.name || hotelName || 'Your Hotel';
       const coHotelAddr = hotelOverride?.address || hotelAddress || '';
-
-      let checkoutStartMin: number;
-      const depMins = returnDepartureTime24 ? (parseTimeToMinutes(returnDepartureTime24) ?? null) : null;
-      if (isLastDay && depMins !== null) {
-        checkoutStartMin = Math.max(7 * 60, depMins - 210);
-      } else {
-        checkoutStartMin = 11 * 60;
-      }
+      const checkoutStartMin: number = targetCheckoutMin;
 
       const checkoutStart = minutesToHHMM(checkoutStartMin);
       const checkoutEnd = minutesToHHMM(checkoutStartMin + 30);
@@ -1963,6 +1998,42 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
 
     const hasDepartureTransport = activities.some(isDepartureTransportRow);
+
+    // M2 — Retime an existing departure transfer that survived the drop pass
+    // but is still wrong (e.g., AI scheduled "Transfer to Airport" at 23:00
+    // for a 13:30 flight, or left it untimed-then-fixed-to-noon by other paths).
+    if (hasDepartureTransport && isLastDay && returnDepartureTime24) {
+      const depMinsRetime = parseTimeToMinutes(returnDepartureTime24);
+      if (depMinsRetime !== null) {
+        const transferMinsRetime = input.airportTransferMinutes || 45;
+        const targetTransferStart = Math.max(6 * 60, depMinsRetime - 180 - transferMinsRetime);
+        const existingTransfer = activities.find(isDepartureTransportRow);
+        if (existingTransfer && !lockedIds.has(existingTransfer.id)
+            && !existingTransfer.userAdded && !existingTransfer.userEdited
+            && !existingTransfer.extracted && !existingTransfer.pinned && !existingTransfer.isManual) {
+          const curStart = parseTimeToMinutes(existingTransfer.startTime || '') ?? null;
+          // Retime if start drifted by ≥ 30 minutes from the airport-buffer target.
+          if (curStart === null || Math.abs(curStart - targetTransferStart) > 30) {
+            const before = `${existingTransfer.startTime}-${existingTransfer.endTime}`;
+            existingTransfer.startTime = minutesToHHMM(targetTransferStart);
+            existingTransfer.endTime = minutesToHHMM(targetTransferStart + transferMinsRetime);
+            existingTransfer.durationMinutes = transferMinsRetime;
+            repairs.push({
+              code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+              action: 'enforced_departure_day_logistics_transfer_retime',
+              before,
+              after: `${existingTransfer.startTime}-${existingTransfer.endTime}`,
+            } as any);
+            console.log(`[Repair §8b M2] Retimed departure transfer to ${existingTransfer.startTime} (target=${minutesToHHMM(targetTransferStart)}, dep=${returnDepartureTime24}, buffer=180m+${transferMinsRetime}m)`);
+            activities.sort((a: any, b: any) => {
+              const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+              const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+              return ta - tb;
+            });
+          }
+        }
+      }
+    }
 
     if (!hasDepartureTransport) {
       let transportTitle: string;
@@ -2205,7 +2276,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
   if (activities.length > 0) {
     const effectiveHotelName = hotelName || 'Your Hotel';
-    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay, isFirstDay, isHotelChange, hotelCoordinates, resolvedDestination);
+    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay, isFirstDay, isHotelChange, hotelCoordinates, resolvedDestination, paceScore);
     activities = bookendRepairs.activities;
     repairs.push(...bookendRepairs.repairs);
   }
@@ -2720,6 +2791,10 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     // either move the transit to immediately precede its real target, or rewrite
     // the label to point at the actual next venue.
     {
+      const isTransportFinal = (a: any) => {
+        const c = (a.category || '').toLowerCase();
+        return c === 'transport' || c === 'transportation';
+      };
       const stripVerb = (t: string) =>
         (t || '').replace(/^(?:Travel|Walk|Taxi|Drive|Bus|Metro|Ride|Transfer|Take(?:\s+(?:a|the))?)\s+to\s+/i, '').trim();
       const norm = (s: string) =>
@@ -3807,8 +3882,13 @@ function repairBookends(
   isHotelChange: boolean = false,
   hotelCoordinates?: { lat: number; lng: number },
   resolvedDestination?: string,
+  paceScore: number = 0,
 ): { activities: any[]; repairs: RepairAction[] } {
   const repairs: RepairAction[] = [];
+  // Local fallback — `repairDay` previously relied on closure scope which
+  // crashed at runtime since this is a top-level function. Pre-existing bug
+  // surfaced by M2 tests; keep the original Fast-Paced semantics.
+  const isFastPaced = paceScore >= 4;
 
   const isTransport = (a: any) => (a.category || '').toLowerCase() === 'transport';
   const isAccom = (a: any) => (a.category || '').toLowerCase() === 'accommodation';
