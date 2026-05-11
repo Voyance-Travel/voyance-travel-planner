@@ -1156,7 +1156,7 @@ export function enforceRequiredMealsFinalGuard(
       const emergency = resolveAnyMealFallback(destination, mealType, new Set<string>(usedVenueNamesForInjection));
       venueName = `${label} at ${emergency.name}`;
       venueAddress = emergency.address;
-      venueDescription = emergency.description || `${label} at ${emergency.name}`;
+      venueDescription = emergency.description || '';
       usedVenueNamesForInjection.add(emergency.name.toLowerCase());
       usedRealVenue = true;
       console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Used regional/global emergency fallback "${emergency.name}" for ${mealType} in "${destination}"`);
