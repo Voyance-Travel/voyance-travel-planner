@@ -118,6 +118,3 @@ Deno.test("M1 reviewer — preserves the same sentence when the day has a dinner
   // Dinner is scheduled → phantom resolves OK → returns null (unchanged).
   assertEquals(out, null);
 });
-  // Dinner is scheduled → phantom resolves OK → returns null (unchanged).
-  assertEquals(out, null);
-});
