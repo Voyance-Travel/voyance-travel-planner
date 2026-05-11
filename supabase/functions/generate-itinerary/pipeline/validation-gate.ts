@@ -62,9 +62,31 @@ export function applyValidationGate(
     else if (r.severity === 'warning') counters.warning++;
   }
 
+  // Phantom event refs (warning) get force-blanked here as a final safety net.
+  // Repair §10b should have caught these via scrubActivity; this handles
+  // residuals (e.g. single-segment phantom-only fields that snuck through).
+  const ghostWarnings = results.filter(r =>
+    r.severity === 'warning' && r.code === FAILURE_CODES.DESCRIPTION_GHOST_REFERENCE
+  );
+  let ghostBlanked = 0;
+  for (const r of ghostWarnings) {
+    const idx = r.activityIndex;
+    if (idx == null || idx < 0 || idx >= day.activities.length) continue;
+    const act = day.activities[idx] as any;
+    if (r.field && typeof act[r.field] === 'string' && act[r.field].length > 0) {
+      act[r.field] = '';
+      counters.blankedFields++;
+      counters.forcedDowngrades++;
+      ghostBlanked++;
+    }
+  }
+  if (ghostBlanked > 0) {
+    console.log(`[VALIDATION_GATE] DESCRIPTION_GHOST_REFERENCE day=${ctx.dayNumber} blanked=${ghostBlanked}`);
+  }
+
   if (counters.critical === 0) {
-    log(ctx.dayNumber, 'persist', counters);
-    return { verdict: 'persist', counters, day };
+    log(ctx.dayNumber, ghostBlanked > 0 ? 'persist_forced' : 'persist', counters);
+    return { verdict: ghostBlanked > 0 ? 'persist_forced' : 'persist', counters, day };
   }
 
   // Process critical issues, in reverse activity-index order so splices don't

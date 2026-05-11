@@ -388,20 +388,90 @@ function sentenceHasPhantomRef(sentence: string, summary: DayScheduleSummary): b
   return false;
 }
 
-/** Drop sentences with phantom event refs. Returns null if unchanged or
- *  if every sentence would be removed (never blanks the field). */
+/**
+ * Drop sentences/clauses with phantom event refs.
+ *
+ * Returns null when nothing changed. Returns "" (empty string) when the
+ * entire field was a single phantom-only segment and we chose to blank it
+ * (M2 — Madrid Day 2 single-sentence "Leave by 20:30 for tonight's Michelin
+ * dinner" leak path). Otherwise returns the rebuilt text.
+ *
+ * Splits on sentence terminators (.!?) AND clause separators (`;`, em-dash,
+ * en-dash with surrounding spaces) so we can drop a single offending clause
+ * inside a sentence like "Freshen up at the Ritz; leave by 20:30 for
+ * tonight's Michelin dinner."
+ */
 export function scrubPhantomEventRefsFromString(s: unknown, summary: DayScheduleSummary): string | null {
   if (typeof s !== 'string' || !s) return null;
-  const parts = s.split(/(?<=[.!?])\s+/);
-  if (parts.length < 2) {
-    // Single sentence: only flag — never blank the field.
+
+  // Tokenize keeping the separator with each part so we can rebuild faithfully.
+  // Recognized separators: sentence-final (.!?) followed by space, ` ; `, ` — `, ` – `.
+  const SEP_RE = /([.!?](?=\s)|;|\s+[\u2014\u2013]\s+)/g;
+  const tokens: Array<{ text: string; sep: string }> = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  const src = s;
+  while ((m = SEP_RE.exec(src)) !== null) {
+    const text = src.slice(last, m.index);
+    tokens.push({ text, sep: m[0] });
+    last = m.index + m[0].length;
+  }
+  const tail = src.slice(last);
+  if (tail.length > 0 || tokens.length === 0) tokens.push({ text: tail, sep: '' });
+
+  // Single-segment field — apply phantom-only blanking heuristic.
+  if (tokens.length === 1) {
+    const only = tokens[0].text;
+    if (!sentenceHasPhantomRef(only, summary)) return null;
+    // Strip the matched ref(s) from a copy and see what's left of substance.
+    let stripped = only;
+    for (const pat of PHANTOM_REF_PATTERNS) {
+      pat.re.lastIndex = 0;
+      stripped = stripped.replace(pat.re, ' ');
+    }
+    const wordCount = stripped.split(/\s+/).filter(w => w.length >= 3 && /[a-z]/i.test(w)).length;
+    // If <3 substantive words remain after stripping the phantom ref, the
+    // segment is "essentially only the phantom ref" — blank it. Otherwise
+    // preserve (don't destroy a rich single sentence).
+    if (wordCount < 3) return '';
     return null;
   }
-  const kept = parts.filter((p) => !sentenceHasPhantomRef(p, summary));
-  if (kept.length === parts.length) return null;
-  if (kept.length === 0) return null;
-  const rebuilt = kept.join(' ').replace(/\s{2,}/g, ' ').replace(/\s+\./g, '.').trim();
-  return rebuilt === s ? null : rebuilt;
+
+  // Multi-segment — drop offending segments, rebuild with their separators.
+  const keptIdx: number[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const seg = tokens[i].text.trim();
+    if (!seg) continue;
+    if (!sentenceHasPhantomRef(seg, summary)) keptIdx.push(i);
+  }
+  if (keptIdx.length === tokens.length) return null;
+  if (keptIdx.length === 0) return null;
+
+  let out = '';
+  for (let j = 0; j < keptIdx.length; j++) {
+    const idx = keptIdx[j];
+    const seg = tokens[idx].text.trim();
+    // Use the segment's own separator if it's not the last kept; if the kept
+    // segment originally ended a sentence (.!?), preserve that. For clause
+    // separators, downgrade trailing separator to ". " so we end up with
+    // valid English sentences.
+    const sepRaw = tokens[idx].sep;
+    let sep = '';
+    if (j < keptIdx.length - 1) {
+      if (/^[.!?]/.test(sepRaw)) sep = sepRaw + ' ';
+      else sep = '. '; // promote ; / dash to sentence break when content is dropped around it
+    } else {
+      // Last kept — keep its terminator if it had one, else add a period.
+      if (/^[.!?]/.test(sepRaw)) sep = sepRaw;
+      else if (sepRaw === '') sep = '';
+      else sep = '.';
+    }
+    out += seg + sep;
+  }
+  out = out.replace(/\s{2,}/g, ' ').replace(/\s+([.!?])/g, '$1').trim();
+  // Capitalize the first letter of each sentence after a period for readability.
+  out = out.replace(/(^|[.!?]\s+)([a-z])/g, (_, p, c) => p + c.toUpperCase());
+  return out === s ? null : out;
 }
 
 export interface PhantomRefScrubResult { changed: boolean; fields: string[]; stripped: number; }
@@ -426,6 +496,25 @@ export function scrubPhantomEventRefs(act: any, summary: DayScheduleSummary): Ph
   return { changed: fields.length > 0, fields, stripped };
 }
 
+/**
+ * Read-only detector — returns body field names that contain unresolved
+ * phantom event references. Used by the validation gate to emit
+ * DESCRIPTION_GHOST_REFERENCE before the scrub mutates anything.
+ */
+export function detectPhantomEventRefs(act: any, summary: DayScheduleSummary): string[] {
+  if (!act || typeof act !== 'object') return [];
+  const hits: string[] = [];
+  for (const key of BODY_FIELDS) {
+    const v = act[key];
+    if (typeof v !== 'string' || !v) continue;
+    // Sample-segment scan — split on sentence + clause separators.
+    const segments = v.split(/[.!?](?=\s|$)|;|\s[\u2014\u2013]\s/);
+    for (const seg of segments) {
+      if (sentenceHasPhantomRef(seg, summary)) { hits.push(key); break; }
+    }
+  }
+  return hits;
+}
 export function hasTitleLeak(act: any): { field: string } | null {
   if (!act || typeof act !== 'object') return null;
   for (const key of TITLE_FIELDS) {

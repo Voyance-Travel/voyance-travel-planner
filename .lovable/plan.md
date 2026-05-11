@@ -1,72 +1,90 @@
-## Live enumeration result
+## Why Madrid Day 2 still leaked despite the M1 fix
 
-Ran the audit query against the live DB. **31 SECURITY DEFINER functions** in `public` are currently executable by `authenticated` (and 6 also by `anon`). After cross-referencing every one against frontend `supabase.rpc(...)` call sites, edge-function call sites, and the function bodies themselves, here is the classification:
+The `scrubPhantomEventRefs` infrastructure already exists (`supabase/functions/_shared/prompt-leak-scrub.ts`, wired into `repair-day.ts §10b` + `action-save-itinerary.ts`). I read the implementation end-to-end. Two structural gaps explain why "Freshen up at Mandarin Oriental Ritz; leave by 20:30 for tonight's Michelin-starred dinner" survived:
 
-### A — Service-only / unused: REVOKE from PUBLIC + authenticated, GRANT to service_role
+**Gap A — Single-sentence guard returns null.**
+`scrubPhantomEventRefsFromString` (line 393–405) splits on `(?<=[.!?])\s+` and explicitly bails out for `parts.length < 2`:
+```ts
+if (parts.length < 2) {
+  // Single sentence: only flag — never blank the field.
+  return null;
+}
+```
+The Madrid copy is a **single sentence joined by `;`** (or no terminator at all on the freshen-up line). Splitter sees one part → returns null → nothing stripped. Same for em-dash / en-dash joined clauses ("Freshen up — then leave by 20:30 for tonight's dinner").
 
-| Function | Why |
-|---|---|
-| `add_to_group_budget(uuid, integer)` | Only called from edge fns (`topup-group-budget`, `stripe-webhook`) |
-| `deduct_credits_fifo(uuid, integer)` | Only called from edge fns (`spend-credits`, `generate-travel-guide`, `purchase-group-unlock`, `topup-group-budget`) |
-| `spend_from_group_budget(uuid, integer)` | No frontend callers; service path |
-| `consume_free_edit(uuid)` | No callers anywhere; legacy / unreachable |
-| `get_intake_account(text)` | No callers anywhere |
-| `get_journey_trips(uuid)` | No callers anywhere; multi-trip journeys query goes through other paths |
+**Gap B — No prompt-side prevention.**
+The per-activity description prompt in `prompt-library.ts` does not inject the day's actual schedule, so the LLM has no signal that the Michelin dinner was dropped. Scrubbing is the only defense, and Gap A makes it leaky.
 
-### B — Frontend-callable, internal `auth.uid()` check VERIFIED: keep current grants
+The user-requested validator (`DESCRIPTION_GHOST_REFERENCE`) also has no representation in `applyValidationGate`, so we have no telemetry attribution when this fires.
 
-These already enforce identity inside the function body (confirmed by `prosrc ILIKE '%auth.uid()%'` audit + manual read):
+## Plan
 
-`accept_trip_invite`, `complete_quiz`, `get_user_id_by_email`, `get_user_info_by_email`, `get_trip_permission`, `optimistic_update_itinerary`, `resolve_or_rotate_invite`, `save_onboarding_dna` (both 6-arg and 7-arg overloads), `toggle_consumer_trip_share`, `transition_booking_state`, `update_collaborator_permission`, `get_current_user_email`.
+### 1. Prompt-side prevention (Gap B)
 
-### C — Frontend-callable, intentionally anon: keep `anon` + `authenticated`
+**File:** `supabase/functions/generate-itinerary/prompt-library.ts`
 
-| Function | Why public is OK |
-|---|---|
-| `get_consumer_shared_trip(text)` | Public share-link reader; gated by share_token + share_enabled flag |
-| `get_shared_trip_payload(text)` | Same pattern, agency share view |
-| `get_trip_invite_info(text)` | Pre-auth invite landing page (read-only, token-gated) |
-| `get_founding_member_count()` | Public marketing counter |
-| `get_platform_destination_count()` | Public marketing counter |
-| `get_platform_trip_count()` | Public marketing counter |
-| `submit_client_intake(...)` | Pre-auth client-intake form, token-validated inside body |
+Add a new section to the day-generation system prompt (and to whichever per-activity description prompt exists in this file) injecting the live day schedule with a HARD RULE:
 
-### D — RLS policy helpers: keep `authenticated` grant (used inside policy USING/WITH CHECK)
+```
+HARD RULE — SCHEDULE COHERENCE
+Only reference activities that ALSO appear in this day's schedule below. Do NOT
+write "tonight's dinner / after the museum / leave by 20:30 for X / following
+your tour" unless that exact event is scheduled. If the schedule has no
+dinner, you MUST NOT write "tonight's dinner" anywhere.
 
-`is_trip_owner(uuid)`, `is_trip_collaborator(uuid, uuid, boolean)`, `is_trip_member(uuid, uuid)`, `get_user_trip_ids(uuid)`. Revoking these would break RLS evaluation across the trips/collaborators stack.
+Day schedule (ground truth):
+- 09:00 Breakfast at La Mallorquina
+- 11:00 Prado Museum
+- 18:30 Freshen up at Mandarin Oriental Ritz
+(no dinner scheduled)
+```
 
-### E — MUST FIX: callable by `authenticated` but missing internal auth check
+Built from `buildDayScheduleSummary` + an inline `act.startTime + ' ' + act.title` list — same shape the scrubber already uses. Skip locked/extracted/manual rows so the LLM sees the canonical schedule it's expected to honor.
 
-| Function | Action |
-|---|---|
-| `claim_first_trip_benefit(p_user_id uuid)` | Add internal `IF auth.uid() <> p_user_id THEN RAISE EXCEPTION 'unauthorized'` guard. Without it, any signed-in user can claim a benefit on behalf of another `p_user_id`. Keep grants after fix. |
+### 2. Clause-level scrub (Gap A)
 
-## Migration
+**File:** `supabase/functions/_shared/prompt-leak-scrub.ts` — `scrubPhantomEventRefsFromString`
 
-Single migration `revoke_public_security_definer_grants` performing:
+- **Split on clause separators** in addition to sentence terminators: `;`, ` — `, ` – ` (em/en dash with surrounding spaces). Track which separator each part used so the rebuilt copy preserves separator style.
+- **Single-segment phantom refs:** if the entire field is one segment AND it contains a phantom ref AND the segment is essentially *only* the phantom ref (≤ 14 words after stripping the ref leaves <3 meaningful tokens), drop the field entirely (return empty string sentinel) and let the dining-description-backfill / UI fallback handle the empty state. Otherwise return the original (current behavior — never blank rich copy).
+- **Multi-clause partial strip:** when only some clauses are phantom, drop them and rejoin with `. ` for sentence boundaries or `; ` for clause boundaries to keep readable English.
 
-1. **Revoke + grant service_role** for the 6 Group A functions:
-   ```sql
-   REVOKE EXECUTE ON FUNCTION public.add_to_group_budget(uuid, integer) FROM PUBLIC, authenticated, anon;
-   GRANT  EXECUTE ON FUNCTION public.add_to_group_budget(uuid, integer) TO service_role;
-   -- ...repeat for the other 5
-   ```
+This preserves the existing safety net ("never destroy single rich sentence") while plugging the dominant Madrid leak shape.
 
-2. **Patch `claim_first_trip_benefit`** to add the `auth.uid() = p_user_id` guard (CREATE OR REPLACE FUNCTION with the existing body + new guard at top).
+### 3. Validation-gate code + telemetry (user request #2)
 
-3. **No changes to** Group B/C/D — they are correctly exposed.
+**File:** `supabase/functions/generate-itinerary/pipeline/validate-day.ts` (or wherever `applyValidationGate` lives)
 
-## Verification
+- Register new code `DESCRIPTION_GHOST_REFERENCE` with severity `warning`.
+- Detector: run `buildDayScheduleSummary` once per day, then for each non-locked activity test all body fields with the existing `PHANTOM_REF_PATTERNS`; emit one violation per offending activity carrying `{ activityId, referencedEvent, field }`.
+- Resolution: when fired, run `scrubActivity({ daySchedule })` once; if the scrub couldn't reduce the field (Gap A residual), force-blank that field with a `[VALIDATION_GATE] code=DESCRIPTION_GHOST_REFERENCE action=blanked` log.
+- Sentinel: `[VALIDATION_GATE] DESCRIPTION_GHOST_REFERENCE day=N count=K resolved=K` so we can confirm the M1 fix in production logs.
 
-After migration runs:
-- Re-run the enumeration query; the 6 Group A functions disappear from results.
-- Frontend smoke test: ensure no UI path calls Group A functions (already audited: zero `supabase.rpc('add_to_group_budget'…)` etc. in `src/`).
-- Edge functions (`topup-group-budget`, `stripe-webhook`, `spend-credits`, `generate-travel-guide`, `purchase-group-unlock`) all use the service-role client → unaffected.
-- Re-run `supabase--linter` and confirm the SECURITY DEFINER public-execution warning count drops by 6.
-- Manual test: hit "claim first trip benefit" path on a real signup; confirm it still succeeds for the legitimate user, and a curl with another user's `p_user_id` raises `unauthorized`.
+### 4. Tests
+
+**New file:** `supabase/functions/_shared/__tests__/phantom-ref-clause-scrub.test.ts`
+
+- Madrid Day 2 reproducer: `"Freshen up at Mandarin Oriental Ritz; leave by 20:30 for tonight's Michelin-starred dinner."` with `hasDinner=false` → second clause dropped, first clause survives.
+- Em-dash variant: `"Take a moment to refresh — then leave by 20:30 for tonight's Michelin dinner"` → second clause dropped.
+- Single-segment phantom: `"Leave by 20:30 for tonight's Michelin dinner"` (no other content) → field blanked.
+- Negative: `"Take a moment to refresh"` (no phantom) → unchanged.
+- Negative: `"Tonight's dinner at Coque awaits"` with `hasDinner=true` → unchanged (resolves OK).
+
+**Add to** existing `prompt-leak-scrub.test.ts`: assert `buildDayScheduleSummary` is called by `applyValidationGate` and emits `DESCRIPTION_GHOST_REFERENCE` for the residual case.
+
+### 5. Memory update
+
+Extend `mem://constraints/itinerary/schedule-coherent-copy` with:
+> M2: Clause-level split (`;` / em-dash) + single-segment phantom-ref blanking added to `scrubPhantomEventRefsFromString`. Day-schedule "ground truth" block injected into per-activity description prompt. New validation-gate code `DESCRIPTION_GHOST_REFERENCE` ensures any residual leak is force-blanked + logged. Closes Madrid Day 2 "Freshen up … leave by 20:30 for tonight's Michelin-starred dinner" with no dinner card.
 
 ## Out of scope
 
-- Not touching auth schema or storage schema functions.
-- Not switching any function from SECURITY DEFINER to SECURITY INVOKER (would require RLS audit per function — separate task).
-- Not removing the `postgres` / `sandbox_exec*` superuser grants (those exist on every function and are not a security boundary).
+- No re-prompting / second LLM call for stripped descriptions — the cost/latency trade-off doesn't justify it; UI gracefully handles empty descriptions via the existing dining-description-backfill + whyThisFits chain.
+- No change to `scrubActivity` signature — `daySchedule` already flows through `ScrubContext`.
+- No change to `repair-day.ts §10b` wiring — the upgraded scrubber is automatically picked up.
+
+## Verification
+
+1. Unit: `bunx vitest run supabase/functions/_shared/__tests__/phantom-ref-clause-scrub.test.ts`.
+2. Manual: regenerate the Madrid 3-day trip; confirm no description on Day 2 references "tonight's dinner" when the dinner card is absent.
+3. Logs: grep server output for `[SCRUB_PHANTOM_REF]` and `[VALIDATION_GATE] DESCRIPTION_GHOST_REFERENCE` to confirm both layers fire (scrub for typical cases, gate for residuals).

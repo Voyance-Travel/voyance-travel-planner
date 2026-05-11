@@ -16,7 +16,7 @@ import {
   type StrictDayMinimal,
 } from '../day-validation.ts';
 import type { RequiredMeal } from '../meal-policy.ts';
-import { hasBodyPromptLeak, hasTitleLeak } from '../../_shared/prompt-leak-scrub.ts';
+import { hasBodyPromptLeak, hasTitleLeak, buildDayScheduleSummary, detectPhantomEventRefs } from '../../_shared/prompt-leak-scrub.ts';
 import { WALK_HARD_DISTANCE_METERS, WALK_HARD_DURATION_MINUTES } from '../../_shared/transit-mode.ts';
 import { isTransitActivity } from '../../_shared/transit-detect.ts';
 import {
@@ -178,6 +178,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkPriceDuplication(activities, results);
   checkWalkOverThreshold(activities, results);
   checkCategoryVenueCoherence(activities, results);
+  checkPhantomEventRefs(activities, results);
 
   // --- PRICE SANITY (B3, Barcelona Diagnosis) ---
   checkPlausiblePricing(activities, results);
@@ -1099,6 +1100,33 @@ function checkSentenceCompleteness(activities: StrictActivityMinimal[], results:
         code: FAILURE_CODES.TRUNCATED_SENTENCE,
         severity: 'critical',
         message: `Activity "${act.title}" ${field} appears truncated mid-sentence: "…${tail}"`,
+        activityIndex: i,
+        field,
+        autoRepairable: true,
+      });
+    }
+  });
+}
+
+/**
+ * M2 — Madrid Day 2 phantom event ref detector. Flags activities whose body
+ * fields reference time-bound events ("tonight's dinner", "after the museum",
+ * "leave by 20:30 for X") that don't appear in this day's schedule.
+ *
+ * Severity: warning. The validation gate force-blanks the offending field
+ * if scrubActivity (repair §10b) couldn't recover it.
+ *
+ * See: mem://constraints/itinerary/schedule-coherent-copy
+ */
+function checkPhantomEventRefs(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  const summary = buildDayScheduleSummary(activities as any[]);
+  activities.forEach((act, i) => {
+    const fields = detectPhantomEventRefs(act, summary);
+    for (const field of fields) {
+      results.push({
+        code: FAILURE_CODES.DESCRIPTION_GHOST_REFERENCE,
+        severity: 'warning',
+        message: `Activity "${(act as any).title}" ${field} references an event not in this day's schedule`,
         activityIndex: i,
         field,
         autoRepairable: true,

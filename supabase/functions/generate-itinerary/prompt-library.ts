@@ -1354,7 +1354,19 @@ export function buildRegularDayPrompt(
   lines.push(`     snorkel, or any other strenuous outdoor activity after 21:00.`);
   lines.push(`   - Luxury / Luminary tier: tighten the cutoff to 20:00. Late-night returns from`);
   lines.push(`     island or water-access hotels (Venice, lakeside resorts) MUST use a private`);
-  lines.push(`     water taxi or hotel shuttle — never a 30+ minute walk after 22:00.`);
+  lines.push('');
+
+  lines.push(`   📝 SCHEDULE COHERENCE (HARD RULE) — M2 Madrid:`);
+  lines.push(`   Activity descriptions MUST only reference events that ALSO appear in this`);
+  lines.push(`   day's schedule. Forbidden phrasings when the referenced event is NOT scheduled:`);
+  lines.push(`     - "tonight's dinner" / "this evening's dinner" — only if a dinner card exists`);
+  lines.push(`     - "leave by HH:MM for X" / "head out at HH:MM for X" — only if X is in the schedule`);
+  lines.push(`     - "after the museum/tour/gallery" / "following your visit" — only if that visit exists`);
+  lines.push(`     - "tonight's nightcap / cocktails" — only if a late drinks card exists`);
+  lines.push(`   If you decide to drop an activity (no dinner card, no museum, no nightcap),`);
+  lines.push(`   you MUST also remove every prose reference to it from sibling cards.`);
+  lines.push(`   This rule is enforced post-generation by a scrubber + validation gate that will`);
+  lines.push(`   strip offending sentences. Avoid the strip by writing only what's actually scheduled.`);
   lines.push('');
 
   lines.push(`   PRACTICAL TIPS (inline on activities):`);
