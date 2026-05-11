@@ -189,7 +189,9 @@ export default function AcceptInvite() {
           });
 
           setInviteInfo(info);
-          if (!info.valid) {
+          // Strict equality: only treat the invite as valid when the RPC explicitly
+          // says so. Anything else (undefined, null, missing field) is invalid.
+          if (info?.valid !== true) {
             logger.warn('[invite] Invalid invite', { reason: info.reason, token: token?.slice(0, 8) });
             setError(info.error || 'Invalid invite');
             // Log failure for debugging (fire-and-forget)
