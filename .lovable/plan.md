@@ -1,82 +1,64 @@
-# Restaurant Empty-Description Rescue
+# Fix: False-positive meal detection skips meal-guard
 
-## Problem
+## Root Cause
+`detectMealSlots` in `supabase/functions/generate-itinerary/day-validation.ts` (lines 160–198) treats any non-structural card with a meal keyword in its title as a satisfied meal. A wellness card like "Freshen Up before anniversary dinner" matches "dinner" → meal-guard considers dinner present → no real dinner injected.
 
-`sanitizeAITextField` (sanitization.ts:1204) strips 100+ marketing phrases ("Hidden gem", "Popular with locals", "Recommended from our venue database", etc). Restaurant descriptions written largely from those phrases collapse to empty. The day-walker at line 1564 then writes `act.description = ... || undefined`, so the card renders blank.
+## Change — `day-validation.ts` `detectMealSlots` (lines 160–198)
 
-## Changes
+1. **Restrict title-keyword matching to dining categories only.** Drop the `!isStructural` branch. Title-based meal detection fires only when `isDining` is true (category includes `dining`/`food`/`restaurant`).
 
-### 1. `sanitization.ts` — clarifying comment in `sanitizeAITextField`
+2. **Add temporal-modifier guard.** Even on dining cards, reject titles where the meal keyword is preceded by a forward/backward temporal modifier:
+   ```
+   /\b(before|after|for|prep|prepare|preparing|ahead\s+of|en\s+route\s+to|on\s+the\s+way\s+to|heading\s+to|towards?)\s+\w*\s*(breakfast|brunch|lunch|dinner|supper)\b/i
+   ```
+   If matched → skip without adding to `detected`, log:
+   `[detectMealSlots] Rejected false-positive "${title}" — temporal modifier before meal keyword OR non-dining category`
 
-Add a comment block at the final return documenting the explicit contract:
-- Empty / sub-20-char output is intentional when input ≥ 40 chars (over-strip case).
-- Caller MUST handle the empty-string sentinel (see day-walker at line 1564).
+3. **Keep time-based detection (lines 183–197) unchanged** — already gated on `isDining` and has the drinks-only guard.
 
-No behavior change — the function already returns the empty string; this just documents the contract so the day-walker's rescue path is the only place that decides what to do with it.
+4. **Keep category-keyword branch** (`category.includes(keyword)` when `isDining`) unchanged.
 
-### 2. `sanitization.ts` — day-walker line 1564 dining rescue
-
-Replace:
+## New Logic Sketch
 ```ts
-if (act.description) act.description = sanitizeAITextField(act.description, destination) || undefined;
-```
+const TEMPORAL_MEAL_MODIFIER_RE = /\b(before|after|for|prep|prepare|preparing|ahead\s+of|en\s+route\s+to|on\s+the\s+way\s+to|heading\s+to|towards?)\s+\w*\s*(breakfast|brunch|lunch|dinner|supper)\b/i;
 
-With:
-```ts
-if (act.description) {
-  const sanitized = sanitizeAITextField(act.description, destination);
-  if (sanitized && sanitized.length >= 15) {
-    act.description = sanitized;
-  } else {
-    const cat = String(act.category || '').toLowerCase();
-    if (cat.includes('dining') || cat.includes('food') || cat.includes('restaurant')) {
-      const venueName = act.location?.name || act.venue_name || extractRestaurantVenueName(act.title || '');
-      const titleStr = String(act.title || '');
-      const mealLabel = /breakfast|brunch/i.test(titleStr) ? 'Breakfast'
-                      : /lunch/i.test(titleStr) ? 'Lunch'
-                      : /dinner|supper/i.test(titleStr) ? 'Dinner'
-                      : 'A meal';
-      if (venueName) {
-        act.description = `${mealLabel} at ${venueName}. ${act.location?.address ? `Located at ${act.location.address}.` : 'Check opening hours before heading over.'}`;
-      } else {
-        act.description = `${mealLabel} at a local spot. Check opening hours and reviews before you go.`;
-      }
-      console.log(`[SANITIZE] Day-walker: replaced empty dining description for "${act.title}" with template fallback`);
-    } else {
-      act.description = undefined;
+for (const activity of activities) {
+  if (isPlaceholderMealActivity(activity)) continue;
+  const title = (activity.title || '').toLowerCase();
+  const category = (activity.category || '').toLowerCase();
+  const isDining = DINING_CATEGORIES.some(c => category.includes(c));
+
+  // Hard reject temporal modifiers OR non-dining title matches
+  const hasTemporalModifier = TEMPORAL_MEAL_MODIFIER_RE.test(activity.title || '');
+
+  for (const mealType of Object.keys(MEAL_KEYWORDS) as RequiredMeal[]) {
+    const titleHit = MEAL_KEYWORDS[mealType].some(k => title.includes(k));
+    const categoryHit = MEAL_KEYWORDS[mealType].some(k => category.includes(k));
+
+    if (titleHit && (!isDining || hasTemporalModifier)) {
+      console.log(`[detectMealSlots] Rejected false-positive "${activity.title}" — temporal modifier before meal keyword OR non-dining category`);
+      continue;
     }
+    if (isDining && (titleHit || categoryHit)) detected.add(mealType);
   }
+
+  // ... time-based block unchanged
 }
 ```
 
-Scope: only `dining`/`food`/`restaurant` categories get the template; everything else preserves the current `undefined` behavior. Threshold `length >= 15` matches the user spec (avoids 1-fragment leftovers like ".").
-
-### 3. New test `__tests__/dining-description-rescue.test.ts`
-
-Covers:
-- Dining card, original = `"A local favorite. Popular with locals. Hidden gem with great food."` → after walker, `description` non-empty + contains venue/meal name (template fired).
-- Dining card, original = real prose `"Wood-fired Roman pizza in Trastevere with..."` → description preserved verbatim, no template marker.
-- Non-dining card (e.g. `museum`) with collapse-prone description → `description === undefined` (template NOT fired).
-
-Mirrors style of `phantom-ref-clause-scrub.test.ts`.
-
-## Interaction with existing description-fill pipeline
-
-The Description Coverage memory documents that `_shared/description-fill.ts` runs post-`repairDay` (Gemini Flash, 8s timeout) for any restaurant with `description.length < 30` or missing imperative verb. The template fallback's output (e.g. `"Dinner at Da Ivo. Located at ..."`) is **≥ 30 chars and contains an actionable verb** ("Check opening hours…"), so description-fill will treat it as satisfactory and not re-run. This is intentional — template prevents the empty-state UI artifact even if Gemini-flash fill later times out or fails.
+## Sentinel
+`[detectMealSlots] Rejected false-positive ...` fires for wellness/leisure cards mentioning meals.
 
 ## Out of Scope
+- Meal-guard injection logic
+- `MEAL_KEYWORDS` / `DINING_CATEGORIES` definitions
+- Time-based detection branch
+- `isPlaceholderMealActivity`
 
-- No changes to `sanitizeAITextField`'s strip patterns.
-- No changes to `_shared/description-fill.ts` (lower-priority Gemini path).
-- No prompt or generator changes.
-- No change to the `tips`/`voyanceInsight`/`personalization.whyThisFits` rescue — only `description`.
-
-## Verification
-
-- `grep -n "template fallback" supabase/functions/generate-itinerary/sanitization.ts` → 1 hit.
-- New deno test: 3 cases pass.
-- Existing `phantom-ref-clause-scrub.test.ts` still passes (no regression on rich-prose preservation).
-
-## Memory
-
-Update `mem://constraints/itinerary/description-coverage` to add a 4th defense layer: "Day-walker dining template fallback at sanitization.ts:1564 — restaurants whose description collapses to <15 chars get a meal+venue+hours sentence (≥30 chars, actionable verb so description-fill doesn't re-trigger)."
+## Tests (new `__tests__/meal-detection-false-positives.test.ts`)
+1. "Freshen Up before anniversary dinner" (wellness) → dinner NOT detected
+2. "Walk to lunch" (transport) → lunch NOT detected (already covered by structural skip; regression guard)
+3. "Prep for dinner at hotel" (leisure) → dinner NOT detected
+4. "Dinner at Da Ivo" (dining, 19:30) → dinner detected
+5. "Cooking class: pasta lunch" (food category) → lunch detected (no temporal modifier)
+6. "Heading to brunch at Sant Ambroeus" (transport) → brunch NOT detected

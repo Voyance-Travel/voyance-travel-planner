@@ -157,22 +157,30 @@ export function detectMealSlots(
 ): RequiredMeal[] {
   const detected = new Set<RequiredMeal>();
 
+  // Reject titles where the meal keyword is preceded by a temporal modifier
+  // (e.g. "Freshen Up before anniversary dinner", "Heading to brunch", "Prep for dinner").
+  // Such cards are NOT actual meals and must not satisfy meal-guard compliance.
+  const TEMPORAL_MEAL_MODIFIER_RE = /\b(before|after|for|prep|prepare|preparing|ahead\s+of|en\s+route\s+to|on\s+the\s+way\s+to|heading\s+to|towards?)\s+\w*\s*(breakfast|brunch|lunch|dinner|supper)\b/i;
+
   for (const activity of activities) {
     // Skip placeholder/unverified slots — they must NEVER satisfy meal compliance.
     if (isPlaceholderMealActivity(activity)) continue;
 
-    const title = (activity.title || '').toLowerCase();
+    const rawTitle = (activity.title || '').toString();
+    const title = rawTitle.toLowerCase();
     const category = (activity.category || '').toLowerCase();
     const isDining = DINING_CATEGORIES.some(c => category.includes(c));
-
-    // Skip structural categories (transport, accommodation, logistics) for title-based meal detection
-    // to prevent transit cards like "Walk to Dinner" from satisfying the meal guard
-    const isStructural = ['transport', 'accommodation', 'logistics'].includes(category);
+    const hasTemporalModifier = TEMPORAL_MEAL_MODIFIER_RE.test(rawTitle);
 
     for (const mealType of Object.keys(MEAL_KEYWORDS) as RequiredMeal[]) {
-      if (!isStructural && MEAL_KEYWORDS[mealType].some(keyword => title.includes(keyword))) {
-        detected.add(mealType);
-      } else if (isDining && MEAL_KEYWORDS[mealType].some(keyword => category.includes(keyword))) {
+      const titleHit = MEAL_KEYWORDS[mealType].some(keyword => title.includes(keyword));
+      const categoryHit = MEAL_KEYWORDS[mealType].some(keyword => category.includes(keyword));
+
+      if (titleHit && (!isDining || hasTemporalModifier)) {
+        console.log(`[detectMealSlots] Rejected false-positive "${rawTitle}" — temporal modifier before meal keyword OR non-dining category`);
+        continue;
+      }
+      if (isDining && (titleHit || categoryHit)) {
         detected.add(mealType);
       }
     }
