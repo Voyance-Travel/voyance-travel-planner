@@ -15,11 +15,17 @@ test.describe('Navigation - Public Routes', () => {
   for (const route of PUBLIC_ROUTES) {
     test(`public route ${route} loads without auth`, async ({ page }) => {
       await page.goto(route);
-      
-      // Should not redirect to signin
+
       await page.waitForTimeout(1000);
-      expect(page.url()).not.toContain('signin');
-      
+
+      // /signin and /signup are themselves public; every other public route
+      // must NOT redirect to signin.
+      if (route === '/signin' || route === '/signup') {
+        expect(page.url()).toContain(route);
+      } else {
+        expect(page.url()).not.toContain('signin');
+      }
+
       // Page should have content (not blank)
       const bodyContent = await page.locator('body').textContent();
       expect(bodyContent?.trim().length).toBeGreaterThan(0);
