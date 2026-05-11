@@ -151,73 +151,34 @@ export async function sendFriendRequest(handle: string): Promise<{ success: bool
 }
 
 /**
- * Send a friend request by email (exact match only)
+ * Send a friend request by email — enumeration-safe.
+ *
+ * Routes through the `friend-request-by-email` edge function. The server
+ * performs a service-role lookup and (when matched) inserts/updates the
+ * friendship in the same atomic step. The response shape is identical
+ * regardless of whether the email is registered, so the client cannot
+ * be used to enumerate accounts.
+ *
+ * Memory: mem://constraints/security/security-definer-accepted-class
  */
 export async function sendFriendRequestByEmail(email: string): Promise<{ success: boolean; status: FriendshipStatus }> {
-  const currentUserId = await getCurrentUserId();
+  const trimmed = email.toLowerCase().trim();
+  if (!trimmed) throw new Error('Please enter an email address');
 
-  // Find the user by email using the secure RPC function
-  // Cast to unknown first since the types aren't regenerated yet
-  const { data: targetUserId, error: profileError } = await supabase
-    .rpc('get_user_id_by_email' as any, { lookup_email: email.toLowerCase().trim() }) as { data: string | null; error: any };
+  const { data, error } = await supabase.functions.invoke('friend-request-by-email', {
+    body: { email: trimmed },
+  });
 
-  if (profileError) throw new Error('Failed to lookup user');
-  if (!targetUserId) throw new Error('No user found with this email');
-  if (targetUserId === currentUserId) throw new Error('Cannot friend yourself');
-
-  // Check if friendship already exists
-  const { data: existing } = await supabase
-    .from('friendships')
-    .select('id, status, requester_id')
-    .or(`and(requester_id.eq.${currentUserId},addressee_id.eq.${targetUserId}),and(requester_id.eq.${targetUserId},addressee_id.eq.${currentUserId})`)
-    .maybeSingle();
-
-  if (existing) {
-    if (existing.status === 'accepted') {
-      throw new Error('Already friends');
-    }
-    if (existing.status === 'pending' && existing.requester_id === currentUserId) {
-      throw new Error('Friend request already sent');
-    }
-    // If they sent us a request, accept it
-    if (existing.status === 'pending' && existing.requester_id === targetUserId) {
-      const { error } = await supabase
-        .from('friendships')
-        .update({ status: 'accepted' })
-        .eq('id', existing.id);
-      if (error) throw error;
-      return { success: true, status: 'accepted' };
-    }
-    // If previously declined, flip the row back to pending. UPDATE is atomic
-    // (single statement) so we can't end up with a half-deleted state if the
-    // network drops mid-operation. Also handles direction-flip: if the previously-
-    // declined row had the OPPOSITE direction (current user was the addressee),
-    // we update both fields to reflect the new requester.
-    if (existing.status === 'declined') {
-      const { error: updateError } = await supabase
-        .from('friendships')
-        .update({
-          requester_id: currentUserId,
-          addressee_id: targetUserId,
-          status: 'pending',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existing.id);
-      if (updateError) throw updateError;
-      return { success: true, status: 'pending' };
-    }
+  if (error) {
+    // Edge function errors surface here (auth, transport). Never invent a
+    // "user not found" message — that would re-enable enumeration.
+    throw new Error(error.message || 'Failed to send friend request');
   }
+  if (!data?.ok) throw new Error('Failed to send friend request');
 
-  // Create new friend request
-  const { error } = await supabase
-    .from('friendships')
-    .insert({
-      requester_id: currentUserId,
-      addressee_id: targetUserId,
-      status: 'pending' as const,
-    });
-
-  if (error) throw error;
+  // Status is always "pending" from the caller's perspective. Auto-accepts
+  // (when the other party already sent a request) are surfaced as pending
+  // and the queryClient invalidate refresh will pick up the actual state.
   return { success: true, status: 'pending' };
 }
 
@@ -417,12 +378,9 @@ export function useSendFriendRequestByEmail() {
 
   return useMutation({
     mutationFn: sendFriendRequestByEmail,
-    onSuccess: (result) => {
-      if (result.status === 'accepted') {
-        toast.success('Friend added!');
-      } else {
-        toast.success('Friend request sent!');
-      }
+    onSuccess: () => {
+      // Enumeration-safe ack — never reveal whether the email is registered.
+      toast.success("If that email belongs to a Voyance user, your request has been sent.");
       queryClient.invalidateQueries({ queryKey: ['friends'] });
       queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
     },

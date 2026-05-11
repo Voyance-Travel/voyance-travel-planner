@@ -3754,7 +3754,7 @@ const isLogisticsRow = (a: any): boolean => {
   return false;
 };
 
-function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): { activities: any[]; repairs: RepairAction[] } {
+export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): { activities: any[]; repairs: RepairAction[] } {
   const repairs: RepairAction[] = [];
   let activities = [...input.activities];
   const { dayNumber, hotelName, hotelAddress, returnDepartureTime24, lockedIds } = input;
