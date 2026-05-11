@@ -118,6 +118,11 @@ export function inferSubcategory(activity: any): PriceCategoryKey | null {
   }
 
   // Experiences (paid-tour subcategories run BEFORE generic walking_tour/museum)
+  // Walking-tour bimodal split: paid (min $15) and free (min $0) checked
+  // BEFORE generic experience regexes so "paid food walking tour" lands in
+  // walking_tour_paid rather than food_tour.
+  if (PAID_WALKING_TOUR_RE.test(haystack)) return 'walking_tour_paid';
+  if (FREE_WALKING_TOUR_RE.test(haystack)) return 'walking_tour';
   if (BIKE_TOUR_RE.test(haystack)) return 'bike_tour';
   if (FOOD_TOUR_RE.test(haystack)) return 'food_tour';
   if (COOKING_CLASS_RE.test(haystack)) return 'cooking_class';
