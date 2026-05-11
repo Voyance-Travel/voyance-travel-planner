@@ -87,7 +87,7 @@ export function ProposeReplacementDialog({
 
         // Get collaborators
         const { data: collabs } = await supabase
-          .from('trip_collaborators')
+          .from('public_trip_collaborators')
           .select('user_id')
           .eq('trip_id', tripId)
           .not('accepted_at', 'is', null);

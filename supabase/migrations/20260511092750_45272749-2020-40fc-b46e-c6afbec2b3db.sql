@@ -1,0 +1,1 @@
+ALTER VIEW public.public_trip_collaborators SET (security_invoker = true, security_barrier = true);
