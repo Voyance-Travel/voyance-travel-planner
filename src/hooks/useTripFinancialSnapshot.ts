@@ -302,19 +302,41 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       lastArchivedFingerprintRef.current = null;
     }
 
-    // ── Auto-backfill activity_costs for legacy trips ──────────────────
-    // If the canonical row total is $0 yet live JSON carries priced cards,
-    // trigger sync-trip-cost-table once. Pipeline writer will populate
-    // activity_costs and the next refetch will read real rows (rescue path
-    // drops out automatically).
+    // ── Auto-backfill activity_costs for legacy / partially-written trips ─
+    // Old gate (`canonical.totalCents === 0`) only fired when activity_costs
+    // was completely empty. The recurring "$160 vs $3,600" bug actually shows
+    // up when the table is *partially* populated — e.g. the hotel row exists
+    // (so totalCents > 0) but the dining/activities/transit rows from the
+    // per-day chain were never written. Coverage check fires the backfill
+    // whenever priced JSON activities lack a matching cost row.
+    const pricedJsonIds = new Set(
+      liveActivities.filter((a) => a.jsonCost > 0).map((a) => a.id)
+    );
+    const coveredIds = new Set(
+      (costs || [])
+        .filter(
+          (c) => c.activity_id && (Number(c.cost_per_person_usd) || 0) > 0
+        )
+        .map((c) => String(c.activity_id))
+    );
+    const uncoveredPricedCount = [...pricedJsonIds].filter(
+      (id) => !coveredIds.has(id)
+    ).length;
+    const coverageRatio = pricedJsonIds.size > 0
+      ? 1 - uncoveredPricedCount / pricedJsonIds.size
+      : 1;
+
     if (
       !backfillFiredRef.current &&
-      canonical.totalCents === 0 &&
-      liveActivities.some((a) => a.jsonCost > 0)
+      pricedJsonIds.size > 0 &&
+      coverageRatio < 0.5
     ) {
       backfillFiredRef.current = true;
       const dest = String((tripData as any)?.destination || '');
       const tier = (tripData as any)?.budget_tier || null;
+      console.info(
+        `[useTripFinancialSnapshot] activity_costs coverage ${(coverageRatio * 100).toFixed(0)}% for trip ${tripId} (uncovered=${uncoveredPricedCount}/${pricedJsonIds.size}) — triggering backfill`
+      );
       supabase.functions
         .invoke('sync-trip-cost-table', {
           body: { tripId, destination: dest, travelers: tripTravelers, budgetTier: tier },
@@ -324,7 +346,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
             console.warn('[useTripFinancialSnapshot] sync-trip-cost-table failed', error);
             return;
           }
-          console.info(`[useTripFinancialSnapshot] auto-backfilled activity_costs for legacy trip ${tripId}`);
+          console.info(`[useTripFinancialSnapshot] auto-backfilled activity_costs for trip ${tripId}`);
           window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
         });
     }
