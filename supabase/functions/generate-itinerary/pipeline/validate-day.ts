@@ -1151,20 +1151,34 @@ function checkWalkOverThreshold(activities: StrictActivityMinimal[], results: Va
     const act = activities[i] as any;
     if (!isTransitActivity(act)) continue;
     const t = act?.transportation || {};
-    const method = String(t.method || '').toLowerCase();
-    if (method !== 'walk' && method !== 'walking') continue;
+    const method = String(t.method || '').toLowerCase().trim();
+    // Title fallback — mirrors sanitizer's `titleStartsWalk` so a "Walk to X" card
+    // with empty/missing transportation.method (recurring LLM omission) still
+    // gets evaluated. Without this, the method gate silently bypassed e.g.
+    // "Walk to DiverXO" (Madrid Day 1, ~3.5km / 1h27m).
+    const titleStartsWalk = /^\s*(?:walk|walking|stroll)\b/i.test(act.title || act.name || '');
+    const isWalkLike = method === 'walk' || method === 'walking' || (method === '' && titleStartsWalk);
+    if (!isWalkLike) continue;
     let dur = Number(t.durationMinutes);
     let dist = Number(t.distanceMeters);
-    // Parse string durations like "1h 6m", "66 min", "1:06"
+    // Parse string durations like "1h 6m", "66 min", "1:06" — try transport
+    // block first, then top-level duration fields the LLM sometimes uses.
     if (!Number.isFinite(dur) || dur <= 0) {
-      const durStr = String(t.duration || act.duration || act.durationLabel || '');
-      const hMatch = durStr.match(/(\d+)\s*h/i);
-      const mMatch = durStr.match(/(\d+)\s*m/i);
-      const colonMatch = durStr.match(/^(\d+):(\d+)$/);
-      if (hMatch || mMatch) {
-        dur = (hMatch ? parseInt(hMatch[1]) * 60 : 0) + (mMatch ? parseInt(mMatch[1]) : 0);
-      } else if (colonMatch) {
-        dur = parseInt(colonMatch[1]) * 60 + parseInt(colonMatch[2]);
+      const durStr = String(
+        t.duration || act.durationMinutes || act.duration_minutes || act.duration || act.durationLabel || ''
+      );
+      const numericDur = Number(durStr);
+      if (Number.isFinite(numericDur) && numericDur > 0) {
+        dur = numericDur;
+      } else {
+        const hMatch = durStr.match(/(\d+)\s*h/i);
+        const mMatch = durStr.match(/(\d+)\s*m/i);
+        const colonMatch = durStr.match(/^(\d+):(\d+)$/);
+        if (hMatch || mMatch) {
+          dur = (hMatch ? parseInt(hMatch[1]) * 60 : 0) + (mMatch ? parseInt(mMatch[1]) : 0);
+        } else if (colonMatch) {
+          dur = parseInt(colonMatch[1]) * 60 + parseInt(colonMatch[2]);
+        }
       }
     }
     // If still no duration, infer from start/end timestamps
