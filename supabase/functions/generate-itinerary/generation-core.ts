@@ -3099,7 +3099,7 @@ export async function finalSaveItinerary(
     }
 
     const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
-    const { error } = await persistTripItinerary(supabase, tripId, frontendReadyData, {
+    const { error, regressionBlocked } = await persistTripItinerary(supabase, tripId, frontendReadyData, {
       destination: context.destination ?? null,
       label: 'final-save',
       extraUpdate: updatePayload,
@@ -3108,6 +3108,17 @@ export async function finalSaveItinerary(
     if (error) {
       console.error('[Stage 6] Final save failed:', error);
       return false;
+    }
+
+    if (regressionBlocked) {
+      // The new attempt was materially worse than what's already on disk —
+      // persist-itinerary kept the previous days and only applied extraUpdate
+      // (status, metadata). DO NOT re-snapshot activity_costs or flip trip_cities
+      // to 'generated' from the rejected days, or we re-introduce the regression
+      // via the cost-table path. See mem://constraints/itinerary/no-regression-overwrite.
+      console.warn('[Stage 6] regression blocked — kept previous days; skipping activity_costs + trip_cities updates');
+      await triggerNextJourneyLeg(supabase, tripId);
+      return true;
     }
 
     console.log('[Stage 6] Final save successful');
