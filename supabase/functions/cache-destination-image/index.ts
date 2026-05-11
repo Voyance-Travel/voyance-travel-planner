@@ -7,27 +7,63 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-// Allowlist of trusted image source hosts. Add more here as needed.
-const ALLOWED_IMAGE_HOSTS = new Set<string>([
+// Exact-match allowlist (case-insensitive on hostname).
+const ALLOWED_HOSTS_EXACT = new Set<string>([
   "images.unsplash.com",
   "plus.unsplash.com",
-  "cdn.pixabay.com",
-  "images.pexels.com",
   "lh3.googleusercontent.com",
+  "lh4.googleusercontent.com",
+  "lh5.googleusercontent.com",
+  "lh6.googleusercontent.com",
   "maps.googleapis.com",
-  "jsxplunjjvxuejeouwob.supabase.co",
+]);
+
+// Wildcard suffixes (must endsWith, with leading dot to prevent eviltarget-amazonaws.com).
+const ALLOWED_HOST_SUFFIXES = [
+  ".amazonaws.com", // S3 image hosts
+  ".cloudinary.com",
+];
+
+// Hard-deny literals (cloud metadata + loopback names).
+const DENY_HOST_LITERALS = new Set<string>([
+  "localhost",
+  "metadata.google.internal",
+  "::1",
 ]);
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 
-function isAllowedImageUrl(raw: string): boolean {
-  try {
-    const u = new URL(raw);
-    if (u.protocol !== "https:") return false;
-    return ALLOWED_IMAGE_HOSTS.has(u.hostname.toLowerCase());
-  } catch {
-    return false;
+function isPrivateIp(host: string): boolean {
+  // IPv4 dotted quad
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const a = parseInt(m[1], 10);
+    const b = parseInt(m[2], 10);
+    if (a === 127) return true;                       // 127.0.0.0/8 loopback
+    if (a === 10) return true;                        // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;          // 192.168.0.0/16
+    if (a === 169 && b === 254) return true;          // 169.254.0.0/16 link-local
+    if (a === 0) return true;                         // 0.0.0.0/8
   }
+  const v6 = host.replace(/^\[|\]$/g, "").toLowerCase();
+  if (v6 === "::1") return true;
+  if (v6.startsWith("fe8") || v6.startsWith("fe9") ||
+      v6.startsWith("fea") || v6.startsWith("feb")) return true; // fe80::/10
+  if (/^f[cd][0-9a-f]{2}:/.test(v6)) return true;     // fc00::/7 ULA
+  return false;
+}
+
+function validateImageUrl(raw: string): { ok: true } | { ok: false; reason: string } {
+  let u: URL;
+  try { u = new URL(raw); } catch { return { ok: false, reason: "parse" }; }
+  if (u.protocol !== "https:") return { ok: false, reason: "protocol" };
+  const host = u.hostname.toLowerCase();
+  if (DENY_HOST_LITERALS.has(host)) return { ok: false, reason: "deny_literal" };
+  if (isPrivateIp(host)) return { ok: false, reason: "private_ip" };
+  if (ALLOWED_HOSTS_EXACT.has(host)) return { ok: true };
+  if (ALLOWED_HOST_SUFFIXES.some((s) => host.endsWith(s))) return { ok: true };
+  return { ok: false, reason: "host_not_allowed" };
 }
 
 Deno.serve(async (req) => {
@@ -50,9 +86,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (typeof originalUrl !== "string" || !isAllowedImageUrl(originalUrl)) {
+    const verdict = validateImageUrl(typeof originalUrl === "string" ? originalUrl : "");
+    if (!verdict.ok) {
+      console.warn(
+        `[cache-destination-image] IMAGE_URL_NOT_ALLOWED reason=${verdict.reason} ` +
+        `url=${String(originalUrl).slice(0, 200)} userId=${auth.userId}`,
+      );
       return new Response(
-        JSON.stringify({ error: "originalUrl host not allowed" }),
+        JSON.stringify({ error: "originalUrl host not allowed", code: "IMAGE_URL_NOT_ALLOWED" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
