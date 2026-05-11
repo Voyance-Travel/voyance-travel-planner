@@ -29,6 +29,11 @@ export type PriceCategoryKey =
   | 'walking_tour'
   | 'museum'
   | 'guided_tour_premium'
+  | 'bike_tour'
+  | 'food_tour'
+  | 'cooking_class'
+  | 'wine_tasting'
+  | 'boat_tour'
   | 'metro_ticket'
   | 'taxi_short'
   | 'taxi_airport';
