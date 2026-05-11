@@ -3828,6 +3828,7 @@ function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): { activi
           transfer.startTime = minutesToHHMM(transferStartMin);
           transfer.endTime = minutesToHHMM(requiredAtAirportMin);
           transfer.durationMinutes = transferMins;
+          transfer.subcategory = 'airport_transfer'; // M2: immutability sentinel for §15b
           repairs.push({
             code: FAILURE_CODES.LOGISTICS_SEQUENCE,
             action: 'final_enforce_transfer_retime',
@@ -3835,9 +3836,14 @@ function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): { activi
             after: `${transfer.startTime}-${transfer.endTime}`,
           } as any);
           console.log(`[Repair §15z] Retimed airport transfer day=${dayNumber} ${before} → ${transfer.startTime}`);
+        } else {
+          // Already correctly timed — still stamp the sentinel so subsequent
+          // passes (§15b walk→taxi rewrites) don't recompute it.
+          transfer.subcategory = transfer.subcategory || 'airport_transfer';
         }
       } else {
         transferStartMin = parseTimeToMinutes(transfer.startTime || '') ?? transferStartMin;
+        transfer.subcategory = transfer.subcategory || 'airport_transfer';
       }
     } else {
       transfer = {
