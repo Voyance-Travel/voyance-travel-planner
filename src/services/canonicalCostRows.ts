@@ -73,6 +73,9 @@ export interface ResolveResult {
   manualFlightDelta: number;  // ditto for flight
   /** totalCents + manualHotelDelta(if includeHotel) + manualFlightDelta(if includeFlight) + manualOtherCents, clamped >=0. */
   effectiveTotalCents: number;
+  /** Diagnostic: cents resolved via the json-rescue path (rescueTag='json-missing-row').
+   * If consistently > 0 in production, the per-day backend writer or auto-backfill is broken. */
+  pricedJsonRescueCents: number;
 }
 
 export interface CanonicalManualPayment {
