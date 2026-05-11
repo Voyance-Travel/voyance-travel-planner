@@ -836,10 +836,18 @@ export function nuclearDiningStrip(
   const usedNames = new Set<string>();
   let stripped = 0;
 
+  let preservedManualPick = 0;
   for (let i = activities.length - 1; i >= 0; i--) {
     const act = activities[i];
     if (!act) continue;
     if (act.locked || act.isLocked) continue;
+    // Sentinels emitted by the meal-guard's last-resort path are explicitly
+    // marked preserveAsManualPick so the user sees a "find a place" slot
+    // instead of a silently deleted meal. Never splice these.
+    if (act?.metadata?.preserveAsManualPick === true) {
+      preservedManualPick++;
+      continue;
+    }
     if (!isPlaceholderMeal(act, destinationCity)) continue;
 
     const startTimeStr = act.startTime || act.start_time || '12:00';
