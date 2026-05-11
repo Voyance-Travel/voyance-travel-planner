@@ -1,67 +1,47 @@
-# X2 — Fix `trip_intents` INSERT privilege escalation
+# X3 — Lock down `send-push` to service-role only
 
 ## Problem
-Current INSERT policy:
-```
-WITH CHECK ((EXISTS (SELECT 1 FROM trips WHERE trips.id = trip_intents.trip_id AND trips.user_id = auth.uid())) OR (user_id = auth.uid()))
-```
-The `OR (user_id = auth.uid())` branch lets any authenticated user insert a row into ANY trip's intents simply by setting `user_id` to themselves. Active exploit path → injection of intents into other users' trips.
+`supabase/functions/send-push/index.ts` has zero auth on its handler (`verify_jwt = false` by default + no in-code check). Any anon caller can POST `{ userId, title, body, data }` and trigger an APNs push to that user's devices. Active phishing/spam vector.
 
-## Verification of existing policies (queried)
-| cmd | policy | gate |
+## Caller audit (done)
+| Caller | Auth header sent | Status |
 |---|---|---|
-| SELECT | Users can view intents for their trips | trip owner only ✓ |
-| INSERT | Users can insert intents for their trips | **trip owner OR self-id (broken)** |
-| UPDATE | Users can update intents for their trips | trip owner only ✓ |
-| DELETE | Users can delete intents for their trips | trip owner only ✓ |
+| `supabase/functions/trip-notifications/index.ts:349` | `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` (line 296) | ✓ safe |
+| `supabase/functions/send-trip-reminders/index.ts:541` | `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` (line 384) | ✓ safe |
+| `src/**` | — | **0 matches** ✓ |
 
-Only INSERT has the broken OR. UPDATE/DELETE are already strict.
+No frontend caller. No refactor needed — both internal callers already pass the service-role key.
 
-## Caller audit
-| Caller | Auth context | Risk |
-|---|---|---|
-| `src/contexts/TripPlannerContext.tsx:413` upsert | User session, trip just created by same user | Owner branch passes — safe |
-| `supabase/functions/itinerary-chat/index.ts:981` upsert | `serviceSupabase` (service role) | Bypasses RLS — safe |
-| `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts:345` select | service-role client | Bypasses RLS — safe |
+## Fix
+Add a service-role gate at the top of the `serve()` handler in `supabase/functions/send-push/index.ts`, immediately after the OPTIONS preflight (before the `try { … }` block):
 
-No legitimate caller depends on the broken OR branch.
+```ts
+if (req.method === 'OPTIONS') {
+  return new Response(null, { headers: corsHeaders });
+}
 
-## Migration
-
-```sql
-DROP POLICY IF EXISTS "Users can insert intents for their trips" ON public.trip_intents;
-
-CREATE POLICY "Users can insert intents for their trips"
-ON public.trip_intents
-FOR INSERT
-TO authenticated
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.trips
-    WHERE trips.id = trip_intents.trip_id
-      AND trips.user_id = auth.uid()
-  )
-  OR EXISTS (
-    SELECT 1 FROM public.trip_collaborators tc
-    WHERE tc.trip_id = trip_intents.trip_id
-      AND tc.user_id = auth.uid()
-      AND tc.accepted_at IS NOT NULL
-  )
-);
+// Require service-role auth — push notifications are server-triggered, never user-triggered.
+const authHeader = req.headers.get('Authorization');
+const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+if (!authHeader || !serviceRoleKey || authHeader !== `Bearer ${serviceRoleKey}`) {
+  return new Response(
+    JSON.stringify({ error: 'Forbidden — service-role auth required', code: 'FORBIDDEN' }),
+    { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
 ```
 
-Note: scoped to `TO authenticated` (was `public`) — anon never had a path here anyway.
+No other code changes. No DB migration. No `supabase/config.toml` change (existing default `verify_jwt = false` is fine since we now validate in code).
 
-## Verification post-migration
-1. `pg_policies` shows new WITH CHECK has no `(user_id = auth.uid())` standalone branch.
-2. As user A (no relation to trip T owned by user B): insert `{trip_id: T, user_id: A, …}` → RLS error (expected).
-3. As trip owner: insert succeeds.
-4. As accepted collaborator: insert succeeds.
-5. As pending collaborator (`accepted_at IS NULL`): insert fails (expected).
-6. Linter: `trip_intents_insert_weak_check` finding clears.
+## Verification
+1. `curl -X POST <send-push-url>` no auth → 403 `FORBIDDEN`
+2. `curl -X POST` with `Bearer <anon_key>` → 403 `FORBIDDEN`
+3. `curl -X POST` with `Bearer <SUPABASE_SERVICE_ROLE_KEY>` and valid body → 200 (or `NOT_CONFIGURED`/`no_tokens`)
+4. Internal callers (`trip-notifications`, `send-trip-reminders`) continue to receive 200 — they already send the service-role key.
+5. Linter no longer flags `send-push` as unauthenticated.
 
 ## Memory
-No new constraint memory needed — this is a one-off RLS tightening, not a recurring pattern. Mark security finding `trip_intents_insert_weak_check` as fixed with the migration ref.
+Update `mem://constraints/security/edge-function-auth-required` with a new bullet: `send-push` is **service-role-only** (Pattern D — strict equality check against `SUPABASE_SERVICE_ROLE_KEY`). Future callers from the frontend MUST go through an authed wrapper edge function (e.g., a hypothetical `send-trip-update-notification`) that validates the trigger then calls `send-push` with the service-role key.
 
-## Out of scope (flag, do not fix here)
-SELECT/UPDATE/DELETE on `trip_intents` are owner-only, but the new INSERT permits accepted collaborators. This means a collaborator can write an intent they cannot then read/update/delete via client (service-role reads in `compile-prompt.ts` still see it, so the intent still influences generation — the desired effect). If full collaborator parity is wanted later, add collaborator branches to the other three policies in a follow-up. Current behavior matches user's spec exactly.
+## Out of scope
+Other unauthenticated edge fns flagged in the scan (`activities/transfer-pricing no-auth`, `trip_notifications JWT-claim check`, `agency_documents visibility`, AI endpoints). Each needs its own pattern (user-auth vs service-role) — separate fixes.
