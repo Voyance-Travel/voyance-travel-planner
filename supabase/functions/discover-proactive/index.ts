@@ -29,24 +29,14 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // HARD AUTH — reject anonymous callers (paid AI gateway endpoint)
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
   try {
     const body: ProactiveRequest = await req.json();
     const { destination, archetype, dayNumber, dayActivities, tripDates, budgetTier, interests, timeOfDay, blendedDna, tripId } = body;
-
-    // Resolve userId from JWT (best-effort, optional)
-    let userId: string | null = null;
-    try {
-      const authHeader = req.headers.get("Authorization");
-      if (authHeader) {
-        const supaUrl = Deno.env.get("SUPABASE_URL");
-        const anon = Deno.env.get("SUPABASE_ANON_KEY");
-        if (supaUrl && anon) {
-          const sb = createClient(supaUrl, anon, { global: { headers: { Authorization: authHeader } } });
-          const { data } = await sb.auth.getUser();
-          userId = data.user?.id ?? null;
-        }
-      }
-    } catch (_) { /* ignore */ }
 
     if (!destination || !archetype) {
       return new Response(
