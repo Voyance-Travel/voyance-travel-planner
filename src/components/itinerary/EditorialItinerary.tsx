@@ -3330,7 +3330,12 @@ export function EditorialItinerary({
   const { guestEditMode, isPropose, setGuestEditMode, isUpdating: isUpdatingEditMode } = useGuestEditMode(tripId);
   
   // Get budget settings to pass limit to PaymentsTab
-  const { settings: budgetSettings, isGenerating: isBudgetCalculating } = useTripBudget({ tripId, totalDays: days.length, enabled: true });
+  const { settings: budgetSettings, isGenerating: isBudgetGenerating } = useTripBudget({ tripId, totalDays: days.length, enabled: true });
+  // Surface "Calculating…" both while the AI is generating AND while the
+  // canonical financial snapshot is still loading. Without the snapshot
+  // gate, refresh would briefly render `$0` and then jump to the real
+  // total — which read as "the price changed" to users.
+  const isBudgetCalculating = isBudgetGenerating || financialSnapshot.loading;
   
   // Manual builder overrides preview mode — user gets full editing without AI enrichment
   const effectiveIsPreview = isPreview && !isManualMode;
