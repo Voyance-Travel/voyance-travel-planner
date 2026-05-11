@@ -67,6 +67,74 @@ interface GrantRequest {
   metadata?: Record<string, unknown>;
 }
 
+type EligibilityResult = { ok: true } | { ok: false; code: string };
+
+/**
+ * Server-side action verification — every bonus type must prove the qualifying
+ * action actually happened before credits are granted. Closes credit-farming
+ * vector where any auth'd user could POST any bonusType and accumulate ~400
+ * free credits.
+ */
+async function verifyBonusEligibility(
+  userId: string,
+  bonusType: string,
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+): Promise<EligibilityResult> {
+  switch (bonusType) {
+    case 'welcome':
+    case 'launch': {
+      const { data, error } = await admin.auth.admin.getUserById(userId);
+      if (error || !data?.user?.email_confirmed_at) {
+        return { ok: false, code: 'EMAIL_NOT_VERIFIED' };
+      }
+      return { ok: true };
+    }
+    case 'quiz_completion': {
+      const { data } = await admin
+        .from('quiz_sessions')
+        .select('id')
+        .eq('user_id', userId)
+        .or('is_complete.eq.true,status.eq.completed,completed_at.not.is.null')
+        .limit(1)
+        .maybeSingle();
+      return data ? { ok: true } : { ok: false, code: 'ACTION_NOT_COMPLETED' };
+    }
+    case 'preferences_completion': {
+      const { data } = await admin
+        .from('user_preferences')
+        .select('travel_pace, budget_tier, interests, quiz_completed')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!data) return { ok: false, code: 'ACTION_NOT_COMPLETED' };
+      const hasInterests = Array.isArray(data.interests) && data.interests.length > 0;
+      const ok =
+        data.quiz_completed === true ||
+        (!!data.travel_pace && !!data.budget_tier && hasInterests);
+      return ok ? { ok: true } : { ok: false, code: 'ACTION_NOT_COMPLETED' };
+    }
+    case 'first_share': {
+      const { data } = await admin
+        .from('referral_codes')
+        .select('id')
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle();
+      return data ? { ok: true } : { ok: false, code: 'ACTION_NOT_COMPLETED' };
+    }
+    case 'second_itinerary': {
+      const { count } = await admin
+        .from('trips')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .in('itinerary_status', ['ready', 'partial']);
+      return (count ?? 0) >= 2 ? { ok: true } : { ok: false, code: 'ACTION_NOT_COMPLETED' };
+    }
+    default:
+      return { ok: false, code: 'UNKNOWN_BONUS_TYPE' };
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
