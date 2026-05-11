@@ -1255,6 +1255,9 @@ async function getFineDiningMap(): Promise<Record<string, number>> {
   return _fineDiningMap!;
 }
 
+// Casual-vibe titles that imply a non-fine-dining venue
+const CASUAL_VIBE_RE = /\b(casual|neighborhood|neighbourhood|simple|quick|grab|laid[- ]back|relaxed|local\s+(?:spot|place|favorite|favourite))\b/i;
+
 // Cheap synchronous lookup using cached map (populated lazily; first call may miss).
 function checkCategoryVenueCoherence(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
   // Kick off load (no-await) so subsequent calls have the map ready.
