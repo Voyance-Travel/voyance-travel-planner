@@ -97,6 +97,9 @@ export interface ValidateDayInput {
 
   /** Destination city for demonym validation */
   destination?: string;
+
+  /** Budget tier — drives tier-aware walk thresholds (luxury/luminary/splurge/premium → 20m/1000m, else 30m/1500m). */
+  budgetTier?: string;
 }
 
 // =============================================================================
