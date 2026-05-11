@@ -45,6 +45,7 @@ import {
 import { ensureDayDiningDescriptions } from '../../_shared/dining-description-backfill.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 import { pickTransitFallback, pickTransitTier, haversineMeters, extractCoords } from '../../_shared/transit-mode.ts';
+import { enforceFreshenUpPosition } from '../../_shared/freshen-up-position.ts';
 
 // =============================================================================
 // INPUT TYPES
@@ -2666,6 +2667,25 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     a.durationMinutes = freshenCapMin;
     repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: `capped_freshen_up_to_${freshenCapMin}min`, before: `${dur}min`, after: `${freshenCapMin}min` });
     console.log(`[FRESHEN-CAP] Capped "${a.title}" from ${dur}min to ${freshenCapMin}min (${start}-${a.endTime})${isFastPaced ? ' [fast-paced]' : ''}`);
+  }
+
+  // --- 9d-bis. FRESHEN-UP POSITION INVARIANT ---
+  // Drop freshen-up cards that landed after dinner; clamp those overlapping it.
+  // Runs after the cap pass so we operate on final durations.
+  {
+    const lockedIds = new Set<string>(
+      activities.filter((a: any) => a?.isLocked === true || a?.locked === true || a?.lock_state === 'locked').map((a: any) => String(a.id))
+    );
+    const res = enforceFreshenUpPosition(activities, { dayNumber, isFastPaced, lockedIds });
+    if (res.repairs.length > 0) {
+      // Mutate in place to preserve array identity for downstream passes
+      activities.length = 0;
+      activities.push(...res.activities);
+      for (const r of res.repairs) {
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: r.type });
+        console.log(`[FRESHEN_UP_POSITION] ${r.message}`);
+      }
+    }
   }
 
   // --- 9e. ORPHANED ROUND-TRIP TRANSPORT REMOVAL ---

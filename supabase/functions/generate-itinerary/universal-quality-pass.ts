@@ -17,6 +17,7 @@
 
 import { enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
 import { clampBookendEndTime } from '../_shared/clamp-bookend.ts';
+import { enforceFreshenUpPosition } from '../_shared/freshen-up-position.ts';
 import { fixPlaceholdersForDay, nuclearPlaceholderSweep, nuclearWellnessSweep, nuclearCrossCitySweep, nuclearDiningStrip } from './fix-placeholders.ts';
 import { pruneOrphanTransits } from '../_shared/orphan-transit.ts';
 import {
@@ -644,6 +645,22 @@ export function terminalCleanup(
     }
   } catch (e) {
     console.warn(`[${label}] Terminal dining strip / orphan cleanup failed (non-blocking):`, e);
+  }
+
+  // ── 1f. Freshen-up position invariant (terminal) ──
+  // Drop freshen-up cards landing after dinner, clamp those overlapping it.
+  try {
+    const lockedIds = new Set<string>(
+      activities.filter((a: any) => a?.isLocked === true || a?.locked === true || a?.lock_state === 'locked').map((a: any) => String(a.id))
+    );
+    const res = enforceFreshenUpPosition(activities, { dayNumber, lockedIds });
+    if (res.repairs.length > 0) {
+      activities.length = 0;
+      activities.push(...res.activities);
+      for (const r of res.repairs) console.warn(`[${label}] [FRESHEN_UP_POSITION] ${r.message}`);
+    }
+  } catch (e) {
+    console.warn(`[${label}] freshen-up position pass failed (non-blocking):`, e);
   }
 
   // ── 1b. Deduplicate "Return to Hotel" entries — keep only the LAST one ──
