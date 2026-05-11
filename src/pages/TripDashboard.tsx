@@ -874,15 +874,11 @@ export default function TripDashboard() {
           .map(c => (c.trip as any).id);
         const allTripIds = [...new Set([...ownedIds, ...collabTripIds])];
 
-        // Fetch collaborators + profiles for all trips
-        const { data: allCollaborators } = allTripIds.length > 0 
+        // Fetch collaborators via the safe public view (no emails, RLS-scoped to owner/co-member)
+        const { data: allCollaborators } = allTripIds.length > 0
           ? await supabase
-              .from('trip_collaborators')
-              .select(`
-                trip_id,
-                user_id,
-                profile:profiles!trip_collaborators_user_id_profiles_fkey(id, display_name, avatar_url, handle)
-              `)
+              .from('public_trip_collaborators')
+              .select('trip_id, user_id, member_display, avatar_url')
               .in('trip_id', allTripIds)
               .not('accepted_at', 'is', null)
           : { data: [] };
@@ -900,18 +896,17 @@ export default function TripDashboard() {
 
         const ownerMap = new Map((ownerProfiles || []).map(p => [p.id, p.display_name]));
 
-        // Build collaborator map per trip
+        // Build collaborator map per trip (view returns member_display + avatar_url, no email)
         const collabMap = new Map<string, TripCollaboratorInfo[]>();
         (allCollaborators || []).forEach((c: any) => {
+          if (!c?.user_id) return;
           const list = collabMap.get(c.trip_id) || [];
-          if (c.profile) {
-            list.push({
-              id: c.profile.id,
-              display_name: c.profile.display_name,
-              avatar_url: c.profile.avatar_url,
-              handle: c.profile.handle,
-            });
-          }
+          list.push({
+            id: c.user_id,
+            display_name: c.member_display ?? null,
+            avatar_url: c.avatar_url ?? null,
+            handle: null,
+          });
           collabMap.set(c.trip_id, list);
         });
 
