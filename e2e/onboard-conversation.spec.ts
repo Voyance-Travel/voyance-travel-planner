@@ -101,10 +101,12 @@ test.describe('Onboard Conversation - Submit Flow', () => {
       return;
     }
     
-    // Look for submit button
-    const submitButton = page.locator('button[type="submit"], button:has-text("Submit"), button:has-text("Continue"), button:has-text("Analyze")');
+    // Look for submit button via accessible role + name fallbacks
+    const submitButton = page
+      .getByRole('button', { name: /continue|next|submit|create|start|analyze/i })
+      .or(page.locator('button[type="submit"]'));
     const buttonCount = await submitButton.count();
-    
+
     expect(buttonCount).toBeGreaterThan(0);
   });
 
