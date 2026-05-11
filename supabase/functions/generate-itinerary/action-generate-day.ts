@@ -1664,6 +1664,15 @@ export async function handleGenerateDay(
         generatedDay.activities = mealGuardResult.activities as any;
         normalizedActivities = generatedDay.activities;
         console.warn(`[generate-day] 🍽️ MEAL GUARD FIRED: Day ${dayNumber} was missing [${mealGuardResult.injectedMeals.join(', ')}] — injected ${mealFallbackVenues.length > 0 ? 'REAL POOL venues' : 'destination-aware fallbacks'} before return`);
+
+        // Post-guard description backstop — fill empty-sentinel blurbs.
+        const { fillAfterMealGuard } = await import('../_shared/post-meal-guard-fill.ts');
+        await fillAfterMealGuard(
+          normalizedActivities as any[],
+          resolvedDestination || destination,
+          dayNumber,
+          'generate-day:final-guard',
+        );
       } else {
         console.log(`[generate-day] ✓ Meal guard passed — Day ${dayNumber} has all required meals [${dayMealPolicy.requiredMeals.join(', ')}]`);
       }
