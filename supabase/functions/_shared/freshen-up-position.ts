@@ -171,9 +171,9 @@ export function enforceFreshenUpPosition<T extends Record<string, any>>(
       }
       const before = `${a.title} @ ${a.startTime}-${a.endTime}`;
       const newEndStr = toHHMM(newEnd);
-      a.endTime = newEndStr;
+      (a as any).endTime = newEndStr;
       (a as any).end_time = newEndStr;
-      a.durationMinutes = remaining;
+      (a as any).durationMinutes = remaining;
       repairs.push({
         type: 'clamped_into_dinner',
         activityId: id,
