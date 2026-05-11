@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { requireAuth } from "../_shared/require-auth.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
@@ -361,8 +361,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const authFail = await requireAuth(req);
-  if (authFail) return authFail;
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
 
   try {
     const { text } = await req.json();

@@ -97,6 +97,7 @@ export function ReviewCapturePopup({
           .insert({ review_id: insertedReview.id, email: trimmedEmail });
         if (contactError) {
           console.warn('[ReviewCapturePopup] contact email not stored:', contactError.message);
+          toast.warning("Review saved, but we couldn't store your email for follow-up. Please contact support if you'd like updates.");
         }
       }
 

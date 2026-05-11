@@ -1,7 +1,7 @@
 // Extract text from uploaded documents (PDF, text files)
 // For use with booking import
 
-import { requireAuth } from "../_shared/require-auth.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,8 +13,9 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const authFail = await requireAuth(req);
-  if (authFail) return authFail;
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
 
   try {
     const contentType = req.headers.get('content-type') || '';
@@ -113,7 +114,7 @@ Deno.serve(async (req) => {
       .replace(/[^\x20-\x7E\n\r]/g, ' ')
       .trim();
 
-    console.log(`Extracted ${text.length} characters of text`);
+    console.log(`[parse-document-text] user=${userId} extracted=${text.length}chars`);
 
     return new Response(
       JSON.stringify({ 
