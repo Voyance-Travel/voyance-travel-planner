@@ -223,12 +223,14 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
 
     // Canonical resolver: shared with usePayableItems so the row sum, the
     // header total, AND the manual-payment fold-in apply identical rules.
+    const tripTravelers = Number((tripData as any)?.travelers) || 1;
     const canonical = resolveCanonicalCostRows({
       costs: (costs || []) as any,
       liveActivities,
       includeHotel,
       includeFlight,
       manualPayments: (allPayments || []) as any,
+      travelers: tripTravelers,
     });
     totalCents = canonical.effectiveTotalCents;
     committedHotelCents = canonical.hotelCents;
