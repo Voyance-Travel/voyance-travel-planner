@@ -22,7 +22,9 @@ import { enforceDepartureDayLogistics } from '../../generate-itinerary/pipeline/
 
 function makeBaseDay() {
   return [
-    { id: 'lunch',    title: 'Lunch at El Sur',          startTime: '13:00', endTime: '14:00', category: 'dining' },
+    // Lunch deliberately at 10:00 so that after checkout is retimed to ≤ 11:00,
+    // the time-ordered sequence is lunch(10) < checkout(11) < transfer(15:00).
+    { id: 'lunch',    title: 'Brunch at El Sur',         startTime: '10:00', endTime: '10:45', category: 'dining' },
     { id: 'checkout', title: 'Checkout from hotel',      startTime: '14:00', endTime: '14:30', category: 'accommodation' },
     { id: 'transfer', title: 'Transfer to Madrid Airport',                                          category: 'transport' },
     { id: 'dinner',   title: 'Dinner at Coque',          startTime: '19:30', endTime: '21:30', category: 'dining' },
