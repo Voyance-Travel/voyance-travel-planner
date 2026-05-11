@@ -1,93 +1,107 @@
-# M6 — Itinerary card pricing not flowing into Budget tracker
+# R4 — `public_trip_collaborators` view + REVOKE
 
-## Root cause (verified — not what the prompt assumes)
+## Current state (verified against the live DB)
 
-Budget tracker IS already reading `activity_costs`:
-- `BudgetTab.tsx::"Trip Expenses"` → `snapshot.tripTotalCents`
-- → `useTripFinancialSnapshot` → `resolveCanonicalCostRows({ costs: activity_costs… })`
-- → returns `effectiveTotalCents` (the [Single Resolver Manual Fold] memory)
+- `trip_collaborators` has **no `email` column** — emails leak only when callers join `profiles:user_id (email, …)`. Two such joins exist (`tripSharingAPI.ts` line 102, `tripCollaboratorsAPI.ts` line 425).
+- Anon already has no `SELECT` on `trip_collaborators` (`has_table_privilege('anon', …) = false`), but no explicit `REVOKE … FROM PUBLIC` is recorded — we'll add it for defense-in-depth and to satisfy the linter.
+- A `public_trip_collaborators` view already exists but:
+  - is missing `WITH (security_barrier = true)`,
+  - was not granted to `authenticated` (only `sandbox_exec`),
+  - already (correctly) keeps `user_id` in the projection — we will keep it (UUID is not PII and several callers need it for joins/filtering).
+- SELECT policies on the base table already restrict to trip owner + self; we'll re-create them to match the spec exactly (drop the existing `trip_owner_collaborator_read` / `self_collaborator_read` and re-add cleanly). INSERT/UPDATE/DELETE policies stay untouched.
 
-The shared resolver, the toBudgetCategory map, and the `getBudgetSummary` rollup all work correctly. **The bug is upstream: `activity_costs` is sparse / missing rows for most priced JSON activities.**
+## Migration (single file)
 
-### Why activity_costs is empty/sparse
+```sql
+-- 1. Recreate view, security-barriered, scoped to owner OR accepted co-member
+DROP VIEW IF EXISTS public.public_trip_collaborators;
+CREATE VIEW public.public_trip_collaborators
+WITH (security_barrier = true, security_invoker = true) AS
+SELECT
+  tc.id,
+  tc.trip_id,
+  tc.user_id,
+  tc.permission AS role,
+  tc.accepted_at,
+  tc.created_at,
+  COALESCE(p.display_name, 'Member ' || SUBSTRING(tc.id::text FROM 1 FOR 8)) AS member_display,
+  p.avatar_url
+FROM public.trip_collaborators tc
+LEFT JOIN public.profiles p ON p.id = tc.user_id;
 
-Two cost-writer paths exist:
+GRANT SELECT ON public.public_trip_collaborators TO authenticated;
+REVOKE ALL ON public.public_trip_collaborators FROM anon, PUBLIC;
 
-| Generator path | Writes `activity_costs`? |
-|---|---|
-| `generation-core.ts` Stage 6 / Phase 4 (lines 3108–3395) — legacy whole-trip path | ✅ Yes, full table-driven write |
-| `action-generate-trip-day.ts` — current per-day chain path (most trips today) | ❌ **No.** Comment at line 3258 says "post-completion cost repair intentionally removed" but the original Phase 4 *write* never existed in this file. Only `handleSyncItineraryTables` runs. |
+-- 2. Lock the base table down
+REVOKE SELECT ON public.trip_collaborators FROM anon;
+REVOKE SELECT ON public.trip_collaborators FROM PUBLIC;
 
-Result: Trips generated via the per-day chain (the default for >2-day generation) end up with whatever activity_costs `persist-day.ts` wrote during enrichment + whatever the legacy one-shot backfill seeded — frequently just hotel + a handful of rows = $160 total, while JSON cards display ~$3,600.
+-- 3. Re-state the two SELECT policies cleanly
+DROP POLICY IF EXISTS "trip_owner_collaborator_read" ON public.trip_collaborators;
+DROP POLICY IF EXISTS "self_collaborator_read" ON public.trip_collaborators;
 
-The frontend `syncBudgetFromDays` (EditorialItinerary.tsx:1371) DOES write all priced JSON activities to activity_costs, but it's intentionally NOT called on initial load (comment at line 1505: prevents "+$340 just now" jumps). It only fires on user edits — so a freshly generated trip stays under-counted until the user touches it.
+CREATE POLICY "trip_owner_collaborator_read" ON public.trip_collaborators
+FOR SELECT TO authenticated
+USING (EXISTS (
+  SELECT 1 FROM public.trips t
+  WHERE t.id = trip_collaborators.trip_id AND t.user_id = auth.uid()
+));
 
-## Plan
-
-### 1. Backend: write activity_costs at the end of every generation path
-
-**Extract Phase 4** from `generation-core.ts:3107–3395` into shared helper `supabase/functions/_shared/write-activity-costs.ts` exporting:
-
-```ts
-async function writeActivityCostsFromItinerary(
-  supabase, tripId, days, context: { destination, travelers, budgetTier, actualDailyBudgetPerPerson? }
-): Promise<{ inserted: number; skipped: number; reason?: string }>
+CREATE POLICY "self_collaborator_read" ON public.trip_collaborators
+FOR SELECT TO authenticated
+USING (user_id = auth.uid());
 ```
 
-Behavior preserved verbatim: cost_reference lookup → tier picker → walking/free-venue/unverified-meal guards → budget validation scaler → `delete + insert` for the trip.
+Note: with `security_invoker = on`, the view runs under the caller's RLS, so the implicit "owner OR co-member" filter must come from the view body itself — keeping the existing `WHERE owner OR accepted-co-member` predicate matters for cross-collaborator visibility. We'll preserve it:
 
-**Wire-up**:
-- `generation-core.ts` Stage 6: replace the inline block with `await writeActivityCostsFromItinerary(...)`.
-- `action-generate-trip-day.ts` completion branch (right after `handleSyncItineraryTables`, line 3257, BEFORE the "post-completion cost repair removed" note): `await writeActivityCostsFromItinerary(...)`. This is the missing call.
+```sql
+…
+LEFT JOIN public.profiles p ON p.id = tc.user_id
+WHERE EXISTS (
+        SELECT 1 FROM public.trips t
+        WHERE t.id = tc.trip_id AND t.user_id = auth.uid()
+      )
+   OR EXISTS (
+        SELECT 1 FROM public.trip_collaborators me
+        WHERE me.trip_id = tc.trip_id
+          AND me.user_id = auth.uid()
+          AND me.accepted_at IS NOT NULL
+      );
+```
 
-Both paths end with the same canonical activity_costs snapshot. No behavior change for the legacy path; the chain path now matches.
+## Frontend swap
 
-### 2. Frontend safety net: JSON-cost rescue when row is entirely missing
+Classify each call site. Writes (`insert/update/delete`) **always** keep direct table access (writes don't go through the view). Owner-only management reads keep direct access (so they can still join `profiles.email`). Display/list reads move to the view.
 
-In `src/services/canonicalCostRows.ts`, extend `resolveCanonicalCostRows` with a third rescue pass that runs AFTER the existing direct + orphan-id loops:
+| File | Line | Op | Action |
+|---|---|---|---|
+| `src/services/tripSharingAPI.ts` | 102 | SELECT + `profiles(email)` join | **Owner mgmt** — keep direct |
+| `src/services/tripCollaboratorsAPI.ts` | 425 | SELECT + profile join | **Owner mgmt** — keep direct |
+| `src/services/tripCollaboratorsAPI.ts` | 89 | SELECT base columns for admin map | Keep direct (owner panel) |
+| `src/services/tripCollaboratorsAPI.ts` | 141, 152, 240, 331, 343, 399 | INSERT/UPDATE/DELETE/lookup | Keep direct |
+| `src/services/tripSharingAPI.ts` | 88, 175, 195, 318, 388, 409 | writes / self-scoped reads | Keep direct |
+| `src/components/itinerary/TripCollaboratorsPanel.tsx` | 217 | UPDATE | Keep direct |
+| `src/components/itinerary/BlendRecalcBanner.tsx` | 38 | SELECT `user_id, include_preferences` | Keep direct (needs `include_preferences`, not in view) |
+| `src/hooks/useVoyanceAPI.ts` | 115 | SELECT `trip_id` where `user_id = me` | Keep direct (self policy covers it) |
+| `src/services/achievementsAPI.ts` | 403 | COUNT where `invited_by = me` | Keep direct |
+| `src/pages/TripDashboard.tsx` | 855 | SELECT where `user_id = me` (trip list join) | Keep direct (self) |
+| `src/pages/TripDashboard.tsx` | 880 | SELECT cross-collaborators with profile join (display/avatar) | **Move to `public_trip_collaborators`** |
+| `src/pages/TripDetail.tsx` | 1516 | COUNT for current trip | Keep direct (owner) |
+| `src/pages/Start.tsx` | 2632, 3125 | INSERT | Keep direct |
+| `src/utils/splitJourneyIfNeeded.ts` | 244, 259 | SELECT/INSERT during split (server-trusted owner path) | Keep direct |
+| `supabase/functions/**` | various | Edge functions use service-role key, RLS bypassed | Leave untouched |
 
-For every `liveActivities[i]` whose id was never `consumed` AND whose `jsonCost > 0` AND whose normalized category is paid (`PAID_CATS` ∪ `activity` ∪ `transport`):
-- Synthesize a `ResolvedRow` with `cents = jsonCost × travelers × 100`, `rescueTag: 'json-missing-row'`, `isLogisticsRow: false`, `source: 'json-rescue'`, `isPaid: false`.
-- Add to `out` and `totalCents`.
-- Skip walking legs (`isWalkingLeg`) and free-venue patterns (mirror existing guards).
+Net frontend change: only `src/pages/TripDashboard.tsx` line 880 needs the table swap. Update that call to `from('public_trip_collaborators').select('trip_id, user_id, member_display, avatar_url')` and adjust the consumer to read `member_display` instead of `profile.display_name` (other call sites already use `profile?.handle` etc., so we map the view fields through a small shim).
 
-Backstop ensures legacy trips (no Phase 4 ever ran) and any future orphan windows still produce correct totals without waiting for a frontend edit. Safe because rescue only fires when no DB row exists at all — once Fix #1 backfills, the direct path wins and rescue is a no-op.
+## Verification
 
-### 3. Auto-backfill trigger for legacy trips on first view
+1. `psql -c "SELECT 1 FROM information_schema.views WHERE table_name='public_trip_collaborators'"` returns one row.
+2. `psql -c "SELECT has_table_privilege('anon','public.trip_collaborators','SELECT')"` returns `f`.
+3. `psql -c "SELECT has_table_privilege('anon','public.public_trip_collaborators','SELECT')"` returns `f`.
+4. `psql -c "SELECT has_table_privilege('authenticated','public.public_trip_collaborators','SELECT')"` returns `t`.
+5. `supabase--linter` no longer flags `trip_collaborators` for PII exposure.
+6. Smoke: load the dashboard as a non-owner co-member; cross-collaborator avatars/names render via the view; owner panel still shows emails.
 
-In `useTripFinancialSnapshot` after computing the snapshot, if:
-- `costs.length === 0 || (canonical.totalCents === 0 && liveActivities.some(a => a.jsonCost > 0))`
-- AND a `lastBackfillFingerprint` ref guard hasn't already fired this session
+## Memory
 
-Then dispatch a one-shot call to a new edge function `sync-trip-cost-table` (thin wrapper over `writeActivityCostsFromItinerary` from #1, using the trip's stored `destination` / `travelers` / `budget_tier`). Fire-and-forget; on success the `booking-changed` event triggers a refetch and the JSON-rescue path quietly drops out.
-
-### 4. Tests
-
-- `__tests__/canonicalCostRows.json-missing-row-rescue.test.ts`: 3 live activities with jsonCost>0, zero costs[] → resolver returns 3 rows with `rescueTag='json-missing-row'`, totalCents = sum × travelers.
-- `__tests__/canonicalCostRows.json-missing-row-rescue.test.ts`: same activities + matching costs[] → rescue skipped, no double-count.
-- `_shared/__tests__/write-activity-costs.test.ts`: deterministic Phase-4 write given mock cost_reference + days.
-
-### 5. Memory update
-
-Update `mem://technical/finance/ui-total-cost-fallback-logic` (or new `mem://constraints/finance/activity-costs-write-parity`):
-
-> Both generator paths (`generation-core.ts` Stage 6 + `action-generate-trip-day.ts` completion) MUST call shared `writeActivityCostsFromItinerary`. Per-day chain previously skipped Phase 4 → Budget tracker drifted to $160 vs $3,600. Frontend `resolveCanonicalCostRows` carries a `json-missing-row` rescue safety net for legacy trips; `useTripFinancialSnapshot` auto-triggers `sync-trip-cost-table` once when canonical total is $0 but live JSON has prices.
-
-## Files
-
-- `supabase/functions/_shared/write-activity-costs.ts` (new — extracted Phase 4)
-- `supabase/functions/generate-itinerary/generation-core.ts` (replace inline Phase 4 with helper call)
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (add helper call after table sync)
-- `supabase/functions/sync-trip-cost-table/index.ts` (new — wrapper edge function for #3)
-- `src/services/canonicalCostRows.ts` (add json-missing-row rescue pass)
-- `src/hooks/useTripFinancialSnapshot.ts` (auto-trigger backfill on $0 + JSON-priced live)
-- `src/services/__tests__/canonicalCostRows.test.ts` (extend with 2 new cases)
-- `supabase/functions/_shared/__tests__/write-activity-costs.test.ts` (new)
-- Memory update
-
-## Verify
-
-- 3-day Madrid trip with €830/pp in JSON cards + hotel:
-  - Backend logs show `[Phase 4] Wrote N activity_costs rows (table-driven)` from the chain path completion.
-  - Budget dashboard "Trip Expenses" reads ~$3,600 (matches itinerary totals), Food/Activities/Transit categories non-zero.
-  - Reopen a legacy trip with empty `activity_costs`: snapshot reads ~correct total via JSON rescue immediately, then auto-backfills on first view; subsequent reload hits the canonical rows path.
+Add `mem://constraints/security/trip-collaborators-view-only` documenting: cross-collaborator reads MUST go through `public_trip_collaborators`; only owner-management views may join `profiles.email`; writes always go to the base table.
