@@ -493,17 +493,65 @@ function parseSingleDay(
     })
     .map((a, actIdx) => parseSingleActivity(a, dayIndex, actIdx));
 
-  // Deduplicate activities by title+startTime within the same day
-  const seen = new Set<string>();
-  const activities = parsedActivities.filter(act => {
-    const key = `${(act.title || '').toLowerCase().trim()}|${(act.startTime || '').trim()}`;
-    if (seen.has(key)) {
-      console.warn(`[itineraryParser] Day ${dayNumber}: Removing duplicate activity "${act.title}"`);
-      return false;
+  // Deduplicate activities within the same day.
+  //
+  // Hardened key (Bruges meal-loss fix): category + venue + title + startTime.
+  // Two dining cards now only collide when they're the *same* venue at the
+  // *same* time. Empty-startTime collisions are exempt entirely — that was
+  // the documented Bruges trigger where multiple meal/logistics cards with
+  // empty `startTime` collapsed to a single survivor on the key "|".
+  const DINING_CAT_RE = /(dining|food|restaurant|breakfast|lunch|dinner|brunch|cafe|café)/i;
+  const isDining = (a: any) =>
+    DINING_CAT_RE.test(String(a?.category || '')) ||
+    DINING_CAT_RE.test(String(a?.title || ''));
+  const venueOf = (a: any) =>
+    String(a?.venue_name || a?.location?.name || a?.location?.address || '').toLowerCase().trim();
+  const seen = new Map<string, any>();
+  const activities: any[] = [];
+  for (const act of parsedActivities) {
+    const start = String(act.startTime || '').trim();
+    const cat = String(act.category || '').toLowerCase().trim();
+    const venue = venueOf(act);
+    const title = (act.title || '').toLowerCase().trim();
+    // Never dedup when startTime is empty — empty-time collisions silently
+    // dropped Bruges meal cards. Always keep these.
+    if (!start) {
+      activities.push(act);
+      continue;
     }
-    seen.add(key);
-    return true;
-  });
+    const key = `${cat}|${venue}|${title}|${start}`;
+    const prior = seen.get(key);
+    if (!prior) {
+      seen.set(key, act);
+      activities.push(act);
+      continue;
+    }
+    // Tie-break: prefer dining over non-dining; prefer card with a venue
+    // over a placeholder. Never silently drop a dining card.
+    const priorIsDining = isDining(prior);
+    const actIsDining = isDining(act);
+    if (actIsDining && !priorIsDining) {
+      // Replace prior with act (keep dining).
+      const idx = activities.indexOf(prior);
+      if (idx >= 0) activities[idx] = act;
+      seen.set(key, act);
+      console.warn(`[itineraryParser] Day ${dayNumber}: dedup kept dining "${act.title}" over non-dining "${prior.title}"`);
+      continue;
+    }
+    if (!actIsDining && priorIsDining) {
+      console.warn(`[itineraryParser] Day ${dayNumber}: dedup kept prior dining "${prior.title}" over non-dining "${act.title}"`);
+      continue;
+    }
+    // Same dining-ness: prefer one with venue.
+    const priorHasVenue = !!venueOf(prior);
+    const actHasVenue = !!venue;
+    if (actHasVenue && !priorHasVenue) {
+      const idx = activities.indexOf(prior);
+      if (idx >= 0) activities[idx] = act;
+      seen.set(key, act);
+    }
+    console.warn(`[itineraryParser] Day ${dayNumber}: Removing duplicate activity "${act.title}" (cat=${cat}, venue=${venue || '∅'}, start=${start})`);
+  }
   
   // CRITICAL: Always use calculated date from tripStartDate + dayIndex when available.
   // This acts as a post-generation sanitizer — the AI sometimes returns wrong dates
@@ -593,34 +641,90 @@ export function parseItineraryDays(
     .map((day, idx) => parseSingleDay(day, idx, tripStartDate));
   
   // === LAYER 2: HARD DEDUPLICATION — by dayNumber AND by date ===
-  
-  // Step 1: Deduplicate by dayNumber — keep entry with more activities
+  //
+  // Bruges meal-loss fix: when collapsing duplicate days, salvage any dining
+  // activities from the discarded duplicate so meal cards are never silently
+  // lost. The Payments tab reads raw `activity_costs` rows (no dedup), so any
+  // dining row dropped here is exactly what causes the "Payments shows 7,
+  // itinerary shows fewer" mismatch.
+  const DINING_DAY_CAT_RE = /(dining|food|restaurant|breakfast|lunch|dinner|brunch|cafe|café)/i;
+  const isDiningAct = (a: any) =>
+    DINING_DAY_CAT_RE.test(String(a?.category || '')) ||
+    DINING_DAY_CAT_RE.test(String(a?.title || ''));
+  const actKey = (a: any) =>
+    `${String(a?.title || '').toLowerCase().trim()}|${String(a?.startTime || '').trim()}`;
+  const salvageDining = (winner: ParsedDay, loser: ParsedDay): number => {
+    if (!loser?.activities?.length) return 0;
+    const winnerKeys = new Set((winner.activities || []).map(actKey));
+    const merged = [...(winner.activities || [])];
+    let rescued = 0;
+    for (const a of loser.activities) {
+      if (!isDiningAct(a)) continue;
+      const k = actKey(a);
+      if (winnerKeys.has(k)) continue;
+      merged.push(a);
+      winnerKeys.add(k);
+      rescued++;
+    }
+    if (rescued > 0) {
+      // Re-sort chronologically by startTime where possible.
+      merged.sort((x, y) => {
+        const sx = String(x?.startTime || '99:99');
+        const sy = String(y?.startTime || '99:99');
+        return sx.localeCompare(sy);
+      });
+      winner.activities = merged;
+      console.warn(`[itineraryParser] Salvaged ${rescued} dining card(s) from duplicate day ${loser.dayNumber}`);
+    }
+    return rescued;
+  };
+
+  // Step 1: Deduplicate by dayNumber — keep entry with more activities, but
+  // salvage dining cards from the discarded duplicate.
   const byDayNumber = new Map<number, ParsedDay>();
   for (const day of parsedDays) {
     const existing = byDayNumber.get(day.dayNumber);
-    if (!existing || (day.activities?.length || 0) > (existing.activities?.length || 0)) {
+    if (!existing) {
       byDayNumber.set(day.dayNumber, day);
+      continue;
+    }
+    const dayActs = day.activities?.length || 0;
+    const exActs = existing.activities?.length || 0;
+    if (dayActs > exActs) {
+      salvageDining(day, existing);
+      byDayNumber.set(day.dayNumber, day);
+    } else {
+      salvageDining(existing, day);
     }
   }
   let deduped = Array.from(byDayNumber.values());
-  
-  // Step 2: Deduplicate by date — if two days share the same date, keep the one with more activities
+
+  // Step 2: Deduplicate by date — same salvage logic.
   const byDate = new Map<string, ParsedDay>();
   for (const day of deduped) {
     const dateKey = day.date || `fallback-day-${day.dayNumber}`;
     const existing = byDate.get(dateKey);
-    if (!existing || (day.activities?.length || 0) > (existing.activities?.length || 0)) {
+    if (!existing) {
       byDate.set(dateKey, day);
+      continue;
+    }
+    const dayActs = day.activities?.length || 0;
+    const exActs = existing.activities?.length || 0;
+    if (dayActs > exActs) {
+      salvageDining(day, existing);
+      byDate.set(dateKey, day);
+    } else {
+      salvageDining(existing, day);
     }
   }
   deduped = Array.from(byDate.values());
-  
+
   // Step 3: Sort chronologically and re-number sequentially (1, 2, 3...)
   deduped.sort((a, b) => {
     if (a.date && b.date) return new Date(a.date).getTime() - new Date(b.date).getTime();
     return a.dayNumber - b.dayNumber;
   });
-  
+
   if (deduped.length < parsedDays.length) {
     console.warn(`[itineraryParser] Deduplicated ${parsedDays.length - deduped.length} duplicate day(s)`);
   }
@@ -657,6 +761,23 @@ export function parseItineraryDays(
       // Ignore date parsing errors in diagnostic code
     }
   }
+
+  // Bruges meal-loss telemetry: compare raw dining count to result dining
+  // count. Any diff means a dedup or ghost filter dropped a meal — loud warn
+  // so a future regression is caught in browser console immediately.
+  try {
+    const countDining = (acts: any[]) =>
+      (acts || []).filter((a: any) =>
+        DINING_DAY_CAT_RE.test(String(a?.category || '')) ||
+        DINING_DAY_CAT_RE.test(String(a?.title || ''))
+      ).length;
+    const rawDining = parsedDays.reduce((sum, d) => sum + countDining(d.activities || []), 0);
+    const resultDining = result.reduce((sum, d) => sum + countDining(d.activities || []), 0);
+    console.debug(`[itineraryParser] raw_days=${parsedDays.length} result_days=${result.length} raw_dining=${rawDining} result_dining=${resultDining}`);
+    if (resultDining < rawDining) {
+      console.warn(`[itineraryParser] DINING DROP: ${rawDining - resultDining} dining card(s) lost between raw (${rawDining}) and result (${resultDining}) — investigate dedup/ghost filters`);
+    }
+  } catch { /* telemetry only */ }
 
   return result;
 }
