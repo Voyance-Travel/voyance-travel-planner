@@ -1144,7 +1144,7 @@ export function enforceRequiredMealsFinalGuard(
         if (recycled) {
           venueName = `${label} at ${recycled.name}`;
           venueAddress = recycled.address || `${recycled.name}, ${destination}`;
-          venueDescription = recycled.description || `${label} at ${recycled.name}`;
+          venueDescription = recycled.description || '';
           usedRealVenue = true;
           console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Recycling fallback DB venue "${recycled.name}" for ${mealType} (pool exhausted with unique-name filter)`);
         }
