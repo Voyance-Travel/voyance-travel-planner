@@ -23,8 +23,8 @@ import { isTransitActivity } from '../_shared/transit-detect.ts';
  * Exported so that action-repair-costs.ts and generation-core.ts use the
  * exact same list instead of maintaining their own copies.
  */
-export { ALWAYS_FREE_VENUE_PATTERNS } from '../_shared/always-free-venue-patterns.ts';
 import { ALWAYS_FREE_VENUE_PATTERNS } from '../_shared/always-free-venue-patterns.ts';
+export { ALWAYS_FREE_VENUE_PATTERNS };
 
 /** Tier 2: free only when description says "free" or price is in phantom range */
 export const TIER2_FREE_VENUE_PATTERNS = /\b(?:arch|gate|trail|path|pier|dock|wharf|embankment)\b/i;
