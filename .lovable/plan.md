@@ -1,40 +1,66 @@
-## V3 — Grep-discoverable marker migration for trip-memories no-update constraint
+# X1 — Service-only table lockdown (5 tables)
 
-The original documentation migration (`20260511133529_f55e5774-…`) is on disk but its hash filename + `name` column make it invisible to `grep -i "trip_memories"` in `supabase/migrations/`. Lovable's workflow auto-generates hash-style filenames, so Option A (rename on disk + UPDATE `schema_migrations`) would fight the tooling on the next deploy. **Going with Option B.**
+## Problem
+Linter flagged `stripe_webhook_log` for relying on Postgres default-deny rather than an explicit policy. Same shape as W2 (`customer_review_contacts`). Four sibling cache/log tables created in the same batch share the issue. All five are server-only by design — no frontend or non-service-role caller exists.
 
-### Migration (no-op marker)
+## Pre-deploy verification (already done)
+`rg` for `from('<table>')` shows:
+- 0 matches in `src/` (frontend never touches these — good)
+- All matches in `supabase/functions/` use service-role clients (`supabaseAdmin` / `idemSupabase`) — safe under the new policy because service_role bypasses RLS
 
-A new migration whose filename and SQL body both surface the constraint to `grep`/`rg`. Body is a single `SELECT` literal — no DDL, no side effects, idempotent on every push.
+Affected files (read-only, no changes needed):
+- `stripe-webhook/index.ts` (3 calls)
+- `itinerary-chat/index.ts` (2 calls)
+- `lookup-destination-insights/index.ts` (2 calls)
+- `generate-travel-intel/index.ts` (2 calls)
 
+## Migration
+
+Single migration applying both layers to all 5 tables:
+1. `stripe_webhook_log`
+2. `chat_idempotency_cache`
+3. `destination_insights_cache`
+4. `google_places_search_cache`
+5. `travel_intel_locks`
+
+For each table:
+- `REVOKE ALL ... FROM anon, authenticated, PUBLIC` — strips inherited grants
+- `CREATE POLICY "<table>_deny_non_service" AS RESTRICTIVE FOR ALL TO anon, authenticated USING (false) WITH CHECK (false)` — RESTRICTIVE is AND-ed with permissive policies, so a future accidental permissive policy still cannot expose data
+
+service_role policies + grants from prior migrations remain untouched (service_role bypasses RLS).
+
+DO-block loop over the table array for both steps.
+
+## Verification (post-migration)
+
+A. Grants check — expect 0 rows:
 ```sql
--- doc: trip-memories bucket is insert-once + delete-only by design.
--- Memory replacement MUST be implemented as DELETE-then-INSERT through
--- the upload-trip-memory edge function — never .update() or { upsert: true }.
--- See mem://constraints/security/storage-buckets-update-policy
--- Original documentation migration: 20260511133529_f55e5774-3c4c-4c3f-b923-3e6469dabb18
--- This file exists purely for grep-discoverability of the constraint.
-
-SELECT 'trip_memories_no_update_documented'::text AS marker;
+SELECT table_name, grantee, privilege_type
+FROM information_schema.role_table_grants
+WHERE table_name IN ('stripe_webhook_log','chat_idempotency_cache','destination_insights_cache','google_places_search_cache','travel_intel_locks')
+  AND grantee IN ('anon','authenticated','PUBLIC');
 ```
 
-The Lovable migration tool will assign its own timestamp + hash filename. To make the *filename* grep-able too, the SQL body's leading comment block carries the discoverable tokens (`trip_memories`, `no_update`); the marker SELECT also surfaces them in `schema_migrations.name`-equivalent listings via `pg_stat_statements` if ever needed.
-
-### Verification
-
-```bash
-rg -n "trip_memories|no_update" supabase/migrations/
-# expect at least the new marker file
-```
-
+B. Policy presence — expect 2 rows per table (1 PERMISSIVE service_role + 1 RESTRICTIVE deny):
 ```sql
-SELECT version, name
-FROM supabase_migrations.schema_migrations
-WHERE name ILIKE '%trip_memories%' OR name ILIKE '%no_update%';
--- expect ≥1 row (the new marker)
+SELECT tablename, policyname, permissive
+FROM pg_policies
+WHERE tablename IN ('stripe_webhook_log','chat_idempotency_cache','destination_insights_cache','google_places_search_cache','travel_intel_locks')
+ORDER BY tablename, policyname;
 ```
 
-### Out of scope
+C. Re-run `supabase--linter` — `stripe_webhook_log` finding resolved + 3 sibling warnings (`chat_idempotency_cache`, `destination_insights_cache`, `google_places_search_cache`) also clear.
 
-- No rename of the original `20260511133529_f55e5774-…` file (would desync the migrations table).
-- No direct UPDATE on `supabase_migrations.schema_migrations`.
-- No code, RLS, or memory edits — `mem://constraints/security/storage-buckets-update-policy` already documents the rule and the re-audit grep.
+D. Functional sanity: stripe-webhook insert path + itinerary-chat idempotency upsert continue to work (service_role bypasses RLS).
+
+## Memory
+
+Create `mem://constraints/security/service-only-tables`:
+> Five tables are service-role-only: `stripe_webhook_log`, `chat_idempotency_cache`, `destination_insights_cache`, `google_places_search_cache`, `travel_intel_locks`. Each has (1) RLS enabled, (2) permissive `Service role full access` policy for service_role, (3) RESTRICTIVE deny policy for anon + authenticated, (4) no table-level GRANTs to anon/authenticated/PUBLIC. Any new service-only cache/log table MUST follow this pattern. Frontend must never `supabase.from(...)` these tables.
+
+Add Core index line referencing the new memory.
+
+Mark security finding `stripe_webhook_log_no_authenticated_read` (and the 3 sibling cache warnings) as fixed.
+
+## Out of scope
+The other security findings in the panel (trip_intents INSERT, send-push no-auth, AI endpoints no-auth, activities/transfer-pricing no-auth, trip_notifications JWT-claim check, agency_documents visibility) — separate fixes, not part of this migration.
