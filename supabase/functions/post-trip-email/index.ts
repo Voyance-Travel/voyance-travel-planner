@@ -37,6 +37,12 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // JWT auth: derive caller identity from the validated token.
+  // parseAuth allows service-role bypass (returns userId === 'service_role')
+  // for internal cron callers; user JWTs return their auth.uid().
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -50,11 +56,12 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { tripId, userId, forceResend }: PostTripEmailRequest = await req.json();
+    const body: PostTripEmailRequest & { userId?: string } = await req.json();
+    const { tripId, forceResend } = body;
 
-    if (!tripId || !userId) {
+    if (!tripId) {
       return new Response(
-        JSON.stringify({ error: "tripId and userId are required" }),
+        JSON.stringify({ error: "tripId is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
