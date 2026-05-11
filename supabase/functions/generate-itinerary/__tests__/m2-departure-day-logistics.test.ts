@@ -76,5 +76,6 @@ Deno.test("M2: no flight info → checkout defaults to 11:00, no synthetic airpo
     /check[\s-]?out/i.test(a.title || "")
   );
   assert(checkout, "checkout must be injected");
+  console.log("[DEBUG] checkout startTime =", JSON.stringify(checkout!.startTime), "all titles=", out.activities.map((a:any)=>a.title));
   assertEquals(checkout!.startTime, "11:00");
 });
