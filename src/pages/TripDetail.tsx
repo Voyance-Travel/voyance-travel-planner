@@ -1820,6 +1820,12 @@ export default function TripDetail() {
       next.delete('generate');
       return next;
     }, { replace: true });
+
+    // Reset scroll so the new itinerary opens at the top, not wherever
+    // the generation progress UI happened to be scrolled to.
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    });
     
     // Force-save to backend so we never regenerate on refresh
     // CRITICAL: Never decrease unlocked_day_count — use max of existing vs computed
