@@ -1,68 +1,63 @@
-## Bug 3 — Phantom meal references in non-dining card descriptions
+## Bug 4 — Evening dead-gaps (18:00–22:00) not flagged or filled
 
-**Root cause.** `prompt-leak-scrub.ts` already has a phantom-ref scrubber (`scrubPhantomEventRefs`) that compares card copy against a `DayScheduleSummary` (which already tracks `hasBreakfast/hasLunch/hasDinner/...`) and is wired into `scrubActivity` at validate-day, repair-day §10b, save-itinerary, and the UI sanitizer.
+**Root cause.** `pipeline/fill-dead-gaps.ts` is hard-coded to the afternoon window `AFTERNOON_START_MIN = 12*60` → `AFTERNOON_END_MIN = 19*60` for both the filler (`fillAfternoonDeadGaps`) and the post-pass reporter (`reportRemainingAfternoonDeadGap`). A 18:42 → 22:48 gap (4h6m) lies entirely past the upper bound, so neither function sees it.
 
-The detector covers time-bound prefixes only:
-- `tonight's dinner`, `this evening's dinner`
-- `today's lunch`, `this afternoon's lunch`
-- `this morning's breakfast`
-- `leave by HH:MM for ...`
-- `after/before/following + (the|your|tonight's|today's|this evening's|...) + noun`
+**Approach.** User option (b) — refactor to a single window-parameterized helper, then call it twice (afternoon + evening) at every existing call site. Cleaner than option (a), keeps the body of the algorithm in one place, and avoids drift between the two reporters.
 
-It does **not** match bare prep references like `"Freshen Up before anniversary dinner."` — `before` is not followed by a determiner, so the existing `after/before/following` pattern falls through and the clause survives even when the day has no dinner card.
+## Changes
 
-The plumbing (per-day summary, multi-call-site invocation, blank-vs-rebuild rules, validation-gate detector) is correct. The fix is just **one new pattern** plus tests.
+### 1. `supabase/functions/generate-itinerary/pipeline/fill-dead-gaps.ts`
 
-## Change
+- Add `EVENING_START_MIN = 18*60`, `EVENING_END_MIN = 22*60` constants alongside the existing afternoon ones.
+- Generalize the existing function bodies to accept a `window: { fromMins: number; toMins: number; label: 'afternoon' | 'evening' }` parameter:
+  - Rename the algorithmic core to `fillDeadGapsForWindow(activities, opts, window)` (internal, not exported). All references to `AFTERNOON_START_MIN` / `AFTERNOON_END_MIN` inside the loop and overlap math are replaced by `window.fromMins` / `window.toMins`.
+  - Same for the reporter — extract `reportRemainingDeadGapForWindow(activities, latestUsableMins, window)`.
+- Keep the existing exports as thin wrappers so the 4 call sites in `action-generate-day.ts` + `action-generate-trip-day.ts` keep working unchanged:
+  - `fillAfternoonDeadGaps(...)` → calls `fillDeadGapsForWindow(..., { fromMins: 12*60, toMins: 19*60, label: 'afternoon' })`.
+  - `reportRemainingAfternoonDeadGap(...)` → calls `reportRemainingDeadGapForWindow(..., { fromMins: 12*60, toMins: 19*60, label: 'afternoon' })`.
+- Add new exports:
+  - `fillEveningDeadGaps(...)` → calls the same core with the evening window.
+  - `reportRemainingEveningDeadGap(...)` → same for the reporter.
+- Logging: the existing `[fill-dead-gaps] Detected …` log already prints the gap. Update both functions to include `window.label` in their log lines (e.g. `[fill-dead-gaps][evening] Detected 4h6m gap …`). For the reporter, add `console.warn(\`[QUALITY] Day ${dayNumber ?? '?'} has ${largest}m unplanned ${window.fromMins/60}:00-${window.toMins/60}:00\`)` when `largest >= MIN_GAP_MIN`. Reporter signature gains an optional `dayNumber?: number` so the log includes context — backward-compatible with the existing `(activities, latestUsableMins)` callers.
+- The existing `LAST_DAY_MIN_GAP_MIN = 75` thin-finish threshold is afternoon-specific (departure-day "graceful finish"). Keep it tied to `window.label === 'afternoon'`; evening uses the standard `MIN_GAP_MIN = 180`. Last-day evening fill is implicitly excluded already because last-day flights almost always close the window before 22:00 via `latestUsableMins`.
+- Departure-day skip: still applies to evening — if `opts.isLastDay && (latestUsableMins === undefined || latestUsableMins <= window.fromMins)`, skip.
 
-### `supabase/functions/_shared/prompt-leak-scrub.ts`
+### 2. `supabase/functions/_shared/fill-gap.ts`
 
-Append a new entry to `PHANTOM_REF_PATTERNS` that catches bare prep-verb references to meals when no determiner is present:
+- Add optional `preferCategory?: 'dining' | 'culture' | 'activity'` to `FillGapInput`.
+- When set, append one line to the system prompt: `PREFERRED CATEGORY: ${preferCategory} — pick a real ${preferCategory} venue if a believable option exists; otherwise return another category that fits the WINDOW.`
+- This is a soft preference (not a hard rule) — Bug 1's meal-guard remains the primary mechanism for missing dinners. We're only nudging the filler when the meal-guard already ran and an evening gap still survives.
 
-```ts
-// "before/after/for/prep for/ahead of/en route to anniversary dinner" —
-// bare meal reference without a determiner. Resolves only when the day
-// actually contains the named meal slot (post meal-guard injections, the
-// summary reflects every scheduled card).
-{
-  re: /\b(?:before|after|for|prep(?:aring)?\s+for|ahead\s+of|en\s+route\s+to|on\s+the\s+way\s+to|heading\s+to|towards?)\s+(?:[a-z][\w-]+\s+){0,3}?(breakfast|brunch|lunch|dinner|supper|nightcap)\b/gi,
-  resolves: (m, s) => {
-    const meal = (m[1] || '').toLowerCase();
-    if (meal === 'breakfast' || meal === 'brunch') return s.hasBreakfast || s.hasBrunch;
-    if (meal === 'lunch')   return s.hasLunch;
-    if (meal === 'dinner' || meal === 'supper') return s.hasDinner;
-    if (meal === 'nightcap') return s.hasNightcap;
-    return false;
-  },
-},
-```
+### 3. Call sites — add evening pass after each afternoon pass
 
-Order matters — keep this **after** the existing time-bound patterns so the more-specific `tonight's dinner` rule still wins (avoids double-counting in `stripped`).
+`action-generate-trip-day.ts` (3 sites: ~1515, ~1671 retry, ~1700 reporter):
 
-The single-segment blanking heuristic (≥3 substantive non-phantom words → keep) and multi-segment clause-drop logic in `scrubPhantomEventRefsFromString` already do the right thing for both cases:
-- `"Freshen Up before anniversary dinner."` (no dinner) → single segment, <3 substantive words after strip → blanked → description-fill backfills.
-- `"Freshen up at the Ritz; leave by 20:30 for anniversary dinner."` (no dinner) → multi-segment, second clause dropped → `"Freshen up at the Ritz."`
-- `"Freshen Up before anniversary dinner."` (dinner card present) → resolves true → no change.
+- After each `fillAfternoonDeadGaps(...)` call, add a sibling `fillEveningDeadGaps(dayResult.activities, { ...same opts..., preferCategory: 'dining' })`. Pass `preferCategory: 'dining'` through the opts → `proposeGapFiller` so it surfaces in the prompt.
+- After the existing `reportRemainingAfternoonDeadGap(...)`, add `reportRemainingEveningDeadGap(dayResult.activities, _gapLatestMins2, dayNumber)`.
 
-No call-site changes; the new pattern flows through `scrubActivity` everywhere it's already wired (validate-day, repair-day §10b, save-itinerary `normalizeDays`, UI `activityNameSanitizer`). The validation-gate `DESCRIPTION_GHOST_REFERENCE` code reuses the same detector and will fire on residuals automatically.
+`action-generate-day.ts` (2 sites: ~1349, ~1368): same — add evening fill + reporter after the existing afternoon ones.
 
-### `supabase/functions/_shared/__tests__/phantom-ref-clause-scrub.test.ts`
+`FillDeadGapsOptions` gets an optional `preferCategory?: 'dining' | 'culture' | 'activity'` that is threaded into the `proposeGapFiller` call inside the core helper. Afternoon callers pass nothing (preserve current behavior); evening callers pass `'dining'`.
 
-Add 4 cases:
-1. `"Freshen Up before anniversary dinner."` + summary with `hasDinner=false` → field blanked.
-2. Same input + `hasDinner=true` → unchanged.
-3. `"Freshen up at the Ritz; leave by 20:30 for anniversary dinner."` + `hasDinner=false` → second clause dropped, first kept with period.
-4. `"Light walk before lunch at Casa Mono"` + `hasLunch=true` → unchanged (no false positive when meal exists; protects rich single sentences via the ≥3-substantive-word rule).
+### 4. Test — `supabase/functions/generate-itinerary/__tests__/evening-dead-gap.test.ts`
+
+4 cases against `reportRemainingDeadGapForWindow` / `reportRemainingEveningDeadGap`:
+
+1. 18:42 dinner-end → 22:48 hotel-return → reports `~246m` for evening window (≥180m threshold met).
+2. Activity 19:00 → 22:00 (full evening covered) → reports `0`.
+3. Late-nightlife trailing card 21:30 → 23:30 → reports `0` (no evening gap, even though afternoon may still flag).
+4. 17:00 → 22:30 with no card in between → only the portion from 18:00 onward counts toward evening (4h30m → reports `≥240m`).
+
+Plus 1 wrapper smoke test confirming the legacy `reportRemainingAfternoonDeadGap(activities)` 2-arg signature still returns the same numbers as before (no regression).
 
 ## Out of scope
 
-- No changes to `buildDayScheduleSummary` (already tracks every meal slot needed).
-- No changes to `_shared/scrub-activity.ts` or its call sites.
-- No changes to `validation-gate.ts` — it already emits `DESCRIPTION_GHOST_REFERENCE` via the shared detector.
-- Generic non-meal phantom nouns (e.g. "before the gallery" without determiner) are intentionally not added; user scope is meal references only.
+- Refactoring `proposeGapFiller`'s curated-fallback path — its `dining` branch already exists for `mealSlot`-y windows; the soft-preference nudge in the AI prompt is enough.
+- Changing the meal-guard injection logic itself — that's Bug 1's territory; this fix is the safety net when the meal-guard already ran and a >180m evening hole still exists.
+- Hard upper bound past 22:00 — late-nightlife windows (22:00–02:00) are governed by separate `late_nightlife_bookend` logic; we deliberately stop at 22:00 to avoid double-flagging that path.
 
 ## Verification
 
-- `deno test --allow-all supabase/functions/_shared/__tests__/phantom-ref-clause-scrub.test.ts` (existing 4 + new 4 pass).
-- Sentinel `[SCRUB_PHANTOM_REF] stripped=N fields=description …` already logs from `scrubActivity`.
-- Re-generate the Istanbul Day 2 trip → "Freshen Up" card description no longer mentions "anniversary dinner" when no dinner card follows.
+- `deno test --allow-all supabase/functions/generate-itinerary/__tests__/evening-dead-gap.test.ts` (5 pass).
+- Re-generate a Day 1 with a 18:42 → 22:48 hole → expect `[fill-dead-gaps][evening] Detected …` log + either an inserted dining card or a `[QUALITY] Day 1 has 246m unplanned 18:00-22:00` warning.
+- Existing afternoon-gap tests (if any) and 4 existing call sites continue to compile & behave identically (legacy wrappers preserve the old signatures and constants).
