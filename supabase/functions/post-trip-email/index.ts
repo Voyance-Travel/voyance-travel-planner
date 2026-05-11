@@ -77,8 +77,11 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Trip not found");
     }
 
-    // Verify ownership
-    if (trip.user_id !== userId) {
+    // Derive trip-owner userId for downstream queries. For user JWTs, the
+    // caller MUST own the trip. Service-role callers (internal cron) trust
+    // the trip's stored owner.
+    const userId = auth.userId === "service_role" ? trip.user_id : auth.userId;
+    if (auth.userId !== "service_role" && trip.user_id !== auth.userId) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
