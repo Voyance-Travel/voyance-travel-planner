@@ -282,22 +282,16 @@ export function resolveCanonicalCostRows({
   // positive `jsonCost`, synthesize a counted row so the budget header
   // matches the visible card prices. Drops out automatically once the
   // backend writer fills in real rows on next sync.
+  const rescueTravelers = Math.max(1, Number(travelers) || 1);
   for (const live of liveActivities) {
     if (consumed.has(live.id)) continue;
     if (!(live.jsonCost > 0)) continue;
     if (isWalkingLeg({ title: live.name })) continue;
     const mapped = normalizeCanonicalCategory(live.category, live.name);
-    if (!mapped) continue; // only paid/known categories
-    // Free-venue heuristic guard (cheap; mirrors existing free-venue write guard
-    // used elsewhere — relies on sanitization pattern matching when available).
-    const cents = Math.round(live.jsonCost * 100); // jsonCost is per-person? It's `act.cost.amount` — treat as TOTAL since UI displays it as written
-    // Note: jsonCost reflects whatever the JSON `cost.amount` field carried,
-    // which the snapshot writer treats as PER-PERSON when cloned to activity_costs.
-    // To stay consistent with that writer, multiply by travelers via num_travelers
-    // resolved from the existing cost row population path. Since rescue runs only
-    // when there's NO row, we have no num_travelers — use 1 (per-person) and let
-    // the resolver multiplier handle it. Tests assert behavior.
-    const rescuedCents = Math.round(live.jsonCost * 1 * 100);
+    if (!mapped) continue; // only known categories
+    // Treat jsonCost as per-person (matches snapshot writer's resolvePerPersonForDb).
+    const rescuedCents = Math.round(live.jsonCost * rescueTravelers * 100);
+    if (rescuedCents <= 0) continue;
     consumed.add(live.id);
     totalCents += rescuedCents;
     out.push({
@@ -309,7 +303,7 @@ export function resolveCanonicalCostRows({
       rescueTag: 'json-missing-row',
       isLogisticsRow: false,
       name: live.name,
-      numTravelers: 1,
+      numTravelers: rescueTravelers,
       isPaid: false,
       paidAmountUsd: null,
       source: 'json-rescue',
