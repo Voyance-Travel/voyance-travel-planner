@@ -90,6 +90,15 @@ export interface BackfillResult {
  * In-place backfill of `description` on a single dining activity.
  * Returns the source used (or 'noop' if nothing applied / already populated).
  */
+// Templated meal-guard leaks that look "filled" but carry zero insider value.
+// Treat as missing so a real fallback / LLM blurb can replace them.
+const TEMPLATED_LEAK_RE =
+  /(— a real local spot worth visiting|—\s*pick a (?:restaurant|caf[eé]|spot)|^\s*(?:breakfast|brunch|lunch|dinner|drinks|nightcap)\s+at\s+[^.!?]+\.?\s*$)/i;
+
+export function isTemplatedDiningDescription(desc: string): boolean {
+  return TEMPLATED_LEAK_RE.test(desc.trim());
+}
+
 export function ensureDiningDescription(
   act: any,
   destinationCity?: string,
@@ -98,7 +107,8 @@ export function ensureDiningDescription(
 
   const existing =
     typeof act.description === 'string' ? act.description.trim() : '';
-  if (existing.length >= 20) return { source: 'noop', changed: false };
+  const isTemplatedLeak = existing.length > 0 && isTemplatedDiningDescription(existing);
+  if (existing.length >= 20 && !isTemplatedLeak) return { source: 'noop', changed: false };
 
   const venue = extractVenueName(act);
   const city = cityKey(destinationCity);
@@ -114,6 +124,14 @@ export function ensureDiningDescription(
   if (typeof why === 'string' && why.trim().length >= 20) {
     act.description = why.trim();
     return { source: 'whyThisFits', changed: true };
+  }
+
+  // If we can't backfill from a static source AND the existing copy is the
+  // templated meal-guard leak, blank it so the downstream LLM
+  // `fillMissingDescriptions` backstop treats it as missing and rewrites.
+  if (isTemplatedLeak) {
+    act.description = '';
+    return { source: 'noop', changed: true };
   }
 
   return { source: 'noop', changed: false };
