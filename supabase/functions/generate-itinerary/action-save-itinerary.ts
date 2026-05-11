@@ -388,6 +388,15 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
             // detected_post is computed implicitly by callers; skip here to keep payload small.
             source: 'save-itinerary',
           };
+
+          // Post-guard description backstop — fill empty-sentinel blurbs.
+          const { fillAfterMealGuard } = await import('../_shared/post-meal-guard-fill.ts');
+          await fillAfterMealGuard(
+            itineraryDays[i].activities as any[],
+            destination,
+            dayNumber,
+            'save-itinerary',
+          );
         }
       }
 
