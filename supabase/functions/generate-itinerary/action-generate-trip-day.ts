@@ -1437,7 +1437,7 @@ async function _handleGenerateTripDayInner(
         await fillMissingDescriptions(
           dayResult.activities || [],
           cityInfo?.cityName || destination,
-          LOVABLE_API_KEY,
+          Deno.env.get("LOVABLE_API_KEY") || undefined,
           dayNumber,
         );
       } catch (err) {
