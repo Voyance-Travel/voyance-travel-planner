@@ -1127,7 +1127,8 @@ export function enforceRequiredMealsFinalGuard(
         if (fallback) {
           venueName = `${label} at ${fallback.name}`;
           venueAddress = fallback.address || `${fallback.name}, ${destination}`;
-          venueDescription = fallback.description || `${label} at ${fallback.name}`;
+          // Empty sentinel when fallback DB has no real blurb — post-guard fill writes one.
+          venueDescription = fallback.description || '';
           usedVenueNamesForInjection.add(fallback.name.toLowerCase());
           usedRealVenue = true;
           console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Using FALLBACK DB venue "${fallback.name}" for ${mealType}`);
