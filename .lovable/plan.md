@@ -1,80 +1,98 @@
-# M6 + R4 Implementation Plan (with reviewer notes incorporated)
+## Scope
 
-## M6 — Budget tracker: missing `activity_costs` writes on per-day chain
-
-### Root cause (confirmed)
-Two generator paths exist; only `generation-core.ts` (legacy whole-trip) writes `activity_costs`. The current default `action-generate-trip-day.ts` (per-day chain) never calls the writer, so `BudgetTab → snapshot.tripTotalCents → resolveCanonicalCostRows({ costs: activity_costs })` reads an empty/sparse table and renders $0 / "$160 vs $3,600 in cards" drift.
-
-### Three-layer fix
-
-**Layer 1 — Backend writer parity (source-of-truth fix for new trips)**
-- Extract Phase 4 of `generation-core.ts` Stage 6 into a new shared helper `supabase/functions/_shared/activity-costs-writer.ts` exporting `writeActivityCostsFromItinerary(supabase, tripId, days, travelers)`.
-- Call it from `action-generate-trip-day.ts` after the per-day table sync (same point where transit/cost normalization completes), and replace the inline call in `generation-core.ts` with the shared helper.
-- Sentinel: `[writeActivityCostsFromItinerary] Wrote N rows for trip=…`.
-
-**Layer 2 — Frontend rescue (display correctness for legacy trips, no DB write)**
-- Add a `json-missing-row` rescue branch in `resolveCanonicalCostRows` (`src/lib/payments/resolveCanonicalCostRows.ts`): when an itinerary activity has a price but no matching `activity_costs` row, synthesize an in-memory canonical row from the JSON.
-- **Reviewer note 1 (confirm in code):** Rescued rows MUST carry `isPaid: false` and `source: 'json-rescue'`. Add an explicit assertion + unit test that no rescue path ever writes `isPaid: true` (would falsely trigger payment-flow filters in `usePayableItems` / `PaymentsTab`). Display-only until Layer 1/3 catches up.
-
-**Layer 3 — One-shot auto-backfill (DB heals over time)**
-- New edge function `supabase/functions/sync-trip-cost-table/index.ts` that re-invokes `writeActivityCostsFromItinerary` for a single trip.
-- `useTripFinancialSnapshot` invokes it once per session **per trip** when canonical total = $0 but live JSON has prices.
-- **Reviewer note 2 (fingerprint guard):** The `lastBackfillFingerprint` ref MUST be keyed `${tripId}:${jsonPriceHash}`, not a global session flag. A user with 3 legacy trips opening all 3 in the same session must trigger 3 backfills. Add a unit test asserting the second `tripId` is not skipped after the first fires.
-- Sentinel: `[useTripFinancialSnapshot] auto-backfilled activity_costs for legacy trip=…`.
-
-### Tests
-- Unit: writer parity (per-day chain output matches whole-trip output for a fixture trip).
-- Unit: rescue rows always `isPaid: false`.
-- Unit: backfill fingerprint scoped per `tripId`.
-- Manual: regenerate one fresh trip (verify `activity_costs` populated) + open one pre-existing legacy trip (verify rescue displays correct total immediately, then backfill fires once, then refresh shows canonical rows).
-
-### Memory
-Update `mem://constraints/finance/activity-costs-write-parity` to note the per-trip fingerprint contract and `isPaid: false` rescue invariant.
+Three approved items: R5 (verify-only), M2 (departure-day logistics refined), M6 round 2 (coverage-based auto-backfill trigger + sync-trip-cost-table category audit).
 
 ---
 
-## R4 — `public_trip_collaborators` view hardening
+## R5 — parse-* auth gate (no-op verify)
 
-### Scope (narrowed after live-DB verification)
-Base table `trip_collaborators` is already locked from anon. View already exists. Real changes are minimal:
+**Goal:** Confirm all four parse-* edge functions reject unauthenticated requests and accept authed ones. No code changes expected.
 
-1. **Migration:** Add `security_barrier = true` + `security_invoker = on` to the existing `public_trip_collaborators` view; recreate with the dual-EXISTS WHERE (owner OR accepted co-member); `GRANT SELECT` to `authenticated`; ensure base table has `trip_owner_collaborator_read` + `self_collaborator_read` SELECT policies and is REVOKEd from anon/PUBLIC.
-2. **Frontend:** Single-line swap in `src/components/TripDashboard.tsx:880` from `trip_collaborators` → `public_trip_collaborators` for the cross-collaborator display read. All other call sites (writes, owner email-join management, self-scoped reads) stay on the base table — verified one-by-one.
+**Steps:**
+1. `supabase--curl_edge_functions` against each of: `parse-booking-confirmation`, `parse-document-text`, `parse-travel-story`, `parse-trip-input`.
+   - Unauth call (explicit empty Authorization header) → expect 401.
+   - Authed call (preview session) → expect 200 / 4xx-validation (anything not 401).
+2. Confirm each function imports from `_shared/require-auth.ts` (quick `rg`).
+3. If all pass: close R5, no migration, no memory entry.
+4. If any single function fails: spot-fix only that function by wiring `require-auth.ts` (smallest possible diff). No broad refactor.
 
-### Reviewer concern — profiles RLS probe (BLOCKING gate before merge)
-The view's `LEFT JOIN public.profiles p` under `security_invoker = on` respects caller RLS on `profiles`. If `profiles` only allows self-reads, names fall through `COALESCE` to `'Member abc12345'` placeholders.
-
-**Pre-merge probe (will run via `supabase--read_query` before applying the migration):**
-```sql
--- Pick a real (userA, userB) pair that share an accepted trip_collaborators row.
--- Simulate userA's view of userB:
-SELECT id, display_name, avatar_url
-FROM public.profiles
-WHERE id = '<userB_id>';
--- Then check current RLS:
-SELECT polname, polqual::text
-FROM pg_policy
-WHERE polrelid = 'public.profiles'::regclass;
-```
-
-**Decision tree:**
-- If `display_name` is readable for co-collaborators → ship as planned.
-- If RLS blocks it → add a companion migration with a `profiles_collaborator_read` policy: `SELECT` allowed when `EXISTS (collaborator pair where current user and target user share at least one accepted trip_collaborators row, in either direction)`. Limit exposed columns by view projection (already only `display_name`, `avatar_url`).
-
-### Tests
-- SQL: assert `has_table_privilege('anon', 'trip_collaborators', 'SELECT') = false`.
-- SQL: assert view returns rows for owner + accepted co-member, zero rows for unrelated user.
-- App: TripDashboard displays real `display_name` for collaborators (not `Member abc12345`).
-
-### Memory
-Extend `mem://constraints/security/trip-collaborators-view-only` with the `security_barrier + security_invoker` rationale and note that profiles RLS may need a companion `profiles_collaborator_read` policy depending on probe result.
+**Deliverable:** Verification log in chat. No file changes if green.
 
 ---
 
-## Order of operations
-1. Run profiles RLS probe (R4 gate) — read-only.
-2. Land M6 Layer 1 (writer extraction + per-day call) — migration-free.
-3. Land M6 Layer 2 (rescue) + Layer 3 (auto-backfill edge fn + hook) — migration-free.
-4. Land R4 migration (view + grants, plus optional profiles policy if probe failed).
-5. Land R4 frontend 1-line swap.
-6. Run full vitest + manual QA on one fresh trip + one legacy trip + one collaborator-shared trip.
+## M2 — Departure-day logistics (refined, single source of truth)
+
+**Goal:** Eliminate the Madrid failure shape (21:05 checkout + untimed airport transfer + post-midnight dinner) by aligning §8/§8b with one deterministic helper instead of layering a contradictory pass.
+
+**Steps:**
+
+1. **Extract** `enforceDepartureDayLogistics(day, tripCtx)` into `supabase/functions/_shared/departure-day.ts`. Pure function, returns mutated day + ops log.
+   - Computes checkout time = `min(11:00, dep − buffer − transferMins − 60)` (existing rule).
+   - Inserts/repositions airport transfer ending at `dep − buffer`.
+   - **Marks the airport transfer with `subcategory: 'airport_transfer'`** as the immutability sentinel.
+   - Hard-prunes any non-locked, non-logistics card whose `startTime ≥ transfer.startTime` (covers the post-midnight dinner case explicitly; wrap-past-midnight times treated as "after transfer" via the same `parseTime` wrap rule used in TripHealthPanel).
+
+2. **Replace** the existing logic inside `repair-day.ts` §8 (checkout retime) and §8b (transfer retime) with calls to the shared helper. Remove the per-pass ad-hoc patching so there is no tug-of-war.
+
+3. **Guard the realignment pass:** in the final transport-realignment step (§15c / `repair-transports`), short-circuit any card where `subcategory === 'airport_transfer'` — do not recompute its timing as a venue-to-venue walk.
+
+4. **Save-time safety net:** in `action-save-itinerary` `normalizeDays`, run a lightweight `pruneNonLogisticsAfterAirportTransfer(day)` after `pruneNonLogisticsAfterCheckout`. Defense-in-depth only; repair-day remains the contract.
+
+5. **Tests** (`supabase/functions/generate-itinerary/__tests__/departure-day-logistics.test.ts`):
+   - 13:30 flight, 90m buffer, 30m transfer → checkout 09:15–10:00, transfer ends 12:00.
+   - No flight info → checkout 11:00, no synthetic transfer, nothing scheduled after 12:00.
+   - Madrid shape: 21:05 checkout + untimed transfer + 22:10–24:25 dinner → checkout retimed earlier, transfer timed against flight, dinner pruned.
+   - Realignment pass run after helper → airport_transfer timing unchanged.
+
+6. **Memory:** update `mem://constraints/itinerary/departure-day-final-enforcement` to reference the shared helper + `subcategory: 'airport_transfer'` sentinel.
+
+---
+
+## M6 round 2 — Coverage-based auto-backfill + sync audit
+
+**Goal:** Fix the trigger gap exposed by Madrid (hotel row exists → round-1 trigger never fires → dining/activities stay unwritten) AND verify the backfill function actually writes the full category set.
+
+**Steps:**
+
+1. **Audit `sync-trip-cost-table`:** read the function and confirm it iterates **every day** and calls `writeActivityCostsFromItinerary` (which writes dining + activity + transit + hotel + flight). If it currently scopes to a subset of categories or only Day 0, widen it to the full set. Add a unit test asserting all categories with non-zero JSON price are written.
+
+2. **Replace the trigger condition** in `useTripFinancialSnapshot` (`src/hooks/useTripFinancialSnapshot.ts`):
+   ```ts
+   const pricedJsonIds = new Set(/* ids of JSON activities with price > 0 */);
+   if (pricedJsonIds.size === 0) return; // no priced activities → no gap
+   const uncoveredPriced = [...pricedJsonIds].filter(id => !canonicalIds.has(id));
+   const coverageRatio = 1 - uncoveredPriced.length / pricedJsonIds.size;
+   if (coverageRatio < 0.5 && fingerprintChanged) {
+     console.warn(`[useTripFinancialSnapshot] activity_costs coverage ${(coverageRatio*100).toFixed(0)}% for trip ${tripId} (uncovered=${uncoveredPriced.length}) — triggering backfill`);
+     fire backfill;
+   }
+   ```
+   - Guard `pricedJsonIds.size > 0` precedes the ratio check.
+   - Reuse the per-trip fingerprint (`${tripId}:${sortedPricedJsonIds}`) from round 1 so re-runs don't loop.
+
+3. **Diagnostic field:** add `pricedJsonRescueCents` to the snapshot return object — sum of cents resolved via the in-memory JSON rescue path. Surfaced in dev-only debug panel and grepable in logs.
+
+4. **Tests:**
+   - Madrid shape (180,000¢ canonical, 8 priced JSON rows uncovered, coverage ~11%) → backfill fires.
+   - 1 missing row out of 20 (95% coverage) → backfill does NOT fire.
+   - Zero priced JSON activities → backfill does NOT fire (no division-by-zero, no spurious call).
+   - Two trips opened in same session → both fire independently (per-trip fingerprint).
+
+5. **Memory:** update `mem://constraints/finance/activity-costs-write-parity` with the coverage-ratio rule and the `pricedJsonRescueCents` diagnostic.
+
+---
+
+## Order of execution
+
+1. R5 verification curls (parallel, fast) → if green, close.
+2. M6 round 2 step 1 (audit `sync-trip-cost-table`) — blocking gate; if it doesn't write full category set, fix that BEFORE shipping the broadened trigger.
+3. M6 round 2 steps 2–4 (trigger + tests).
+4. M2 helper extraction → repair-day rewire → realignment guard → save-time net → tests.
+5. Full vitest + Deno test pass.
+6. Memory updates last.
+
+## Out of scope
+
+- Remaining items in the 17-item queue.
+- Q43 watch-list source reads (`get_user_id_by_email`, `get_user_info_by_email`, `get_intake_account`) — already shipped in earlier round.
+- Linter rerun (separate follow-up after this batch lands).

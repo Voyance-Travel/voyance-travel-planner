@@ -15,7 +15,7 @@ import { clampAllBookends } from '../_shared/clamp-bookend.ts';
 import { scrubActivity, addOps, formatOps, EMPTY_OPS, type ScrubOps } from '../_shared/scrub-activity.ts';
 import { buildDayScheduleSummary } from '../_shared/prompt-leak-scrub.ts';
 import { ensureDayDiningDescriptions } from '../_shared/dining-description-backfill.ts';
-import { pruneNonLogisticsAfterCheckout } from '../_shared/post-checkout-prune.ts';
+import { pruneNonLogisticsAfterCheckout, pruneNonLogisticsAfterAirportTransfer } from '../_shared/post-checkout-prune.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
@@ -146,6 +146,7 @@ function normalizeDays(days: any[], tripStartDate: string | null, destination?: 
       console.log(`[DINING_DESC_BACKFILL] day=${dayNumber} dest="${destination || 'unknown'}" fallback=${diningBackfill.fallback} whyThisFits=${diningBackfill.whyThisFits} scanned=${diningBackfill.scanned} path=save-itinerary`);
     }
     const pruneResult = pruneNonLogisticsAfterCheckout(activities);
+    const transferPruneResult = pruneNonLogisticsAfterAirportTransfer(activities);
     if (dayOps.titleLeak + dayOps.bodyLeak + dayOps.fragment + dayOps.mealSuffix
         + dayOps.crossCity + dayOps.countryMismatch + dayOps.mealLabel
         + dayOps.phantomRef > 0) {
@@ -153,6 +154,9 @@ function normalizeDays(days: any[], tripStartDate: string | null, destination?: 
     }
     if (pruneResult.prunedCount > 0) {
       console.log(`[POST_CHECKOUT_PRUNE] day=${dayNumber} count=${pruneResult.prunedCount} titles=${JSON.stringify(pruneResult.prunedTitles)} path=save-itinerary`);
+    }
+    if (transferPruneResult.prunedCount > 0) {
+      console.log(`[POST_TRANSFER_PRUNE] day=${dayNumber} count=${transferPruneResult.prunedCount} titles=${JSON.stringify(transferPruneResult.prunedTitles)} path=save-itinerary`);
     }
     return { ...day, dayNumber, date, activities, _scrubOps: dayOps };
   });

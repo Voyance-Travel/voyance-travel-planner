@@ -71,4 +71,27 @@ describe('JSON-missing-row rescue', () => {
       expect(row.paidAmountUsd).toBeNull();
     }
   });
+
+  it('exposes pricedJsonRescueCents diagnostic equal to sum of rescued rows', () => {
+    const r = resolveCanonicalCostRows({
+      costs: [], liveActivities: live, includeHotel: true, includeFlight: false, travelers: 2,
+    });
+    const expected = r.rows
+      .filter(x => x.rescueTag === 'json-missing-row')
+      .reduce((s, x) => s + x.cents, 0);
+    expect(r.pricedJsonRescueCents).toBe(expected);
+    expect(r.pricedJsonRescueCents).toBe(36000);
+  });
+
+  it('pricedJsonRescueCents is 0 when activity_costs fully covers JSON', () => {
+    const costs = [
+      { activity_id: 'a1', day_number: 1, category: 'dining',   cost_per_person_usd: 60, num_travelers: 2 },
+      { activity_id: 'a2', day_number: 1, category: 'activity', cost_per_person_usd: 25, num_travelers: 2 },
+      { activity_id: 'a3', day_number: 2, category: 'activity', cost_per_person_usd: 95, num_travelers: 2 },
+    ];
+    const r = resolveCanonicalCostRows({
+      costs: costs as any, liveActivities: live, includeHotel: true, includeFlight: false, travelers: 2,
+    });
+    expect(r.pricedJsonRescueCents).toBe(0);
+  });
 });

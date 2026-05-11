@@ -3583,6 +3583,9 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       if (idx < 0 || idx >= activities.length) continue;
       const act = activities[idx] as any;
       if (lockedIds.has(act?.id)) continue;
+      // M2: Never recompute the airport transfer as a venue-to-venue walk.
+      // §15z owns its timing; this pass would otherwise overwrite duration/cost.
+      if (act?.subcategory === 'airport_transfer') continue;
       const t = act.transportation || (act.transportation = {});
       const distM = Number(t.distanceMeters) || 0;
       const curDur = Number(t.durationMinutes) || 0;
@@ -3825,6 +3828,7 @@ function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): { activi
           transfer.startTime = minutesToHHMM(transferStartMin);
           transfer.endTime = minutesToHHMM(requiredAtAirportMin);
           transfer.durationMinutes = transferMins;
+          transfer.subcategory = 'airport_transfer'; // M2: immutability sentinel for §15b
           repairs.push({
             code: FAILURE_CODES.LOGISTICS_SEQUENCE,
             action: 'final_enforce_transfer_retime',
@@ -3832,9 +3836,14 @@ function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): { activi
             after: `${transfer.startTime}-${transfer.endTime}`,
           } as any);
           console.log(`[Repair §15z] Retimed airport transfer day=${dayNumber} ${before} → ${transfer.startTime}`);
+        } else {
+          // Already correctly timed — still stamp the sentinel so subsequent
+          // passes (§15b walk→taxi rewrites) don't recompute it.
+          transfer.subcategory = transfer.subcategory || 'airport_transfer';
         }
       } else {
         transferStartMin = parseTimeToMinutes(transfer.startTime || '') ?? transferStartMin;
+        transfer.subcategory = transfer.subcategory || 'airport_transfer';
       }
     } else {
       transfer = {
@@ -3846,6 +3855,7 @@ function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): { activi
         endTime: minutesToHHMM(requiredAtAirportMin),
         category: 'transport',
         type: 'transport',
+        subcategory: 'airport_transfer', // M2: immutability sentinel for §15b
         location: { name: 'Airport', address: '' },
         cost: { amount: 0, currency: 'USD' },
         bookingRequired: false,
