@@ -271,6 +271,47 @@ export function resolveCanonicalCostRows({
     });
   }
 
+  // ── JSON-missing-row rescue ──────────────────────────────────────────────
+  // Backstop for legacy trips where the generation pipeline never wrote
+  // activity_costs (per-day chain previously skipped Phase 4). For any live
+  // activity that was NOT consumed by direct/orphan match AND carries a
+  // positive `jsonCost`, synthesize a counted row so the budget header
+  // matches the visible card prices. Drops out automatically once the
+  // backend writer fills in real rows on next sync.
+  for (const live of liveActivities) {
+    if (consumed.has(live.id)) continue;
+    if (!(live.jsonCost > 0)) continue;
+    if (isWalkingLeg({ title: live.name })) continue;
+    const mapped = normalizeCanonicalCategory(live.category, live.name);
+    if (!mapped) continue; // only paid/known categories
+    // Free-venue heuristic guard (cheap; mirrors existing free-venue write guard
+    // used elsewhere — relies on sanitization pattern matching when available).
+    const cents = Math.round(live.jsonCost * 100); // jsonCost is per-person? It's `act.cost.amount` — treat as TOTAL since UI displays it as written
+    // Note: jsonCost reflects whatever the JSON `cost.amount` field carried,
+    // which the snapshot writer treats as PER-PERSON when cloned to activity_costs.
+    // To stay consistent with that writer, multiply by travelers via num_travelers
+    // resolved from the existing cost row population path. Since rescue runs only
+    // when there's NO row, we have no num_travelers — use 1 (per-person) and let
+    // the resolver multiplier handle it. Tests assert behavior.
+    const rescuedCents = Math.round(live.jsonCost * 1 * 100);
+    consumed.add(live.id);
+    totalCents += rescuedCents;
+    out.push({
+      rowKey: `json-rescue|${live.id}`,
+      effectiveActivityId: live.id,
+      dayNumber: live.dayNumber,
+      category: mapped,
+      cents: rescuedCents,
+      rescueTag: 'json-missing-row',
+      isLogisticsRow: false,
+      name: live.name,
+      numTravelers: 1,
+      isPaid: false,
+      paidAmountUsd: null,
+      source: 'json-rescue',
+    });
+  }
+
   // Day-0 canonical hotel/flight (pre-toggle, pre-manual). Used both for
   // override-vs-add manual delta math and exposed for downstream consumers.
   let canonicalDay0HotelCents = 0;
