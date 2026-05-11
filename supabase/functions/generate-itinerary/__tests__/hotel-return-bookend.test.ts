@@ -152,3 +152,45 @@ Deno.test('predawn strip: untagged accommodation card at 00:30 still removed (re
   assertEquals(removed, 1);
   assertEquals(acts.length, 0);
 });
+
+// ── AM/PM parser regression (Bruges) ───────────────────────────────────────
+// Bare /(\d{1,2}):(\d{2})/ regex captured h=12 from "12:16 AM", which fell
+// outside both the standard 14–23 window and the 0–2 nightlife window, so the
+// bookend was silently dropped. parseTime (AM/PM-aware) now treats it as 00:16.
+
+Deno.test('runStep8 (AM/PM): nightcap endTime "12:16 AM" → late_nightlife_bookend appended (Bruges repro)', () => {
+  const acts = [
+    mkAct({ title: 'Le Trappiste Cocktail Bar', startTime: '10:30 PM', endTime: '12:16 AM', category: 'nightlife' }),
+  ];
+  runStep8(acts, 1, 'The Notary');
+  assertEquals(acts.length, 2);
+  assertEquals(String(acts[1]?.source), 'late_nightlife_bookend');
+  // Predawn strip must leave the late-nightlife bookend alone.
+  const removed = stripPreDawnHotelReturns(acts, { dayNumber: 2, label: 'TEST' });
+  assertEquals(removed, 0);
+  assertEquals(acts.length, 2);
+});
+
+Deno.test('runStep8 (AM/PM): museum endTime "4:30 PM" → standard bookend appended', () => {
+  const acts = [mkAct({ title: 'Groeningemuseum', startTime: '2:00 PM', endTime: '4:30 PM', category: 'museum' })];
+  runStep8(acts, 0, 'The Notary');
+  assertEquals(acts.length, 2);
+  assertEquals(lastCat(acts), 'accommodation');
+  assertEquals(lastTitle(acts).startsWith('Return to'), true);
+});
+
+Deno.test('runStep8 (AM/PM): cocktail endTime "11:45 PM" → standard bookend appended', () => {
+  const acts = [mkAct({ title: 'Cocktails at Bar Choux', startTime: '9:30 PM', endTime: '11:45 PM', category: 'nightlife' })];
+  runStep8(acts, 0, 'The Notary');
+  assertEquals(acts.length, 2);
+  assertEquals(lastCat(acts), 'accommodation');
+});
+
+Deno.test('runStep8 (AM/PM): already tagged late_nightlife_bookend with 12-hr time → idempotent', () => {
+  const acts = [
+    mkAct({ title: 'Speakeasy', startTime: '11:00 PM', endTime: '12:30 AM', category: 'nightlife' }),
+    mkAct({ title: 'Return to The Notary', startTime: '12:30 AM', endTime: '12:55 AM', category: 'accommodation', source: 'late_nightlife_bookend' }),
+  ];
+  runStep8(acts, 0, 'The Notary');
+  assertEquals(acts.length, 2);
+});
