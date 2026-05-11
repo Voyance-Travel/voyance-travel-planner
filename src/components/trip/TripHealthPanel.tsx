@@ -134,13 +134,36 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
       });
     }
 
-    // Large gap — flag any ≥3h gap between consecutive activities
-    const sortedForGap = [...realActivities]
-      .filter((a: any) => !!a.startTime)
-      .sort((a: any, b: any) => parseTime(a.startTime || '00:00') - parseTime(b.startTime || '00:00'));
+    // Large gap — flag any ≥3h gap between consecutive SAME-DAY substantive activities.
+    // INVARIANT: this loop only inspects pairs (i, i+1) within the current day's array,
+    // so the wake-up window (before first activity) and sleep window (after last activity)
+    // are NEVER flagged as gaps — that's intentional. Do not "fix" by adding pre/post checks.
+    const isBookendOrTransit = (a: any) => {
+      const cat = (a.category || a.type || '').toLowerCase();
+      const title = (a.title || a.name || '').toLowerCase();
+      if (['check-in','check-out','hotel','accommodation','transit','transportation',
+           'transfer','logistics','commute'].includes(cat)) return true;
+      if (/^(return to|walk to|transfer to|drive to|taxi|metro|train|bus|tram)\b/i.test(title)) return true;
+      if (/return to (the )?hotel/i.test(title)) return true;
+      return false;
+    };
+    // Hard guard: only this day's rows, even if caller passed polluted activities.
+    const dayScopedForGap = realActivities.filter(
+      (a: any) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum
+    );
+    const sortedForGap = dayScopedForGap
+      .filter((a: any) => !!a.startTime && !isBookendOrTransit(a))
+      .map((a: any) => {
+        const startMins = parseTime(a.startTime || '00:00');
+        const endMins = parseTime(a.endTime || a.startTime || '00:00');
+        const wrapsMidnight = endMins > 0 && endMins < startMins;
+        const preDawn = startMins < 5 * 60; // before 05:00 = overnight residue
+        return { a, startMins, endMins, skip: wrapsMidnight || preDawn };
+      })
+      .filter((x) => !x.skip)
+      .sort((x, y) => x.startMins - y.startMins);
     let prevEnd: number | null = null;
-    for (const a of sortedForGap) {
-      const startMins = parseTime(a.startTime || '00:00');
+    for (const { a, startMins, endMins } of sortedForGap) {
       if (prevEnd !== null && startMins - prevEnd >= 180) {
         const gapHours = Math.floor((startMins - prevEnd) / 60);
         issues.push({
@@ -152,7 +175,6 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
           dayNumber: dayNum,
         });
       }
-      const endMins = parseTime(a.endTime || a.startTime || '00:00');
       if (endMins > startMins) prevEnd = endMins;
     }
 
@@ -172,6 +194,8 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
 
     const timed = activities
       .filter((a: any) => a.startTime && a.endTime)
+      // Day-boundary guard: drop rows tagged for a different day
+      .filter((a: any) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
       .map((a: any) => ({
         name: a.name || a.title,
         category: a.category,
@@ -181,6 +205,8 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
         endStr: String(a.endTime),
       }))
       .filter((a: { start: number; end: number }) => a.start > 0 || a.end > 0)
+      // Drop wrap-past-midnight residue (e.g. hotel-return 23:50 → 00:28)
+      .filter((a: { start: number; end: number }) => !(a.end > 0 && a.end < a.start))
       .sort((a: { start: number }, b: { start: number }) => a.start - b.start);
 
     for (let i = 0; i < timed.length - 1; i++) {
