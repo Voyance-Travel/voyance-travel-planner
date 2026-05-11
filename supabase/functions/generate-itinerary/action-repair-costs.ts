@@ -494,9 +494,17 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
               const bound = CATEGORY_PRICE_CEILINGS[subcat];
               if (bound && costPerPerson > bound.max) {
                 const median = Math.round((bound.min + bound.max) / 2);
-                console.warn(`[REPAIR_PRICE_SUBSTITUTE] (repair-costs) "${title}" subcat=${subcat} orig=${costPerPerson} median=${median}`);
+                console.warn(`[REPAIR_PRICE_SUBSTITUTE] (repair-costs) direction=ceiling_cap "${title}" subcat=${subcat} orig=${costPerPerson} median=${median}`);
                 costPerPerson = median;
                 source = 'category_median_substitute';
+                wasCorrected = true;
+                corrected++;
+              } else if (bound && bound.min > 0 && costPerPerson < bound.min) {
+                // Floor raise: paid-tour categories must never snapshot $0.
+                const median = Math.round((bound.min + bound.max) / 2);
+                console.warn(`[REPAIR_PRICE_SUBSTITUTE] (repair-costs) direction=floor_raise "${title}" subcat=${subcat} orig=${costPerPerson} median=${median}`);
+                costPerPerson = median;
+                source = 'category_floor_substitute';
                 wasCorrected = true;
                 corrected++;
               }
