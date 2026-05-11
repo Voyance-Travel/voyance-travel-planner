@@ -120,7 +120,7 @@ function parseTimeToMinutes(t?: string): number {
  * Normalize all days: ensure dayNumber, date, sort activities by time.
  * This is the single canonical normalization that runs BEFORE persistence.
  */
-function normalizeDays(days: any[], tripStartDate: string | null, destination?: string): any[] {
+export function normalizeDays(days: any[], tripStartDate: string | null, destination?: string): any[] {
   return days.map((day: any, idx: number) => {
     const dayNumber = idx + 1;
     let date = day.date;
