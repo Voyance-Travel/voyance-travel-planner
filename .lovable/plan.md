@@ -1,57 +1,99 @@
-## Fix: Meal cards disappear on hard reload
+## Bug
+LLM generates a pre-dinner freshen-up card whose body says "exchange bike gear for evening attire", but post-processing displaces it past dinner (lands at 22:12) because the bike-tour → dinner gap is only ~15 min. Card is also mistitled "Check-in" instead of "Freshen Up", which lets it slip past `enforceFreshenUpPosition` (that helper requires a freshen-up regex match in the title).
 
-### What we know
-- Payments tab shows 7 dining items; itinerary view after hard reload shows fewer.
-- `activity_costs` rows (Payments source) are written by `writeActivityCostsFromItinerary` directly from `trips.itinerary_data.days[].activities[]`. So if Payments has 7 dining rows, the 7 dining cards **did persist** into `itinerary_data` at save time.
-- Therefore the drop happens on the **read path**, between `trips.itinerary_data` and the rendered itinerary.
+## Fix Strategy
 
-### Read path (confirmed)
-`useLovableItinerary` / `TripDetail` / `EditorialItinerary` → `supabase.from('trips').select('itinerary_data')` → `parseItineraryDays()` in `src/utils/itineraryParser.ts`. No server filter; the parser is the only transform.
+Three coordinated edits, all in the existing pipeline — no new files.
 
-### Two silent-drop sites in `parseItineraryDays`
+### (a) `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — pre-dinner gap rule
 
-**A. Intra-day dedup (`parseSingleDay`, line 496–506)**
-```ts
-const key = `${(act.title || '').toLowerCase().trim()}|${(act.startTime || '').trim()}`;
+Find the gap/transition rules block (around lines 1200 / 1209 / 1327 — the existing "Minimum gaps" / "NEVER schedule zero-gap" / "REALISTIC travel time" prose).
+
+Add one new explicit HARD RULE line that the LLM must respect:
+
 ```
-Collisions silently drop the duplicate. Two dining cards with the same generic title (e.g. `"Lunch"`) **and** an identical or empty `startTime` will collapse to one. Same hazard if a Day-0 dining card has an empty `startTime` alongside a logistics card with empty `startTime` — they collide on `"|"`.
+PRE-DINNER GAP RULE: Before any dinner / fine-dining / evening restaurant
+activity, leave a MINIMUM 30-minute gap from the preceding activity's end.
+If the preceding activity is physically active (matches
+\b(bike|cycle|hike|kayak|ski|surf|climb|swim|run|workout|fitness)\b),
+the minimum gap is 45 minutes (time to shower/change). The freshen-up
+card, if present, MUST fit entirely inside this gap.
+```
 
-**B. Inter-day dedup by `dayNumber` (line 595–605) and by `date` (607–616)**
-"Keep the entry with more activities." If `itinerary_data.days` contains a duplicate `dayNumber` (regression from per-day chain regen or partial save), the smaller variant — which may carry the meal cards — is discarded silently.
+No code-level enforcement here; this is prompt-only. Code-level enforcement lives in (b).
 
-Both sites match the symptom exactly: Payments sees raw rows (no dedup), itinerary parse drops a subset on every read.
+### (b) `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — pre-dinner placement enforcement
 
-### Fix
+The current §7b ("POST-CHECK-IN DEDUP") relabels late "Check-in" titles to "Freshen Up at <hotel>". After that runs, `enforceFreshenUpPosition` already drops post-dinner freshen-ups (Case A in `_shared/freshen-up-position.ts`). The leak is that some bodies say "before dinner" but the title is generic enough that displaced placement squeezes by.
 
-1. **`parseSingleDay` intra-day dedup — harden the key + tie-breaker.**
-   - Replace the key with `category + venue + title + startTime` so two dining cards never collide unless they are the *same* venue at the *same* time.
-   - Drop only when the key is genuinely identical AND both items have non-empty `startTime` (skip the dedup when `startTime` is empty — empty-time collisions are the documented Bruges trigger).
-   - When a collision is real, prefer the card with a non-empty venue/location over a placeholder; never drop a `category=dining/food/restaurant` card in favor of a non-dining one.
+Add a new step **§7b-bis: PRE-DINNER FRESHEN-UP NARRATIVE ENFORCEMENT**, executed right after §7b and before the existing `enforceFreshenUpPosition` invocation. For each accommodation / freshen-up card whose body text (`description`, `tips`, `notes` concatenated) matches:
 
-2. **Outer day-dedup — never collapse meal rows.**
-   - Before discarding the "loser" duplicate day, salvage any `category=dining/food/restaurant` activity present in it but absent from the keeper (compare by title+startTime), and merge them into the keeper's `activities[]` in chronological order.
-   - Same salvage for the `byDate` dedup loop.
+```
+/\b(before|prior to|ahead of|ready for)\s+(dinner|reservation|fine.?dining|the\s+evening)/i
+```
 
-3. **Instrumentation kept in (gated by `console.debug`).**
-   - In `parseItineraryDays`, log `[itineraryParser] raw days=N raw_dining=K` (count of dining activities across all raw days) and `[itineraryParser] result days=N result_dining=K`. If `result_dining < raw_dining`, log `console.warn` with the diff for production triage. This is the verification signal the user asked for.
+…check whether it currently sits **after** the day's dinner anchor (last dining card with `dinner` in title). If yes:
 
-4. **Tighten the existing `console.warn` on dedup**: include category and venue so a future regression is loud, not silent.
+1. Compute the available gap between the preceding non-logistics activity's `endTime` and `dinnerStart`.
+2. Required gap = 30 min, OR 45 min if the preceding activity title matches the "active" regex (`bike|cycle|hike|kayak|ski|surf|climb|swim|run|workout|fitness`).
+3. If `gap < requiredGap + freshen-up duration` (default freshen-up duration 20 min) → **drop the freshen-up card** and push a repair entry:
 
-### Files
+```
+console.log(`[repair-day] Day ${dayNumber} dropped freshen-up "${title}" — cannot fit before referenced dinner anchor (gap=${gap}m, required=${required}m)`);
+repairs.push({ code: 'FRESHEN_UP_CANT_FIT', action: 'dropped_pre_dinner_no_room', before: title });
+```
 
-- `src/utils/itineraryParser.ts` (only file changed).
+4. Else → relocate: set the freshen-up `startTime = dinnerStart − requiredGap − freshenDuration`, `endTime = dinnerStart − requiredGap`, and reinsert it at the correct array index (immediately before the dinner card). Record `relocated_pre_dinner`.
 
-No edge-function changes. No DB or RLS changes. No prompt changes.
+Locked / userAdded / extracted / pinned / isManual cards are exempt (mirror the existing guards used elsewhere in repair-day).
 
-### Verification
+### (c) `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — lone "Check-in" on non-arrival days
 
-1. Open Bruges trip → all 7 dining cards visible after hard reload, matching Payments.
-2. Browser console shows `[itineraryParser] raw_dining=7 result_dining=7` (no diff warn).
-3. Unit test added in `src/utils/__tests__/itineraryParser.dining-preservation.test.ts`:
-   - Two dining cards with same `"Lunch"` title but different startTimes → both kept.
-   - Two dining cards with same title and *empty* startTime → both kept (empty-time collisions exempt).
-   - Two days sharing `dayNumber`, one carrying the only dinner → dinner merged into the keeper, not dropped.
+§7b currently only relabels the **second-and-later** "Check-in" titles. It misses the case where a single "Check-in" card appears on a non-arrival day (no real arrival exists to anchor "first check-in"). Extend the block:
 
-### Memory
+- If `!isFirstDayAtHotel` (use the same predicate the generator uses for the "NO CHECK-IN ON NON-ARRIVAL DAYS" prompt rule — typically `!isArrivalDay && !isHotelChange`), then EVERY accommodation card whose title matches `/\bcheck[\s-]?in\b/i` is relabeled to `Freshen Up at <hotelName>` regardless of position. Log:
 
-Append to `mem://constraints/itinerary/data-integrity-and-merging` (the 60% dedup memo) a sentinel that `parseItineraryDays` never drops dining cards: empty-time dedup skip + cross-day dining salvage.
+```
+[repair-day] Day ${dayNumber} relabeled lone "Check-in" → "Freshen Up at ${hn}" (non-arrival day)
+```
+
+This guarantees the existing `enforceFreshenUpPosition` pass (which keys on the freshen-up regex) will see the card and drop/clamp it as appropriate.
+
+### Ordering inside `repairDay`
+
+```
+…
+§7  PRE-CHECK-IN MEAL CLEANUP        (unchanged)
+§7b POST-CHECK-IN DEDUP              (extended per fix (c))
+§7b-bis PRE-DINNER FRESHEN-UP NARRATIVE ENFORCEMENT   (new per fix (b))
+§8  HOTEL CHECKOUT GUARANTEE         (unchanged)
+…
+§9d-bis enforceFreshenUpPosition     (unchanged; benefits from (b)+(c))
+```
+
+## Verification
+
+1. **Static**:
+   - `rg "PRE-DINNER GAP RULE" supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` → 1 hit
+   - `rg "FRESHEN_UP_CANT_FIT|dropped_pre_dinner_no_room" supabase/functions/generate-itinerary/pipeline/repair-day.ts` → ≥1 hit each
+   - `rg "relabeled lone .Check-in" supabase/functions/generate-itinerary/pipeline/repair-day.ts` → 1 hit
+
+2. **Unit test** (new `supabase/functions/generate-itinerary/__tests__/freshen-up-pre-dinner.test.ts`):
+   - Day with bike tour 17:45–19:00 + dinner 19:15 + freshen-up body "exchange bike gear before dinner" placed at 22:12 → after `repairDay`, freshen-up is dropped (gap 15m < 45m required) and log line emitted.
+   - Same day but dinner at 20:00 → freshen-up relocated to 19:00–19:15 (45m active gap; freshen-up shortened to fit) OR dropped if still no room. Assert it never appears after dinner.
+   - Non-arrival day with a single "Check-in at Hotel X" 18:30 → after `repairDay`, title is "Freshen Up at Hotel X".
+
+3. **Existing suite**: `bun test supabase/functions/generate-itinerary/ledger-check.test.ts` and `freshen-up-position*.test.ts` still green.
+
+## Memory
+
+Append to `mem://constraints/itinerary/freshen-up-must-precede-dinner` (already exists per Core memory): note the new §7b-bis pre-dinner narrative enforcement step + lone "Check-in" relabel on non-arrival days. Add sentinel strings `FRESHEN_UP_CANT_FIT` and `relabeled lone "Check-in"` for future triage.
+
+## Files Changed
+
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` (prose rule)
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (extend §7b, add §7b-bis)
+- `supabase/functions/generate-itinerary/__tests__/freshen-up-pre-dinner.test.ts` (new)
+- `mem://constraints/itinerary/freshen-up-must-precede-dinner` (append)
+
+No DB, RLS, edge-fn-config, or frontend changes.

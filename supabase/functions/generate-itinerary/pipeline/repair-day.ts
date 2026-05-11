@@ -1835,27 +1835,155 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 7b. POST-CHECK-IN DEDUP (relabel duplicate "check-in" titles to "Freshen Up") ---
+  // Also relabels LONE "Check-in" titles on non-arrival days (no real check-in
+  // anchor exists — the title is a freshen-up in disguise and must be tagged
+  // accordingly so §7b-bis + enforceFreshenUpPosition can act on it).
   {
     const checkInRe = /\bcheck[\s-]?in\b/i;
-    const firstCheckInIdx = activities.findIndex((a: any) => {
-      const cat = (a.category || '').toLowerCase();
-      return cat === 'accommodation' && checkInRe.test(a.title || a.name || '');
-    });
-    if (firstCheckInIdx >= 0) {
-      const hn = hotelName || 'Your Hotel';
-      for (let i = firstCheckInIdx + 1; i < activities.length; i++) {
+    const hn = hotelName || 'Your Hotel';
+    const isArrivalLikeDay = !isHotelChange && (dayNumber === 1 || isTransitionDay);
+
+    if (!isArrivalLikeDay) {
+      // Non-arrival day: ANY check-in title is a freshen-up in disguise.
+      for (let i = 0; i < activities.length; i++) {
         const a = activities[i];
+        const cat = (a.category || '').toLowerCase();
+        if (cat !== 'accommodation') continue;
         const t = (a.title || a.name || '');
-        if (checkInRe.test(t)) {
-          const oldTitle = t;
-          a.title = `Freshen Up at ${hn}`;
-          if (a.name) a.name = a.title;
-          a.category = 'accommodation';
-          repairs.push({ code: FAILURE_CODES.MEAL_DUPLICATE, action: 'relabeled_duplicate_checkin_to_freshen_up', before: oldTitle, after: a.title });
+        if (!checkInRe.test(t)) continue;
+        const oldTitle = t;
+        a.title = `Freshen Up at ${hn}`;
+        if (a.name) a.name = a.title;
+        a.category = 'accommodation';
+        repairs.push({ code: FAILURE_CODES.MEAL_DUPLICATE, action: 'relabeled_lone_checkin_to_freshen_up', before: oldTitle, after: a.title });
+        console.log(`[repair-day] Day ${dayNumber} relabeled lone "Check-in" → "Freshen Up at ${hn}" (non-arrival day)`);
+      }
+    } else {
+      // Arrival-like day: relabel only the SECOND-and-later check-ins.
+      const firstCheckInIdx = activities.findIndex((a: any) => {
+        const cat = (a.category || '').toLowerCase();
+        return cat === 'accommodation' && checkInRe.test(a.title || a.name || '');
+      });
+      if (firstCheckInIdx >= 0) {
+        for (let i = firstCheckInIdx + 1; i < activities.length; i++) {
+          const a = activities[i];
+          const t = (a.title || a.name || '');
+          if (checkInRe.test(t)) {
+            const oldTitle = t;
+            a.title = `Freshen Up at ${hn}`;
+            if (a.name) a.name = a.title;
+            a.category = 'accommodation';
+            repairs.push({ code: FAILURE_CODES.MEAL_DUPLICATE, action: 'relabeled_duplicate_checkin_to_freshen_up', before: oldTitle, after: a.title });
+          }
         }
       }
     }
   }
+
+  // --- 7b-bis. PRE-DINNER FRESHEN-UP NARRATIVE ENFORCEMENT ---
+  // Freshen-up cards whose body text references the upcoming dinner ("before
+  // dinner", "ahead of the reservation"…) but which the LLM placed AFTER the
+  // dinner anchor must be repositioned before dinner OR dropped if no room.
+  // Active preceding activities (bike/hike/kayak/etc.) require a 45-min gap;
+  // otherwise 30 min. Freshen-up duration defaults to 20 min.
+  {
+    const FRESHEN_TITLE_RE = /\b(?:freshen[-\s]?up|luggage\s+drop|bag\s+drop|settle\s+in)\b/i;
+    const PRE_DINNER_BODY_RE = /\b(before|prior to|ahead of|ready for)\s+(dinner|reservation|fine.?dining|the\s+evening)\b/i;
+    const ACTIVE_PRECEDING_RE = /\b(bike|cycle|cycling|hike|hiking|kayak|kayaking|ski|skiing|surf|surfing|climb|climbing|swim|swimming|run|running|workout|fitness)\b/i;
+    const DINNER_TITLE_RE = /\b(dinner|evening\s+meal)\b/i;
+    const FRESHEN_DURATION = 20;
+
+    // Locate terminal dinner card
+    let dinnerIdx = -1;
+    for (let i = activities.length - 1; i >= 0; i--) {
+      const a = activities[i];
+      const cat = (a.category || '').toLowerCase();
+      if (cat === 'dining' && DINNER_TITLE_RE.test(a.title || a.name || '')) {
+        dinnerIdx = i;
+        break;
+      }
+    }
+
+    if (dinnerIdx >= 0) {
+      const dinner = activities[dinnerIdx];
+      const dinnerStart = parseTimeToMinutes(dinner.startTime || dinner.start_time || '');
+      if (dinnerStart !== null) {
+        // Walk reverse so splices/reorders don't reshuffle earlier indices
+        for (let i = activities.length - 1; i >= 0; i--) {
+          if (i <= dinnerIdx) break; // only cards AFTER dinner
+          const a = activities[i];
+          const cat = (a.category || '').toLowerCase();
+          if (cat !== 'accommodation') continue;
+          const title = (a.title || a.name || '');
+          if (!FRESHEN_TITLE_RE.test(title)) continue;
+
+          // Lock/manual exemptions
+          if (a.isLocked === true || a.locked === true || a.lock_state === 'locked') continue;
+          if (a.userAdded || a.userEdited || a.extracted || a.pinned || a.isManual) continue;
+          if (a.id && lockedIds && lockedIds.has(a.id)) continue;
+
+          const body = [a.description, a.tips, a.notes].filter(Boolean).map((x: any) => String(x)).join(' ');
+          if (!PRE_DINNER_BODY_RE.test(body)) continue;
+
+          // Find preceding non-logistics activity end (the one immediately before dinner)
+          let precedingEnd: number | null = null;
+          let precedingTitle = '';
+          for (let j = dinnerIdx - 1; j >= 0; j--) {
+            const p = activities[j];
+            const pCat = (p.category || '').toLowerCase();
+            if (pCat === 'transport' || pCat === 'transit' || pCat === 'transfer') continue;
+            const pEnd = parseTimeToMinutes(p.endTime || p.end_time || '');
+            if (pEnd !== null) {
+              precedingEnd = pEnd;
+              precedingTitle = String(p.title || p.name || '');
+              break;
+            }
+          }
+
+          const isActive = ACTIVE_PRECEDING_RE.test(precedingTitle);
+          const requiredGap = isActive ? 45 : 30;
+          const gap = precedingEnd !== null ? (dinnerStart - precedingEnd) : (dinnerStart - 0);
+
+          if (gap < requiredGap + FRESHEN_DURATION || precedingEnd === null) {
+            // No room — drop the freshen-up
+            const dropped = activities.splice(i, 1)[0];
+            console.log(`[repair-day] Day ${dayNumber} dropped freshen-up "${dropped.title}" — cannot fit before referenced dinner anchor (gap=${gap}m, required=${requiredGap + FRESHEN_DURATION}m)`);
+            repairs.push({
+              code: FAILURE_CODES.CHRONOLOGY,
+              action: 'dropped_pre_dinner_no_room',
+              before: `${dropped.title} @ ${dropped.startTime}-${dropped.endTime}`,
+            });
+            continue;
+          }
+
+          // Relocate: end = dinnerStart − requiredGap, start = end − FRESHEN_DURATION
+          const newEndMin = dinnerStart - requiredGap;
+          const newStartMin = newEndMin - FRESHEN_DURATION;
+          const before = `${a.title} @ ${a.startTime}-${a.endTime}`;
+          a.startTime = minutesToHHMM(newStartMin);
+          a.endTime = minutesToHHMM(newEndMin);
+          if (a.start_time) a.start_time = a.startTime;
+          if (a.end_time) a.end_time = a.endTime;
+          a.durationMinutes = FRESHEN_DURATION;
+
+          // Move card from position i to position dinnerIdx (insert before dinner)
+          const moved = activities.splice(i, 1)[0];
+          activities.splice(dinnerIdx, 0, moved);
+          // dinnerIdx didn't change because we removed from a later index and inserted at dinnerIdx,
+          // but the dinner card shifted right by one — recompute for safety not strictly required.
+
+          console.log(`[repair-day] Day ${dayNumber} relocated pre-dinner freshen-up "${moved.title}" → ${a.startTime}-${a.endTime} (gap=${requiredGap}m, active=${isActive})`);
+          repairs.push({
+            code: FAILURE_CODES.CHRONOLOGY,
+            action: 'relocated_pre_dinner',
+            before,
+            after: `${a.title} @ ${a.startTime}-${a.endTime}`,
+          });
+        }
+      }
+    }
+  }
+
 
   // --- 8. HOTEL CHECKOUT GUARANTEE (last day, last day in city — NOT hotel change, handled above) ---
   // CRITICAL: only fire on a true city-departure day. If the next day's city is the SAME city,
