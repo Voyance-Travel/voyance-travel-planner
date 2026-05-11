@@ -15,11 +15,17 @@ test.describe('Navigation - Public Routes', () => {
   for (const route of PUBLIC_ROUTES) {
     test(`public route ${route} loads without auth`, async ({ page }) => {
       await page.goto(route);
-      
-      // Should not redirect to signin
+
       await page.waitForTimeout(1000);
-      expect(page.url()).not.toContain('signin');
-      
+
+      // /signin and /signup are themselves public; every other public route
+      // must NOT redirect to signin.
+      if (route === '/signin' || route === '/signup') {
+        expect(page.url()).toContain(route);
+      } else {
+        expect(page.url()).not.toContain('signin');
+      }
+
       // Page should have content (not blank)
       const bodyContent = await page.locator('body').textContent();
       expect(bodyContent?.trim().length).toBeGreaterThan(0);
@@ -195,8 +201,9 @@ test.describe('Navigation - Auth Pages Cross-Links', () => {
 
   test('signup has link to signin', async ({ page }) => {
     await page.goto('/signup');
-    
-    const signinLink = page.locator('a[href*="signin"]');
+
+    // Scope to the form so the assertion isn't ambiguous with a nav-level signin link
+    const signinLink = page.locator('form').locator('a[href*="signin"]');
     await expect(signinLink).toBeVisible();
   });
 });

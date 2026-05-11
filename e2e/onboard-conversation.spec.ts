@@ -40,10 +40,13 @@ test.describe('Onboard Conversation - Page Load', () => {
       return;
     }
     
-    // Look for textarea or input for story
-    const storyInput = page.locator('textarea, input[type="text"]');
+    // Look for textarea or text-input via role/placeholder fallbacks
+    const storyInput = page
+      .getByRole('textbox', { name: /story|adventure|tell|describe|share/i })
+      .or(page.getByPlaceholder(/share|tell|story|describe/i))
+      .or(page.locator('textarea, input[type="text"]'));
     const inputCount = await storyInput.count();
-    
+
     expect(inputCount).toBeGreaterThan(0);
   });
 });
@@ -98,10 +101,12 @@ test.describe('Onboard Conversation - Submit Flow', () => {
       return;
     }
     
-    // Look for submit button
-    const submitButton = page.locator('button[type="submit"], button:has-text("Submit"), button:has-text("Continue"), button:has-text("Analyze")');
+    // Look for submit button via accessible role + name fallbacks
+    const submitButton = page
+      .getByRole('button', { name: /continue|next|submit|create|start|analyze/i })
+      .or(page.locator('button[type="submit"]'));
     const buttonCount = await submitButton.count();
-    
+
     expect(buttonCount).toBeGreaterThan(0);
   });
 

@@ -30,11 +30,9 @@ export default defineConfig({
   
   // Shared settings for all projects
   use: {
-    // Base URL for all tests - MUST be a publicly reachable origin (published URL or custom domain).
-    // Do NOT point this at id-preview--*.lovable.app: that origin is gated by Lovable's
-    // auth-bridge (302 → lovable.dev/auth-bridge), so the SPA never loads and every assertion
-    // times out. Override locally with PLAYWRIGHT_BASE_URL=http://localhost:8080 if needed.
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'https://travelwithvoyance.com',
+    // Public published URL — DO NOT change to id-preview--*.lovable.app (auth-gated, breaks suite).
+    // Override locally with PLAYWRIGHT_BASE_URL=http://localhost:8080 if needed.
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'https://voyance-travel-planner.lovable.app',
     
     // Capture screenshot on failure
     screenshot: 'only-on-failure',
