@@ -3330,7 +3330,7 @@ export function EditorialItinerary({
   const { guestEditMode, isPropose, setGuestEditMode, isUpdating: isUpdatingEditMode } = useGuestEditMode(tripId);
   
   // Get budget settings to pass limit to PaymentsTab
-  const { settings: budgetSettings, isGenerating: isBudgetCalculating } = useTripBudget({ tripId, totalDays: days.length, enabled: true });
+  const { settings: budgetSettings, isGenerating: isBudgetGenerating } = useTripBudget({ tripId, totalDays: days.length, enabled: true });
   
   // Manual builder overrides preview mode — user gets full editing without AI enrichment
   const effectiveIsPreview = isPreview && !isManualMode;
@@ -3784,14 +3784,19 @@ export function EditorialItinerary({
   // change to the math propagates everywhere at once.
   const hotelCost = computeHotelCostUsd(allHotels as any, hotelSelection as any, days.length);
   
-  // Use financial snapshot as the SOLE source of truth for trip total
-  // This eliminates divergence between Trip Summary, Budget tab, and Payments tab
+  // Use financial snapshot as the SOLE source of truth for trip total.
+  // While the snapshot is loading we render 0 (the header shows "Calculating…"
+  // beside it), instead of computing a JS-estimator fallback that would
+  // flash a wildly different number for ~1s on every refresh and feel like
+  // "the price changed". The earlier fallback also double-multiplied
+  // travelers and ignored the budget_include_hotel/flight toggles.
   const snapshotTotalUsd = financialSnapshot.tripTotalCents / 100;
-  // Only fall back to JS calculation while snapshot is still loading (value = 0)
-  // Once snapshot loads, it becomes the canonical total
-  const totalCost = snapshotTotalUsd > 0
-    ? snapshotTotalUsd
-    : (totalActivityCost * (travelers || 1) + flightCost + hotelCost);
+  const totalCost = financialSnapshot.loading ? 0 : snapshotTotalUsd;
+  // Surface "Calculating…" both while the AI is generating AND while the
+  // canonical financial snapshot is still loading. Without the snapshot
+  // gate, refresh would briefly render `$0` and then jump to the real
+  // total — which read as "the price changed" to users.
+  const isBudgetCalculating = isBudgetGenerating || financialSnapshot.loading;
 
   // ─── Reconciliation between per-day badges and the trip total ───
   // tripLevelCents = trip total − Σ day(d≥1) totals

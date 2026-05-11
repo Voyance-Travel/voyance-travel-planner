@@ -1306,15 +1306,24 @@ export default function TripDetail() {
           }
 
           // ── SELF-HEAL: Detect days that are unplanned ("empty" or missing entirely) ──
-          // Fires whenever generation is no longer running, regardless of whether
-          // actualDays reached expectedTotal. Previously this was gated on
-          // `actualDays >= expectedTotal`, which meant trips that ended early
-          // (e.g. 23/25 days produced) silently left days 24 & 25 unplanned forever.
+          // Only fires when generation has not finished cleanly. A trip that is
+          // already `ready` MUST NOT be rewritten on page load — refresh-time
+          // writes were the root cause of the "meals disappearing on refresh"
+          // regression. If a ready trip somehow has empty days, surface the
+          // recovery banner instead of silently materializing placeholders.
           const generationFinished =
             tripData?.itinerary_status !== 'generating' &&
             tripData?.itinerary_status !== 'queued';
+          const isReadyTrip =
+            tripData?.itinerary_status === 'ready' ||
+            (tripData?.itinerary_status as string) === 'generated';
 
-          if (expectedTotal > 0 && generationFinished && !emptyDayHealAttemptedRef.current) {
+          if (
+            expectedTotal > 0 &&
+            generationFinished &&
+            !isReadyTrip &&
+            !emptyDayHealAttemptedRef.current
+          ) {
             const daysList = (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>;
             const presentDayNumbers = new Set<number>();
             const emptyDayNumbers: number[] = [];

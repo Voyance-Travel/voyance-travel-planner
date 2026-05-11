@@ -1,43 +1,59 @@
-# Fix: Google sign-in lands on "Wrong turn" 404
+## Updated finding
 
-## Root cause
+You’re right to push back. The current saved Bruges JSON still has meals, but there are page-load code paths that can change what the itinerary looks like, and some of them can also persist changes. That is the risk to fix.
 
-`src/components/auth/SocialLoginButtons.tsx` (line 19) sends Google/Apple OAuth back to `${window.location.origin}/auth/callback`. There is **no `/auth/callback` route registered** in `src/App.tsx` — the React Router catch-all renders `NotFound.tsx`, whose copy starts with the "Wrong turn. This page doesn't exist, but your next trip could…" headline the user is seeing.
+The biggest suspect is not the financial snapshot. It’s refresh-time “self-heal” / synthetic logistics logic:
 
-The auth session itself is set correctly by `lovable.auth.signInWithOAuth` before the redirect, so `AuthContext.onAuthStateChange` already fires `SIGNED_IN`. The bug is purely a missing route handler — the user is authenticated but stranded on a 404.
+1. `TripDetail.tsx` has automatic self-heal blocks that run on load. They can call `save-itinerary` / `safeUpdateItineraryData` after detecting empty/missing days or version-history restores.
+2. `EditorialItinerary.tsx` derives `days` from `rawDays` and injects/removes synthetic departure/transport cards during render. That logic filters activities after departure cutoffs. If derived `days` ever gets passed into `syncBudgetFromDays` or save flows, it can make the ledger/content disagree with the original generated trip.
+3. There are load-time logistics syncs that dispatch `booking-changed`, causing financial refetches while the page is still hydrating. This can make the price drop look like content was deleted even if the JSON did not change.
 
-## Fix
+## Plan
 
-### 1. Add an `AuthCallback` page (`src/pages/AuthCallback.tsx`)
+### 1. Add a page-load mutation guard
 
-- Show a minimal centered "Signing you in…" spinner (re-use `RouteFallback` styling).
-- On mount: read the auth context. As soon as `user` is present (or after a short grace period via `onAuthStateChange`), call `consumeReturnPath('/profile')` and `navigate(returnPath, { replace: true })`.
-- If after ~6 seconds there is still no session, navigate to `/signin?error=oauth_failed` with a toast, so we don't trap users in an infinite spinner when the broker fails silently.
-- Honor a pending invite token: if `popPendingInviteToken()` exists, prefer `/invite/<token>` over the saved return path (mirror existing `AcceptInvite` behavior).
+Scope load-time repair so refresh cannot silently rewrite a completed itinerary.
 
-### 2. Register the route in `src/App.tsx`
+- In `TripDetail.tsx`, restrict auto self-heal writes to truly incomplete states only:
+  - `itinerary_status` is `generating`, `queued`, or `failed`, or
+  - a day is missing/empty and the trip is explicitly marked incomplete.
+- Do not call `save-itinerary` or `safeUpdateItineraryData` from the empty-day/version-history self-heal path on a normal `ready` trip unless the user explicitly clicks a recovery action.
+- If a ready trip has suspicious empty/missing days, show the existing recovery UI/banner instead of mutating data on refresh.
 
-Add inside the **Auth Routes** block (next to `/signin`, `/signup`):
+### 2. Keep synthetic logistics as display-only
 
-```tsx
-<Route path="/auth/callback" element={<AuthCallback />} />
-```
+Prevent render-derived cleanup from becoming persisted itinerary truth.
 
-Public route (no `ProtectedRoute` wrapper) so unauthenticated arrivals during the brief session-write window aren't bounced.
+- Keep the `days = useMemo(...)` synthetic card logic as UI-only.
+- Audit save/sync calls in `EditorialItinerary.tsx` so `syncBudgetFromDays` and itinerary persistence are only triggered by explicit user actions, not hydration/render effects.
+- Ensure departure-cutoff filtering cannot remove real dining/activity cards from the persisted `itinerary_data` during a refresh.
 
-### 3. Leave `getAuthRedirectUrl` as-is
+### 3. Stabilize the Trip Total during hydration
 
-`/auth/callback` is the documented redirect for both the Lovable broker and the custom-domain `supabase.auth.signInWithOAuth` branch — fixing the missing route is the correct change. Native (`voyance://auth/callback`) is already handled separately by `src/lib/native/oauthDeepLink.ts`.
+Avoid a scary number changing while content and ledger are still loading.
 
-## Out of scope
+- During `financialSnapshot.loading`, render “Calculating…” instead of a fallback total.
+- Keep the canonical source as `activity_costs` once loaded.
+- Do not fire visible delta indicators for the initial hydration pass.
 
-- No changes to `AuthContext`, `lovable` integration, or Supabase config.
-- No changes to `NotFound.tsx` copy.
-- No new edge functions or migrations.
+### 4. Add diagnostics for this exact regression
 
-## Verification
+Add small, targeted logging/guards so we can prove refresh is no longer destructive.
 
-1. Sign in with Google in preview → expect brief "Signing you in…" splash → land on `/profile` (or last-saved path), never on the 404 page.
-2. Console: `[404] Route not found: /auth/callback` warning disappears.
-3. Sign-in via custom domain (`travelwithvoyance.com`) → same behavior (the `isCustomDomain` branch also redirects to `/auth/callback`).
-4. Existing email/password sign-in flow unchanged.
+- Before any automatic itinerary write from page-load code, log the reason, day counts, and meal counts.
+- If an automatic write would reduce activity count or meal count on a ready trip, block it and warn instead.
+- Keep this guard local to refresh/self-heal paths so explicit user edits still work.
+
+### 5. Verify on the Bruges trip
+
+Use the known trip `e0655f06-03fc-4fd3-91c2-c8771b588da5`:
+
+- Before refresh: record per-day activity count and meal count.
+- Hard refresh itinerary page.
+- After refresh: counts must match exactly.
+- Trip Total must either show loading briefly or the canonical value, never a high number followed by a drop.
+- No automatic save/recovery path should run for a normal ready trip.
+
+## Expected result
+
+Hard refresh becomes read-only for completed trips. It can refetch data and recalculate display values, but it cannot silently remove meals, remove activities, rewrite days, or create itinerary gaps.
