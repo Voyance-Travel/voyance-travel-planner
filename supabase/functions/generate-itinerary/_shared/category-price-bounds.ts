@@ -66,10 +66,19 @@ export const CATEGORY_PRICE_CEILINGS: Record<PriceCategoryKey, PriceBound> = {
   walking_tour_paid:   { min: 15, max: 80,  currency: 'USD' },
   museum:              { min: 0,  max: 50,  currency: 'USD' },
   guided_tour_premium: { min: 50, max: 250, currency: 'USD' },
-  bike_tour:           { min: 25, max: 90,  currency: 'USD' },
-  food_tour:           { min: 50, max: 150, currency: 'USD' },
+  // Paid-tour ceilings (M5 addendum): bumped to accommodate legitimate luxury
+  // private variants. Examples calibrated against real listings:
+  //   - bike_tour:     90→200 (private guided e-bike, e.g. Salamanca half-day ~$150)
+  //   - food_tour:    150→200 (private 4h tapas/wine pairing in old town ~$180)
+  //   - cooking_class: 200    (kept — Michelin-chef classes already accommodated)
+  //   - wine_tasting: 150→200 (private cellar + sommelier flight ~$175)
+  //   - boat_tour:     200    (kept — yacht charters use guided_tour_premium)
+  // Anything above the ceiling is still flagged as PRICE_IMPLAUSIBLE; locked
+  // / basis=user|user_override|booked rows bypass via shouldSkipPriceSanity.
+  bike_tour:           { min: 25, max: 200, currency: 'USD' },
+  food_tour:           { min: 50, max: 200, currency: 'USD' },
   cooking_class:       { min: 60, max: 200, currency: 'USD' },
-  wine_tasting:        { min: 25, max: 150, currency: 'USD' },
+  wine_tasting:        { min: 25, max: 200, currency: 'USD' },
   boat_tour:           { min: 20, max: 200, currency: 'USD' },
 
   // transport
