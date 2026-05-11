@@ -826,10 +826,7 @@ serve(async (req) => {
 
   const auth = await parseAuth(req);
   if (auth instanceof Response) return auth;
-  const userId = auth.userId;
-
-  const costTracker = trackCost('fetch_reviews', 'google/places-api');
-  costTracker.setUserId(userId);
+  // userId attribution handled by inner googlePlacesTextSearch wrapper
 
   try {
     const body: ReviewRequest & { tripId?: string } = await req.json();
@@ -837,9 +834,7 @@ serve(async (req) => {
       placeName,
       destination,
       maxReviews = 10,
-      tripId,
     } = body;
-    if (tripId) costTracker.setTripId(tripId);
 
     if (!placeName || !destination) {
       return new Response(
