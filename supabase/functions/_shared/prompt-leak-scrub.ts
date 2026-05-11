@@ -246,6 +246,186 @@ export function hasSentenceFragment(act: any): { field: string } | null {
   return null;
 }
 
+// ─── Phantom event references (schedule-coherent copy) ─────────────────────
+//
+// Catches description/tip/note sentences that reference a time-bound event
+// the day's schedule does not contain — e.g. "leave by 20:30 for tonight's
+// Michelin-starred dinner" on a day with no dinner card.
+//
+// We only DROP the offending sentence within a multi-sentence string; if the
+// strip would blank the field we leave the original (mirrors fragment-scrub
+// policy — wrong copy is worse than missing copy, but blank cards are worst).
+//
+// Cross-day references ("tomorrow's flight", "tomorrow's checkout") are out
+// of scope here — handled by the departure / bookend pipelines.
+//
+// See plan: .lovable/plan.md (M1 — Day continuity fix)
+
+export interface DayScheduleSummary {
+  hasBreakfast: boolean;
+  hasBrunch: boolean;
+  hasLunch: boolean;
+  hasDinner: boolean;
+  hasNightcap: boolean;
+  /** Lowercased keyword set drawn from titles/categories of every card today. */
+  keywords: Set<string>;
+}
+
+const STOPWORDS = new Set([
+  'the','a','an','at','in','on','for','with','to','of','from','your','our','their',
+  'tonight','tomorrow','today','this','that','and','or','then','later','before','after',
+  'visit','tour','time','moment','experience','session',
+]);
+
+function tokenize(s: string): string[] {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !STOPWORDS.has(w));
+}
+
+function startMinutes(act: any): number {
+  const t = act?.startTime || act?.start_time || act?.time;
+  if (typeof t !== 'string') return -1;
+  const m = t.match(/^(\d{1,2}):(\d{2})/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : -1;
+}
+
+/**
+ * Build a quick-lookup summary of what a day actually contains, used by the
+ * phantom-reference scrubber to verify any "tonight's X" / "after the Y"
+ * references in copy.
+ */
+export function buildDayScheduleSummary(activities: any[]): DayScheduleSummary {
+  const summary: DayScheduleSummary = {
+    hasBreakfast: false, hasBrunch: false, hasLunch: false,
+    hasDinner: false, hasNightcap: false, keywords: new Set<string>(),
+  };
+  if (!Array.isArray(activities)) return summary;
+  for (const a of activities) {
+    if (!a || typeof a !== 'object') continue;
+    const title = String(a.title || a.name || '');
+    const cat = String(a.category || '').toLowerCase();
+    const slot = String(a.mealSlot || a.meal_slot || '').toLowerCase();
+    const start = startMinutes(a);
+    const isDining = cat === 'dining' || /^(breakfast|brunch|lunch|dinner|drinks)\b/i.test(title);
+    if (isDining) {
+      const tl = title.toLowerCase();
+      if (slot === 'breakfast' || /\bbreakfast\b/.test(tl)) summary.hasBreakfast = true;
+      if (slot === 'brunch' || /\bbrunch\b/.test(tl)) summary.hasBrunch = true;
+      if (slot === 'lunch' || /\blunch\b/.test(tl) || (start >= 11 * 60 && start < 15 * 60)) summary.hasLunch = true;
+      if (slot === 'dinner' || /\bdinner\b/.test(tl) || (start >= 18 * 60)) summary.hasDinner = true;
+      if (/\b(?:nightcap|cocktail|aperitif|drinks)\b/i.test(title) && start >= 20 * 60) summary.hasNightcap = true;
+    }
+    for (const w of tokenize(title)) summary.keywords.add(w);
+    if (cat) summary.keywords.add(cat);
+  }
+  return summary;
+}
+
+// Time-bound reference patterns. Each captures the event noun in group 1 (or
+// uses a fixed-meal predicate). Order matters — meal-specific patterns first.
+const PHANTOM_REF_PATTERNS: Array<{
+  re: RegExp;
+  /** Returns true iff schedule has the referenced event. */
+  resolves: (m: RegExpExecArray, s: DayScheduleSummary) => boolean;
+}> = [
+  // "tonight's (Michelin-starred) dinner" / "this evening's dinner"
+  {
+    re: /\b(?:tonight'?s?|this\s+evening'?s?)\s+(?:[a-z][\w-]*\s+){0,3}?dinner\b/gi,
+    resolves: (_m, s) => s.hasDinner,
+  },
+  // "this afternoon's lunch", "today's lunch"
+  {
+    re: /\b(?:this\s+afternoon'?s?|today'?s?)\s+(?:[a-z][\w-]*\s+){0,3}?lunch\b/gi,
+    resolves: (_m, s) => s.hasLunch,
+  },
+  // "this morning's breakfast"
+  {
+    re: /\bthis\s+morning'?s?\s+(?:[a-z][\w-]*\s+){0,3}?breakfast\b/gi,
+    resolves: (_m, s) => s.hasBreakfast || s.hasBrunch,
+  },
+  // "tonight's nightcap / cocktails / drinks"
+  {
+    re: /\b(?:tonight'?s?|this\s+evening'?s?)\s+(?:nightcap|cocktails?|drinks|aperitifs?)\b/gi,
+    resolves: (_m, s) => s.hasNightcap,
+  },
+  // "leave by HH:MM for [tonight's|the] X" / "head out at HH:MM for X"
+  {
+    re: /\b(?:leave|depart|head\s+out|set\s+off)\s+(?:by|at)\s+\d{1,2}:\d{2}\s+(?:for|to)\s+(?:tonight'?s?|the|your|this\s+(?:evening'?s?|afternoon'?s?|morning'?s?))?\s*([a-z][\w-]+(?:\s+[a-z][\w-]+){0,4})/gi,
+    resolves: (m, s) => {
+      const noun = (m[1] || '').toLowerCase();
+      if (/\bdinner\b/.test(noun)) return s.hasDinner;
+      if (/\blunch\b/.test(noun))  return s.hasLunch;
+      if (/\bbreakfast\b/.test(noun)) return s.hasBreakfast || s.hasBrunch;
+      // Generic noun — require keyword overlap with day
+      return tokenize(noun).some((w) => s.keywords.has(w));
+    },
+  },
+  // "after the museum/tour/visit/show", "before the gallery", "following your tour"
+  {
+    re: /\b(?:after|before|following|prior\s+to)\s+(?:the|your|tonight'?s?|today'?s?|this\s+(?:evening'?s?|afternoon'?s?|morning'?s?))\s+([a-z][\w-]+(?:\s+[a-z][\w-]+){0,3})/gi,
+    resolves: (m, s) => {
+      const noun = (m[1] || '').toLowerCase();
+      if (/\bdinner\b/.test(noun)) return s.hasDinner;
+      if (/\blunch\b/.test(noun))  return s.hasLunch;
+      if (/\bbreakfast\b/.test(noun)) return s.hasBreakfast || s.hasBrunch;
+      return tokenize(noun).some((w) => s.keywords.has(w));
+    },
+  },
+];
+
+function sentenceHasPhantomRef(sentence: string, summary: DayScheduleSummary): boolean {
+  for (const pat of PHANTOM_REF_PATTERNS) {
+    pat.re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = pat.re.exec(sentence)) !== null) {
+      if (!pat.resolves(m, summary)) return true;
+      if (m.index === pat.re.lastIndex) pat.re.lastIndex++; // safety
+    }
+  }
+  return false;
+}
+
+/** Drop sentences with phantom event refs. Returns null if unchanged or
+ *  if every sentence would be removed (never blanks the field). */
+export function scrubPhantomEventRefsFromString(s: unknown, summary: DayScheduleSummary): string | null {
+  if (typeof s !== 'string' || !s) return null;
+  const parts = s.split(/(?<=[.!?])\s+/);
+  if (parts.length < 2) {
+    // Single sentence: only flag — never blank the field.
+    return null;
+  }
+  const kept = parts.filter((p) => !sentenceHasPhantomRef(p, summary));
+  if (kept.length === parts.length) return null;
+  if (kept.length === 0) return null;
+  const rebuilt = kept.join(' ').replace(/\s{2,}/g, ' ').replace(/\s+\./g, '.').trim();
+  return rebuilt === s ? null : rebuilt;
+}
+
+export interface PhantomRefScrubResult { changed: boolean; fields: string[]; stripped: number; }
+
+/** In-place phantom-event-ref scrub across body fields of a single activity. */
+export function scrubPhantomEventRefs(act: any, summary: DayScheduleSummary): PhantomRefScrubResult {
+  if (!act || typeof act !== 'object') return { changed: false, fields: [], stripped: 0 };
+  const fields: string[] = [];
+  let stripped = 0;
+  for (const key of BODY_FIELDS) {
+    const before = act[key];
+    const next = scrubPhantomEventRefsFromString(before, summary);
+    if (next !== null) {
+      // Count dropped sentences for telemetry
+      const beforeCount = String(before).split(/(?<=[.!?])\s+/).length;
+      const afterCount  = next.split(/(?<=[.!?])\s+/).length;
+      stripped += Math.max(0, beforeCount - afterCount);
+      act[key] = next;
+      fields.push(key);
+    }
+  }
+  return { changed: fields.length > 0, fields, stripped };
+}
+
 export function hasTitleLeak(act: any): { field: string } | null {
   if (!act || typeof act !== 'object') return null;
   for (const key of TITLE_FIELDS) {

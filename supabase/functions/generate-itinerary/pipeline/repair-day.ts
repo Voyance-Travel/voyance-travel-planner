@@ -34,7 +34,7 @@ import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-u
 import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../fix-placeholders.ts';
 import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
 import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
-import { scrubBodyPromptLeaks, scrubTitleLeaks } from '../../_shared/prompt-leak-scrub.ts';
+import { scrubBodyPromptLeaks, scrubTitleLeaks, buildDayScheduleSummary } from '../../_shared/prompt-leak-scrub.ts';
 import { scrubActivity, formatOps, opsHadChange } from '../../_shared/scrub-activity.ts';
 import {
   CATEGORY_PRICE_CEILINGS,
@@ -2822,11 +2822,13 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
   // --- 10b. UNIFIED OUTPUT VALIDATION (single boundary) ---
   // Routes title/body/fragment scrubs + meal-suffix strip + cross-city/country
-  // downgrade through one entry point. See plan.md (Unified LLM Output Validation Layer).
+  // downgrade + phantom-event-ref strip through one entry point.
+  // See plan.md (Unified LLM Output Validation Layer + M1 phantom refs).
+  const daySchedule10b = buildDayScheduleSummary(activities);
   for (let i = 0; i < activities.length; i++) {
     const act: any = activities[i];
     if (lockedIds.has(act.id)) continue;
-    const ops = scrubActivity(act, { destination: resolvedDestination });
+    const ops = scrubActivity(act, { destination: resolvedDestination, daySchedule: daySchedule10b });
     if (opsHadChange(ops)) {
       repairs.push({
         code: FAILURE_CODES.TITLE_LABEL_LEAK,

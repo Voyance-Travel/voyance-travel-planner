@@ -13,6 +13,7 @@ import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
 import { scrubActivity, addOps, formatOps, EMPTY_OPS, type ScrubOps } from '../_shared/scrub-activity.ts';
+import { buildDayScheduleSummary } from '../_shared/prompt-leak-scrub.ts';
 import { ensureDayDiningDescriptions } from '../_shared/dining-description-backfill.ts';
 import { pruneNonLogisticsAfterCheckout } from '../_shared/post-checkout-prune.ts';
 
@@ -135,9 +136,10 @@ function normalizeDays(days: any[], tripStartDate: string | null, destination?: 
     stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
     clampAllBookends(activities, { dayNumber, label: 'SAVE' });
     // Unified scrub boundary — single entry point.
+    const daySchedule = buildDayScheduleSummary(activities);
     let dayOps: ScrubOps = { ...EMPTY_OPS } as ScrubOps;
     for (const a of activities) {
-      dayOps = addOps(dayOps, scrubActivity(a, { destination }));
+      dayOps = addOps(dayOps, scrubActivity(a, { destination, daySchedule }));
     }
     const diningBackfill = ensureDayDiningDescriptions(activities, destination);
     if (diningBackfill.fallback + diningBackfill.whyThisFits > 0) {
@@ -145,7 +147,8 @@ function normalizeDays(days: any[], tripStartDate: string | null, destination?: 
     }
     const pruneResult = pruneNonLogisticsAfterCheckout(activities);
     if (dayOps.titleLeak + dayOps.bodyLeak + dayOps.fragment + dayOps.mealSuffix
-        + dayOps.crossCity + dayOps.countryMismatch + dayOps.mealLabel > 0) {
+        + dayOps.crossCity + dayOps.countryMismatch + dayOps.mealLabel
+        + dayOps.phantomRef > 0) {
       console.log(`[SCRUB_ACTIVITY] day=${dayNumber} dest="${destination || 'unknown'}" ops=${formatOps(dayOps)} path=save-itinerary`);
     }
     if (pruneResult.prunedCount > 0) {

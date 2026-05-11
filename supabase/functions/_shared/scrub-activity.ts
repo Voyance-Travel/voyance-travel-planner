@@ -13,6 +13,8 @@ import {
   scrubBodyPromptLeaks,
   scrubTitleLeaks,
   scrubSentenceFragmentsOnAct,
+  scrubPhantomEventRefs,
+  type DayScheduleSummary,
 } from './prompt-leak-scrub.ts';
 import { stripVenueMealSuffix, VENUE_MEAL_SUFFIX_RE } from './venue-name.ts';
 import { downgradeCrossCityActivity } from '../generate-itinerary/fix-placeholders.ts';
@@ -27,6 +29,7 @@ export interface ScrubOps {
   countryMismatch: number;
   mealLabel: number;
   downgraded: number;
+  phantomRef: number;
 }
 
 export const EMPTY_OPS: ScrubOps = Object.freeze({
@@ -38,6 +41,7 @@ export const EMPTY_OPS: ScrubOps = Object.freeze({
   countryMismatch: 0,
   mealLabel: 0,
   downgraded: 0,
+  phantomRef: 0,
 }) as ScrubOps;
 
 export interface ScrubContext {
@@ -45,6 +49,8 @@ export interface ScrubContext {
   destination?: string;
   /** Optional explicit meal slot for venue/label coherence. */
   mealSlot?: 'breakfast' | 'lunch' | 'dinner' | 'brunch' | null;
+  /** Day-schedule summary for phantom-event-reference scrubbing. */
+  daySchedule?: DayScheduleSummary;
 }
 
 const MEAL_SLOT_RE = /\((breakfast|lunch|dinner|brunch)\)/i;
@@ -60,6 +66,7 @@ export function scrubActivity(act: any, ctx: ScrubContext = {}): ScrubOps {
   const ops: ScrubOps = {
     titleLeak: 0, bodyLeak: 0, fragment: 0, mealSuffix: 0,
     crossCity: 0, countryMismatch: 0, mealLabel: 0, downgraded: 0,
+    phantomRef: 0,
   };
   if (!act || typeof act !== 'object') return ops;
 
@@ -67,6 +74,13 @@ export function scrubActivity(act: any, ctx: ScrubContext = {}): ScrubOps {
   if (scrubTitleLeaks(act).changed) ops.titleLeak++;
   if (scrubBodyPromptLeaks(act).changed) ops.bodyLeak++;
   if (scrubSentenceFragmentsOnAct(act).changed) ops.fragment++;
+  if (ctx.daySchedule) {
+    const phantom = scrubPhantomEventRefs(act, ctx.daySchedule);
+    if (phantom.changed) {
+      ops.phantomRef += phantom.stripped;
+      console.warn(`[SCRUB_PHANTOM_REF] stripped=${phantom.stripped} fields=${phantom.fields.join(',')} title="${act.title || act.name || ''}"`);
+    }
+  }
 
   // Meal-suffix strip — title/name + location.name
   for (const k of ['title', 'name'] as const) {
@@ -139,12 +153,14 @@ export function addOps(a: ScrubOps, b: ScrubOps): ScrubOps {
     countryMismatch: a.countryMismatch + b.countryMismatch,
     mealLabel: a.mealLabel + b.mealLabel,
     downgraded: a.downgraded + b.downgraded,
+    phantomRef: a.phantomRef + b.phantomRef,
   };
 }
 
 export function opsHadChange(o: ScrubOps): boolean {
   return o.titleLeak + o.bodyLeak + o.fragment + o.mealSuffix
-       + o.crossCity + o.countryMismatch + o.mealLabel + o.downgraded > 0;
+       + o.crossCity + o.countryMismatch + o.mealLabel + o.downgraded
+       + o.phantomRef > 0;
 }
 
 /** Compact one-line render for logs. */
