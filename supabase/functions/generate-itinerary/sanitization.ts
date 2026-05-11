@@ -1964,7 +1964,6 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       }
     }
   }
-  }
 
   // ── City-mismatch detection: flag restaurants with addresses outside destination ──
   if (destination && day.activities) {
