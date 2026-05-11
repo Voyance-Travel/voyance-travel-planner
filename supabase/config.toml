@@ -28,7 +28,7 @@ project_id = "jsxplunjjvxuejeouwob"
   [functions.bulk-import]
     verify_jwt = false
   [functions.cache-destination-image]
-    verify_jwt = false
+    verify_jwt = true
   [functions.calculate-travel-dna]
     verify_jwt = false
   [functions.chat-trip-planner]
