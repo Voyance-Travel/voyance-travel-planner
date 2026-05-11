@@ -41,7 +41,7 @@ export interface ResolvedRow {
   dayNumber: number;
   category: string;                       // raw category from activity_costs
   cents: number;                          // post-rescue, post-toggle
-  rescueTag?: 'orphan-id' | 'json-zero';
+  rescueTag?: 'orphan-id' | 'json-zero' | 'json-missing-row';
   isLogisticsRow: boolean;
   /** Display name (live JSON title) when known. */
   name: string | null;
