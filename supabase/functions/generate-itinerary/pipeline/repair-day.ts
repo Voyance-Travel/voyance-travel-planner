@@ -1999,6 +1999,42 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
     const hasDepartureTransport = activities.some(isDepartureTransportRow);
 
+    // M2 — Retime an existing departure transfer that survived the drop pass
+    // but is still wrong (e.g., AI scheduled "Transfer to Airport" at 23:00
+    // for a 13:30 flight, or left it untimed-then-fixed-to-noon by other paths).
+    if (hasDepartureTransport && isLastDay && returnDepartureTime24) {
+      const depMinsRetime = parseTimeToMinutes(returnDepartureTime24);
+      if (depMinsRetime !== null) {
+        const transferMinsRetime = input.airportTransferMinutes || 45;
+        const targetTransferStart = Math.max(6 * 60, depMinsRetime - 180 - transferMinsRetime);
+        const existingTransfer = activities.find(isDepartureTransportRow);
+        if (existingTransfer && !lockedIds.has(existingTransfer.id)
+            && !existingTransfer.userAdded && !existingTransfer.userEdited
+            && !existingTransfer.extracted && !existingTransfer.pinned && !existingTransfer.isManual) {
+          const curStart = parseTimeToMinutes(existingTransfer.startTime || '') ?? null;
+          // Retime if start drifted by ≥ 30 minutes from the airport-buffer target.
+          if (curStart === null || Math.abs(curStart - targetTransferStart) > 30) {
+            const before = `${existingTransfer.startTime}-${existingTransfer.endTime}`;
+            existingTransfer.startTime = minutesToHHMM(targetTransferStart);
+            existingTransfer.endTime = minutesToHHMM(targetTransferStart + transferMinsRetime);
+            existingTransfer.durationMinutes = transferMinsRetime;
+            repairs.push({
+              code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+              action: 'enforced_departure_day_logistics_transfer_retime',
+              before,
+              after: `${existingTransfer.startTime}-${existingTransfer.endTime}`,
+            } as any);
+            console.log(`[Repair §8b M2] Retimed departure transfer to ${existingTransfer.startTime} (target=${minutesToHHMM(targetTransferStart)}, dep=${returnDepartureTime24}, buffer=180m+${transferMinsRetime}m)`);
+            activities.sort((a: any, b: any) => {
+              const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+              const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+              return ta - tb;
+            });
+          }
+        }
+      }
+    }
+
     if (!hasDepartureTransport) {
       let transportTitle: string;
       let transportDesc: string;
