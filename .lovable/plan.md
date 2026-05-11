@@ -1,29 +1,19 @@
-## Three AI-Gateway functions — already remediated, memorialize only
+## Already remediated — no plan to execute
 
-### Live verification (just curled)
+Just confirmed in the previous turn (this conversation) that all three functions already match the finding's required pattern:
 
-| Function | Unauth POST result |
-|---|---|
-| `/analyze-itinerary` | **401** `{"error":"Authentication required","code":"UNAUTHORIZED"}` ✅ |
-| `/discover-proactive` | **401** `{"error":"Authentication required","code":"UNAUTHORIZED"}` ✅ |
-| `/budget-coach` | **401** `{"error":"Authentication required","code":"UNAUTHORIZED"}` ✅ |
+| Function | parseAuth gate | setUserId | setTripId | recordAiUsage + save | Live unauth POST |
+|---|---|---|---|---|---|
+| `budget-coach` | L78 | L393 | L394 | L418–419 | **401** ✅ |
+| `analyze-itinerary` | L34 | L129 | n/a (pre-trip) | L130–131 | **401** ✅ |
+| `discover-proactive` | L33 | L135 | L136 | L169–170 | **401** ✅ |
 
-### Code audit (current state)
+- `discover-proactive` no longer has any "best-effort, optional" `try { authHeader }` block — it's a hard `parseAuth` reject.
+- `grep "best-effort"` on that file → **0 matches**.
+- The R3 memory entry (`mem://constraints/security/edge-function-auth-required`) was extended last turn to cover all 13 paid endpoints and explicitly bans the "read-and-ignore" pattern.
 
-All three already use `parseAuth` + Pattern B cost attribution exactly as the finding requests:
+### Recommendation
 
-| Function | parseAuth gate | setUserId | setTripId | recordAiUsage + save |
-|---|---|---|---|---|
-| `budget-coach` | L78 | L393 | L394 | L418–419 |
-| `analyze-itinerary` | L34 | L129 | n/a (pre-trip) | L130–131 |
-| `discover-proactive` | L33 | L135 | L136 | L169–170 |
+Close the finding without code changes. If the security scanner is still flagging it, mark it fixed via `security--manage_security_finding` referencing the in-place gates + the R3 memory entry — but I'd need approval to leave plan mode to run that tool call.
 
-`discover-proactive` no longer contains the "best-effort, optional" `try { authHeader }` pattern — it's a hard reject. The only `optional` matches in `budget-coach` are inside the system-prompt copy ("optional museums beyond the daily anchor"), not auth code.
-
-### Action — memorialize only
-
-1. **Extend `mem://constraints/security/edge-function-auth-required.md`** (the existing R3 "Paid-API Auth + Cost Attribution" entry) to add these three functions to the covered-functions list, bumping the count from 10 → 13. Add a note that `discover-proactive` previously used a "best-effort, optional" auth pattern that was a silent vulnerability and must never be reintroduced for paid-API endpoints — read the JWT and reject, or don't read it at all and stay public; never read-and-ignore.
-
-2. **No new R-number entry** — this is a coverage extension of the existing constraint, not a new pattern.
-
-3. **No code changes, no migration, no security-finding tool call** (the finding doesn't appear in the live scanner results — it was raised in chat).
+**Nothing else to do.** If you re-ran the scanner and a *new* finding appeared on these functions (different vulnerability), share the scanner output and I'll diagnose it.
