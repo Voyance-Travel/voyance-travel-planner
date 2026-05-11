@@ -3,7 +3,7 @@
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import { runStep8 } from '../universal-quality-pass.ts';
 
-function mkAct(opts: Partial<any> & { startTime: string; endTime: string }) {
+function mkAct(opts: Partial<any> & { startTime: string; endTime: string }): any {
   return {
     title: opts.title ?? 'Sightseeing',
     category: opts.category ?? 'sightseeing',
