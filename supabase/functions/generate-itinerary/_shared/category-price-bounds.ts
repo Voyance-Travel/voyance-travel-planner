@@ -111,7 +111,12 @@ export function inferSubcategory(activity: any): PriceCategoryKey | null {
     return null;
   }
 
-  // Experiences
+  // Experiences (paid-tour subcategories run BEFORE generic walking_tour/museum)
+  if (BIKE_TOUR_RE.test(haystack)) return 'bike_tour';
+  if (FOOD_TOUR_RE.test(haystack)) return 'food_tour';
+  if (COOKING_CLASS_RE.test(haystack)) return 'cooking_class';
+  if (WINE_TASTING_RE.test(haystack)) return 'wine_tasting';
+  if (BOAT_TOUR_RE.test(haystack)) return 'boat_tour';
   if (WALKING_TOUR_RE.test(haystack)) return 'walking_tour';
   if (MUSEUM_RE.test(haystack) && !cat.includes('dining')) return 'museum';
 
