@@ -2494,6 +2494,15 @@ async function _handleGenerateTripDayInner(
           injected: result.injectedMeals, detected_post: detectMealSlots(updatedDays[i].activities),
           source: 'generate-trip-day:multi-day-loop',
         };
+
+        // Post-guard description backstop
+        const { fillAfterMealGuard } = await import('../_shared/post-meal-guard-fill.ts');
+        await fillAfterMealGuard(
+          updatedDays[i].activities as any[],
+          dest,
+          dn,
+          'generate-trip-day:multi-day-loop',
+        );
       }
     }
 
