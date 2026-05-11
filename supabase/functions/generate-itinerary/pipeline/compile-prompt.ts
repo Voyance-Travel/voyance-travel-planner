@@ -1353,6 +1353,9 @@ OPERATIONAL NOTES — NEVER INCLUDE:
 Never include operational notes about checking hours, confirming availability, or verifying opening times in any description text. Never use generic database descriptor phrases like "Popular with locals", "A local favorite", "Hidden gem", "Must-visit", or "Highly recommended" as restaurant or activity descriptions. Every description must be a specific, unique sentence describing what makes this particular venue special. All descriptions should read as confident, polished travel recommendations.
 Never include any Voyance branding, attribution, or "thank you" messages in activity descriptions, titles, or any user-visible text. No text should reference "Voyance" in any way.
 
+SCHEDULE-COHERENT COPY — REFERENCE ONLY REAL CARDS:
+A description, tip, or note may only reference another activity that ALSO appears in this same day's schedule. Phrases like "tonight's dinner", "after the museum", "before tonight's tour", "later this evening", or "leave by HH:MM for X" must point at a real card present on this day. If the referenced event is not in the schedule you are returning, OMIT the reference entirely — do not invent it. Cross-day references ("tomorrow's flight") are out of scope here.
+
 CRITICAL GEOGRAPHIC RULE: Every restaurant and venue MUST be physically located within the trip destination city or its immediate metro area. Do not suggest restaurants from other cities or regions, even if they are famous. For example, for a Lisbon trip, only suggest restaurants actually located in the Lisbon metropolitan area — not restaurants in the Algarve, Porto, or other regions.
 `;
 
