@@ -194,6 +194,8 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
 
     const timed = activities
       .filter((a: any) => a.startTime && a.endTime)
+      // Day-boundary guard: drop rows tagged for a different day
+      .filter((a: any) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
       .map((a: any) => ({
         name: a.name || a.title,
         category: a.category,
@@ -203,6 +205,8 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
         endStr: String(a.endTime),
       }))
       .filter((a: { start: number; end: number }) => a.start > 0 || a.end > 0)
+      // Drop wrap-past-midnight residue (e.g. hotel-return 23:50 → 00:28)
+      .filter((a: { start: number; end: number }) => !(a.end > 0 && a.end < a.start))
       .sort((a: { start: number }, b: { start: number }) => a.start - b.start);
 
     for (let i = 0; i < timed.length - 1; i++) {
