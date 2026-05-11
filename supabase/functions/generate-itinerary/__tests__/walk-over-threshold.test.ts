@@ -131,6 +131,45 @@ describe('WALK_OVER_THRESHOLD', () => {
   });
 });
 
+describe('WALK_OVER_THRESHOLD — tier-aware ceiling (luxury 20m/1000m)', () => {
+  it('luxury tier flags 25-min / 1200m walk', () => {
+    const day = makeDay({ transportation: { method: 'walk', durationMinutes: 25, distanceMeters: 1200 } });
+    const results = validateDay({ ...baseInput, day, budgetTier: 'luxury' } as any);
+    const hit = results.find(r => r.code === FAILURE_CODES.WALK_OVER_THRESHOLD);
+    expect(hit).toBeTruthy();
+    expect(hit!.message).toMatch(/luxury ceiling/);
+  });
+
+  it('standard tier does NOT flag 25-min / 1200m walk', () => {
+    const day = makeDay({ transportation: { method: 'walk', durationMinutes: 25, distanceMeters: 1200 } });
+    const results = validateDay({ ...baseInput, day, budgetTier: 'moderate' } as any);
+    expect(results.find(r => r.code === FAILURE_CODES.WALK_OVER_THRESHOLD)).toBeUndefined();
+  });
+
+  it('luminary tier flags 22-min / 950m (duration-only trigger)', () => {
+    const day = makeDay({ transportation: { method: 'walk', durationMinutes: 22, distanceMeters: 950 } });
+    const results = validateDay({ ...baseInput, day, budgetTier: 'luminary' } as any);
+    expect(results.find(r => r.code === FAILURE_CODES.WALK_OVER_THRESHOLD)).toBeTruthy();
+  });
+
+  it('luxury tier still allows in-neighborhood 8-min / 600m walk', () => {
+    const day = makeDay({ transportation: { method: 'walk', durationMinutes: 8, distanceMeters: 600 } });
+    const results = validateDay({ ...baseInput, day, budgetTier: 'luxury' } as any);
+    expect(results.find(r => r.code === FAILURE_CODES.WALK_OVER_THRESHOLD)).toBeUndefined();
+  });
+
+  it('repair on luxury 25-min / 1200m walk produces metro (1.2km < 5km)', async () => {
+    const day = makeDay({ transportation: { method: 'walk', durationMinutes: 25, distanceMeters: 1200 } });
+    const results = validateDay({ ...baseInput, day, budgetTier: 'luxury' } as any);
+    const out = await repairDay({
+      day, validationResults: results, dayNumber: 1, isFirstDay: true, isLastDay: false, budgetTier: 'luxury',
+    } as any);
+    const t = out.day.activities[0].transportation;
+    expect(t.method).toBe('metro');
+    expect(out.day.activities[0].title).toMatch(/^Metro to/);
+  });
+});
+
 describe('enforceTransitModeByDistance — duration-only fallback', () => {
   it('overrides walk → uber/metro when coords missing but duration > 15min', async () => {
     const { enforceTransitModeByDistance } = await import('../sanitization');
