@@ -3622,14 +3622,18 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         const verb = tier.method === 'metro' ? 'Metro' : 'Taxi';
         act.title = act.title.replace(/^(?:Walk|Walking)\b/i, verb);
       }
+      const tierLabel = (() => {
+        const t = String((input as any).budgetTier || '').toLowerCase().trim();
+        return (t === 'luxury' || t === 'luminary' || t === 'splurge' || t === 'premium') ? 'luxury' : 'standard';
+      })();
       repairs.push({
         code: FAILURE_CODES.WALK_OVER_THRESHOLD,
         activityIndex: idx,
         action: 'walk_to_taxi',
         before,
-        after: { method: tier.method, durationMinutes: tier.durationMinutes, costAmount: tier.costAmount },
+        after: { method: tier.method, durationMinutes: tier.durationMinutes, costAmount: tier.costAmount, tier: tierLabel },
       });
-      console.log(`[WALK_OVER_THRESHOLD] day=${dayNumber} idx=${idx} ${before.method} ${curDur}min/${distM}m → ${tier.method} ${tier.durationMinutes}min/$${tier.costAmount}`);
+      console.log(`[WALK_OVER_THRESHOLD] day=${dayNumber} tier=${tierLabel} idx=${idx} ${before.method} ${curDur}min/${distM}m → ${tier.method} ${tier.durationMinutes}min/$${tier.costAmount}`);
     }
   }
 
