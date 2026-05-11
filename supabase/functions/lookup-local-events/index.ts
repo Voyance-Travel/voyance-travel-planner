@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
 import { buildCacheKey, getCached, setCache, TTL } from "../_shared/perplexity-cache.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,14 +16,21 @@ interface LocalEventsRequest {
 }
 
 serve(async (req) => {
-  const costTracker = trackCost('lookup_local_events', 'perplexity/sonar');
-  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
+  const costTracker = trackCost('lookup_local_events', 'perplexity/sonar');
+  costTracker.setUserId(userId);
+
   try {
-    const { destination, startDate, endDate, interests } = await req.json() as LocalEventsRequest;
+    const body = await req.json() as LocalEventsRequest & { tripId?: string };
+    const { destination, startDate, endDate, interests, tripId } = body;
+    if (tripId) costTracker.setTripId(tripId);
 
     if (!destination || !startDate || !endDate) {
       return new Response(
