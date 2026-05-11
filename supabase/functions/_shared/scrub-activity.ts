@@ -66,6 +66,7 @@ export function scrubActivity(act: any, ctx: ScrubContext = {}): ScrubOps {
   const ops: ScrubOps = {
     titleLeak: 0, bodyLeak: 0, fragment: 0, mealSuffix: 0,
     crossCity: 0, countryMismatch: 0, mealLabel: 0, downgraded: 0,
+    phantomRef: 0,
   };
   if (!act || typeof act !== 'object') return ops;
 
@@ -73,6 +74,13 @@ export function scrubActivity(act: any, ctx: ScrubContext = {}): ScrubOps {
   if (scrubTitleLeaks(act).changed) ops.titleLeak++;
   if (scrubBodyPromptLeaks(act).changed) ops.bodyLeak++;
   if (scrubSentenceFragmentsOnAct(act).changed) ops.fragment++;
+  if (ctx.daySchedule) {
+    const phantom = scrubPhantomEventRefs(act, ctx.daySchedule);
+    if (phantom.changed) {
+      ops.phantomRef += phantom.stripped;
+      console.warn(`[SCRUB_PHANTOM_REF] stripped=${phantom.stripped} fields=${phantom.fields.join(',')} title="${act.title || act.name || ''}"`);
+    }
+  }
 
   // Meal-suffix strip — title/name + location.name
   for (const k of ['title', 'name'] as const) {
