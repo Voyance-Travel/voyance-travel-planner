@@ -38,6 +38,8 @@ interface RequestBody {
   anchor_activity_ids?: string[];
   /** Client signal: gap is large enough that swap-only won't bridge it. Allows drop / consolidate. */
   deep_cuts_requested?: boolean;
+  /** Optional trip ID for cost attribution. */
+  tripId?: string;
 }
 
 // ─── Category normalization ─────────────────────────────────────
