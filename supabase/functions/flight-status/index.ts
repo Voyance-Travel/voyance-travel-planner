@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -212,8 +214,17 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
+  const costTracker = trackCost('flight_status', 'amadeus');
+  costTracker.setUserId(userId);
+
   try {
-    const { carrierCode, flightNumber, scheduledDate } = await req.json() as FlightStatusParams;
+    const body = await req.json() as FlightStatusParams & { tripId?: string };
+    const { carrierCode, flightNumber, scheduledDate, tripId } = body;
+    if (tripId) costTracker.setTripId(tripId);
 
     if (!carrierCode || !flightNumber || !scheduledDate) {
       return new Response(
@@ -223,6 +234,9 @@ serve(async (req) => {
     }
 
     const result = await getFlightStatus({ carrierCode, flightNumber, scheduledDate });
+
+    costTracker.recordAmadeus(1);
+    await costTracker.save();
 
     return new Response(
       JSON.stringify(result),

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
 import { buildCacheKey, getCached, setCache, TTL } from "../_shared/perplexity-cache.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,14 +15,21 @@ interface TravelAdvisoryRequest {
 }
 
 serve(async (req) => {
-  const costTracker = trackCost('lookup_travel_advisory', 'perplexity/sonar');
-  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
+  const costTracker = trackCost('lookup_travel_advisory', 'perplexity/sonar');
+  costTracker.setUserId(userId);
+
   try {
-    const { destination, originCountry, travelDate } = await req.json() as TravelAdvisoryRequest;
+    const body = await req.json() as TravelAdvisoryRequest & { tripId?: string };
+    const { destination, originCountry, travelDate, tripId } = body;
+    if (tripId) costTracker.setTripId(tripId);
 
     if (!destination) {
       return new Response(

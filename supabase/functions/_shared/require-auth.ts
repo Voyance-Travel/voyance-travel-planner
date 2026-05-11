@@ -67,18 +67,23 @@ export async function parseAuth(req: Request): Promise<AuthOk | Response> {
   if (!authHeader?.startsWith("Bearer ")) {
     return unauthorized("Authentication required", "UNAUTHORIZED");
   }
+  const token = authHeader.replace("Bearer ", "");
   try {
+    // Service-role bypass for trusted server-to-server calls (e.g. generate-itinerary → viator-search).
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (serviceRoleKey && token === serviceRoleKey) {
+      return { userId: "service_role", token };
+    }
     const client = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
     );
-    const token = authHeader.replace("Bearer ", "");
     const { data, error } = await client.auth.getClaims(token);
-    const sub = (data?.claims as { sub?: string } | undefined)?.sub;
-    if (error || !sub) {
+    const claims = data?.claims as { sub?: string; role?: string } | undefined;
+    if (error || !claims?.sub) {
       return unauthorized("Invalid token", "AUTH_INVALID");
     }
-    return { userId: sub, token };
+    return { userId: claims.sub, token };
   } catch (e) {
     console.error("[parseAuth] check failed:", e);
     return unauthorized("Invalid token", "AUTH_INVALID");

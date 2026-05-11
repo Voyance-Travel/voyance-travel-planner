@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { getCachedPlacesPhotoByResource } from "../_shared/photo-storage.ts";
 import { cacheVenueResult } from "../_shared/venue-cache.ts";
 import { cachedGooglePlacesTextSearch as googlePlacesTextSearch } from "../_shared/google-api.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -823,8 +824,12 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  // userId attribution handled by inner googlePlacesTextSearch wrapper
+
   try {
-    const body: ReviewRequest = await req.json();
+    const body: ReviewRequest & { tripId?: string } = await req.json();
     const {
       placeName,
       destination,
