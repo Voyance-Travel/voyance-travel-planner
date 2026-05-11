@@ -134,61 +134,63 @@ const templates = {
   },
 };
 
+// Admin allowlist — defense-in-depth against compromised service-role key.
+const ALLOWED_TEST_RECIPIENTS = new Set<string>([
+  "ashtonlaurenn@gmail.com",
+]);
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Gate 1: service-role auth ONLY. test-email is an admin/debug tool.
+  const authHeader = req.headers.get("Authorization");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!authHeader || !serviceRoleKey || authHeader !== `Bearer ${serviceRoleKey}`) {
+    return new Response(
+      JSON.stringify({ error: "Forbidden — service-role auth required", code: "FORBIDDEN" }),
+      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     logStep("Test email request received");
 
-    if (!isConfigured()) {
+    // Gate 2: parse + validate body, recipient must be in allowlist.
+    let body: TestEmailRequest = {};
+    try {
+      body = await req.json();
+    } catch {
+      // empty/invalid body falls through to allowlist check below
+    }
+
+    const toAddress = String(body?.to || "").trim().toLowerCase();
+    if (!ALLOWED_TEST_RECIPIENTS.has(toAddress)) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Zoho SMTP not configured",
-          hint: "Add ZOHO_SMTP_USER and ZOHO_SMTP_PASSWORD secrets in your Lovable Cloud settings"
+        JSON.stringify({
+          error: "Recipient not in test allowlist",
+          code: "RECIPIENT_NOT_ALLOWED",
+          hint: "test-email only sends to allowlisted admin addresses",
         }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    let targetEmail: string | undefined;
     let templateName: keyof typeof templates = "test";
-
-    try {
-      const body: TestEmailRequest = await req.json();
-      targetEmail = body.to;
-      if (body.template && templates[body.template]) {
-        templateName = body.template;
-      }
-    } catch {
-      // No body provided, will try to get user email
+    if (body.template && templates[body.template]) {
+      templateName = body.template;
     }
+    const targetEmail = toAddress;
 
-    // If no email provided, try to get from authenticated user
-    if (!targetEmail) {
-      const authHeader = req.headers.get("authorization");
-      if (authHeader) {
-        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-        const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-          global: { headers: { Authorization: authHeader } }
-        });
-        
-        const { data: { user } } = await supabase.auth.getUser();
-        targetEmail = user?.email;
-      }
-    }
-
-    if (!targetEmail) {
+    if (!isConfigured()) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "No email address provided",
-          hint: "Either authenticate or provide 'to' in request body"
+        JSON.stringify({
+          success: false,
+          error: "Zoho SMTP not configured",
+          hint: "Add ZOHO_SMTP_USER and ZOHO_SMTP_PASSWORD secrets in your Lovable Cloud settings",
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
