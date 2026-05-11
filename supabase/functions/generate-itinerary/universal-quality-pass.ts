@@ -93,7 +93,28 @@ const LATE_NIGHTLIFE_TITLE_RE = /\b(speakeasy|nightclub|cocktail|nightcap|club|l
 
 export function runStep8(result: any[], dayIndex: number, hotelName?: string): void {
   if (!result || result.length === 0) return;
-  const lastActivity = result[result.length - 1];
+  // Identify the day's true terminal card by start_time, not array position —
+  // insertion order isn't guaranteed across all upstream paths and the bookend
+  // logic must reason about the chronologically last activity.
+  const _toMins = (a: any): number => {
+    const t = String(a?.startTime || a?.start_time || a?.endTime || a?.end_time || '');
+    const m = t.match(/(\d{1,2}):(\d{2})/);
+    if (!m) return -1;
+    return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  };
+  let lastActivity = result[result.length - 1];
+  let lastIdx = result.length - 1;
+  let lastMins = _toMins(lastActivity);
+  for (let i = result.length - 2; i >= 0; i--) {
+    const m = _toMins(result[i]);
+    if (m > lastMins) { lastMins = m; lastIdx = i; lastActivity = result[i]; }
+  }
+  // If the chronologically last card isn't the array tail, move it to the tail
+  // so all subsequent index math (and the push() below) lands correctly.
+  if (lastIdx !== result.length - 1) {
+    const [card] = result.splice(lastIdx, 1);
+    result.push(card);
+  }
   const lastCat = String(lastActivity?.category || '').toUpperCase();
   const lastTitle = String(lastActivity?.title || '');
   // A genuine "Return to Hotel" / "Back to Hotel" / "Hotel Checkout" / explicit
