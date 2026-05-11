@@ -1863,25 +1863,60 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     && String((input as any).nextLegCity).toLowerCase().trim() === String(resolvedDestination || '').toLowerCase().trim();
   const needsCheckout = !isHotelChange && !_intoSameCity && (isLastDay || (isLastDayInCity && !isTransitionDay));
   if (needsCheckout && activities.length > 0) {
-    const hasCheckout = activities.some((a: any) => {
+    const existingCheckout = activities.find((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
       const cat = (a.category || '').toLowerCase();
       return cat === 'accommodation' && (
         t.includes('check-out') || t.includes('check out') || t.includes('checkout')
       );
     });
+    const hasCheckout = !!existingCheckout;
+
+    // M2 — Compute target checkout time: capped at 11:00 AM AND early enough
+    // for transfer + airport buffer. This is the single source of truth used
+    // by both the inject path and the retime path below.
+    const transferMinsForCheckout = input.airportTransferMinutes || 45;
+    const flightBufferForCheckout = isLastDay ? 180 : 120; // flight: 3h, train/intercity: 2h
+    const depMinsCheckout = returnDepartureTime24 ? (parseTimeToMinutes(returnDepartureTime24) ?? null) : null;
+    const HARD_CHECKOUT_CAP = 11 * 60; // 11:00 AM is the latest acceptable checkout
+    let targetCheckoutMin: number = HARD_CHECKOUT_CAP;
+    if (isLastDay && depMinsCheckout !== null) {
+      // checkout must finish 30m before transfer departure, transfer arrives at airport
+      // (departure - flightBuffer). So checkoutStart ≤ dep - buffer - transfer - 30 - 30(checkout).
+      const latestByFlight = depMinsCheckout - flightBufferForCheckout - transferMinsForCheckout - 30 - 30;
+      targetCheckoutMin = Math.max(7 * 60, Math.min(HARD_CHECKOUT_CAP, latestByFlight));
+    }
+
+    // Retime an existing checkout if it drifted past the cap (Madrid 21:05, Florence 16:15…)
+    if (hasCheckout && !lockedIds.has(existingCheckout.id) && !existingCheckout.userAdded
+        && !existingCheckout.userEdited && !existingCheckout.extracted && !existingCheckout.pinned
+        && !existingCheckout.isManual) {
+      const curStart = parseTimeToMinutes(existingCheckout.startTime || '') ?? null;
+      if (curStart === null || curStart > targetCheckoutMin) {
+        const before = `${existingCheckout.startTime}-${existingCheckout.endTime}`;
+        existingCheckout.startTime = minutesToHHMM(targetCheckoutMin);
+        existingCheckout.endTime = minutesToHHMM(targetCheckoutMin + 30);
+        existingCheckout.durationMinutes = 30;
+        repairs.push({
+          code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+          action: 'enforced_departure_day_logistics_checkout_retime',
+          before,
+          after: `${existingCheckout.startTime}-${existingCheckout.endTime}`,
+        } as any);
+        console.log(`[Repair §8 M2] Retimed late checkout to ${existingCheckout.startTime} (target=${minutesToHHMM(targetCheckoutMin)}, dep=${returnDepartureTime24 || 'none'})`);
+        // Re-sort after retime
+        activities.sort((a: any, b: any) => {
+          const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+          const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+          return ta - tb;
+        });
+      }
+    }
 
     if (!hasCheckout) {
       const coHotelName = hotelOverride?.name || hotelName || 'Your Hotel';
       const coHotelAddr = hotelOverride?.address || hotelAddress || '';
-
-      let checkoutStartMin: number;
-      const depMins = returnDepartureTime24 ? (parseTimeToMinutes(returnDepartureTime24) ?? null) : null;
-      if (isLastDay && depMins !== null) {
-        checkoutStartMin = Math.max(7 * 60, depMins - 210);
-      } else {
-        checkoutStartMin = 11 * 60;
-      }
+      const checkoutStartMin: number = targetCheckoutMin;
 
       const checkoutStart = minutesToHHMM(checkoutStartMin);
       const checkoutEnd = minutesToHHMM(checkoutStartMin + 30);
