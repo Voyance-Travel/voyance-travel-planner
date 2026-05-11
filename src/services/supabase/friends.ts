@@ -378,12 +378,9 @@ export function useSendFriendRequestByEmail() {
 
   return useMutation({
     mutationFn: sendFriendRequestByEmail,
-    onSuccess: (result) => {
-      if (result.status === 'accepted') {
-        toast.success('Friend added!');
-      } else {
-        toast.success('Friend request sent!');
-      }
+    onSuccess: () => {
+      // Enumeration-safe ack — never reveal whether the email is registered.
+      toast.success("If that email belongs to a Voyance user, your request has been sent.");
       queryClient.invalidateQueries({ queryKey: ['friends'] });
       queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
     },
