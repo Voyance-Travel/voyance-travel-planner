@@ -91,4 +91,70 @@ describe('WALK_OVER_THRESHOLD', () => {
     expect(tier.durationMinutes).toBe(20);
     expect(tier.costAmount).toBe(15);
   });
+
+  // ── M4 leak-path regressions ────────────────────────────────────────────
+  it('flags title-only walk with empty transportation.method (Madrid DiverXO)', () => {
+    const day = {
+      activities: [
+        {
+          id: 't1',
+          title: 'Walk to DiverXO',
+          category: 'transport',
+          startTime: '12:30',
+          endTime: '13:57',
+          transportation: {}, // method missing — LLM omission
+        },
+        { id: 'a2', title: 'Lunch', category: 'dining', startTime: '14:00', endTime: '15:30' },
+      ],
+    } as any;
+    const results = validateDay({ ...baseInput, day } as any);
+    const hit = results.find(r => r.code === FAILURE_CODES.WALK_OVER_THRESHOLD);
+    expect(hit).toBeTruthy();
+    expect(hit!.severity).toBe('critical');
+  });
+
+  it('flags walk with top-level durationMinutes only (no transport block duration)', () => {
+    const day = {
+      activities: [
+        {
+          id: 't1',
+          title: 'Walk to Salamanca',
+          category: 'transport',
+          durationMinutes: 87,
+          transportation: { method: 'walk' },
+        },
+        { id: 'a2', title: 'Dinner', category: 'dining' },
+      ],
+    } as any;
+    const results = validateDay({ ...baseInput, day } as any);
+    expect(results.find(r => r.code === FAILURE_CODES.WALK_OVER_THRESHOLD)).toBeTruthy();
+  });
+});
+
+describe('enforceTransitModeByDistance — duration-only fallback', () => {
+  it('overrides walk → uber/metro when coords missing but duration > 15min', async () => {
+    const { enforceTransitModeByDistance } = await import('../sanitization');
+    const act: any = {
+      title: 'Walk to DiverXO',
+      category: 'transport',
+      transportation: { method: 'walk', durationMinutes: 87 },
+    };
+    const changed = enforceTransitModeByDistance(act, null, null, 'TEST');
+    expect(changed).toBe(true);
+    expect(act.transportation.method).not.toBe('walk');
+    expect(['uber', 'metro']).toContain(act.transportation.method);
+    expect(act.title).not.toMatch(/^Walk\b/);
+  });
+
+  it('does NOT override when coords missing AND duration ≤ 15min', async () => {
+    const { enforceTransitModeByDistance } = await import('../sanitization');
+    const act: any = {
+      title: 'Walk to Plaza Mayor',
+      category: 'transport',
+      transportation: { method: 'walk', durationMinutes: 8 },
+    };
+    const changed = enforceTransitModeByDistance(act, null, null, 'TEST');
+    expect(changed).toBe(false);
+    expect(act.transportation.method).toBe('walk');
+  });
 });
