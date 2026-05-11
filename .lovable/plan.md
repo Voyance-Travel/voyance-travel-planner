@@ -1,98 +1,83 @@
-## Scope
+# Ship Queue: 5 Approved Plans + Reviewer Notes
 
-Three approved items: R5 (verify-only), M2 (departure-day logistics refined), M6 round 2 (coverage-based auto-backfill trigger + sync-trip-cost-table category audit).
+All five plans approved with specific reinforcing notes. Consolidating into one execution plan.
 
----
+## 1. Hotel-Return Bookend (Florence/Barcelona nightcap days)
 
-## R5 — parse-* auth gate (no-op verify)
+**Leak A — Pre-dawn strip eats fresh bookend:**
+- Tag late-nightlife bookends with `source: 'late_nightlife_bookend'` at emission in `runStep8` / accommodation builder.
+- Update `stripPreDawnHotelReturns` to skip rows where `source === 'late_nightlife_bookend'` (single change inherits to all 5 call sites: universal-quality-pass, action-save-itinerary, action-sync-tables, persist-day, action-generate-trip-day).
 
-**Goal:** Confirm all four parse-* edge functions reject unauthenticated requests and accept authed ones. No code changes expected.
+**Leak B — Retry gate semantic:**
+- Set `metadata.quality.step8_deferred = true` when Step 8 defers due to required-but-missing dinner.
+- Gate post-meal-guard retry on `step8_deferred && lacksHotelReturn(day)` instead of `mealsInjected > 0`.
 
-**Steps:**
-1. `supabase--curl_edge_functions` against each of: `parse-booking-confirmation`, `parse-document-text`, `parse-travel-story`, `parse-trip-input`.
-   - Unauth call (explicit empty Authorization header) → expect 401.
-   - Authed call (preview session) → expect 200 / 4xx-validation (anything not 401).
-2. Confirm each function imports from `_shared/require-auth.ts` (quick `rg`).
-3. If all pass: close R5, no migration, no memory entry.
-4. If any single function fails: spot-fix only that function by wiring `require-auth.ts` (smallest possible diff). No broad refactor.
+**Reviewer note (added):** Add unit test asserting `source: 'late_nightlife_bookend'` tag survives a full pipeline pass (repair-day → terminalCleanup → save normalization → persist). If any downstream pass strips/rewrites the source field on accommodation cards, the 5-site strip-skip becomes a no-op.
 
-**Deliverable:** Verification log in chat. No file changes if green.
+## 2. Q43 SECURITY DEFINER REVOKE + Group A–E Classification
 
----
+Single migration containing:
 
-## M2 — Departure-day logistics (refined, single source of truth)
+**Group A (revoke from authenticated → service_role only):** functions only called from edge functions / triggers.
 
-**Goal:** Eliminate the Madrid failure shape (21:05 checkout + untimed airport transfer + post-midnight dinner) by aligning §8/§8b with one deterministic helper instead of layering a contradictory pass.
+**Group B (keep grants, verified internal auth):** `get_user_id_by_email`, `get_user_info_by_email`, `get_intake_account` (already hardened in prior round).
 
-**Steps:**
+**Group C (keep, intentional public surface):** sign-up flows, public lookups already documented.
 
-1. **Extract** `enforceDepartureDayLogistics(day, tripCtx)` into `supabase/functions/_shared/departure-day.ts`. Pure function, returns mutated day + ops log.
-   - Computes checkout time = `min(11:00, dep − buffer − transferMins − 60)` (existing rule).
-   - Inserts/repositions airport transfer ending at `dep − buffer`.
-   - **Marks the airport transfer with `subcategory: 'airport_transfer'`** as the immutability sentinel.
-   - Hard-prunes any non-locked, non-logistics card whose `startTime ≥ transfer.startTime` (covers the post-midnight dinner case explicitly; wrap-past-midnight times treated as "after transfer" via the same `parseTime` wrap rule used in TripHealthPanel).
+**Group D (keep, RLS policy helpers):** `is_trip_owner`, `is_trip_collaborator`, `is_trip_member`, `get_user_trip_ids` — revoking breaks RLS evaluation. Document as accepted.
 
-2. **Replace** the existing logic inside `repair-day.ts` §8 (checkout retime) and §8b (transfer retime) with calls to the shared helper. Remove the per-pass ad-hoc patching so there is no tug-of-war.
+**Group E (fix in same migration):** `claim_first_trip_benefit` — add `IF auth.uid() IS DISTINCT FROM p_user_id THEN RAISE EXCEPTION 'forbidden'; END IF;` before benefit grant. New privilege-escalation finding; do **not** defer.
 
-3. **Guard the realignment pass:** in the final transport-realignment step (§15c / `repair-transports`), short-circuit any card where `subcategory === 'airport_transfer'` — do not recompute its timing as a venue-to-venue walk.
+**Reviewer note (added):** Before merging, do a 30-second source read of `get_user_id_by_email` and `get_user_info_by_email` to confirm `auth.uid()` is identity-restrictive (e.g., admin-role check or caller=subject), not just an incidental reference. Already hardened to `has_role('admin')` in prior round per memory — re-verify in current `prosrc`.
 
-4. **Save-time safety net:** in `action-save-itinerary` `normalizeDays`, run a lightweight `pruneNonLogisticsAfterAirportTransfer(day)` after `pruneNonLogisticsAfterCheckout`. Defense-in-depth only; repair-day remains the contract.
+## 3. M1 Round 2 — Clause-Level Phantom-Ref Scrub
 
-5. **Tests** (`supabase/functions/generate-itinerary/__tests__/departure-day-logistics.test.ts`):
-   - 13:30 flight, 90m buffer, 30m transfer → checkout 09:15–10:00, transfer ends 12:00.
-   - No flight info → checkout 11:00, no synthetic transfer, nothing scheduled after 12:00.
-   - Madrid shape: 21:05 checkout + untimed transfer + 22:10–24:25 dinner → checkout retimed earlier, transfer timed against flight, dinner pruned.
-   - Realignment pass run after helper → airport_transfer timing unchanged.
+**Gap A — Clause splitting:** In `scrubPhantomEventRefs`, split on `;`, `—`, `–` in addition to sentence terminators before phantom detection. Drop early-return on `parts.length < 2`.
 
-6. **Memory:** update `mem://constraints/itinerary/departure-day-final-enforcement` to reference the shared helper + `subcategory: 'airport_transfer'` sentinel.
+**Single-segment phantom blanking:** If entire field is just the phantom ref (≤14 words AND <3 meaningful tokens after stripping phantom phrase), blank the field. New validation-gate code `DESCRIPTION_GHOST_REFERENCE` force-blanks residuals.
 
----
+**Gap B — Prompt-side ground-truth injection:** In `prompt-library.ts` SCHEDULE COHERENCE block, inject the day's actual schedule (start time, title, neighborhood) as ground truth with HARD RULE forbidding references to non-listed activities.
 
-## M6 round 2 — Coverage-based auto-backfill + sync audit
+**Reviewer note (added):** Schedule context block must be deterministic. Stable sort by `(startTime, activityId)` before building the schedule text, so retries with identical inputs produce identical ground truth and the coherence rule retains force.
 
-**Goal:** Fix the trigger gap exposed by Madrid (hotel row exists → round-1 trigger never fires → dining/activities stay unwritten) AND verify the backfill function actually writes the full category set.
+**Telemetry:** Start `DESCRIPTION_GHOST_REFERENCE` as soft warn (no forced regen). Promote to forced regen only if production leak rate warrants.
 
-**Steps:**
+## 4. M3 Round 2 — Extract `detectGapsForDay`
 
-1. **Audit `sync-trip-cost-table`:** read the function and confirm it iterates **every day** and calls `writeActivityCostsFromItinerary` (which writes dining + activity + transit + hotel + flight). If it currently scopes to a subset of categories or only Day 0, widen it to the full set. Add a unit test asserting all categories with non-zero JSON price are written.
+Refactor only — no behavior change beyond the M3 round 1 fix already shipped.
 
-2. **Replace the trigger condition** in `useTripFinancialSnapshot` (`src/hooks/useTripFinancialSnapshot.ts`):
-   ```ts
-   const pricedJsonIds = new Set(/* ids of JSON activities with price > 0 */);
-   if (pricedJsonIds.size === 0) return; // no priced activities → no gap
-   const uncoveredPriced = [...pricedJsonIds].filter(id => !canonicalIds.has(id));
-   const coverageRatio = 1 - uncoveredPriced.length / pricedJsonIds.size;
-   if (coverageRatio < 0.5 && fingerprintChanged) {
-     console.warn(`[useTripFinancialSnapshot] activity_costs coverage ${(coverageRatio*100).toFixed(0)}% for trip ${tripId} (uncovered=${uncoveredPriced.length}) — triggering backfill`);
-     fire backfill;
-   }
-   ```
-   - Guard `pricedJsonIds.size > 0` precedes the ratio check.
-   - Reuse the per-trip fingerprint (`${tripId}:${sortedPricedJsonIds}`) from round 1 so re-runs don't loop.
+- Extract the inline 200-line `forEach` from `TripHealthPanel.tsx` into a named module-level `detectGapsForDay(allActivities, dayNumber)` (already done in M3 round 1 per memory; this round adds the safety invariants).
+- **Step 1 of function MUST be the day-boundary filter** — invariant impossible to violate via future edits.
+- Explicit guard: never emit a gap before the first sorted activity of the day (no synthetic `prevEnd = 0` anchor).
+- Belt-and-braces: secondary `startMins < firstSubstantiveStart` filter after sort to catch wrap-past-midnight cards that slip the wrap filter.
 
-3. **Diagnostic field:** add `pricedJsonRescueCents` to the snapshot return object — sum of cents resolved via the in-memory JSON rescue path. Surfaced in dev-only debug panel and grepable in logs.
+**Regression sentinel test:** "Day 3 first activity 08:30 with no prior → no gap emitted." Fails immediately if synthetic anchor is re-introduced.
 
-4. **Tests:**
-   - Madrid shape (180,000¢ canonical, 8 priced JSON rows uncovered, coverage ~11%) → backfill fires.
-   - 1 missing row out of 20 (95% coverage) → backfill does NOT fire.
-   - Zero priced JSON activities → backfill does NOT fire (no division-by-zero, no spurious call).
-   - Two trips opened in same session → both fire independently (per-trip fingerprint).
+## 5. M4 Round 2 — Luxury-Tier Walk Threshold
 
-5. **Memory:** update `mem://constraints/finance/activity-costs-write-parity` with the coverage-ratio rule and the `pricedJsonRescueCents` diagnostic.
+- Add `isLuxuryTier(budgetTier)` helper (single source of truth, returns true for `luxury | luminary | splurge | premium`).
+- `walkThresholdsFor(budgetTier)` already returns tier-aware `{ maxWalkMin, maxWalkMeters }` per memory — confirm luxury bucket = `20 min / 1000 m`, standard = `30 min / 1500 m`.
+- Repair `§15b` uses `pickTransitTier` (haversine, no Google Directions calls — respects centralization constraint).
+- Repair logs include tier: `[WALK_OVER_THRESHOLD] day=N tier=luxury dist=… mins=…`.
 
----
+**Tests (both directions):**
+- Luxury 25-min / 1.2 km walk → flagged → upgraded to transit
+- Luxury 8-min / 600 m (Plaza Mayor → Mercado San Miguel) → passes
+- Standard 25-min / 1.2 km → does NOT flag (below universal cap)
+- Standard 35-min / 1.6 km → flagged by universal cap
 
-## Order of execution
+**Reviewer note (logged):** Reviewer formally retracts prior "defer luxury sub-cap" advice from M4 round 1. Universal cap and luxury sub-cap catch disjoint case classes; both ship.
 
-1. R5 verification curls (parallel, fast) → if green, close.
-2. M6 round 2 step 1 (audit `sync-trip-cost-table`) — blocking gate; if it doesn't write full category set, fix that BEFORE shipping the broadened trigger.
-3. M6 round 2 steps 2–4 (trigger + tests).
-4. M2 helper extraction → repair-day rewire → realignment guard → save-time net → tests.
-5. Full vitest + Deno test pass.
-6. Memory updates last.
+## Execution Order
 
-## Out of scope
+1. Q43 migration (Groups A revoke + Group E `claim_first_trip_benefit` guard, with B/D source re-verification first).
+2. Hotel-return Leak A (source tag + strip skip) + Leak B (`step8_deferred` flag + retry gate) + pipeline-survival unit test.
+3. M1 round 2 (clause split + prompt-side schedule injection with stable sort + `DESCRIPTION_GHOST_REFERENCE` validation code).
+4. M3 round 2 safety invariants + regression sentinel test.
+5. M4 round 2 luxury tier helper + bidirectional tests.
+6. Full vitest + Deno test runs.
+7. Memory updates (one entry per item, condensed).
 
-- Remaining items in the 17-item queue.
-- Q43 watch-list source reads (`get_user_id_by_email`, `get_user_info_by_email`, `get_intake_account`) — already shipped in earlier round.
-- Linter rerun (separate follow-up after this batch lands).
+## Out of Scope
+
+Madrid-style QA on a fresh city, final linter rerun, Stripe E2E manual config, beta-2 — all post-ship verification, handled in follow-up rounds.
