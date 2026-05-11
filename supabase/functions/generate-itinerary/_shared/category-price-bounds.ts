@@ -82,6 +82,10 @@ const PASTRY_RE = /\b(pastr(?:y|er[ií]a|isserie)|bakery|boulangerie|panader[ií
 const COFFEE_RE = /\b(coffee|caf[eé]|espresso|cappuccino|barista)\b/i;
 const FINE_DINING_RE = /\b(michelin|tasting menu|chef[''`s]?\s*counter|chef[''`s]?\s*table|kaiseki|omakase|degustaci[oó]n|menu degustaci[oó]n)\b/i;
 const WALKING_TOUR_RE = /\bwalking\s+tour\b/i;
+// Bimodal split: paid walking tours have a $15 floor, free ones stay $0.
+// Paid prefix beats food/wine/etc. so "paid food walking tour" lands in walking_tour_paid.
+const PAID_WALKING_TOUR_RE = /\b(paid|guided|premium|private|food|tapas|wine|history|historical|ghost|architecture|street[- ]art)\s+walking\s+tour\b/i;
+const FREE_WALKING_TOUR_RE = /\bfree\s+(walking\s+)?tour\b/i;
 const BIKE_TOUR_RE = /\b(e-?bike|electric\s+bike|cycling|bicycle|segway)\s+(tour|experience|ride)\b|\bbike\s+tour\b/i;
 const FOOD_TOUR_RE = /\b(food|tapas|street[- ]food|market|culinary|gastronom(?:y|ic))\s+tour\b/i;
 const COOKING_CLASS_RE = /\b(cooking|pasta|paella|pizza|sushi|baking)\s+(class|workshop|experience|lesson)\b/i;
