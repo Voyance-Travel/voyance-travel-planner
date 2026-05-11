@@ -1314,3 +1314,90 @@ function checkCrossDayCheckoutHotelLeak(
     }
   });
 }
+
+// =============================================================================
+// DESCRIPTION COVERAGE — every non-transit/bookend activity needs a real blurb.
+// Restaurants additionally need an actionable recommendation verb.
+// Closes the Madrid intermittent-blank-restaurant pattern (phantom-ref scrub
+// blanks the only sentence, nothing fills it back in).
+// =============================================================================
+
+const DESC_MIN_CHARS = 30;
+const GENERIC_OPENER_RE = /^\s*(this is (a|an|the)?|great|amazing|wonderful|fantastic|excellent|incredible|lovely|nice|you[''']ll love|you will love|a (great|nice|lovely) (spot|place))/i;
+export const RESTAURANT_RECOMMENDATION_RE =
+  /\b(order|try|request|ask for|don[''']?t miss|signature|known for|best for|book (?:a |the )?table|reserve|sit at|sample the|specialt(?:y|ies))\b/i;
+
+const DINING_CATS_LOWER = new Set([
+  'dining', 'restaurant', 'food', 'breakfast', 'lunch', 'dinner', 'brunch', 'drinks',
+]);
+
+const DESC_SKIP_CATS_LOWER = new Set([
+  'transport', 'transit', 'logistics', 'flight', 'accommodation',
+]);
+
+const BOOKEND_TITLE_RE = /(check[\s-]?in|check[\s-]?out|return to (?:hotel|your hotel)|freshen up|drop bags|store luggage|hotel bookend|head to (?:airport|station|terminal)|airport security|board (?:flight|train))/i;
+
+function isRestaurantActivity(act: any): boolean {
+  if (!act || typeof act !== 'object') return false;
+  const cat = String(act.category || '').toLowerCase();
+  if (DINING_CATS_LOWER.has(cat)) return true;
+  const sub = String(act.subcategory || '').toLowerCase();
+  return /restaurant|dining|food|brunch|lunch|dinner|breakfast/.test(sub);
+}
+
+export function shouldSkipDescriptionCheck(act: any): boolean {
+  if (!act || typeof act !== 'object') return true;
+  if (act.isLocked || act.userAdded || act.userEdited || act.extracted || act.pinned || act.isManual) return true;
+  const cat = String(act.category || '').toLowerCase();
+  if (DESC_SKIP_CATS_LOWER.has(cat)) return true;
+  if (isTransitActivity(act)) return true;
+  const title = String(act.title || act.name || '');
+  if (BOOKEND_TITLE_RE.test(title)) return true;
+  // Ghost / placeholder rows are stripped elsewhere
+  const sub = String(act.subcategory || '').toLowerCase();
+  if (sub === 'hotel_return' || sub === 'bookend') return true;
+  return false;
+}
+
+function checkActivityDescriptions(activities: any[], results: ValidationResult[]): void {
+  for (let i = 0; i < activities.length; i++) {
+    const act = activities[i];
+    if (shouldSkipDescriptionCheck(act)) continue;
+
+    const desc = typeof act.description === 'string' ? act.description.trim() : '';
+    if (desc.length < DESC_MIN_CHARS) {
+      results.push({
+        code: FAILURE_CODES.MISSING_DESCRIPTION,
+        severity: 'error',
+        message: `Activity "${act.title || act.name || '?'}" has no description (${desc.length} chars).`,
+        activityIndex: i,
+        field: 'description',
+        autoRepairable: true,
+      });
+      continue;
+    }
+
+    if (GENERIC_OPENER_RE.test(desc) && desc.length < 100) {
+      results.push({
+        code: FAILURE_CODES.GENERIC_DESCRIPTION,
+        severity: 'warning',
+        message: `Activity "${act.title || act.name || '?'}" has a generic description ("${desc.slice(0, 60)}…").`,
+        activityIndex: i,
+        field: 'description',
+        autoRepairable: true,
+      });
+      continue;
+    }
+
+    if (isRestaurantActivity(act) && !RESTAURANT_RECOMMENDATION_RE.test(desc)) {
+      results.push({
+        code: FAILURE_CODES.RESTAURANT_MISSING_RECOMMENDATION,
+        severity: 'warning',
+        message: `Restaurant "${act.title || act.name || '?'}" has no actionable recommendation (Order/Try/Request/Ask for/Signature).`,
+        activityIndex: i,
+        field: 'description',
+        autoRepairable: true,
+      });
+    }
+  }
+}
