@@ -1,38 +1,27 @@
-# R5 — `parse-*` auth gate: already shipped, no changes needed
-
-## Findings
-
-The repo has four `parse-*` edge functions; the requested pattern is already in place on all of them via the shared helper `supabase/functions/_shared/require-auth.ts`.
-
-| Function | OPTIONS handler | `requireAuth(req)` | `trackCost` |
-|---|---|---|---|
-| `parse-booking-confirmation` | line 112 | line 116 | line 302 (Gemini 3 Flash) |
-| `parse-document-text` | line 12 | line 16 | n/a (no AI call — does local PDF text scrape) |
-| `parse-travel-story` | line 70 | line 74 | line 179 (Gemini 2.5 Flash) |
-| `parse-trip-input` | line 360 | line 364 | line 440 (Gemini 3 Flash) |
-
-`requireAuth`:
-1. Rejects requests without `Bearer` header → `401 { error: "Authentication required", code: "UNAUTHORIZED" }`.
-2. Validates the bearer via `supabase.auth.getClaims(token)` → `401 { error: "Invalid token", code: "AUTH_INVALID" }` on failure.
-3. Returns CORS-headered JSON in both error cases.
-
-This matches the requested PROMPT R5 spec verbatim, just centralised in a shared module instead of inlined in each function — which is the project's documented pattern (the helper's docstring even calls this out: *"so any future change happens in one place"*).
-
-There is no `parse-document` (without `-text`) or `parse-itinerary` function — only the four above. The user prompt's filename list (`parse-document` / `parse-booking-confirmation` / `parse-itinerary`) was approximate; the equivalent shipped functions are covered.
-
 ## Plan
 
-**No code changes required.** Verify in this turn:
+1. **Add one final departure-day enforcement pass in `repair-day.ts`**
+   - Create a deterministic helper that runs on true departure days after existing repairs/transport coherence and before the final timing cascade.
+   - Compute a single checkout target capped at **11:00 AM** and constrained by the departure time, airport buffer, transfer duration, and checkout duration.
+   - Retime or inject checkout at that target.
+   - Retime or inject airport transfer only when a flight departure time exists.
+   - For no-flight departure days, keep checkout at 11:00, do **not** synthesize an airport transfer, and remove non-logistics activities after noon.
 
-1. `curl -X POST https://<project>.functions.supabase.co/parse-document-text` (no auth) → expect `401 {"error":"Authentication required","code":"UNAUTHORIZED"}`.
-2. Same with a valid Bearer → expect `200` (or domain-specific `400` for missing file, which is downstream of auth).
-3. Repeat for `parse-booking-confirmation`, `parse-travel-story`, `parse-trip-input`.
-4. Run `supabase--linter` and confirm no `parse-*` function is flagged for missing JWT verification.
+2. **Make the airport-transfer barrier authoritative**
+   - Treat `Transfer to Airport` / airport-bound transport as the hard cutoff.
+   - Remove any non-logistics, non-locked activity starting at or after the transfer start, including late dinners ending after midnight.
+   - Preserve locked/manual/user-edited activities per the Universal Locking rule.
 
-If any check fails, fall back to:
-- Spot-fix the affected function to ensure the `requireAuth` call sits immediately after the OPTIONS handler with no early bailouts in between.
-- Confirm `verify_jwt` handling in `supabase/config.toml` matches the project's signing-keys mode (no per-function override needed).
+3. **Fix existing drift points rather than layering contradictory behavior**
+   - Align existing §8/§8b logic with the helper so transfer timing uses `departure - buffer - transferMinutes` instead of ending too early or floating untimed.
+   - Ensure the final transport realignment pass does not rewrite the airport transfer into a normal neighbor-to-neighbor venue transport.
+   - Keep save-time post-checkout pruning as a safety net, but rely on repair-day as the primary source of correct generated output.
 
-## Memory
+4. **Add regression coverage**
+   - Extend `m2-departure-day-logistics.test.ts` for:
+     - 13:30 flight: checkout around 09:15–10:00 depending on transfer duration; airport transfer ends at required airport arrival time.
+     - no flight info: checkout at/near 11:00, no airport transfer, no non-logistics activity after noon.
+     - Madrid failure shape: 21:05 checkout, untimed/floating airport transfer, and late dinner are normalized/pruned.
 
-If verification passes, no new memory entry — the existing pattern is already documented implicitly via the shared helper. If a regression is found and fixed, save a new entry `mem://constraints/security/parse-functions-require-auth` enumerating the four functions and the helper.
+5. **Update project memory after implementation**
+   - Record the finalized departure-day logistics enforcement rule so future work preserves the behavior.
