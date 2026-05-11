@@ -42,6 +42,8 @@ export interface FillGapInput {
   budgetTier?: string;
   tripCurrency?: string;
   avoidIds?: string[];
+  /** Bug 4: soft category preference (e.g. 'dining' for evening gaps). */
+  preferCategory?: 'dining' | 'culture' | 'activity';
 }
 
 export interface FilledActivity {
@@ -71,6 +73,7 @@ export async function proposeGapFiller(
     beforeId, afterId, archetype,
     dietaryRestrictions = [], budgetTier = 'standard', tripCurrency = 'USD',
     avoidIds = [],
+    preferCategory,
   } = input;
 
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
@@ -108,6 +111,7 @@ HARD RULES:
 - Do NOT duplicate any of these: ${avoidList || '(none)'}.
 - Be geographically sensible — close to the previous activity if possible.
 - If you cannot find a real venue, return { "fallback": true } and nothing else.
+${preferCategory ? `\nPREFERRED CATEGORY: ${preferCategory} — pick a real ${preferCategory} venue if a believable option exists; otherwise return another category that fits the WINDOW.\n` : ''}
 
 OUTPUT (JSON only, no markdown):
 {

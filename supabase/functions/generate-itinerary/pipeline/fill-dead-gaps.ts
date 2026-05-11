@@ -1,25 +1,41 @@
 /**
- * Auto-fill afternoon dead gaps in a generated day.
+ * Auto-fill dead gaps in a generated day.
  *
- * Runs AFTER repairDay() to detect ≥180-min unplanned windows that overlap
- * the active afternoon (12:00–19:00) and inserts a real activity from the
- * shared fill-gap helper. Skips arrival/departure days, locked activities,
- * and gaps that touch transport/logistics on either side.
+ * Window-parameterized helper: runs AFTER repairDay() to detect ≥180-min
+ * unplanned windows that overlap a target window (afternoon 12:00–19:00 or
+ * evening 18:00–22:00) and inserts a real activity from the shared fill-gap
+ * helper. Skips arrival/departure days, locked activities, and gaps that
+ * touch transport/logistics on either side.
+ *
+ * Bug 4: extended to cover the evening window so 18:42 → 22:48 holes get
+ * flagged + filled (preferring a dining card via preferCategory).
  */
 
 import { proposeGapFiller } from '../../_shared/fill-gap.ts';
 
 const AFTERNOON_START_MIN = 12 * 60;
 const AFTERNOON_END_MIN = 19 * 60;
+const EVENING_START_MIN = 18 * 60;
+const EVENING_END_MIN = 22 * 60;
 const MIN_GAP_MIN = 180;
 // Departure-day "graceful finish" threshold: a 75-120min window between the
 // last leisure beat and (departure − buffer)/checkout deserves a low-key
 // closing moment (espresso, hotel terrace, short stroll) instead of dying
 // abruptly at checkout. Smaller than MIN_GAP_MIN to catch the thin-finish case.
+// Afternoon-only — evening keeps the standard 180m floor.
 const LAST_DAY_MIN_GAP_MIN = 75;
 const MIN_USABLE_OVERLAP_MIN = 60;
 
 const LOGISTICS_KEYWORDS = ['check-in', 'check in', 'checkin', 'check-out', 'check out', 'checkout', 'arrival', 'departure', 'flight', 'airport', 'transfer to', 'transfer from', 'luggage drop', 'freshen up', 'return to', 'settle in'];
+
+interface GapWindow {
+  fromMins: number;
+  toMins: number;
+  label: 'afternoon' | 'evening';
+}
+
+const AFTERNOON_WINDOW: GapWindow = { fromMins: AFTERNOON_START_MIN, toMins: AFTERNOON_END_MIN, label: 'afternoon' };
+const EVENING_WINDOW: GapWindow = { fromMins: EVENING_START_MIN, toMins: EVENING_END_MIN, label: 'evening' };
 
 function parseTime(t: string | undefined | null): number | null {
   if (!t) return null;
@@ -52,10 +68,15 @@ export interface FillDeadGapsOptions {
    * Last-day upper bound (HH:MM minutes-from-midnight).
    * Typically `departureTime − buffer` (180m flight / 120m train) or hotel
    * checkout. When set on a last day, dead-gap fill runs with the upper bound
-   * = min(AFTERNOON_END_MIN, latestUsableMins). When omitted on a last day,
+   * = min(window.toMins, latestUsableMins). When omitted on a last day,
    * dead-gap fill is skipped (legacy behaviour).
    */
   latestUsableMins?: number;
+  /**
+   * Soft preference threaded through to proposeGapFiller. Evening callers
+   * pass 'dining' so the AI picks a dinner restaurant when one fits.
+   */
+  preferCategory?: 'dining' | 'culture' | 'activity';
 }
 
 export interface FillDeadGapsResult {
@@ -63,32 +84,25 @@ export interface FillDeadGapsResult {
   inserted: Array<{ afterId: string | undefined; title: string; gapMinutes: number }>;
 }
 
-/**
- * Returns the (possibly mutated) activities array plus a list of inserts.
- * Always returns a fresh array so callers can drop it into their day object.
- */
-export async function fillAfternoonDeadGaps(
+/** Internal — window-parameterized core. */
+async function fillDeadGapsForWindow(
   activities: any[],
   opts: FillDeadGapsOptions,
+  win: GapWindow,
 ): Promise<FillDeadGapsResult> {
   if (opts.enabled === false) return { activities: [...activities], inserted: [] };
-  // Arrival day: skip (handled by dedicated arrival-day pacing).
   if (opts.isFirstDay) return { activities: [...activities], inserted: [] };
-  // Departure day: only run when caller provided a usable upper bound,
-  // otherwise we don't know how late we can schedule activities.
-  if (opts.isLastDay && (opts.latestUsableMins === undefined || opts.latestUsableMins <= AFTERNOON_START_MIN)) {
+  if (opts.isLastDay && (opts.latestUsableMins === undefined || opts.latestUsableMins <= win.fromMins)) {
     return { activities: [...activities], inserted: [] };
   }
   if (!Array.isArray(activities) || activities.length < 2) {
     return { activities: [...activities], inserted: [] };
   }
 
-  // Effective upper bound for this day's afternoon window.
-  const effectiveAfternoonEnd = opts.isLastDay && opts.latestUsableMins !== undefined
-    ? Math.min(AFTERNOON_END_MIN, opts.latestUsableMins)
-    : AFTERNOON_END_MIN;
+  const effectiveEnd = opts.isLastDay && opts.latestUsableMins !== undefined
+    ? Math.min(win.toMins, opts.latestUsableMins)
+    : win.toMins;
 
-  // Sort a copy by startTime for gap detection
   const work = [...activities].sort((a, b) => {
     const sa = parseTime(a?.startTime) ?? 0;
     const sb = parseTime(b?.startTime) ?? 0;
@@ -98,17 +112,12 @@ export async function fillAfternoonDeadGaps(
   const inserted: FillDeadGapsResult['inserted'] = [];
   const lockedIds = opts.lockedIds || new Set<string>();
   let i = 0;
-  // Cap to 2 inserts per day to bound AI calls / runaway behavior
   const MAX_INSERTS = 2;
 
   while (i < work.length - 1 && inserted.length < MAX_INSERTS) {
     const curr = work[i];
     const next = work[i + 1];
 
-    // On last-day, the gap-end neighbour is typically a logistics card
-    // (Hotel Checkout / Airport Transfer). We still want to fill the gap
-    // BEFORE it. So allow logistics-next on last day; only block when curr
-    // is logistics or when the next item is locked.
     const currIsLogistics = isLogisticsActivity(curr);
     const nextIsLogistics = isLogisticsActivity(next);
     if (currIsLogistics || (nextIsLogistics && !opts.isLastDay)) {
@@ -127,31 +136,29 @@ export async function fillAfternoonDeadGaps(
       continue;
     }
 
-    // Effective gap end clamped to the day's usable upper bound.
-    const clampedNextStart = Math.min(nextStart, effectiveAfternoonEnd);
+    const clampedNextStart = Math.min(nextStart, effectiveEnd);
     const gap = clampedNextStart - currEnd;
-    const minGap = opts.isLastDay ? LAST_DAY_MIN_GAP_MIN : MIN_GAP_MIN;
+    // Only afternoon supports the thin-finish departure-day threshold.
+    const minGap = (opts.isLastDay && win.label === 'afternoon') ? LAST_DAY_MIN_GAP_MIN : MIN_GAP_MIN;
     if (gap < minGap) {
       i++;
       continue;
     }
 
-    // Must overlap afternoon window (using effective upper bound)
-    const overlapStart = Math.max(currEnd, AFTERNOON_START_MIN);
-    const overlapEnd = Math.min(clampedNextStart, effectiveAfternoonEnd);
+    const overlapStart = Math.max(currEnd, win.fromMins);
+    const overlapEnd = Math.min(clampedNextStart, effectiveEnd);
     if (overlapEnd - overlapStart < MIN_USABLE_OVERLAP_MIN) {
       i++;
       continue;
     }
 
-    // Compute clamped gapEndTime string for the AI prompt
     const clampedEndHHMM = (() => {
       const h = Math.floor(clampedNextStart / 60);
       const m = clampedNextStart % 60;
       return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     })();
 
-    console.log(`[fill-dead-gaps] Detected ${Math.round(gap / 60)}h gap between "${curr.title}" (${curr.endTime}) and "${next.title}" (${next.startTime})${opts.isLastDay ? ' [last-day, clamped to ' + clampedEndHHMM + ']' : ''} — requesting filler`);
+    console.log(`[fill-dead-gaps][${win.label}] Detected ${Math.round(gap / 60)}h${gap % 60 ? (gap % 60) + 'm' : ''} gap between "${curr.title}" (${curr.endTime}) and "${next.title}" (${next.startTime})${opts.isLastDay ? ' [last-day, clamped to ' + clampedEndHHMM + ']' : ''} — requesting filler`);
 
     let proposed: any = null;
     try {
@@ -166,22 +173,21 @@ export async function fillAfternoonDeadGaps(
         dietaryRestrictions: opts.dietaryRestrictions,
         budgetTier: opts.budgetTier,
         tripCurrency: opts.tripCurrency,
-      }, { source: opts.isLastDay ? 'gap-filler-lastday' : 'gap-filler-auto' });
+        preferCategory: opts.preferCategory,
+      }, { source: opts.isLastDay ? `gap-filler-lastday-${win.label}` : `gap-filler-auto-${win.label}` });
     } catch (e) {
-      console.warn('[fill-dead-gaps] proposeGapFiller threw:', e);
+      console.warn(`[fill-dead-gaps][${win.label}] proposeGapFiller threw:`, e);
     }
 
     if (!proposed) {
-      console.log(`[fill-dead-gaps] No filler returned for gap after "${curr.title}" — leaving gap`);
+      console.log(`[fill-dead-gaps][${win.label}] No filler returned for gap after "${curr.title}" — leaving gap`);
       i++;
       continue;
     }
 
-    // Insert into work array right after curr
     work.splice(i + 1, 0, proposed);
     inserted.push({ afterId: curr.id, title: proposed.title, gapMinutes: gap });
-    console.log(`[fill-dead-gaps] Inserted "${proposed.title}" (${proposed.startTime}-${proposed.endTime}) after "${curr.title}"`);
-    // Advance past the new insert so we don't re-scan it
+    console.log(`[fill-dead-gaps][${win.label}] Inserted "${proposed.title}" (${proposed.startTime}-${proposed.endTime}) after "${curr.title}"`);
     i += 2;
   }
 
@@ -189,13 +195,36 @@ export async function fillAfternoonDeadGaps(
 }
 
 /**
- * Inspect a finalized day for any remaining ≥180-min unplanned afternoon window.
- * Returns the largest such gap in minutes (0 if none). Non-mutating.
+ * Returns the (possibly mutated) activities array plus a list of inserts.
+ * Always returns a fresh array so callers can drop it into their day object.
  *
- * On last day, pass `latestUsableMins` to clamp the upper bound to the
- * usable departure window.
+ * Afternoon (12:00–19:00) window — preserves legacy signature & behaviour.
  */
-export function reportRemainingAfternoonDeadGap(activities: any[], latestUsableMins?: number): number {
+export async function fillAfternoonDeadGaps(
+  activities: any[],
+  opts: FillDeadGapsOptions,
+): Promise<FillDeadGapsResult> {
+  return fillDeadGapsForWindow(activities, opts, AFTERNOON_WINDOW);
+}
+
+/**
+ * Bug 4: evening (18:00–22:00) window. Caller should pass
+ * `preferCategory: 'dining'` so the filler prefers a dinner restaurant
+ * when no dinner card was injected by the meal-guard.
+ */
+export async function fillEveningDeadGaps(
+  activities: any[],
+  opts: FillDeadGapsOptions,
+): Promise<FillDeadGapsResult> {
+  return fillDeadGapsForWindow(activities, opts, EVENING_WINDOW);
+}
+
+/** Internal — window-parameterized reporter. */
+function reportRemainingDeadGapForWindow(
+  activities: any[],
+  latestUsableMins: number | undefined,
+  win: GapWindow,
+): number {
   if (!Array.isArray(activities) || activities.length < 2) return 0;
   const sorted = [...activities].sort((a, b) => {
     const sa = parseTime(a?.startTime) ?? 0;
@@ -203,21 +232,47 @@ export function reportRemainingAfternoonDeadGap(activities: any[], latestUsableM
     return sa - sb;
   });
   const upperBound = latestUsableMins !== undefined
-    ? Math.min(AFTERNOON_END_MIN, latestUsableMins)
-    : AFTERNOON_END_MIN;
+    ? Math.min(win.toMins, latestUsableMins)
+    : win.toMins;
   let largest = 0;
   for (let i = 0; i < sorted.length - 1; i++) {
     const currEnd = parseTime(sorted[i]?.endTime) ?? parseTime(sorted[i]?.startTime);
     const nextStart = parseTime(sorted[i + 1]?.startTime);
     if (currEnd === null || nextStart === null) continue;
     const clampedNext = Math.min(nextStart, upperBound);
-    const gap = clampedNext - currEnd;
-    if (gap < MIN_GAP_MIN) continue;
-    const overlapStart = Math.max(currEnd, AFTERNOON_START_MIN);
+    // Measure only the portion of the gap that overlaps the window.
+    const overlapStart = Math.max(currEnd, win.fromMins);
     const overlapEnd = Math.min(clampedNext, upperBound);
-    if (overlapEnd - overlapStart < MIN_USABLE_OVERLAP_MIN) continue;
-    if (gap > largest) largest = gap;
+    const overlap = overlapEnd - overlapStart;
+    if (overlap < MIN_USABLE_OVERLAP_MIN) continue;
+    if (overlap < MIN_GAP_MIN) continue;
+    if (overlap > largest) largest = overlap;
   }
   return largest;
 }
 
+/**
+ * Inspect a finalized day for any remaining ≥180-min unplanned afternoon window.
+ * Returns the largest such gap in minutes (0 if none). Non-mutating.
+ *
+ * Legacy 2-arg signature preserved.
+ */
+export function reportRemainingAfternoonDeadGap(activities: any[], latestUsableMins?: number): number {
+  return reportRemainingDeadGapForWindow(activities, latestUsableMins, AFTERNOON_WINDOW);
+}
+
+/**
+ * Bug 4 — same for the evening (18:00–22:00) window.
+ * Optional `dayNumber` is only used for log context.
+ */
+export function reportRemainingEveningDeadGap(
+  activities: any[],
+  latestUsableMins?: number,
+  dayNumber?: number,
+): number {
+  const largest = reportRemainingDeadGapForWindow(activities, latestUsableMins, EVENING_WINDOW);
+  if (largest >= MIN_GAP_MIN) {
+    console.warn(`[QUALITY] Day ${dayNumber ?? '?'} has ${largest}m unplanned ${EVENING_WINDOW.fromMins / 60}:00-${EVENING_WINDOW.toMins / 60}:00`);
+  }
+  return largest;
+}

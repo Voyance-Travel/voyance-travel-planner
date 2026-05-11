@@ -1539,6 +1539,25 @@ async function _handleGenerateTripDayInner(
           console.log(`[generate-trip-day] Auto-filled ${filled.inserted.length} afternoon dead gap(s) on day ${dayNumber}${isLastDay ? ' (last-day mode)' : ''}`);
           dayResult.activities = filled.activities;
         }
+        // Bug 4 — evening pass (18:00–22:00), prefer dining
+        const { fillEveningDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
+        const filledEve = await fillEveningDeadGaps(dayResult.activities, {
+          destination: cityInfo?.cityName || destination,
+          isFirstDay,
+          isLastDay,
+          isLastDayInCity,
+          archetype: (tripMeta?.travel_dna_primary as string | undefined) || undefined,
+          dietaryRestrictions: (tripMeta?.dietary_restrictions as string[] | undefined) || [],
+          budgetTier: (tripMeta?.budget_tier as string | undefined) || 'standard',
+          tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
+          lockedIds: lockedIdSet,
+          latestUsableMins: _gapLatestMins,
+          preferCategory: 'dining',
+        });
+        if (filledEve.inserted.length > 0) {
+          console.log(`[generate-trip-day] Auto-filled ${filledEve.inserted.length} evening dead gap(s) on day ${dayNumber}`);
+          dayResult.activities = filledEve.activities;
+        }
       } catch (gapErr) {
         console.warn('[generate-trip-day] Dead-gap auto-fill failed (non-blocking):', gapErr);
       }
@@ -1694,10 +1713,29 @@ async function _handleGenerateTripDayInner(
         console.log(`[generate-trip-day] 2nd-pass: filled ${filled2.inserted.length} dead gap(s) re-opened by post-processing on day ${dayNumber}${_isLastDay ? ' (last-day mode)' : ''}`);
         dayResult.activities = filled2.activities;
       }
+      // Bug 4 — evening 2nd-pass (18:00–22:00), prefer dining
+      const { fillEveningDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
+      const filled2Eve = await fillEveningDeadGaps(dayResult.activities, {
+        destination: cityInfo?.cityName || destination,
+        isFirstDay,
+        isLastDay,
+        isLastDayInCity,
+        archetype: (tripMeta?.travel_dna_primary as string | undefined) || undefined,
+        dietaryRestrictions: (tripMeta?.dietary_restrictions as string[] | undefined) || [],
+        budgetTier: (tripMeta?.budget_tier as string | undefined) || 'standard',
+        tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
+        lockedIds: lockedIdSet,
+        latestUsableMins: _gapLatestMins2,
+        preferCategory: 'dining',
+      });
+      if (filled2Eve.inserted.length > 0) {
+        console.log(`[generate-trip-day] 2nd-pass: filled ${filled2Eve.inserted.length} evening dead gap(s) on day ${dayNumber}`);
+        dayResult.activities = filled2Eve.activities;
+      }
       // Density observability — flag any remaining ≥3h afternoon gap so we can
       // grep edge logs for the next regression. Clamp upper bound on last day
       // so we report against the actual usable departure window.
-      const { reportRemainingAfternoonDeadGap } = await import('./pipeline/fill-dead-gaps.ts');
+      const { reportRemainingAfternoonDeadGap, reportRemainingEveningDeadGap } = await import('./pipeline/fill-dead-gaps.ts');
       const remaining = reportRemainingAfternoonDeadGap(dayResult.activities, _gapLatestMins2);
       if (remaining >= 180) {
         if (_isLastDay) {
@@ -1711,6 +1749,13 @@ async function _handleGenerateTripDayInner(
           dayResult.metadata.quality = dayResult.metadata.quality || {};
           dayResult.metadata.quality.unfilled_dead_gap_minutes = remaining;
         }
+      }
+      // Bug 4 — same observability for the evening window. Reporter logs `[QUALITY]`.
+      const remainingEve = reportRemainingEveningDeadGap(dayResult.activities, _gapLatestMins2, dayNumber);
+      if (remainingEve >= 180) {
+        dayResult.metadata = dayResult.metadata || {};
+        dayResult.metadata.quality = dayResult.metadata.quality || {};
+        dayResult.metadata.quality.unfilled_evening_gap_minutes = remainingEve;
       }
     } catch (gapErr) {
       console.warn('[generate-trip-day] 2nd-pass dead-gap fill failed (non-blocking):', gapErr);
