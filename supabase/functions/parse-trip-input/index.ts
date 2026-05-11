@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { requireAuth } from "../_shared/require-auth.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -359,6 +361,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const authFail = await requireAuth(req);
+  if (authFail) return authFail;
+
   try {
     const { text } = await req.json();
 
@@ -424,9 +429,21 @@ serve(async (req) => {
     }
 
     let result: any;
+    let jsonErr: unknown = null;
     try {
       result = await response.json();
-    } catch (jsonErr) {
+    } catch (e) {
+      jsonErr = e;
+    }
+    if (result) {
+      try {
+        const costTracker = trackCost('parse_trip_input', 'google/gemini-3-flash-preview');
+        costTracker.recordAiUsage(result);
+        await costTracker.save();
+      } catch (e) {
+        console.warn('[parse-trip-input] cost tracking failed:', e);
+      }
+    } else {
       console.error("AI response JSON parse error:", jsonErr);
       return new Response(JSON.stringify({
         error: "AI returned an invalid response — please try again",
