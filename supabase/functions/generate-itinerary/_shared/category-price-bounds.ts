@@ -63,6 +63,7 @@ export const CATEGORY_PRICE_CEILINGS: Record<PriceCategoryKey, PriceBound> = {
 
   // experiences
   walking_tour:        { min: 0,  max: 40,  currency: 'USD' },
+  walking_tour_paid:   { min: 15, max: 80,  currency: 'USD' },
   museum:              { min: 0,  max: 50,  currency: 'USD' },
   guided_tour_premium: { min: 50, max: 250, currency: 'USD' },
   bike_tour:           { min: 25, max: 90,  currency: 'USD' },
