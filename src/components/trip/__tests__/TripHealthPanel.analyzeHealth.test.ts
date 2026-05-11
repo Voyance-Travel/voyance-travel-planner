@@ -35,4 +35,28 @@ describe('analyzeHealth — overlap classification', () => {
     expect(issues.length).toBe(1);
     expect(issues[0].severity).toBe('warning');
   });
+
+  // ── M3 wrap-residue / logistics-filter regression (user addendum) ──
+  it('M3: wrap-past-midnight Return to Hotel does NOT generate phantom overlap', () => {
+    // Pre-fix: bookend with endTime 00:28 (wrap) sat in the day's `timed`
+    // array and the buffer/conflict pass — sourced from `activities` not
+    // `realActivities` — flagged a fake conflict against the real evening
+    // activity. Now the pass is sourced from realActivities AND the wrap
+    // predicate (end===0||end<start) drops it defensively.
+    const days = [day(2, [
+      { name: 'Dinner at Sant Pau', category: 'dining', startTime: '20:00', endTime: '22:00' },
+      { name: 'Return to JW Marriott', category: 'hotel_return', startTime: '23:50', endTime: '00:28' },
+    ])];
+    const issues = analyzeHealth(days).filter(i => i.fixAction === 'fix_timing');
+    expect(issues.length).toBe(0);
+  });
+
+  it('M3: Return to Hotel ending exactly at 00:00 does NOT generate phantom overlap', () => {
+    const days = [day(2, [
+      { name: 'Dinner at Sant Pau', category: 'dining', startTime: '20:00', endTime: '22:00' },
+      { name: 'Return to Hotel',    category: 'hotel_return', startTime: '23:30', endTime: '00:00' },
+    ])];
+    const issues = analyzeHealth(days).filter(i => i.fixAction === 'fix_timing');
+    expect(issues.length).toBe(0);
+  });
 });

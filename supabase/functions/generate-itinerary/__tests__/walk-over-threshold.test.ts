@@ -196,4 +196,39 @@ describe('enforceTransitModeByDistance — duration-only fallback', () => {
     expect(changed).toBe(false);
     expect(act.transportation.method).toBe('walk');
   });
+
+  // ── M4 negative: confirm we did NOT over-tighten ──
+  // User addendum: defer luxury sub-cap. A legitimate in-neighborhood walk
+  // (~600m, ~10 min) MUST stay a walk for every tier, including luxury.
+  it('M4: 10-min ~600m in-neighborhood walk stays a walk (no over-tightening)', async () => {
+    const { enforceTransitModeByDistance } = await import('../sanitization');
+    const act: any = {
+      title: 'Walk to Mercado San Miguel',
+      category: 'transport',
+      transportation: {
+        method: 'walk',
+        durationMinutes: 10,
+        distanceMeters: 600,
+      },
+    };
+    const changed = enforceTransitModeByDistance(act, null, null, 'TEST');
+    expect(changed).toBe(false);
+    expect(act.transportation.method).toBe('walk');
+  });
+
+  it('M4: validate-day does NOT flag a 10-min/600m walk under standard cap', () => {
+    const day = {
+      activities: [
+        {
+          id: 't1', title: 'Walk to Mercado San Miguel', category: 'transport',
+          startTime: '10:00', endTime: '10:10',
+          transportation: { method: 'walk', durationMinutes: 10, distanceMeters: 600 },
+        },
+        { id: 'a2', title: 'Tapas', category: 'dining', startTime: '10:10', endTime: '11:10' },
+      ],
+    } as any;
+    const results = validateDay({ ...baseInput, day } as any);
+    const hit = results.find((r: any) => r.code === FAILURE_CODES.WALK_OVER_THRESHOLD);
+    expect(hit).toBeFalsy();
+  });
 });

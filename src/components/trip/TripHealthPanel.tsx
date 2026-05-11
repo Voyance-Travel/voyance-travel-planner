@@ -67,10 +67,30 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
     const activities = day.activities || [];
     const dayNum = day.dayNumber || day.day_number;
 
-    // Empty day
+    // Empty day. Exclude bookends (hotel/check-in/check-out) AND transit/return
+    // logistics so e.g. a "Walk to dinner" + hotel-return don't pad an
+    // otherwise empty schedule into a "real" 2-activity day. Also drops the
+    // wrap-past-midnight residue (hotel-return 23:50 → 00:00/00:28) that the
+    // generator occasionally tags onto the next day's bucket.
+    const NON_REAL_CATS = new Set([
+      'check-in', 'check-out', 'hotel', 'accommodation',
+      'transit', 'transportation', 'transfer', 'logistics',
+      'commute', 'hotel_return', 'bookend',
+    ]);
+    const NON_REAL_TITLE_RE = /^\s*(?:return to|walk to|transfer to|drive to|taxi to|metro to|train to|bus to|tram to)\b/i;
+    const isWrapResidue = (a: any) => {
+      const s = parseTime(a.startTime || '');
+      const e = parseTime(a.endTime || '');
+      // Wrap-past-midnight: end===0 with start>0 (exact 23:30→00:00) OR end>0 && end<start.
+      return (e === 0 && s > 0) || (e > 0 && e < s);
+    };
     const realActivities = activities.filter((a: any) => {
       const cat = (a.category || a.type || '').toLowerCase();
-      return !['check-in', 'check-out', 'hotel', 'accommodation'].includes(cat);
+      const title = String(a.title || a.name || '');
+      if (NON_REAL_CATS.has(cat)) return false;
+      if (NON_REAL_TITLE_RE.test(title)) return false;
+      if (isWrapResidue(a)) return false;
+      return true;
     });
 
     if (realActivities.length === 0) {
@@ -152,10 +172,23 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
     });
     if (!allTimed) return;
 
+    // Buffer/conflict passes still source from `activities` (NOT realActivities)
+    // so legitimate transit-overlap warnings ("Walk to X" runs into next stop)
+    // continue to fire. The wrap-past-midnight residue + hotel-return bookend
+    // rows are explicitly filtered out below — that was the root cause of the
+    // phantom overlap warnings, not the inclusion of transit cards.
+    const isHotelReturn = (a: any) => {
+      const cat = String(a.category || a.type || '').toLowerCase();
+      const title = String(a.name || a.title || '');
+      if (['hotel_return', 'bookend', 'check-in', 'check-out', 'accommodation', 'hotel'].includes(cat)) return true;
+      return /^(?:return to (?:the )?hotel|return to )/i.test(title);
+    };
     const timed = activities
       .filter((a: any) => a.startTime && a.endTime)
-      // Day-boundary guard: drop rows tagged for a different day
       .filter((a: any) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
+      // Drop hotel-return bookends — they're decorative and routinely wrap
+      // past midnight; should never anchor a buffer/overlap warning.
+      .filter((a: any) => !isHotelReturn(a))
       .map((a: any) => ({
         name: a.name || a.title,
         category: a.category,
@@ -165,8 +198,10 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
         endStr: String(a.endTime),
       }))
       .filter((a: { start: number; end: number }) => a.start > 0 || a.end > 0)
-      // Drop wrap-past-midnight residue (e.g. hotel-return 23:50 → 00:28)
-      .filter((a: { start: number; end: number }) => !(a.end > 0 && a.end < a.start))
+      // Drop wrap-past-midnight residue. Treat end===0 with start>0 as wrap
+      // too (e.g. anything ending exactly at 00:00) — would otherwise false-negative.
+      .filter((a: { start: number; end: number }) =>
+        !((a.end === 0 && a.start > 0) || (a.end > 0 && a.end < a.start)))
       .sort((a: { start: number }, b: { start: number }) => a.start - b.start);
 
     for (let i = 0; i < timed.length - 1; i++) {
@@ -281,7 +316,10 @@ export function detectGapsForDay(allActivities: any[], dayNumber: number): Healt
     .map((a: any) => {
       const startMins = parseTime(a.startTime || '00:00');
       const endMins = parseTime(a.endTime || a.startTime || '00:00');
-      const wrapsMidnight = endMins > 0 && endMins < startMins;
+      // Wrap predicate: end===0 with start>0 (e.g. 23:30→00:00 exact) is wrap
+      // too — without the end===0 branch, "Return to Hotel" landing exactly on
+      // midnight false-negatives and pollutes the next day's gap analysis.
+      const wrapsMidnight = (endMins === 0 && startMins > 0) || (endMins > 0 && endMins < startMins);
       const preDawn = startMins < 5 * 60;
       return { a, startMins, endMins, skip: wrapsMidnight || preDawn };
     })

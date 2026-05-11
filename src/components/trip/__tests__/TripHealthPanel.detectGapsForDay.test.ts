@@ -79,4 +79,23 @@ describe('detectGapsForDay — day-boundary invariant', () => {
     ];
     expect(detectGapsForDay(acts, 3)).toHaveLength(1);
   });
+
+  // ── M3 wrap-detection edge case (user addendum) ──
+  it('M3: skips Return to Hotel ending exactly at 00:00 (midnight wrap)', () => {
+    const acts = [
+      a({ dayNumber: 3, title: 'Return to Hotel', startTime: '23:30', endTime: '00:00' }),
+      a({ dayNumber: 3, title: 'Misión Café',     startTime: '08:30', endTime: '09:30' }),
+    ];
+    expect(detectGapsForDay(acts, 3)).toHaveLength(0);
+  });
+
+  it('M3: skips wrap with end===0 (exact midnight) on a non-bookend stray', () => {
+    // Even when the title doesn't match the bookend regex, the wrap predicate
+    // alone must discard a 22:00→00:00 row so it can't anchor a phantom gap.
+    const acts = [
+      a({ dayNumber: 3, title: 'Late Tasting', category: 'dining', startTime: '22:00', endTime: '00:00' }),
+      a({ dayNumber: 3, title: 'Brunch',       category: 'dining', startTime: '11:00', endTime: '12:00' }),
+    ];
+    expect(detectGapsForDay(acts, 3)).toHaveLength(0);
+  });
 });
