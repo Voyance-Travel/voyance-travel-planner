@@ -892,6 +892,9 @@ export function nuclearDiningStrip(
     }
   }
 
+  if (preservedManualPick > 0) {
+    console.log(`[DINING NUCLEAR] skipped=${preservedManualPick} preserveAsManualPick (visible "find a place" slots kept)`);
+  }
   return stripped;
 }
 
