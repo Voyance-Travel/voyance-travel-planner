@@ -44,7 +44,7 @@ import {
 } from '../_shared/category-price-bounds.ts';
 import { ensureDayDiningDescriptions } from '../../_shared/dining-description-backfill.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
-import { pickTransitFallback } from '../../_shared/transit-mode.ts';
+import { pickTransitFallback, pickTransitTier, haversineMeters, extractCoords } from '../../_shared/transit-mode.ts';
 
 // =============================================================================
 // INPUT TYPES
