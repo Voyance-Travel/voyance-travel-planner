@@ -1134,6 +1134,8 @@ function checkPhantomEventRefs(activities: StrictActivityMinimal[], results: Val
     }
   });
 }
+
+function getActivityCostAmount(act: any): number | null {
   const c = act?.cost ?? act?.estimatedCost;
   if (!c || typeof c !== 'object') return null;
   const amt = Number(c.amount);
