@@ -493,17 +493,65 @@ function parseSingleDay(
     })
     .map((a, actIdx) => parseSingleActivity(a, dayIndex, actIdx));
 
-  // Deduplicate activities by title+startTime within the same day
-  const seen = new Set<string>();
-  const activities = parsedActivities.filter(act => {
-    const key = `${(act.title || '').toLowerCase().trim()}|${(act.startTime || '').trim()}`;
-    if (seen.has(key)) {
-      console.warn(`[itineraryParser] Day ${dayNumber}: Removing duplicate activity "${act.title}"`);
-      return false;
+  // Deduplicate activities within the same day.
+  //
+  // Hardened key (Bruges meal-loss fix): category + venue + title + startTime.
+  // Two dining cards now only collide when they're the *same* venue at the
+  // *same* time. Empty-startTime collisions are exempt entirely — that was
+  // the documented Bruges trigger where multiple meal/logistics cards with
+  // empty `startTime` collapsed to a single survivor on the key "|".
+  const DINING_CAT_RE = /(dining|food|restaurant|breakfast|lunch|dinner|brunch|cafe|café)/i;
+  const isDining = (a: any) =>
+    DINING_CAT_RE.test(String(a?.category || '')) ||
+    DINING_CAT_RE.test(String(a?.title || ''));
+  const venueOf = (a: any) =>
+    String(a?.venue_name || a?.location?.name || a?.location?.address || '').toLowerCase().trim();
+  const seen = new Map<string, any>();
+  const activities: any[] = [];
+  for (const act of parsedActivities) {
+    const start = String(act.startTime || '').trim();
+    const cat = String(act.category || '').toLowerCase().trim();
+    const venue = venueOf(act);
+    const title = (act.title || '').toLowerCase().trim();
+    // Never dedup when startTime is empty — empty-time collisions silently
+    // dropped Bruges meal cards. Always keep these.
+    if (!start) {
+      activities.push(act);
+      continue;
     }
-    seen.add(key);
-    return true;
-  });
+    const key = `${cat}|${venue}|${title}|${start}`;
+    const prior = seen.get(key);
+    if (!prior) {
+      seen.set(key, act);
+      activities.push(act);
+      continue;
+    }
+    // Tie-break: prefer dining over non-dining; prefer card with a venue
+    // over a placeholder. Never silently drop a dining card.
+    const priorIsDining = isDining(prior);
+    const actIsDining = isDining(act);
+    if (actIsDining && !priorIsDining) {
+      // Replace prior with act (keep dining).
+      const idx = activities.indexOf(prior);
+      if (idx >= 0) activities[idx] = act;
+      seen.set(key, act);
+      console.warn(`[itineraryParser] Day ${dayNumber}: dedup kept dining "${act.title}" over non-dining "${prior.title}"`);
+      continue;
+    }
+    if (!actIsDining && priorIsDining) {
+      console.warn(`[itineraryParser] Day ${dayNumber}: dedup kept prior dining "${prior.title}" over non-dining "${act.title}"`);
+      continue;
+    }
+    // Same dining-ness: prefer one with venue.
+    const priorHasVenue = !!venueOf(prior);
+    const actHasVenue = !!venue;
+    if (actHasVenue && !priorHasVenue) {
+      const idx = activities.indexOf(prior);
+      if (idx >= 0) activities[idx] = act;
+      seen.set(key, act);
+    }
+    console.warn(`[itineraryParser] Day ${dayNumber}: Removing duplicate activity "${act.title}" (cat=${cat}, venue=${venue || '∅'}, start=${start})`);
+  }
   
   // CRITICAL: Always use calculated date from tripStartDate + dayIndex when available.
   // This acts as a post-generation sanitizer — the AI sometimes returns wrong dates
