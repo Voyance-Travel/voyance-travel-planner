@@ -22,6 +22,13 @@
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { parseAuth } from "../_shared/require-auth.ts";
+import { checkDbRateLimit } from "../_shared/db-rate-limiter.ts";
+
+// Per-caller rate limit: 20 requests / hour / auth.uid().
+// Eliminates timing-based enumeration channel (DB lookup latency would
+// otherwise leak whether an email exists). Over-limit returns the same
+// neutral ACK shape — never a 429 — so no enumeration via status code either.
+const RATE_RULE = { maxRequests: 20, windowMs: 60 * 60 * 1000 };
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,7 +45,7 @@ const json = (status: number, body: unknown): Response =>
 // Single canonical "ack" response shape — never reveals registration.
 const ACK = { ok: true, message: "If that email belongs to a Voyance user, your request has been sent." };
 
-const EMAIL_RE = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -71,6 +78,14 @@ Deno.serve(async (req: Request) => {
   const admin = createClient(SERVICE_URL, SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  // Per-caller rate limit. Over-limit returns neutral ACK (no 429 leak,
+  // no DB lookup performed → no timing channel either).
+  const rl = await checkDbRateLimit(admin, callerId, "friend-request-by-email", RATE_RULE, callerId);
+  if (!rl.allowed) {
+    console.warn(`[FRIEND_REQ_RATE_LIMIT] caller=${callerId} count=${rl.count}`);
+    return json(200, ACK);
+  }
 
   // Look up target user_id.
   // Use existing `get_user_id_by_email` if the service role can call it;

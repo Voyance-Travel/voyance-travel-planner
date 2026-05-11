@@ -1,128 +1,79 @@
-# Ship Queue: Walking-Tour + Description Coverage + Q43 Drop + M1/M2 Tests
+# Q43 Friend-Request Refactor + Audit Batch Closeout
 
-All five items approved. Per memory + repo audit, walking-tour bimodal split and description-coverage 3-layer defense are **already shipped** (mem://constraints/itinerary/per-category-price-sanity + mem://constraints/itinerary/description-coverage). This batch executes the **net-new** work: Q43 watch-list drop + M1/M2 regression tests.
+## Priority 1 (BLOCKING) — Q43 Refactor: Restore `sendFriendRequestByEmail`
 
----
+**Context.** `get_user_id_by_email` was hardened to admin-only in a prior migration. `src/services/supabase/friends.ts:162` (`sendFriendRequestByEmail`) silently 403s for every non-admin user. This is a real broken feature in production; refactor — don't remove.
 
-## Critical diagnostic flag — Q43 plan needs revision
+### Steps
 
-The reviewer's plan says "**Confirmed zero callers in the codebase**" for `get_user_id_by_email` and `get_user_info_by_email`. **That is incorrect.** Repo grep found:
+1. **Pre-flight check (BLOCKING gate)** — run pg_stat_statements query for any non-repo callers of `get_user_id_by_email` and `get_user_info_by_email`. If `pg_stat_statements` is unavailable, defer the `_info_` DROP only — proceed with everything else. Sentinel logged.
 
-```
-src/services/supabase/friends.ts:162  // sendFriendRequestByEmail()
-src/pages/admin/SessionExplorer.tsx:60  // admin tool
-```
+2. **New edge function** — `supabase/functions/friend-request-by-email/index.ts`:
+   - `verify_jwt = true` via shared `_shared/require-auth.ts` pattern (must have `auth.uid()`)
+   - Service-role client looks up email → user_id
+   - If found and not self and no existing friendship/pending request → insert `friend_requests` row
+   - **Always returns the same shape** regardless of registration status, self-request, or existing-request: `{ ok: true, message: "If that email belongs to a Voyance user, your request has been sent." }`
+   - **Per-caller rate limit:** 20 requests/hour per `auth.uid()`. Use existing `rate_limit_log` infra if present (grep first); otherwise simple table-backed counter (NOT in-memory — edge functions are stateless). New table `friend_request_rate_log(user_id, created_at)` with index on `(user_id, created_at)` and a `cleanup_friend_request_rate_log()` purge >24h. Over-limit also returns the same neutral shape (no 429 leak).
+   - Input validation: Zod schema, lowercase + trim email, max 255 chars
+   - All error branches return the neutral shape — never `{error: "..."}` that leaks state
+   - CORS headers on every response
 
-`get_user_id_by_email` is currently **admin-only** (per `has_role('admin')` check shipped in prior round). That means **`sendFriendRequestByEmail` has been silently broken for non-admin users since the hardening shipped** — it throws "Forbidden: admin role required" on every "Add friend by email" attempt.
+3. **Refactor frontend** — `src/services/supabase/friends.ts:162` `sendFriendRequestByEmail`:
+   - Replace `supabase.rpc('get_user_id_by_email', ...)` + manual insert with single `supabase.functions.invoke('friend-request-by-email', { body: { email } })`
+   - Toast copy uses returned `message` verbatim
+   - Remove now-dead error branches (user-not-found, self-request, duplicate) — all collapse into the neutral success path
 
-Dropping the RPC outright would not "eliminate dead code" — it would make the breakage explicit (404 instead of 403). The right fix is the architectural pattern the reviewer cited later in the message:
+4. **Migration — drop `get_user_info_by_email` only** (gated on step 1):
+   - `DROP FUNCTION public.get_user_info_by_email(text);`
+   - Keep `get_user_id_by_email` admin-only (legitimate sole caller: `SessionExplorer.tsx`)
 
-> "Build the new feature on the principle 'never return whether an email is registered' — always send the email regardless, route to magic-link (existing user) or signup-invite (new user) based on lookup happening server-side in the email sender."
+5. **Tests** — `supabase/functions/friend-request-by-email/__tests__/`:
+   - Unregistered email → neutral success, no DB write
+   - Registered email → neutral success + `friend_requests` row exists
+   - Self-request → neutral success, no row
+   - Duplicate request → neutral success, no second row
+   - Rate-limit boundary: 20th request OK, 21st returns neutral success but no DB write (sentinel `[FRIEND_REQ_RATE_LIMIT]`)
+   - Response shape byte-identical across all branches (enumeration-safety assertion)
 
-### Q43 — revised path
-
-1. **pre-flight `pg_stat_statements` check** (reviewer note):
-   ```sql
-   SELECT calls, query
-   FROM pg_stat_statements
-   WHERE query ILIKE '%get_user_id_by_email%'
-      OR query ILIKE '%get_user_info_by_email%'
-   ORDER BY last_call DESC NULLS LAST
-   LIMIT 20;
-   ```
-   If any non-repo callers surface, document them before changing function shape.
-
-2. **New edge function `friend-request-by-email`** (service-role lookup, enumeration-safe):
-   - Looks up target user_id via service-role query on `auth.users`
-   - If found AND not self AND no existing friendship: insert friend request as the caller
-   - If not found OR self OR already-friends: return identical generic success shape
-   - Always returns the same response shape — never reveals registration status
-   - Caller is `auth.uid()`; no admin role required
-
-3. **Refactor `friends.ts::sendFriendRequestByEmail`** to invoke the new edge function instead of the RPC. UI surfaces a single neutral toast ("If that email belongs to a Voyance user, your request has been sent.").
-
-4. **Restrict `get_user_id_by_email` to admin-only** (already done per memory) and keep `SessionExplorer.tsx` as the only caller. Confirms the "admin tool needs n" comment from migration `20260511115400`.
-
-5. **Drop `get_user_info_by_email`** (after `pg_stat_statements` check confirms zero non-repo callers — there are zero repo callers for the `_info_` variant). Single migration.
-
-6. **Memory update**: revise mem://constraints/security/security-definer-accepted-class to reflect the refactor (friend-by-email no longer runs through SECURITY DEFINER admin RPC).
+6. **Memory** — update `mem://constraints/security/security-definer-accepted-class.md`:
+   - `get_user_info_by_email` removed (or deferral noted)
+   - `get_user_id_by_email` admin-only, sole caller `SessionExplorer.tsx`
+   - Friend-by-email flow now goes through `friend-request-by-email` edge function with rate limit
 
 ---
 
-## M1 phantom-ref regression test (round 2)
+## Priority 2 — Approved follow-ups (batch ship after Q43)
 
-Per memory `mem://constraints/itinerary/schedule-coherent-copy`, the scrubber + DESCRIPTION_GHOST_REFERENCE validation code is shipped, and `phantom-ref-clause-scrub.test.ts` already covers the dinner-present/dinner-absent shapes. Add the **two reviewer-spec test cases verbatim** as the canonical regression sentinel inside that file:
-- "drops 'Tonight's dinner has limited seating' when no dinner card on Day 2"
-- "preserves the same sentence when the day has a dinner card"
+### M3 addendum — wrap-past-midnight edge case
+`detectGapsForDay` + `analyzeHealth`: use `endTime === 0 && startTime > 0` (more defensive than `<= 0`). One-line guard + regression test for 23:30 → 00:00 bookend.
 
-These mirror the production Madrid leak shape (single-sentence description, prior assertions covered partial-clause/em-dash patterns).
+### M5 ceiling review
+Audit `_shared/category-price-bounds.ts` upper bounds for `bike_tour` ($90→$150), `food_tour`, `wine_tasting`, `cooking_class`, `boat_tour`. Document chosen ceiling rationale in file header comment block. Mirror in `action-repair-costs.ts`.
 
----
+### R4 — Profiles RLS probe (BLOCKING gate before companion policy)
+Run probe query as a co-collaborator (non-owner) reading another collaborator's `profiles.display_name`. If denied, add `profiles_collaborator_read` policy: `USING (EXISTS (SELECT 1 FROM trip_collaborators tc1 JOIN trip_collaborators tc2 ON tc1.trip_id = tc2.trip_id WHERE tc1.user_id = auth.uid() AND tc2.user_id = profiles.user_id AND tc1.status = 'accepted' AND tc2.status = 'accepted'))` exposing `display_name` + `avatar_url` only. If allowed, ship migration as-is.
 
-## M2 combined departure-day regression test
+### R5 verify
+Curl-test the 4 parse-* edge functions (booking-confirmation, document-text, travel-story, trip-input) without auth → expect 401. With auth → expect 200/proper response. Spot-fix only the one(s) that fail. No broader changes.
 
-Single new test in `supabase/functions/_shared/__tests__/departure-day-combined.test.ts`. Constructs a Day N final-day shape with all three known failures co-occurring:
-- Late checkout at 14:00
-- Untimed airport transfer (no startTime)
-- Post-transfer dinner at 19:30
-
-Asserts after one `enforceDepartureDayLogistics` pass:
-- Checkout retimed ≤ 11:00 (cap = `min(11:00, dep − buffer − transfer − 60 − 30)`)
-- Transfer ends at `dep − buffer`
-- Post-transfer dinner pruned (non-locked)
-
-**Reviewer addendum — activity order assertion:**
-```ts
-const ids = out.activities.map(a => a.id);
-const lunchIdx    = ids.indexOf('lunch');
-const checkoutIdx = ids.indexOf('checkout');
-const transferIdx = ids.indexOf('transfer');
-expect(lunchIdx).toBeLessThan(checkoutIdx);
-expect(checkoutIdx).toBeLessThan(transferIdx);
-```
-
-Plus the second test from the original plan: locked-dinner preservation — same shape but the post-transfer dinner row carries `metadata.userLocked = true`. After repair, the locked dinner survives even though it violates departure-day logistics (universal locking wins). Add the same order assertion (lunch < checkout < transfer); the locked dinner ends up wherever the locking protocol places it (typically end-of-array; assert it's still present, not its index).
+### Description-coverage telemetry note
+Memory-only update on `mem://constraints/itinerary/description-coverage.md`: documented the `>5% false-positive` relax-trigger. No code change.
 
 ---
 
-## Description-coverage telemetry note
+## Sequencing
 
-Per reviewer's "Defer this nuance unless telemetry shows a problem" — **no code change this round**. Document the telemetry watch in memory:
-
-> If `RESTAURANT_MISSING_RECOMMENDATION` fires >5% of restaurant rows in production over a 7-day window, relax the rule to fire only when `description.length < 60 chars AND lacks an imperative verb`. Don't pre-tighten.
-
-Add to `mem://constraints/itinerary/description-coverage` as the documented escape valve.
-
----
-
-## Walking-tour split — verification only
-
-Per memory `mem://constraints/itinerary/per-category-price-sanity`, bimodal split is shipped:
-- `walking_tour_paid` (min $15, regex paid|guided|premium|private|food|tapas|wine|history|ghost|architecture)
-- Generic `walking_tour` (min $0)
-- Prefix-wins ordering verified
-
-Confirm via existing test file `m5-paid-tour-floor.test.ts`. No new code.
-
----
-
-## Execution order
-
-1. `pg_stat_statements` query — surface any non-repo callers
-2. New edge function `friend-request-by-email` (service-role + enumeration-safe response shape)
-3. Refactor `src/services/supabase/friends.ts::sendFriendRequestByEmail` to invoke it; update toast copy
-4. Migration: `DROP FUNCTION public.get_user_info_by_email(text)` (zero callers, period)
-5. M1 regression test (append two cases to `phantom-ref-clause-scrub.test.ts`)
-6. M2 combined test (new file, two tests, with order assertion)
-7. Run vitest + Deno test suites
-8. Memory updates: `security-definer-accepted-class` (friend-flow refactored), `description-coverage` (telemetry watch)
-
----
+1. Q43 ships first (closes real broken feature)
+2. M3 / M5 / R5 in parallel after Q43 lands
+3. R4 probe runs separately (BLOCKING gate decides whether to add companion policy)
+4. Memory updates last
 
 ## Out of scope
 
-Fresh-city Madrid-style QA, Stripe E2E manual config, beta-2 invite, final linter rerun — all in the post-batch verification phase.
+- Hotel-return, M1, M2, M4, M6, description-coverage code changes — already shipped in prior rounds (per chat history). This plan is the residual queue: Q43 refactor + the four small follow-ups + R4 probe + R5 verify.
 
-## Decision required
+## Risks
 
-The Q43 path above (refactor `friends.ts` to a service-role edge function + drop only the `_info_` variant) is the architecturally correct read of "never return whether an email is registered." If you'd rather the simpler (but feature-removing) path — drop both functions and remove `sendFriendRequestByEmail` UI entirely until the new flow is built — flag and I'll switch the plan.
+- **`pg_stat_statements` unavailable.** Mitigation: defer only the `_info_` DROP; everything else proceeds. Memory notes the deferral.
+- **Rate-limit infra audit miss.** If existing `rate_limit_log` exists, use it (grep first). Otherwise dedicated table, not in-memory.
+- **R4 probe ambiguous.** If probe shows partial access (some collaborators yes, others no), default to adding the companion policy — never ship a "Member abc12345" regression.
