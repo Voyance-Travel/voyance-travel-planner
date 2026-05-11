@@ -2765,11 +2765,43 @@ export type Database = {
         }
         Relationships: []
       }
+      customer_review_contacts: {
+        Row: {
+          created_at: string
+          email: string
+          review_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          review_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          review_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_review_contacts_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: true
+            referencedRelation: "customer_reviews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_review_contacts_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: true
+            referencedRelation: "public_customer_reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_reviews: {
         Row: {
           archetype: string | null
           created_at: string
-          email: string | null
           id: string
           is_approved: boolean | null
           is_featured: boolean | null
@@ -2784,7 +2816,6 @@ export type Database = {
         Insert: {
           archetype?: string | null
           created_at?: string
-          email?: string | null
           id?: string
           is_approved?: boolean | null
           is_featured?: boolean | null
@@ -2799,7 +2830,6 @@ export type Database = {
         Update: {
           archetype?: string | null
           created_at?: string
-          email?: string | null
           id?: string
           is_approved?: boolean | null
           is_featured?: boolean | null
