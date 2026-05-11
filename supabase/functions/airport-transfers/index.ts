@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { googleDistanceMatrix } from "../_shared/google-api.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -221,9 +222,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
   try {
-    const body = await req.json() as TransferRequest;
-    const { origin, destination, city, airportCode, arrivalTime, hotelName, archetype, travelers, isReturn } = body;
+    const body = await req.json() as TransferRequest & { tripId?: string };
+    const { origin, destination, city, airportCode, arrivalTime, hotelName, archetype, travelers, isReturn, tripId } = body;
 
     if (!city) {
       return new Response(
@@ -267,6 +272,8 @@ serve(async (req) => {
 
     if (GOOGLE_MAPS_API_KEY && googleOrigin && googleDest) {
       const transferTracker = trackCost('airport_transfers', 'google_distance_matrix');
+      transferTracker.setUserId(userId);
+      if (tripId) transferTracker.setTripId(tripId);
       const fetchPromises = [];
 
       // Driving
