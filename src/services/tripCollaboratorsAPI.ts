@@ -185,14 +185,8 @@ export async function addTripCollaborator({ tripId, userId, permission = 'edit',
       .eq('id', userId)
       .maybeSingle();
 
-    // Get collaborator email from auth via the secure RPC
-    const { data: userInfo } = await supabase.rpc('get_user_info_by_email', {
-      lookup_email: '', // We need email — fetch from get_current_user_email won't work for other users
-    });
-    // Instead, use the profiles + a direct lookup
-    const { data: memberEmail } = await supabase
-      .rpc('get_current_user_email'); // This only gets current user, so use a fallback
-
+    // Note: cannot resolve other users' emails from the client (admin-only RPC).
+    // Email is resolved server-side on invite acceptance; placeholder used here.
     // Upsert into trip_members with a placeholder email if we can't resolve it
     await supabase
       .from('trip_members')

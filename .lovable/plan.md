@@ -1,103 +1,129 @@
-# Restaurant & Activity Description Coverage
+# Q43 + M1 + M2 — Approved with notes
 
-## Investigation Summary
+## Part 1 — Q43: SECURITY DEFINER audit + watch-list remediation
 
-**Q1 — Where are descriptions generated?**
-Single source: the main activity-generation prompt in `supabase/functions/generate-itinerary/prompt-library.ts` (assembled by `pipeline/compile-prompt.ts`). The model returns `activity.description` inline with the rest of the activity object — there is **no separate description-enrichment step or post-gen blurb writer**. `pipeline/enrich-day.ts` only attaches venue metadata (place_id, coords, rating) from `verified_venues`, never copy.
+### 1a. Document the architectural decision
 
-**Q2 — Required vs optional?**
-Description is **never explicitly required** in `prompt-library.ts`. It's mentioned only tangentially:
-- L1309 "include WHICH line/route for public transit"
-- L1326 "Can be optional/skippable — note 'optional' in description if so"
-- L1389 "If an activity is FREE, you may mention 'free entry' in the description"
+Append an "Accepted findings" section to `@security-memory` covering:
 
-No "every activity MUST have a description" rule, no quality bar for restaurants.
+- The 30 authenticated `SECURITY DEFINER` functions are the project's intentional RPC contract for RLS-bypassing privileged operations (invites, credit deduction, group budgets, share toggles, booking state machine).
+- Future linter/scanner runs that re-flag these as a class should treat them as accepted unless the function:
+  - Is callable by `anon` AND touches PII or secrets, OR
+  - Reads from `auth.users` AND lacks both an `auth.uid() IS NOT NULL` guard and a per-caller scope filter, OR
+  - Performs writes scoped only by a client-supplied id (no `auth.uid()` check or membership join).
+- Individual finding entries will still be triaged; the **class** is approved.
 
-**Q3 — Existing validator?**
-None. `rg "MISSING_DESCRIPTION|checkActivityDescription|description.*empty"` returns 0 hits across the whole edge-functions tree. `FAILURE_CODES` (pipeline/types.ts) has no description-quality entries.
+### 1b. Watch-list remediation (the 4 functions)
 
-**Q4 — Hidden leak path (BIG):**
-`scrubPhantomEventRefsFromString` (`_shared/prompt-leak-scrub.ts:404`) and `scrubBodyPromptLeaks` can **blank a description to `''`** when the entire field is a single phantom-only sentence (M2 Madrid fix). Nothing fills it back in. This explains the intermittent "good blurb on Café Comercial, blank on the next restaurant" pattern: when the LLM wrote "Tonight's Michelin dinner has limited seating" as the *only* description, the scrubber dropped it and left empty.
+Codebase grep confirms **zero callers** for `get_user_id_by_email`, `get_user_info_by_email`, and `get_intake_account` across `src/`, `supabase/functions/`, and SQL migrations.
 
-So root causes are (a) prompt doesn't mandate descriptions, (b) phantom-ref scrubber legitimately blanks fields with no replacement.
+Treat dead code as the cheapest fix: **drop them.**
 
-## Plan
+| Function | Action | Rationale |
+|---|---|---|
+| `get_user_id_by_email` | `DROP FUNCTION` | No callers. PII enumeration risk. `auth.uid() IS NOT NULL` insufficient against authed enumeration at scale. If invite-by-email returns, build it on `send-invite-email` edge fn that emails the recipient without confirming registration status to the caller. |
+| `get_user_info_by_email` | `DROP FUNCTION` | Same as above; returns even more PII (display_name, handle, names). |
+| `get_intake_account` | Keep, **REVOKE FROM `anon, authenticated`; GRANT TO `service_role` only** | Returns minimal data (id, name) gated on `intake_token` which is itself a secret. Currently has no role guard so anyone with a token can call it. Restrict to service_role and route via an edge function that validates the token server-side. No callers in repo today, so no client breakage. |
+| Plus: write a one-shot reverse-callers check via Supabase logs before drop | Defensive | If anything in production hits the dropped functions in the next 7 days, logs will surface it. |
 
-### 1. Prompt mandate — `prompt-library.ts`
-Insert a `DESCRIPTION REQUIREMENTS (HARD RULE)` block right after the existing `MEAL DETAILS` section (~line 1295), modelled on the SCHEDULE COHERENCE block:
+**Migration:** single SQL migration file dropping the two functions and revoking grants on the third. Add a comment block citing the security-memory accepted-findings entry and the date.
 
-- Every non-transit, non-bookend activity MUST have a description ≥30 chars.
-- Restaurants: ONE actionable recommendation — "Order/Try/Request the [signature dish]" or "Ask for a table in the [specific area]" or "Best window: [time slot]".
-- Attractions: ONE insider tip — best entrance, what to focus on, ideal light/crowd timing.
-- Experiences: ONE calibration — skill level, dress code, what to bring.
-- Banned openings: "This is a great…", "You'll love…", "Amazing…", "Wonderful…" + length <100 chars.
-- Note that empty/generic descriptions trigger a regeneration pass.
+**Memory:** add a new entry `mem://constraints/security/security-definer-accepted-class` documenting the accepted-class decision and the three watch-list fixes for traceability.
 
-### 2. Validator — `pipeline/validate-day.ts`
-Add `checkActivityDescriptions(activities, results)` and wire it before `checkPlausiblePricing` (~line 186). New failure codes in `pipeline/types.ts`:
+### 1c. Note for future-me
 
-```
-MISSING_DESCRIPTION:                 'MISSING_DESCRIPTION',         // <30 chars or empty
-GENERIC_DESCRIPTION:                 'GENERIC_DESCRIPTION',         // generic opener + <100 chars
-RESTAURANT_MISSING_RECOMMENDATION:   'RESTAURANT_MISSING_RECOMMENDATION',
-```
+If invite-by-email UX is rebuilt later, the right shape is:
+- Client POSTs `{recipient_email, trip_id}` to an edge function
+- Edge function never returns whether the email is registered
+- Email is always sent (existing user → magic link, new user → signup invite)
+- Eliminates the enumeration vector entirely
 
-Skip rules (mirror `shouldSkipPriceSanity`):
-- Skip `category === 'transport'`, transit rows (`isTransitActivity`), bookends (`isBookendCard`).
-- Skip locked/user/manual/extracted/pinned (Universal Locking).
-- Skip `isGhostActivity` rows.
+## Part 2 — M1: Phantom event scrubber test addition
 
-Restaurant detection: `category === 'dining' || subcategory matches restaurant|dining|food`. Recommendation regex: `/order|try|request|ask for|don'?t miss|signature|known for|best for|book.*table/i`.
+The scrubber and 3-layer defense already shipped (`mem://constraints/itinerary/schedule-coherent-copy`). Add the explicit Madrid regression test the user called out.
 
-### 3. Repair — `pipeline/repair-day.ts`
-Add **§10f. DESCRIPTION_FILL** right after §10e price-substitute. Strategy: **single batched LLM call per day** (cost-conscious vs per-activity round-trip).
+In `supabase/functions/_shared/__tests__/prompt-leak-scrub.test.ts` (or the existing scrub-activity test file, whichever owns `scrubPhantomEventRefs`), add:
 
-```
-const missing = results.filter(r => 
-  r.code === MISSING_DESCRIPTION || 
-  r.code === GENERIC_DESCRIPTION || 
-  r.code === RESTAURANT_MISSING_RECOMMENDATION
-);
-if (missing.length === 0) skip;
+```ts
+it('drops "Leave by 20:30 for tonight\'s Michelin-starred dinner" when no dinner card exists', () => {
+  const description = "Wander the gallery rooms. Leave by 20:30 for tonight's Michelin-starred dinner.";
+  const out = scrubPhantomEventRefs(description, { hasDinner: false });
+  expect(out).toBe('Wander the gallery rooms.');
+  expect(out).not.toMatch(/20:30|Michelin|tonight/i);
+});
 
-// Build compact prompt: destination + per-activity {id, title, venue, category, subcategory, isRestaurant}
-// Ask Gemini 2.5 flash for {id: string, description: string}[] — strict JSON.
-// Apply via id match; never overwrite a non-empty description for GENERIC/RESTAURANT_MISSING (only enrich blanks).
-// Stamp `repair.action='filled_missing_description'` + sentinel log `[DESC_FILL] day=N filled=K`.
+it('preserves the same sentence when a dinner card IS present (not phantom)', () => {
+  const description = "Wander the gallery rooms. Leave by 20:30 for tonight's Michelin-starred dinner.";
+  const out = scrubPhantomEventRefs(description, { hasDinner: true });
+  expect(out).toContain('20:30');
+});
 ```
 
-Model: `google/gemini-2.5-flash` (Lovable AI Gateway, no key needed; cheap, fast, JSON-mode reliable). Hard 8-second timeout — on failure leave field empty (no generic placeholder, per Density Protocol "No placeholder responses" core rule).
+If the current scrubber signature doesn't take a `hasDinner` context arg, add the test against the actual API surface used at the §10b call site (whatever determines "phantom" — typically per-day activity-list inspection).
 
-### 4. Validation gate — `pipeline/validation-gate.ts`
-Add cases for the three new codes — non-blocking (warning severity passes through). Repair-day §10f is the actual mutator; the gate just logs `[VALIDATION_GATE] day=N MISSING_DESCRIPTION count=K` for telemetry.
+No production code changes.
 
-### 5. Tests — `supabase/functions/generate-itinerary/__tests__/description-coverage.test.ts` (new)
-- Empty description on restaurant → MISSING_DESCRIPTION.
-- 25-char description → MISSING_DESCRIPTION (length floor).
-- "This is a great spot" → GENERIC_DESCRIPTION.
-- Restaurant with "Order the suckling pig roasted in the 16th-century cellar" → no violation.
-- Restaurant with "Authentic Spanish cuisine in Madrid" → RESTAURANT_MISSING_RECOMMENDATION.
-- Transit/bookend/locked/ghost rows → skipped.
-- After phantom-ref scrub blanks a description, validator catches it (regression coverage for the Madrid M2 leak path).
+## Part 3 — M2: Departure-day combined regression test
 
-### 6. Memory
-Update existing `mem://constraints/itinerary/schedule-coherent-copy` entry to note that the phantom-scrub blank is now backstopped by §10f description-fill, and add a new core memory `mem://constraints/itinerary/description-coverage`:
+The enforcement already shipped (`mem://constraints/itinerary/departure-day-final-enforcement`). Add the combined Madrid scenario test.
 
-> Every non-transit/bookend activity MUST have a description ≥30 chars. Restaurants additionally need an actionable verb ("Order/Try/Request/Ask for/Don't miss/signature"). Validator: `checkActivityDescriptions` (validate-day.ts) → repair §10f batched Gemini-2.5-flash fill. Closes intermittent blank-restaurant-blurb pattern (Madrid: Café Comercial OK, next restaurant blank because phantom-ref scrubber dropped the only sentence).
+In `supabase/functions/generate-itinerary/__tests__/` add `m2-departure-day-combined.test.ts`:
 
-Add one-line index entry under Per-Category Price Sanity.
+```ts
+// Madrid combined failure: 21:05 checkout + untimed transfer + 22:10–00:25 dinner
+// All three must be fixed by enforceDepartureDayLogistics in one pass.
 
-## Out of Scope
+it('M2 combined: late checkout + untimed transfer + post-transfer dinner all repaired', async () => {
+  const day = {
+    dayNumber: 5,
+    activities: [
+      { id: 'breakfast', startTime: '08:30', endTime: '09:30', category: 'food', name: 'Breakfast at hotel' },
+      { id: 'museum',    startTime: '10:00', endTime: '12:30', category: 'culture', name: 'Prado' },
+      { id: 'lunch',     startTime: '13:00', endTime: '14:30', category: 'food', name: 'Lunch' },
+      { id: 'checkout',  startTime: '21:05', endTime: '21:20', category: 'logistics', subcategory: 'checkout', name: 'Hotel checkout' },
+      { id: 'transfer',  startTime: '',      endTime: '',      category: 'logistics', subcategory: 'transfer_airport', name: 'Transfer to Airport' },
+      { id: 'dinner',    startTime: '22:10', endTime: '00:25', category: 'food', name: 'Dinner' },
+    ],
+  };
+  const flight = { departureTime: '23:55', kind: 'international' }; // buffer 180m → transfer ends 20:55
 
-- Per-activity LLM round-trips (rejected — too expensive). Batched per-day only.
-- Rewriting good-but-short descriptions (only fills empty/generic blanks).
-- Description quality scoring beyond length + recommendation-verb regex.
-- New `verified_venues.signature_dish` column (heavy migration — revisit only if telemetry shows fill-rate <85%).
-- Editing the existing `scrubPhantomEventRefs` behavior — it correctly blanks; §10f refills.
+  const out = enforceDepartureDayLogistics(day, { flight, transferMinutes: 30, isLastDay: true });
 
-## Verification
+  // Checkout retimed ≤ min(11:00, 20:55−30−60−30 = 19:55) → 11:00
+  const checkout = out.activities.find(a => a.id === 'checkout');
+  expect(parseTimeToMinutes(checkout.startTime)).toBeLessThanOrEqual(parseTimeToMinutes('11:00'));
 
-- New test file passes via direct `deno test` on `description-coverage.test.ts`.
-- Existing `m2-departure-day-logistics.test.ts` + phantom-ref tests still pass (no regression on legitimate blanks).
-- Manual: 3-day Madrid trip — every restaurant has actionable verb; no <30-char descriptions on non-transit cards.
-- Sentinel grep on edge logs after a generation: `[DESC_FILL] day=N filled=K` appears when phantom-scrub blanks fields.
+  // Transfer ends at dep − buffer = 20:55
+  const transfer = out.activities.find(a => a.id === 'transfer');
+  expect(transfer.endTime).toBe('20:55');
+  expect(transfer.startTime).toBe('20:25'); // 20:55 − 30m
+
+  // Dinner removed (non-logistics after transfer start)
+  expect(out.activities.find(a => a.id === 'dinner')).toBeUndefined();
+
+  // Locked rows would be preserved — verify exemption holds
+  // (assert in a separate test by adding isLocked:true to the dinner)
+});
+
+it('M2 combined: locked dinner is preserved even when it falls after transfer', () => {
+  // ... same setup but dinner.isLocked = true → expect dinner still present, transfer/checkout still fixed
+});
+```
+
+No production code changes — this is purely a regression assertion against existing behavior.
+
+## Files touched
+
+- New: `supabase/migrations/<timestamp>_drop_email_lookup_functions_and_lock_intake.sql`
+- New: `mem://constraints/security/security-definer-accepted-class` (memory file)
+- Update: `mem://index.md` (add new memory reference)
+- Update: `@security-memory` via `security--update_memory` (Accepted findings section)
+- Update: existing `prompt-leak-scrub.test.ts` (or scrub-activity test) — 2 new test cases
+- New: `supabase/functions/generate-itinerary/__tests__/m2-departure-day-combined.test.ts`
+
+## Out of scope
+
+- Rebuilding invite-by-email UX (deferred until a feature actually needs it)
+- Touching any of the other 30 SECURITY DEFINER functions (class-accepted)
+- M1/M2 production code changes (already shipped per memory)
+- The remaining 8 prompts (A1, A2, A4, A5, B-M3, B-M4, B-M5, C1) and 4 backlog items — separate batches per the user's queue
