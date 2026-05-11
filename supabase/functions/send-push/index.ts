@@ -196,6 +196,16 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Require service-role auth — push notifications are server-triggered, never user-triggered.
+  const authHeader = req.headers.get('Authorization');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!authHeader || !serviceRoleKey || authHeader !== `Bearer ${serviceRoleKey}`) {
+    return new Response(
+      JSON.stringify({ error: 'Forbidden — service-role auth required', code: 'FORBIDDEN' }),
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   try {
     const { userId, tokens: directTokens, title, body: pushBody, data } = await req.json();
 
