@@ -146,6 +146,7 @@ function normalizeDays(days: any[], tripStartDate: string | null, destination?: 
       console.log(`[DINING_DESC_BACKFILL] day=${dayNumber} dest="${destination || 'unknown'}" fallback=${diningBackfill.fallback} whyThisFits=${diningBackfill.whyThisFits} scanned=${diningBackfill.scanned} path=save-itinerary`);
     }
     const pruneResult = pruneNonLogisticsAfterCheckout(activities);
+    const transferPruneResult = pruneNonLogisticsAfterAirportTransfer(activities);
     if (dayOps.titleLeak + dayOps.bodyLeak + dayOps.fragment + dayOps.mealSuffix
         + dayOps.crossCity + dayOps.countryMismatch + dayOps.mealLabel
         + dayOps.phantomRef > 0) {
@@ -153,6 +154,9 @@ function normalizeDays(days: any[], tripStartDate: string | null, destination?: 
     }
     if (pruneResult.prunedCount > 0) {
       console.log(`[POST_CHECKOUT_PRUNE] day=${dayNumber} count=${pruneResult.prunedCount} titles=${JSON.stringify(pruneResult.prunedTitles)} path=save-itinerary`);
+    }
+    if (transferPruneResult.prunedCount > 0) {
+      console.log(`[POST_TRANSFER_PRUNE] day=${dayNumber} count=${transferPruneResult.prunedCount} titles=${JSON.stringify(transferPruneResult.prunedTitles)} path=save-itinerary`);
     }
     return { ...day, dayNumber, date, activities, _scrubOps: dayOps };
   });
