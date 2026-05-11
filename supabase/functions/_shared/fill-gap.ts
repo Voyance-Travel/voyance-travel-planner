@@ -42,6 +42,8 @@ export interface FillGapInput {
   budgetTier?: string;
   tripCurrency?: string;
   avoidIds?: string[];
+  /** Bug 4: soft category preference (e.g. 'dining' for evening gaps). */
+  preferCategory?: 'dining' | 'culture' | 'activity';
 }
 
 export interface FilledActivity {
