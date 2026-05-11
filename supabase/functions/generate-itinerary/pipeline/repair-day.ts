@@ -3633,6 +3633,29 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 15z. FINAL DEPARTURE-DAY LOGISTICS ENFORCEMENT (consolidated) -----------
+  // Last-line-of-defense after every other repair has finished mutating the day.
+  // Guarantees on a true departure day:
+  //   - checkout exists, starts ≤ 11:00 AND ≤ dep − buffer − transferMins − 60
+  //   - airport transfer (when flight info present) ends exactly at dep − buffer
+  //   - no non-logistics, non-locked card starts at/after the airport-transfer start
+  // Universal Locking honored — locked/user/manual/extracted/pinned rows preserved.
+  // Closes the recurring "Florence 16:15 / Barcelona 15:30 / Madrid 21:05" drift.
+  if ((isLastDay || (isLastDayInCity && !isTransitionDay)) && !isHotelChange) {
+    const enforcement = enforceDepartureDayLogistics({
+      activities,
+      dayNumber,
+      hotelName: hotelName || hotelOverride?.name || 'Your Hotel',
+      hotelAddress: hotelAddress || hotelOverride?.address || '',
+      returnDepartureTime24,
+      airportTransferMinutes: input.airportTransferMinutes || 45,
+      isLastDay,
+      lockedIds,
+    });
+    activities = enforcement.activities;
+    repairs.push(...enforcement.repairs);
+  }
+
   // --- 16. FINAL TIMING & TRANSIT-BUFFER PASS (shared with refresh-day) ---------
   // Catches the conflict classes the section-13 cascade misses:
   //   - Same-start collisions (currStart === nextStart)
