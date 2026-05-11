@@ -762,6 +762,23 @@ export function parseItineraryDays(
     }
   }
 
+  // Bruges meal-loss telemetry: compare raw dining count to result dining
+  // count. Any diff means a dedup or ghost filter dropped a meal — loud warn
+  // so a future regression is caught in browser console immediately.
+  try {
+    const countDining = (acts: any[]) =>
+      (acts || []).filter((a: any) =>
+        DINING_DAY_CAT_RE.test(String(a?.category || '')) ||
+        DINING_DAY_CAT_RE.test(String(a?.title || ''))
+      ).length;
+    const rawDining = parsedDays.reduce((sum, d) => sum + countDining(d.activities || []), 0);
+    const resultDining = result.reduce((sum, d) => sum + countDining(d.activities || []), 0);
+    console.debug(`[itineraryParser] raw_days=${parsedDays.length} result_days=${result.length} raw_dining=${rawDining} result_dining=${resultDining}`);
+    if (resultDining < rawDining) {
+      console.warn(`[itineraryParser] DINING DROP: ${rawDining - resultDining} dining card(s) lost between raw (${rawDining}) and result (${resultDining}) — investigate dedup/ghost filters`);
+    }
+  } catch { /* telemetry only */ }
+
   return result;
 }
 
