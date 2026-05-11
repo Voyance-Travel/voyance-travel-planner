@@ -302,6 +302,33 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       lastArchivedFingerprintRef.current = null;
     }
 
+    // ── Auto-backfill activity_costs for legacy trips ──────────────────
+    // If the canonical row total is $0 yet live JSON carries priced cards,
+    // trigger sync-trip-cost-table once. Pipeline writer will populate
+    // activity_costs and the next refetch will read real rows (rescue path
+    // drops out automatically).
+    if (
+      !backfillFiredRef.current &&
+      canonical.totalCents === 0 &&
+      liveActivities.some((a) => a.jsonCost > 0)
+    ) {
+      backfillFiredRef.current = true;
+      const dest = String((tripData as any)?.destination || '');
+      const tier = (tripData as any)?.budget_tier || null;
+      supabase.functions
+        .invoke('sync-trip-cost-table', {
+          body: { tripId, destination: dest, travelers: tripTravelers, budgetTier: tier },
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.warn('[useTripFinancialSnapshot] sync-trip-cost-table failed', error);
+            return;
+          }
+          console.info(`[useTripFinancialSnapshot] auto-backfilled activity_costs for legacy trip ${tripId}`);
+          window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
+        });
+    }
+
     // Reconciliation guard: BudgetTab must never under-report compared to
     // PaymentsTab. PaymentsTab's "Paid so far" is sum(trip_payments where
     // status='paid'); if our combined figure (which folds in the
