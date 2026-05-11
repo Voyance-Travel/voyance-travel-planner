@@ -129,14 +129,86 @@ export async function persistTripItinerary(
     console.warn(`[${label}] duration normalization failed (non-blocking):`, e);
   }
 
-  // 4. Write.
-  const updatePayload: Record<string, any> = {
-    itinerary_data: itinerary,
-    ...(options.extraUpdate || {}),
-  };
+  // 4. Regression guard — fetch the on-disk version and refuse to overwrite a
+  //    healthy `days` array with a materially worse one. The completeness
+  //    probe already classifies skeleton/incomplete plans; this layer makes
+  //    sure such a plan never *replaces* a previously-saved healthy one.
+  //    Failures here are non-blocking: any probe error falls through to the
+  //    normal write path so we don't lock callers out on transient errors.
+  let regressionBlocked = false;
+  let oldMetadata: Record<string, any> | null = null;
+  let oldSummary: { meaningfulCount: number; paidMeaningfulCount: number; dayCount: number } | null = null;
+  let newSummary: { meaningfulCount: number; paidMeaningfulCount: number; dayCount: number } | null = null;
+  try {
+    const { data: existing } = await supabase
+      .from('trips')
+      .select('itinerary_data, metadata')
+      .eq('id', tripId)
+      .maybeSingle();
+    if (existing) {
+      oldMetadata = (existing.metadata as Record<string, any>) || {};
+      const oldDays = Array.isArray((existing.itinerary_data as any)?.days)
+        ? (existing.itinerary_data as any).days
+        : [];
+      const { classifyItineraryCompleteness } = await import(
+        '../generate-itinerary/day-validation.ts'
+      );
+      oldSummary = classifyItineraryCompleteness(oldDays);
+      newSummary = classifyItineraryCompleteness(days);
+      const wasHealthy = oldSummary.meaningfulCount >= 3;
+      const minMeaningful = Math.max(3, Math.floor(oldSummary.meaningfulCount * 0.6));
+      const minPaid = Math.floor(oldSummary.paidMeaningfulCount * 0.5);
+      const isRegression =
+        wasHealthy &&
+        (newSummary.meaningfulCount < minMeaningful ||
+          newSummary.paidMeaningfulCount < minPaid);
+      if (isRegression && !options.allowRegression) {
+        regressionBlocked = true;
+        console.warn(
+          `[${label}] [PERSIST_REGRESSION_BLOCKED] keeping previous days — ` +
+            `was meaningful=${oldSummary.meaningfulCount} paid=${oldSummary.paidMeaningfulCount}, ` +
+            `now meaningful=${newSummary.meaningfulCount} paid=${newSummary.paidMeaningfulCount}`,
+        );
+      }
+    }
+  } catch (e) {
+    console.warn(`[${label}] regression-guard probe failed (non-blocking):`, e);
+  }
+
+  // 5. Write.
+  const extra = options.extraUpdate || {};
+  const updatePayload: Record<string, any> = { ...extra };
+
+  if (regressionBlocked) {
+    // Do NOT write itinerary_data — preserve the healthy on-disk version.
+    // Still merge metadata + rejected_attempts ring buffer.
+    const existingRejected = Array.isArray((oldMetadata as any)?.rejected_attempts)
+      ? ((oldMetadata as any).rejected_attempts as any[])
+      : [];
+    const callerMetadata = (extra.metadata && typeof extra.metadata === 'object')
+      ? extra.metadata as Record<string, any>
+      : {};
+    const newEntry = {
+      at: new Date().toISOString(),
+      label,
+      reason: 'regression_blocked',
+      old: oldSummary,
+      attempted: newSummary,
+    };
+    const rejected = [...existingRejected, newEntry].slice(-MAX_REJECTED_ATTEMPTS);
+    updatePayload.metadata = {
+      ...(oldMetadata || {}),
+      ...callerMetadata,
+      rejected_attempts: rejected,
+    };
+    delete updatePayload.itinerary_data; // belt-and-suspenders
+  } else {
+    updatePayload.itinerary_data = itinerary;
+  }
+
   const { error } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
   if (error) {
     console.error(`[${label}] trips.update failed:`, error);
   }
-  return { error };
+  return { error, regressionBlocked };
 }
