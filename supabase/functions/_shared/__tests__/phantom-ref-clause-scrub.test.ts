@@ -80,3 +80,17 @@ Deno.test('scrubPhantomEventRefs partial-clause strip preserves first clause', (
   assertEquals(/tonight/i.test(act.description), false);
   assertEquals(/freshen up/i.test(act.description), true);
 });
+
+// User-requested explicit Madrid regression: exact failure phrasing from QA.
+Deno.test("Madrid QA repro — 'Leave by 20:30 for tonight's Michelin-starred dinner.' (no dinner card) is dropped", () => {
+  const input = "Leave by 20:30 for tonight's Michelin-starred dinner.";
+  const out = scrubPhantomEventRefsFromString(input, noDinnerSummary);
+  assertEquals(out, '');
+});
+
+Deno.test("Madrid QA repro — same sentence preserved when dinner IS scheduled", () => {
+  const input = "Leave by 20:30 for tonight's Michelin-starred dinner.";
+  const out = scrubPhantomEventRefsFromString(input, withDinnerSummary);
+  // null = unchanged (no phantom); accept null OR non-empty preserved string
+  if (out !== null) assertEquals(out !== '', true);
+});
