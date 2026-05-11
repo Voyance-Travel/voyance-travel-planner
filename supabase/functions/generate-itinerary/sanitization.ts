@@ -1561,7 +1561,34 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       const cleanActName = sanitizeAITextField(act.name, destination);
       act.title = cleanActTitle || cleanActName || `Activity ${idx + 1}`;
       act.name = act.title;
-      if (act.description) act.description = sanitizeAITextField(act.description, destination) || undefined;
+      if (act.description) {
+        const _origDescLen = act.description.length;
+        const _sanitized = sanitizeAITextField(act.description, destination);
+        if (_sanitized && _sanitized.length >= 15) {
+          act.description = _sanitized;
+        } else {
+          // Sanitization emptied the description. For dining cards, generate a template fallback
+          // so the user never sees a restaurant card with no description.
+          const _cat = String(act.category || '').toLowerCase();
+          if (_cat.includes('dining') || _cat.includes('food') || _cat.includes('restaurant')) {
+            const _venueName = (act as any).location?.name || (act as any).venue_name || '';
+            const _addr = (act as any).location?.address || '';
+            let _mealLabel = 'A meal';
+            const _t = String(act.title || '');
+            if (/breakfast|brunch/i.test(_t)) _mealLabel = 'Breakfast';
+            else if (/lunch/i.test(_t)) _mealLabel = 'Lunch';
+            else if (/dinner|supper/i.test(_t)) _mealLabel = 'Dinner';
+            if (_venueName) {
+              act.description = `${_mealLabel} at ${_venueName}.${_addr ? ` Located at ${_addr}.` : ''} Check opening hours and recent reviews before you go.`;
+            } else {
+              act.description = `${_mealLabel} at a local spot. Check opening hours and reviews before you go.`;
+            }
+            console.log(`[SANITIZE] Day-walker: replaced empty dining description for "${_t}" (was ${_origDescLen} chars) with template fallback`);
+          } else {
+            act.description = undefined;
+          }
+        }
+      }
       if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips, destination) || undefined;
       if (act.location && typeof act.location === 'object') {
         if (act.location.name) act.location.name = sanitizeAddress(sanitizeAITextField(act.location.name, destination) || act.location.name);
