@@ -96,10 +96,19 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
   const lastActivity = result[result.length - 1];
   const lastCat = String(lastActivity?.category || '').toUpperCase();
   const lastTitle = String(lastActivity?.title || '');
+  // A genuine "Return to Hotel" / "Back to Hotel" / "Hotel Checkout" / explicit
+  // STAY card is the only acceptable terminal accommodation. Freshen-up cards,
+  // luggage drops, and check-ins are MIDDAY rituals — even when categorized
+  // 'accommodation' they MUST NOT short-circuit the bookend (Bruges Day 2
+  // "Freshen Up at The Notary" 17:45–19:30 was the user-visible regression).
+  const TRUE_RETURN_RE = /\b(?:return\s+to|back\s+to|head\s+back\s+to|wind\s+down\s+at|retire\s+to|end\s+of\s+day\s+at)\b/i;
+  const CHECKOUT_RE = /\b(?:check[-\s]?out|checkout)\b/i;
+  const MIDDAY_ACCOM_RE = /\b(?:freshen[-\s]?up|luggage\s+drop|bag\s+drop|settle\s+in|check[-\s]?in|drop\s+(?:bags|luggage))\b/i;
+  const titleIsTrueReturn = TRUE_RETURN_RE.test(lastTitle) || CHECKOUT_RE.test(lastTitle);
+  const titleIsMiddayAccom = MIDDAY_ACCOM_RE.test(lastTitle) && !titleIsTrueReturn;
   const alreadyReturn =
-    lastCat === 'STAY' ||
-    lastCat === 'ACCOMMODATION' ||
-    /return.*hotel|back.*hotel|return\s+to/i.test(lastTitle);
+    titleIsTrueReturn ||
+    ((lastCat === 'STAY' || lastCat === 'ACCOMMODATION') && !titleIsMiddayAccom);
   if (alreadyReturn) return;
   // Skip logistics tails (airport/station transfers)
   if (/\b(airport|station|terminal|gate)\b/i.test(lastTitle) &&
