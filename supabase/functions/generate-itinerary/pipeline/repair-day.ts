@@ -3855,6 +3855,7 @@ function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): { activi
         endTime: minutesToHHMM(requiredAtAirportMin),
         category: 'transport',
         type: 'transport',
+        subcategory: 'airport_transfer', // M2: immutability sentinel for §15b
         location: { name: 'Airport', address: '' },
         cost: { amount: 0, currency: 'USD' },
         bookingRequired: false,
