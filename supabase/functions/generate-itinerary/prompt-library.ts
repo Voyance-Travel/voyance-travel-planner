@@ -1301,6 +1301,15 @@ export function buildRegularDayPrompt(
   lines.push(`   - Title formats: "Signature dinner at <Venue>" or "Tasting menu at <Venue>" for fine dining; "Dinner at <Venue>" for mid-tier; "Casual <meal> at <Venue>" only for genuinely casual venues`);
   lines.push('');
 
+  lines.push(`   📝 DESCRIPTION REQUIREMENTS (HARD RULE):`);
+  lines.push(`   Every non-transit, non-bookend activity MUST have a "description" field of at least 30 characters that adds insider value:`);
+  lines.push(`   - Restaurants: ONE actionable recommendation. Format: "Order the [signature dish]" / "Try the [specialty]" / "Request a table [specific area]" / "Ask for the [specific thing]" / "Don't miss the [specialty]". Example: "Order the chocolate con churros at the marble counter — best 8–10am before the queue forms."`);
+  lines.push(`   - Attractions / museums: ONE insider tip — best entrance, what to focus on, ideal light/crowd timing. Example: "Enter via the Porta del Paradiso side door to skip the rotunda queue; head straight to the third-floor terrace for sunset light."`);
+  lines.push(`   - Experiences / tours: ONE specific calibration — skill level, dress code, what to bring, what to expect.`);
+  lines.push(`   - BANNED: empty descriptions, "This is a great…", "You'll love…", "Amazing/Wonderful/Lovely…" without specifics, generic openings under 100 chars.`);
+  lines.push(`   - A description that doesn't add insider value will be flagged and trigger a regeneration pass.`);
+  lines.push('');
+
   lines.push(`   TRANSIT REQUIREMENTS (between EVERY consecutive activity):`);
   lines.push(`   - Include as category: "transport" activities between stops`);
   lines.push(`   - Mode: walk, taxi, metro/tube/subway, bus, tram, rideshare`);

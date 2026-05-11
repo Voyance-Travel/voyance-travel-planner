@@ -1290,6 +1290,21 @@ export async function handleGenerateDay(
         generatedDay.activities = repairedDay.activities;
         normalizedActivities = generatedDay.activities;
 
+        // ── DESCRIPTION FILL — backstop blank/generic blurbs (Madrid intermittent
+        //    blank restaurant pattern after phantom-ref scrub). Single batched
+        //    Gemini-flash call per day; on failure leaves descriptions empty.
+        try {
+          const { fillMissingDescriptions } = await import('../_shared/description-fill.ts');
+          await fillMissingDescriptions(
+            normalizedActivities as any[],
+            validationInput.destination,
+            Deno.env.get('LOVABLE_API_KEY') || undefined,
+            dayNumber,
+          );
+        } catch (err) {
+          console.warn(`[generate-day] description-fill failed day=${dayNumber}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+
         // ── VALIDATION GATE — re-validate after repair, force in-place downgrades for any
         //    critical semantic failure (punctuation-only fields, cross-day checkout-hotel leaks)
         //    that the deterministic repair pass didn't catch. No regen; never raw to UI.
