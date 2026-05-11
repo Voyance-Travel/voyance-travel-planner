@@ -68,9 +68,7 @@ describe('parseItineraryDays — dining preservation (Bruges meal-loss fix)', ()
     expect(titles).toContain('Museum visit');
   });
 
-  it('preserves dining over non-dining on a real key collision', () => {
-    // Two cards with literally identical key — prior arrives as non-dining,
-    // second as dining. Dining must win.
+  it('with hardened key (category included), different-category same-time cards both survive', () => {
     const data = {
       days: [
         baseDay({
@@ -82,7 +80,9 @@ describe('parseItineraryDays — dining preservation (Bruges meal-loss fix)', ()
       ],
     };
     const days = parseItineraryDays(data, '2026-06-01');
-    expect(days[0].activities.length).toBe(1);
-    expect(days[0].activities[0].category).toBe('dining');
+    // Old behavior dropped the second card on bare title|start key.
+    // Hardened key includes category, so both survive.
+    expect(days[0].activities.length).toBe(2);
+    expect(days[0].activities.some((a: any) => a.category === 'dining')).toBe(true);
   });
 });
