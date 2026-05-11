@@ -3255,6 +3255,25 @@ async function _handleGenerateTripDayInner(
       console.error('[generate-trip-day] Post-completion table sync error (non-fatal):', syncErr);
     }
 
+    // ── WRITE activity_costs from cost_reference ────────────────────
+    // Per-day chain previously skipped this, leaving Budget tracker reading
+    // ~$160 vs $3,600+ on the itinerary cards. Mirrors generation-core Stage 6.
+    try {
+      const { writeActivityCostsFromItinerary } = await import('../_shared/write-activity-costs.ts');
+      const actualDailyBudgetPerPerson = (typeof (globalThis as any).__actualDailyBudget === 'number')
+        ? (globalThis as any).__actualDailyBudget
+        : null;
+      const res = await writeActivityCostsFromItinerary(supabase, tripId, partialItinerary?.days || [], {
+        destination: destination || '',
+        travelers: travelers || 1,
+        budgetTier: budgetTier || null,
+        actualDailyBudgetPerPerson,
+      });
+      console.log(`[generate-trip-day] activity_costs writer: inserted=${res.inserted} reason=${res.skippedReason ?? 'ok'}`);
+    } catch (costWriteErr) {
+      console.error('[generate-trip-day] activity_costs writer error (non-fatal):', costWriteErr);
+    }
+
     // ── NOTE: post-completion cost repair intentionally removed ──
     // Running handleRepairTripCosts here silently rewrote prices via
     // Michelin/ticketed/reference floors at the end of every regen, producing
