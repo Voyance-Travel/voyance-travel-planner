@@ -1,44 +1,88 @@
-# Batch 3 verification + R1-redo migration
+# Batch 4 verification + Option 1 (cron sweeper)
 
-## Verification results (Q10–Q16)
+## Batch 4 results (Q17–Q24)
 
-| # | Item | Status | Evidence |
+| Q | Item | Status | Evidence |
 |---|---|---|---|
-| Q10 | AI notes load-path hydration | ✅ SHIPPED | `aiNotes` is in `src/types/itinerary.ts` (source) and the DB→frontend mapper at line 284 copies `aiNotes: activity.aiNotes`. Full round-trip works. R7 closes as resolved — JSONB blob path is intentional and correct. |
-| Q11 | Refund-on-failure for regenerate_day | ⚠️ PARTIAL (by design) | No server-side try/catch refund in `action-generate-day.ts`. Instead the **client** owns the refund via `useGenerationGate` (line 211–251): on failure it invokes `spend-credits` with `originalIdempotencyKey` + `defensiveRefundKey`. `spend-credits` (lines 377–436) supports this via `originalIdempotencyKey` lookup — `regenerate_day: 0` placeholder forces it to read the actual debit from the ledger. Works as long as the client stays alive long enough to fire the refund. If user closes tab mid-failure, no refund. Architectural call — flagging, not blocking. |
-| Q12 | Edit-trip-dates activity shift | ✅ SHIPPED | `voyanceAPI.updateTrip` (lines 264–276) throws hard if `startDate`/`endDate` change without `allowDateChange: true`. Comment cites the orphan footgun explicitly and routes callers to `TripDateEditor → TripDetail.handleDateChange`. |
-| Q13 | Mid-trip invite auto-regen | ✅ SHIPPED | `AcceptInvite.tsx` line 286–291: if `itinerary_status === 'ready'`, fires `regenerate-on-blend-change`. `TripCollaboratorsPanel.handleTogglePreferences` line 237–241: also fires `regenerate-on-blend-change` on every toggle direction (both ON and OFF). |
-| Q14 | Even-weight blending | ✅ SHIPPED | `dnaBlending.ts` line 135: `ownerWeight: evenWeight`. Lines 101–106 apply `evenWeight` to both owner and every companion symmetrically. No 50/50 owner bias. |
-| Q15 | Frontend idempotencyKey coverage | ✅ SHIPPED | 9 distinct call sites: `useSpendCredits`, `useUnlockDay`, `useGenerationGate`, `checkoutAPI`, `bookingsV1API`, `FindMyHotelsDrawer`, `TripConfirmationBanner`, `ItineraryAssistant`, `EditorialItinerary` (regenerate-trip + 2 spend contexts). |
-| Q16 | Curated destination images | ✅ SHIPPED | All 6 named keys present (`venice`, `naples`, `stockholm`, `athens`, `madrid`, `santorini`) plus 23 others — 29 destinations curated in `src/utils/destinationImages.ts`. |
+| Q17 | Unsplash Tier 2A fallback | ✅ SHIPPED | `destination-images/index.ts` L373–439 `tryUnsplashFallback` + L1623–1626 dispatch; needs `UNSPLASH_ACCESS_KEY` secret |
+| Q18 | Per-category price sanity | ✅ SHIPPED | `CATEGORY_PRICE_CEILINGS` in `_shared/category-price-bounds.ts`; `checkPlausiblePricing` in `validate-day.ts` L183/198; `PRICE_IMPLAUSIBLE` repair in `repair-day.ts` L2910–2948 + `action-repair-costs.ts` L494 |
+| Q19 | Hotel-return on non-departure days | ✅ SHIPPED | `repair-day.ts` L4066 `injected_midday_hotel_return` + L4120 `injected_hotel_return`; gated on `isDepartureDay` (L1511/1921), runs on all non-departure days. Save-time net at `action-save-itinerary.ts` L434 + `action-generate-trip-day.ts` L1813 |
+| Q20 | Meal injection at repair | ⚠️ NO MATCH | No `MISSING_MEAL` / `repairMissingMeals` / `generateSingleMealActivity` token found in pipeline. Meal-guard runs at generate-trip-day (per memory) but repair-day does **not** inject; only validate flags. Needs investigation — possible drift |
+| Q21A | 5 new DNA traits | ✅ SHIPPED | All 5 traits present in `quiz-questions-v3.json` weights + schema L1426 |
+| Q21B | q22/q23 added | ✅ SHIPPED | `q22_accomplishment` L1297, `q23_recharge` L1348, registered in step 10 L2002 |
+| Q21C | Forbidden pairs + adjusted score | ✅ SHIPPED | `archetype-matcher.ts` L17 `FORBIDDEN_PAIRS`, L464 `adjustedScore` w/ 0.7 same-category penalty, L469 forbidden-pair filter |
+| Q21D | eco_ethicist constraints | ⚠️ PARTIAL | `eco_ethicist` defined in quiz JSON L1806 + rarity/group/narratives, but no `elephant`/`tiger temple` avoid-list match found. Constraint file may be elsewhere or never landed |
+| Q22A | discover-proactive auth | ✅ SHIPPED | `index.ts` L39–45 reads Authorization header + `auth.getUser()` |
+| Q22B | activity-concierge auth + CostTracker | ⚠️ PARTIAL | Auth check present L133 `authClient.auth.getUser()`. **No `trackCost`/`CostTracker` import** — cost tracking did not ship for this function |
+| Q22C | itinerary-chat daily cap | ✅ SHIPPED | `DAILY_CHAT_CAP = 50` L29, enforcement L496–505 |
+| Q23 | EUR rate unification | ✅ SHIPPED | Single source `supabase/functions/_shared/exchange-rates.ts` L18 `EUR: 0.86`; both `src/lib/currency.ts` and `generate-itinerary/currency-utils.ts` re-export from it. No duplicate table |
+| Q24 | Refund-day cleanup of activity_costs | ⚠️ MOVED | No `persist-day.ts` exists. Cleanup found in `generation-core.ts` L3388 `activity_costs.delete().eq('trip_id', tripId)`. Likely correct but **trip-wide delete on regenerate-day** is worth confirming scope — could be over-broad |
 
-**Tally:** 6/7 clean, 1 architectural note (Q11 client-owned refund). No critical drift.
+**Tally:** 9 clean, 3 partial/drift (Q20 meal-inject, Q21D eco constraints, Q22B concierge cost-track), 1 needs-scope-check (Q24).
 
-## R1-redo — Ship migration
+None are launch-blockers; flag for batch 5 or post-launch hardening.
 
-Drop the leftover anon SELECT policy on `customer_reviews` and REVOKE direct table access so anon callers must use the `public_customer_reviews` view (which omits `email`/`user_id`).
+---
+
+## Option 1: pg_cron stale pending-charge sweeper
+
+Closes the tab-close-mid-failure window where a `pending_credit_charges` row stays `pending` indefinitely and the user silently loses credits.
+
+### Design
+
+A pg_cron job runs every 5 minutes and invokes a SECURITY DEFINER function `sweep_stale_pending_charges()` that:
+
+1. Finds `pending_credit_charges` rows where:
+   - `status = 'pending'`
+   - `created_at < now() - interval '5 minutes'`
+   - `refund_attempts < 3` (respects existing client-side max-attempts contract from `useStalePendingChargeRefund`)
+2. For each row, calls the existing `spend-credits` edge function via `pg_net.http_post` with:
+   - `action: 'REFUND'`
+   - `creditsAmount`, `tripId`, `userId` from the row
+   - `metadata.reason = 'cron_stale_pending_sweeper'`
+   - `metadata.pendingChargeId = id` (atomic dedup against existing idempotency layer)
+   - `metadata.originalAction = action`
+3. Increments `refund_attempts` immediately (race protection against the client hook running at the same time).
+4. The existing `spend-credits` REFUND handler does the actual ledger reversal + marks the row `refunded` — we reuse its idempotency, no duplicate refund logic.
+
+### Why 5 minutes
+
+- Matches the client hook's `STALE_THRESHOLD_MS = 2 minutes` but adds 3-minute buffer so the client always gets first shot.
+- Generation P99 is ~90s; 5 min is well past any legitimate in-flight charge.
+
+### Idempotency / collision with client hook
+
+Both code paths set `metadata.pendingChargeId` and call `spend-credits` REFUND. `spend-credits` already dedupes refunds by `originalIdempotencyKey` / pending charge id (per Q11 architecture). Worst case: both fire simultaneously → second one is a no-op.
+
+The `refund_attempts` UPDATE uses `WHERE refund_attempts = <current value>` (optimistic lock) so only one path increments per attempt.
+
+### Files
+
+**1 migration** (`supabase/migrations/<timestamp>_stale_charge_cron_sweeper.sql`):
+
+- `CREATE OR REPLACE FUNCTION public.sweep_stale_pending_charges()` — SECURITY DEFINER, plpgsql, loops over stale rows, fires `net.http_post` to `/functions/v1/spend-credits` with service-role JWT (read from vault — same pattern as existing cron jobs in this project).
+- `REVOKE EXECUTE ... FROM PUBLIC, anon, authenticated;` (callable only by cron / service role).
+- `SELECT cron.schedule('sweep-stale-pending-charges', '*/5 * * * *', $$SELECT public.sweep_stale_pending_charges()$$);`
+- Guard: `cron.unschedule` first if same name exists (idempotent re-run).
+
+**Note on service-role key:** the migration tool runs as the project owner so `vault.decrypted_secrets` works. If the project already has a cron-friendly pattern (e.g. a `SERVICE_ROLE_KEY` vault secret), reuse it; otherwise the migration creates a `cron_caller_token` secret. I'll confirm which exists before writing the migration.
+
+### Verification after ship
 
 ```sql
--- Drop the leftover anon policy on base table
-DROP POLICY IF EXISTS "customer_reviews_anon_approved_read" ON public.customer_reviews;
-
--- Belt-and-suspenders: revoke direct table SELECT from anon/public
-REVOKE SELECT ON public.customer_reviews FROM anon;
-REVOKE SELECT ON public.customer_reviews FROM PUBLIC;
-
--- Keep authenticated owner-read policy + authenticated INSERT (unchanged)
--- public_customer_reviews view already exists from prior migration and remains the anon read path
+SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'sweep-stale-pending-charges';
+-- Then manually insert a fake stale charge (created_at = now() - '10 min', status='pending')
+-- Wait 5 min, confirm status flipped to 'refunded' and credits returned
 ```
 
-## Verification after migration
+### Not in scope
 
-1. SQL: `SELECT policyname FROM pg_policies WHERE tablename = 'customer_reviews' AND 'anon' = ANY(roles);` → 0 rows.
-2. SQL: `SELECT grantee, privilege_type FROM information_schema.role_table_grants WHERE table_name = 'customer_reviews' AND grantee IN ('anon','PUBLIC');` → 0 rows.
-3. Anon curl on base `customer_reviews` → 401/empty; on `public_customer_reviews` → rows without `email`.
-4. Re-run Supabase linter — the email PII finding on `customer_reviews` should be gone.
-5. Confirm no frontend code reads `customer_reviews` directly as anon (logged-in owner reads stay intact via owner-read policy).
+- No change to `useStalePendingChargeRefund` client hook (keeps fast-path responsiveness).
+- No change to `spend-credits` (relies on existing REFUND handler).
+- No change to client-side generation flow.
 
-## Out of scope
+---
 
-- Q11 server-side refund hardening (current client-owned refund is a known design tradeoff, not a regression — flag for separate decision).
-- Any frontend changes — none required by R1-redo since the public-facing reads already go through the view.
+## Deliverable
+
+One migration via `supabase--migration` for the cron sweeper. After approval, I'll verify the job is scheduled and report the 3 partial Batch 4 items (Q20, Q21D, Q22B) for inclusion in Batch 5 or backlog.

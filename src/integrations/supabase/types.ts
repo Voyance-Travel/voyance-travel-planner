@@ -10372,6 +10372,7 @@ export type Database = {
         }
         Returns: Json
       }
+      sweep_stale_pending_charges: { Args: never; Returns: Json }
       sync_expired_credit_balances: { Args: never; Returns: number }
       toggle_consumer_trip_share: {
         Args: { p_enabled: boolean; p_trip_id: string }
