@@ -1,83 +1,128 @@
-# Ship Queue: 5 Approved Plans + Reviewer Notes
+# Ship Queue: Walking-Tour + Description Coverage + Q43 Drop + M1/M2 Tests
 
-All five plans approved with specific reinforcing notes. Consolidating into one execution plan.
+All five items approved. Per memory + repo audit, walking-tour bimodal split and description-coverage 3-layer defense are **already shipped** (mem://constraints/itinerary/per-category-price-sanity + mem://constraints/itinerary/description-coverage). This batch executes the **net-new** work: Q43 watch-list drop + M1/M2 regression tests.
 
-## 1. Hotel-Return Bookend (Florence/Barcelona nightcap days)
+---
 
-**Leak A — Pre-dawn strip eats fresh bookend:**
-- Tag late-nightlife bookends with `source: 'late_nightlife_bookend'` at emission in `runStep8` / accommodation builder.
-- Update `stripPreDawnHotelReturns` to skip rows where `source === 'late_nightlife_bookend'` (single change inherits to all 5 call sites: universal-quality-pass, action-save-itinerary, action-sync-tables, persist-day, action-generate-trip-day).
+## Critical diagnostic flag — Q43 plan needs revision
 
-**Leak B — Retry gate semantic:**
-- Set `metadata.quality.step8_deferred = true` when Step 8 defers due to required-but-missing dinner.
-- Gate post-meal-guard retry on `step8_deferred && lacksHotelReturn(day)` instead of `mealsInjected > 0`.
+The reviewer's plan says "**Confirmed zero callers in the codebase**" for `get_user_id_by_email` and `get_user_info_by_email`. **That is incorrect.** Repo grep found:
 
-**Reviewer note (added):** Add unit test asserting `source: 'late_nightlife_bookend'` tag survives a full pipeline pass (repair-day → terminalCleanup → save normalization → persist). If any downstream pass strips/rewrites the source field on accommodation cards, the 5-site strip-skip becomes a no-op.
+```
+src/services/supabase/friends.ts:162  // sendFriendRequestByEmail()
+src/pages/admin/SessionExplorer.tsx:60  // admin tool
+```
 
-## 2. Q43 SECURITY DEFINER REVOKE + Group A–E Classification
+`get_user_id_by_email` is currently **admin-only** (per `has_role('admin')` check shipped in prior round). That means **`sendFriendRequestByEmail` has been silently broken for non-admin users since the hardening shipped** — it throws "Forbidden: admin role required" on every "Add friend by email" attempt.
 
-Single migration containing:
+Dropping the RPC outright would not "eliminate dead code" — it would make the breakage explicit (404 instead of 403). The right fix is the architectural pattern the reviewer cited later in the message:
 
-**Group A (revoke from authenticated → service_role only):** functions only called from edge functions / triggers.
+> "Build the new feature on the principle 'never return whether an email is registered' — always send the email regardless, route to magic-link (existing user) or signup-invite (new user) based on lookup happening server-side in the email sender."
 
-**Group B (keep grants, verified internal auth):** `get_user_id_by_email`, `get_user_info_by_email`, `get_intake_account` (already hardened in prior round).
+### Q43 — revised path
 
-**Group C (keep, intentional public surface):** sign-up flows, public lookups already documented.
+1. **pre-flight `pg_stat_statements` check** (reviewer note):
+   ```sql
+   SELECT calls, query
+   FROM pg_stat_statements
+   WHERE query ILIKE '%get_user_id_by_email%'
+      OR query ILIKE '%get_user_info_by_email%'
+   ORDER BY last_call DESC NULLS LAST
+   LIMIT 20;
+   ```
+   If any non-repo callers surface, document them before changing function shape.
 
-**Group D (keep, RLS policy helpers):** `is_trip_owner`, `is_trip_collaborator`, `is_trip_member`, `get_user_trip_ids` — revoking breaks RLS evaluation. Document as accepted.
+2. **New edge function `friend-request-by-email`** (service-role lookup, enumeration-safe):
+   - Looks up target user_id via service-role query on `auth.users`
+   - If found AND not self AND no existing friendship: insert friend request as the caller
+   - If not found OR self OR already-friends: return identical generic success shape
+   - Always returns the same response shape — never reveals registration status
+   - Caller is `auth.uid()`; no admin role required
 
-**Group E (fix in same migration):** `claim_first_trip_benefit` — add `IF auth.uid() IS DISTINCT FROM p_user_id THEN RAISE EXCEPTION 'forbidden'; END IF;` before benefit grant. New privilege-escalation finding; do **not** defer.
+3. **Refactor `friends.ts::sendFriendRequestByEmail`** to invoke the new edge function instead of the RPC. UI surfaces a single neutral toast ("If that email belongs to a Voyance user, your request has been sent.").
 
-**Reviewer note (added):** Before merging, do a 30-second source read of `get_user_id_by_email` and `get_user_info_by_email` to confirm `auth.uid()` is identity-restrictive (e.g., admin-role check or caller=subject), not just an incidental reference. Already hardened to `has_role('admin')` in prior round per memory — re-verify in current `prosrc`.
+4. **Restrict `get_user_id_by_email` to admin-only** (already done per memory) and keep `SessionExplorer.tsx` as the only caller. Confirms the "admin tool needs n" comment from migration `20260511115400`.
 
-## 3. M1 Round 2 — Clause-Level Phantom-Ref Scrub
+5. **Drop `get_user_info_by_email`** (after `pg_stat_statements` check confirms zero non-repo callers — there are zero repo callers for the `_info_` variant). Single migration.
 
-**Gap A — Clause splitting:** In `scrubPhantomEventRefs`, split on `;`, `—`, `–` in addition to sentence terminators before phantom detection. Drop early-return on `parts.length < 2`.
+6. **Memory update**: revise mem://constraints/security/security-definer-accepted-class to reflect the refactor (friend-by-email no longer runs through SECURITY DEFINER admin RPC).
 
-**Single-segment phantom blanking:** If entire field is just the phantom ref (≤14 words AND <3 meaningful tokens after stripping phantom phrase), blank the field. New validation-gate code `DESCRIPTION_GHOST_REFERENCE` force-blanks residuals.
+---
 
-**Gap B — Prompt-side ground-truth injection:** In `prompt-library.ts` SCHEDULE COHERENCE block, inject the day's actual schedule (start time, title, neighborhood) as ground truth with HARD RULE forbidding references to non-listed activities.
+## M1 phantom-ref regression test (round 2)
 
-**Reviewer note (added):** Schedule context block must be deterministic. Stable sort by `(startTime, activityId)` before building the schedule text, so retries with identical inputs produce identical ground truth and the coherence rule retains force.
+Per memory `mem://constraints/itinerary/schedule-coherent-copy`, the scrubber + DESCRIPTION_GHOST_REFERENCE validation code is shipped, and `phantom-ref-clause-scrub.test.ts` already covers the dinner-present/dinner-absent shapes. Add the **two reviewer-spec test cases verbatim** as the canonical regression sentinel inside that file:
+- "drops 'Tonight's dinner has limited seating' when no dinner card on Day 2"
+- "preserves the same sentence when the day has a dinner card"
 
-**Telemetry:** Start `DESCRIPTION_GHOST_REFERENCE` as soft warn (no forced regen). Promote to forced regen only if production leak rate warrants.
+These mirror the production Madrid leak shape (single-sentence description, prior assertions covered partial-clause/em-dash patterns).
 
-## 4. M3 Round 2 — Extract `detectGapsForDay`
+---
 
-Refactor only — no behavior change beyond the M3 round 1 fix already shipped.
+## M2 combined departure-day regression test
 
-- Extract the inline 200-line `forEach` from `TripHealthPanel.tsx` into a named module-level `detectGapsForDay(allActivities, dayNumber)` (already done in M3 round 1 per memory; this round adds the safety invariants).
-- **Step 1 of function MUST be the day-boundary filter** — invariant impossible to violate via future edits.
-- Explicit guard: never emit a gap before the first sorted activity of the day (no synthetic `prevEnd = 0` anchor).
-- Belt-and-braces: secondary `startMins < firstSubstantiveStart` filter after sort to catch wrap-past-midnight cards that slip the wrap filter.
+Single new test in `supabase/functions/_shared/__tests__/departure-day-combined.test.ts`. Constructs a Day N final-day shape with all three known failures co-occurring:
+- Late checkout at 14:00
+- Untimed airport transfer (no startTime)
+- Post-transfer dinner at 19:30
 
-**Regression sentinel test:** "Day 3 first activity 08:30 with no prior → no gap emitted." Fails immediately if synthetic anchor is re-introduced.
+Asserts after one `enforceDepartureDayLogistics` pass:
+- Checkout retimed ≤ 11:00 (cap = `min(11:00, dep − buffer − transfer − 60 − 30)`)
+- Transfer ends at `dep − buffer`
+- Post-transfer dinner pruned (non-locked)
 
-## 5. M4 Round 2 — Luxury-Tier Walk Threshold
+**Reviewer addendum — activity order assertion:**
+```ts
+const ids = out.activities.map(a => a.id);
+const lunchIdx    = ids.indexOf('lunch');
+const checkoutIdx = ids.indexOf('checkout');
+const transferIdx = ids.indexOf('transfer');
+expect(lunchIdx).toBeLessThan(checkoutIdx);
+expect(checkoutIdx).toBeLessThan(transferIdx);
+```
 
-- Add `isLuxuryTier(budgetTier)` helper (single source of truth, returns true for `luxury | luminary | splurge | premium`).
-- `walkThresholdsFor(budgetTier)` already returns tier-aware `{ maxWalkMin, maxWalkMeters }` per memory — confirm luxury bucket = `20 min / 1000 m`, standard = `30 min / 1500 m`.
-- Repair `§15b` uses `pickTransitTier` (haversine, no Google Directions calls — respects centralization constraint).
-- Repair logs include tier: `[WALK_OVER_THRESHOLD] day=N tier=luxury dist=… mins=…`.
+Plus the second test from the original plan: locked-dinner preservation — same shape but the post-transfer dinner row carries `metadata.userLocked = true`. After repair, the locked dinner survives even though it violates departure-day logistics (universal locking wins). Add the same order assertion (lunch < checkout < transfer); the locked dinner ends up wherever the locking protocol places it (typically end-of-array; assert it's still present, not its index).
 
-**Tests (both directions):**
-- Luxury 25-min / 1.2 km walk → flagged → upgraded to transit
-- Luxury 8-min / 600 m (Plaza Mayor → Mercado San Miguel) → passes
-- Standard 25-min / 1.2 km → does NOT flag (below universal cap)
-- Standard 35-min / 1.6 km → flagged by universal cap
+---
 
-**Reviewer note (logged):** Reviewer formally retracts prior "defer luxury sub-cap" advice from M4 round 1. Universal cap and luxury sub-cap catch disjoint case classes; both ship.
+## Description-coverage telemetry note
 
-## Execution Order
+Per reviewer's "Defer this nuance unless telemetry shows a problem" — **no code change this round**. Document the telemetry watch in memory:
 
-1. Q43 migration (Groups A revoke + Group E `claim_first_trip_benefit` guard, with B/D source re-verification first).
-2. Hotel-return Leak A (source tag + strip skip) + Leak B (`step8_deferred` flag + retry gate) + pipeline-survival unit test.
-3. M1 round 2 (clause split + prompt-side schedule injection with stable sort + `DESCRIPTION_GHOST_REFERENCE` validation code).
-4. M3 round 2 safety invariants + regression sentinel test.
-5. M4 round 2 luxury tier helper + bidirectional tests.
-6. Full vitest + Deno test runs.
-7. Memory updates (one entry per item, condensed).
+> If `RESTAURANT_MISSING_RECOMMENDATION` fires >5% of restaurant rows in production over a 7-day window, relax the rule to fire only when `description.length < 60 chars AND lacks an imperative verb`. Don't pre-tighten.
 
-## Out of Scope
+Add to `mem://constraints/itinerary/description-coverage` as the documented escape valve.
 
-Madrid-style QA on a fresh city, final linter rerun, Stripe E2E manual config, beta-2 — all post-ship verification, handled in follow-up rounds.
+---
+
+## Walking-tour split — verification only
+
+Per memory `mem://constraints/itinerary/per-category-price-sanity`, bimodal split is shipped:
+- `walking_tour_paid` (min $15, regex paid|guided|premium|private|food|tapas|wine|history|ghost|architecture)
+- Generic `walking_tour` (min $0)
+- Prefix-wins ordering verified
+
+Confirm via existing test file `m5-paid-tour-floor.test.ts`. No new code.
+
+---
+
+## Execution order
+
+1. `pg_stat_statements` query — surface any non-repo callers
+2. New edge function `friend-request-by-email` (service-role + enumeration-safe response shape)
+3. Refactor `src/services/supabase/friends.ts::sendFriendRequestByEmail` to invoke it; update toast copy
+4. Migration: `DROP FUNCTION public.get_user_info_by_email(text)` (zero callers, period)
+5. M1 regression test (append two cases to `phantom-ref-clause-scrub.test.ts`)
+6. M2 combined test (new file, two tests, with order assertion)
+7. Run vitest + Deno test suites
+8. Memory updates: `security-definer-accepted-class` (friend-flow refactored), `description-coverage` (telemetry watch)
+
+---
+
+## Out of scope
+
+Fresh-city Madrid-style QA, Stripe E2E manual config, beta-2 invite, final linter rerun — all in the post-batch verification phase.
+
+## Decision required
+
+The Q43 path above (refactor `friends.ts` to a service-role edge function + drop only the `_info_` variant) is the architecturally correct read of "never return whether an email is registered." If you'd rather the simpler (but feature-removing) path — drop both functions and remove `sendFriendRequestByEmail` UI entirely until the new flow is built — flag and I'll switch the plan.
