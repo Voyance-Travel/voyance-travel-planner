@@ -16,7 +16,7 @@ import {
   type StrictDayMinimal,
 } from '../day-validation.ts';
 import type { RequiredMeal } from '../meal-policy.ts';
-import { hasBodyPromptLeak, hasTitleLeak } from '../../_shared/prompt-leak-scrub.ts';
+import { hasBodyPromptLeak, hasTitleLeak, buildDayScheduleSummary, detectPhantomEventRefs } from '../../_shared/prompt-leak-scrub.ts';
 import { WALK_HARD_DISTANCE_METERS, WALK_HARD_DURATION_MINUTES } from '../../_shared/transit-mode.ts';
 import { isTransitActivity } from '../../_shared/transit-detect.ts';
 import {
