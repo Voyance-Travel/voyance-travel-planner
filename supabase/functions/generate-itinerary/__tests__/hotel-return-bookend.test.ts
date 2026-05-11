@@ -104,14 +104,44 @@ Deno.test('runStep8: speakeasy ending 00:20 keeps bookend after predawn strip (B
   assertEquals(String(acts[acts.length - 1]?.source), 'late_nightlife_bookend');
 });
 
-Deno.test('runStep8: terminal "Freshen up at <hotel>" mid-evening — no duplicate bookend', () => {
+Deno.test('runStep8: terminal "Freshen up at <hotel>" is NOT a true return — append bookend (Madrid Day 2 regression)', () => {
+  // Behavior change: freshen-up / luggage-drop / check-in are MIDDAY rituals,
+  // not end-of-day returns. When they're the chronologically last card on a
+  // non-departure day, runStep8 must still append a true Return-to-Hotel
+  // bookend so the day visibly ends at the hotel. Madrid Day 2 shipped with
+  // "Freshen up at Mandarin Oriental Ritz" 20:30–21:40 as the final card and
+  // no return — exactly the user-visible regression.
   const acts = [
     mkAct({ title: 'Thyssen Museum', startTime: '11:30', endTime: '13:30', category: 'activity' }),
     mkAct({ title: 'Freshen up at Mandarin Oriental Ritz, Madrid', startTime: '20:30', endTime: '21:40', category: 'accommodation' }),
   ];
-  const before = acts.length;
   runStep8(acts, 1, 'Mandarin Oriental Ritz, Madrid');
-  assertEquals(acts.length, before);
+  assertEquals(acts.length, 3);
+  assertEquals(lastCat(acts), 'accommodation');
+  assertEquals(lastTitle(acts).startsWith('Return to'), true);
+});
+
+Deno.test('runStep8: terminal "Freshen Up at <hotel>" 17:45–19:30 appends return (Bruges Day 2 regression)', () => {
+  const acts = [
+    mkAct({ title: 'Adornes Estate', startTime: '12:05', endTime: '13:35', category: 'activity' }),
+    mkAct({ title: 'Freshen Up at The Notary', startTime: '17:45', endTime: '19:30', category: 'accommodation' }),
+  ];
+  runStep8(acts, 1, 'The Notary');
+  assertEquals(acts.length, 3);
+  assertEquals(lastTitle(acts).startsWith('Return to'), true);
+});
+
+Deno.test('runStep8: chronological-last detection — array-tail is mid-day card, real terminal is later evening', () => {
+  // Insertion order isn't guaranteed across pipeline stages. runStep8 must
+  // identify the chronologically last card and bookend after it, even if a
+  // mid-day card was appended later in the array.
+  const acts = [
+    mkAct({ title: 'Dinner at Da Ivo', startTime: '19:00', endTime: '21:00', category: 'dining' }),
+    mkAct({ title: 'Freshen up at hotel', startTime: '14:00', endTime: '15:00', category: 'accommodation' }),
+  ];
+  runStep8(acts, 0, 'Hotel Cipriani');
+  assertEquals(acts.length, 3);
+  assertEquals(lastTitle(acts).startsWith('Return to'), true);
 });
 
 Deno.test('predawn strip: untagged accommodation card at 00:30 still removed (regression guard)', () => {
