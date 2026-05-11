@@ -58,4 +58,17 @@ describe('JSON-missing-row rescue', () => {
     });
     expect(r.totalCents).toBe(18000); // (60+25+95) * 1 * 100
   });
+
+  it('rescued rows MUST always be isPaid:false with source=json-rescue (display-only invariant)', () => {
+    const r = resolveCanonicalCostRows({
+      costs: [], liveActivities: live, includeHotel: true, includeFlight: false, travelers: 3,
+    });
+    const rescued = r.rows.filter(x => x.rescueTag === 'json-missing-row');
+    expect(rescued.length).toBeGreaterThan(0);
+    for (const row of rescued) {
+      expect(row.isPaid).toBe(false);
+      expect(row.source).toBe('json-rescue');
+      expect(row.paidAmountUsd).toBeNull();
+    }
+  });
 });

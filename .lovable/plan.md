@@ -1,67 +1,80 @@
-## Scope
+# M6 + R4 Implementation Plan (with reviewer notes incorporated)
 
-Ship M3, M4, M5 as previously planned, with three small addenda from the user's approval notes.
+## M6 — Budget tracker: missing `activity_costs` writes on per-day chain
 
----
+### Root cause (confirmed)
+Two generator paths exist; only `generation-core.ts` (legacy whole-trip) writes `activity_costs`. The current default `action-generate-trip-day.ts` (per-day chain) never calls the writer, so `BudgetTab → snapshot.tripTotalCents → resolveCanonicalCostRows({ costs: activity_costs })` reads an empty/sparse table and renders $0 / "$160 vs $3,600 in cards" drift.
 
-## M3 — Health engine overnight gap leak
+### Three-layer fix
 
-**Files:** `src/components/trip/TripHealthPanel.tsx` (+ test)
+**Layer 1 — Backend writer parity (source-of-truth fix for new trips)**
+- Extract Phase 4 of `generation-core.ts` Stage 6 into a new shared helper `supabase/functions/_shared/activity-costs-writer.ts` exporting `writeActivityCostsFromItinerary(supabase, tripId, days, travelers)`.
+- Call it from `action-generate-trip-day.ts` after the per-day table sync (same point where transit/cost normalization completes), and replace the inline call in `generation-core.ts` with the shared helper.
+- Sentinel: `[writeActivityCostsFromItinerary] Wrote N rows for trip=…`.
 
-Fixes (as previously planned):
-1. `parseItineraryDays` / day-array builder: drop wrap-past-midnight bookends from the *next* day's bucket.
-2. `realActivities` filter: also exclude `transit | return | logistics | hotel_return | bookend` categories.
-3. Per-day gap detector unchanged (already correct at line 66).
-4. Hotel-return detection uses brand-aware regex already in `clamp-bookend.ts::isBookendCard` — reuse, don't duplicate.
-5. **Bonus catch — ship it:** buffer/conflict passes currently iterate the unfiltered activities array. Swap them to `realActivities` so phantom overlap warnings stop firing on the same wrap-past-midnight pattern.
+**Layer 2 — Frontend rescue (display correctness for legacy trips, no DB write)**
+- Add a `json-missing-row` rescue branch in `resolveCanonicalCostRows` (`src/lib/payments/resolveCanonicalCostRows.ts`): when an itinerary activity has a price but no matching `activity_costs` row, synthesize an in-memory canonical row from the JSON.
+- **Reviewer note 1 (confirm in code):** Rescued rows MUST carry `isPaid: false` and `source: 'json-rescue'`. Add an explicit assertion + unit test that no rescue path ever writes `isPaid: true` (would falsely trigger payment-flow filters in `usePayableItems` / `PaymentsTab`). Display-only until Layer 1/3 catches up.
 
-Addendum from user:
-- **Wrap-detection edge case:** current proposal `endTime > 0 && endTime < startTime` would false-negative a `Return to Hotel` ending at exactly `00:00`. Change predicate to treat `endTime <= 0` (or explicit `endTime === 0 && startTime > 0`) as wrap. Add unit test: bookend `23:30 → 00:00` must be classified as wrap and excluded from the next day's bucket.
+**Layer 3 — One-shot auto-backfill (DB heals over time)**
+- New edge function `supabase/functions/sync-trip-cost-table/index.ts` that re-invokes `writeActivityCostsFromItinerary` for a single trip.
+- `useTripFinancialSnapshot` invokes it once per session **per trip** when canonical total = $0 but live JSON has prices.
+- **Reviewer note 2 (fingerprint guard):** The `lastBackfillFingerprint` ref MUST be keyed `${tripId}:${jsonPriceHash}`, not a global session flag. A user with 3 legacy trips opening all 3 in the same session must trigger 3 backfills. Add a unit test asserting the second `tripId` is not skipped after the first fires.
+- Sentinel: `[useTripFinancialSnapshot] auto-backfilled activity_costs for legacy trip=…`.
 
-Sentinel/log: keep existing `[BOOKEND_CLAMP]` + add a one-line `[HEALTH_GAP] day=N excluded=K (wrap+logistics)` debug.
+### Tests
+- Unit: writer parity (per-day chain output matches whole-trip output for a fixture trip).
+- Unit: rescue rows always `isPaid: false`.
+- Unit: backfill fingerprint scoped per `tripId`.
+- Manual: regenerate one fresh trip (verify `activity_costs` populated) + open one pre-existing legacy trip (verify rescue displays correct total immediately, then backfill fires once, then refresh shows canonical rows).
 
----
-
-## M4 — Walk-over-threshold leaks
-
-**Files:** `supabase/functions/_shared/sanitization.ts`, `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (§15b), `_shared/transit-mode.ts` (helper reuse) (+ tests)
-
-Fixes (as previously planned):
-1. **Title-only walk cards:** sanitizer's method gate currently keys off `transport_mode` field — extend to also classify when title matches `^walk|stroll\b` AND no explicit non-walk mode is set. Routes title-only "Walk to X" through the threshold cascade.
-2. **Sanitizer no-op when one endpoint coord missing:** fall back to surrounding-card coords (prev.end → next.start) via existing `extractCoords`; only skip when *both* sides are unknowable.
-3. **Repair §15b haversine fallback:** when leg has no precomputed distance, derive it from surrounding coords using existing `extractCoords` + `haversineMeters`. No new utilities.
-
-Addendum from user:
-- **Defer luxury sub-cap.** Keep canonical 30 min / 1500 m thresholds. After ship, run a 2–3 city QA pass (Madrid + 2 others) to confirm the leak fix alone resolves the cross-district walk pattern. Only revisit luxury sub-cap if the pattern recurs.
-
-Tests: 3 regression cases — title-only walk, missing-endpoint-coord, repair-fallback haversine. Plus a luxury-tier in-neighborhood walk (~600m, ~10 min) that must remain a walk to confirm we did *not* over-tighten.
+### Memory
+Update `mem://constraints/finance/activity-costs-write-parity` to note the per-trip fingerprint contract and `isPaid: false` rescue invariant.
 
 ---
 
-## M5 — Paid-tour price floor
+## R4 — `public_trip_collaborators` view hardening
 
-**Files:** `supabase/functions/generate-itinerary/_shared/category-price-bounds.ts`, `pipeline/repair-day.ts` (price-substitute step), `action-repair-costs.ts` (mirror) (+ test)
+### Scope (narrowed after live-DB verification)
+Base table `trip_collaborators` is already locked from anon. View already exists. Real changes are minimal:
 
-Fixes (as previously planned):
-1. Extend existing `CATEGORY_PRICE_CEILINGS` with `min > 0` for paid-only subcategories: `bike_tour`, `food_tour`, `cooking_class`, `wine_tasting`, `boat_tour`.
-2. Detection regex order: paid-tour regexes run **before** existing `WALKING_TOUR_RE` so "bike tour" doesn't fall through to `walking_tour` (`min: 0`).
-3. Keep `museum` and `walking_tour` at `min: 0` (free variants are real).
-4. Universal Locking: user-locked / `basis=user` rows skipped — included as an explicit test case.
+1. **Migration:** Add `security_barrier = true` + `security_invoker = on` to the existing `public_trip_collaborators` view; recreate with the dual-EXISTS WHERE (owner OR accepted co-member); `GRANT SELECT` to `authenticated`; ensure base table has `trip_owner_collaborator_read` + `self_collaborator_read` SELECT policies and is REVOKEd from anon/PUBLIC.
+2. **Frontend:** Single-line swap in `src/components/TripDashboard.tsx:880` from `trip_collaborators` → `public_trip_collaborators` for the cross-collaborator display read. All other call sites (writes, owner email-join management, self-scoped reads) stay on the base table — verified one-by-one.
 
-Addendum from user:
-- **Inverse-direction regression test:** $300 luxury private bike tour (e.g. Salamanca private guide) must NOT trigger `PRICE_IMPLAUSIBLE`. Audit current `bike_tour.max`: if it's $90, bump to **$150** to accommodate legitimate luxury private variants. Same review pass for `food_tour` / `wine_tasting` / `cooking_class` / `boat_tour` max ceilings — bump where the upper end of legitimate luxury would otherwise be flagged. Document chosen ceilings in the file's header comment.
+### Reviewer concern — profiles RLS probe (BLOCKING gate before merge)
+The view's `LEFT JOIN public.profiles p` under `security_invoker = on` respects caller RLS on `profiles`. If `profiles` only allows self-reads, names fall through `COALESCE` to `'Member abc12345'` placeholders.
 
-Sentinels: existing `[REPAIR_PRICE_SUBSTITUTE] direction=floor_raise|ceiling_cap` cover both directions.
+**Pre-merge probe (will run via `supabase--read_query` before applying the migration):**
+```sql
+-- Pick a real (userA, userB) pair that share an accepted trip_collaborators row.
+-- Simulate userA's view of userB:
+SELECT id, display_name, avatar_url
+FROM public.profiles
+WHERE id = '<userB_id>';
+-- Then check current RLS:
+SELECT polname, polqual::text
+FROM pg_policy
+WHERE polrelid = 'public.profiles'::regclass;
+```
+
+**Decision tree:**
+- If `display_name` is readable for co-collaborators → ship as planned.
+- If RLS blocks it → add a companion migration with a `profiles_collaborator_read` policy: `SELECT` allowed when `EXISTS (collaborator pair where current user and target user share at least one accepted trip_collaborators row, in either direction)`. Limit exposed columns by view projection (already only `display_name`, `avatar_url`).
+
+### Tests
+- SQL: assert `has_table_privilege('anon', 'trip_collaborators', 'SELECT') = false`.
+- SQL: assert view returns rows for owner + accepted co-member, zero rows for unrelated user.
+- App: TripDashboard displays real `display_name` for collaborators (not `Member abc12345`).
+
+### Memory
+Extend `mem://constraints/security/trip-collaborators-view-only` with the `security_barrier + security_invoker` rationale and note that profiles RLS may need a companion `profiles_collaborator_read` policy depending on probe result.
 
 ---
 
-## Out of scope
-
-- M4 luxury sub-cap (deferred pending QA).
-- Remaining 17-item queue verification, Q43 watch-list source reads, and post-ship linter rerun — separate batches as results arrive.
-- No changes to Universal Locking, cost reference table, or budget snapshot logic.
-
-## Verification
-
-- Vitest: new cases for M3 (wrap at exactly 00:00 + logistics filter), M4 (3 leak paths + luxury-walk negative), M5 (paid-tour floor + locked-$0 preserved + luxury-priced upper bound).
-- Manual: regenerate one Madrid + one Barcelona trip; confirm no phantom gap warnings, no >1.5km walks on luxury Day 1, no $0/Free paid-tour cards, no $300 private bike tour flagged.
+## Order of operations
+1. Run profiles RLS probe (R4 gate) — read-only.
+2. Land M6 Layer 1 (writer extraction + per-day call) — migration-free.
+3. Land M6 Layer 2 (rescue) + Layer 3 (auto-backfill edge fn + hook) — migration-free.
+4. Land R4 migration (view + grants, plus optional profiles policy if probe failed).
+5. Land R4 frontend 1-line swap.
+6. Run full vitest + manual QA on one fresh trip + one legacy trip + one collaborator-shared trip.
