@@ -15,7 +15,7 @@ import { clampAllBookends } from '../_shared/clamp-bookend.ts';
 import { scrubActivity, addOps, formatOps, EMPTY_OPS, type ScrubOps } from '../_shared/scrub-activity.ts';
 import { buildDayScheduleSummary } from '../_shared/prompt-leak-scrub.ts';
 import { ensureDayDiningDescriptions } from '../_shared/dining-description-backfill.ts';
-import { pruneNonLogisticsAfterCheckout } from '../_shared/post-checkout-prune.ts';
+import { pruneNonLogisticsAfterCheckout, pruneNonLogisticsAfterAirportTransfer } from '../_shared/post-checkout-prune.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
