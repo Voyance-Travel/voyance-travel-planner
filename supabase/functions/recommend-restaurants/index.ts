@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { getCachedPlacesPhotoByResource } from "../_shared/photo-storage.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
 import { cachedGooglePlacesTextSearch as googlePlacesTextSearch } from "../_shared/google-api.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -725,14 +726,19 @@ function deduplicateRestaurants(restaurants: Restaurant[]): Restaurant[] {
 // =============================================================================
 
 serve(async (req) => {
-  const costTracker = trackCost('recommend_restaurants', 'google/places-api');
-  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const authedUserId = auth.userId;
+
+  const costTracker = trackCost('recommend_restaurants', 'google/places-api');
+  costTracker.setUserId(authedUserId);
+
   try {
-    const body: RecommendationRequest = await req.json();
+    const body: RecommendationRequest & { tripId?: string } = await req.json();
     const {
       destination,
       coordinates,
@@ -741,7 +747,9 @@ serve(async (req) => {
       budgetLevel,
       userId,
       minRating = 4.0, // Default to 4+ stars
+      tripId,
     } = body;
+    if (tripId) costTracker.setTripId(tripId);
 
     console.log(`[recommend-restaurants] Request for ${destination}, meal: ${mealType}`);
 
