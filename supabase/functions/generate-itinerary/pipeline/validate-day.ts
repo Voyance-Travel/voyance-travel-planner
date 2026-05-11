@@ -1175,10 +1175,13 @@ function checkPriceDuplication(activities: StrictActivityMinimal[], results: Val
 
 /**
  * WALK_OVER_THRESHOLD — any transit card with method=walk/walking that
- * exceeds 30 min OR 1500 m. Critical so validation-gate fires even if
- * repair-day is bypassed.
+ * exceeds the tier-aware ceiling. Standard: 30 min / 1500 m. Luxury cohort
+ * (luxury/luminary/splurge/premium): 20 min / 1000 m. Critical so the
+ * validation gate fires even if repair-day is bypassed.
  */
-function checkWalkOverThreshold(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+function checkWalkOverThreshold(activities: StrictActivityMinimal[], results: ValidationResult[], budgetTier?: string): void {
+  const { duration: durCap, distance: distCap } = walkThresholdsFor(budgetTier);
+  const tierLabel = isLuxuryTier(budgetTier) ? 'luxury' : 'standard';
   for (let i = 0; i < activities.length; i++) {
     const act = activities[i] as any;
     if (!isTransitActivity(act)) continue;
