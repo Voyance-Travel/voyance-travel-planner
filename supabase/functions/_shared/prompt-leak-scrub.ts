@@ -303,7 +303,20 @@ export function buildDayScheduleSummary(activities: any[]): DayScheduleSummary {
     hasDinner: false, hasNightcap: false, keywords: new Set<string>(),
   };
   if (!Array.isArray(activities)) return summary;
-  for (const a of activities) {
+  // M1 round 2 reviewer note: stable sort by (startTime asc, activityId asc)
+  // so prompt-side schedule context is deterministic across retries with
+  // identical inputs. Without this, jittered ordering between runs would
+  // cause the LLM to receive different "ground truth" and the SCHEDULE
+  // COHERENCE rule would lose force.
+  const sorted = [...activities].sort((a: any, b: any) => {
+    const ta = startMinutes(a);
+    const tb = startMinutes(b);
+    if (ta !== tb) return ta - tb;
+    const ida = String(a?.id ?? a?.activityId ?? a?.title ?? '');
+    const idb = String(b?.id ?? b?.activityId ?? b?.title ?? '');
+    return ida < idb ? -1 : ida > idb ? 1 : 0;
+  });
+  for (const a of sorted) {
     if (!a || typeof a !== 'object') continue;
     const title = String(a.title || a.name || '');
     const cat = String(a.category || '').toLowerCase();
@@ -322,6 +335,16 @@ export function buildDayScheduleSummary(activities: any[]): DayScheduleSummary {
     if (cat) summary.keywords.add(cat);
   }
   return summary;
+}
+
+/**
+ * Deterministic, stable-sorted accessor over the keyword set built by
+ * `buildDayScheduleSummary`. Use this when emitting the schedule context
+ * into a prompt or other consumer that requires byte-for-byte stability
+ * across retries (M1 round 2 reviewer note).
+ */
+export function summaryKeywordList(summary: DayScheduleSummary): string[] {
+  return Array.from(summary.keywords).sort();
 }
 
 // Time-bound reference patterns. Each captures the event noun in group 1 (or
