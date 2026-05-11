@@ -670,7 +670,7 @@ export async function calculateBudgetSummary(tripId: string): Promise<BudgetSumm
 
     return {
       memberId: member.id,
-      name: member.name || member.email,
+      name: member.name || member.email || 'Member',
       owes,
       owed,
     };
