@@ -40,10 +40,13 @@ test.describe('Onboard Conversation - Page Load', () => {
       return;
     }
     
-    // Look for textarea or input for story
-    const storyInput = page.locator('textarea, input[type="text"]');
+    // Look for textarea or text-input via role/placeholder fallbacks
+    const storyInput = page
+      .getByRole('textbox', { name: /story|adventure|tell|describe|share/i })
+      .or(page.getByPlaceholder(/share|tell|story|describe/i))
+      .or(page.locator('textarea, input[type="text"]'));
     const inputCount = await storyInput.count();
-    
+
     expect(inputCount).toBeGreaterThan(0);
   });
 });
