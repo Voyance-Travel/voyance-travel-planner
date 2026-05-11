@@ -2546,8 +2546,28 @@ async function _handleGenerateTripDayInner(
         dayNumber: dn,
         isFirstDay: isFirstDayLoop,
         isLastDay: isLastDayLoop,
+        hotelName: cityInfo?.hotelName || tripHotelName || undefined,
       });
     } catch (_e) { /* non-blocking */ }
+
+    // ── FINAL HOTEL-RETURN INVARIANT (multi-day finalization loop) ──
+    // Same invariant as the per-day path: every non-departure day must
+    // end on a hotel return or a logistics tail. terminalCleanup may
+    // dedupe / strip / clamp cards but does not append returns.
+    if (!isLastDayLoop && Array.isArray(updatedDays[i].activities) && updatedDays[i].activities.length > 0) {
+      try {
+        const { runStep8 } = await import('./universal-quality-pass.ts');
+        const _hotelForReturn = cityInfo?.hotelName || tripHotelName || undefined;
+        const _beforeLen = updatedDays[i].activities.length;
+        runStep8(updatedDays[i].activities, dn - 1, _hotelForReturn);
+        if (updatedDays[i].activities.length > _beforeLen) {
+          updatedDays[i].metadata = updatedDays[i].metadata || {};
+          updatedDays[i].metadata.quality = updatedDays[i].metadata.quality || {};
+          updatedDays[i].metadata.quality.hotel_return_finalize_loop = true;
+          console.log(`[QUALITY] Day ${dn}: hotel-return appended in multi-day finalization loop`);
+        }
+      } catch (_e) { /* non-blocking */ }
+    }
   }
 
   // ── DATE NORMALIZATION (ensure every day has a date) ─────────────
