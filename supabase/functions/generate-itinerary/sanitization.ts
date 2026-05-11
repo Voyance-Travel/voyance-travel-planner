@@ -1935,7 +1935,35 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
           }
         }
       }
+
+      // ── Dining description rescue ──
+      // The stub-strip pass above can collapse a description composed mostly
+      // of "Hidden gem", "Popular with locals", "A local favourite" phrases
+      // into <15 chars. For dining cards, render a meal+venue+hours template
+      // so the card never ships blank. Output is ≥30 chars + actionable verb
+      // so description-fill (Gemini Flash) treats it as satisfactory and
+      // won't re-trigger.
+      if (typeof act.description === 'string' && act.description.length < 15) {
+        const cat = String(act.category || '').toLowerCase();
+        if (cat.includes('dining') || cat.includes('food') || cat.includes('restaurant')) {
+          const venueName = act.location?.name || act.venue_name || extractRestaurantVenueName(act.title || '');
+          const titleStr = String(act.title || '');
+          const mealLabel = /breakfast|brunch/i.test(titleStr) ? 'Breakfast'
+                          : /lunch/i.test(titleStr) ? 'Lunch'
+                          : /dinner|supper/i.test(titleStr) ? 'Dinner'
+                          : 'A meal';
+          if (venueName) {
+            act.description = `${mealLabel} at ${venueName}. ${act.location?.address ? `Located at ${act.location.address}.` : 'Check opening hours before heading over.'}`;
+          } else {
+            act.description = `${mealLabel} at a local spot. Check opening hours and reviews before you go.`;
+          }
+          console.log(`[SANITIZE] Day-walker: replaced empty dining description for "${act.title}" with template fallback`);
+        } else if (act.description.length === 0) {
+          act.description = undefined;
+        }
+      }
     }
+  }
   }
 
   // ── City-mismatch detection: flag restaurants with addresses outside destination ──
