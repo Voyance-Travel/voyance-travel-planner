@@ -30,6 +30,11 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // HARD AUTH — reject anonymous callers (paid AI gateway endpoint)
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
   try {
     const { itineraryText }: AnalyzeItineraryRequest = await req.json();
 
