@@ -1,62 +1,50 @@
-## What's actually wrong
+## Plan: make day-end hotel return a hard generation invariant
 
-Bruges trip data confirms the leak: every dining card in the saved itinerary has a templated description like
+### What I found
+- The core injector `runStep8` exists, but it runs too early in several paths.
+- Later stages can add or reorder terminal cards after `runStep8`:
+  - final meal guard
+  - gap fill
+  - validation gate
+  - orphan transit cleanup
+  - trip-wide finalization loop
+- The final trip-wide loop only calls `terminalCleanup`; it does **not** re-add hotel returns after those later mutations.
+- Recent saved trips confirm the bug: non-departure days often end on dinner/nightcap/activity/freshen-up instead of a final return card.
+- Late-night cards ending after midnight are only handled when the category/title matches a narrow nightlife pattern; several real examples like `Nightcap at L'Estaminet` in category `activity` still miss the late-night return.
 
-> "Lunch at Gruuthuse Hof — a real local spot worth visiting"
-> "Dinner at Refter — a real local spot worth visiting"
+### Fix
+1. **Create one shared finalizer** in `universal-quality-pass.ts`
+   - Add `ensureDayEndHotelReturn(...)` as the canonical invariant wrapper.
+   - It will:
+     - skip true departure days
+     - sort/identify the real terminal non-logistics activity by time, not array position
+     - call `runStep8` idempotently
+     - handle late-night terminal titles like `nightcap`, `cocktail`, `bar`, `speakeasy`, even when category is `activity` or `relaxation`
+     - clamp standard returns to the same day and preserve legitimate late-nightlife source tags
 
-This string is hardcoded at `supabase/functions/generate-itinerary/day-validation.ts:1109` inside `enforceRequiredMealsFinalGuard` (the meal-guard fallback that injects breakfast/lunch/dinner when the AI didn't deliver). It's >30 chars so it passes `MISSING_DESCRIPTION` and lacks any verb so it fails `RESTAURANT_RECOMMENDATION_RE` — but **the validator and `fillMissingDescriptions` LLM backstop never get a chance to see it**.
+2. **Call the finalizer after every late mutation path**
+   - In `action-generate-trip-day.ts`:
+     - after final meal guard / validation gate / orphan transit cleanup
+     - inside the trip-wide finalization loop after `terminalCleanup`
+     - before intermediate and final `persistTripItinerary` writes
+   - In `action-generate-day.ts`:
+     - after meal guard and terminal cleanup before single-day persistence/return
+   - In `action-save-itinerary.ts`:
+     - replace the ad-hoc save-time `runStep8` call with the shared finalizer so manual saves and refresh-triggered saves use the same rule.
 
-### Why the existing description-fill misses these
+3. **Strengthen persistence defense**
+   - Update `persistTripItinerary` to run a non-destructive check before write:
+     - for every non-last day with real evening content, warn if it lacks a terminal hotel return
+     - do not silently drop or reorder user-locked/manual rows
+   - Keep it observational unless the caller passes hotel/day context; generation paths will actively repair before reaching this boundary.
 
-`fillMissingDescriptions` runs at `action-generate-trip-day.ts:1437` immediately after `repairDay`. The two meal-guard call sites that inject these dining cards run **later** in the pipeline:
+4. **Add regression tests**
+   - Standard evening dinner ends at 20:15 → append `Return to ...`.
+   - Nightcap category `activity` ending 00:16 after 23:16 start → append late-nightlife return and preserve it through pre-dawn strip.
+   - Existing final `Freshen Up at hotel` at 17:45 is **not** treated as a day-end return when later evening content exists; if it is terminal on a non-departure day, append/normalize a true return card.
+   - Departure day ending on airport/station logistics remains unchanged.
+   - Re-running the finalizer is idempotent and does not duplicate return cards.
 
-- `action-generate-trip-day.ts:1839` — final per-day meal guard
-- `action-generate-trip-day.ts:2467` — multi-day loop meal guard
-- Parity sites: `action-generate-day.ts` (post-fill meal guard at line 1561), `generation-core.ts:2270`, `action-save-itinerary.ts` (save-time meal guard)
-
-So any meal injected by the guard ships to the user with the template string, which is exactly what the user is seeing on the Bruges cards.
-
-A secondary leak: `day-validation.ts:1127/1143/1155` use `fallback.description || "${label} at ${name}"`. Any fallback-DB venue without a description in `fix-placeholders.ts` produces an even shorter blank-equivalent ("Dinner at X").
-
-## Fix
-
-**Goal:** every dining card carries an actionable insider blurb ("Order the…", "Try the…", "Ask for…"), regardless of which pipeline branch produced it.
-
-### 1. Stop shipping the "real local spot worth visiting" template
-
-`supabase/functions/generate-itinerary/day-validation.ts` lines ~1109/1127/1143/1155: replace the descriptive template fallbacks with an empty string sentinel (`description: ''`) so the description-fill backstop treats them as missing and refills them. Keep the title/venue/address logic untouched. If a fallback-DB entry has a real description (some do), keep it — only the templated "real local spot worth visiting" / "{Label} at {Name}" stubs go.
-
-### 2. Run description-fill **after** meal-guard, not before
-
-Add a second `fillMissingDescriptions` pass immediately after every meal-guard call site that can inject new dining cards:
-
-- `action-generate-trip-day.ts` after the line 1839 guard (single-day path) and after the line 2467 guard (multi-day chain loop)
-- `action-generate-day.ts` after the line 1561 guard
-- `action-save-itinerary.ts` after its save-time meal guard
-
-Each post-guard pass is gated on `result.alreadyCompliant === false` (only runs when something was actually injected) and reuses the same 8s timeout / single Gemini-flash batched call, so it adds ≤1 LLM round trip per day in the rare path. On failure the description stays empty (per the existing Density Protocol — no generic placeholder).
-
-### 3. One-shot legacy backfill for the affected trips
-
-The Bruges trip and any others already saved with the templated string will not regenerate. Add a tiny client-side detector in the existing `useTripFinancialSnapshot` /  `EditorialItinerary` hydration path that, on load of a `ready` trip, checks dining cards for the regex `/— a real local spot worth visiting$/` and silently fires `refresh-day` for each affected day exactly once per trip session (idempotent flag on the trip metadata: `quality.dining_blurb_backfill_v1 = true`). No new edge function. No structural change. Locked / userEdited / pinned / extracted rows are skipped per the Universal Locking Protocol.
-
-### 4. Verification
-
-- Bruges trip (`e0655f06-…`): hard refresh → backfill fires once → all dining cards now show a verb-led blurb ≥30 chars, no "real local spot worth visiting" string remains in `itinerary_data`.
-- New generation: trigger a multi-day plan that intentionally omits a dinner from the model output, confirm the meal-guard injects, the post-guard `fillMissingDescriptions` runs (`[DESC_FILL] day=N flagged=K filled=K`), and the saved card description starts with Order/Try/Ask/Don't miss/Request/Sit at/Sample/Specialty.
-- Parity tests: extend `description-coverage.test.ts` with a fixture day where every dining card was inserted by `enforceRequiredMealsFinalGuard`; assert the output passes `RESTAURANT_RECOMMENDATION_RE` for all of them.
-- Health panel: no new MISSING_DESCRIPTION / RESTAURANT_MISSING_RECOMMENDATION warnings on the test trips.
-
-## Out of scope
-
-- Activity card descriptions (already correct per user)
-- Currency / cost / budget snapshot logic
-- Chain restaurant / cross-city / wellness placeholder filters
-- Front-end card layout, link rendering, neighborhood label
-- DB schema changes
-- Removing or relaxing the strict `RESTAURANT_RECOMMENDATION_RE` regex
-
-## Memory updates after merge
-
-Update `mem://constraints/itinerary/description-coverage` with the new rule: **description-fill must run after every meal-guard injection point, not just after `repairDay`.** Add a sentinel guidance line referencing the post-guard `[DESC_FILL]` log lines so future regressions are caught in `edge_function_logs`.
+### Validation
+- Run targeted edge-function tests for hotel-return/bookend behavior.
+- Query recent generated trips after implementation to confirm every non-departure day ends with a visible hotel-return card or legitimate departure logistics.

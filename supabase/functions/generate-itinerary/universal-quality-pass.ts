@@ -93,13 +93,43 @@ const LATE_NIGHTLIFE_TITLE_RE = /\b(speakeasy|nightclub|cocktail|nightcap|club|l
 
 export function runStep8(result: any[], dayIndex: number, hotelName?: string): void {
   if (!result || result.length === 0) return;
-  const lastActivity = result[result.length - 1];
+  // Identify the day's true terminal card by start_time, not array position —
+  // insertion order isn't guaranteed across all upstream paths and the bookend
+  // logic must reason about the chronologically last activity.
+  const _toMins = (a: any): number => {
+    const t = String(a?.startTime || a?.start_time || a?.endTime || a?.end_time || '');
+    const m = t.match(/(\d{1,2}):(\d{2})/);
+    if (!m) return -1;
+    return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  };
+  let lastActivity = result[result.length - 1];
+  let lastIdx = result.length - 1;
+  let lastMins = _toMins(lastActivity);
+  for (let i = result.length - 2; i >= 0; i--) {
+    const m = _toMins(result[i]);
+    if (m > lastMins) { lastMins = m; lastIdx = i; lastActivity = result[i]; }
+  }
+  // If the chronologically last card isn't the array tail, move it to the tail
+  // so all subsequent index math (and the push() below) lands correctly.
+  if (lastIdx !== result.length - 1) {
+    const [card] = result.splice(lastIdx, 1);
+    result.push(card);
+  }
   const lastCat = String(lastActivity?.category || '').toUpperCase();
   const lastTitle = String(lastActivity?.title || '');
+  // A genuine "Return to Hotel" / "Back to Hotel" / "Hotel Checkout" / explicit
+  // STAY card is the only acceptable terminal accommodation. Freshen-up cards,
+  // luggage drops, and check-ins are MIDDAY rituals — even when categorized
+  // 'accommodation' they MUST NOT short-circuit the bookend (Bruges Day 2
+  // "Freshen Up at The Notary" 17:45–19:30 was the user-visible regression).
+  const TRUE_RETURN_RE = /\b(?:return\s+to|back\s+to|head\s+back\s+to|wind\s+down\s+at|retire\s+to|end\s+of\s+day\s+at)\b/i;
+  const CHECKOUT_RE = /\b(?:check[-\s]?out|checkout)\b/i;
+  const MIDDAY_ACCOM_RE = /\b(?:freshen[-\s]?up|luggage\s+drop|bag\s+drop|settle\s+in|check[-\s]?in|drop\s+(?:bags|luggage))\b/i;
+  const titleIsTrueReturn = TRUE_RETURN_RE.test(lastTitle) || CHECKOUT_RE.test(lastTitle);
+  const titleIsMiddayAccom = MIDDAY_ACCOM_RE.test(lastTitle) && !titleIsTrueReturn;
   const alreadyReturn =
-    lastCat === 'STAY' ||
-    lastCat === 'ACCOMMODATION' ||
-    /return.*hotel|back.*hotel|return\s+to/i.test(lastTitle);
+    titleIsTrueReturn ||
+    ((lastCat === 'STAY' || lastCat === 'ACCOMMODATION') && !titleIsMiddayAccom);
   if (alreadyReturn) return;
   // Skip logistics tails (airport/station transfers)
   if (/\b(airport|station|terminal|gate)\b/i.test(lastTitle) &&

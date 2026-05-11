@@ -2147,7 +2147,32 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  // Flush stage logger (non-blocking, non-fatal)
+  // ── FINAL HOTEL-RETURN INVARIANT (post-everything) ───────────────────
+  // runStep8 already ran inside universalQualityPass, but later stages
+  // (final meal guard, gap fill, validation gate, transport collapse,
+  // hotel-address pass, dedup) can leave the day terminating on a
+  // freshen-up / dinner / nightcap / activity with no hotel-return card.
+  // This is THE invariant — every non-departure day MUST end on either:
+  //   (a) a logistics tail (airport/station transfer for the actual
+  //       departure day), or
+  //   (b) a Return-to-Hotel card (regular or late-nightlife).
+  // runStep8 is idempotent: short-circuits when (a) or (b) already holds.
+  if (dayNumber < totalDays && Array.isArray(dayResult?.activities) && dayResult.activities.length > 0) {
+    try {
+      const { runStep8 } = await import('./universal-quality-pass.ts');
+      const _hotelForReturn = cityInfo?.hotelName || tripHotelName || undefined;
+      const _beforeLen = dayResult.activities.length;
+      runStep8(dayResult.activities, dayNumber - 1, _hotelForReturn);
+      if (dayResult.activities.length > _beforeLen) {
+        dayResult.metadata = dayResult.metadata || {};
+        dayResult.metadata.quality = dayResult.metadata.quality || {};
+        dayResult.metadata.quality.hotel_return_final_invariant = true;
+        console.log(`[QUALITY] Day ${dayNumber}: FINAL hotel-return invariant appended bookend (post-everything)`);
+      }
+    } catch (_e) { /* non-blocking */ }
+  }
+
+
   try {
     await stageLogger.flush();
     console.log(`[generate-trip-day] ${stageLogger.getSummary()}`);
@@ -2521,8 +2546,28 @@ async function _handleGenerateTripDayInner(
         dayNumber: dn,
         isFirstDay: isFirstDayLoop,
         isLastDay: isLastDayLoop,
+        hotelName: cityInfo?.hotelName || tripHotelName || undefined,
       });
     } catch (_e) { /* non-blocking */ }
+
+    // ── FINAL HOTEL-RETURN INVARIANT (multi-day finalization loop) ──
+    // Same invariant as the per-day path: every non-departure day must
+    // end on a hotel return or a logistics tail. terminalCleanup may
+    // dedupe / strip / clamp cards but does not append returns.
+    if (!isLastDayLoop && Array.isArray(updatedDays[i].activities) && updatedDays[i].activities.length > 0) {
+      try {
+        const { runStep8 } = await import('./universal-quality-pass.ts');
+        const _hotelForReturn = cityInfo?.hotelName || tripHotelName || undefined;
+        const _beforeLen = updatedDays[i].activities.length;
+        runStep8(updatedDays[i].activities, dn - 1, _hotelForReturn);
+        if (updatedDays[i].activities.length > _beforeLen) {
+          updatedDays[i].metadata = updatedDays[i].metadata || {};
+          updatedDays[i].metadata.quality = updatedDays[i].metadata.quality || {};
+          updatedDays[i].metadata.quality.hotel_return_finalize_loop = true;
+          console.log(`[QUALITY] Day ${dn}: hotel-return appended in multi-day finalization loop`);
+        }
+      } catch (_e) { /* non-blocking */ }
+    }
   }
 
   // ── DATE NORMALIZATION (ensure every day has a date) ─────────────
