@@ -59,6 +59,11 @@ export const FAILURE_CODES = {
   // Pricing sanity (B3, Barcelona Diagnosis 2026-05-10)
   PRICE_IMPLAUSIBLE:         'PRICE_IMPLAUSIBLE',
   PRICE_TOO_LOW:             'PRICE_TOO_LOW',
+
+  // Description coverage (Madrid: intermittent blank restaurant blurbs after phantom-ref scrub)
+  MISSING_DESCRIPTION:               'MISSING_DESCRIPTION',
+  GENERIC_DESCRIPTION:               'GENERIC_DESCRIPTION',
+  RESTAURANT_MISSING_RECOMMENDATION: 'RESTAURANT_MISSING_RECOMMENDATION',
 } as const;
 
 export type FailureCode = typeof FAILURE_CODES[keyof typeof FAILURE_CODES];
