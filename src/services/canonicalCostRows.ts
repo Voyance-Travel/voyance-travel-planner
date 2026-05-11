@@ -41,7 +41,7 @@ export interface ResolvedRow {
   dayNumber: number;
   category: string;                       // raw category from activity_costs
   cents: number;                          // post-rescue, post-toggle
-  rescueTag?: 'orphan-id' | 'json-zero';
+  rescueTag?: 'orphan-id' | 'json-zero' | 'json-missing-row';
   isLogisticsRow: boolean;
   /** Display name (live JSON title) when known. */
   name: string | null;
@@ -132,6 +132,9 @@ export interface ResolveCanonicalArgs {
    *  fold-in is computed inside the resolver so snapshot + payable items
    *  cannot diverge. */
   manualPayments?: CanonicalManualPayment[];
+  /** Trip travelers count, used by JSON-missing-row rescue to convert
+   *  per-person `jsonCost` into total cents. Defaults to 1. */
+  travelers?: number;
 }
 
 export function resolveCanonicalCostRows({
@@ -140,6 +143,7 @@ export function resolveCanonicalCostRows({
   includeHotel,
   includeFlight,
   manualPayments,
+  travelers,
 }: ResolveCanonicalArgs): ResolveResult {
   const liveById = new Map<string, CanonicalLiveActivity>();
   const rescueByDayCat = new Map<string, CanonicalLiveActivity[]>();
@@ -268,6 +272,41 @@ export function resolveCanonicalCostRows({
       isPaid: row.is_paid === true,
       paidAmountUsd: row.paid_amount_usd ?? null,
       source: row.source ?? null,
+    });
+  }
+
+  // ── JSON-missing-row rescue ──────────────────────────────────────────────
+  // Backstop for legacy trips where the generation pipeline never wrote
+  // activity_costs (per-day chain previously skipped Phase 4). For any live
+  // activity that was NOT consumed by direct/orphan match AND carries a
+  // positive `jsonCost`, synthesize a counted row so the budget header
+  // matches the visible card prices. Drops out automatically once the
+  // backend writer fills in real rows on next sync.
+  const rescueTravelers = Math.max(1, Number(travelers) || 1);
+  for (const live of liveActivities) {
+    if (consumed.has(live.id)) continue;
+    if (!(live.jsonCost > 0)) continue;
+    if (isWalkingLeg({ title: live.name })) continue;
+    const mapped = normalizeCanonicalCategory(live.category, live.name);
+    if (!mapped) continue; // only known categories
+    // Treat jsonCost as per-person (matches snapshot writer's resolvePerPersonForDb).
+    const rescuedCents = Math.round(live.jsonCost * rescueTravelers * 100);
+    if (rescuedCents <= 0) continue;
+    consumed.add(live.id);
+    totalCents += rescuedCents;
+    out.push({
+      rowKey: `json-rescue|${live.id}`,
+      effectiveActivityId: live.id,
+      dayNumber: live.dayNumber,
+      category: mapped,
+      cents: rescuedCents,
+      rescueTag: 'json-missing-row',
+      isLogisticsRow: false,
+      name: live.name,
+      numTravelers: rescueTravelers,
+      isPaid: false,
+      paidAmountUsd: null,
+      source: 'json-rescue',
     });
   }
 

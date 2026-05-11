@@ -80,6 +80,10 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   // Tracks the last orphan-payment fingerprint we asked the DB to archive,
   // so we don't re-fire the archival RPC on every refetch when nothing changed.
   const lastArchivedFingerprintRef = useRef<string | null>(null);
+  // One-shot guard: trigger sync-trip-cost-table at most once per session
+  // when activity_costs is empty but live JSON has prices (legacy trips
+  // generated before the per-day chain wrote Phase 4 cost rows).
+  const backfillFiredRef = useRef<boolean>(false);
 
   const fetchData = useCallback(async () => {
     if (!tripId) return;
@@ -91,7 +95,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // session-to-session drift and a permanent "Reconciling…" mismatch.
     const { data: tripData } = await supabase
       .from('trips')
-      .select('budget_total_cents, budget_include_hotel, budget_include_flight, budget_allocations, itinerary_data')
+      .select('budget_total_cents, budget_include_hotel, budget_include_flight, budget_allocations, itinerary_data, travelers, destination, budget_tier')
       .eq('id', tripId)
       .single();
 
@@ -223,12 +227,14 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
 
     // Canonical resolver: shared with usePayableItems so the row sum, the
     // header total, AND the manual-payment fold-in apply identical rules.
+    const tripTravelers = Number((tripData as any)?.travelers) || 1;
     const canonical = resolveCanonicalCostRows({
       costs: (costs || []) as any,
       liveActivities,
       includeHotel,
       includeFlight,
       manualPayments: (allPayments || []) as any,
+      travelers: tripTravelers,
     });
     totalCents = canonical.effectiveTotalCents;
     committedHotelCents = canonical.hotelCents;
@@ -294,6 +300,33 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       }
     } else {
       lastArchivedFingerprintRef.current = null;
+    }
+
+    // ── Auto-backfill activity_costs for legacy trips ──────────────────
+    // If the canonical row total is $0 yet live JSON carries priced cards,
+    // trigger sync-trip-cost-table once. Pipeline writer will populate
+    // activity_costs and the next refetch will read real rows (rescue path
+    // drops out automatically).
+    if (
+      !backfillFiredRef.current &&
+      canonical.totalCents === 0 &&
+      liveActivities.some((a) => a.jsonCost > 0)
+    ) {
+      backfillFiredRef.current = true;
+      const dest = String((tripData as any)?.destination || '');
+      const tier = (tripData as any)?.budget_tier || null;
+      supabase.functions
+        .invoke('sync-trip-cost-table', {
+          body: { tripId, destination: dest, travelers: tripTravelers, budgetTier: tier },
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.warn('[useTripFinancialSnapshot] sync-trip-cost-table failed', error);
+            return;
+          }
+          console.info(`[useTripFinancialSnapshot] auto-backfilled activity_costs for legacy trip ${tripId}`);
+          window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
+        });
     }
 
     // Reconciliation guard: BudgetTab must never under-report compared to
