@@ -132,7 +132,7 @@ OUTPUT FORMAT (JSON only, no markdown):
 }`;
 
     const costTracker = trackCost('discover_proactive', 'google/gemini-2.5-flash');
-    if (userId) costTracker.setUserId(userId);
+    costTracker.setUserId(userId);
     if (tripId) costTracker.setTripId(tripId);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
