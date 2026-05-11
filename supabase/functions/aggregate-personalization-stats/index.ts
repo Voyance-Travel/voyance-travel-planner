@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { requireAdmin } from "../_shared/require-admin.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,25 +23,14 @@ interface TagAction {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
+  // Mandatory admin (or service-role) gate — no anonymous bulk aggregation.
+  const adminCheck = await requireAdmin(req);
+  if (adminCheck instanceof Response) return adminCheck;
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
-    // Optional auth check for manual triggers
-    const authHeader = req.headers.get('Authorization');
-    
-    // Use service role for data aggregation, but validate auth properly
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: { user } } = await supabase.auth.getUser(token);
-      if (user) {
-        const { data: roles } = await supabase.from('user_roles').select('role').eq('user_id', user.id).eq('role', 'admin');
-        if (!roles || roles.length === 0) {
-          return new Response(JSON.stringify({ error: 'Admin access required' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-      }
-    }
 
     const body = await req.json().catch(() => ({}));
     const { sinceDays = 30 } = body;

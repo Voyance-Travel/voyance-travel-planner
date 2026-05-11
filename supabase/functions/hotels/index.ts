@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { getCachedPlacesPhotoByResource } from "../_shared/photo-storage.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
 import { cachedGooglePlacesTextSearch as googlePlacesTextSearch } from "../_shared/google-api.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -780,7 +781,11 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
   const costTracker = trackCost('hotels_search', 'google_places');
+  costTracker.setUserId(auth.userId);
 
   try {
     const body = await req.json();

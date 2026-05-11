@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
 import { buildCacheKey, getCached, setCache, TTL } from "../_shared/perplexity-cache.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,11 +15,15 @@ interface AttractionEnrichmentRequest {
 }
 
 serve(async (req) => {
-  const costTracker = trackCost('enrich_attraction', 'perplexity/sonar');
-  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
+  const costTracker = trackCost('enrich_attraction', 'perplexity/sonar');
+  costTracker.setUserId(auth.userId);
 
   try {
     const { attractionName, destination, travelDate } = await req.json() as AttractionEnrichmentRequest;

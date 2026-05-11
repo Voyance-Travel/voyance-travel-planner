@@ -11,6 +11,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { isWalkingLeg } from "../_shared/walking-leg.ts";
+import { requireAdmin } from "../_shared/require-admin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -161,6 +162,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const adminCheck = await requireAdmin(req);
+  if (adminCheck instanceof Response) return adminCheck;
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
