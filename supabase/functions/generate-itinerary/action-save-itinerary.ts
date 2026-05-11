@@ -148,6 +148,17 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
     }
     const pruneResult = pruneNonLogisticsAfterCheckout(activities);
     const transferPruneResult = pruneNonLogisticsAfterAirportTransfer(activities);
+    // Freshen-up position invariant — drops post-dinner / clamps overlap
+    {
+      const lockedIds = new Set<string>(
+        activities.filter((a: any) => a?.isLocked === true || a?.locked === true || a?.lock_state === 'locked').map((a: any) => String(a.id))
+      );
+      const fres = enforceFreshenUpPosition(activities, { dayNumber, lockedIds });
+      if (fres.repairs.length > 0) {
+        activities = fres.activities;
+        for (const r of fres.repairs) console.log(`[FRESHEN_UP_POSITION] ${r.message} path=save-itinerary`);
+      }
+    }
     if (dayOps.titleLeak + dayOps.bodyLeak + dayOps.fragment + dayOps.mealSuffix
         + dayOps.crossCity + dayOps.countryMismatch + dayOps.mealLabel
         + dayOps.phantomRef > 0) {
