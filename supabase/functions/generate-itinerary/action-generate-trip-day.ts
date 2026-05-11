@@ -2159,6 +2159,7 @@ async function _handleGenerateTripDayInner(
   // runStep8 is idempotent: short-circuits when (a) or (b) already holds.
   if (dayNumber < totalDays && Array.isArray(dayResult?.activities) && dayResult.activities.length > 0) {
     try {
+      const { runStep8 } = await import('./universal-quality-pass.ts');
       const _hotelForReturn = cityInfo?.hotelName || tripHotelName || undefined;
       const _beforeLen = dayResult.activities.length;
       runStep8(dayResult.activities, dayNumber - 1, _hotelForReturn);
