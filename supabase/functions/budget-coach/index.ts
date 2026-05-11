@@ -74,6 +74,11 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // HARD AUTH — reject anonymous callers (paid AI gateway endpoint)
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
   try {
     const {
       itinerary_days,
@@ -86,6 +91,7 @@ serve(async (req) => {
       category_overruns = {},
       anchor_activity_ids = [],
       deep_cuts_requested = false,
+      tripId,
     } = (await req.json()) as RequestBody;
 
     const gap_cents = current_total_cents - budget_target_cents;
