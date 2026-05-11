@@ -201,8 +201,9 @@ test.describe('Navigation - Auth Pages Cross-Links', () => {
 
   test('signup has link to signin', async ({ page }) => {
     await page.goto('/signup');
-    
-    const signinLink = page.locator('a[href*="signin"]');
+
+    // Scope to the form so the assertion isn't ambiguous with a nav-level signin link
+    const signinLink = page.locator('form').locator('a[href*="signin"]');
     await expect(signinLink).toBeVisible();
   });
 });
