@@ -1,96 +1,72 @@
-## Root cause
+## Live enumeration result
 
-Querying the three test trips in the DB confirms the failure shape:
+Ran the audit query against the live DB. **31 SECURITY DEFINER functions** in `public` are currently executable by `authenticated` (and 6 also by `anon`). After cross-referencing every one against frontend `supabase.rpc(...)` call sites, edge-function call sites, and the function bodies themselves, here is the classification:
 
-| Trip | Day | Last activity | endTime | Bookend? |
-|---|---|---|---|---|
-| Madrid | 1 | Romantic Dinner at Botín | 22:45 | ✓ Return added 22:45–23:15 |
-| Madrid | 2 | Freshen up at Ritz (mid-evening accommodation) | 21:40 | ✗ none — but at-hotel, "works" |
-| **Florence** | **1** | **Secluded Nightcap at Bulli & Balene** | **00:10** | **✗ MISSING** |
-| **Florence** | **2** | **Birthday Nightcap at Fusion Bar** | **22:55** | **✗ MISSING** |
-| Florence | 3 | Freshen up at hotel | 18:05 | ✗ none — at-hotel |
-| **Barcelona** | **2** | **Nightcap at Paradiso Speakeasy** | **00:20** | **✗ MISSING** |
-| Barcelona | 1 | Wander El Born | 21:50 | ✓ Return added 21:50–22:20 |
+### A — Service-only / unused: REVOKE from PUBLIC + authenticated, GRANT to service_role
 
-The pattern is **days that end on a late nightcap / drinks card**, not "Day 1 across all cities". Madrid Day 1 actually works because it ends on dinner.
+| Function | Why |
+|---|---|
+| `add_to_group_budget(uuid, integer)` | Only called from edge fns (`topup-group-budget`, `stripe-webhook`) |
+| `deduct_credits_fifo(uuid, integer)` | Only called from edge fns (`spend-credits`, `generate-travel-guide`, `purchase-group-unlock`, `topup-group-budget`) |
+| `spend_from_group_budget(uuid, integer)` | No frontend callers; service path |
+| `consume_free_edit(uuid)` | No callers anywhere; legacy / unreachable |
+| `get_intake_account(text)` | No callers anywhere |
+| `get_journey_trips(uuid)` | No callers anywhere; multi-trip journeys query goes through other paths |
 
-The existing `runStep8` in `universal-quality-pass.ts` already has a late-nightlife-bleed branch (per the **Late-Nightlife Hotel Return** memory) and a save-time net in `action-save-itinerary.ts`. Both call paths exist. So why isn't a card landing?
+### B — Frontend-callable, internal `auth.uid()` check VERIFIED: keep current grants
 
-Two leaks:
+These already enforce identity inside the function body (confirmed by `prosrc ILIKE '%auth.uid()%'` audit + manual read):
 
-### Leak A — pre-dawn strip eats the late-nightlife bookend it just emitted
+`accept_trip_invite`, `complete_quiz`, `get_user_id_by_email`, `get_user_info_by_email`, `get_trip_permission`, `optimistic_update_itinerary`, `resolve_or_rotate_invite`, `save_onboarding_dna` (both 6-arg and 7-arg overloads), `toggle_consumer_trip_share`, `transition_booking_state`, `update_collaborator_permission`, `get_current_user_email`.
 
-`_shared/predawn-hotel-strip.ts::stripPreDawnHotelReturns` removes **any** card with `startTime < 05:00` whose category is `accommodation` (or whose title matches `return to|hotel|...`). The just-pushed late-nightlife bookend is exactly that:
+### C — Frontend-callable, intentionally anon: keep `anon` + `authenticated`
 
-```ts
-{ category: 'accommodation', startTime: '00:10', source: 'late_nightlife_bookend' }
-```
+| Function | Why public is OK |
+|---|---|
+| `get_consumer_shared_trip(text)` | Public share-link reader; gated by share_token + share_enabled flag |
+| `get_shared_trip_payload(text)` | Same pattern, agency share view |
+| `get_trip_invite_info(text)` | Pre-auth invite landing page (read-only, token-gated) |
+| `get_founding_member_count()` | Public marketing counter |
+| `get_platform_destination_count()` | Public marketing counter |
+| `get_platform_trip_count()` | Public marketing counter |
+| `submit_client_intake(...)` | Pre-auth client-intake form, token-validated inside body |
 
-`runStep8` pushes the card at line 173, then `stripPreDawnHotelReturns(result, …)` at line 416 immediately strips it. The same strip runs in `terminalCleanup` and `persist-day` and `action-sync-tables` — each one wipes the legitimate bleed bookend. **Florence Day 1 (00:10 nightcap)** and **Barcelona Day 2 (00:20 speakeasy)** are killed here.
+### D — RLS policy helpers: keep `authenticated` grant (used inside policy USING/WITH CHECK)
 
-### Leak B — Florence Day 2 (22:55 nightcap) — missed by save-time net
+`is_trip_owner(uuid)`, `is_trip_collaborator(uuid, uuid, boolean)`, `is_trip_member(uuid, uuid)`, `get_user_trip_ids(uuid)`. Revoking these would break RLS evaluation across the trips/collaborators stack.
 
-This day's last endTime is 22:55, **not** pre-dawn, so Leak A doesn't apply. Tracing:
+### E — MUST FIX: callable by `authenticated` but missing internal auth check
 
-1. Day requires dinner (luxury archetype, full day) → Step 8 deferred.
-2. Meal-guard couldn't add a real dinner → no card injected.
-3. Post-meal-guard runStep8 retry in `action-generate-trip-day.ts:1808` only runs when `mealsInjected > 0` (need to verify the gate condition).
-4. Save-time net at `action-save-itinerary.ts:432` runs unconditionally — should fix it. **Need to confirm** whether the `nonLogistics` filter or some other guard is short-circuiting on a day whose only "non-logistics" card is `relaxation` / `activity` (nightcap). The filter only excludes transport categories so it should pass; suggests the post-meal-guard retry gate is the one being missed.
+| Function | Action |
+|---|---|
+| `claim_first_trip_benefit(p_user_id uuid)` | Add internal `IF auth.uid() <> p_user_id THEN RAISE EXCEPTION 'unauthorized'` guard. Without it, any signed-in user can claim a benefit on behalf of another `p_user_id`. Keep grants after fix. |
 
-## Fix
+## Migration
 
-### 1. Make the pre-dawn strip source-aware (`_shared/predawn-hotel-strip.ts`)
+Single migration `revoke_public_security_definer_grants` performing:
 
-Skip cards that the bookend pipeline just minted as legitimate post-midnight:
+1. **Revoke + grant service_role** for the 6 Group A functions:
+   ```sql
+   REVOKE EXECUTE ON FUNCTION public.add_to_group_budget(uuid, integer) FROM PUBLIC, authenticated, anon;
+   GRANT  EXECUTE ON FUNCTION public.add_to_group_budget(uuid, integer) TO service_role;
+   -- ...repeat for the other 5
+   ```
 
-```ts
-const src = String(act?.source || '').toLowerCase();
-if (src === 'late_nightlife_bookend') continue;
-const tags = Array.isArray(act?.tags) ? act.tags.map(String) : [];
-if (tags.includes('late_nightlife_bookend')) continue;
-```
+2. **Patch `claim_first_trip_benefit`** to add the `auth.uid() = p_user_id` guard (CREATE OR REPLACE FUNCTION with the existing body + new guard at top).
 
-This change is local to the strip function and inherits to all 5 call sites (`universal-quality-pass`, `action-save-itinerary`, `action-sync-tables`, `persist-day`, `action-generate-trip-day`). Sentinel: bump existing `[predawn-strip]` log to include `(skipped:N late_nightlife_bookend)`.
-
-### 2. Force save-time net to run on every non-departure day
-
-The save-time block at `action-save-itinerary.ts:422` already runs unconditionally per day. Audit and tighten:
-
-- Drop the `nonLogistics.length > 0` guard or relax it — a day whose only cards are transport is a degenerate edge that still benefits from a hotel-return anchor when it ends mid-evening.
-- After `runStep8` runs, log explicit reason when nothing was appended (already exists via `runStep8`'s own `[QUALITY] Skipped hotel return injection on Day N`).
-
-### 3. Tighten the post-meal-guard retry gate (`action-generate-trip-day.ts` ~1804)
-
-Verify and ensure `runStep8` runs when:
-- Step 8 was deferred earlier (track via `metadata.quality.step8_deferred = true`), AND
-- The day still lacks a hotel-return terminal card.
-
-Currently the retry appears gated on meal injection success; should instead be gated on "Step 8 was previously deferred". One-liner: set the deferral flag in `universal-quality-pass.ts:404` and read it here.
-
-### 4. Add scenario coverage (`supabase/functions/generate-itinerary/__tests__/hotel-return-bookend.test.ts`)
-
-Three new fixtures:
-- Day ending 00:10 with `nightcap` title — bookend present, **not** stripped by predawn pass.
-- Day ending 22:55 with `nightcap` title and dinner-required defer — bookend appended by save-time net.
-- Day ending with `Freshen up at <Hotel>` mid-evening — no duplicate bookend (current behavior preserved).
-
-### 5. Memory update
-
-Append a new constraint:
-> **Predawn-Strip Source Allowlist** — `stripPreDawnHotelReturns` MUST exempt cards tagged `source='late_nightlife_bookend'` (or `tags` containing same). Otherwise the legitimate post-midnight return injected by `runStep8`'s late-nightlife branch is eaten by the very next pass. Sentinel: `[predawn-strip] day=N kept N cards (skipped:K late_nightlife_bookend)`.
-
-## Out of scope
-
-- Not introducing a brand-new `appendHotelReturn` function — `runStep8` already exists and is wired correctly. Replacing it would duplicate logic and break the 4 call-site contract.
-- Not touching the at-hotel detection (Madrid Day 2 "freshen up" / Florence Day 3 "freshen up at hotel") — already correct via `lastCat==='ACCOMMODATION'`.
-- Not changing departure-day handling — already covered by `dayIndex < totalDays - 1` gate.
+3. **No changes to** Group B/C/D — they are correctly exposed.
 
 ## Verification
 
-1. Re-run Florence/Barcelona/Madrid scenario tests in `scenario.test.ts`.
-2. Manual DB query after re-generation:
-   ```
-   psql -c "SELECT day, last_title, last_end FROM (...) WHERE last_end > '21:00';"
-   ```
-   Every non-departure day should have a `Return to <Hotel>` row as the final activity.
-3. Console grep for `[predawn-strip]` lines to confirm `late_nightlife_bookend` cards survive.
+After migration runs:
+- Re-run the enumeration query; the 6 Group A functions disappear from results.
+- Frontend smoke test: ensure no UI path calls Group A functions (already audited: zero `supabase.rpc('add_to_group_budget'…)` etc. in `src/`).
+- Edge functions (`topup-group-budget`, `stripe-webhook`, `spend-credits`, `generate-travel-guide`, `purchase-group-unlock`) all use the service-role client → unaffected.
+- Re-run `supabase--linter` and confirm the SECURITY DEFINER public-execution warning count drops by 6.
+- Manual test: hit "claim first trip benefit" path on a real signup; confirm it still succeeds for the legitimate user, and a curl with another user's `p_user_id` raises `unauthorized`.
+
+## Out of scope
+
+- Not touching auth schema or storage schema functions.
+- Not switching any function from SECURITY DEFINER to SECURITY INVOKER (would require RLS audit per function — separate task).
+- Not removing the `postgres` / `sandbox_exec*` superuser grants (those exist on every function and are not a security boundary).
