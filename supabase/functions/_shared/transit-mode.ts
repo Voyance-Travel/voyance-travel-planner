@@ -69,6 +69,47 @@ export function haversineMeters(
   return Math.round(2 * R * Math.asin(Math.min(1, Math.sqrt(a))));
 }
 
+export type WaterCrossing = { city: string; reason: string };
+
+/**
+ * Hard-coded water/borough boundaries. Detects when a straight-line leg
+ * crosses a body of water that pedestrians cannot traverse. Bounding boxes
+ * scope the rule to the right city so unrelated lat/lng pairs that happen
+ * to share a longitude don't false-positive.
+ *
+ * Returns null when no boundary is crossed.
+ */
+export function detectWaterCrossing(
+  from: { lat: number; lng: number },
+  to:   { lat: number; lng: number },
+): WaterCrossing | null {
+  // Istanbul — Bosphorus: lng ≈ 29.02 separates European (west) from Asian (east) side
+  if (from.lat > 40.8 && from.lat < 41.3 && to.lat > 40.8 && to.lat < 41.3
+      && ((from.lng < 29.00 && to.lng > 29.05) || (from.lng > 29.05 && to.lng < 29.00))) {
+    return { city: 'Istanbul', reason: 'Bosphorus (Europe ↔ Asia)' };
+  }
+
+  // NYC — East River: Manhattan (lng < -73.972) ↔ Brooklyn/Queens (lng > -73.945)
+  if (from.lat > 40.55 && from.lat < 40.92 && to.lat > 40.55 && to.lat < 40.92
+      && ((from.lng < -73.972 && to.lng > -73.945) || (from.lng > -73.945 && to.lng < -73.972))) {
+    return { city: 'New York', reason: 'East River (Manhattan ↔ Brooklyn/Queens)' };
+  }
+
+  // SF Bay — SF (lng < -122.38) ↔ Oakland/Alameda (lng > -122.32)
+  if (from.lat > 37.7 && from.lat < 37.9 && to.lat > 37.7 && to.lat < 37.9
+      && ((from.lng < -122.38 && to.lng > -122.32) || (from.lng > -122.32 && to.lng < -122.38))) {
+    return { city: 'San Francisco', reason: 'SF Bay (SF ↔ Oakland)' };
+  }
+
+  // London — Thames runs roughly east-west around lat 51.505 through central London
+  if (from.lng > -0.25 && from.lng < 0.05 && to.lng > -0.25 && to.lng < 0.05
+      && ((from.lat < 51.498 && to.lat > 51.512) || (from.lat > 51.512 && to.lat < 51.498))) {
+    return { city: 'London', reason: 'Thames (north ↔ south)' };
+  }
+
+  return null;
+}
+
 /**
  * Pick the best transit tier for a known distance. Mirrors the canonical
  * thresholds from optimize-itinerary `getHaversineTransport`.
