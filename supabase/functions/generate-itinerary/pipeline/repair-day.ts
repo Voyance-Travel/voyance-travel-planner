@@ -2276,7 +2276,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
   if (activities.length > 0) {
     const effectiveHotelName = hotelName || 'Your Hotel';
-    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay, isFirstDay, isHotelChange, hotelCoordinates, resolvedDestination);
+    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay, isFirstDay, isHotelChange, hotelCoordinates, resolvedDestination, paceScore);
     activities = bookendRepairs.activities;
     repairs.push(...bookendRepairs.repairs);
   }
