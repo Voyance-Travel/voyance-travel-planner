@@ -1,52 +1,55 @@
-## Context
+# Hotel-Return Bookend — Edge-Case Hardening
 
-Four RLS policies grant `anon` direct REST SELECT access to agency share-link data based only on `share_enabled = true`, with no `share_token` validation. Anon callers can dump every shared agency trip's `internal_notes`, `total_cost_cents`, `total_commission_cents`, plus all cascading suggestions, votes, and chat messages via the PostgREST REST API.
+## Problem
 
-The legitimate share UX (`src/pages/agent/TripShare.tsx:79`) already routes through the SECURITY DEFINER RPC `public.get_shared_trip_payload(p_share_token)` (defined in migration `20260120225243_*`, granted to `anon`+`authenticated`), which validates the token server-side and returns sanitized data. Dropping the broken policies removes the leak without breaking the share page.
+`runStep8` (universal-quality-pass.ts:94) only injects the "Return to hotel" bookend when the last activity's `end_time` parses to 14:00–23:59 (or post-midnight nightlife). When the last card has missing/malformed `end_time` or ends before 14:00, it silently bails — last card on the day is left as e.g. an early lunch with no hotel return. Save-time net at action-save-itinerary.ts:435 calls the same `runStep8` and inherits the gap.
 
-## Migration — single file
+## Changes
 
-Drop the 4 broken policies, no replacements:
+### 1. `supabase/functions/generate-itinerary/universal-quality-pass.ts` — `runStep8`
 
-```sql
-DROP POLICY IF EXISTS "Public can view shared trips by token"
-  ON public.agency_trips;
+Add an `endTime` derivation fallback before the parse at line 110:
 
-DROP POLICY IF EXISTS "Anon can read suggestions for shared agency trips"
-  ON public.trip_suggestions;
+- If `lastActivity.end_time` / `endTime` is missing or unparseable, derive from `startTime` + duration:
+  - parse `activity.duration` ("90 min", "1h30", "1:30", bare minutes number) or `activity.durationMinutes`
+  - if still nothing, default to `startTime + 60min`
+- If `startTime` is also missing/unparseable, treat the synthesized end as the day's empirical floor: `max(last_known_time across day, 19:00)`.
 
-DROP POLICY IF EXISTS "Anon can read votes for shared agency trips"
-  ON public.trip_suggestion_votes;
+Widen acceptance:
 
-DROP POLICY IF EXISTS "Shared trip viewers can read chat"
-  ON public.trip_chat_messages;
-```
+- Standard 14:00–23:59 zone unchanged.
+- Late-nightlife 00:00–02:55 bleed unchanged.
+- NEW: if end_time was synthesized (not from real LLM data) AND this is the terminal card of the day AND not airport/STAY/return, still inject — clamp synthesized start ≥ 19:00, end via existing `clampBookendEndTime`.
+- Log: `[QUALITY] Day X: hotel return injected with synthesized end_time (was unparseable)`.
 
-## Future-extension contract
+Keep existing skip guards: airport/station/terminal/gate logistics tail, STAY/accommodation, existing return-to-hotel title.
 
-If product later wants anon viewers of a shared trip to see suggestions / votes / chat, the only correct path is:
+### 2. `supabase/functions/generate-itinerary/action-save-itinerary.ts` — save-time net (line ~423)
 
-- Extend `get_shared_trip_payload(token)` to return them in the same payload, **or**
-- Add sibling token-validating SECURITY DEFINER RPCs (e.g. `get_shared_trip_chat(p_share_token)`, `get_shared_trip_suggestions(p_share_token)`) granted to `anon`.
+After the existing `runStep8` call:
 
-Never re-add direct anon table policies on `agency_trips` / `trip_suggestions` / `trip_suggestion_votes` / `trip_chat_messages`.
+- If `acts.length` unchanged AND last activity is not STAY/accommodation/airport/return, log:
+  `[SAVE_QUALITY] day=N WARNING: bookend injection skipped despite non-terminal last activity "<title>" end="<endTime>"`
+- This is a monitoring signal only — no behavioral change.
+
+### 3. New test `supabase/functions/generate-itinerary/__tests__/bookend-edge-cases.test.ts`
+
+Covers:
+- Last activity with no `end_time` → bookend injected (synthesized)
+- Last activity ending 13:45 → bookend injected (early-close case)
+- Last activity = airport transit on departure day → NO bookend
+- Last activity already STAY/accommodation → NO duplicate bookend
+
+Mirrors style of existing `hotel-return-bookend.test.ts` and `late-nightlife-source-survival.test.ts`.
+
+## Out of Scope
+
+- No changes to `clampBookendEndTime`, predawn-strip, ghost filter, or save-time `terminalCleanup`.
+- No prompt changes — pure post-gen safety net.
+- No memory rule rewrite (existing Day-End Hotel-Return Bookend memory still accurate; this widens the "no end_time / pre-14:00" leak path it implicitly covered via `runStep8`).
 
 ## Verification
 
-After deploy:
-
-```bash
-# 1. agency_trips REST surface — must NOT return shared rows to anon
-curl -s 'https://jsxplunjjvxuejeouwob.supabase.co/rest/v1/agency_trips?share_enabled=eq.true&select=*' \
-  -H "apikey: <ANON_KEY>"
-# expect: []
-
-# 2. trip_chat_messages REST surface — must NOT leak chat to anon
-curl -s 'https://jsxplunjjvxuejeouwob.supabase.co/rest/v1/trip_chat_messages?select=*' \
-  -H "apikey: <ANON_KEY>"
-# expect: [] (or auth error)
-```
-
-In-app smoke: open an existing `/trip-share/<token>` link in a logged-out browser → trip details + segments still render via `get_shared_trip_payload` RPC. Verify `TripShare.tsx` works end-to-end.
-
-After deploy completes, mark the security finding fixed via `security--manage_security_finding` and append a memory entry under `mem://constraints/security/agency-share-token-rpc-only` documenting: anon access to shared agency trip data must go exclusively through `get_shared_trip_payload(token)` (or future sibling token-validating RPCs); never direct table policies.
+- `grep -n "synthesized end_time\|bookend injection skipped" supabase/functions/generate-itinerary/` → ≥2 hits.
+- New deno test passes (4 cases).
+- Re-run any prior failing trip → terminal card on every non-departure day = "Return to <hotel>".
