@@ -146,11 +146,7 @@ serve(async (req) => {
       );
     }
 
-    // Use service role for database operations
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    // (supabaseAdmin already created above)
 
     // Check if bonus already claimed
     const { data: existingBonus, error: checkError } = await supabaseAdmin
