@@ -172,9 +172,12 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
     });
     if (!allTimed) return;
 
-    const timed = activities
+    // Buffer/conflict passes operate on realActivities (not the raw `activities`
+    // array) so wrap-past-midnight bookends + transit/return residue can't
+    // generate phantom overlap warnings. Day-boundary filter still runs second
+    // as a defense-in-depth guard.
+    const timed = realActivities
       .filter((a: any) => a.startTime && a.endTime)
-      // Day-boundary guard: drop rows tagged for a different day
       .filter((a: any) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
       .map((a: any) => ({
         name: a.name || a.title,
@@ -185,8 +188,10 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
         endStr: String(a.endTime),
       }))
       .filter((a: { start: number; end: number }) => a.start > 0 || a.end > 0)
-      // Drop wrap-past-midnight residue (e.g. hotel-return 23:50 → 00:28)
-      .filter((a: { start: number; end: number }) => !(a.end > 0 && a.end < a.start))
+      // Drop wrap-past-midnight residue. Treat end===0 with start>0 as wrap
+      // too (e.g. "Return to Hotel 23:30 → 00:00") — would otherwise false-negative.
+      .filter((a: { start: number; end: number }) =>
+        !((a.end === 0 && a.start > 0) || (a.end > 0 && a.end < a.start)))
       .sort((a: { start: number }, b: { start: number }) => a.start - b.start);
 
     for (let i = 0; i < timed.length - 1; i++) {
