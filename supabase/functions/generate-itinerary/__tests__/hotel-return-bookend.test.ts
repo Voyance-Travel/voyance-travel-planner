@@ -55,3 +55,67 @@ Deno.test('runStep8 falls back to "Your Hotel" when hotelName empty', () => {
   runStep8(acts, 0, undefined);
   assertEquals(lastTitle(acts), 'Return to Your Hotel');
 });
+
+// ── Late-nightlife bookend regressions (Florence/Barcelona) ──
+
+import { stripPreDawnHotelReturns } from '../../_shared/predawn-hotel-strip.ts';
+
+Deno.test('runStep8 + predawn strip: late nightcap ending 00:10 keeps bookend (Florence Day 1)', () => {
+  const acts = [
+    mkAct({ title: 'The Duomo Complex', startTime: '12:25', endTime: '14:55', category: 'sightseeing' }),
+    mkAct({ title: 'Wander the Oltrarno Alleys', startTime: '19:10', endTime: '20:40', category: 'activity' }),
+    mkAct({ title: 'Secluded Nightcap at Bulli & Balene', startTime: '23:25', endTime: '00:10', category: 'relaxation' }),
+  ];
+  runStep8(acts, 0, 'MH Florence Hotel & Spa');
+  assertEquals(acts.length, 4);
+  const last = acts[acts.length - 1];
+  assertEquals(String(last.source), 'late_nightlife_bookend');
+  // Predawn strip MUST NOT remove the late-nightlife bookend.
+  const removed = stripPreDawnHotelReturns(acts, { dayNumber: 1, label: 'TEST' });
+  assertEquals(removed, 0);
+  assertEquals(acts.length, 4);
+  assertEquals(String(acts[acts.length - 1]?.category), 'accommodation');
+});
+
+Deno.test('runStep8: nightcap ending 22:55 gets standard bookend (Florence Day 2)', () => {
+  const acts = [
+    mkAct({ title: 'Officina Santa Maria Novella Visit', startTime: '13:50', endTime: '15:20', category: 'cultural' }),
+    mkAct({ title: 'Birthday Nightcap at Fusion Bar', startTime: '21:55', endTime: '22:55', category: 'activity' }),
+  ];
+  runStep8(acts, 1, 'MH Florence Hotel & Spa');
+  assertEquals(acts.length, 3);
+  assertEquals(lastCat(acts), 'accommodation');
+  assertEquals(lastTitle(acts).startsWith('Return to'), true);
+});
+
+Deno.test('runStep8: speakeasy ending 00:20 keeps bookend after predawn strip (Barcelona Day 2)', () => {
+  const acts = [
+    mkAct({ title: 'Freshen Up at Condal Mar', startTime: '19:50', endTime: '21:25', category: 'accommodation' }),
+    mkAct({ title: 'Nightcap at Paradiso Speakeasy', startTime: '23:10', endTime: '00:20', category: 'activity' }),
+  ];
+  runStep8(acts, 1, 'Hotel Barcelona Condal Mar');
+  assertEquals(acts.length, 3);
+  stripPreDawnHotelReturns(acts, { dayNumber: 2, label: 'TEST' });
+  // Late-nightlife bookend survives, predawn strip leaves it alone.
+  assertEquals(acts.length, 3);
+  assertEquals(String(acts[acts.length - 1]?.source), 'late_nightlife_bookend');
+});
+
+Deno.test('runStep8: terminal "Freshen up at <hotel>" mid-evening — no duplicate bookend', () => {
+  const acts = [
+    mkAct({ title: 'Thyssen Museum', startTime: '11:30', endTime: '13:30', category: 'activity' }),
+    mkAct({ title: 'Freshen up at Mandarin Oriental Ritz, Madrid', startTime: '20:30', endTime: '21:40', category: 'accommodation' }),
+  ];
+  const before = acts.length;
+  runStep8(acts, 1, 'Mandarin Oriental Ritz, Madrid');
+  assertEquals(acts.length, before);
+});
+
+Deno.test('predawn strip: untagged accommodation card at 00:30 still removed (regression guard)', () => {
+  const acts = [
+    mkAct({ title: 'Return to Hotel', startTime: '00:30', endTime: '01:00', category: 'accommodation' }),
+  ];
+  const removed = stripPreDawnHotelReturns(acts, { dayNumber: 1, label: 'TEST' });
+  assertEquals(removed, 1);
+  assertEquals(acts.length, 0);
+});
