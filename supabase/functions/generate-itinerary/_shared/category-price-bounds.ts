@@ -29,6 +29,11 @@ export type PriceCategoryKey =
   | 'walking_tour'
   | 'museum'
   | 'guided_tour_premium'
+  | 'bike_tour'
+  | 'food_tour'
+  | 'cooking_class'
+  | 'wine_tasting'
+  | 'boat_tour'
   | 'metro_ticket'
   | 'taxi_short'
   | 'taxi_airport';
@@ -59,6 +64,11 @@ export const CATEGORY_PRICE_CEILINGS: Record<PriceCategoryKey, PriceBound> = {
   walking_tour:        { min: 0,  max: 40,  currency: 'USD' },
   museum:              { min: 0,  max: 50,  currency: 'USD' },
   guided_tour_premium: { min: 50, max: 250, currency: 'USD' },
+  bike_tour:           { min: 25, max: 90,  currency: 'USD' },
+  food_tour:           { min: 50, max: 150, currency: 'USD' },
+  cooking_class:       { min: 60, max: 200, currency: 'USD' },
+  wine_tasting:        { min: 25, max: 150, currency: 'USD' },
+  boat_tour:           { min: 20, max: 200, currency: 'USD' },
 
   // transport
   metro_ticket:  { min: 1,  max: 8,   currency: 'USD' },
@@ -70,6 +80,11 @@ const PASTRY_RE = /\b(pastr(?:y|er[ií]a|isserie)|bakery|boulangerie|panader[ií
 const COFFEE_RE = /\b(coffee|caf[eé]|espresso|cappuccino|barista)\b/i;
 const FINE_DINING_RE = /\b(michelin|tasting menu|chef[''`s]?\s*counter|chef[''`s]?\s*table|kaiseki|omakase|degustaci[oó]n|menu degustaci[oó]n)\b/i;
 const WALKING_TOUR_RE = /\bwalking\s+tour\b/i;
+const BIKE_TOUR_RE = /\b(e-?bike|electric\s+bike|cycling|bicycle|segway)\s+(tour|experience|ride)\b|\bbike\s+tour\b/i;
+const FOOD_TOUR_RE = /\b(food|tapas|street[- ]food|market|culinary|gastronom(?:y|ic))\s+tour\b/i;
+const COOKING_CLASS_RE = /\b(cooking|pasta|paella|pizza|sushi|baking)\s+(class|workshop|experience|lesson)\b/i;
+const WINE_TASTING_RE = /\b(wine|sake|whisk(?:ey|y)|champagne|sparkling|cava|prosecco)\s+(tasting|flight|pairing)\b/i;
+const BOAT_TOUR_RE = /\b(boat|gondola|sunset|sailing|catamaran|cruise|yacht|kayak\s+tour)\s+(tour|ride|experience|cruise)\b/i;
 const MUSEUM_RE = /\b(museum|gallery|museo|galerie|kunsthalle)\b/i;
 const METRO_RE = /\b(metro|subway|underground|tube|t-bana|s-bahn|u-bahn)\s*(ticket|fare|pass)?\b/i;
 const TAXI_AIRPORT_RE = /\b(airport)\b.*\b(taxi|transfer|cab|uber|lyft)\b|\b(taxi|transfer|cab|uber|lyft)\b.*\b(airport)\b/i;
@@ -96,7 +111,12 @@ export function inferSubcategory(activity: any): PriceCategoryKey | null {
     return null;
   }
 
-  // Experiences
+  // Experiences (paid-tour subcategories run BEFORE generic walking_tour/museum)
+  if (BIKE_TOUR_RE.test(haystack)) return 'bike_tour';
+  if (FOOD_TOUR_RE.test(haystack)) return 'food_tour';
+  if (COOKING_CLASS_RE.test(haystack)) return 'cooking_class';
+  if (WINE_TASTING_RE.test(haystack)) return 'wine_tasting';
+  if (BOAT_TOUR_RE.test(haystack)) return 'boat_tour';
   if (WALKING_TOUR_RE.test(haystack)) return 'walking_tour';
   if (MUSEUM_RE.test(haystack) && !cat.includes('dining')) return 'museum';
 
