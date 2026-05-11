@@ -13,6 +13,8 @@ import {
   scrubBodyPromptLeaks,
   scrubTitleLeaks,
   scrubSentenceFragmentsOnAct,
+  scrubPhantomEventRefs,
+  type DayScheduleSummary,
 } from './prompt-leak-scrub.ts';
 import { stripVenueMealSuffix, VENUE_MEAL_SUFFIX_RE } from './venue-name.ts';
 import { downgradeCrossCityActivity } from '../generate-itinerary/fix-placeholders.ts';
@@ -27,6 +29,7 @@ export interface ScrubOps {
   countryMismatch: number;
   mealLabel: number;
   downgraded: number;
+  phantomRef: number;
 }
 
 export const EMPTY_OPS: ScrubOps = Object.freeze({
@@ -38,6 +41,7 @@ export const EMPTY_OPS: ScrubOps = Object.freeze({
   countryMismatch: 0,
   mealLabel: 0,
   downgraded: 0,
+  phantomRef: 0,
 }) as ScrubOps;
 
 export interface ScrubContext {
@@ -45,6 +49,8 @@ export interface ScrubContext {
   destination?: string;
   /** Optional explicit meal slot for venue/label coherence. */
   mealSlot?: 'breakfast' | 'lunch' | 'dinner' | 'brunch' | null;
+  /** Day-schedule summary for phantom-event-reference scrubbing. */
+  daySchedule?: DayScheduleSummary;
 }
 
 const MEAL_SLOT_RE = /\((breakfast|lunch|dinner|brunch)\)/i;
