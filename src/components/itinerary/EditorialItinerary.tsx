@@ -3792,6 +3792,11 @@ export function EditorialItinerary({
   // travelers and ignored the budget_include_hotel/flight toggles.
   const snapshotTotalUsd = financialSnapshot.tripTotalCents / 100;
   const totalCost = financialSnapshot.loading ? 0 : snapshotTotalUsd;
+  // Surface "Calculating…" both while the AI is generating AND while the
+  // canonical financial snapshot is still loading. Without the snapshot
+  // gate, refresh would briefly render `$0` and then jump to the real
+  // total — which read as "the price changed" to users.
+  const isBudgetCalculating = isBudgetGenerating || financialSnapshot.loading;
 
   // ─── Reconciliation between per-day badges and the trip total ───
   // tripLevelCents = trip total − Σ day(d≥1) totals
