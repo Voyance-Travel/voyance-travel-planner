@@ -1799,24 +1799,33 @@ async function _handleGenerateTripDayInner(
               source: 'generate-trip-day:final-per-day',
             };
 
-            // Step 8 was deferred earlier in universalQualityPass when dinner
-            // was required-but-missing. Now that meal-guard has injected it,
-            // re-run runStep8 so the day terminates on a hotel-return card.
-            // Idempotent: short-circuits if last activity already STAY/return.
-            if (dayNumber < totalDays) {
-              try {
-                const { runStep8 } = await import('./universal-quality-pass.ts');
-                const _hotelForReturn = cityInfo?.hotelName || tripHotelName || undefined;
-                const _beforeLen = dayResult.activities.length;
-                runStep8(dayResult.activities, dayNumber - 1, _hotelForReturn);
-                if (dayResult.activities.length > _beforeLen) {
-                  dayResult.metadata.quality.hotel_return_post_meal_guard = true;
-                  console.log(`[QUALITY] Day ${dayNumber}: re-ran Step 8 after meal-guard — hotel-return appended`);
-                }
-              } catch (_e) { /* non-blocking */ }
-            }
           } else {
             console.log(`[MEAL_AUDIT] day=${dayNumber} required=[${_fmgPolicy.requiredMeals.join(',')}] detected=[${_detectedPre.join(',')}] missing=[] pool=${_perDayPool.length} source="generate-trip-day:final-per-day" (no-op)`);
+          }
+
+          // Step 8 retry — runs regardless of whether meal-guard injected
+          // anything. Covers two cases:
+          //   1. Step 8 was deferred earlier (dinner required-but-missing)
+          //      and meal-guard succeeded → bookend after the new dinner.
+          //   2. Step 8 was deferred and meal-guard FAILED (no real venue)
+          //      → bookend after the existing terminal card (e.g., nightcap)
+          //      so the day still ends with a hotel return.
+          // runStep8 is idempotent — short-circuits if last activity is
+          // already STAY/return or outside its 14:00–23:59 / late-nightlife
+          // acceptance window.
+          if (dayNumber < totalDays) {
+            try {
+              const { runStep8 } = await import('./universal-quality-pass.ts');
+              const _hotelForReturn = cityInfo?.hotelName || tripHotelName || undefined;
+              const _beforeLen = dayResult.activities.length;
+              runStep8(dayResult.activities, dayNumber - 1, _hotelForReturn);
+              if (dayResult.activities.length > _beforeLen) {
+                dayResult.metadata = dayResult.metadata || {};
+                dayResult.metadata.quality = dayResult.metadata.quality || {};
+                dayResult.metadata.quality.hotel_return_post_meal_guard = true;
+                console.log(`[QUALITY] Day ${dayNumber}: re-ran Step 8 after meal-guard — hotel-return appended`);
+              }
+            } catch (_e) { /* non-blocking */ }
           }
 
           // RS.M.I3: cache the meal policy used during generation so action-save-itinerary

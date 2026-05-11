@@ -402,6 +402,10 @@ export async function universalQualityPass(
       });
       if (!hasDinner) {
         console.log(`[QUALITY] Day ${dayIndex + 1}: deferring hotel-return injection — dinner is required but not yet present (meal-guard will fill it; terminal pass will append hotel-return after dinner)`);
+        // Flag deferral so post-meal-guard retry runs runStep8 even when no
+        // meal was successfully injected (covers nightcap-only days where
+        // dinner stays missing but a bookend is still required).
+        (result as any).__step8Deferred = true;
         // Skip Step 8 only — Step 8b (predawn strip) and Step 9 still run below.
       } else {
         runStep8(result, dayIndex, hotelName);

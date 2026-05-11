@@ -421,23 +421,21 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         // retries. Skip departure day; idempotent via runStep8's own guard.
         if (!isLastDay && Array.isArray(itineraryDays[i].activities) && itineraryDays[i].activities.length > 0) {
           const acts = itineraryDays[i].activities;
-          const nonLogistics = acts.filter((a: any) => {
-            const cat = String(a?.category || '').toLowerCase();
-            return !['transport', 'transit', 'transportation', 'transfer', 'logistics', 'walking', 'taxi', 'rideshare', 'metro'].includes(cat);
-          });
-          if (nonLogistics.length > 0) {
-            try {
-              const { runStep8 } = await import('./universal-quality-pass.ts');
-              const _beforeLen = acts.length;
-              runStep8(acts, dayNumber - 1, savedHotelName);
-              if (acts.length > _beforeLen) {
-                console.log(`[QUALITY] day=${dayNumber} save-time hotel-return appended`);
-                itineraryDays[i].metadata = itineraryDays[i].metadata || {};
-                itineraryDays[i].metadata.quality = itineraryDays[i].metadata.quality || {};
-                itineraryDays[i].metadata.quality.hotel_return_save_time = true;
-              }
-            } catch (_e) { /* non-blocking */ }
-          }
+          // Always attempt — runStep8 itself decides whether to append based
+          // on terminal card category/title/time. Removed prior nonLogistics
+          // guard: a nightcap/relaxation-only day (Florence Day 2 pattern)
+          // still needs a bookend, and runStep8 is idempotent.
+          try {
+            const { runStep8 } = await import('./universal-quality-pass.ts');
+            const _beforeLen = acts.length;
+            runStep8(acts, dayNumber - 1, savedHotelName);
+            if (acts.length > _beforeLen) {
+              console.log(`[QUALITY] day=${dayNumber} save-time hotel-return appended`);
+              itineraryDays[i].metadata = itineraryDays[i].metadata || {};
+              itineraryDays[i].metadata.quality = itineraryDays[i].metadata.quality || {};
+              itineraryDays[i].metadata.quality.hotel_return_save_time = true;
+            }
+          } catch (_e) { /* non-blocking */ }
         }
       } catch (_e) { /* non-blocking */ }
 

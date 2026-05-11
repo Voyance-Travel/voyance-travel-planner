@@ -42,12 +42,24 @@ export function stripPreDawnHotelReturns(
   const dayLabel = context?.dayNumber != null ? `day ${context.dayNumber}` : '';
 
   let removed = 0;
+  let skippedLateNightlife = 0;
   // Scan the WHOLE array — pre-dawn hotel returns can show up in the middle
   // when sorts are unstable or when prior cleanup leaves a gap.
   for (let i = activities.length - 1; i >= 0; i--) {
     const act = activities[i];
     const mins = startMinsOf(act);
     if (mins === null || mins >= 5 * 60) continue;
+
+    // ALLOWLIST: legitimate post-midnight hotel-return injected by runStep8's
+    // late-nightlife-bleed branch (e.g., speakeasy/nightcap ending 00:20 →
+    // taxi back at 00:25). Without this guard the very next predawn-strip
+    // pass eats the card we just minted.
+    const src = String(act?.source || '').toLowerCase();
+    const tags = Array.isArray(act?.tags) ? act.tags.map((t: unknown) => String(t).toLowerCase()) : [];
+    if (src === 'late_nightlife_bookend' || tags.includes('late_nightlife_bookend')) {
+      skippedLateNightlife++;
+      continue;
+    }
 
     const title = String(act?.title || act?.name || '').toLowerCase();
     const cat = String(act?.category || '').toLowerCase();
@@ -71,6 +83,9 @@ export function stripPreDawnHotelReturns(
     removed++;
   }
 
+  if (skippedLateNightlife > 0) {
+    console.log(`[${label}] day=${context?.dayNumber ?? '?'} kept ${activities.length} cards (skipped:${skippedLateNightlife} late_nightlife_bookend)`);
+  }
   return removed;
 }
 
