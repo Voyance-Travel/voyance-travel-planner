@@ -9689,6 +9689,33 @@ export type Database = {
         }
         Relationships: []
       }
+      public_trip_collaborators: {
+        Row: {
+          accepted_at: string | null
+          avatar_url: string | null
+          created_at: string | null
+          id: string | null
+          member_display: string | null
+          role: string | null
+          trip_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_collaborators_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       public_trip_members: {
         Row: {
           accepted_at: string | null

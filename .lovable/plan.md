@@ -1,88 +1,95 @@
-# Batch 4 verification + Option 1 (cron sweeper)
+## Goal
 
-## Batch 4 results (Q17–Q24)
+Stop `trip_collaborators` from leaking peer identity (and via FK-join, peer profile/email surface) to non-owner trip members. Enforce: owner sees full base table, each user sees only their own row, peers see other members **only** through a PII-free view.
 
-| Q | Item | Status | Evidence |
-|---|---|---|---|
-| Q17 | Unsplash Tier 2A fallback | ✅ SHIPPED | `destination-images/index.ts` L373–439 `tryUnsplashFallback` + L1623–1626 dispatch; needs `UNSPLASH_ACCESS_KEY` secret |
-| Q18 | Per-category price sanity | ✅ SHIPPED | `CATEGORY_PRICE_CEILINGS` in `_shared/category-price-bounds.ts`; `checkPlausiblePricing` in `validate-day.ts` L183/198; `PRICE_IMPLAUSIBLE` repair in `repair-day.ts` L2910–2948 + `action-repair-costs.ts` L494 |
-| Q19 | Hotel-return on non-departure days | ✅ SHIPPED | `repair-day.ts` L4066 `injected_midday_hotel_return` + L4120 `injected_hotel_return`; gated on `isDepartureDay` (L1511/1921), runs on all non-departure days. Save-time net at `action-save-itinerary.ts` L434 + `action-generate-trip-day.ts` L1813 |
-| Q20 | Meal injection at repair | ⚠️ NO MATCH | No `MISSING_MEAL` / `repairMissingMeals` / `generateSingleMealActivity` token found in pipeline. Meal-guard runs at generate-trip-day (per memory) but repair-day does **not** inject; only validate flags. Needs investigation — possible drift |
-| Q21A | 5 new DNA traits | ✅ SHIPPED | All 5 traits present in `quiz-questions-v3.json` weights + schema L1426 |
-| Q21B | q22/q23 added | ✅ SHIPPED | `q22_accomplishment` L1297, `q23_recharge` L1348, registered in step 10 L2002 |
-| Q21C | Forbidden pairs + adjusted score | ✅ SHIPPED | `archetype-matcher.ts` L17 `FORBIDDEN_PAIRS`, L464 `adjustedScore` w/ 0.7 same-category penalty, L469 forbidden-pair filter |
-| Q21D | eco_ethicist constraints | ⚠️ PARTIAL | `eco_ethicist` defined in quiz JSON L1806 + rarity/group/narratives, but no `elephant`/`tiger temple` avoid-list match found. Constraint file may be elsewhere or never landed |
-| Q22A | discover-proactive auth | ✅ SHIPPED | `index.ts` L39–45 reads Authorization header + `auth.getUser()` |
-| Q22B | activity-concierge auth + CostTracker | ⚠️ PARTIAL | Auth check present L133 `authClient.auth.getUser()`. **No `trackCost`/`CostTracker` import** — cost tracking did not ship for this function |
-| Q22C | itinerary-chat daily cap | ✅ SHIPPED | `DAILY_CHAT_CAP = 50` L29, enforcement L496–505 |
-| Q23 | EUR rate unification | ✅ SHIPPED | Single source `supabase/functions/_shared/exchange-rates.ts` L18 `EUR: 0.86`; both `src/lib/currency.ts` and `generate-itinerary/currency-utils.ts` re-export from it. No duplicate table |
-| Q24 | Refund-day cleanup of activity_costs | ⚠️ MOVED | No `persist-day.ts` exists. Cleanup found in `generation-core.ts` L3388 `activity_costs.delete().eq('trip_id', tripId)`. Likely correct but **trip-wide delete on regenerate-day** is worth confirming scope — could be over-broad |
+## Two issues with the spec as written
 
-**Tally:** 9 clean, 3 partial/drift (Q20 meal-inject, Q21D eco constraints, Q22B concierge cost-track), 1 needs-scope-check (Q24).
+Before shipping I need to flag two things in the SQL you pasted — the migration will fail or silently mis-secure as-is:
 
-None are launch-blockers; flag for batch 5 or post-launch hardening.
+1. **`tc.role` doesn't exist.** The column is `permission` (text). Columns are: `id, trip_id, user_id, permission, invited_by, accepted_at, created_at, include_preferences`. I'll use `tc.permission AS role` in the view (keeps the API name you want).
+2. **The existing SELECT policy is not named `trip_owner_collaborator_read`.** It's `"Users can view relevant collaborations"` and its third OR-clause `is_trip_collaborator(trip_id, auth.uid())` is exactly what currently lets peers read each other. The migration must `DROP` that policy (plus any stale variants) before creating the two new ones, otherwise the permissive peer-read survives and the lock is cosmetic.
 
----
+Also worth noting: the `member_display` fallback `'Member ' || SUBSTRING(p.id::text, 1, 8)` exposes the first 8 chars of the profile UUID (== user_id). If the goal is to fully hide identity from peers, swap to `SUBSTRING(tc.id::text, 1, 8)` (the row id, not the user id). I'll go with row id unless you say otherwise.
 
-## Option 1: pg_cron stale pending-charge sweeper
+## Migration
 
-Closes the tab-close-mid-failure window where a `pending_credit_charges` row stays `pending` indefinitely and the user silently loses credits.
-
-### Design
-
-A pg_cron job runs every 5 minutes and invokes a SECURITY DEFINER function `sweep_stale_pending_charges()` that:
-
-1. Finds `pending_credit_charges` rows where:
-   - `status = 'pending'`
-   - `created_at < now() - interval '5 minutes'`
-   - `refund_attempts < 3` (respects existing client-side max-attempts contract from `useStalePendingChargeRefund`)
-2. For each row, calls the existing `spend-credits` edge function via `pg_net.http_post` with:
-   - `action: 'REFUND'`
-   - `creditsAmount`, `tripId`, `userId` from the row
-   - `metadata.reason = 'cron_stale_pending_sweeper'`
-   - `metadata.pendingChargeId = id` (atomic dedup against existing idempotency layer)
-   - `metadata.originalAction = action`
-3. Increments `refund_attempts` immediately (race protection against the client hook running at the same time).
-4. The existing `spend-credits` REFUND handler does the actual ledger reversal + marks the row `refunded` — we reuse its idempotency, no duplicate refund logic.
-
-### Why 5 minutes
-
-- Matches the client hook's `STALE_THRESHOLD_MS = 2 minutes` but adds 3-minute buffer so the client always gets first shot.
-- Generation P99 is ~90s; 5 min is well past any legitimate in-flight charge.
-
-### Idempotency / collision with client hook
-
-Both code paths set `metadata.pendingChargeId` and call `spend-credits` REFUND. `spend-credits` already dedupes refunds by `originalIdempotencyKey` / pending charge id (per Q11 architecture). Worst case: both fire simultaneously → second one is a no-op.
-
-The `refund_attempts` UPDATE uses `WHERE refund_attempts = <current value>` (optimistic lock) so only one path increments per attempt.
-
-### Files
-
-**1 migration** (`supabase/migrations/<timestamp>_stale_charge_cron_sweeper.sql`):
-
-- `CREATE OR REPLACE FUNCTION public.sweep_stale_pending_charges()` — SECURITY DEFINER, plpgsql, loops over stale rows, fires `net.http_post` to `/functions/v1/spend-credits` with service-role JWT (read from vault — same pattern as existing cron jobs in this project).
-- `REVOKE EXECUTE ... FROM PUBLIC, anon, authenticated;` (callable only by cron / service role).
-- `SELECT cron.schedule('sweep-stale-pending-charges', '*/5 * * * *', $$SELECT public.sweep_stale_pending_charges()$$);`
-- Guard: `cron.unschedule` first if same name exists (idempotent re-run).
-
-**Note on service-role key:** the migration tool runs as the project owner so `vault.decrypted_secrets` works. If the project already has a cron-friendly pattern (e.g. a `SERVICE_ROLE_KEY` vault secret), reuse it; otherwise the migration creates a `cron_caller_token` secret. I'll confirm which exists before writing the migration.
-
-### Verification after ship
+One migration file:
 
 ```sql
-SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'sweep-stale-pending-charges';
--- Then manually insert a fake stale charge (created_at = now() - '10 min', status='pending')
--- Wait 5 min, confirm status flipped to 'refunded' and credits returned
+-- 1. View (security_barrier, joins profiles for display only — no email, no user_id)
+CREATE OR REPLACE VIEW public.public_trip_collaborators
+WITH (security_barrier = true) AS
+SELECT
+  tc.id,
+  tc.trip_id,
+  tc.permission AS role,
+  tc.accepted_at,
+  tc.created_at,
+  COALESCE(p.display_name, 'Member ' || SUBSTRING(tc.id::text FROM 1 FOR 8)) AS member_display,
+  p.avatar_url
+FROM public.trip_collaborators tc
+LEFT JOIN public.profiles p ON p.id = tc.user_id;
+
+GRANT SELECT ON public.public_trip_collaborators TO authenticated;
+REVOKE SELECT ON public.public_trip_collaborators FROM anon, PUBLIC;
+
+-- 2. Lock base table
+REVOKE SELECT ON public.trip_collaborators FROM anon, PUBLIC;
+
+-- 3. Drop ALL existing SELECT policies on the base table
+DROP POLICY IF EXISTS "Users can view relevant collaborations" ON public.trip_collaborators;
+DROP POLICY IF EXISTS "trip_owner_collaborator_read" ON public.trip_collaborators;
+DROP POLICY IF EXISTS "self_collaborator_read" ON public.trip_collaborators;
+
+-- 4. Recreate as owner-only + self-only
+CREATE POLICY "trip_owner_collaborator_read" ON public.trip_collaborators
+  FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.trips t
+                 WHERE t.id = trip_collaborators.trip_id AND t.user_id = auth.uid()));
+
+CREATE POLICY "self_collaborator_read" ON public.trip_collaborators
+  FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
 ```
 
-### Not in scope
+INSERT/UPDATE/DELETE policies untouched.
 
-- No change to `useStalePendingChargeRefund` client hook (keeps fast-path responsiveness).
-- No change to `spend-credits` (relies on existing REFUND handler).
-- No change to client-side generation flow.
+## Frontend impact (real, non-trivial)
 
----
+42 call sites across `src/` and `supabase/functions/`. They split cleanly:
 
-## Deliverable
+**Safe to leave on base table** (owner context or self-row only):
+- All edge functions in `supabase/functions/generate-itinerary/*` and `regenerate-on-blend-change` — these run in trip-owner or service-role context, both of which can still read the base table.
+- `src/services/tripCollaboratorsAPI.ts` lines 303/315/371/397 (delete + own-row reads).
+- All `INSERT` / `DELETE` / `UPDATE` call sites (policies untouched).
+- Self-membership lookups (e.g. `BlendRecalcBanner.tsx`, `useVoyanceAPI.ts`, `TripDashboard.tsx:855/880`, `Start.tsx:2632/3125`, `TripDetail.tsx:1516`, `splitJourneyIfNeeded.ts:244`) — these filter by `user_id = current user`, so `self_collaborator_read` covers them. **No change needed**, just verify each.
 
-One migration via `supabase--migration` for the cron sweeper. After approval, I'll verify the job is scheduled and report the 3 partial Batch 4 items (Q20, Q21D, Q22B) for inclusion in Batch 5 or backlog.
+**Must move to `public_trip_collaborators`** (peer-list reads from a non-owner viewer):
+- `src/services/tripCollaboratorsAPI.ts` lines 73 + 125 — list-members for the trip detail panel. These currently embed `profile:profiles!...(id, handle, display_name, avatar_url)`; the view already inlines `member_display + avatar_url`, so the embed is dropped.
+- `src/services/tripSharingAPI.ts` lines 89/102/176/195/319/389/410 — audit each; the ones that render member lists for non-owners switch to the view.
+- `src/components/itinerary/TripCollaboratorsPanel.tsx:217` — peer-visible member list → view.
+- `src/components/suggestions/TripSuggestions.tsx:203`, `ProposeReplacementDialog.tsx:90` — peer-context reads → view.
+- `src/services/achievementsAPI.ts:403` — verify context, likely view.
+
+For each switched site I'll: drop `user_id` references (view doesn't expose it), drop the `profile:profiles!fk(...)` embed (view inlines it), rename `permission` → `role` reads. Owner-only flows stay on the base table because the view strips `user_id`/`invited_by`/`include_preferences` they need.
+
+I will **not** touch RPCs, INSERT paths, or anything that already filters by `user_id = auth.uid()`.
+
+## Verification (after apply)
+
+1. `SELECT 1 FROM information_schema.views WHERE table_schema='public' AND table_name='public_trip_collaborators';` → 1 row
+2. `SET ROLE anon; SELECT * FROM public.trip_collaborators LIMIT 1;` → permission denied
+3. As a non-owner collaborator: `SELECT * FROM trip_collaborators WHERE trip_id = <shared_trip>;` returns only their own row; same query on `public_trip_collaborators` returns all members (display + avatar only).
+4. Run `supabase--linter`; the `trip_collaborators`/profile-email exposure finding should drop off.
+5. Manually open the trip-collaborators panel as a non-owner peer in preview to confirm the members list still renders names + avatars.
+
+## Deliverables
+
+- 1 migration (above).
+- Edits to ~6 frontend files routing peer-context reads through `public_trip_collaborators` (drop `profiles` embed, drop `user_id` field references, rename `permission` → `role`).
+- Verification report (linter + the 5 checks above).
+
+## Questions before I implement
+
+1. Confirm `member_display` fallback should use **row id** (`tc.id`) not **user id** (`p.id`) — i.e. fully hide user_id from peers. Recommended: yes.
+2. The view exposes `permission` as `role`. OK to keep this rename, or prefer `permission` to match the column?
