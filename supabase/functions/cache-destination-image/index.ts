@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,10 +7,37 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// Allowlist of trusted image source hosts. Add more here as needed.
+const ALLOWED_IMAGE_HOSTS = new Set<string>([
+  "images.unsplash.com",
+  "plus.unsplash.com",
+  "cdn.pixabay.com",
+  "images.pexels.com",
+  "lh3.googleusercontent.com",
+  "maps.googleapis.com",
+  "jsxplunjjvxuejeouwob.supabase.co",
+]);
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+function isAllowedImageUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:") return false;
+    return ALLOWED_IMAGE_HOSTS.has(u.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // Auth gate — block anonymous SSRF / storage-abuse attempts.
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
 
   try {
     const { destinationSlug, originalUrl, imageType = "hero" } =
@@ -18,6 +46,13 @@ Deno.serve(async (req) => {
     if (!destinationSlug || !originalUrl) {
       return new Response(
         JSON.stringify({ error: "destinationSlug and originalUrl required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (typeof originalUrl !== "string" || !isAllowedImageUrl(originalUrl)) {
+      return new Response(
+        JSON.stringify({ error: "originalUrl host not allowed" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -57,13 +92,25 @@ Deno.serve(async (req) => {
     }
 
     const contentType = imgResponse.headers.get("content-type") || "image/jpeg";
+    if (!contentType.toLowerCase().startsWith("image/")) {
+      return new Response(
+        JSON.stringify({ error: "Resource is not an image" }),
+        { status: 415, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const imageBuffer = await imgResponse.arrayBuffer();
 
-    // Reject tiny/blank images (< 1KB)
+    // Reject tiny/blank images (< 1KB) or oversized (> 5 MB).
     if (imageBuffer.byteLength < 1024) {
       return new Response(
         JSON.stringify({ error: "Image too small, likely blank" }),
         { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (imageBuffer.byteLength > MAX_IMAGE_BYTES) {
+      return new Response(
+        JSON.stringify({ error: "Image exceeds 5 MB size cap" }),
+        { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
