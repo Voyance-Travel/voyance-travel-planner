@@ -73,10 +73,36 @@ Deno.test('M5: user-overridden $0 paid tour is skipped', () => {
   assertEquals(shouldSkipPriceSanity(act), true);
 });
 
-Deno.test('M5: bike_tour median is in expected range', () => {
+Deno.test('M5: bike_tour median is in expected range (post-luxury bump)', () => {
   const b = CATEGORY_PRICE_CEILINGS['bike_tour'];
   const median = Math.round((b.min + b.max) / 2);
-  assertEquals(median >= 50 && median <= 65, true);
+  // Post-bump: min=25, max=200 → median ≈ 113. Window covers reasonable drift.
+  assertEquals(median >= 90 && median <= 130, true);
+});
+
+// ── Inverse-direction guard (M5 user addendum) ──
+// Legitimate luxury private tours must NOT trip PRICE_IMPLAUSIBLE.
+
+Deno.test('M5 inverse: $150 private e-Bike tour is within bike_tour ceiling', () => {
+  const ceiling = CATEGORY_PRICE_CEILINGS['bike_tour'].max;
+  // $150 covers the Salamanca / private-guide reference case the user flagged.
+  assertEquals(150 <= ceiling, true);
+});
+
+Deno.test('M5 inverse: $180 private tapas tour is within food_tour ceiling', () => {
+  assertEquals(180 <= CATEGORY_PRICE_CEILINGS['food_tour'].max, true);
+});
+
+Deno.test('M5 inverse: $175 private cellar wine tasting is within wine_tasting ceiling', () => {
+  assertEquals(175 <= CATEGORY_PRICE_CEILINGS['wine_tasting'].max, true);
+});
+
+Deno.test('M5 inverse: $300 outlier still flagged (locked rows are the escape hatch)', () => {
+  // Documents the deliberate boundary: anything above $200 is still treated
+  // as implausible and substituted to median; user-locked / basis=user rows
+  // bypass via shouldSkipPriceSanity. Keeps the AI hallucination guard
+  // meaningful without permitting unbounded prices.
+  assertEquals(300 > CATEGORY_PRICE_CEILINGS['bike_tour'].max, true);
 });
 
 // ── Walking-tour bimodal split (M5 addendum) ──
