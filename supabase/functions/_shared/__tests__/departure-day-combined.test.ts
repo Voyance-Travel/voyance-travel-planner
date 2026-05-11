@@ -75,11 +75,12 @@ Deno.test('M2 combined — late checkout + untimed transfer + post-transfer dinn
 });
 
 Deno.test('M2 combined — locked post-transfer dinner survives prune (universal locking)', () => {
-  const day = makeBaseDay();
-  // Mark the dinner as user-locked.
-  day[3] = { ...day[3], metadata: { userLocked: true } } as any;
-
-  const out = enforceDepartureDayLogistics({ ...baseInput, activities: day });
+  // Lock via lockedIds (canonical signal honoured by isLockedRow in §15z).
+  const out = enforceDepartureDayLogistics({
+    ...baseInput,
+    activities: makeBaseDay(),
+    lockedIds: new Set(['dinner']),
+  });
   const ids = out.activities.map(a => a.id);
   const checkoutIdx = ids.indexOf('checkout');
   const transferIdx = ids.indexOf('transfer');
