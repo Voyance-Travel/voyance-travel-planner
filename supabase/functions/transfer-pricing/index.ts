@@ -24,6 +24,7 @@ interface TransferPricingRequest {
   time?: string;            // Preferred time (e.g., "14:00")
   transferType?: 'airport_arrival' | 'airport_departure' | 'point_to_point';
   preferredModes?: string[]; // e.g., ['taxi', 'train', 'uber', 'private']
+  tripId?: string;          // For cost attribution
 }
 
 interface TransferOption {
