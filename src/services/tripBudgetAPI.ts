@@ -84,21 +84,23 @@ export interface BudgetSummary {
 // ============================================================================
 
 export async function getTripMembers(tripId: string): Promise<TripMember[]> {
+  // R5: Cross-member reads MUST go through public_trip_members (no email).
+  // Trip owners' management UIs that need email read trip_members directly
+  // (owner SELECT policy still allows it).
   const { data, error } = await supabase
-    .from('trip_members')
+    .from('public_trip_members')
     .select('*')
     .eq('trip_id', tripId)
-    .order('role', { ascending: false })
-    .order('created_at');
+    .order('role', { ascending: false });
 
   if (error) throw new Error(error.message);
-  
+
   return (data || []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
     tripId: row.trip_id as string,
     userId: row.user_id as string | null,
-    email: row.email as string,
-    name: row.name as string | null,
+    email: '', // intentionally not exposed via public_trip_members
+    name: (row.name as string | null) ?? (row.member_display as string | null) ?? null,
     role: row.role as TripMemberRole,
     invitedAt: row.invited_at as string,
     acceptedAt: row.accepted_at as string | null,
