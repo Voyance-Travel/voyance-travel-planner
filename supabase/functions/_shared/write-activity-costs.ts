@@ -13,7 +13,7 @@
  */
 
 import { isWalkingLeg } from "./walking-leg.ts";
-import { ALWAYS_FREE_VENUE_PATTERNS } from "../generate-itinerary/sanitization.ts";
+import { ALWAYS_FREE_VENUE_PATTERNS } from "./always-free-venue-patterns.ts";
 
 export interface WriteCostsContext {
   destination: string;
