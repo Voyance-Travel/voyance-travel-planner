@@ -239,6 +239,74 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
   return issues;
 }
 
+/**
+ * Detect ≥3h intra-day gaps for a single day.
+ *
+ * INVARIANTS (do not break — covered by detectGapsForDay tests):
+ *   1. Filters by dayNumber FIRST. Caller may pass either a day-scoped or a
+ *      flat cross-day array — either way only rows tagged for `dayNumber` are
+ *      inspected. Overnight sleep (last activity of day N → first activity of
+ *      day N+1) is therefore NEVER flagged.
+ *   2. No synthetic pre-day anchor. The first sorted activity NEVER produces
+ *      a gap warning ("wake-up window" is intentional).
+ *   3. Wrap-past-midnight (endMins > 0 && endMins < startMins) and pre-dawn
+ *      residue (startMins < 05:00) cards are dropped — they are bookend
+ *      artifacts, not real day-content.
+ *   4. Bookend/transit-like rows (check-in/out, hotel, transfer, "Walk to X",
+ *      "Return to hotel") are excluded so a 2-min taxi between dinner and
+ *      hotel doesn't silence a real gap.
+ */
+export function detectGapsForDay(allActivities: any[], dayNumber: number): HealthIssue[] {
+  const issues: HealthIssue[] = [];
+  if (!Array.isArray(allActivities) || allActivities.length === 0) return issues;
+
+  const isBookendOrTransit = (a: any) => {
+    const cat = (a.category || a.type || '').toLowerCase();
+    const title = (a.title || a.name || '').toLowerCase();
+    if (['check-in','check-out','hotel','accommodation','transit','transportation',
+         'transfer','logistics','commute'].includes(cat)) return true;
+    if (/^(return to|walk to|transfer to|drive to|taxi|metro|train|bus|tram)\b/i.test(title)) return true;
+    if (/return to (the )?hotel/i.test(title)) return true;
+    return false;
+  };
+
+  // Hard day-boundary guard — first thing, before anything else.
+  const dayActivities = allActivities.filter(
+    (a: any) => (a.dayNumber ?? a.day_number) === dayNumber
+  );
+  if (dayActivities.length === 0) return issues;
+
+  const sorted = dayActivities
+    .filter((a: any) => !!a.startTime && !isBookendOrTransit(a))
+    .map((a: any) => {
+      const startMins = parseTime(a.startTime || '00:00');
+      const endMins = parseTime(a.endTime || a.startTime || '00:00');
+      const wrapsMidnight = endMins > 0 && endMins < startMins;
+      const preDawn = startMins < 5 * 60;
+      return { a, startMins, endMins, skip: wrapsMidnight || preDawn };
+    })
+    .filter((x) => !x.skip)
+    .sort((x, y) => x.startMins - y.startMins);
+
+  let prevEnd: number | null = null;
+  for (const { a, startMins, endMins } of sorted) {
+    // INVARIANT 2: first activity never emits a gap (prevEnd starts null).
+    if (prevEnd !== null && startMins - prevEnd >= 180) {
+      const gapHours = Math.floor((startMins - prevEnd) / 60);
+      issues.push({
+        id: `gap-${dayNumber}-${startMins}`,
+        severity: 'warning',
+        message: `Day ${dayNumber} has ${gapHours}h gap before ${a.title || a.name || 'next activity'}`,
+        fixLabel: 'Fill Gap',
+        fixAction: 'refresh_day',
+        dayNumber,
+      });
+    }
+    if (endMins > startMins) prevEnd = endMins;
+  }
+  return issues;
+}
+
 function parseTime(timeStr: string): number {
   if (!timeStr) return 0;
   const normalized = timeStr.trim().toUpperCase();
