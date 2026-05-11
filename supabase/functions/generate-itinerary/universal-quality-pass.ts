@@ -205,25 +205,20 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
       return null;
     };
     let derivedMins: number;
-    if (m) {
+    if (endMinsParsed !== null) {
       // end_time existed but was outside acceptance window (e.g., 13:00 early lunch).
-      derivedMins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + 30;
-    } else if (sm) {
-      const sH = parseInt(sm[1], 10);
-      const sM = parseInt(sm[2], 10);
+      derivedMins = endMinsParsed + 30;
+    } else if (startMinsParsed !== null) {
       const dur = parseDurationMins(lastActivity) ?? 60;
-      derivedMins = sH * 60 + sM + dur;
+      derivedMins = startMinsParsed + dur;
     } else {
       // No usable times anywhere on the activity — scan the day for the latest
-      // known time and floor at 19:00.
+      // known time (AM/PM-aware) and floor at 19:00.
       let latest = -1;
       for (const a of result) {
         const t = a?.end_time || a?.endTime || a?.start_time || a?.startTime || '';
-        const mm = String(t).match(/(\d{1,2}):(\d{2})/);
-        if (mm) {
-          const v = parseInt(mm[1], 10) * 60 + parseInt(mm[2], 10);
-          if (v > latest) latest = v;
-        }
+        const v = parseTimeAmPm(String(t));
+        if (v !== null && v > latest) latest = v;
       }
       derivedMins = latest >= 0 ? latest + 30 : 19 * 60;
     }
