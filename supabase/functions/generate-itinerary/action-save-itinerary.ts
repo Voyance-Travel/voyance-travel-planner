@@ -373,6 +373,9 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
                 saveFallbackVenues.push({ name: v.name, address: v.address || destination, mealType: 'any' });
               }
             }
+            if (saveFallbackVenues.length < 3) {
+              console.warn(`[VENUE_POOL_THIN] dest="${destination}" count=${saveFallbackVenues.length} — meal-guard will fall through to needsVenuePick sentinels (preserveAsManualPick)`);
+            }
           }
         } catch (_e) { /* non-blocking */ }
         const result = enforceRequiredMealsFinalGuard(
