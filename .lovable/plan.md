@@ -1,31 +1,62 @@
-## Lock down `test-email` to service-role + allowlist
+## Diagnosis: Not a route-guard regression
 
-**File:** `supabase/functions/test-email/index.ts`
+I followed Steps 1–2 from the request and verified ProtectedRoute is wired and working. The Playwright failure has a different root cause.
 
-**Caller audit:** `rg "test-email"` across `src/` and `supabase/functions/` returns zero matches. No frontend or backend code invokes this function — it is purely an admin/debug tool. No callers need to be removed or migrated.
+### Step 1 — guard exists and is wired correctly
 
-### Changes
+- `src/components/layout/ProtectedRoute.tsx` — `if (!isAuthenticated) return <Navigate to={ROUTES.SIGNIN} state={{ from }} replace />` (correct pattern).
+- `src/App.tsx` lines 226–261 — every route the failing tests hit IS wrapped:
+  - `/profile`, `/profile/edit`, `/profile/settings`, `/profile/credits` — `<ProtectedRoute><…/></ProtectedRoute>`
+  - `/start` — wrapped
+  - `/trip/dashboard`, `/trip/:tripId`, `/trip/:tripId/active`, etc. — all wrapped
+- `AuthContext` resolves `isLoading=false` within ~500ms of mount when there's no session (single retry then bail), with an 8s safety timeout.
 
-Inject two gates immediately after the CORS preflight check (before any other logic, including the `isConfigured()` short-circuit so unauthenticated callers can't probe SMTP config state):
+### Step 2 — manual verification: redirect works
 
-1. **Service-role auth gate** — reject unless `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` matches exactly. Returns `403 FORBIDDEN`.
-2. **Recipient allowlist gate** — parse the JSON body once, lowercase-trim `to`, and require it to be in `ALLOWED_TEST_RECIPIENTS` (initially `ashtonlaurenn@gmail.com`). Returns `400 RECIPIENT_NOT_ALLOWED`.
+Hit the live sandbox at `/profile` while unauthenticated → browser landed on `/signin`. ProtectedRoute is doing its job.
 
-The existing "fall back to authenticated user's email" branch (lines 169–182) is removed — under service-role auth there is no end-user, and the allowlist is now the single source of truth for recipient. The `targetEmail` resolution collapses to the validated `toAddress` from the allowlist check.
+### Actual root cause: Playwright is hitting a Lovable-gated URL
 
-### Verification (post-deploy)
+`playwright.config.ts` line 34:
 
-- `curl -X POST <url>` (no auth) → 403 FORBIDDEN
-- `curl -X POST -H "Authorization: Bearer <ANON_KEY>"` → 403 FORBIDDEN
-- `curl -X POST -H "Authorization: Bearer <SERVICE_ROLE>" -d '{"to":"random@example.com"}'` → 400 RECIPIENT_NOT_ALLOWED
-- `curl -X POST -H "Authorization: Bearer <SERVICE_ROLE>" -d '{"to":"ashtonlaurenn@gmail.com"}'` → 200, email delivered
-- Linter no longer flags `test-email` as unauthenticated email-send vector
+```
+baseURL: process.env.PLAYWRIGHT_BASE_URL || 'https://id-preview--bbef7015-…-7d36d59f8dcd.lovable.app'
+```
 
-### Memory
+`curl -I https://id-preview--…lovable.app/profile` returns:
 
-Add new entry `mem://constraints/security/test-email-service-role-only` documenting:
-- `test-email` is admin-only, service-role auth required
-- Recipient must be in `ALLOWED_TEST_RECIPIENTS` allowlist (defense-in-depth vs. compromised service key)
-- Never wire this function into any user-facing UI; never relax the allowlist to accept arbitrary `to`
+```
+302 → https://lovable.dev/auth-bridge?project_id=…&return_url=…/profile
+```
 
-Update `mem://index.md` with R7 reference line.
+Every request to `id-preview--*.lovable.app` is intercepted by Lovable's preview auth-bridge before the SPA loads. Playwright follows the 302, lands on a Lovable login page (no `input[type="email"]`, no `/signin` URL, no `<h1>` matching `/journey|account/i`), and every assertion times out at 5–40 s. That explains the symptom (15 failures across `auth.spec.ts` + `profile.spec.ts`) without any code regression.
+
+### What to change
+
+```text
+playwright.config.ts
+└── baseURL default → public URL the React app actually serves
+```
+
+The project has two publicly reachable origins (no Lovable gate, SPA fallback enabled):
+
+- Published: `https://voyance-travel-planner.lovable.app`
+- Custom domain: `https://travelwithvoyance.com`
+
+Switch the default to the published URL (custom domain is fine too — same hosting). CI/local runs that need a different target keep the `PLAYWRIGHT_BASE_URL` env override.
+
+### Plan
+
+1. **`playwright.config.ts`** — change line 34 default from `id-preview--*.lovable.app` to `https://voyance-travel-planner.lovable.app`. Add a one-line comment that `id-preview--*` is auth-gated and must not be used as Playwright's target.
+
+2. **`e2e/README.md` (create or append)** — short note: tests must run against the published URL or a custom domain; never against `id-preview--*.lovable.app`. Override with `PLAYWRIGHT_BASE_URL` for local dev servers.
+
+3. **No app-code changes.** ProtectedRoute, AuthContext, and `App.tsx` route wrapping are correct — leave them alone.
+
+4. **Verify** — re-run `npx playwright test e2e/auth.spec.ts e2e/profile.spec.ts` against the new baseURL. Expect ~25 passing.
+
+5. **Step 5 audit (deferred / quick scan only)** — `grep -rn "useAuth\|useUser" src/pages` to flag any user-state-reading page that's NOT wrapped in `ProtectedRoute` and doesn't gracefully handle null user. Will report findings; not changing wiring unless something obvious appears.
+
+### Out of scope
+
+- The 4 unrelated Supabase security findings shown in the security panel (JWT-claim role check, `trip_intents` collaborator SELECT, `activities`/`transfer-pricing` paid-API auth, `test-email`) — `test-email` was already fixed earlier this turn; the others are separate work.
