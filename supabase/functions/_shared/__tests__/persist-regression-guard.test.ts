@@ -105,7 +105,7 @@ Deno.test('initial generation: old is empty → new with 10 activities PROCEEDS'
     { label: 'test-initial' },
   );
   assertEquals(error, null);
-  assertEquals(regressionBlocked, undefined);
+  assertEquals(regressionBlocked, false);
   // itinerary_data MUST be written
   assertEquals(captured.updatePayload.itinerary_data.days.length, 2);
 });
@@ -127,7 +127,7 @@ Deno.test('small drop within tolerance: 10 → 9 PROCEEDS', async () => {
     { label: 'test-tolerance' },
   );
   // 9 >= max(3, floor(10*0.6)=6) → write proceeds
-  assertEquals(regressionBlocked, undefined);
+  assertEquals(regressionBlocked, false);
   assertEquals(captured.updatePayload.itinerary_data.days.length, 2);
 });
 
@@ -144,7 +144,7 @@ Deno.test('allowRegression=true overrides the guard', async () => {
     { days: newDays },
     { label: 'test-override', allowRegression: true },
   );
-  assertEquals(regressionBlocked, undefined);
+  assertEquals(regressionBlocked, false);
   assertEquals(captured.updatePayload.itinerary_data.days.length, 1);
 });
 
