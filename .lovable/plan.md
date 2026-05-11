@@ -1,94 +1,102 @@
-## Goal
+# Structurally isolate customer_reviews.email
 
-Close `OPEN_ENDPOINTS / unauth_paid_api_functions` — add JWT auth to the 10 remaining paid-API edge functions so anonymous callers can't drain Lovable AI / Google / Perplexity / Viator / Amadeus budgets.
+## Decision gate result
 
-## STEP 1 — The 10 functions (enumerated, all confirmed present)
+- `SELECT count(*) FROM customer_reviews` → **0 rows** (0 with email).
+- Threshold says <1000 → **Option A (structural isolation)**.
 
-| # | Function | Paid API | Existing CostTracker? | Caller surface |
-|---|---|---|---|---|
-| 1 | `nearby-suggestions` | Lovable AI (Gemini 2.5 Flash) | No | `useNearbySuggestions`, `DiscoverDrawer` (in-trip, authed) |
-| 2 | `fetch-reviews` | Google/TripAdvisor/Foursquare/OpenTripMap | No | `services/reviewsService.ts` (authed) |
-| 3 | `recommend-restaurants` | Google/TripAdvisor/Foursquare | Yes | `restaurantRecommendationService` (authed) |
-| 4 | `airport-transfers` | Google Distance Matrix | Yes | 4 itinerary components (authed) |
-| 5 | `flight-status` | Amadeus | No | Agent `FlightStatusTracker` (authed) |
-| 6 | `lookup-local-events` | Perplexity Sonar | Yes | `enrichmentService` (authed) |
-| 7 | `lookup-travel-advisory` | Perplexity Sonar | Yes | `enrichmentService` (authed) |
-| 8 | `viator-search` | Viator Partner | Yes | `generate-itinerary/venue-enrichment.ts` (server→server, authed orchestrator) |
-| 9 | `viator-product` | Viator Partner | No | `viatorAPI` service (authed) |
-| 10 | `viator-availability` | Viator Partner | Yes | `viatorAPI` service (authed) |
+## Code-impact survey
 
-## STEP 2 — Classification
+Only one direct writer of `customer_reviews.email` exists:
 
-**No INTENTIONALLY-ANON candidates.** Grep across `src/pages/`, share/public surfaces, and unauth components returned zero hits for any of the 10. None feed `/trip-share/:token` or landing previews. **All 10 → SHOULD BE AUTHED.**
+- `src/components/reviews/ReviewCapturePopup.tsx` (line 78) — single insert that sets `email: email.trim() || null` alongside the review row.
 
-Special case: `viator-search` is called server-to-server from `generate-itinerary/venue-enrichment.ts`. Since `generate-itinerary` runs under the user's bearer token and uses `supabase.functions.invoke()` (which forwards `Authorization`), `requireAuth` will still pass. Will verify post-deploy by hitting it from a generate-itinerary trace.
+No reads of `customer_reviews.email` anywhere in `src/` or `supabase/functions/`. `delete-users` / `delete-my-account` only touch `auth.users.email`, not the review column. Existing migration `20260510185906` already revokes column-level SELECT on `email` from anon/authenticated — that grant becomes unnecessary once the column is dropped.
 
-## STEP 3 — Changes per function
+## Migration (single file)
 
-For each of the 10 `supabase/functions/<name>/index.ts`:
+```sql
+-- 1. New contacts table
+CREATE TABLE public.customer_review_contacts (
+  review_id  UUID PRIMARY KEY REFERENCES public.customer_reviews(id) ON DELETE CASCADE,
+  email      TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
-```ts
-import { parseAuth } from "../_shared/require-auth.ts";
+ALTER TABLE public.customer_review_contacts ENABLE ROW LEVEL SECURITY;
 
-// inside Deno.serve / serve handler, after the OPTIONS short-circuit:
-const auth = await parseAuth(req);
-if (auth instanceof Response) return auth;
-const userId = auth.userId;
+-- 2. Owner-only SELECT (joined back to parent review)
+CREATE POLICY "customer_review_contacts_owner_read"
+  ON public.customer_review_contacts
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.customer_reviews cr
+      WHERE cr.id = customer_review_contacts.review_id
+        AND cr.user_id = auth.uid()
+    )
+  );
+
+-- 3. Owner-only INSERT (so the review submitter can attach their own contact row)
+CREATE POLICY "customer_review_contacts_owner_insert"
+  ON public.customer_review_contacts
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.customer_reviews cr
+      WHERE cr.id = customer_review_contacts.review_id
+        AND cr.user_id = auth.uid()
+    )
+  );
+
+-- 4. No UPDATE / DELETE policy → blocked for authenticated/anon by default.
+REVOKE UPDATE, DELETE ON public.customer_review_contacts FROM authenticated, anon, PUBLIC;
+
+-- 5. Backfill (no-op at 0 rows, kept for safety/idempotency)
+INSERT INTO public.customer_review_contacts (review_id, email)
+SELECT id, email FROM public.customer_reviews WHERE email IS NOT NULL
+ON CONFLICT (review_id) DO NOTHING;
+
+-- 6. Drop the column from customer_reviews
+ALTER TABLE public.customer_reviews DROP COLUMN email;
+
+-- 7. Hardening comment on the new column
+COMMENT ON COLUMN public.customer_review_contacts.email IS
+  'PII — never expose via any anon-readable policy, view, or RPC. Owner-only access via RLS.';
 ```
 
-Use `parseAuth` (not `requireAuth`) so we get `userId` for cost tracking attribution.
+## Code change
 
-### Cost-tracker additions (4 functions missing it)
+`src/components/reviews/ReviewCapturePopup.tsx` — split the single insert into two:
 
-For `nearby-suggestions`, `fetch-reviews`, `flight-status`, `viator-product` — add:
+1. Insert the review (without `email`) and `select('id').single()` to get `reviewId`.
+2. If `email.trim()` is non-empty, insert `{ review_id: reviewId, email }` into `customer_review_contacts`. Failure here is non-fatal (toast warn, review is already saved).
 
-```ts
-import { trackCost } from "../_shared/cost-tracker.ts";
-const costTracker = trackCost('<function_name>', '<api_or_model>', userId, body?.tripId ?? null);
-// after success: costTracker.recordAiUsage(resp)  // for Lovable AI
-//                costTracker.recordApiCall()       // for Google/Amadeus/Viator/etc
-await costTracker.save();
-```
+No other callers to update.
 
-For the 6 that already have `trackCost(...)` calls without `userId`/`tripId`, pass `userId` (and `body.tripId` where the body carries it) so `trip_cost_tracking` rows are properly attributed instead of orphaned.
+## Memory
 
-## STEP 4 — Verification per function
+Add `mem://constraints/security/customer-reviews-pii-isolation`:
+> `customer_reviews.email` was structurally removed (migration 20260511…). Email now lives in `customer_review_contacts`, owner-only RLS. Never re-add an `email` column to `customer_reviews`, and never expose `customer_review_contacts` via any anon-readable policy, view, or RPC. Public review surfaces (e.g. `public_customer_reviews` view) must continue to omit contact data entirely.
 
-For each newly-authed function:
+Add a one-liner reference under the index `## Memories` section.
 
-```
-curl -X POST <fn-url>                                 # expect 401 UNAUTHORIZED
-curl -X POST -H "Authorization: Bearer <preview>" …   # expect 200 or 4xx-validation
-```
+## Verification
 
-Done via `supabase--curl_edge_functions` (no Authorization → 401; preview-session bearer → 200/4xx). Then `select count(*) from trip_cost_tracking where created_at > now() - interval '5 min'` to confirm attribution rows.
-
-After all 10:
-- Re-run `supabase--linter` — `unauth_paid_api_functions` finding should resolve to 0.
-- Re-run a generate-itinerary smoke test to confirm `viator-search` server→server invocation still passes auth.
-
-## STEP 5 — Memory + rollback note
-
-- Update `mem://constraints/security/security-definer-accepted-class` with: "All 10 paid-API edge functions now require JWT (no anon-class accepted exceptions)."
-- Add new memory `mem://constraints/security/edge-function-auth-required` listing the 10 functions + the `parseAuth` + `trackCost(userId, tripId)` pattern, so future paid-API functions copy it by default.
-- No DB migration needed.
-
-## Files touched (10 + 2 memory)
-
-- `supabase/functions/nearby-suggestions/index.ts`
-- `supabase/functions/fetch-reviews/index.ts`
-- `supabase/functions/recommend-restaurants/index.ts`
-- `supabase/functions/airport-transfers/index.ts`
-- `supabase/functions/flight-status/index.ts`
-- `supabase/functions/lookup-local-events/index.ts`
-- `supabase/functions/lookup-travel-advisory/index.ts`
-- `supabase/functions/viator-search/index.ts`
-- `supabase/functions/viator-product/index.ts`
-- `supabase/functions/viator-availability/index.ts`
-- `mem://constraints/security/edge-function-auth-required` (new)
-- `mem://index.md` (append reference + remove Q43 deferred-class language about these)
+1. `supabase--linter` — `customer_reviews_email_public_read` finding should resolve.
+2. ```sql
+   SELECT column_name FROM information_schema.columns
+   WHERE table_schema='public' AND table_name='customer_reviews' AND column_name='email';
+   ```
+   → 0 rows.
+3. ```sql
+   SELECT polname FROM pg_policy
+   WHERE polrelid = 'public.customer_review_contacts'::regclass;
+   ```
+   → exactly the two policies above; no UPDATE/DELETE policies.
+4. Smoke: submit a review via `ReviewCapturePopup` with an email; confirm one row in each table and that a different authenticated user cannot SELECT the contact row.
 
 ## Out of scope
 
-- `cleanup-friend-request-rate-log` cron job (separate item from prior verification round).
-- Adding rate limits beyond auth — none of these are anon, so per-caller `db-rate-limiter` is optional follow-up; not blocking.
+- The `is_approved` / `is_featured` admin workflow is unchanged — admins now read contact info via service role on `customer_review_contacts` if needed.
+- `public_customer_reviews` view requires no edit (already projects out email).
