@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 import {
   googleGeocode,
   googlePlacesTextSearch,
@@ -1748,13 +1749,16 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
   try {
     const body: OptimizeRequest = await req.json();
     const {
       tripId,
       destination,
       days,
-      userId,
       currency = 'USD',
       travelers = 1,
       nights = 1,

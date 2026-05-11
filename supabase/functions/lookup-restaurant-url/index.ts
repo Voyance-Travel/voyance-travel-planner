@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 import { buildCacheKey, getCached, setCache, TTL } from "../_shared/perplexity-cache.ts";
 
 const corsHeaders = {
@@ -8,13 +9,19 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  const costTracker = trackCost('lookup_restaurant_url', 'perplexity/sonar');
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
+  const costTracker = trackCost('lookup_restaurant_url', 'perplexity/sonar');
+  costTracker.setUserId(auth.userId);
+
   try {
-    const { restaurantName, destination } = await req.json();
+    const { restaurantName, destination, tripId } = await req.json();
+    if (tripId) costTracker.setTripId(tripId);
 
     if (!restaurantName || !destination) {
       return new Response(

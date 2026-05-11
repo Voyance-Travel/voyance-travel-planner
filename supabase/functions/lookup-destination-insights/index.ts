@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
@@ -16,17 +17,23 @@ const corsHeaders = {
 interface DestinationInsightsRequest {
   destination: string;
   country?: string;
+  tripId?: string;
 }
 
 serve(async (req) => {
-  const costTracker = trackCost('lookup_destination_insights', 'perplexity/sonar');
-  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
+  const costTracker = trackCost('lookup_destination_insights', 'perplexity/sonar');
+  costTracker.setUserId(auth.userId);
+
   try {
-    const { destination, country } = await req.json() as DestinationInsightsRequest;
+    const { destination, country, tripId } = await req.json() as DestinationInsightsRequest;
+    if (tripId) costTracker.setTripId(tripId);
 
     if (!destination) {
       return new Response(
