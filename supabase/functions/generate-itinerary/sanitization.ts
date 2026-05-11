@@ -6,6 +6,7 @@
 import { extractRestaurantVenueName } from './generation-utils.ts';
 import {
   pickTransitTier,
+  pickTransitFallback,
   haversineMeters,
   extractCoords,
   MAX_WALK_DISTANCE_METERS,
