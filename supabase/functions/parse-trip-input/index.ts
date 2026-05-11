@@ -429,10 +429,11 @@ serve(async (req) => {
     }
 
     let result: any;
+    let jsonErr: unknown = null;
     try {
       result = await response.json();
-    } catch (jsonErr) {
-      // fall through
+    } catch (e) {
+      jsonErr = e;
     }
     if (result) {
       try {
@@ -442,9 +443,7 @@ serve(async (req) => {
       } catch (e) {
         console.warn('[parse-trip-input] cost tracking failed:', e);
       }
-    }
-    if (!result) {
-      try {
+    } else {
       console.error("AI response JSON parse error:", jsonErr);
       return new Response(JSON.stringify({
         error: "AI returned an invalid response — please try again",
