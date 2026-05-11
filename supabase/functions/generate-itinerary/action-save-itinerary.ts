@@ -492,7 +492,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // dining cards. Runs all days in parallel to bound total latency.
   try {
     const { fillAfterMealGuard } = await import('../_shared/post-meal-guard-fill.ts');
-    const destForFill = (currentTrip as any)?.destination || (trip as any)?.destination || destination;
+    const destForFill = (currentTrip as any)?.destination || (trip as any)?.destination;
     await Promise.all(itineraryDays.map((d: any, idx: number) =>
       fillAfterMealGuard(d.activities || [], destForFill, idx + 1, 'save-itinerary:final-dining-fill')
     ));
