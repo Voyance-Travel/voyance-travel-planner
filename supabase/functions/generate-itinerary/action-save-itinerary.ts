@@ -130,6 +130,8 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
       date = deriveDateFromStartDate(tripStartDate, dayNumber);
     }
     let activities = Array.isArray(day.activities) ? [...day.activities] : [];
+    // Fill missing startTime from endTime − duration BEFORE sort so chronology is coherent.
+    fillMissingStartTimes(activities, { dayNumber, path: 'save-itinerary' });
     activities.sort((a: any, b: any) => {
       const ta = parseTimeToMinutes(a.startTime || a.start_time || a.time);
       const tb = parseTimeToMinutes(b.startTime || b.start_time || b.time);
