@@ -2688,6 +2688,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 9e. ORPHANED ROUND-TRIP TRANSPORT REMOVAL ---
   // Detect consecutive transport cards with no real activity between them
   // (e.g., "Travel to Le Moulin" → "Travel to Your Hotel") and remove both.
   {
