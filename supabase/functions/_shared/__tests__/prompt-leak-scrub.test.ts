@@ -109,3 +109,62 @@ Deno.test('drops camelCase-shaped reservationUrgency JSON value', () => {
   scrubTitleLeaks(a);
   if ('reservationUrgency' in a) throw new Error('expected reservationUrgency removed');
 });
+
+// ─── Phantom event references (M1) ─────────────────────────────────────────
+
+import {
+  buildDayScheduleSummary,
+  scrubPhantomEventRefs,
+  scrubPhantomEventRefsFromString,
+} from '../prompt-leak-scrub.ts';
+
+const dayWithDinner = [
+  { title: 'Freshen up at Mandarin Oriental Ritz', startTime: '20:00', category: 'wellness' },
+  { title: 'Dinner at DiverXO', startTime: '21:00', category: 'dining', mealSlot: 'dinner' },
+];
+const dayNoDinner = [
+  { title: 'Freshen up at Mandarin Oriental Ritz', startTime: '20:00', category: 'wellness' },
+];
+
+Deno.test('phantom-ref: drops "leave by 20:30 for tonight\'s Michelin-starred dinner" when no dinner card', () => {
+  const summary = buildDayScheduleSummary(dayNoDinner);
+  const act: any = { description: 'Recharge briefly in your suite. Then leave by 20:30 for tonight\'s Michelin-starred dinner.' };
+  const r = scrubPhantomEventRefs(act, summary);
+  if (!r.changed) throw new Error('expected change');
+  if (/dinner/i.test(act.description)) throw new Error('dinner ref should be stripped, got: ' + act.description);
+});
+
+Deno.test('phantom-ref: keeps the same sentence when dinner card IS present', () => {
+  const summary = buildDayScheduleSummary(dayWithDinner);
+  const act: any = { description: 'Recharge briefly in your suite. Then leave by 20:30 for tonight\'s Michelin-starred dinner.' };
+  const r = scrubPhantomEventRefs(act, summary);
+  if (r.changed) throw new Error('expected no change when dinner exists');
+});
+
+Deno.test('phantom-ref: drops "after the Prado tour" when no Prado card', () => {
+  const summary = buildDayScheduleSummary([{ title: 'Lunch at Botin', category: 'dining', startTime: '14:00', mealSlot: 'lunch' }]);
+  const act: any = { description: 'Walk slowly through the gardens. Linger after the Prado tour for a moment of calm.' };
+  const r = scrubPhantomEventRefs(act, summary);
+  if (!r.changed) throw new Error('expected change');
+  if (/Prado/i.test(act.description)) throw new Error('Prado ref should be stripped');
+});
+
+Deno.test('phantom-ref: keeps "after the Prado tour" when Prado is on schedule', () => {
+  const summary = buildDayScheduleSummary([
+    { title: 'Prado Museum tour', category: 'museum', startTime: '10:00' },
+    { title: 'Lunch at Botin', category: 'dining', startTime: '14:00', mealSlot: 'lunch' },
+  ]);
+  const act: any = { description: 'Walk slowly through the gardens. Linger after the Prado tour for a moment of calm.' };
+  const r = scrubPhantomEventRefs(act, summary);
+  if (r.changed) throw new Error('expected no change when Prado exists');
+});
+
+Deno.test('phantom-ref: never blanks a single-sentence field', () => {
+  const summary = buildDayScheduleSummary(dayNoDinner);
+  const out = scrubPhantomEventRefsFromString(
+    "Leave by 20:30 for tonight's Michelin-starred dinner.",
+    summary,
+  );
+  // Single sentence — must not be stripped to empty
+  assertEquals(out, null);
+});
