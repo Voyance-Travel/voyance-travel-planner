@@ -153,12 +153,14 @@ export function addOps(a: ScrubOps, b: ScrubOps): ScrubOps {
     countryMismatch: a.countryMismatch + b.countryMismatch,
     mealLabel: a.mealLabel + b.mealLabel,
     downgraded: a.downgraded + b.downgraded,
+    phantomRef: a.phantomRef + b.phantomRef,
   };
 }
 
 export function opsHadChange(o: ScrubOps): boolean {
   return o.titleLeak + o.bodyLeak + o.fragment + o.mealSuffix
-       + o.crossCity + o.countryMismatch + o.mealLabel + o.downgraded > 0;
+       + o.crossCity + o.countryMismatch + o.mealLabel + o.downgraded
+       + o.phantomRef > 0;
 }
 
 /** Compact one-line render for logs. */
