@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { parseAuth } from "../_shared/require-auth.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -166,12 +168,21 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
+  const costTracker = trackCost('activities', 'viator');
+  costTracker.setUserId(userId);
+
   try {
     const url = new URL(req.url);
     const destination = url.searchParams.get('destination');
     const destinationId = url.searchParams.get('destinationId');
     const category = url.searchParams.get('category') || undefined;
     const limit = parseInt(url.searchParams.get('limit') || '20');
+    const tripId = url.searchParams.get('tripId');
+    if (tripId) costTracker.setTripId(tripId);
 
     if (!destination && !destinationId) {
       return new Response(
@@ -184,10 +195,10 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
-    
+
     let activities: Activity[] = [];
     let source: 'viator' | 'database' | 'mixed' = 'database';
-    
+
     // Try Viator first if we have an API key and destination name
     if (viatorApiKey && destination) {
       const viatorResults = await searchViator(destination, viatorApiKey, category, limit);
@@ -197,13 +208,15 @@ serve(async (req) => {
         console.log('[Activities] Found', viatorResults.length, 'Viator results');
       }
     }
-    
+
     // Fallback to database if no Viator results
     if (activities.length === 0 && destinationId) {
       activities = await searchDatabase(supabase, destinationId, category, limit);
       source = 'database';
       console.log('[Activities] Using', activities.length, 'database results');
     }
+
+    await costTracker.save();
 
     return new Response(
       JSON.stringify({

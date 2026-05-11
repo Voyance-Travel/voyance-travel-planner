@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost } from "../_shared/cost-tracker.ts";
 import { googleDistanceMatrix } from "../_shared/google-api.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,6 +24,7 @@ interface TransferPricingRequest {
   time?: string;            // Preferred time (e.g., "14:00")
   transferType?: 'airport_arrival' | 'airport_departure' | 'point_to_point';
   preferredModes?: string[]; // e.g., ['taxi', 'train', 'uber', 'private']
+  tripId?: string;          // For cost attribution
 }
 
 interface TransferOption {
@@ -322,12 +324,18 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
   const costTracker = trackCost('transfer_pricing', 'google_routes');
+  costTracker.setUserId(userId);
 
   try {
     const request: TransferPricingRequest = await req.json();
     const { origin, destination, city, country, airportCode, travelers = 2, date, time, transferType } = request;
-    
+    if (request.tripId) costTracker.setTripId(request.tripId);
+
     if (!origin || !destination || !city) {
       return new Response(
         JSON.stringify({ error: 'origin, destination, and city are required' }),

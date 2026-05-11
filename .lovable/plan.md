@@ -1,49 +1,100 @@
-# Eliminate Render-Blocking Resources
+# Add Auth + Cost Attribution to `activities` and `transfer-pricing`
 
-Lighthouse flags ~530ms render-blocking. Root cause: Google Fonts loaded via `@import` at the top of `src/index.css`. That import is the worst possible pattern — the browser must download + parse the entry CSS bundle before it even discovers the font request, then block on the font CSS too.
+Same fix pattern as the W1 ten functions. Both functions currently accept anonymous traffic and call paid third-party APIs (Viator, Google Distance Matrix). No frontend callers found in `src/` for either — they're either dead code paths or invoked by URL — but we still close the open endpoint.
 
-## 1. Move Google Fonts out of `src/index.css`
+## 1. `supabase/functions/activities/index.ts`
 
-Delete the `@import url('https://fonts.googleapis.com/css2?...')` line from `src/index.css` (line 1).
+Currently: GET-style handler reading query params. No `trackCost` exists yet.
 
-Add to `index.html` `<head>` after the existing preconnects, using async-stylesheet pattern so it doesn't block first paint:
+Edits at the top of `serve(async (req) => …)` (line 164), immediately after the OPTIONS short-circuit and before the `try`:
 
-```html
-<link
-  rel="preload"
-  as="style"
-  href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
-/>
-<link
-  rel="stylesheet"
-  href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
-  media="print"
-  onload="this.media='all'"
-/>
-<noscript>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" />
-</noscript>
+```ts
+import { parseAuth } from "../_shared/require-auth.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
+// (already imports serve, createClient)
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
+  const costTracker = trackCost('activities', 'viator');
+  costTracker.setUserId(userId);
+
+  try {
+    const url = new URL(req.url);
+    const destination = url.searchParams.get('destination');
+    const destinationId = url.searchParams.get('destinationId');
+    const tripId = url.searchParams.get('tripId');
+    if (tripId) costTracker.setTripId(tripId);
+    // … existing logic unchanged …
+
+    if (viatorApiKey && destination) {
+      const viatorResults = await searchViator(destination, viatorApiKey, category, limit);
+      if (viatorResults.length > 0) {
+        costTracker.recordApiCall('viator', 1);
+        // …
+      }
+    }
+
+    // before the success Response:
+    await costTracker.save();
+    return new Response(/* … */);
+  } catch (error) { /* unchanged */ }
+});
 ```
 
-`display=swap` is already in the URL, so text will render immediately in the system fallback and re-flow when fonts arrive.
+`tripId` is optional (no current frontend caller passes it; harmless when absent — orphan tolerated only for legacy paths until a caller exists).
 
-## 2. Vite asset hashing — confirm only
+## 2. `supabase/functions/transfer-pricing/index.ts`
 
-Vite already emits hashed filenames by default (`assets/[name]-[hash].js|.css`). No config change needed; will verify by inspecting `dist/assets/` after build. Skip writing `assetFileNames`/`chunkFileNames`/`entryFileNames` overrides — they would only match the existing defaults.
+Currently: POST handler. `trackCost('transfer_pricing', 'google_routes')` already exists at line 325 but is never given a user. Just add the auth gate + attribution lines.
 
-## 3. Cache headers — platform note
+Edits inside the existing `serve` handler (line 320):
 
-Lovable's hosting layer sets `Cache-Control` automatically: hashed `/assets/*` get long-lived immutable caching, `index.html` is no-cache. There's no per-path config we can ship from the repo. We'll note this in memory and rely on the Step 1 + previous lazy-loading work for first-visit gains.
+```ts
+import { parseAuth } from "../_shared/require-auth.ts"; // add to imports
 
-Note: `index.html` currently has `<meta http-equiv="Cache-Control" content="no-cache">` etc. — leave as-is (defensive against the doc itself being cached).
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
-## 4. Verification
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
 
-- After deploy, re-run Lighthouse on `/`. "Render blocking requests" entry should drop the Google Fonts CSS line; total savings flagged should fall from ~530ms to <100ms.
-- Visual check on landing page: headings (Playfair Display) and body (DM Sans) still render correctly after a brief system-font flash.
+  const costTracker = trackCost('transfer_pricing', 'google_routes');
+  costTracker.setUserId(userId);
+
+  try {
+    const request: TransferPricingRequest = await req.json();
+    const tripId = (request as any).tripId;
+    if (tripId) costTracker.setTripId(tripId);
+    // … existing logic …
+  }
+});
+```
+
+Add `tripId?: string` to the `TransferPricingRequest` interface so it's typed.
+
+## 3. Verification
+
+After deploy:
+
+```bash
+curl -X POST "$URL/functions/v1/activities?destination=Rome"          # → 401
+curl -X POST "$URL/functions/v1/transfer-pricing" -d '{"origin":"a"}' # → 401
+```
+
+Then 30 minutes later, check `trip_cost_tracking` for the two `action_type` rows: 0 orphans expected for new rows.
+
+## 4. Memory
+
+Append both function names to the W1-cleaned list in `mem://constraints/security/edge-function-auth-required` (count 10 → 12).
 
 ## Out of scope
 
-- No font self-hosting (would shave another 50-100ms but adds licensing/maintenance overhead — separate task).
-- No Tailwind purge tuning (JIT already trims).
-- No new preload tags for woff2 files (Google serves them dynamically, so the URLs aren't stable enough to preload directly).
+- No changes to either function's business logic, API shape, or response.
+- No frontend changes (no current callers found; if any URL-based caller exists outside the repo it must already be sending a Bearer to other authed endpoints).
+- No `verify_jwt = true` switch in `config.toml` — in-code `parseAuth` is the project standard.
