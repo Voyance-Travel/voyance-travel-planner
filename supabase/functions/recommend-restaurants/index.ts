@@ -820,7 +820,7 @@ serve(async (req) => {
     // Track cost - estimate Google Places calls based on restaurants found
     const googleCallCount = GOOGLE_MAPS_API_KEY ? Math.ceil(allRestaurants.filter(r => r.source === 'google').length / 20) : 0;
     costTracker.recordGooglePlaces(googleCallCount);
-    if (userId) costTracker.setUserId(userId);
+    // Canonical attribution is the JWT userId set above; do NOT override from body.userId
     await costTracker.save();
 
     return new Response(
