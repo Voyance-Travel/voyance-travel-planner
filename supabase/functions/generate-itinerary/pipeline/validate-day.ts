@@ -178,6 +178,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkPriceDuplication(activities, results);
   checkWalkOverThreshold(activities, results);
   checkCategoryVenueCoherence(activities, results);
+  checkPhantomEventRefs(activities, results);
 
   // --- PRICE SANITY (B3, Barcelona Diagnosis) ---
   checkPlausiblePricing(activities, results);
