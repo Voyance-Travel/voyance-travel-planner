@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -84,9 +86,17 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
+  const costTracker = trackCost('nearby_suggestions', 'google/gemini-2.5-flash');
+  costTracker.setUserId(userId);
+
   try {
-    const body: NearbyRequest = await req.json();
-    const { lat, lng, category, archetype, timeOfDay, radiusMeters = 800, query } = body;
+    const body: NearbyRequest & { tripId?: string } = await req.json();
+    const { lat, lng, category, archetype, timeOfDay, radiusMeters = 800, query, tripId } = body;
+    if (tripId) costTracker.setTripId(tripId);
 
     if (!lat || !lng || !category) {
       return new Response(
@@ -185,6 +195,8 @@ OUTPUT FORMAT (JSON only, no markdown):
     }
 
     const aiResponse = await response.json();
+    costTracker.recordAiUsage(aiResponse, 'google/gemini-2.5-flash');
+    await costTracker.save();
     const content = aiResponse.choices?.[0]?.message?.content;
 
     if (!content) {
