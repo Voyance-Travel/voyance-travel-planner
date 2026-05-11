@@ -1,49 +1,84 @@
-## Q43 result
+## M1 — Day continuity fix: strip phantom event references from copy
 
-Live DB query returned **31 SECURITY DEFINER public functions** with broad EXECUTE grants. Splitting by grantee (zero `PUBLIC` grants — only `anon` and `authenticated`):
+**Bug.** A "Freshen up" card on Day 2 said "leave by 20:30 for tonight's Michelin-starred dinner" — but no dinner card was scheduled. The description was generated independently of the day's actual activity list, so it referenced an event that doesn't exist.
 
-### `anon`-callable (6) — by design
-| Function | Purpose | Verdict |
-|---|---|---|
-| `get_consumer_shared_trip` | Read trip via public share token | ✅ intentional (consumer share architecture) |
-| `get_shared_trip_payload` | Same family, payload variant | ✅ intentional |
-| `get_founding_member_count` | Landing-page social proof | ✅ intentional |
-| `get_platform_destination_count` | Landing-page stat | ✅ intentional |
-| `get_platform_trip_count` | Landing-page stat | ✅ intentional |
-| `get_intake_account` | Client intake (concierge form?) | ⚠️ needs 60-second source read to confirm anon is intended |
+**Fix philosophy.** Same pattern we already use for `Reservation Urgency:` and meal-suffix leaks: a small **prompt rule** + a **shared scrubber** wired into the existing validate / repair / save / UI boundaries. No new pipeline stage, no regen loop — phantom references are downgraded in place (sentence stripped) so we never ship copy that lies about the schedule.
 
-### `authenticated`-callable (~30) — by design
-These are the app's RPC surface. They're SECURITY DEFINER on purpose so RLS-aware queries can run against tables that authenticated users can't read directly. Any blanket `REVOKE EXECUTE FROM authenticated` would break invites, credit deduction, group budgets, share toggles, intake submission, the booking-state machine, and the entire DNA pipeline.
+---
 
-The three worth a paranoid second look (PII enumeration risk):
-- `get_current_user_email` — should return *only* the caller's own email
-- `get_user_id_by_email` — invite/lookup helper; risk is unbounded enumeration
-- `get_user_info_by_email` — same family
+### Step 1 — Prompt rule (compile-prompt.ts)
 
-### Conclusion: do NOT ship a blanket REVOKE migration
+In `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`, add a rule alongside the existing "Never include parenthetical notes / operational notes" block (~line 1350–1354):
 
-Linter findings 0010 / "broad SECURITY DEFINER" on these are architectural-by-design, not drift. The right answer is **audit + document**, not revoke.
+> **Schedule-coherent copy.** A description, tip, or note may only reference another activity that ALSO appears in this day's schedule. Phrases like "tonight's dinner", "after the museum", "before tomorrow's flight", "later this evening", or "leave by HH:MM for X" must point at a real card on the same day. If the referenced card is not present, omit the reference entirely — do not invent it.
 
-## Plan
+Cheap, model already follows this class of rule; it's the cleanup pass below that actually closes the gap.
 
-1. **Read source of the 4 functions on the watch list** — `get_intake_account`, `get_current_user_email`, `get_user_id_by_email`, `get_user_info_by_email`. Confirm each one either (a) restricts to `auth.uid() = …` internally, or (b) is intentionally enumerable for a documented reason (e.g. invite UX needs to look up by email).
-2. **Per-function decisions:**
-   - If `get_intake_account` doesn't actually need anon access → ship a targeted `REVOKE EXECUTE … FROM anon` for it only.
-   - If any of the email-lookup functions enumerate without a rate guard → add a `auth.uid() IS NOT NULL` guard or convert to a `WHERE` that requires the caller already know the user_id (defeats enumeration).
-   - All others → leave as-is.
-3. **Update `@security-memory`** with an "Accepted findings" section listing:
-   - The 5 confirmed intentional anon RPCs (share-link reads + landing stats) and *why* they're public.
-   - The pattern that authenticated SECURITY DEFINER RPCs are the project's standard contract for RLS-bypassing privileged operations, so future scanner runs don't re-flag the ~30 entries.
-4. **Re-run `supabase--linter`** to confirm warning count drops or that the remaining ones are now expected per memory.
+### Step 2 — New shared scrubber: `scrubPhantomEventRefs`
 
-## Out of scope
+Add to `supabase/functions/_shared/prompt-leak-scrub.ts` (sits next to `scrubBodyPromptLeaks` / `scrubSentenceFragments`):
 
-- No code refactor of working RPCs.
-- No mass DDL migration. Only a targeted REVOKE *if* step 1 turns up a function that doesn't need anon.
+- Input: one activity + the **day's schedule** (titles, categories, start times).
+- Build a small "what exists today" set:
+  - boolean flags: `hasBreakfast / hasLunch / hasDinner / hasNightcap` (from category=`dining` + slot/time)
+  - keyword set: tokenized titles (museum, gallery, tour, flight, train, checkout, spa, etc.)
+- Scan each text field (`description`, `tips`, `notes`, `voyanceInsight`, `whyThisFits`) sentence-by-sentence. Drop a sentence iff it matches a **time-bound reference regex** AND the referent is missing:
+  - `tonight'?s? (michelin[- ])?dinner` → require `hasDinner`
+  - `this (afternoon|evening|morning)'?s? (\w+)` → require category/keyword match in same window
+  - `(after|before|following) (the|your|tonight'?s?) (\w+)` → require keyword match in day
+  - `leave by \d{1,2}:\d{2} (for|to) (the|your|tonight'?s?)? ?(\w+)` → require keyword match
+  - `tomorrow'?s? (flight|train|checkout)` is **out of scope** (cross-day; handled elsewhere)
+- Never blank the field — if removing the sentence empties it, leave the original (mirrors `scrubSentenceFragments` behavior).
+- Returns `{ changed, ops: { phantomRefsStripped: N } }`.
 
-## Deliverables
+Add unit tests in `supabase/functions/_shared/__tests__/prompt-leak-scrub.test.ts` covering:
+- "leave by 20:30 for tonight's Michelin-starred dinner" + no dinner → sentence dropped
+- same sentence + dinner card present → preserved
+- "after the Prado tour" + Prado card present → preserved
+- "after the Prado tour" + no Prado → dropped
+- single-sentence field that would be emptied → preserved
 
-- Read-only audit of 4 functions (no DB writes if all check out).
-- At most one tiny migration (single-line REVOKE) — only if step 1 finds drift.
-- Updated `@security-memory` documenting the accepted pattern.
-- Final linter snapshot.
+### Step 3 — Wire into the unified scrubber
+
+Per **Unified Output Validation Layer** memory, all per-activity sanitization composes through `scrubActivity` (`supabase/functions/_shared/scrub-activity.ts`). Update its signature so callers can pass the day context:
+
+```ts
+scrubActivity(act, { destination, mealSlot, daySchedule? })
+```
+
+Inside `scrubActivity`, after the existing body/title/fragment scrubs, call `scrubPhantomEventRefs(act, daySchedule)` when `daySchedule` is provided. Bump the `ScrubOps` shape with `phantomRefsStripped`.
+
+### Step 4 — Pass `daySchedule` at the 3 wired boundaries
+
+`scrubActivity` is currently called from:
+
+1. `repair-day.ts` §10b (line ~2829) — already iterates day; pass the sibling activity list.
+2. `action-save-itinerary.ts` `normalizeDays` — pass each day's activities.
+3. `src/lib/itinerary/activityNameSanitizer.ts` (UI) — pass the day's activities from the calling component (already in scope where this is invoked).
+
+Also call directly inside `validate-day.ts` as a soft semantic check that emits a non-critical `phantom_event_reference` finding for telemetry, so we can monitor leak frequency without forcing regen.
+
+### Step 5 — Logging & memory
+
+- Sentinel: `[SCRUB_PHANTOM_REF] day=N stripped=K refs=[…]` (matches `[SCRUB_ACTIVITY]` style).
+- Add a memory note under `mem://constraints/itinerary/` titled **schedule-coherent-copy** documenting the rule, the scrubber, and the 4 wire points so future leaks get fixed at the same boundary.
+
+---
+
+### Out of scope
+
+- Regeneration of dropped sentences (we strip, we don't refill — same policy as fragment scrub).
+- Cross-day references ("tomorrow's flight") — already handled by `Day-End Hotel-Return Bookend` + departure logic.
+- Restructuring the prompt; only one rule line is added.
+
+### Files touched
+
+- `supabase/functions/_shared/prompt-leak-scrub.ts` — add `scrubPhantomEventRefs`
+- `supabase/functions/_shared/scrub-activity.ts` — accept `daySchedule`, compose new scrubber
+- `supabase/functions/_shared/__tests__/prompt-leak-scrub.test.ts` — new tests
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — 1 rule line near 1350
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — pass `daySchedule` to `scrubActivity`
+- `supabase/functions/generate-itinerary/pipeline/validate-day.ts` — soft `phantom_event_reference` finding
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — pass `daySchedule` in `normalizeDays`
+- `src/lib/itinerary/activityNameSanitizer.ts` — accept + forward day context
+- `mem://constraints/itinerary/schedule-coherent-copy` (+ index update)
