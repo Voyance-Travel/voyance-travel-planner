@@ -81,7 +81,7 @@ serve(async (req) => {
     const { data: travelDNA } = await supabase
       .from('travel_dna_profiles')
       .select('primary_archetype_name, travel_dna_v2, archetype_matches')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     // Resolve archetype via shared helper; preserve this caller's specific default.
