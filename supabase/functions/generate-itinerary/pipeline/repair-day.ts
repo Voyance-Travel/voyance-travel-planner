@@ -3581,7 +3581,24 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         || (act?.location?.name)
         || '';
       const before = { method: t.method, durationMinutes: curDur, distanceMeters: distM };
-      const tier = pickTransitFallback(distM > 0 ? distM : null, curDur, destName);
+      // Try to derive haversine from neighbor coords when distance is missing
+      // — repair runs after enrichment, so prev/next location.coordinates are
+      // usually populated. This avoids the 20-min taxi default when the LLM
+      // omitted distanceMeters (Leak 3).
+      let derivedDist = distM > 0 ? distM : 0;
+      if (!derivedDist) {
+        const fromC = extractCoords(t?.from) || extractCoords(activities[idx - 1] || {});
+        const toC = extractCoords(t?.to) || extractCoords(activities[idx + 1] || {})
+          || extractCoords(act?.location || {});
+        if (fromC && toC) {
+          const hav = haversineMeters(fromC.lat, fromC.lng, toC.lat, toC.lng);
+          if (Number.isFinite(hav) && hav > 0) derivedDist = hav;
+        }
+      }
+      const tier = derivedDist > 0
+        ? pickTransitTier(derivedDist, destName || 'destination')
+        : pickTransitFallback(null, curDur, destName);
+      if (derivedDist > 0) t.distanceMeters = derivedDist;
       t.method = tier.method;
       t.durationMinutes = tier.durationMinutes;
       t.duration = `${tier.durationMinutes} min`;
