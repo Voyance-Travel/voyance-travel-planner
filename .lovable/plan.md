@@ -1,52 +1,63 @@
-## X4 — Hard auth on three AI Gateway endpoints
+# Reduce Initial JS Bundle (~1.3 MB unused → target <500 KB)
 
-Lock down `budget-coach`, `analyze-itinerary`, and `discover-proactive` so anonymous callers cannot burn paid AI tokens. Add cost attribution (Pattern B) on every call.
+Currently every page in `src/pages/` (~55 files including admin + agent CRM) is statically imported at the top of `src/App.tsx`, so React Router cannot code-split anything. We'll convert routes to `React.lazy`, lazy-load a few heavy in-page components, and add explicit vendor chunks in Vite.
 
-### Files
+## 1. Lazy-load route components in `src/App.tsx`
 
-**1. `supabase/functions/budget-coach/index.ts`**
-- Add `import { parseAuth } from "../_shared/require-auth.ts";` and `import { trackCost } from "../_shared/cost-tracker.ts";` (currently has neither — no cost tracking today).
-- After OPTIONS preflight in `serve()` (line 71), insert hard auth gate:
-  ```ts
-  const auth = await parseAuth(req);
-  if (auth instanceof Response) return auth;
-  const userId = auth.userId;
-  ```
-- Read `tripId` from request body (add to `RequestBody` interface as optional `tripId?: string`).
-- Wrap the existing `fetch("https://ai.gateway.lovable.dev/...")` call (around line 385) with a tracker:
-  ```ts
-  const costTracker = trackCost('budget_coach', 'google/gemini-2.5-flash', userId, tripId ?? null);
-  // ...after response parsed:
-  costTracker.recordAiUsage(aiResponseJson);
-  await costTracker.save();
-  ```
+Keep eager (needed for fast first paint / above-the-fold landing):
+- `Home`, `NotFound`, `SignIn`, `SignUp` (auth is a frequent first hop and tiny)
 
-**2. `supabase/functions/analyze-itinerary/index.ts`**
-- Add `parseAuth` import.
-- After OPTIONS at line 30, insert the same hard auth gate.
-- Existing `trackCost('analyze_itinerary', 'google/gemini-2.5-flash')` at line 122 → switch to Pattern B: `trackCost(..., userId, null)` (no `tripId` in this body — analyzer is for paste-flow before trip exists).
+Convert the remaining ~50 page imports to `lazy(() => import(...))`. Wrap `<Routes>` in a single top-level `<Suspense fallback={<RouteFallback />}>` rather than per-route — simpler and avoids flicker between sibling routes. Fallback = a lightweight branded spinner component (new `src/components/common/RouteFallback.tsx`).
 
-**3. `supabase/functions/discover-proactive/index.ts`**
-- Add `parseAuth` import; remove the existing best-effort block at lines 36–47 (createClient + manual `getUser` + silent try/catch).
-- Replace with hard `parseAuth` gate after OPTIONS at line 33; derive `userId` from result.
-- Keep existing `trackCost(...)` at line 144, but always set userId (drop the `if (userId)` guard since it's now guaranteed). `tripId` already wired.
+Group lazy imports by section (Public / Auth / Onboarding / Profile / Planner / Trip / Itinerary / Legal / Admin / Agent) to mirror current comments.
 
-### Verification
+## 2. Lazy-load heavy in-page components
 
-For each function after deploy:
-- `curl -X POST <fn-url>` (no auth) → **401** with `{error,code:"UNAUTHORIZED"}`.
-- `curl -X POST -H "Authorization: Bearer <invalid>"` → **401**.
-- Authenticated invocation → 200 / domain validation error.
-- `select user_id, trip_id, function_name from trip_cost_tracking order by created_at desc limit 5;` → rows attributed correctly.
-- `rg -n "best-effort|optional" supabase/functions/discover-proactive/index.ts` → 0 matches in auth comments.
-- `supabase--linter` → "Three AI Gateway Endpoints Callable Without Authentication" finding cleared.
+Audit + convert these to `lazy` + `Suspense` at their render sites (only mount when actually shown):
 
-### Memory
+- `components/itinerary/ItineraryAssistant` (chat UI, large)
+- `components/itinerary/ActivityConciergeSheet` (if present)
+- Budget tab / charts inside `TripDetail` (anything pulling `recharts`)
+- DNA reveal animations (quiz result screens)
+- Admin dashboard charts in `pages/admin/UnitEconomics`
 
-Update `mem://constraints/security/edge-function-auth-required`:
-- New rule: **NO "best-effort" or "optional" auth on paid-API edge fns.** Mandatory shape is `parseAuth` + `instanceof Response` early-return. Anon-allowed fns must be in an explicit allowlist with inline rationale.
-- Add `budget-coach`, `analyze-itinerary`, `discover-proactive` to the W1 verified-clean list.
+Each gated behind an existing `showX` / tab-active condition, so `Suspense fallback={null}` is fine.
 
-### Out of scope
+## 3. Vendor chunk splitting in `vite.config.ts`
 
-Frontend callers — these endpoints are already invoked via `supabase.functions.invoke()` from authed contexts, so no client changes needed. Other unauthed AI edge fns flagged separately get their own fixes.
+Add `build.rollupOptions.output.manualChunks`:
+
+```ts
+manualChunks: {
+  'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+  'supabase':    ['@supabase/supabase-js'],
+  'radix':       [/* all @radix-ui/* actually in package.json */],
+  'charts':      ['recharts'],
+  'date':        ['date-fns'],
+  'motion':      ['framer-motion'],
+}
+```
+
+Resolve actual package names from `package.json` before writing (skip libs not installed). Keep `sourcemap: 'hidden'` and existing dev settings unchanged.
+
+## 4. Defer non-critical scripts in `index.html`
+
+Audit `<script>` tags. Currently only `/src/main.tsx` (module, already deferred). If any tracking pixels/widgets are added later, mark them `defer`. Likely no-op today — confirm during implementation.
+
+## 5. Verification
+
+- `bun run build` (via harness) → list top 10 chunks: `ls -lS dist/assets/*.js | head -10`
+- Confirm initial entry chunk < 500 KB and per-page chunks appear
+- Smoke-test routes in preview: `/`, `/signin`, `/trip/dashboard`, `/itinerary/:id`, `/admin/dashboard`, `/agent` — watch network tab for failed chunk loads
+- Re-run Lighthouse on landing + trip dashboard; expect Unused JS to drop ~800 KB+
+
+## Out of scope
+
+- No backend / RLS / edge-fn changes
+- No UX redesign of loading states (single shared fallback)
+- No removal of unused deps (separate task)
+
+## Risk
+
+- Suspense boundary at the Routes level briefly unmounts current page during navigation → mitigated by lightweight fallback and React Router's built-in transition.
+- `manualChunks` can cause circular-chunk warnings if a vendor is referenced from another vendor chunk; will adjust per build output.
