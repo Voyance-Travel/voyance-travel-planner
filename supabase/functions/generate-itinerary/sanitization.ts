@@ -1943,7 +1943,7 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       // so the card never ships blank. Output is ≥30 chars + actionable verb
       // so description-fill (Gemini Flash) treats it as satisfactory and
       // won't re-trigger.
-      if (typeof act.description === 'string' && act.description.length < 15) {
+      if (typeof act.description === 'string' && act.description.length < 25) {
         const cat = String(act.category || '').toLowerCase();
         if (cat.includes('dining') || cat.includes('food') || cat.includes('restaurant')) {
           const venueName = act.location?.name || act.venue_name || extractRestaurantVenueName(act.title || '');
