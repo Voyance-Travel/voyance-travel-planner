@@ -99,8 +99,12 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
   try {
-    const { userId, destination, traitScores, budgetTier, primaryArchetype, tripType } = await req.json();
+    const { destination, traitScores, budgetTier, primaryArchetype, tripType } = await req.json();
 
     if (!destination) {
       return new Response(JSON.stringify({ error: 'Destination is required' }), {
