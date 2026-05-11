@@ -21,7 +21,7 @@ import { consumePendingInviteToken } from '@/utils/inviteTokenPersistence';
  */
 const AuthCallback = () => {
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
+  const { user, isLoading } = useAuth();
   const settledRef = useRef(false);
 
   useEffect(() => {
@@ -46,7 +46,7 @@ const AuthCallback = () => {
     }, 8000);
 
     return () => window.clearTimeout(timeout);
-  }, [user, loading, navigate]);
+  }, [user, isLoading, navigate]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
