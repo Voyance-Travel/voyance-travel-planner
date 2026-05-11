@@ -16,10 +16,10 @@ export interface PostTripEmailResult {
 /**
  * Trigger a post-trip follow-up email for a specific trip
  */
-export async function sendPostTripEmail(tripId: string, userId: string): Promise<PostTripEmailResult> {
+export async function sendPostTripEmail(tripId: string): Promise<PostTripEmailResult> {
   try {
     const { data, error } = await supabase.functions.invoke('post-trip-email', {
-      body: { tripId, userId }
+      body: { tripId }
     });
 
     if (error) {
