@@ -2791,6 +2791,10 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     // either move the transit to immediately precede its real target, or rewrite
     // the label to point at the actual next venue.
     {
+      const isTransportFinal = (a: any) => {
+        const c = (a.category || '').toLowerCase();
+        return c === 'transport' || c === 'transportation';
+      };
       const stripVerb = (t: string) =>
         (t || '').replace(/^(?:Travel|Walk|Taxi|Drive|Bus|Metro|Ride|Transfer|Take(?:\s+(?:a|the))?)\s+to\s+/i, '').trim();
       const norm = (s: string) =>
