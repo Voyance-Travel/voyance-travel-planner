@@ -10291,18 +10291,6 @@ export type Database = {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json
       }
-      get_user_id_by_email: { Args: { lookup_email: string }; Returns: string }
-      get_user_info_by_email: {
-        Args: { lookup_email: string }
-        Returns: {
-          display_name: string
-          first_name: string
-          handle: string
-          last_name: string
-          user_email: string
-          user_id: string
-        }[]
-      }
       get_user_trip_ids: { Args: { uid: string }; Returns: string[] }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
