@@ -80,6 +80,10 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   // Tracks the last orphan-payment fingerprint we asked the DB to archive,
   // so we don't re-fire the archival RPC on every refetch when nothing changed.
   const lastArchivedFingerprintRef = useRef<string | null>(null);
+  // One-shot guard: trigger sync-trip-cost-table at most once per session
+  // when activity_costs is empty but live JSON has prices (legacy trips
+  // generated before the per-day chain wrote Phase 4 cost rows).
+  const backfillFiredRef = useRef<boolean>(false);
 
   const fetchData = useCallback(async () => {
     if (!tripId) return;
