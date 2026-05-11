@@ -80,10 +80,13 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   // Tracks the last orphan-payment fingerprint we asked the DB to archive,
   // so we don't re-fire the archival RPC on every refetch when nothing changed.
   const lastArchivedFingerprintRef = useRef<string | null>(null);
-  // One-shot guard: trigger sync-trip-cost-table at most once per session
-  // when activity_costs is empty but live JSON has prices (legacy trips
-  // generated before the per-day chain wrote Phase 4 cost rows).
-  const backfillFiredRef = useRef<boolean>(false);
+  // Per-trip + content-hash backfill guard. Stores `${tripId}:${jsonPriceHash}`
+  // for the most recent backfill we triggered so we (a) don't refire on every
+  // refetch and (b) DO fire when the user opens a different legacy trip in the
+  // same component instance (a plain boolean would block trip #2 forever).
+  // The hash also lets a content change re-trigger if the user adds priced
+  // items after the first attempt.
+  const lastBackfillFingerprintRef = useRef<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!tripId) return;
