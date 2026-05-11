@@ -2669,7 +2669,25 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     console.log(`[FRESHEN-CAP] Capped "${a.title}" from ${dur}min to ${freshenCapMin}min (${start}-${a.endTime})${isFastPaced ? ' [fast-paced]' : ''}`);
   }
 
-  // --- 9e. ORPHANED ROUND-TRIP TRANSPORT REMOVAL ---
+  // --- 9d-bis. FRESHEN-UP POSITION INVARIANT ---
+  // Drop freshen-up cards that landed after dinner; clamp those overlapping it.
+  // Runs after the cap pass so we operate on final durations.
+  {
+    const lockedIds = new Set<string>(
+      activities.filter((a: any) => a?.isLocked === true || a?.locked === true || a?.lock_state === 'locked').map((a: any) => String(a.id))
+    );
+    const res = enforceFreshenUpPosition(activities, { dayNumber, isFastPaced, lockedIds });
+    if (res.repairs.length > 0) {
+      // Mutate in place to preserve array identity for downstream passes
+      activities.length = 0;
+      activities.push(...res.activities);
+      for (const r of res.repairs) {
+        repairs.push({ code: FAILURE_CODES.MEAL_TIMING ?? FAILURE_CODES.MISSING_SLOT, action: r.type });
+        console.log(`[FRESHEN_UP_POSITION] ${r.message}`);
+      }
+    }
+  }
+
   // Detect consecutive transport cards with no real activity between them
   // (e.g., "Travel to Le Moulin" → "Travel to Your Hotel") and remove both.
   {
