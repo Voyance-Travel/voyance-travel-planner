@@ -1,127 +1,68 @@
-# Fix: Walking transits crossing water boundaries (Bosphorus, Bay, Thames, East River)
+## Bug 3 — Phantom meal references in non-dining card descriptions
 
-## Root Cause
-`checkWalkOverThreshold` in `supabase/functions/generate-itinerary/pipeline/validate-day.ts:1185` only flags walks whose duration > 30 min (or > 20 min luxury) OR distance > 1500 m. A "15-min walk" from Topkapi (European Istanbul) to Çiya Sofrası (Asian Kadıköy) is short by these thresholds — so no failure code is emitted, repair-day §15b never runs, and an impossible cross-Bosphorus walk ships.
+**Root cause.** `prompt-leak-scrub.ts` already has a phantom-ref scrubber (`scrubPhantomEventRefs`) that compares card copy against a `DayScheduleSummary` (which already tracks `hasBreakfast/hasLunch/hasDinner/...`) and is wired into `scrubActivity` at validate-day, repair-day §10b, save-itinerary, and the UI sanitizer.
 
-There is no continent / water-body check anywhere in the pipeline (`rg "ferry|water_cross|bosphorus"` returns 0 hits).
+The detector covers time-bound prefixes only:
+- `tonight's dinner`, `this evening's dinner`
+- `today's lunch`, `this afternoon's lunch`
+- `this morning's breakfast`
+- `leave by HH:MM for ...`
+- `after/before/following + (the|your|tonight's|today's|this evening's|...) + noun`
 
-## Change 1 — `supabase/functions/_shared/transit-mode.ts`
+It does **not** match bare prep references like `"Freshen Up before anniversary dinner."` — `before` is not followed by a determiner, so the existing `after/before/following` pattern falls through and the clause survives even when the day has no dinner card.
 
-Add a tiny pure helper alongside `haversineMeters` / `pickTransitTier`:
+The plumbing (per-day summary, multi-call-site invocation, blank-vs-rebuild rules, validation-gate detector) is correct. The fix is just **one new pattern** plus tests.
 
-```ts
-export type WaterCrossing = { city: string; reason: string };
+## Change
 
-/**
- * Hard-coded water/borough boundaries. Detect when a straight-line leg
- * crosses a body of water that pedestrians cannot traverse (or where the
- * required bridge dwarfs the haversine distance).
- *
- * Returns null when no boundary is crossed.
- */
-export function detectWaterCrossing(
-  from: { lat: number; lng: number },
-  to:   { lat: number; lng: number },
-): WaterCrossing | null {
-  // Istanbul — Bosphorus: lng ≈ 29.02
-  if (from.lat > 40.8 && from.lat < 41.3 && to.lat > 40.8 && to.lat < 41.3
-      && ((from.lng < 29.00 && to.lng > 29.05) || (from.lng > 29.05 && to.lng < 29.00))) {
-    return { city: 'Istanbul', reason: 'Bosphorus (Europe ↔ Asia)' };
-  }
+### `supabase/functions/_shared/prompt-leak-scrub.ts`
 
-  // NYC — East River: Manhattan (lng < -73.97) ↔ Brooklyn/Queens (lng > -73.97)
-  if (from.lat > 40.55 && from.lat < 40.92 && to.lat > 40.55 && to.lat < 40.92
-      && ((from.lng < -73.972 && to.lng > -73.945) || (from.lng > -73.945 && to.lng < -73.972))) {
-    return { city: 'New York', reason: 'East River (Manhattan ↔ Brooklyn/Queens)' };
-  }
-
-  // SF Bay — SF (lng < -122.38) ↔ Oakland/Alameda (lng > -122.32)
-  if (from.lat > 37.7 && from.lat < 37.9 && to.lat > 37.7 && to.lat < 37.9
-      && ((from.lng < -122.38 && to.lng > -122.32) || (from.lng > -122.32 && to.lng < -122.38))) {
-    return { city: 'San Francisco', reason: 'SF Bay (SF ↔ Oakland)' };
-  }
-
-  // London — Thames: lat ≈ 51.505 (rough east-west river through central London)
-  if (from.lng > -0.25 && from.lng < 0.05 && to.lng > -0.25 && to.lng < 0.05
-      && ((from.lat < 51.498 && to.lat > 51.512) || (from.lat > 51.512 && to.lat < 51.498))) {
-    return { city: 'London', reason: 'Thames (north ↔ south)' };
-  }
-
-  return null;
-}
-```
-
-Pure function, no I/O. Bounding boxes prevent false-positives in unrelated cities that happen to share a longitude.
-
-## Change 2 — `pipeline/validate-day.ts` `checkWalkOverThreshold` (~line 1185)
-
-After the existing `if (dur <= durCap && dist <= distCap) continue;` short-circuit, add a coordinate-pair water-crossing check that **fires regardless of distance/duration**:
+Append a new entry to `PHANTOM_REF_PATTERNS` that catches bare prep-verb references to meals when no determiner is present:
 
 ```ts
-// Cross-water guard — short walks can still cross impassable water bodies.
-const fromC = extractCoords((act as any)?.transportation?.from)
-  || extractCoords(activities[i - 1] || {});
-const toC = extractCoords((act as any)?.transportation?.to)
-  || extractCoords(activities[i + 1] || {})
-  || extractCoords((act as any)?.location || {});
-if (fromC && toC) {
-  const crossing = detectWaterCrossing(fromC, toC);
-  if (crossing) {
-    results.push({
-      code: FAILURE_CODES.WALK_OVER_THRESHOLD,
-      severity: 'critical',
-      message: `Walk "${act.title}" crosses ${crossing.reason} — must be ferry/taxi`,
-      activityIndex: i,
-      meta: { waterCrossing: crossing },
-    });
-    continue; // already flagged; don't double-emit on duration/distance
-  }
-}
+// "before/after/for/prep for/ahead of/en route to anniversary dinner" —
+// bare meal reference without a determiner. Resolves only when the day
+// actually contains the named meal slot (post meal-guard injections, the
+// summary reflects every scheduled card).
+{
+  re: /\b(?:before|after|for|prep(?:aring)?\s+for|ahead\s+of|en\s+route\s+to|on\s+the\s+way\s+to|heading\s+to|towards?)\s+(?:[a-z][\w-]+\s+){0,3}?(breakfast|brunch|lunch|dinner|supper|nightcap)\b/gi,
+  resolves: (m, s) => {
+    const meal = (m[1] || '').toLowerCase();
+    if (meal === 'breakfast' || meal === 'brunch') return s.hasBreakfast || s.hasBrunch;
+    if (meal === 'lunch')   return s.hasLunch;
+    if (meal === 'dinner' || meal === 'supper') return s.hasDinner;
+    if (meal === 'nightcap') return s.hasNightcap;
+    return false;
+  },
+},
 ```
 
-Reuse `WALK_OVER_THRESHOLD` so the existing repair-day §15b handler picks it up — no new failure code, no validation-gate wiring change needed.
+Order matters — keep this **after** the existing time-bound patterns so the more-specific `tonight's dinner` rule still wins (avoids double-counting in `stripped`).
 
-## Change 3 — `pipeline/repair-day.ts` §15b (~line 3577)
+The single-segment blanking heuristic (≥3 substantive non-phantom words → keep) and multi-segment clause-drop logic in `scrubPhantomEventRefsFromString` already do the right thing for both cases:
+- `"Freshen Up before anniversary dinner."` (no dinner) → single segment, <3 substantive words after strip → blanked → description-fill backfills.
+- `"Freshen up at the Ritz; leave by 20:30 for anniversary dinner."` (no dinner) → multi-segment, second clause dropped → `"Freshen up at the Ritz."`
+- `"Freshen Up before anniversary dinner."` (dinner card present) → resolves true → no change.
 
-After the existing `pickTransitTier` call, override the chosen mode when the validation result tagged the leg as a water crossing:
+No call-site changes; the new pattern flows through `scrubActivity` everywhere it's already wired (validate-day, repair-day §10b, save-itinerary `normalizeDays`, UI `activityNameSanitizer`). The validation-gate `DESCRIPTION_GHOST_REFERENCE` code reuses the same detector and will fire on residuals automatically.
 
-```ts
-// Water-crossing override: pickTransitTier doesn't know about ferries.
-const wc = vr?.meta?.waterCrossing as { city?: string; reason?: string } | undefined;
-if (wc) {
-  tier = {
-    method: 'ferry' as any,
-    durationMinutes: Math.max(tier.durationMinutes, 25), // ferry crossing floor
-    costAmount: tier.costAmount > 0 ? tier.costAmount : 5,
-    instructions: `Ferry across ${wc.reason}`,
-    distanceMeters: tier.distanceMeters,
-  };
-  // Rewrite "Walk to X" → "Ferry to X"
-  if (typeof act.title === 'string') {
-    act.title = act.title.replace(/^(?:Walk|Walking|Stroll)\b/i, 'Ferry');
-  }
-  console.log(`[transit] Day ${dayNumber} downgraded walk → ferry: ${act.title} crosses water boundary (${wc.reason})`);
-}
-```
+### `supabase/functions/_shared/__tests__/phantom-ref-clause-scrub.test.ts`
 
-Requires threading `vr` into the loop — current code maps to indices only; adjust to keep the full `ValidationResult` so `meta.waterCrossing` survives.
+Add 4 cases:
+1. `"Freshen Up before anniversary dinner."` + summary with `hasDinner=false` → field blanked.
+2. Same input + `hasDinner=true` → unchanged.
+3. `"Freshen up at the Ritz; leave by 20:30 for anniversary dinner."` + `hasDinner=false` → second clause dropped, first kept with period.
+4. `"Light walk before lunch at Casa Mono"` + `hasLunch=true` → unchanged (no false positive when meal exists; protects rich single sentences via the ≥3-substantive-word rule).
 
-The existing label rewrite (`Walk → Taxi`) at line 3625 is replaced by `Ferry` only when `wc` is set; otherwise existing behavior is preserved.
+## Out of scope
 
-## Out of Scope
-- Generic "altitude/network unclear" heuristic from the bug report — too noisy without routing data; the bounded city list covers the documented false-positive cases. Add cities incrementally as new reports come in.
-- LLM-generation-time prompt rule (separate concern).
-- Refresh-day / chat-action paths (they already re-run validate→repair).
+- No changes to `buildDayScheduleSummary` (already tracks every meal slot needed).
+- No changes to `_shared/scrub-activity.ts` or its call sites.
+- No changes to `validation-gate.ts` — it already emits `DESCRIPTION_GHOST_REFERENCE` via the shared detector.
+- Generic non-meal phantom nouns (e.g. "before the gallery" without determiner) are intentionally not added; user scope is meal references only.
 
-## Tests — new `__tests__/water-crossing-walk.test.ts`
+## Verification
 
-1. `detectWaterCrossing` Topkapi (41.0115, 28.9833) → Çiya (40.9893, 29.0254) → returns Istanbul/Bosphorus.
-2. `detectWaterCrossing` Sultanahmet → Galata (both European, lng 28.97 / 28.97) → returns null (no false-positive same-side).
-3. `detectWaterCrossing` Manhattan (40.758, -74.000) → DUMBO (40.703, -73.989) → returns NYC/East River.
-4. `detectWaterCrossing` Paris ↔ Marais (both lng ≈ 2.35) → returns null (outside London bbox).
-5. `validate-day.checkWalkOverThreshold` — 15-min walk Topkapi → Çiya → emits `WALK_OVER_THRESHOLD` with `meta.waterCrossing.city === 'Istanbul'`.
-6. `repair-day` §15b — given the above failure, mutates `transportation.method = 'ferry'`, `durationMinutes >= 25`, title prefix `Ferry`.
-
-## Sentinels
-- `[transit] Day N downgraded walk → ferry: ... crosses water boundary (...)`
-- Existing `[WALK_OVER_THRESHOLD]` log still fires.
+- `deno test --allow-all supabase/functions/_shared/__tests__/phantom-ref-clause-scrub.test.ts` (existing 4 + new 4 pass).
+- Sentinel `[SCRUB_PHANTOM_REF] stripped=N fields=description …` already logs from `scrubActivity`.
+- Re-generate the Istanbul Day 2 trip → "Freshen Up" card description no longer mentions "anniversary dinner" when no dinner card follows.
