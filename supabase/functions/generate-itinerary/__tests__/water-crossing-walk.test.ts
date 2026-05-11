@@ -18,10 +18,10 @@ Deno.test("detectWaterCrossing: Sultanahmet → Galata (both European) → null"
   assertEquals(r, null);
 });
 
-Deno.test("detectWaterCrossing: Manhattan → DUMBO (East River) → NYC crossing", () => {
+Deno.test("detectWaterCrossing: Empire State → Williamsburg (East River) → NYC crossing", () => {
   const r = detectWaterCrossing(
-    { lat: 40.758,  lng: -74.000 },  // Times Square area
-    { lat: 40.703,  lng: -73.989 },  // DUMBO, Brooklyn
+    { lat: 40.748, lng: -73.985 },  // Empire State Building
+    { lat: 40.715, lng: -73.957 },  // Williamsburg, Brooklyn
   );
   assert(r !== null);
   assertEquals(r!.city, "New York");
