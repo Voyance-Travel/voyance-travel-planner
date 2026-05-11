@@ -1,62 +1,60 @@
-## Diagnosis: Not a route-guard regression
+## Context
 
-I followed Steps 1–2 from the request and verified ProtectedRoute is wired and working. The Playwright failure has a different root cause.
+Audit of `trip_intents` policies showed the reported INSERT bypass (`OR user_id = auth.uid()`) **does not exist** — the current INSERT policy is already trip-owner-OR-accepted-collaborator. The real issue is an asymmetry: collaborators can INSERT but cannot SELECT/UPDATE/DELETE.
 
-### Step 1 — guard exists and is wired correctly
+## Current policies
 
-- `src/components/layout/ProtectedRoute.tsx` — `if (!isAuthenticated) return <Navigate to={ROUTES.SIGNIN} state={{ from }} replace />` (correct pattern).
-- `src/App.tsx` lines 226–261 — every route the failing tests hit IS wrapped:
-  - `/profile`, `/profile/edit`, `/profile/settings`, `/profile/credits` — `<ProtectedRoute><…/></ProtectedRoute>`
-  - `/start` — wrapped
-  - `/trip/dashboard`, `/trip/:tripId`, `/trip/:tripId/active`, etc. — all wrapped
-- `AuthContext` resolves `isLoading=false` within ~500ms of mount when there's no session (single retry then bail), with an 8s safety timeout.
+| cmd | rule |
+|---|---|
+| INSERT | owner OR accepted collaborator ✅ |
+| SELECT | owner only |
+| UPDATE | owner only |
+| DELETE | owner only |
 
-### Step 2 — manual verification: redirect works
+## Plan
 
-Hit the live sandbox at `/profile` while unauthenticated → browser landed on `/signin`. ProtectedRoute is doing its job.
+### 1. Migration — extend the three lagging policies
 
-### Actual root cause: Playwright is hitting a Lovable-gated URL
+Drop and recreate SELECT, UPDATE, DELETE on `public.trip_intents` using the same trip-owner-OR-accepted-collaborator pattern already used by INSERT. Scope all three `TO authenticated` (matches INSERT).
 
-`playwright.config.ts` line 34:
+```sql
+DROP POLICY IF EXISTS "Users can view intents for their trips"   ON public.trip_intents;
+DROP POLICY IF EXISTS "Users can update intents for their trips" ON public.trip_intents;
+DROP POLICY IF EXISTS "Users can delete intents for their trips" ON public.trip_intents;
 
-```
-baseURL: process.env.PLAYWRIGHT_BASE_URL || 'https://id-preview--bbef7015-…-7d36d59f8dcd.lovable.app'
-```
+CREATE POLICY "Users can view intents for their trips"
+ON public.trip_intents FOR SELECT TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.trips
+          WHERE trips.id = trip_intents.trip_id AND trips.user_id = auth.uid())
+  OR EXISTS (SELECT 1 FROM public.trip_collaborators tc
+             WHERE tc.trip_id = trip_intents.trip_id
+               AND tc.user_id = auth.uid()
+               AND tc.accepted_at IS NOT NULL)
+);
 
-`curl -I https://id-preview--…lovable.app/profile` returns:
-
-```
-302 → https://lovable.dev/auth-bridge?project_id=…&return_url=…/profile
-```
-
-Every request to `id-preview--*.lovable.app` is intercepted by Lovable's preview auth-bridge before the SPA loads. Playwright follows the 302, lands on a Lovable login page (no `input[type="email"]`, no `/signin` URL, no `<h1>` matching `/journey|account/i`), and every assertion times out at 5–40 s. That explains the symptom (15 failures across `auth.spec.ts` + `profile.spec.ts`) without any code regression.
-
-### What to change
-
-```text
-playwright.config.ts
-└── baseURL default → public URL the React app actually serves
+-- Same USING clause for UPDATE (with matching WITH CHECK) and DELETE.
 ```
 
-The project has two publicly reachable origins (no Lovable gate, SPA fallback enabled):
+UPDATE policy gets the same expression as both `USING` and `WITH CHECK` so a collaborator can't reassign `trip_id` to a trip they don't belong to.
 
-- Published: `https://voyance-travel-planner.lovable.app`
-- Custom domain: `https://travelwithvoyance.com`
+### 2. No app-code changes
 
-Switch the default to the published URL (custom domain is fine too — same hosting). CI/local runs that need a different target keep the `PLAYWRIGHT_BASE_URL` env override.
+All callers already operate within proper trip scope:
+- `src/contexts/TripPlannerContext.tsx` — owner saving their own trip's occasion
+- `supabase/functions/itinerary-chat/index.ts` — service-role client (bypasses RLS)
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — service-role client
+- `delete-users` / `delete-my-account` — admin/self cleanup
 
-### Plan
+### 3. Security memory
 
-1. **`playwright.config.ts`** — change line 34 default from `id-preview--*.lovable.app` to `https://voyance-travel-planner.lovable.app`. Add a one-line comment that `id-preview--*` is auth-gated and must not be used as Playwright's target.
+Mark the original "OR user_id = auth.uid() bypass" finding as not-applicable (policy was already correct on this DB) and document the new symmetric collaborator access in the same entry pattern as R4/R5/R6/R7.
 
-2. **`e2e/README.md` (create or append)** — short note: tests must run against the published URL or a custom domain; never against `id-preview--*.lovable.app`. Override with `PLAYWRIGHT_BASE_URL` for local dev servers.
+### 4. Verification
 
-3. **No app-code changes.** ProtectedRoute, AuthContext, and `App.tsx` route wrapping are correct — leave them alone.
-
-4. **Verify** — re-run `npx playwright test e2e/auth.spec.ts e2e/profile.spec.ts` against the new baseURL. Expect ~25 passing.
-
-5. **Step 5 audit (deferred / quick scan only)** — `grep -rn "useAuth\|useUser" src/pages` to flag any user-state-reading page that's NOT wrapped in `ProtectedRoute` and doesn't gracefully handle null user. Will report findings; not changing wiring unless something obvious appears.
-
-### Out of scope
-
-- The 4 unrelated Supabase security findings shown in the security panel (JWT-claim role check, `trip_intents` collaborator SELECT, `activities`/`transfer-pricing` paid-API auth, `test-email`) — `test-email` was already fixed earlier this turn; the others are separate work.
+- `psql \d public.trip_intents` — confirm all 4 policies share the owner-OR-collaborator pattern
+- Owner can insert/select/update/delete intents on own trip → ✅
+- Accepted collaborator can insert/select/update/delete intents on shared trip → ✅
+- Authenticated user with no relation to trip → blocked on all 4 ops
+- Pending (not-yet-accepted) collaborator → blocked
+- Linter clean
