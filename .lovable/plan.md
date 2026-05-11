@@ -1,42 +1,31 @@
-# Realtime anon hard-deny (R6 — defense in depth)
+## Lock down `test-email` to service-role + allowlist
 
-## Current state (verified)
-`realtime.messages` has exactly one policy: `realtime_topic_scoped` — PERMISSIVE, `TO authenticated`, `FOR SELECT`, with a `CASE` matching `trip:<id>` / `user:<id>` topics against `auth.uid()` ownership/collaboration. No anon policy exists, so anon is already denied today by Postgres RLS default.
+**File:** `supabase/functions/test-email/index.ts`
 
-The linter flag is for **defense in depth**: if a future maintainer adds any PERMISSIVE policy that touches `anon`, anon would silently start getting access. A RESTRICTIVE deny ANDs with all permissive policies and cannot be bypassed.
+**Caller audit:** `rg "test-email"` across `src/` and `supabase/functions/` returns zero matches. No frontend or backend code invokes this function — it is purely an admin/debug tool. No callers need to be removed or migrated.
 
-## Migration
+### Changes
 
-```sql
-CREATE POLICY "realtime_messages_deny_anon"
-ON realtime.messages
-AS RESTRICTIVE
-FOR ALL
-TO anon
-USING (false)
-WITH CHECK (false);
-```
+Inject two gates immediately after the CORS preflight check (before any other logic, including the `isConfigured()` short-circuit so unauthenticated callers can't probe SMTP config state):
 
-`FOR ALL` covers SELECT/INSERT/UPDATE/DELETE — Realtime broadcast/presence writes also flow through this table, so we don't want a future channel feature to accidentally let anon write.
+1. **Service-role auth gate** — reject unless `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` matches exactly. Returns `403 FORBIDDEN`.
+2. **Recipient allowlist gate** — parse the JSON body once, lowercase-trim `to`, and require it to be in `ALLOWED_TEST_RECIPIENTS` (initially `ashtonlaurenn@gmail.com`). Returns `400 RECIPIENT_NOT_ALLOWED`.
 
-The existing `realtime_topic_scoped` policy is untouched.
+The existing "fall back to authenticated user's email" branch (lines 169–182) is removed — under service-role auth there is no end-user, and the allowlist is now the single source of truth for recipient. The `targetEmail` resolution collapses to the validated `toAddress` from the allowlist check.
 
-## No code changes
-Frontend Realtime subscriptions already require an authenticated session; nothing in `src/` needs editing.
+### Verification (post-deploy)
 
-## Verification
-- Signed-out: subscribe to any Realtime channel → rejected
-- Signed-in owner: subscribe to own `trip:<id>` channel → works
-- Signed-in non-collaborator: subscribe to someone else's `trip:<id>` → rejected by existing `CASE`
-- Linter: Realtime anon coverage warning clears
+- `curl -X POST <url>` (no auth) → 403 FORBIDDEN
+- `curl -X POST -H "Authorization: Bearer <ANON_KEY>"` → 403 FORBIDDEN
+- `curl -X POST -H "Authorization: Bearer <SERVICE_ROLE>" -d '{"to":"random@example.com"}'` → 400 RECIPIENT_NOT_ALLOWED
+- `curl -X POST -H "Authorization: Bearer <SERVICE_ROLE>" -d '{"to":"ashtonlaurenn@gmail.com"}'` → 200, email delivered
+- Linter no longer flags `test-email` as unauthenticated email-send vector
 
-## Memory
-New entry `mem://constraints/security/realtime-subscription-rules`:
-> Realtime channel subscription requires authenticated + topic-matched ownership (trip:<id> → owner OR accepted collaborator; user:<id> → self). anon is explicitly denied via RESTRICTIVE policy `realtime_messages_deny_anon` (belt-and-braces against future permissive policy additions). Never add a PERMISSIVE policy on `realtime.messages` covering `anon`.
+### Memory
 
-Add a one-liner reference under Memories in `mem://index.md`.
+Add new entry `mem://constraints/security/test-email-service-role-only` documenting:
+- `test-email` is admin-only, service-role auth required
+- Recipient must be in `ALLOWED_TEST_RECIPIENTS` allowlist (defense-in-depth vs. compromised service key)
+- Never wire this function into any user-facing UI; never relax the allowlist to accept arbitrary `to`
 
-## Out of scope
-- No changes to `realtime_topic_scoped`
-- No frontend changes
-- No other realtime tables (none with policies)
+Update `mem://index.md` with R7 reference line.
