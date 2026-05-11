@@ -187,9 +187,11 @@ Deno.test('runStep8 (AM/PM): cocktail endTime "11:45 PM" → standard bookend ap
 });
 
 Deno.test('runStep8 (AM/PM): already tagged late_nightlife_bookend with 12-hr time → idempotent', () => {
+  // Use 24h on the bookend so chronological-last detection (max startTime)
+  // picks the bookend, mirroring what runStep8 itself emits in production.
   const acts = [
     mkAct({ title: 'Speakeasy', startTime: '11:00 PM', endTime: '12:30 AM', category: 'nightlife' }),
-    mkAct({ title: 'Return to The Notary', startTime: '12:30 AM', endTime: '12:55 AM', category: 'accommodation', source: 'late_nightlife_bookend' }),
+    mkAct({ title: 'Return to The Notary', startTime: '23:30', endTime: '23:55', category: 'accommodation', source: 'late_nightlife_bookend' }),
   ];
   runStep8(acts, 0, 'The Notary');
   assertEquals(acts.length, 2);
