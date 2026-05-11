@@ -22,6 +22,13 @@
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { parseAuth } from "../_shared/require-auth.ts";
+import { checkDbRateLimit } from "../_shared/db-rate-limiter.ts";
+
+// Per-caller rate limit: 20 requests / hour / auth.uid().
+// Eliminates timing-based enumeration channel (DB lookup latency would
+// otherwise leak whether an email exists). Over-limit returns the same
+// neutral ACK shape — never a 429 — so no enumeration via status code either.
+const RATE_RULE = { maxRequests: 20, windowMs: 60 * 60 * 1000 };
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
