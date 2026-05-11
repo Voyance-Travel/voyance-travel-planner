@@ -17,6 +17,7 @@ import { buildDayScheduleSummary } from '../_shared/prompt-leak-scrub.ts';
 import { ensureDayDiningDescriptions } from '../_shared/dining-description-backfill.ts';
 import { pruneNonLogisticsAfterCheckout, pruneNonLogisticsAfterAirportTransfer } from '../_shared/post-checkout-prune.ts';
 import { enforceFreshenUpPosition } from '../_shared/freshen-up-position.ts';
+import { fillMissingStartTimes } from '../_shared/timing-cascade.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
@@ -129,6 +130,8 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
       date = deriveDateFromStartDate(tripStartDate, dayNumber);
     }
     let activities = Array.isArray(day.activities) ? [...day.activities] : [];
+    // Fill missing startTime from endTime − duration BEFORE sort so chronology is coherent.
+    fillMissingStartTimes(activities, { dayNumber, path: 'save-itinerary' });
     activities.sort((a: any, b: any) => {
       const ta = parseTimeToMinutes(a.startTime || a.start_time || a.time);
       const tb = parseTimeToMinutes(b.startTime || b.start_time || b.time);

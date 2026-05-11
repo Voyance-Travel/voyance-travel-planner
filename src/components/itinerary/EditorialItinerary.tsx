@@ -11706,30 +11706,44 @@ function ActivityRow({
       <div 
         className={cn(
           "hidden sm:block w-24 shrink-0 p-4 border-r border-border bg-gradient-to-b from-secondary/20 to-secondary/5",
-          isEditable && "cursor-pointer hover:from-primary/10 hover:to-primary/5 transition-colors group"
+          isEditable && time && "cursor-pointer hover:from-primary/10 hover:to-primary/5 transition-colors group"
         )}
-        onClick={() => isEditable && onTimeEdit(dayIndex, activityIndex, activity)}
-        title={isEditable ? "Click to edit time" : undefined}
+        onClick={() => isEditable && time && onTimeEdit(dayIndex, activityIndex, activity)}
+        title={isEditable && time ? "Click to edit time" : undefined}
       >
-        <div className="flex items-center gap-1">
-          <span className="text-sm font-medium text-foreground">{formatTime(time)}</span>
-          {isEditable && <Edit3 className="h-3 w-3 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />}
-        </div>
-        {activity.endTime && (
-          <p className="text-xs text-muted-foreground mt-0.5">→ {formatTime(activity.endTime)}</p>
-        )}
-        {activity.duration && (
-          <p className="text-xs text-primary/70 mt-0.5 font-medium">
-            {(activityType === 'accommodation' || titleLower.includes('return to') || titleLower.includes('freshen up'))
-              ? (activity.durationMinutes && activity.durationMinutes > 180
-                ? (titleLower.includes('check-in') || titleLower.includes('checkout') || titleLower.includes('check-out')
-                   ? activity.duration 
-                   : null)
-                : activity.duration)
-              : activity.duration}
-          </p>
+        {time ? (
+          <>
+            <div className="flex items-center gap-1">
+              <span className="text-sm font-medium text-foreground">{formatTime(time)}</span>
+              {isEditable && <Edit3 className="h-3 w-3 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />}
+            </div>
+            {activity.endTime && (
+              <p className="text-xs text-muted-foreground mt-0.5">→ {formatTime(activity.endTime)}</p>
+            )}
+            {activity.duration && (
+              <p className="text-xs text-primary/70 mt-0.5 font-medium">
+                {(activityType === 'accommodation' || titleLower.includes('return to') || titleLower.includes('freshen up'))
+                  ? (activity.durationMinutes && activity.durationMinutes > 180
+                    ? (titleLower.includes('check-in') || titleLower.includes('checkout') || titleLower.includes('check-out')
+                       ? activity.duration 
+                       : null)
+                    : activity.duration)
+                  : activity.duration}
+              </p>
+            )}
+          </>
+        ) : (
+          // No anchor start time — render duration-only (or em-dash) instead of an orphan "→ end" line.
+          <div className="flex items-center gap-1">
+            {activity.duration ? (
+              <span className="text-xs text-primary/70 font-medium">{activity.duration}</span>
+            ) : (
+              <span className="text-sm text-muted-foreground">—</span>
+            )}
+          </div>
         )}
       </div>
+
 
       {/* Thumbnail Column - Hidden on mobile, consistent width on desktop */}
       <div className="hidden sm:block w-24 h-24 shrink-0 border-r border-border bg-muted/30 overflow-hidden relative group/thumb">

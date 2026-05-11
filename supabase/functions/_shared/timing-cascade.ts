@@ -72,6 +72,58 @@ export function minutesToTime(m: number): string {
   return `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
 }
 
+/**
+ * Fill missing `startTime` from `endTime − durationMinutes` when possible.
+ *
+ * Closes the "card renders as bare → 1:30 PM" leak (Day 3 Bistro Refter).
+ * Mutates each activity in place. Locked / user-anchored cards are exempt.
+ * Returns counts for telemetry.
+ *
+ * Sentinels:
+ *   [NORMALIZE_START]          — filled startTime
+ *   [NORMALIZE_START_SKIPPED]  — couldn't fill (no duration, or unparseable end)
+ */
+export function fillMissingStartTimes(
+  activities: any[],
+  opts: { dayNumber?: number; path?: string } = {}
+): { filled: number; skipped: number } {
+  let filled = 0;
+  let skipped = 0;
+  const day = opts.dayNumber ?? '?';
+  const path = opts.path ?? 'unknown';
+  for (const a of activities || []) {
+    if (!a || typeof a !== 'object') continue;
+    // Exempt user-anchored / locked rows — never recompute their time.
+    if (a.isLocked || a.locked || a.lock_state === 'locked'
+        || a.userAdded || a.userEdited || a.isManual
+        || a.extracted || a.pinned) continue;
+    const start = a.startTime || a.start_time || a.time;
+    if (start) continue; // already has a start; nothing to do
+    const end = a.endTime || a.end_time;
+    if (!end) continue; // no anchor to compute from — leave as-is
+    const dur = Number(a.durationMinutes ?? a.duration_minutes);
+    if (!Number.isFinite(dur) || dur <= 0) {
+      skipped++;
+      console.log(`[NORMALIZE_START_SKIPPED] day=${day} title="${a.title || a.name || ''}" reason=no_duration end=${end} path=${path}`);
+      continue;
+    }
+    const endMin = parseTime(end);
+    if (endMin === null) {
+      skipped++;
+      console.log(`[NORMALIZE_START_SKIPPED] day=${day} title="${a.title || a.name || ''}" reason=unparseable_end end=${end} path=${path}`);
+      continue;
+    }
+    const startMin = Math.max(0, endMin - dur);
+    const computed = minutesToTime(startMin);
+    a.startTime = computed;
+    a.start_time = computed;
+    a.time = computed;
+    filled++;
+    console.log(`[NORMALIZE_START] day=${day} title="${a.title || a.name || ''}" computed=${computed} from end=${end} dur=${dur} path=${path}`);
+  }
+  return { filled, skipped };
+}
+
 // ─── Geo helpers ──────────────────────────────────────────────────────────────
 
 export function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
@@ -177,6 +229,10 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
   const cutoff = opts.cutoffMinutes ?? (23 * 60 + 30);
   const overlapBuffer = opts.overlapBufferMinutes ?? 5;
   const repairs: CascadeRepair[] = [];
+
+  // Pre-walk: fill missing startTime from endTime − durationMinutes so the sort
+  // (and all downstream pair logic) sees a coherent chronology. Mutates input.
+  fillMissingStartTimes(input as any[], { path: 'enforceTimingAndBuffers' });
 
   // Sort chronologically; activities without a startTime go to the end.
   let activities = [...input].sort((a, b) => {
