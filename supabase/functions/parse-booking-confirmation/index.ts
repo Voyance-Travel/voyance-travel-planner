@@ -1,6 +1,6 @@
 // Parse booking confirmation using AI — extracts ALL flight segments + intelligent analysis
 
-import { requireAuth } from "../_shared/require-auth.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
 
 /** Convert "HH:MM" or "H:MM" time string to minutes since midnight. Returns null if invalid. */
@@ -113,8 +113,9 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const authFail = await requireAuth(req);
-  if (authFail) return authFail;
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
 
   try {
     const body = await req.json();
@@ -297,9 +298,10 @@ ${confirmationText}`;
     const aiResponse = await response.json();
     const content = aiResponse.choices?.[0]?.message?.content || '';
 
-    // Track AI usage
+    // Track AI usage (attribute to caller for cost analytics)
     try {
       const costTracker = trackCost('parse_booking_confirmation', 'google/gemini-3-flash-preview');
+      costTracker.setUserId(userId);
       costTracker.recordAiUsage(aiResponse);
       await costTracker.save();
     } catch (e) {

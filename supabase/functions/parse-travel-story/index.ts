@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
-import { requireAuth } from "../_shared/require-auth.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -71,8 +71,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const authFail = await requireAuth(req);
-  if (authFail) return authFail;
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
 
   try {
     const { story, previousAnalysis } = await req.json();
@@ -175,8 +176,9 @@ Refine your analysis based on this additional information.`
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
 
-    // Track AI usage
+    // Track AI usage (attribute to caller for cost analytics)
     const costTracker = trackCost('parse_travel_story', 'google/gemini-2.5-flash');
+    costTracker.setUserId(userId);
     costTracker.recordAiUsage(data);
     await costTracker.save();
 
