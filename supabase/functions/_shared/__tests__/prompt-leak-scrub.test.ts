@@ -159,12 +159,24 @@ Deno.test('phantom-ref: keeps "after the Prado tour" when Prado is on schedule',
   if (r.changed) throw new Error('expected no change when Prado exists');
 });
 
-Deno.test('phantom-ref: never blanks a single-sentence field', () => {
+Deno.test('phantom-ref: blanks single phantom-only segment (M2)', () => {
+  // M2 update: a field that is *essentially only* the phantom ref is blanked
+  // (UI fallback / dining-description-backfill recovers the empty state).
+  // See mem://constraints/itinerary/schedule-coherent-copy
   const summary = buildDayScheduleSummary(dayNoDinner);
   const out = scrubPhantomEventRefsFromString(
     "Leave by 20:30 for tonight's Michelin-starred dinner.",
     summary,
   );
-  // Single sentence — must not be stripped to empty
-  assertEquals(out, null);
+  assertEquals(out, '');
+});
+
+Deno.test('phantom-ref: preserves rich single sentence with phantom ref', () => {
+  // Safety guard — never destroy a sentence with substantive content.
+  const summary = buildDayScheduleSummary(dayNoDinner);
+  const out = scrubPhantomEventRefsFromString(
+    "Spend a relaxing afternoon wandering the leafy Retiro gardens before tonight's dinner.",
+    summary,
+  );
+  if (out === '') throw new Error('rich sentence must not be blanked');
 });
