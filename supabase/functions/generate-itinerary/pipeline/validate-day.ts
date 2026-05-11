@@ -1229,11 +1229,11 @@ function checkWalkOverThreshold(activities: StrictActivityMinimal[], results: Va
     if (!Number.isFinite(dist) || dist < 0) dist = 0;
     // Both unknown — can't evaluate. Default to NOT firing (conservative).
     if ((!Number.isFinite(dur) || dur <= 0) && dist <= 0) continue;
-    if (dur <= WALK_HARD_DURATION_MINUTES && dist <= WALK_HARD_DISTANCE_METERS) continue;
+    if (dur <= durCap && dist <= distCap) continue;
     results.push({
       code: FAILURE_CODES.WALK_OVER_THRESHOLD,
       severity: 'critical',
-      message: `Transit "${act.title}" is walk for ${dur}min / ${dist}m — exceeds ${WALK_HARD_DURATION_MINUTES}min/${WALK_HARD_DISTANCE_METERS}m threshold`,
+      message: `Transit "${act.title}" is walk for ${dur}min / ${dist}m — exceeds ${tierLabel} ceiling ${durCap}min/${distCap}m`,
       activityIndex: i,
       field: 'transportation',
       autoRepairable: true,
