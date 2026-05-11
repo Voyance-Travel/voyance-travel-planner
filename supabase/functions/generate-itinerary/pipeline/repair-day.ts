@@ -2822,11 +2822,13 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
   // --- 10b. UNIFIED OUTPUT VALIDATION (single boundary) ---
   // Routes title/body/fragment scrubs + meal-suffix strip + cross-city/country
-  // downgrade through one entry point. See plan.md (Unified LLM Output Validation Layer).
+  // downgrade + phantom-event-ref strip through one entry point.
+  // See plan.md (Unified LLM Output Validation Layer + M1 phantom refs).
+  const daySchedule10b = buildDayScheduleSummary(activities);
   for (let i = 0; i < activities.length; i++) {
     const act: any = activities[i];
     if (lockedIds.has(act.id)) continue;
-    const ops = scrubActivity(act, { destination: resolvedDestination });
+    const ops = scrubActivity(act, { destination: resolvedDestination, daySchedule: daySchedule10b });
     if (opsHadChange(ops)) {
       repairs.push({
         code: FAILURE_CODES.TITLE_LABEL_LEAK,
