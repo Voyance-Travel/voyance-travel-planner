@@ -84,21 +84,37 @@ export interface BudgetSummary {
 // ============================================================================
 
 export async function getTripMembers(tripId: string): Promise<TripMember[]> {
-  const { data, error } = await supabase
-    .from('trip_members')
-    .select('*')
-    .eq('trip_id', tripId)
-    .order('role', { ascending: false })
-    .order('created_at');
+  // R5: Cross-member reads MUST go through public_trip_members (no email).
+  // Trip owners + self also get a base-table read (owner sees all, non-owner sees
+  // only their own row) so emails appear where the caller is authorized to see them.
+  const [viewRes, baseRes] = await Promise.all([
+    supabase
+      .from('public_trip_members')
+      .select('*')
+      .eq('trip_id', tripId)
+      .order('role', { ascending: false }),
+    supabase
+      .from('trip_members')
+      .select('id, email')
+      .eq('trip_id', tripId),
+  ]);
 
-  if (error) throw new Error(error.message);
-  
-  return (data || []).map((row: Record<string, unknown>) => ({
+  if (viewRes.error) throw new Error(viewRes.error.message);
+
+  // baseRes may legitimately error/return [] for non-owners on rows they can't see.
+  const emailById = new Map<string, string>();
+  if (!baseRes.error && baseRes.data) {
+    for (const row of baseRes.data as Array<{ id: string; email: string | null }>) {
+      if (row.email) emailById.set(row.id, row.email);
+    }
+  }
+
+  return (viewRes.data || []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
     tripId: row.trip_id as string,
     userId: row.user_id as string | null,
-    email: row.email as string,
-    name: row.name as string | null,
+    email: emailById.get(row.id as string) ?? '',
+    name: (row.name as string | null) ?? (row.member_display as string | null) ?? null,
     role: row.role as TripMemberRole,
     invitedAt: row.invited_at as string,
     acceptedAt: row.accepted_at as string | null,
@@ -668,7 +684,7 @@ export async function calculateBudgetSummary(tripId: string): Promise<BudgetSumm
 
     return {
       memberId: member.id,
-      name: member.name || member.email,
+      name: member.name || member.email || 'Member',
       owes,
       owed,
     };
