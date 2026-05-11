@@ -172,13 +172,23 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
     });
     if (!allTimed) return;
 
-    // Buffer/conflict passes operate on realActivities (not the raw `activities`
-    // array) so wrap-past-midnight bookends + transit/return residue can't
-    // generate phantom overlap warnings. Day-boundary filter still runs second
-    // as a defense-in-depth guard.
-    const timed = realActivities
+    // Buffer/conflict passes still source from `activities` (NOT realActivities)
+    // so legitimate transit-overlap warnings ("Walk to X" runs into next stop)
+    // continue to fire. The wrap-past-midnight residue + hotel-return bookend
+    // rows are explicitly filtered out below — that was the root cause of the
+    // phantom overlap warnings, not the inclusion of transit cards.
+    const isHotelReturn = (a: any) => {
+      const cat = String(a.category || a.type || '').toLowerCase();
+      const title = String(a.name || a.title || '');
+      if (['hotel_return', 'bookend', 'check-in', 'check-out', 'accommodation', 'hotel'].includes(cat)) return true;
+      return /^(?:return to (?:the )?hotel|return to )/i.test(title);
+    };
+    const timed = activities
       .filter((a: any) => a.startTime && a.endTime)
       .filter((a: any) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
+      // Drop hotel-return bookends — they're decorative and routinely wrap
+      // past midnight; should never anchor a buffer/overlap warning.
+      .filter((a: any) => !isHotelReturn(a))
       .map((a: any) => ({
         name: a.name || a.title,
         category: a.category,
@@ -189,7 +199,7 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
       }))
       .filter((a: { start: number; end: number }) => a.start > 0 || a.end > 0)
       // Drop wrap-past-midnight residue. Treat end===0 with start>0 as wrap
-      // too (e.g. "Return to Hotel 23:30 → 00:00") — would otherwise false-negative.
+      // too (e.g. anything ending exactly at 00:00) — would otherwise false-negative.
       .filter((a: { start: number; end: number }) =>
         !((a.end === 0 && a.start > 0) || (a.end > 0 && a.end < a.start)))
       .sort((a: { start: number }, b: { start: number }) => a.start - b.start);
