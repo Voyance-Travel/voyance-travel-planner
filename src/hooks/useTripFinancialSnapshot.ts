@@ -329,12 +329,18 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       ? 1 - uncoveredPricedCount / pricedJsonIds.size
       : 1;
 
+    // Build a content fingerprint over (tripId + sorted priced JSON ids) so we
+    // re-fire when the user navigates to a different legacy trip OR adds new
+    // priced cards after the first backfill attempt.
+    const pricedJsonHash = [...pricedJsonIds].sort().join(',');
+    const backfillFingerprint = `${tripId}:${pricedJsonHash}`;
+
     if (
-      !backfillFiredRef.current &&
+      lastBackfillFingerprintRef.current !== backfillFingerprint &&
       pricedJsonIds.size > 0 &&
       coverageRatio < 0.5
     ) {
-      backfillFiredRef.current = true;
+      lastBackfillFingerprintRef.current = backfillFingerprint;
       const dest = String((tripData as any)?.destination || '');
       const tier = (tripData as any)?.budget_tier || null;
       console.info(
