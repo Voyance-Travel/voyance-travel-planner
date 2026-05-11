@@ -61,14 +61,36 @@ export interface PersistItineraryOptions {
   extraUpdate?: Record<string, any>;
   /** Label for log lines (e.g. 'save-itinerary', 'generate-trip-day'). */
   label?: string;
+  /**
+   * Opt out of the regression guard. Default false. Only pass `true` for
+   * write paths where overwriting a healthier previous version with fewer
+   * activities is the intended behavior (e.g. user-initiated reset). The
+   * guard is a single boundary that protects against partial / "last-minute
+   * patch" generations clobbering a healthy itinerary on disk — the
+   * symptom is total cost dropping (e.g. $924 → $340) after a page reload.
+   * See mem://constraints/itinerary/no-regression-overwrite.
+   */
+  allowRegression?: boolean;
 }
+
+export interface PersistResult {
+  error: any;
+  /** True when the new `days` array was rejected for being a regression
+   *  against the on-disk version; the on-disk `itinerary_data` was kept
+   *  intact, only `extraUpdate` (status, metadata) was applied. */
+  regressionBlocked?: boolean;
+}
+
+/** Capped-size ring buffer of rejected attempts written under
+ *  `metadata.rejected_attempts` for post-mortem debugging. */
+const MAX_REJECTED_ATTEMPTS = 3;
 
 export async function persistTripItinerary(
   supabase: any,
   tripId: string,
   itinerary: any,
   options: PersistItineraryOptions = {},
-): Promise<{ error: any }> {
+): Promise<PersistResult> {
   const label = options.label || 'persist-itinerary';
   const days = Array.isArray(itinerary?.days) ? itinerary.days : [];
 
