@@ -1,4 +1,5 @@
 import { corsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from '../_shared/cors.ts';
+import { requireAuth } from '../_shared/require-auth.ts';
 
 const ALLOWED_ORIGINS = (() => {
   const raw = Deno.env.get('MAPKIT_ALLOWED_ORIGINS');
@@ -16,6 +17,11 @@ const ALLOWED_ORIGINS = (() => {
 Deno.serve(async (req) => {
   const corsResp = handleCorsPreflightRequest(req);
   if (corsResp) return corsResp;
+
+  // Require an authenticated caller — prevents anonymous polling that drains
+  // Apple Maps quota even though tokens are origin-restricted.
+  const authFail = await requireAuth(req);
+  if (authFail) return authFail;
 
   try {
     const teamId = Deno.env.get('APPLE_TEAM_ID');
