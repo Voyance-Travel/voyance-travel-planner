@@ -1326,6 +1326,9 @@ CRITICAL: Generate exactly ONE activity or restaurant per time slot. Do NOT gene
 BUFFER TIME — MANDATORY:
 Include realistic travel and transition time between every activity. NEVER schedule back-to-back with zero gap. Minimum gaps: 5 min same venue, 10-15 min walking distance, 15-20 min restaurant arrival, 20-30 min hotel check-in/out, 30-60 min airport. Include actual transit time for non-walking distances.
 
+PRE-DINNER GAP RULE — HARD CONSTRAINT:
+Before any dinner / fine-dining / evening restaurant activity, leave a MINIMUM 30-minute gap from the preceding activity's end. If the preceding activity is physically active (matches \b(bike|cycle|hike|kayak|ski|surf|climb|swim|run|workout|fitness)\b), the minimum gap is 45 minutes (time to shower/change). Any freshen-up card present MUST fit entirely inside this gap (start ≥ preceding.end, end ≤ dinner.start − 15min). Never place a freshen-up card AFTER dinner — if it cannot fit before dinner, OMIT it entirely.
+
 OPERATING HOURS — HARD CONSTRAINT:
 Never schedule an activity before its opening time or after its closing time. Use conservative defaults when unknown: attractions 09:30-17:00, restaurants lunch 11:30-14:00 and dinner 18:00-21:30, outdoor activities sunrise to sunset.
 
