@@ -496,6 +496,25 @@ export function scrubPhantomEventRefs(act: any, summary: DayScheduleSummary): Ph
   return { changed: fields.length > 0, fields, stripped };
 }
 
+/**
+ * Read-only detector — returns body field names that contain unresolved
+ * phantom event references. Used by the validation gate to emit
+ * DESCRIPTION_GHOST_REFERENCE before the scrub mutates anything.
+ */
+export function detectPhantomEventRefs(act: any, summary: DayScheduleSummary): string[] {
+  if (!act || typeof act !== 'object') return [];
+  const hits: string[] = [];
+  for (const key of BODY_FIELDS) {
+    const v = act[key];
+    if (typeof v !== 'string' || !v) continue;
+    // Sample-segment scan — split on sentence + clause separators.
+    const segments = v.split(/[.!?](?=\s|$)|;|\s[\u2014\u2013]\s/);
+    for (const seg of segments) {
+      if (sentenceHasPhantomRef(seg, summary)) { hits.push(key); break; }
+    }
+  }
+  return hits;
+}
 export function hasTitleLeak(act: any): { field: string } | null {
   if (!act || typeof act !== 'object') return null;
   for (const key of TITLE_FIELDS) {
