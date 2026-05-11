@@ -63,6 +63,7 @@ const HelpCenter = lazy(() => import("./pages/HelpCenter"));
 // Pages - Auth (lazy, except SignIn/SignUp above)
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 
 // Pages - Onboarding
 const Welcome = lazy(() => import("./pages/Welcome"));
@@ -220,6 +221,7 @@ function AnimatedRoutes() {
           <Route path="/sign-up" element={<Navigate to="/signup" replace />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
 
           {/* Onboarding Routes */}
           <Route path="/welcome" element={<Welcome />} />
