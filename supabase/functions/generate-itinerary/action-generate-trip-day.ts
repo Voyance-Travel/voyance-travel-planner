@@ -1539,6 +1539,25 @@ async function _handleGenerateTripDayInner(
           console.log(`[generate-trip-day] Auto-filled ${filled.inserted.length} afternoon dead gap(s) on day ${dayNumber}${isLastDay ? ' (last-day mode)' : ''}`);
           dayResult.activities = filled.activities;
         }
+        // Bug 4 — evening pass (18:00–22:00), prefer dining
+        const { fillEveningDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
+        const filledEve = await fillEveningDeadGaps(dayResult.activities, {
+          destination: cityInfo?.cityName || destination,
+          isFirstDay,
+          isLastDay,
+          isLastDayInCity,
+          archetype: (tripMeta?.travel_dna_primary as string | undefined) || undefined,
+          dietaryRestrictions: (tripMeta?.dietary_restrictions as string[] | undefined) || [],
+          budgetTier: (tripMeta?.budget_tier as string | undefined) || 'standard',
+          tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
+          lockedIds: lockedIdSet,
+          latestUsableMins: _gapLatestMins,
+          preferCategory: 'dining',
+        });
+        if (filledEve.inserted.length > 0) {
+          console.log(`[generate-trip-day] Auto-filled ${filledEve.inserted.length} evening dead gap(s) on day ${dayNumber}`);
+          dayResult.activities = filledEve.activities;
+        }
       } catch (gapErr) {
         console.warn('[generate-trip-day] Dead-gap auto-fill failed (non-blocking):', gapErr);
       }
