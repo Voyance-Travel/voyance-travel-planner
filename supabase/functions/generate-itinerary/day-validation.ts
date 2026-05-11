@@ -1106,7 +1106,10 @@ export function enforceRequiredMealsFinalGuard(
     if (venue) {
       venueName = venue.name;
       venueAddress = venue.address || `${venue.name}, ${destination}`;
-      venueDescription = `${label} at ${venue.name} — a real local spot worth visiting`;
+      // Empty sentinel — post-guard fillMissingDescriptions backstop writes a
+      // verb-led insider blurb. Templates like "real local spot worth visiting"
+      // are NOT acceptable copy on a luxury food product.
+      venueDescription = '';
       usedVenueNamesForInjection.add(venue.name.toLowerCase());
       usedVenueNamesForInjection.add(extractRestaurantVenueName(venue.name));
       usedRealVenue = true;
@@ -1124,7 +1127,8 @@ export function enforceRequiredMealsFinalGuard(
         if (fallback) {
           venueName = `${label} at ${fallback.name}`;
           venueAddress = fallback.address || `${fallback.name}, ${destination}`;
-          venueDescription = fallback.description || `${label} at ${fallback.name}`;
+          // Empty sentinel when fallback DB has no real blurb — post-guard fill writes one.
+          venueDescription = fallback.description || '';
           usedVenueNamesForInjection.add(fallback.name.toLowerCase());
           usedRealVenue = true;
           console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Using FALLBACK DB venue "${fallback.name}" for ${mealType}`);
@@ -1140,7 +1144,7 @@ export function enforceRequiredMealsFinalGuard(
         if (recycled) {
           venueName = `${label} at ${recycled.name}`;
           venueAddress = recycled.address || `${recycled.name}, ${destination}`;
-          venueDescription = recycled.description || `${label} at ${recycled.name}`;
+          venueDescription = recycled.description || '';
           usedRealVenue = true;
           console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Recycling fallback DB venue "${recycled.name}" for ${mealType} (pool exhausted with unique-name filter)`);
         }
@@ -1152,7 +1156,7 @@ export function enforceRequiredMealsFinalGuard(
       const emergency = resolveAnyMealFallback(destination, mealType, new Set<string>(usedVenueNamesForInjection));
       venueName = `${label} at ${emergency.name}`;
       venueAddress = emergency.address;
-      venueDescription = emergency.description || `${label} at ${emergency.name}`;
+      venueDescription = emergency.description || '';
       usedVenueNamesForInjection.add(emergency.name.toLowerCase());
       usedRealVenue = true;
       console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Used regional/global emergency fallback "${emergency.name}" for ${mealType} in "${destination}"`);

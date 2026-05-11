@@ -1,59 +1,62 @@
-## Updated finding
+## What's actually wrong
 
-You’re right to push back. The current saved Bruges JSON still has meals, but there are page-load code paths that can change what the itinerary looks like, and some of them can also persist changes. That is the risk to fix.
+Bruges trip data confirms the leak: every dining card in the saved itinerary has a templated description like
 
-The biggest suspect is not the financial snapshot. It’s refresh-time “self-heal” / synthetic logistics logic:
+> "Lunch at Gruuthuse Hof — a real local spot worth visiting"
+> "Dinner at Refter — a real local spot worth visiting"
 
-1. `TripDetail.tsx` has automatic self-heal blocks that run on load. They can call `save-itinerary` / `safeUpdateItineraryData` after detecting empty/missing days or version-history restores.
-2. `EditorialItinerary.tsx` derives `days` from `rawDays` and injects/removes synthetic departure/transport cards during render. That logic filters activities after departure cutoffs. If derived `days` ever gets passed into `syncBudgetFromDays` or save flows, it can make the ledger/content disagree with the original generated trip.
-3. There are load-time logistics syncs that dispatch `booking-changed`, causing financial refetches while the page is still hydrating. This can make the price drop look like content was deleted even if the JSON did not change.
+This string is hardcoded at `supabase/functions/generate-itinerary/day-validation.ts:1109` inside `enforceRequiredMealsFinalGuard` (the meal-guard fallback that injects breakfast/lunch/dinner when the AI didn't deliver). It's >30 chars so it passes `MISSING_DESCRIPTION` and lacks any verb so it fails `RESTAURANT_RECOMMENDATION_RE` — but **the validator and `fillMissingDescriptions` LLM backstop never get a chance to see it**.
 
-## Plan
+### Why the existing description-fill misses these
 
-### 1. Add a page-load mutation guard
+`fillMissingDescriptions` runs at `action-generate-trip-day.ts:1437` immediately after `repairDay`. The two meal-guard call sites that inject these dining cards run **later** in the pipeline:
 
-Scope load-time repair so refresh cannot silently rewrite a completed itinerary.
+- `action-generate-trip-day.ts:1839` — final per-day meal guard
+- `action-generate-trip-day.ts:2467` — multi-day loop meal guard
+- Parity sites: `action-generate-day.ts` (post-fill meal guard at line 1561), `generation-core.ts:2270`, `action-save-itinerary.ts` (save-time meal guard)
 
-- In `TripDetail.tsx`, restrict auto self-heal writes to truly incomplete states only:
-  - `itinerary_status` is `generating`, `queued`, or `failed`, or
-  - a day is missing/empty and the trip is explicitly marked incomplete.
-- Do not call `save-itinerary` or `safeUpdateItineraryData` from the empty-day/version-history self-heal path on a normal `ready` trip unless the user explicitly clicks a recovery action.
-- If a ready trip has suspicious empty/missing days, show the existing recovery UI/banner instead of mutating data on refresh.
+So any meal injected by the guard ships to the user with the template string, which is exactly what the user is seeing on the Bruges cards.
 
-### 2. Keep synthetic logistics as display-only
+A secondary leak: `day-validation.ts:1127/1143/1155` use `fallback.description || "${label} at ${name}"`. Any fallback-DB venue without a description in `fix-placeholders.ts` produces an even shorter blank-equivalent ("Dinner at X").
 
-Prevent render-derived cleanup from becoming persisted itinerary truth.
+## Fix
 
-- Keep the `days = useMemo(...)` synthetic card logic as UI-only.
-- Audit save/sync calls in `EditorialItinerary.tsx` so `syncBudgetFromDays` and itinerary persistence are only triggered by explicit user actions, not hydration/render effects.
-- Ensure departure-cutoff filtering cannot remove real dining/activity cards from the persisted `itinerary_data` during a refresh.
+**Goal:** every dining card carries an actionable insider blurb ("Order the…", "Try the…", "Ask for…"), regardless of which pipeline branch produced it.
 
-### 3. Stabilize the Trip Total during hydration
+### 1. Stop shipping the "real local spot worth visiting" template
 
-Avoid a scary number changing while content and ledger are still loading.
+`supabase/functions/generate-itinerary/day-validation.ts` lines ~1109/1127/1143/1155: replace the descriptive template fallbacks with an empty string sentinel (`description: ''`) so the description-fill backstop treats them as missing and refills them. Keep the title/venue/address logic untouched. If a fallback-DB entry has a real description (some do), keep it — only the templated "real local spot worth visiting" / "{Label} at {Name}" stubs go.
 
-- During `financialSnapshot.loading`, render “Calculating…” instead of a fallback total.
-- Keep the canonical source as `activity_costs` once loaded.
-- Do not fire visible delta indicators for the initial hydration pass.
+### 2. Run description-fill **after** meal-guard, not before
 
-### 4. Add diagnostics for this exact regression
+Add a second `fillMissingDescriptions` pass immediately after every meal-guard call site that can inject new dining cards:
 
-Add small, targeted logging/guards so we can prove refresh is no longer destructive.
+- `action-generate-trip-day.ts` after the line 1839 guard (single-day path) and after the line 2467 guard (multi-day chain loop)
+- `action-generate-day.ts` after the line 1561 guard
+- `action-save-itinerary.ts` after its save-time meal guard
 
-- Before any automatic itinerary write from page-load code, log the reason, day counts, and meal counts.
-- If an automatic write would reduce activity count or meal count on a ready trip, block it and warn instead.
-- Keep this guard local to refresh/self-heal paths so explicit user edits still work.
+Each post-guard pass is gated on `result.alreadyCompliant === false` (only runs when something was actually injected) and reuses the same 8s timeout / single Gemini-flash batched call, so it adds ≤1 LLM round trip per day in the rare path. On failure the description stays empty (per the existing Density Protocol — no generic placeholder).
 
-### 5. Verify on the Bruges trip
+### 3. One-shot legacy backfill for the affected trips
 
-Use the known trip `e0655f06-03fc-4fd3-91c2-c8771b588da5`:
+The Bruges trip and any others already saved with the templated string will not regenerate. Add a tiny client-side detector in the existing `useTripFinancialSnapshot` /  `EditorialItinerary` hydration path that, on load of a `ready` trip, checks dining cards for the regex `/— a real local spot worth visiting$/` and silently fires `refresh-day` for each affected day exactly once per trip session (idempotent flag on the trip metadata: `quality.dining_blurb_backfill_v1 = true`). No new edge function. No structural change. Locked / userEdited / pinned / extracted rows are skipped per the Universal Locking Protocol.
 
-- Before refresh: record per-day activity count and meal count.
-- Hard refresh itinerary page.
-- After refresh: counts must match exactly.
-- Trip Total must either show loading briefly or the canonical value, never a high number followed by a drop.
-- No automatic save/recovery path should run for a normal ready trip.
+### 4. Verification
 
-## Expected result
+- Bruges trip (`e0655f06-…`): hard refresh → backfill fires once → all dining cards now show a verb-led blurb ≥30 chars, no "real local spot worth visiting" string remains in `itinerary_data`.
+- New generation: trigger a multi-day plan that intentionally omits a dinner from the model output, confirm the meal-guard injects, the post-guard `fillMissingDescriptions` runs (`[DESC_FILL] day=N flagged=K filled=K`), and the saved card description starts with Order/Try/Ask/Don't miss/Request/Sit at/Sample/Specialty.
+- Parity tests: extend `description-coverage.test.ts` with a fixture day where every dining card was inserted by `enforceRequiredMealsFinalGuard`; assert the output passes `RESTAURANT_RECOMMENDATION_RE` for all of them.
+- Health panel: no new MISSING_DESCRIPTION / RESTAURANT_MISSING_RECOMMENDATION warnings on the test trips.
 
-Hard refresh becomes read-only for completed trips. It can refetch data and recalculate display values, but it cannot silently remove meals, remove activities, rewrite days, or create itinerary gaps.
+## Out of scope
+
+- Activity card descriptions (already correct per user)
+- Currency / cost / budget snapshot logic
+- Chain restaurant / cross-city / wellness placeholder filters
+- Front-end card layout, link rendering, neighborhood label
+- DB schema changes
+- Removing or relaxing the strict `RESTAURANT_RECOMMENDATION_RE` regex
+
+## Memory updates after merge
+
+Update `mem://constraints/itinerary/description-coverage` with the new rule: **description-fill must run after every meal-guard injection point, not just after `repairDay`.** Add a sentinel guidance line referencing the post-guard `[DESC_FILL]` log lines so future regressions are caught in `edge_function_logs`.
