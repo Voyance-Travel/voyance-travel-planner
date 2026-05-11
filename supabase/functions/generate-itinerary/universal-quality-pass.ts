@@ -220,8 +220,8 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
     is_free: true,
     price_per_person: 0,
     skipEnrichment: true,
-    source: lateNightBleed ? 'late_nightlife_bookend' : 'bookend-validator',
-    tags: lateNightBleed ? ['hotel', 'rest', 'late_nightlife_bookend'] : ['hotel', 'rest'],
+    source: lateNightBleed ? 'late_nightlife_bookend' : (synthesized ? 'bookend-synthesized' : 'bookend-validator'),
+    tags: lateNightBleed ? ['hotel', 'rest', 'late_nightlife_bookend'] : (synthesized ? ['hotel', 'rest', 'synthesized'] : ['hotel', 'rest']),
   };
   // For standard daytime returns, route through the shared bookend clamp so
   // the 23:59 cap lives in exactly one place. Skip for the late-night-bleed
