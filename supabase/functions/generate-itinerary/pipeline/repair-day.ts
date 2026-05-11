@@ -3583,6 +3583,9 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       if (idx < 0 || idx >= activities.length) continue;
       const act = activities[idx] as any;
       if (lockedIds.has(act?.id)) continue;
+      // M2: Never recompute the airport transfer as a venue-to-venue walk.
+      // §15z owns its timing; this pass would otherwise overwrite duration/cost.
+      if (act?.subcategory === 'airport_transfer') continue;
       const t = act.transportation || (act.transportation = {});
       const distM = Number(t.distanceMeters) || 0;
       const curDur = Number(t.durationMinutes) || 0;
