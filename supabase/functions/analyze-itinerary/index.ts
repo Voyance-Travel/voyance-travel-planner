@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,6 +29,11 @@ serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // HARD AUTH — reject anonymous callers (paid AI gateway endpoint)
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
 
   try {
     const { itineraryText }: AnalyzeItineraryRequest = await req.json();
@@ -118,8 +124,9 @@ OUTPUT FORMAT (JSON only, no markdown):
     const aiResponse = await response.json();
     const content = aiResponse.choices?.[0]?.message?.content;
 
-    // Track cost for this AI call
+    // Track cost for this AI call (Pattern B — userId from parseAuth, no tripId pre-trip)
     const costTracker = trackCost('analyze_itinerary', 'google/gemini-2.5-flash');
+    costTracker.setUserId(userId);
     costTracker.recordAiUsage(aiResponse);
     await costTracker.save();
 

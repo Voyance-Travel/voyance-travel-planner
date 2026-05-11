@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,6 +38,8 @@ interface RequestBody {
   anchor_activity_ids?: string[];
   /** Client signal: gap is large enough that swap-only won't bridge it. Allows drop / consolidate. */
   deep_cuts_requested?: boolean;
+  /** Optional trip ID for cost attribution. */
+  tripId?: string;
 }
 
 // ─── Category normalization ─────────────────────────────────────
@@ -70,6 +74,11 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // HARD AUTH — reject anonymous callers (paid AI gateway endpoint)
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
   try {
     const {
       itinerary_days,
@@ -82,6 +91,7 @@ serve(async (req) => {
       category_overruns = {},
       anchor_activity_ids = [],
       deep_cuts_requested = false,
+      tripId,
     } = (await req.json()) as RequestBody;
 
     const gap_cents = current_total_cents - budget_target_cents;
@@ -379,6 +389,10 @@ Rules:
       },
     };
 
+    const costTracker = trackCost('budget_coach', 'google/gemini-2.5-flash');
+    costTracker.setUserId(userId);
+    if (tripId) costTracker.setTripId(tripId);
+
     const callAI = async (sysPrompt: string, usrPrompt: string): Promise<any[]> => {
       const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -401,6 +415,8 @@ Rules:
         throw new Error(`AI gateway error: ${r.status}`);
       }
       const j = await r.json();
+      costTracker.recordAiUsage(j);
+      await costTracker.save();
       const tc = j.choices?.[0]?.message?.tool_calls?.[0];
       if (!tc?.function?.arguments) return [];
       try { return JSON.parse(tc.function.arguments).suggestions || []; }
