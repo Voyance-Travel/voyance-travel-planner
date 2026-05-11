@@ -2990,7 +2990,9 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // price fields (cost-repair-jsonb-parity), and tag for downstream audit.
   if (Deno.env.get('PRICE_SANITY_ENABLED') !== 'false') {
     for (const result of validationResults) {
-      if (result.code !== FAILURE_CODES.PRICE_IMPLAUSIBLE) continue;
+      const isCeiling = result.code === FAILURE_CODES.PRICE_IMPLAUSIBLE;
+      const isFloor = result.code === FAILURE_CODES.PRICE_TOO_LOW;
+      if (!isCeiling && !isFloor) continue;
       const idx = result.activityIndex;
       if (idx == null || idx < 0 || idx >= activities.length) continue;
       const act: any = activities[idx];
@@ -3000,15 +3002,22 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       if (!subcat) continue;
       const bound = CATEGORY_PRICE_CEILINGS[subcat];
       if (!bound) continue;
+      // Floor-raise only applies to paid-tour categories (min > 0).
+      if (isFloor && bound.min <= 0) continue;
       const originalAmount = extractPerPersonPrice(act);
       if (originalAmount === null) continue;
+      // Skip if price is actually within bounds (defensive)
+      if (isCeiling && originalAmount <= bound.max) continue;
+      if (isFloor && originalAmount >= bound.min) continue;
       const median = Math.round((bound.min + bound.max) / 2);
+      const direction = isFloor ? 'floor_raise' : 'ceiling_cap';
+      const priceSource = isFloor ? 'category_floor_substitute' : 'category_median_substitute';
 
       // Mirror to all canonical fields (Cost-Repair JSONB Parity memory).
       if (!act.cost || typeof act.cost !== 'object') act.cost = { amount: median, currency: 'USD' };
       else act.cost.amount = median;
       if (!act.cost.currency) act.cost.currency = 'USD';
-      (act.cost as any).priceSource = 'category_median_substitute';
+      (act.cost as any).priceSource = priceSource;
       (act.cost as any).originalAmount = originalAmount;
 
       if (act.estimatedCost && typeof act.estimatedCost === 'object') {
@@ -3020,13 +3029,13 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       if (typeof act.cost_per_person === 'number') act.cost_per_person = median;
       if (typeof act.price === 'number') act.price = median;
 
-      console.warn(`[REPAIR_PRICE_SUBSTITUTE] day=${dayNumber} venue="${act.title || act.name || '?'}" subcat=${subcat} orig=${originalAmount} median=${median}`);
+      console.warn(`[REPAIR_PRICE_SUBSTITUTE] day=${dayNumber} direction=${direction} venue="${act.title || act.name || '?'}" subcat=${subcat} orig=${originalAmount} median=${median}`);
       repairs.push({
-        code: FAILURE_CODES.PRICE_IMPLAUSIBLE,
+        code: result.code,
         activityIndex: idx,
-        action: 'price_median_substitute',
+        action: isFloor ? 'price_floor_substitute' : 'price_median_substitute',
         before: `${originalAmount} (${subcat})`,
-        after: `${median} (median of $${bound.min}-$${bound.max})`,
+        after: `${median} (${direction}, range $${bound.min}-$${bound.max})`,
       });
     }
   }
