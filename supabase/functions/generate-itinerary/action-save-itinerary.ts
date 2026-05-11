@@ -960,7 +960,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       },
     }),
   };
-  const { error } = await persistTripItinerary(supabase, tripId, itinerary, {
+  const { error, regressionBlocked } = await persistTripItinerary(supabase, tripId, itinerary, {
     destination: (currentTrip as any)?.destination ?? null,
     extraUpdate,
     label: 'save-itinerary',
@@ -969,6 +969,19 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   if (error) {
     console.error("[save-itinerary] Failed:", error);
     return errorJson("Failed to save itinerary", 500);
+  }
+
+  if (regressionBlocked) {
+    // Healthy on-disk plan preserved — DO NOT sync normalized tables from the
+    // rejected `itinerary` (they'd re-introduce the regression). The status
+    // flags and metadata.rejected_attempts already landed in extraUpdate.
+    console.warn('[save-itinerary] regression blocked — kept previous days; skipping table sync');
+    return okJson({
+      success: true,
+      regressionBlocked: true,
+      message: 'Kept previous plan — new version was incomplete.',
+      mealGuardInjections,
+    });
   }
 
   // ── STEP 4: SYNC TO NORMALIZED TABLES ──────────────────────────
