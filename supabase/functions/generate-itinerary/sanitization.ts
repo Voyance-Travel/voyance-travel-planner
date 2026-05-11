@@ -902,7 +902,63 @@ export function enforceTransitModeByDistance(
     extractCoords(activity) ||
     extractCoords(nextActivity || {});
 
-  if (!originCoords || !destCoords) return false;
+  const destName =
+    (activity.title || '').replace(/^(?:Walk|Walking|Travel|Taxi|Bus|Metro|Tram|Train|Drive|Ride|Ferry|Uber|Rideshare)\s+(?:to|from|along|through)\s+/i, '').trim()
+    || activity?.location?.name
+    || (nextActivity as any)?.title
+    || 'destination';
+
+  // Compute a duration signal that survives even when coords are unknown.
+  const parseDurStr = (s: any): number => {
+    const str = String(s || '').trim();
+    if (!str) return 0;
+    const numeric = Number(str);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+    const h = str.match(/(\d+)\s*h/i);
+    const m = str.match(/(\d+)\s*m/i);
+    if (h || m) return (h ? parseInt(h[1]) * 60 : 0) + (m ? parseInt(m[1]) : 0);
+    const colon = str.match(/^(\d+):(\d+)$/);
+    if (colon) return parseInt(colon[1]) * 60 + parseInt(colon[2]);
+    return 0;
+  };
+  let knownDurMin = Number(t?.durationMinutes) || parseDurStr(t?.duration)
+    || Number(activity.durationMinutes) || Number(activity.duration_minutes) || parseDurStr(activity.duration) || 0;
+  if (!knownDurMin) {
+    const sm = String(activity.startTime || '').match(/(\d{1,2}):(\d{2})/);
+    const em = String(activity.endTime || '').match(/(\d{1,2}):(\d{2})/);
+    if (sm && em) {
+      const a = parseInt(sm[1]) * 60 + parseInt(sm[2]);
+      const b = parseInt(em[1]) * 60 + parseInt(em[2]);
+      if (b > a) knownDurMin = b - a;
+    }
+  }
+
+  // ── Path A: coords unknown → duration-only fallback ─────────────────────
+  // If we can prove duration exceeds the walking ceiling, override mode
+  // without distance. Eliminates the "needs both endpoints" silent skip
+  // (e.g. Madrid Day 1 "Walk to DiverXO" before venue enrichment).
+  if (!originCoords || !destCoords) {
+    if (knownDurMin <= MAX_WALK_DURATION_MINUTES) return false;
+    const fbTier = pickTransitFallback(null, knownDurMin, destName);
+    if (fbTier.method === 'walk') return false;
+    const oldMethodA = currentMethod || 'walking';
+    activity.transportation = {
+      ...(t || {}),
+      method: fbTier.method,
+      duration: formatDurationMin(fbTier.durationMinutes),
+      durationMinutes: fbTier.durationMinutes,
+      // Leave distanceMeters absent — repair-day §15b will derive haversine if coords appear later.
+      estimatedCost: { amount: fbTier.costAmount, currency: t?.estimatedCost?.currency || 'USD' },
+      instructions: fbTier.instructions,
+    };
+    if (typeof activity.durationMinutes === 'number') activity.durationMinutes = fbTier.durationMinutes;
+    if (typeof activity.duration_minutes === 'number') activity.duration_minutes = fbTier.durationMinutes;
+    if (typeof activity.duration === 'string') activity.duration = formatDurationMin(fbTier.durationMinutes);
+    if (typeof activity.title === 'string') activity.title = rewriteTransitTitle(activity.title, fbTier.method);
+    if (typeof activity.name === 'string') activity.name = rewriteTransitTitle(activity.name, fbTier.method);
+    console.warn(`[TRANSIT_MODE_OVERRIDE] [${logPrefix}] (duration-only): "${activity.title}" "${oldMethodA}"→"${fbTier.method}" dur=${knownDurMin}m → ${fbTier.durationMinutes}m cost=${fbTier.costAmount}`);
+    return true;
+  }
 
   const distanceMeters = haversineMeters(
     originCoords.lat, originCoords.lng,
@@ -914,12 +970,6 @@ export function enforceTransitModeByDistance(
   if (distanceMeters <= MAX_WALK_DISTANCE_METERS && walkMinutes <= MAX_WALK_DURATION_MINUTES) {
     return false;
   }
-
-  const destName =
-    (activity.title || '').replace(/^(?:Walk|Walking|Travel|Taxi|Bus|Metro|Tram|Train|Drive|Ride|Ferry|Uber|Rideshare)\s+(?:to|from|along|through)\s+/i, '').trim()
-    || activity?.location?.name
-    || (nextActivity as any)?.title
-    || 'destination';
 
   const tier = pickTransitTier(distanceMeters, destName);
   if (tier.method === 'walk') return false; // shouldn't happen with the gate above
