@@ -353,6 +353,10 @@ export function resolveCanonicalCostRows({
   effectiveTotalCents += manualOtherCents;
   effectiveTotalCents = Math.max(0, effectiveTotalCents);
 
+  const pricedJsonRescueCents = out
+    .filter((r) => r.rescueTag === 'json-missing-row')
+    .reduce((s, r) => s + (r.cents || 0), 0);
+
   return {
     rows: out,
     totalCents,
@@ -367,5 +371,6 @@ export function resolveCanonicalCostRows({
     manualHotelDelta,
     manualFlightDelta,
     effectiveTotalCents,
+    pricedJsonRescueCents,
   };
 }
