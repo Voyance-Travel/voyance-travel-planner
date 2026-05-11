@@ -2,7 +2,7 @@
 // description into <15 chars, the day-walker injects a meal+venue template so
 // the card never renders blank.
 import { assert, assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
-import { sanitizeNarrativeFields } from '../sanitization.ts';
+import { sanitizeGeneratedDay } from '../sanitization.ts';
 
 function mkDay(activities: any[]) {
   return { title: 'Day 1', theme: '', activities };
@@ -17,7 +17,7 @@ Deno.test('dining card: over-stripped description gets template fallback', () =>
       description: 'A local favorite. Popular with locals. Hidden gem with great food.',
     },
   ]);
-  sanitizeNarrativeFields(day, 'Venice');
+  sanitizeGeneratedDay(day, 1, 'Venice');
   const desc = String(day.activities[0].description || '');
   assert(desc.length >= 30, `expected template fallback (>=30 chars), got: "${desc}"`);
   assert(/Dinner at Da Ivo/i.test(desc), `expected venue+meal in template, got: "${desc}"`);
@@ -33,7 +33,7 @@ Deno.test('dining card: real prose description preserved (no template)', () => {
       description: original,
     },
   ]);
-  sanitizeNarrativeFields(day, 'Rome');
+  sanitizeGeneratedDay(day, 1, 'Rome');
   const desc = String(day.activities[0].description || '');
   assert(/Wood-fired Roman pizza/i.test(desc), `expected prose preserved, got: "${desc}"`);
   assert(!/Check opening hours before heading over/i.test(desc), 'template should not have fired');
@@ -47,7 +47,7 @@ Deno.test('non-dining card: over-stripped description stays undefined (no templa
       description: 'A local favorite. Popular with locals. Hidden gem.',
     },
   ]);
-  sanitizeNarrativeFields(day, 'Florence');
+  sanitizeGeneratedDay(day, 1, 'Florence');
   // template only fires for dining; non-dining gets undefined
   assertEquals(day.activities[0].description, undefined);
 });
