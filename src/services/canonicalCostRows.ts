@@ -132,6 +132,9 @@ export interface ResolveCanonicalArgs {
    *  fold-in is computed inside the resolver so snapshot + payable items
    *  cannot diverge. */
   manualPayments?: CanonicalManualPayment[];
+  /** Trip travelers count, used by JSON-missing-row rescue to convert
+   *  per-person `jsonCost` into total cents. Defaults to 1. */
+  travelers?: number;
 }
 
 export function resolveCanonicalCostRows({
@@ -140,6 +143,7 @@ export function resolveCanonicalCostRows({
   includeHotel,
   includeFlight,
   manualPayments,
+  travelers,
 }: ResolveCanonicalArgs): ResolveResult {
   const liveById = new Map<string, CanonicalLiveActivity>();
   const rescueByDayCat = new Map<string, CanonicalLiveActivity[]>();
