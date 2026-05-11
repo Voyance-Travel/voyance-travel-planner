@@ -9779,10 +9779,10 @@ export type Database = {
         Row: {
           accepted_at: string | null
           avatar_url: string | null
-          created_at: string | null
           id: string | null
           invited_at: string | null
           member_display: string | null
+          name: string | null
           role: Database["public"]["Enums"]["trip_member_role"] | null
           trip_id: string | null
           user_id: string | null
