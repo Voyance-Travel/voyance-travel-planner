@@ -1,19 +1,70 @@
-## Already remediated — no plan to execute
+# R10: Harden Service-Role Policies (auth.jwt → auth.role)
 
-Just confirmed in the previous turn (this conversation) that all three functions already match the finding's required pattern:
+## Problem
+Three RLS policies gate service-role access via `auth.jwt() ->> 'role' = 'service_role'`, which reads the raw JWT claim and is forgeable if the JWT secret leaks. The verified pattern `auth.role() = 'service_role'` (used by 6 other migrations in the project) reads the GUC session context set by PostgREST after signature verification.
 
-| Function | parseAuth gate | setUserId | setTripId | recordAiUsage + save | Live unauth POST |
-|---|---|---|---|---|---|
-| `budget-coach` | L78 | L393 | L394 | L418–419 | **401** ✅ |
-| `analyze-itinerary` | L34 | L129 | n/a (pre-trip) | L130–131 | **401** ✅ |
-| `discover-proactive` | L33 | L135 | L136 | L169–170 | **401** ✅ |
+Confirmed via `pg_policies`:
+- `credit_balances` → "Service role can manage credit balances" (qual: jwt())
+- `credit_ledger` → "Service role can insert credit ledger entries" (with_check: jwt())
+- `trip_notifications` → "Service role can manage all notifications" (qual: jwt())
 
-- `discover-proactive` no longer has any "best-effort, optional" `try { authHeader }` block — it's a hard `parseAuth` reject.
-- `grep "best-effort"` on that file → **0 matches**.
-- The R3 memory entry (`mem://constraints/security/edge-function-auth-required`) was extended last turn to cover all 13 paid endpoints and explicitly bans the "read-and-ignore" pattern.
+No other policies on these tables would be affected; the surrounding owner/admin/collaborator policies are unchanged.
 
-### Recommendation
+## Migration
 
-Close the finding without code changes. If the security scanner is still flagging it, mark it fixed via `security--manage_security_finding` referencing the in-place gates + the R3 memory entry — but I'd need approval to leave plan mode to run that tool call.
+```sql
+-- 1. trip_notifications (FOR ALL)
+DROP POLICY IF EXISTS "Service role can manage all notifications"
+  ON public.trip_notifications;
+CREATE POLICY "Service role can manage all notifications"
+ON public.trip_notifications
+FOR ALL
+TO service_role
+USING (auth.role() = 'service_role')
+WITH CHECK (auth.role() = 'service_role');
 
-**Nothing else to do.** If you re-ran the scanner and a *new* finding appeared on these functions (different vulnerability), share the scanner output and I'll diagnose it.
+-- 2. credit_balances (FOR ALL)
+DROP POLICY IF EXISTS "Service role can manage credit balances"
+  ON public.credit_balances;
+CREATE POLICY "Service role can manage credit balances"
+ON public.credit_balances
+FOR ALL
+TO service_role
+USING (auth.role() = 'service_role')
+WITH CHECK (auth.role() = 'service_role');
+
+-- 3. credit_ledger (INSERT-only — WITH CHECK, no USING)
+DROP POLICY IF EXISTS "Service role can insert credit ledger entries"
+  ON public.credit_ledger;
+CREATE POLICY "Service role can insert credit ledger entries"
+ON public.credit_ledger
+FOR INSERT
+TO service_role
+WITH CHECK (auth.role() = 'service_role');
+```
+
+## Verification (post-migration)
+
+```sql
+-- Expect: qual / with_check show "auth.role() = 'service_role'"
+SELECT tablename, policyname, qual, with_check FROM pg_policies
+WHERE tablename IN ('trip_notifications','credit_balances','credit_ledger')
+  AND policyname LIKE 'Service role%';
+
+-- Expect: 0 rows project-wide
+SELECT tablename, policyname FROM pg_policies
+WHERE qual LIKE '%auth.jwt() ->> ''role''%'
+   OR with_check LIKE '%auth.jwt() ->> ''role''%';
+```
+
+## Service-role smoke tests (must pass — else roll back)
+
+1. **Stripe** — test-mode purchase → `stripe-webhook` inserts `credit_ledger` row.
+2. **Reminders** — manual invoke `send-trip-reminders` → `trip_notifications` insert succeeds.
+3. **Spend** — in-app credit-spending action → `credit_balances` updates via service-role edge fn.
+
+## Memory
+On success, append a short Core entry referencing R10 and the `auth.role()` standard so future scanners and the agent never re-introduce `auth.jwt() ->> 'role'` for service-role checks.
+
+## Out of scope
+No frontend changes. No other policies altered. No code edits.
