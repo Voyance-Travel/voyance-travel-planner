@@ -124,8 +124,9 @@ OUTPUT FORMAT (JSON only, no markdown):
     const aiResponse = await response.json();
     const content = aiResponse.choices?.[0]?.message?.content;
 
-    // Track cost for this AI call
+    // Track cost for this AI call (Pattern B — userId from parseAuth, no tripId pre-trip)
     const costTracker = trackCost('analyze_itinerary', 'google/gemini-2.5-flash');
+    costTracker.setUserId(userId);
     costTracker.recordAiUsage(aiResponse);
     await costTracker.save();
 
