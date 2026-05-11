@@ -67,10 +67,30 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
     const activities = day.activities || [];
     const dayNum = day.dayNumber || day.day_number;
 
-    // Empty day
+    // Empty day. Exclude bookends (hotel/check-in/check-out) AND transit/return
+    // logistics so e.g. a "Walk to dinner" + hotel-return don't pad an
+    // otherwise empty schedule into a "real" 2-activity day. Also drops the
+    // wrap-past-midnight residue (hotel-return 23:50 → 00:00/00:28) that the
+    // generator occasionally tags onto the next day's bucket.
+    const NON_REAL_CATS = new Set([
+      'check-in', 'check-out', 'hotel', 'accommodation',
+      'transit', 'transportation', 'transfer', 'logistics',
+      'commute', 'hotel_return', 'bookend',
+    ]);
+    const NON_REAL_TITLE_RE = /^\s*(?:return to|walk to|transfer to|drive to|taxi to|metro to|train to|bus to|tram to)\b/i;
+    const isWrapResidue = (a: any) => {
+      const s = parseTime(a.startTime || '');
+      const e = parseTime(a.endTime || '');
+      // Wrap-past-midnight: end===0 with start>0 (exact 23:30→00:00) OR end>0 && end<start.
+      return (e === 0 && s > 0) || (e > 0 && e < s);
+    };
     const realActivities = activities.filter((a: any) => {
       const cat = (a.category || a.type || '').toLowerCase();
-      return !['check-in', 'check-out', 'hotel', 'accommodation'].includes(cat);
+      const title = String(a.title || a.name || '');
+      if (NON_REAL_CATS.has(cat)) return false;
+      if (NON_REAL_TITLE_RE.test(title)) return false;
+      if (isWrapResidue(a)) return false;
+      return true;
     });
 
     if (realActivities.length === 0) {
