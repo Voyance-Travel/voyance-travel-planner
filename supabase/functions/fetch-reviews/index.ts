@@ -135,12 +135,13 @@ async function fetchGoogleReviews(
   placeName: string,
   destination: string,
   apiKey: string,
-  maxReviews: number
+  maxReviews: number,
+  attribution?: { userId?: string; tripId?: string },
 ): Promise<{ place: PlaceDetails | null; reviews: Review[] }> {
   try {
     // Step 1: Search for the place
     const searchQuery = `${placeName} ${destination}`;
-    
+
     const searchResult = await googlePlacesTextSearch(
       {
         textQuery: searchQuery,
@@ -149,7 +150,12 @@ async function fetchGoogleReviews(
         fieldMask:
           'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.photos,places.websiteUri,places.nationalPhoneNumber,places.currentOpeningHours,places.types,places.reviews',
       },
-      { actionType: 'fetch_reviews_search', reason: searchQuery },
+      {
+        actionType: 'fetch_reviews',
+        reason: searchQuery,
+        userId: attribution?.userId,
+        tripId: attribution?.tripId,
+      },
     );
 
     if (!searchResult.ok) {
@@ -826,7 +832,7 @@ serve(async (req) => {
 
   const auth = await parseAuth(req);
   if (auth instanceof Response) return auth;
-  // userId attribution handled by inner googlePlacesTextSearch wrapper
+  const userId = auth.userId;
 
   try {
     const body: ReviewRequest & { tripId?: string } = await req.json();
@@ -834,6 +840,7 @@ serve(async (req) => {
       placeName,
       destination,
       maxReviews = 10,
+      tripId,
     } = body;
 
     if (!placeName || !destination) {
@@ -864,7 +871,7 @@ serve(async (req) => {
     const promises: Promise<{ place: PlaceDetails | null; reviews: Review[] }>[] = [];
 
     if (GOOGLE_MAPS_API_KEY) {
-      promises.push(fetchGoogleReviews(placeName, destination, GOOGLE_MAPS_API_KEY, maxReviews));
+      promises.push(fetchGoogleReviews(placeName, destination, GOOGLE_MAPS_API_KEY, maxReviews, { userId, tripId }));
     } else {
       promises.push(Promise.resolve({ place: null, reviews: [] }));
     }

@@ -65,17 +65,19 @@ serve(async (req) => {
     }
 
     const url = new URL(req.url);
-    const productCode = url.searchParams.get('productCode');
+    const queryProductCode = url.searchParams.get('productCode');
 
-    if (!productCode) {
-      // Try body for POST requests
-      const body = await req.json().catch(() => ({}));
-      if (!body.productCode) {
-        throw new Error("Missing productCode parameter");
-      }
+    // Parse body once (POST callers) and reuse for productCode + tripId attribution
+    let bodyData: { productCode?: string; tripId?: string } = {};
+    if (!queryProductCode && req.method !== 'GET') {
+      bodyData = await req.json().catch(() => ({}));
     }
 
-    const code = productCode || (await req.json()).productCode;
+    const code = queryProductCode || bodyData.productCode;
+    if (!code) {
+      throw new Error("Missing productCode parameter");
+    }
+    if (bodyData.tripId) costTracker.setTripId(bodyData.tripId);
     log("Fetching product details", { productCode: code });
 
     // Fetch product details from Viator
