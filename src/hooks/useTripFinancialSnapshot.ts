@@ -246,6 +246,15 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     canonicalHotelCents = canonical.canonicalDay0HotelCents;
     canonicalFlightCents = canonical.canonicalDay0FlightCents;
 
+    // Diagnostic: surface json-rescue usage. Persistent non-zero values mean
+    // either the per-day chain writer or the auto-backfill is broken — the
+    // rescue path is a display safety net, not a steady state.
+    if (canonical.pricedJsonRescueCents > 0) {
+      console.warn(
+        `[useTripFinancialSnapshot] pricedJsonRescueCents=$${(canonical.pricedJsonRescueCents / 100).toFixed(2)} for trip ${tripId} — backend activity_costs writes lagging`
+      );
+    }
+
     // is_paid mirror — count rows whose activity is still live and not
     // already covered by a trip_payments paid row.
     for (const row of costs || []) {
