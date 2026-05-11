@@ -2326,6 +2326,17 @@ Generate activities for this day following ALL constraints above.`;
           // Last attempt — accept the guard fallbacks
           generatedDay.activities = mealGuardResult.activities as any;
           console.warn(`[Stage 2] Day ${dayNumber}: FINAL ATTEMPT — Meal guard injected [${mealGuardResult.injectedMeals.join(', ')}] (destination-aware fallbacks)`);
+
+          // Post-guard description backstop — fill empty-sentinel blurbs.
+          try {
+            const { fillAfterMealGuard } = await import('../_shared/post-meal-guard-fill.ts');
+            await fillAfterMealGuard(
+              generatedDay.activities as any[],
+              context.destination,
+              dayNumber,
+              'generation-core:final-attempt',
+            );
+          } catch (_e) { /* non-blocking */ }
         } else {
           console.log(`[Stage 2] Day ${dayNumber}: Meal guard passed — all required meals present`);
         }
