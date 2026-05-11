@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -279,7 +280,12 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const authedUserId = auth.userId;
+
   const costTracker = trackCost('viator_search', 'viator');
+  costTracker.setUserId(authedUserId);
 
   try {
     const apiKey = Deno.env.get('VIATOR_API_KEY');
@@ -294,11 +300,10 @@ serve(async (req) => {
       throw new Error('activityName and destination are required');
     }
 
-    // Attribution — so we can see who's driving spikes
+    // Attribution — JWT userId is canonical; body userId kept for log compatibility
     if (tripId) costTracker.setTripId?.(tripId);
-    if (userId) costTracker.setUserId?.(userId);
     const referrer = req.headers.get('referer') || req.headers.get('origin') || 'unknown';
-    log('Search request', { activityName, destination, category, tripId, userId, referrer });
+    log('Search request', { activityName, destination, category, tripId, userId: authedUserId, bodyUserId: userId, referrer });
 
     // ── Cache check ─────────────────────────────────────────────────────────
     const key = cacheKey(activityName, destination, category);

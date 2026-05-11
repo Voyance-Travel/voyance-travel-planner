@@ -6,6 +6,8 @@
  */
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,6 +48,13 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
+  const costTracker = trackCost('viator_product', 'viator');
+  costTracker.setUserId(userId);
 
   try {
     log("Function started");
