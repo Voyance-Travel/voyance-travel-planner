@@ -7,6 +7,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,7 +55,12 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth.userId;
+
   const costTracker = trackCost('viator_availability', 'viator');
+  costTracker.setUserId(userId);
 
   try {
     log("Function started");
@@ -64,8 +70,9 @@ serve(async (req) => {
       throw new Error("VIATOR_API_KEY not configured");
     }
 
-    const body: AvailabilityRequest = await req.json();
-    const { productCode, travelDate, travelers, currency = 'USD' } = body;
+    const body: AvailabilityRequest & { tripId?: string } = await req.json();
+    const { productCode, travelDate, travelers, currency = 'USD', tripId } = body;
+    if (tripId) costTracker.setTripId(tripId);
 
     if (!productCode || !travelDate || !travelers?.adults) {
       throw new Error("Missing required fields: productCode, travelDate, travelers.adults");

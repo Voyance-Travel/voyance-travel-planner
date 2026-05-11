@@ -88,6 +88,9 @@ serve(async (req) => {
     });
 
     const data = await response.json();
+    costTracker.addMetadata('productCode', code);
+    costTracker.recordPerplexity(1); // Viator API call attribution (~$0.005)
+    await costTracker.save();
 
     if (!response.ok) {
       log("Viator API error", { status: response.status, data });
