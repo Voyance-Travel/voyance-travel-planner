@@ -129,23 +129,12 @@ export async function isPriceMonitorEnabled(tripId: string): Promise<boolean> {
   return (trip?.metadata as any)?.price_monitor_enabled === true;
 }
 
-/**
- * Manually trigger a price alert (for testing or immediate notification)
- */
-export async function triggerPriceAlert(
-  tripId: string, 
-  priceChange: PriceChange
-): Promise<{ ok: boolean; sent?: boolean }> {
-  const { data, error } = await supabase.functions.invoke('send-price-alerts', {
-    body: { tripId, priceChange },
-  });
+// NOTE: `triggerPriceAlert` was removed because `send-price-alerts` is now
+// service-role-only (cron-only). Any future user-triggered price alert must
+// route through a separate authenticated edge function that internally
+// invokes `send-price-alerts` with the service-role key.
+// See mem://constraints/security/cron-email-functions-service-role-only
 
-  if (error) {
-    throw new Error(`Failed to send price alert: ${error.message}`);
-  }
-
-  return data;
-}
 
 // ============================================================================
 // REACT QUERY HOOKS
@@ -183,12 +172,8 @@ export function usePriceMonitorStatus(tripId: string | null) {
   });
 }
 
-export function useTriggerPriceAlert() {
-  return useMutation({
-    mutationFn: ({ tripId, priceChange }: { tripId: string; priceChange: PriceChange }) =>
-      triggerPriceAlert(tripId, priceChange),
-  });
-}
+// `useTriggerPriceAlert` removed — see note above triggerPriceAlert removal.
+
 
 // ============================================================================
 // HELPER FUNCTIONS

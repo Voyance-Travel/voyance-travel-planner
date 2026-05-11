@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { sendEmail, isConfigured } from "../_shared/zoho-smtp.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,7 +10,6 @@ const corsHeaders = {
 
 interface PostTripEmailRequest {
   tripId: string;
-  userId: string;
   forceResend?: boolean;
 }
 
@@ -37,6 +37,12 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // JWT auth: derive caller identity from the validated token.
+  // parseAuth allows service-role bypass (returns userId === 'service_role')
+  // for internal cron callers; user JWTs return their auth.uid().
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -50,11 +56,12 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { tripId, userId, forceResend }: PostTripEmailRequest = await req.json();
+    const body: PostTripEmailRequest & { userId?: string } = await req.json();
+    const { tripId, forceResend } = body;
 
-    if (!tripId || !userId) {
+    if (!tripId) {
       return new Response(
-        JSON.stringify({ error: "tripId and userId are required" }),
+        JSON.stringify({ error: "tripId is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -70,8 +77,11 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Trip not found");
     }
 
-    // Verify ownership
-    if (trip.user_id !== userId) {
+    // Derive trip-owner userId for downstream queries. For user JWTs, the
+    // caller MUST own the trip. Service-role callers (internal cron) trust
+    // the trip's stored owner.
+    const userId = auth.userId === "service_role" ? trip.user_id : auth.userId;
+    if (auth.userId !== "service_role" && trip.user_id !== auth.userId) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
