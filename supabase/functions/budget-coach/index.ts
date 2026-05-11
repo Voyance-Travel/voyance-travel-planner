@@ -389,6 +389,10 @@ Rules:
       },
     };
 
+    const costTracker = trackCost('budget_coach', 'google/gemini-2.5-flash');
+    costTracker.setUserId(userId);
+    if (tripId) costTracker.setTripId(tripId);
+
     const callAI = async (sysPrompt: string, usrPrompt: string): Promise<any[]> => {
       const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
