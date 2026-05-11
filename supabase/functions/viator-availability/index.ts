@@ -112,6 +112,7 @@ serve(async (req) => {
 
     // Track Viator API call
     costTracker.addMetadata('productCode', productCode);
+    costTracker.recordPerplexity(1); // Viator API call attribution (~$0.005)
     await costTracker.save();
 
     if (!response.ok) {
