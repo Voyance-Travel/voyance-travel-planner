@@ -172,12 +172,8 @@ export function usePriceMonitorStatus(tripId: string | null) {
   });
 }
 
-export function useTriggerPriceAlert() {
-  return useMutation({
-    mutationFn: ({ tripId, priceChange }: { tripId: string; priceChange: PriceChange }) =>
-      triggerPriceAlert(tripId, priceChange),
-  });
-}
+// `useTriggerPriceAlert` removed — see note above triggerPriceAlert removal.
+
 
 // ============================================================================
 // HELPER FUNCTIONS
