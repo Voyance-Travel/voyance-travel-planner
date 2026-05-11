@@ -27,6 +27,7 @@ export type PriceCategoryKey =
   | 'dinner_mid'
   | 'dinner_fine_dining'
   | 'walking_tour'
+  | 'walking_tour_paid'
   | 'museum'
   | 'guided_tour_premium'
   | 'bike_tour'
