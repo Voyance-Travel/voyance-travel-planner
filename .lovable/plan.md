@@ -1,55 +1,82 @@
-# Hotel-Return Bookend — Edge-Case Hardening
+# Restaurant Empty-Description Rescue
 
 ## Problem
 
-`runStep8` (universal-quality-pass.ts:94) only injects the "Return to hotel" bookend when the last activity's `end_time` parses to 14:00–23:59 (or post-midnight nightlife). When the last card has missing/malformed `end_time` or ends before 14:00, it silently bails — last card on the day is left as e.g. an early lunch with no hotel return. Save-time net at action-save-itinerary.ts:435 calls the same `runStep8` and inherits the gap.
+`sanitizeAITextField` (sanitization.ts:1204) strips 100+ marketing phrases ("Hidden gem", "Popular with locals", "Recommended from our venue database", etc). Restaurant descriptions written largely from those phrases collapse to empty. The day-walker at line 1564 then writes `act.description = ... || undefined`, so the card renders blank.
 
 ## Changes
 
-### 1. `supabase/functions/generate-itinerary/universal-quality-pass.ts` — `runStep8`
+### 1. `sanitization.ts` — clarifying comment in `sanitizeAITextField`
 
-Add an `endTime` derivation fallback before the parse at line 110:
+Add a comment block at the final return documenting the explicit contract:
+- Empty / sub-20-char output is intentional when input ≥ 40 chars (over-strip case).
+- Caller MUST handle the empty-string sentinel (see day-walker at line 1564).
 
-- If `lastActivity.end_time` / `endTime` is missing or unparseable, derive from `startTime` + duration:
-  - parse `activity.duration` ("90 min", "1h30", "1:30", bare minutes number) or `activity.durationMinutes`
-  - if still nothing, default to `startTime + 60min`
-- If `startTime` is also missing/unparseable, treat the synthesized end as the day's empirical floor: `max(last_known_time across day, 19:00)`.
+No behavior change — the function already returns the empty string; this just documents the contract so the day-walker's rescue path is the only place that decides what to do with it.
 
-Widen acceptance:
+### 2. `sanitization.ts` — day-walker line 1564 dining rescue
 
-- Standard 14:00–23:59 zone unchanged.
-- Late-nightlife 00:00–02:55 bleed unchanged.
-- NEW: if end_time was synthesized (not from real LLM data) AND this is the terminal card of the day AND not airport/STAY/return, still inject — clamp synthesized start ≥ 19:00, end via existing `clampBookendEndTime`.
-- Log: `[QUALITY] Day X: hotel return injected with synthesized end_time (was unparseable)`.
+Replace:
+```ts
+if (act.description) act.description = sanitizeAITextField(act.description, destination) || undefined;
+```
 
-Keep existing skip guards: airport/station/terminal/gate logistics tail, STAY/accommodation, existing return-to-hotel title.
+With:
+```ts
+if (act.description) {
+  const sanitized = sanitizeAITextField(act.description, destination);
+  if (sanitized && sanitized.length >= 15) {
+    act.description = sanitized;
+  } else {
+    const cat = String(act.category || '').toLowerCase();
+    if (cat.includes('dining') || cat.includes('food') || cat.includes('restaurant')) {
+      const venueName = act.location?.name || act.venue_name || extractRestaurantVenueName(act.title || '');
+      const titleStr = String(act.title || '');
+      const mealLabel = /breakfast|brunch/i.test(titleStr) ? 'Breakfast'
+                      : /lunch/i.test(titleStr) ? 'Lunch'
+                      : /dinner|supper/i.test(titleStr) ? 'Dinner'
+                      : 'A meal';
+      if (venueName) {
+        act.description = `${mealLabel} at ${venueName}. ${act.location?.address ? `Located at ${act.location.address}.` : 'Check opening hours before heading over.'}`;
+      } else {
+        act.description = `${mealLabel} at a local spot. Check opening hours and reviews before you go.`;
+      }
+      console.log(`[SANITIZE] Day-walker: replaced empty dining description for "${act.title}" with template fallback`);
+    } else {
+      act.description = undefined;
+    }
+  }
+}
+```
 
-### 2. `supabase/functions/generate-itinerary/action-save-itinerary.ts` — save-time net (line ~423)
+Scope: only `dining`/`food`/`restaurant` categories get the template; everything else preserves the current `undefined` behavior. Threshold `length >= 15` matches the user spec (avoids 1-fragment leftovers like ".").
 
-After the existing `runStep8` call:
-
-- If `acts.length` unchanged AND last activity is not STAY/accommodation/airport/return, log:
-  `[SAVE_QUALITY] day=N WARNING: bookend injection skipped despite non-terminal last activity "<title>" end="<endTime>"`
-- This is a monitoring signal only — no behavioral change.
-
-### 3. New test `supabase/functions/generate-itinerary/__tests__/bookend-edge-cases.test.ts`
+### 3. New test `__tests__/dining-description-rescue.test.ts`
 
 Covers:
-- Last activity with no `end_time` → bookend injected (synthesized)
-- Last activity ending 13:45 → bookend injected (early-close case)
-- Last activity = airport transit on departure day → NO bookend
-- Last activity already STAY/accommodation → NO duplicate bookend
+- Dining card, original = `"A local favorite. Popular with locals. Hidden gem with great food."` → after walker, `description` non-empty + contains venue/meal name (template fired).
+- Dining card, original = real prose `"Wood-fired Roman pizza in Trastevere with..."` → description preserved verbatim, no template marker.
+- Non-dining card (e.g. `museum`) with collapse-prone description → `description === undefined` (template NOT fired).
 
-Mirrors style of existing `hotel-return-bookend.test.ts` and `late-nightlife-source-survival.test.ts`.
+Mirrors style of `phantom-ref-clause-scrub.test.ts`.
+
+## Interaction with existing description-fill pipeline
+
+The Description Coverage memory documents that `_shared/description-fill.ts` runs post-`repairDay` (Gemini Flash, 8s timeout) for any restaurant with `description.length < 30` or missing imperative verb. The template fallback's output (e.g. `"Dinner at Da Ivo. Located at ..."`) is **≥ 30 chars and contains an actionable verb** ("Check opening hours…"), so description-fill will treat it as satisfactory and not re-run. This is intentional — template prevents the empty-state UI artifact even if Gemini-flash fill later times out or fails.
 
 ## Out of Scope
 
-- No changes to `clampBookendEndTime`, predawn-strip, ghost filter, or save-time `terminalCleanup`.
-- No prompt changes — pure post-gen safety net.
-- No memory rule rewrite (existing Day-End Hotel-Return Bookend memory still accurate; this widens the "no end_time / pre-14:00" leak path it implicitly covered via `runStep8`).
+- No changes to `sanitizeAITextField`'s strip patterns.
+- No changes to `_shared/description-fill.ts` (lower-priority Gemini path).
+- No prompt or generator changes.
+- No change to the `tips`/`voyanceInsight`/`personalization.whyThisFits` rescue — only `description`.
 
 ## Verification
 
-- `grep -n "synthesized end_time\|bookend injection skipped" supabase/functions/generate-itinerary/` → ≥2 hits.
-- New deno test passes (4 cases).
-- Re-run any prior failing trip → terminal card on every non-departure day = "Return to <hotel>".
+- `grep -n "template fallback" supabase/functions/generate-itinerary/sanitization.ts` → 1 hit.
+- New deno test: 3 cases pass.
+- Existing `phantom-ref-clause-scrub.test.ts` still passes (no regression on rich-prose preservation).
+
+## Memory
+
+Update `mem://constraints/itinerary/description-coverage` to add a 4th defense layer: "Day-walker dining template fallback at sanitization.ts:1564 — restaurants whose description collapses to <15 chars get a meal+venue+hours sentence (≥30 chars, actionable verb so description-fill doesn't re-trigger)."
