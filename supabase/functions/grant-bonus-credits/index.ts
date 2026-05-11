@@ -118,6 +118,22 @@ serve(async (req) => {
     const config = BONUS_CONFIG[bonusType];
     const now = new Date();
 
+    // Use service role for database operations + verification
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    // SERVER-SIDE ACTION VERIFICATION — block credit farming
+    const eligibility = await verifyBonusEligibility(user.id, bonusType, supabaseAdmin);
+    if (!eligibility.ok) {
+      console.warn(`[grant-bonus-credits] Verification failed user=${user.id} type=${bonusType} code=${eligibility.code}`);
+      return new Response(
+        JSON.stringify({ granted: false, reason: eligibility.code, bonusType }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Check launch period for launch bonus
     if (config.requiresLaunchPeriod && (now < LAUNCH_START || now > LAUNCH_END)) {
       return new Response(
