@@ -117,6 +117,13 @@ export function ensureHotelReturnBookend<T extends any[]>(
     console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=n/a reason=departure_day`);
     return activities;
   }
+  // Defense in depth: if any card on this day is a flight/airport-transfer
+  // terminal, treat as departure day even if caller forgot to pass the flag.
+  if ((activities as any[]).some(isDepartureTerminal)) {
+    // eslint-disable-next-line no-console
+    console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=n/a reason=day_contains_departure_terminal`);
+    return activities;
+  }
 
   // Identify the chronologically last activity by max end_time (fallback
   // start_time). Don't trust array order — the editor injects synthetic
