@@ -27,6 +27,14 @@ export interface MealPolicy {
   isFullExplorationDay: boolean;
   /** Total usable hours for scheduling (approximate) */
   usableHours: number;
+  /**
+   * Contextual mode for the breakfast slot.
+   * 'brunch' is used on arrival days where the guest lands 10:30 AM – 12:00 PM:
+   * a late-morning café/brunch stop replaces a traditional 8 AM hotel breakfast.
+   * Defaults to 'breakfast' for all other days.
+   * See mem://constraints/itinerary/day1-arrival-brunch-band
+   */
+  breakfastMode?: 'breakfast' | 'brunch';
 }
 
 export interface MealPolicyInput {
