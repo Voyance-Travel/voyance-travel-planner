@@ -187,11 +187,15 @@ serve(async (req) => {
       }
 
       // Map edge action → spend-credits action label(s) (proof of charge)
+      // NOTE: regenerate_trip authorizes the per-day loop fired by EditorialItinerary's
+      // full-trip Regenerate (one umbrella charge → many generate-day calls). Without it
+      // every day call returns GENERATION_NOT_AUTHORIZED and silently burns the charge.
+      // trip_generation similarly authorizes day-chain calls during primary generation.
       const SPEND_ACTIONS_BY_EDGE: Record<string, string[]> = {
-        'generate-trip': ['trip_generation'],
-        'generate-full': ['trip_generation'],
-        'regenerate-day': ['regenerate_day', 'unlock_day'],
-        'generate-day': ['regenerate_day', 'unlock_day'],
+        'generate-trip':  ['trip_generation', 'regenerate_trip'],
+        'generate-full':  ['trip_generation', 'regenerate_trip'],
+        'regenerate-day': ['regenerate_day', 'unlock_day', 'regenerate_trip', 'trip_generation'],
+        'generate-day':   ['regenerate_day', 'unlock_day', 'regenerate_trip', 'trip_generation'],
       };
       const allowedSpendActions = SPEND_ACTIONS_BY_EDGE[action] || [];
 
