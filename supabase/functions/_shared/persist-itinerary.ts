@@ -156,6 +156,21 @@ export async function persistTripItinerary(
     console.warn(`[${label}] dining-description persist net failed (non-blocking):`, e);
   }
 
+  // 3c. Hotel-return verification + invariant — single boundary for every
+  // write path (fresh generation, intermediate chain, save-itinerary, chat
+  // executor). Stamps `metadata.quality.bookend_trace` on each day so the
+  // result is auditable in persisted JSON instead of ephemeral console logs.
+  // See mem://constraints/itinerary/day-end-hotel-return-bookend.
+  try {
+    const { runBookendVerification } = await import('./bookend-verification.ts');
+    await runBookendVerification(days, {
+      destination: options.destination ?? null,
+      label,
+    });
+  } catch (e) {
+    console.warn(`[${label}] bookend verification failed (non-blocking):`, e);
+  }
+
   // 4. Regression guard — fetch the on-disk version and refuse to overwrite a
   //    healthy `days` array with a materially worse one. The completeness
   //    probe already classifies skeleton/incomplete plans; this layer makes
