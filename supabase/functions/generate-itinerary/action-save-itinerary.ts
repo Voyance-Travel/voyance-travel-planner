@@ -184,6 +184,8 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
 export async function handleSaveItinerary(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;
   const { tripId, itinerary, extraUpdate: callerExtraUpdate } = params;
+  const skipLedgerCheck = params.skipLedgerCheck === true;
+  const saveReason = typeof params.saveReason === 'string' ? params.saveReason : 'unspecified';
 
   // Verify trip access
   const { data: trip, error: tripError } = await supabase
