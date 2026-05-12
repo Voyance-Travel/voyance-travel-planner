@@ -1509,7 +1509,7 @@ export default function TripDetail() {
                       });
                     } catch (saveErr) {
                       console.error('[TripDetail] Backend save after placeholder materialization failed:', saveErr);
-                      await safeUpdateItineraryData(tripId!, mergedFresh);
+                      await safeUpdateItineraryData(tripId!, mergedFresh, {}, { skipLedgerCheck: true, reason: 'self-heal-empty-day-placeholder-fallback' });
                     }
                     queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
                     setIncompleteDays(unresolvedDays);
