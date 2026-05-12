@@ -64,6 +64,36 @@ Deno.test('meal policy: midday arrival only requires lunch and dinner', () => {
   assertEquals(policy.requiredMeals, ['lunch', 'dinner']);
 });
 
+// Day 1 arrival brunch band — closes Milan/Mallorca/Faro/Bruges Day-1 breakfast gap.
+// See mem://constraints/itinerary/day1-arrival-brunch-band
+Deno.test('meal policy: arrival before 10:30 keeps traditional breakfast', () => {
+  const policy = deriveMealPolicy({
+    dayNumber: 1, totalDays: 4, isFirstDay: true, isLastDay: false,
+    arrivalTime24: '09:30',
+  });
+  assertEquals(policy.requiredMeals, ['breakfast', 'lunch', 'dinner']);
+  assertEquals(policy.breakfastMode ?? 'breakfast', 'breakfast');
+});
+
+Deno.test('meal policy: arrival 10:30–12:00 requires brunch (not skipped)', () => {
+  for (const t of ['10:30', '10:45', '11:30', '11:59']) {
+    const policy = deriveMealPolicy({
+      dayNumber: 1, totalDays: 4, isFirstDay: true, isLastDay: false,
+      arrivalTime24: t,
+    });
+    assertEquals(policy.requiredMeals, ['breakfast', 'lunch', 'dinner'], `arrival ${t}`);
+    assertEquals(policy.breakfastMode, 'brunch', `arrival ${t} should be brunch mode`);
+  }
+});
+
+Deno.test('meal policy: arrival 12:00+ stays lunch-first (no brunch)', () => {
+  const policy = deriveMealPolicy({
+    dayNumber: 1, totalDays: 4, isFirstDay: true, isLastDay: false,
+    arrivalTime24: '12:30',
+  });
+  assertEquals(policy.requiredMeals, ['lunch', 'dinner']);
+});
+
 Deno.test('meal policy: early departure requires only breakfast', () => {
   const policy = deriveMealPolicy({
     dayNumber: 4,

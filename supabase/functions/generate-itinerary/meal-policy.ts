@@ -27,6 +27,14 @@ export interface MealPolicy {
   isFullExplorationDay: boolean;
   /** Total usable hours for scheduling (approximate) */
   usableHours: number;
+  /**
+   * Contextual mode for the breakfast slot.
+   * 'brunch' is used on arrival days where the guest lands 10:30 AM – 12:00 PM:
+   * a late-morning café/brunch stop replaces a traditional 8 AM hotel breakfast.
+   * Defaults to 'breakfast' for all other days.
+   * See mem://constraints/itinerary/day1-arrival-brunch-band
+   */
+  breakfastMode?: 'breakfast' | 'brunch';
 }
 
 export interface MealPolicyInput {
@@ -139,11 +147,21 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
         return meal('midday_arrival', meals, usableHours,
           buildMealText(meals, 'midday/afternoon arrival'));
       }
-      // Before noon — morning arrival, nearly full day
-      // Breakfast required if arrival < 10:30 AM (real morning window for café/coffee).
-      const meals: RequiredMeal[] = arrivalMins < 630 ? ['breakfast', 'lunch', 'dinner'] : ['lunch', 'dinner'];
+      // Before noon — morning arrival, nearly full day.
+      // Three bands so the morning meal is never silently skipped:
+      //   < 10:30  → traditional breakfast
+      //   10:30–12 → brunch / late-morning café (NEW — closes Milan/Mallorca/Faro/Bruges Day-1 gaps)
+      //   ≥ 12     → handled by the >= 720 branch above (lunch-first)
+      // See mem://constraints/itinerary/day1-arrival-brunch-band
+      if (arrivalMins < 630) {
+        const meals: RequiredMeal[] = ['breakfast', 'lunch', 'dinner'];
+        return meal('morning_arrival', meals, usableHours,
+          buildMealText(meals, 'morning arrival'));
+      }
+      const meals: RequiredMeal[] = ['breakfast', 'lunch', 'dinner'];
       return meal('morning_arrival', meals, usableHours,
-        buildMealText(meals, 'morning arrival'));
+        buildMealText(meals, 'late-morning arrival (brunch day)'),
+        'brunch');
     }
 
     // No arrival time — assume full day available (morning start)
@@ -213,13 +231,20 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
 // HELPERS
 // =============================================================================
 
-function meal(mode: DayMode, meals: RequiredMeal[], usableHours: number, text: string): MealPolicy {
+function meal(
+  mode: DayMode,
+  meals: RequiredMeal[],
+  usableHours: number,
+  text: string,
+  breakfastMode: 'breakfast' | 'brunch' = 'breakfast',
+): MealPolicy {
   return {
     dayMode: mode,
     requiredMeals: meals,
     mealInstructionText: text,
     isFullExplorationDay: false,
     usableHours,
+    breakfastMode,
   };
 }
 
@@ -279,7 +304,11 @@ export function buildMealRequirementsPrompt(policy: MealPolicy): string {
   lines.push(`Each meal MUST use a REAL, SPECIFIC restaurant or café name that exists in the destination.`);
 
   if (policy.requiredMeals.includes('breakfast')) {
-    lines.push(`- 🍳 BREAKFAST (MANDATORY): PREFER the hotel's own restaurant/café (e.g., "Breakfast at [Hotel Restaurant Name]"). At least 3 of every 5 days should be at the guest's hotel. For variety, alternate with a real named café within walking distance on some days. NEVER send the guest to a DIFFERENT hotel for breakfast. Include the actual restaurant name, approximate price. MUST be DIFFERENT from any previous day's breakfast. Example: "Breakfast at The Lounge at Four Seasons" NOT "Breakfast — Local Café".`);
+    if (policy.breakfastMode === 'brunch') {
+      lines.push(`- 🥐 BRUNCH / LATE-MORNING CAFÉ (MANDATORY): The guest arrives mid-morning. Schedule ONE real named café, bakery, or brunch spot near the hotel between 11:00 AM and 12:30 PM — AFTER luggage drop, BEFORE lunch. Do NOT schedule an early hotel breakfast — they're still travelling at 8 AM. Do NOT also schedule a separate breakfast and a brunch — this single café/brunch stop covers the morning meal. Include the actual venue name and approximate price. Example: "Brunch at Marchesi 1824" or "Coffee & Pastries at Pavé".`);
+    } else {
+      lines.push(`- 🍳 BREAKFAST (MANDATORY): PREFER the hotel's own restaurant/café (e.g., "Breakfast at [Hotel Restaurant Name]"). At least 3 of every 5 days should be at the guest's hotel. For variety, alternate with a real named café within walking distance on some days. NEVER send the guest to a DIFFERENT hotel for breakfast. Include the actual restaurant name, approximate price. MUST be DIFFERENT from any previous day's breakfast. Example: "Breakfast at The Lounge at Four Seasons" NOT "Breakfast — Local Café".`);
+    }
   }
   if (policy.requiredMeals.includes('lunch')) {
     lines.push(`- 🥗 LUNCH (MANDATORY): A real named restaurant near the previous activity. Include actual restaurant name, ~price, 1 alternative in tips. MUST be DIFFERENT from any previous day's lunch. Example: "Lunch at Ichiran Ramen" NOT "Lunch spot".`);
