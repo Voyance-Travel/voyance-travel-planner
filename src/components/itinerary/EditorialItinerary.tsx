@@ -5306,7 +5306,7 @@ export function EditorialItinerary({
             data.day.activities = data.day.activities.filter((a: EditorialActivity) => !isAccommodationLike(a));
             data.day.activities.push(originalHotel);
             data.day.activities.sort((a: EditorialActivity, b: EditorialActivity) =>
-              (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
+              dayChronoKey(a.startTime || a.time) - dayChronoKey(b.startTime || b.time)
             );
           }
 
