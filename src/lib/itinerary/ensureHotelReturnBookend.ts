@@ -110,6 +110,11 @@ export interface EnsureBookendOptions {
  * Returns a new array with a synthetic "Return to {hotel}" card appended when
  * appropriate. Returns the input untouched (same reference) when no injection
  * is needed.
+ *
+ * Lock semantics: locked / user / manual / extracted / pinned rows are NEVER
+ * modified or reordered. They simply do not block appending a hotel return
+ * after them — a user-added late dinner still terminates with a "Return to
+ * {hotel}" card.
  */
 export function ensureHotelReturnBookend<T extends any[]>(
   activities: T,
@@ -118,22 +123,41 @@ export function ensureHotelReturnBookend<T extends any[]>(
   if (!Array.isArray(activities) || activities.length === 0) return activities;
   if (opts.isDepartureDay) return activities;
 
-  // Use the array tail — that's what the user actually sees as the day's
-  // last card. The generator's chronological re-sort runs upstream; by the
-  // time we reach the read-time path the array order is the truth.
-  const last = activities[activities.length - 1] as any;
+  // Identify the chronologically last activity by max end_time (fallback
+  // start_time). Don't trust array order — the editor injects synthetic
+  // transport / departure cards mid-stream and stale "Travel to <park>"
+  // tails can survive past the day's true terminal anchor.
+  let lastIdx = -1;
+  let lastTime = -1;
+  for (let i = 0; i < activities.length; i++) {
+    const a = activities[i] as any;
+    const t =
+      parseTime(a?.endTime) ??
+      parseTime(a?.end_time) ??
+      parseTime(a?.startTime) ??
+      parseTime(a?.start_time);
+    if (t == null) continue;
+    if (t >= lastTime) {
+      lastTime = t;
+      lastIdx = i;
+    }
+  }
+
+  // No times anywhere — fall back to array tail and let the synthesis logic
+  // below decide.
+  const last =
+    lastIdx >= 0
+      ? (activities[lastIdx] as any)
+      : (activities[activities.length - 1] as any);
   if (!last) return activities;
 
-  // Idempotency / lock / departure-style guards.
+  // Idempotency / departure-style guards. We deliberately do NOT skip on
+  // user/manual/locked source — those rows just shouldn't be modified, but
+  // the day still needs a hotel return.
   if (isTerminalAlready(last)) return activities;
-  if (isLockedOrUser(last)) return activities;
   if (isDepartureTerminal(last)) return activities;
 
-  const lastEndMins =
-    parseTime(last.endTime) ??
-    parseTime(last.end_time) ??
-    parseTime(last.startTime) ??
-    parseTime(last.start_time);
+  const lastEndMins = lastTime >= 0 ? lastTime : null;
   if (lastEndMins === null) return activities;
 
   const hotel =
