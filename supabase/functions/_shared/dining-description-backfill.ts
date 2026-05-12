@@ -157,15 +157,38 @@ export function ensureDiningDescription(
     return { source: 'whyThisFits', changed: true };
   }
 
-  // If we can't backfill from a static source AND the existing copy is the
-  // templated meal-guard leak, blank it so the downstream LLM
-  // `fillMissingDescriptions` backstop treats it as missing and rewrites.
-  if (isTemplatedLeak) {
-    act.description = '';
-    return { source: 'noop', changed: true };
+  // Last-resort deterministic template — guarantees a non-empty actionable
+  // body so the card never renders blank. Replaces a templated leak too.
+  if (existing.length === 0 || isTemplatedLeak) {
+    act.description = buildDeterministicDiningDescription(act, destinationCity);
+    return { source: 'venueTemplate', changed: true };
   }
 
   return { source: 'noop', changed: false };
+}
+
+export interface DayBackfillCounters {
+  fallback: number;
+  whyThisFits: number;
+  venueTemplate: number;
+  scanned: number;
+}
+
+export function ensureDayDiningDescriptions(
+  activities: any[],
+  destinationCity?: string,
+): DayBackfillCounters {
+  const c: DayBackfillCounters = { fallback: 0, whyThisFits: 0, venueTemplate: 0, scanned: 0 };
+  if (!Array.isArray(activities)) return c;
+  for (const act of activities) {
+    if (!isDiningActivity(act)) continue;
+    c.scanned++;
+    const r = ensureDiningDescription(act, destinationCity);
+    if (r.changed && r.source === 'fallback') c.fallback++;
+    else if (r.changed && r.source === 'whyThisFits') c.whyThisFits++;
+    else if (r.changed && r.source === 'venueTemplate') c.venueTemplate++;
+  }
+  return c;
 }
 
 export interface DayBackfillCounters {
