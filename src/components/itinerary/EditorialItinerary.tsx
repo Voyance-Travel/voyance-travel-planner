@@ -2081,6 +2081,19 @@ export function EditorialItinerary({
           // Use token-based matching to catch "Transfer to Narita Airport (NRT)" etc.
           const HUB_TOKENS = ['airport', 'station', 'port', 'terminal', 'aeropuerto', 'gare', 'bahnhof'];
           updatedActivities = updatedActivities.filter(act => {
+            // Drop synthetic read-time hotel-return bookends — the traveler
+            // is leaving on this day, so any "Return to {hotel}" card injected
+            // by parseItineraryDays is wrong now that a real departure card
+            // exists. Identifies via id prefix, source tag, or tags array
+            // (set by ensureHotelReturnBookend).
+            const aSource = String((act as any).source || '');
+            const aTags: string[] = Array.isArray((act as any).tags) ? (act as any).tags : [];
+            const isReadTimeBookend =
+              (typeof act.id === 'string' && act.id.startsWith('bookend-readtime-')) ||
+              aSource === 'bookend-readtime' || aSource === 'bookend-overnight' ||
+              aTags.includes('bookend-readtime') || aTags.includes('bookend-overnight');
+            if (isReadTimeBookend) return false;
+
             if ((act as any).__syntheticFinalDeparture || (act as any).__syntheticTravel ||
                 (act as any).__syntheticDeparture || (act as any).__interCityTransport ||
                 (act as any).__hotelCheckout || (act as any).__hotelCheckin ||
@@ -2091,10 +2104,12 @@ export function EditorialItinerary({
             const t = (act.title || '').toLowerCase();
             const desc = (act.description || '').toLowerCase();
             const catLower = (act.category || '').toLowerCase();
-            // Preserve AI-generated check-in/checkout/accommodation cards
-            const isAccommodationCard = catLower === 'accommodation' ||
+            // Preserve AI-generated check-in/checkout cards, but NOT generic
+            // "Return to hotel" accommodation rows on the departure day.
+            const isReturnToHotel = /\b(?:return|head\s+back|back)\s+to\b/i.test(act.title || '');
+            const isAccommodationCard = !isReturnToHotel && (catLower === 'accommodation' ||
               t.includes('check-in') || t.includes('checkin') || t.includes('check in') ||
-              t.includes('check-out') || t.includes('checkout') || t.includes('check out');
+              t.includes('check-out') || t.includes('checkout') || t.includes('check out'));
             if (isAccommodationCard) return true;
             // Preserve repair-injected local transport to airport/station (distinct from the inter-city flight card)
             const actSource = (act as any).source || '';
