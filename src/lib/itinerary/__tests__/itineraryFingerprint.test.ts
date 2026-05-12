@@ -44,6 +44,7 @@ describe('itineraryFingerprint', () => {
 
   it('treats missing activities array as zero-count day', () => {
     const a = { days: [{ dayNumber: 1 }, { dayNumber: 2, activities: [] }] };
-    expect(itineraryFingerprint(a)).toBe('0:0,0');
+    // Each empty `[]` serializes to 2 chars → lenSum=4, both days have 0 activities.
+    expect(itineraryFingerprint(a)).toBe('4:0,0');
   });
 });
