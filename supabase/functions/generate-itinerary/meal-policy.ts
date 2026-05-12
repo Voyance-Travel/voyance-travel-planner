@@ -147,11 +147,21 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
         return meal('midday_arrival', meals, usableHours,
           buildMealText(meals, 'midday/afternoon arrival'));
       }
-      // Before noon — morning arrival, nearly full day
-      // Breakfast required if arrival < 10:30 AM (real morning window for café/coffee).
-      const meals: RequiredMeal[] = arrivalMins < 630 ? ['breakfast', 'lunch', 'dinner'] : ['lunch', 'dinner'];
+      // Before noon — morning arrival, nearly full day.
+      // Three bands so the morning meal is never silently skipped:
+      //   < 10:30  → traditional breakfast
+      //   10:30–12 → brunch / late-morning café (NEW — closes Milan/Mallorca/Faro/Bruges Day-1 gaps)
+      //   ≥ 12     → handled by the >= 720 branch above (lunch-first)
+      // See mem://constraints/itinerary/day1-arrival-brunch-band
+      if (arrivalMins < 630) {
+        const meals: RequiredMeal[] = ['breakfast', 'lunch', 'dinner'];
+        return meal('morning_arrival', meals, usableHours,
+          buildMealText(meals, 'morning arrival'));
+      }
+      const meals: RequiredMeal[] = ['breakfast', 'lunch', 'dinner'];
       return meal('morning_arrival', meals, usableHours,
-        buildMealText(meals, 'morning arrival'));
+        buildMealText(meals, 'late-morning arrival (brunch day)'),
+        'brunch');
     }
 
     // No arrival time — assume full day available (morning start)
