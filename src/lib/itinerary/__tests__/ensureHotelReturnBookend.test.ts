@@ -69,6 +69,16 @@ describe('ensureHotelReturnBookend', () => {
     expect(out).toBe(acts);
   });
 
+  it('idempotent — existing hotel return anywhere prevents read-time duplicate', () => {
+    const acts = [
+      mk({ title: 'Return to The Notary', category: 'accommodation', startTime: '20:45', endTime: '21:10' }),
+      mk({ title: 'Late notes at the lounge', category: 'activity', startTime: '21:20', endTime: '22:00' }),
+    ];
+    const out = ensureHotelReturnBookend(acts, { hotelName: 'The Notary', dayIndex: 0 });
+    expect(out).toBe(acts);
+    expect(out.filter((a: any) => /return to/i.test(String(a.title))).length).toBe(1);
+  });
+
   it('idempotent — already ends in checkout', () => {
     const acts = [mk({ title: 'Checkout from Hotel', category: 'accommodation', startTime: '11:00', endTime: '11:30' })];
     const out = ensureHotelReturnBookend(acts, { dayIndex: 0 });
