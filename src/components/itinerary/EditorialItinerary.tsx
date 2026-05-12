@@ -1849,6 +1849,16 @@ export function EditorialItinerary({
         const cutoffMinutes = depMinutes - bufferMinutes;
 
         updatedActivities = updatedActivities.filter(act => {
+          // Drop synthetic read-time hotel-return bookends — see final-departure
+          // filter below for rationale.
+          const aSource = String((act as any).source || '');
+          const aTags: string[] = Array.isArray((act as any).tags) ? (act as any).tags : [];
+          const isReadTimeBookend =
+            (typeof act.id === 'string' && act.id.startsWith('bookend-readtime-')) ||
+            aSource === 'bookend-readtime' || aSource === 'bookend-overnight' ||
+            aTags.includes('bookend-readtime') || aTags.includes('bookend-overnight');
+          if (isReadTimeBookend) return false;
+
           // Keep all synthetic cards (transport, hotel, etc.)
           if ((act as any).__syntheticTravel || (act as any).__syntheticDeparture ||
               (act as any).__interCityTransport || (act as any).__hotelCheckout ||
@@ -1857,12 +1867,14 @@ export function EditorialItinerary({
               act.id.startsWith('travel-')) {
             return true;
           }
-          // Preserve AI-generated check-in/checkout/accommodation cards
+          // Preserve AI-generated check-in/checkout cards, but NOT a generic
+          // "Return to hotel" row on a day the traveler is leaving the city.
           const tLower = (act.title || '').toLowerCase();
           const catLower = (act.category || '').toLowerCase();
-          const isAccommodationCard = catLower === 'accommodation' ||
+          const isReturnToHotel = /\b(?:return|head\s+back|back)\s+to\b/i.test(act.title || '');
+          const isAccommodationCard = !isReturnToHotel && (catLower === 'accommodation' ||
             tLower.includes('check-in') || tLower.includes('checkin') || tLower.includes('check in') ||
-            tLower.includes('check-out') || tLower.includes('checkout') || tLower.includes('check out');
+            tLower.includes('check-out') || tLower.includes('checkout') || tLower.includes('check out'));
           if (isAccommodationCard) return true;
           // No time = keep (safe fallback)
           if (!act.startTime) return true;
@@ -2081,6 +2093,19 @@ export function EditorialItinerary({
           // Use token-based matching to catch "Transfer to Narita Airport (NRT)" etc.
           const HUB_TOKENS = ['airport', 'station', 'port', 'terminal', 'aeropuerto', 'gare', 'bahnhof'];
           updatedActivities = updatedActivities.filter(act => {
+            // Drop synthetic read-time hotel-return bookends — the traveler
+            // is leaving on this day, so any "Return to {hotel}" card injected
+            // by parseItineraryDays is wrong now that a real departure card
+            // exists. Identifies via id prefix, source tag, or tags array
+            // (set by ensureHotelReturnBookend).
+            const aSource = String((act as any).source || '');
+            const aTags: string[] = Array.isArray((act as any).tags) ? (act as any).tags : [];
+            const isReadTimeBookend =
+              (typeof act.id === 'string' && act.id.startsWith('bookend-readtime-')) ||
+              aSource === 'bookend-readtime' || aSource === 'bookend-overnight' ||
+              aTags.includes('bookend-readtime') || aTags.includes('bookend-overnight');
+            if (isReadTimeBookend) return false;
+
             if ((act as any).__syntheticFinalDeparture || (act as any).__syntheticTravel ||
                 (act as any).__syntheticDeparture || (act as any).__interCityTransport ||
                 (act as any).__hotelCheckout || (act as any).__hotelCheckin ||
@@ -2091,10 +2116,12 @@ export function EditorialItinerary({
             const t = (act.title || '').toLowerCase();
             const desc = (act.description || '').toLowerCase();
             const catLower = (act.category || '').toLowerCase();
-            // Preserve AI-generated check-in/checkout/accommodation cards
-            const isAccommodationCard = catLower === 'accommodation' ||
+            // Preserve AI-generated check-in/checkout cards, but NOT generic
+            // "Return to hotel" accommodation rows on the departure day.
+            const isReturnToHotel = /\b(?:return|head\s+back|back)\s+to\b/i.test(act.title || '');
+            const isAccommodationCard = !isReturnToHotel && (catLower === 'accommodation' ||
               t.includes('check-in') || t.includes('checkin') || t.includes('check in') ||
-              t.includes('check-out') || t.includes('checkout') || t.includes('check out');
+              t.includes('check-out') || t.includes('checkout') || t.includes('check out'));
             if (isAccommodationCard) return true;
             // Preserve repair-injected local transport to airport/station (distinct from the inter-city flight card)
             const actSource = (act as any).source || '';
@@ -11961,6 +11988,23 @@ function ActivityRow({
                         <span className="leading-snug line-clamp-2 sm:line-clamp-none">{address}</span>
                       </div>
                     )}
+                    {/* Description — also rendered in the venue branch so dining cards
+                        with a known restaurant still show their blurb. Mirrors the
+                        no-venue branch (resolveActivityDisplayDescription handles
+                        existing description, whyThisFits, and dining fallback). */}
+                    {!compact && (() => {
+                      const d = resolveActivityDisplayDescription(
+                        activity,
+                        sanitizeActivityText(activity.description),
+                        destination,
+                      );
+                      return d ? (
+                        <p className={cn(
+                          "text-xs sm:text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed",
+                          !canViewPremium && "blur-sm pointer-events-none select-none"
+                        )}>{d}</p>
+                      ) : null;
+                    })()}
                   </>
                 );
               }
