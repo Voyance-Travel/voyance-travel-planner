@@ -2525,6 +2525,34 @@ export default function Start() {
 
       if (error) throw error;
 
+      // Eagerly write the hotel cost row into activity_costs so the trip total
+      // includes the hotel from the very first render. Without this we relied
+      // on EditorialItinerary's mount-effect, which silently produced $0 for
+      // trips created here because the hotel entries were missing dates. Fire
+      // and forget — non-fatal if it fails (mount-effect is a backup).
+      if (includeHotelInBudget && hotelSelection && hotelSelection.length > 0) {
+        const tripIdForSync = trip.id;
+        const hotelsForSync = hotelSelection;
+        import('@/services/budgetLedgerSync').then(({ syncHotelToLedger, syncMultiCityHotelsToLedger }) => {
+          if (hotelsForSync.length > 1) {
+            const entries = hotelsForSync
+              .filter((h: any) => h.name && (h.totalPrice || h.pricePerNight))
+              .map((h: any) => ({
+                name: h.name,
+                totalPrice: h.totalPrice || (h.pricePerNight && h.nights ? h.pricePerNight * h.nights : 0),
+              }))
+              .filter(e => e.totalPrice > 0);
+            if (entries.length > 0) {
+              syncMultiCityHotelsToLedger(tripIdForSync, entries)
+                .catch(err => console.warn('[Start] eager multi-hotel sync failed (non-fatal):', err));
+            }
+          } else {
+            syncHotelToLedger(tripIdForSync, hotelsForSync[0] as any)
+              .catch(err => console.warn('[Start] eager hotel sync failed (non-fatal):', err));
+          }
+        });
+      }
+
       // Persist per-city rows for multi-city trips
       if (isMultiCity && multiCityDestinations.length >= 2) {
         const datesWithDates = multiCityDestinations.map((d, i) => {
