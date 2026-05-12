@@ -3336,6 +3336,12 @@ async function _handleGenerateTripDayInner(
       label: 'generate-trip-day:final',
       extraUpdate: {
         itinerary_status: finalStatus,
+        // Stamp itinerary_frozen_at on first ready transition so page-load
+        // self-heal writes are permanently blocked. See
+        // mem://constraints/itinerary/frozen-after-ready.
+        ...(finalStatus === 'ready' && !(meta as any)?.itinerary_frozen_at
+          ? { /* metadata field is set below */ }
+          : {}),
         unlocked_day_count: newUnlocked,
         metadata: {
           ...meta,
