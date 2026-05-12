@@ -207,6 +207,8 @@ export function ensureHotelReturnBookend<T extends any[]>(
       parseTime((last as any)?.startTime) ?? parseTime((last as any)?.start_time);
     if (!qualifiesAsLateNightlife(last, lastStartMins, lastEndMins)) {
       // 00:00–02:30 but not nightlife — don't fabricate; let it ship as-is.
+      // eslint-disable-next-line no-console
+      console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=n/a reason=postmidnight_not_nightlife lastEnd=${fmt(lastEndMins)}`);
       return activities;
     }
     startMins = Math.min(lastEndMins + 25, 2 * 60 + 55);
@@ -224,6 +226,8 @@ export function ensureHotelReturnBookend<T extends any[]>(
     description = `Head back to ${titleHotel} to wind down (overnight).`;
     tags = ['hotel', 'rest', 'bookend-overnight'];
   } else {
+    // eslint-disable-next-line no-console
+    console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=n/a reason=out_of_window lastEnd=${fmt(lastEndMins)}`);
     return activities;
   }
 
