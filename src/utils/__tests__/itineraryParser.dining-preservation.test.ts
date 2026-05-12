@@ -87,9 +87,10 @@ describe('parseItineraryDays — dining preservation (Bruges meal-loss fix)', ()
       ],
     };
     const days = parseItineraryDays(data, '2026-06-01');
+    const acts = stripBookends(days[0].activities);
     // Old behavior dropped the second card on bare title|start key.
     // Hardened key includes category, so both survive.
-    expect(days[0].activities.length).toBe(2);
-    expect(days[0].activities.some((a: any) => a.category === 'dining')).toBe(true);
+    expect(acts.length).toBe(2);
+    expect(acts.some((a: any) => a.category === 'dining')).toBe(true);
   });
 });
