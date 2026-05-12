@@ -84,6 +84,24 @@ function isLockedRow(a: any): boolean {
   return false;
 }
 
+/**
+ * Deliberate, user-actionable meal placeholders emitted by the meal-guard
+ * when no vetted venue exists for the destination ("Lunch — find a local
+ * spot in Aruba"). They render as a tap-to-pick card. Without this allowlist
+ * the placeholder-name branch + cross-city sweep below silently drop them
+ * on every save, so the meal slot disappears after a hard refresh.
+ */
+function isManualPickSentinel(a: any): boolean {
+  if (!a) return false;
+  if (a.preserveAsManualPick === true || a.preserve_as_manual_pick === true) return true;
+  if (a.needsVenuePick === true || a.needs_venue_pick === true) return true;
+  const source = String(a.source || '').toLowerCase();
+  if (source === 'needs_venue_pick' || source === 'manual_pick') return true;
+  const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
+  if (tags.includes('needs_venue_pick') || tags.includes('preserve_as_manual_pick')) return true;
+  return false;
+}
+
 export type ContractViolation =
   | 'ghost-row'
   | 'placeholder-name'
