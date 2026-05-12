@@ -11605,9 +11605,9 @@ function ActivityRow({
               sanitizeActivityText(activity.description),
               destination,
             );
-            return d && !compact ? (
+            return d ? (
               <p className={cn(
-                "text-xs text-muted-foreground leading-relaxed",
+                "text-xs text-muted-foreground leading-relaxed line-clamp-2",
                 !canViewPremium && "blur-sm pointer-events-none select-none"
               )}>{d}</p>
             ) : null;
@@ -12001,7 +12001,7 @@ function ActivityRow({
                       sanitizeActivityText(activity.description),
                       destination,
                     );
-                    return d && !compact ? (
+                    return d ? (
                       <p className={cn(
                         "text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed",
                         !canViewPremium && "blur-sm pointer-events-none select-none"
