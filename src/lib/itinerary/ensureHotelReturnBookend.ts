@@ -51,13 +51,6 @@ function fmt(mins: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-function isLockedOrUser(a: any): boolean {
-  if (!a) return false;
-  if (a.is_locked === true || a.isLocked === true) return true;
-  const src = String(a.source || '').toLowerCase();
-  return src === 'user' || src === 'manual' || src === 'extracted' || src === 'pinned';
-}
-
 function isTerminalAlready(a: any): boolean {
   if (!a) return false;
   const cat = String(a.category || '').toUpperCase();
@@ -117,6 +110,11 @@ export interface EnsureBookendOptions {
  * Returns a new array with a synthetic "Return to {hotel}" card appended when
  * appropriate. Returns the input untouched (same reference) when no injection
  * is needed.
+ *
+ * Lock semantics: locked / user / manual / extracted / pinned rows are NEVER
+ * modified or reordered. They simply do not block appending a hotel return
+ * after them — a user-added late dinner still terminates with a "Return to
+ * {hotel}" card.
  */
 export function ensureHotelReturnBookend<T extends any[]>(
   activities: T,
@@ -125,22 +123,52 @@ export function ensureHotelReturnBookend<T extends any[]>(
   if (!Array.isArray(activities) || activities.length === 0) return activities;
   if (opts.isDepartureDay) return activities;
 
-  // Use the array tail — that's what the user actually sees as the day's
-  // last card. The generator's chronological re-sort runs upstream; by the
-  // time we reach the read-time path the array order is the truth.
-  const last = activities[activities.length - 1] as any;
+  // Identify the chronologically last activity by max end_time (fallback
+  // start_time). Don't trust array order — the editor injects synthetic
+  // transport / departure cards mid-stream and stale "Travel to <park>"
+  // tails can survive past the day's true terminal anchor.
+  //
+  // Wrap-aware: times in [00:00, 05:59] are treated as the *following* day
+  // so a 00:16 nightcap or a 02:50 cultural endpoint outranks an earlier
+  // 21:00 dinner. Without this, the late-nightlife / overnight branches
+  // below would never trigger when an earlier dinner exists.
+  const WRAP_BOUNDARY = 6 * 60;
+  const ONE_DAY = 24 * 60;
+  const norm = (t: number) => (t < WRAP_BOUNDARY ? t + ONE_DAY : t);
+  let lastIdx = -1;
+  let lastTimeRaw = -1;
+  let lastRank = -1;
+  for (let i = 0; i < activities.length; i++) {
+    const a = activities[i] as any;
+    const t =
+      parseTime(a?.endTime) ??
+      parseTime(a?.end_time) ??
+      parseTime(a?.startTime) ??
+      parseTime(a?.start_time);
+    if (t == null) continue;
+    const rank = norm(t);
+    if (rank >= lastRank) {
+      lastRank = rank;
+      lastTimeRaw = t;
+      lastIdx = i;
+    }
+  }
+
+  // No times anywhere — fall back to array tail and let the synthesis logic
+  // below decide.
+  const last =
+    lastIdx >= 0
+      ? (activities[lastIdx] as any)
+      : (activities[activities.length - 1] as any);
   if (!last) return activities;
 
-  // Idempotency / lock / departure-style guards.
+  // Idempotency / departure-style guards. We deliberately do NOT skip on
+  // user/manual/locked source — those rows just shouldn't be modified, but
+  // the day still needs a hotel return.
   if (isTerminalAlready(last)) return activities;
-  if (isLockedOrUser(last)) return activities;
   if (isDepartureTerminal(last)) return activities;
 
-  const lastEndMins =
-    parseTime(last.endTime) ??
-    parseTime(last.end_time) ??
-    parseTime(last.startTime) ??
-    parseTime(last.start_time);
+  const lastEndMins = lastTimeRaw >= 0 ? lastTimeRaw : null;
   if (lastEndMins === null) return activities;
 
   const hotel =

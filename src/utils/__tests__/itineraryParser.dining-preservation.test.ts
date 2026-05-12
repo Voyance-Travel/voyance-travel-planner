@@ -8,6 +8,12 @@ const baseDay = (overrides: any = {}) => ({
   ...overrides,
 });
 
+// `parseItineraryDays` runs the read-time hotel-return safety net (Step 4b),
+// which can append a synthetic bookend card. These dedup tests only care
+// about the parser's own output — strip bookend cards before counting.
+const stripBookends = (acts: any[]) =>
+  acts.filter(a => !String(a?.source || '').startsWith('bookend-'));
+
 describe('parseItineraryDays — dining preservation (Bruges meal-loss fix)', () => {
   it('keeps two dining cards with same title but different startTimes', () => {
     const data = {
@@ -21,8 +27,9 @@ describe('parseItineraryDays — dining preservation (Bruges meal-loss fix)', ()
       ],
     };
     const days = parseItineraryDays(data, '2026-06-01');
-    expect(days[0].activities.length).toBe(2);
-    expect(days[0].activities.map((a: any) => a.startTime).sort()).toEqual(['12:30', '14:00']);
+    const acts = stripBookends(days[0].activities);
+    expect(acts.length).toBe(2);
+    expect(acts.map((a: any) => a.startTime).sort()).toEqual(['12:30', '14:00']);
   });
 
   it('keeps two dining cards with empty startTime (empty-time dedup exempt)', () => {
@@ -80,9 +87,10 @@ describe('parseItineraryDays — dining preservation (Bruges meal-loss fix)', ()
       ],
     };
     const days = parseItineraryDays(data, '2026-06-01');
+    const acts = stripBookends(days[0].activities);
     // Old behavior dropped the second card on bare title|start key.
     // Hardened key includes category, so both survive.
-    expect(days[0].activities.length).toBe(2);
-    expect(days[0].activities.some((a: any) => a.category === 'dining')).toBe(true);
+    expect(acts.length).toBe(2);
+    expect(acts.some((a: any) => a.category === 'dining')).toBe(true);
   });
 });
