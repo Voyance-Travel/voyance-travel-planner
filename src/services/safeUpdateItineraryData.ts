@@ -98,6 +98,14 @@ export async function safeUpdateItineraryData(
           `Days that would lose content: ${violations.map(v => `D${v.dayNumber} (${v.prev.count}→${v.next.count} acts, ${v.prev.meals}→${v.next.meals} meals)`).join('; ')}. ` +
           `Pass { allowReduction: true } if this was intentional.`
         );
+        // The DB version is healthier than the in-memory session. Tell listeners
+        // to resync from DB so the user's view heals to match the canonical
+        // state instead of staying diverged with the silently-stale session.
+        // See mem://constraints/itinerary/db-is-source-of-truth.
+        try {
+          const { dispatchTripPersisted } = await import('@/lib/itinerary/resyncItineraryFromDb');
+          dispatchTripPersisted({ tripId, prevDays: nextDays, source: 'integrity-blocked-resync' });
+        } catch { /* non-fatal */ }
         return { error: { code: 'INTEGRITY_BLOCKED', violations } };
       }
     }
