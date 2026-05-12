@@ -30,6 +30,11 @@ export interface SafeUpdateOptions {
    *  silently erode meals across reloads. See
    *  mem://constraints/itinerary/ledger-check-mutation-only. */
   skipLedgerCheck?: boolean;
+  /** User-initiated saves MUST set this so the FROZEN gate lets them through
+   *  once a trip has reached ready/generated. Page-load / hydration / self-heal
+   *  paths MUST NEVER set this. See
+   *  mem://constraints/itinerary/frozen-after-ready. */
+  allowFrozenWrite?: boolean;
 }
 
 const MEAL_RE = /\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/i;
@@ -88,9 +93,30 @@ export async function safeUpdateItineraryData(
   try {
     const { data: current } = await supabase
       .from('trips')
-      .select('itinerary_data')
+      .select('itinerary_data, itinerary_status, metadata')
       .eq('id', tripId)
       .maybeSingle();
+
+    // ── FROZEN GATE ──
+    // Once a trip's itinerary is ready/generated (or has ever been frozen),
+    // page-load / hydration / self-heal paths MUST NOT write. Server-side
+    // normalization makes the bytes drift on every save, which the next
+    // listener treats as new truth — the root cause of "prices change /
+    // activities disappear / hotel-return doubles after refresh". User-
+    // initiated mutations opt in via { allowFrozenWrite: true }.
+    // See mem://constraints/itinerary/frozen-after-ready.
+    if (!options.allowFrozenWrite) {
+      const status = String((current as any)?.itinerary_status || '');
+      const meta = ((current as any)?.metadata as Record<string, any>) || {};
+      const frozenAt = meta?.itinerary_frozen_at;
+      const isFrozen = frozenAt || status === 'ready' || status === 'generated';
+      if (isFrozen) {
+        console.log(
+          `[safeUpdateItineraryData] FROZEN write blocked (reason=${options.reason || 'unspecified'}, status=${status}, frozenAt=${frozenAt || 'n/a'}, tripId=${tripId})`,
+        );
+        return { error: null };
+      }
+    }
 
     const prevDays = (current?.itinerary_data as any)?.days ?? [];
     const nextDays = nextItinerary?.days ?? [];

@@ -284,7 +284,7 @@ export function ItineraryEditor({
       const { safeUpdateItineraryData } = await import('@/services/safeUpdateItineraryData');
       const safeRes = await safeUpdateItineraryData(tripId, itineraryData as any, {
         itinerary_status: 'ready',
-      });
+      }, { allowFrozenWrite: true, reason: 'user-itinerary-editor-save' });
       if (safeRes?.error) throw safeRes.error;
 
       if (onSave) await onSave(days);

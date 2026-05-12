@@ -78,7 +78,7 @@ export async function saveItineraryOptimistic(
     // prompt-artifact strip, persist-day contract, and cross-city sweep all
     // run. Raw .update was a confirmed intermittent leak path.
     const { safeUpdateItineraryData } = await import('./safeUpdateItineraryData');
-    const safeRes = await safeUpdateItineraryData(tripId, itineraryData as any);
+    const safeRes = await safeUpdateItineraryData(tripId, itineraryData as any, {}, { allowFrozenWrite: true, reason: 'optimistic-update' });
 
     if (safeRes?.error) {
       console.error('[OptimisticUpdate] Fallback update failed:', safeRes.error);

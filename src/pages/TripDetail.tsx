@@ -1929,7 +1929,7 @@ export default function TripDetail() {
         const result = await safeUpdateItineraryData(tripId, JSON.parse(JSON.stringify(itineraryPayload)), {
           itinerary_status: 'ready',
           ...(safeUnlocked !== undefined ? { unlocked_day_count: safeUnlocked } : {}),
-        });
+        }, { allowFrozenWrite: true, reason: 'user-force-save' });
         const error = result?.error;
         
         if (error) {
@@ -2145,6 +2145,7 @@ export default function TripDetail() {
           end_date: newEndDate,
           hotel_selection: updatedHotelSelection as any,
         },
+        { allowFrozenWrite: true, reason: 'user-date-change' },
       );
       const error = safeRes?.error;
 
@@ -2231,6 +2232,7 @@ export default function TripDetail() {
           tripId,
           itineraryData as any,
           extraFields,
+          { allowFrozenWrite: true, reason: 'user-undo-date-change' },
         );
         error = safeRes?.error ?? null;
       } else {
@@ -2291,7 +2293,7 @@ export default function TripDetail() {
     };
     setTrip(prev => prev ? { ...prev, itinerary_data: updatedItinerary as any } : null);
     try {
-      const safeRes = await safeUpdateItineraryData(tripId, updatedItinerary as any);
+      const safeRes = await safeUpdateItineraryData(tripId, updatedItinerary as any, {}, { allowFrozenWrite: true, reason: 'user-archive-orphans' });
       if (safeRes?.error) throw safeRes.error;
       toast.success(`Archived ${archived.length} day${archived.length === 1 ? '' : 's'} outside your trip dates`);
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
@@ -2324,7 +2326,7 @@ export default function TripDetail() {
     };
     setTrip(prev => prev ? { ...prev, itinerary_data: updatedItinerary as any } : null);
     try {
-      const safeRes = await safeUpdateItineraryData(tripId, updatedItinerary as any);
+      const safeRes = await safeUpdateItineraryData(tripId, updatedItinerary as any, {}, { allowFrozenWrite: true, reason: 'user-shift-in-range' });
       if (safeRes?.error) throw safeRes.error;
       toast.success(
         overflow.length > 0

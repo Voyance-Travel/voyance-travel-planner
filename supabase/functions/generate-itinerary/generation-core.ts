@@ -3099,18 +3099,26 @@ export async function finalSaveItinerary(
       }
     }
 
+    const willBeReady = !emptyItineraryDetected;
+    const existingFrozenAt = (existingMetadata as Record<string, any>)?.itinerary_frozen_at;
+    const freezeStamp = willBeReady
+      ? (existingFrozenAt || new Date().toISOString())
+      : existingFrozenAt;
     const updatePayload: Record<string, unknown> = {
       itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',
       dna_snapshot: dnaSnapshot,
       updated_at: new Date().toISOString(),
       ...(context.blendedDnaSnapshot && { blended_dna: context.blendedDnaSnapshot }),
-      ...(emptyItineraryDetected && {
-        metadata: {
-          ...existingMetadata,
+      // Always carry metadata so itinerary_frozen_at is stamped on first ready.
+      // See mem://constraints/itinerary/frozen-after-ready.
+      metadata: {
+        ...existingMetadata,
+        ...(emptyItineraryDetected && {
           generation_failure_reason: failureReason,
           empty_itinerary_detected_at: new Date().toISOString(),
-        },
-      }),
+        }),
+        ...(freezeStamp ? { itinerary_frozen_at: freezeStamp } : {}),
+      },
     };
     if (computedEndDate) {
       updatePayload.end_date = computedEndDate;

@@ -280,7 +280,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // Verify trip access
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('user_id, start_date, end_date, flight_selection, metadata')
+    .select('user_id, start_date, end_date, flight_selection, metadata, itinerary_status')
     .eq('id', tripId)
     .single();
 
@@ -304,7 +304,25 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     return errorJson("Access denied. You don't have permission to modify this trip.", 403);
   }
 
+  // ── FROZEN GATE (mirror of safeUpdateItineraryData) ──
+  // Block any save whose `saveReason` starts with `self-heal-` once the trip
+  // has reached ready/generated. Catches direct edge-fn invokes that bypass
+  // the client wrapper. See mem://constraints/itinerary/frozen-after-ready.
+  {
+    const meta = (trip.metadata as Record<string, any>) || {};
+    const frozenAt = meta?.itinerary_frozen_at;
+    const status = String(trip.itinerary_status || '');
+    const isFrozen = frozenAt || status === 'ready' || status === 'generated';
+    if (isFrozen && saveReason.startsWith('self-heal-')) {
+      console.log(
+        `[save-itinerary] FROZEN gate: skipping self-heal write tripId=${tripId} reason=${saveReason} status=${status} frozenAt=${frozenAt || 'n/a'}`,
+      );
+      return okJson({ success: true, skipped: true, reason: 'frozen' });
+    }
+  }
+
   const tripStartDate: string | null = trip.start_date || null;
+
 
   // ── NO-SHRINK GUARD ──────────────────────────────────────────────
   const allowShrink = params.allowShrink === true;
@@ -1112,18 +1130,31 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     warnings: persistVerdict.warnings,
   };
 
+  const nextStatus = emptyItineraryDetected ? 'failed' : (persistVerdict.ok ? 'ready' : 'partial');
+  // ── FREEZE STAMP ──
+  // First time the trip transitions to ready/generated, stamp
+  // metadata.itinerary_frozen_at so future page-load self-heal writes are
+  // permanently blocked. The stamp is "has ever been ready" — once set, it
+  // stays set even if a later partial save flips status back. See
+  // mem://constraints/itinerary/frozen-after-ready.
+  const existingFrozenAt = ((trip.metadata as Record<string, any>) || {})?.itinerary_frozen_at;
+  const freezeStamp = (nextStatus === 'ready' || nextStatus === 'generated')
+    ? (existingFrozenAt || new Date().toISOString())
+    : existingFrozenAt;
+
   const extraUpdate: Record<string, any> = {
     // NOTE: itinerary_status enum is {not_started, queued, generating, partial, ready, failed}.
     // 'needs_regeneration' is NOT a valid value — using it rolls back the entire trips.update
     // with Postgres 22P02, leaving partial side-effects (cost-table sync, normalized tables)
     // and causing post-refresh divergence. Use 'partial' for the non-ok-but-non-empty branch.
-    itinerary_status: emptyItineraryDetected ? 'failed' : (persistVerdict.ok ? 'ready' : 'partial'),
+    itinerary_status: nextStatus,
     updated_at: new Date().toISOString(),
     ...(callerExtraUpdate && typeof callerExtraUpdate === 'object' ? callerExtraUpdate : {}),
     metadata: {
       ...(callerExtraUpdate?.metadata || {}),
       ...(emptyItineraryDetected ? { ...existingMetadataForEmpty, generation_failure_reason: failureReason, empty_itinerary_detected_at: new Date().toISOString() } : {}),
       persist_validation: persistValidationStamp,
+      ...(freezeStamp ? { itinerary_frozen_at: freezeStamp } : {}),
     },
   };
   const { error, regressionBlocked } = await persistTripItinerary(supabase, tripId, itinerary, {
