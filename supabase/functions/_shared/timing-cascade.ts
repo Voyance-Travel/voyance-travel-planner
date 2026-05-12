@@ -146,6 +146,85 @@ export function fillMissingStartTimes(
   return { filled, skipped };
 }
 
+// ─── Floating-meal time assigner ──────────────────────────────────────────────
+// A "floating" meal card has no startTime, no endTime, AND no duration to
+// compute either from — fillMissingStartTimes can't help it. Result in UI is a
+// dinner card sitting at the bottom of the day with no time, often duplicated.
+// This pass assigns canonical meal slots (or drops a clear duplicate) so the
+// card either anchors visibly or disappears.
+const MEAL_SLOT_RE = /\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/i;
+function mealKindOf(act: any): 'breakfast' | 'brunch' | 'lunch' | 'dinner' | null {
+  const t = `${act?.title || ''} ${act?.name || ''}`.toLowerCase();
+  if (/\bdinner\b|\bsupper\b/.test(t)) return 'dinner';
+  if (/\blunch\b/.test(t)) return 'lunch';
+  if (/\bbrunch\b/.test(t)) return 'brunch';
+  if (/\bbreakfast\b/.test(t)) return 'breakfast';
+  return null;
+}
+const DEFAULT_SLOT: Record<string, { start: string; end: string; lux: { start: string; end: string } }> = {
+  breakfast: { start: '08:30', end: '09:30', lux: { start: '09:00', end: '10:00' } },
+  brunch:    { start: '11:00', end: '12:00', lux: { start: '11:30', end: '12:30' } },
+  lunch:     { start: '13:00', end: '14:00', lux: { start: '13:30', end: '14:45' } },
+  dinner:    { start: '19:30', end: '21:00', lux: { start: '20:00', end: '21:45' } },
+};
+
+export function assignFloatingMealTimes(
+  activities: any[],
+  opts: { dayNumber?: number; budgetTier?: string; path?: string } = {}
+): { assigned: number; dropped: number } {
+  if (!Array.isArray(activities) || activities.length === 0) return { assigned: 0, dropped: 0 };
+  const day = opts.dayNumber ?? '?';
+  const path = opts.path ?? 'unknown';
+  const isLux = /luxury|luminary|splurge|premium/i.test(opts.budgetTier || '');
+
+  // Identify which meal slots already have a timed card.
+  const slotTaken: Record<string, boolean> = { breakfast: false, brunch: false, lunch: false, dinner: false };
+  for (const a of activities) {
+    if (!a) continue;
+    if (a.startTime || a.start_time || a.time || a.endTime || a.end_time) {
+      const kind = mealKindOf(a);
+      if (kind && slotTaken[kind] === false) slotTaken[kind] = true;
+    }
+  }
+
+  let assigned = 0;
+  let dropped = 0;
+  for (let i = activities.length - 1; i >= 0; i--) {
+    const a = activities[i];
+    if (!a || typeof a !== 'object') continue;
+    if (a.isLocked || a.locked || a.lock_state === 'locked'
+        || a.userAdded || a.userEdited || a.isManual
+        || a.extracted || a.pinned) continue;
+    if (a.startTime || a.start_time || a.time) continue;
+    if (a.endTime || a.end_time) continue;
+    if (Number.isFinite(Number(a.durationMinutes ?? a.duration_minutes))) continue;
+
+    const kind = mealKindOf(a);
+    if (!kind) continue;
+
+    if (slotTaken[kind]) {
+      // A timed card for this meal already exists — drop the floating duplicate.
+      activities.splice(i, 1);
+      dropped++;
+      console.log(`[FLOATING_MEAL_DROP] day=${day} kind=${kind} title="${a.title || a.name || ''}" path=${path}`);
+      continue;
+    }
+
+    const slot = DEFAULT_SLOT[kind];
+    if (!slot) continue;
+    const { start, end } = isLux ? slot.lux : slot;
+    a.startTime = start;
+    a.start_time = start;
+    a.time = start;
+    a.endTime = end;
+    a.end_time = end;
+    slotTaken[kind] = true;
+    assigned++;
+    console.log(`[FLOATING_MEAL_ASSIGN] day=${day} kind=${kind} start=${start} end=${end} title="${a.title || a.name || ''}" path=${path}`);
+  }
+  return { assigned, dropped };
+}
+
 // ─── Geo helpers ──────────────────────────────────────────────────────────────
 
 export function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
