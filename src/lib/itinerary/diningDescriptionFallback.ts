@@ -6,6 +6,11 @@
  * already-saved trips whose JSON has empty dining descriptions still
  * render an actionable blurb without requiring a re-save.
  *
+ * Dining card NEVER renders blank — even if the LLM omitted a description,
+ * a meal-guard wrote sanitizer-tripping boilerplate, or both backend and
+ * frontend sanitizers stripped it to empty, this helper synthesizes a
+ * usable blurb from data that's always present (venue + meal keyword).
+ *
  * IMPORTANT: this never mutates the activity. It only produces a string
  * to render. Saved data remains untouched.
  *
@@ -13,10 +18,11 @@
  */
 
 const DINING_CATEGORIES = new Set([
-  'dining', 'restaurant', 'food', 'breakfast', 'lunch', 'dinner', 'brunch', 'drinks',
+  'dining', 'restaurant', 'food', 'breakfast', 'lunch', 'dinner', 'brunch',
+  'drinks', 'cafe', 'coffee', 'nightcap', 'bar',
 ]);
 
-const MEAL_TITLE_RE = /^\s*(?:breakfast|brunch|lunch|dinner|drinks|nightcap)\b/i;
+const MEAL_TITLE_RE = /\b(?:breakfast|brunch|lunch|dinner|supper|nightcap|drinks|cocktails?|aperitif|coffee|cafe|café)\b/i;
 
 export function isDiningCard(act: { category?: string; title?: string; name?: string }): boolean {
   if (!act) return false;
@@ -30,19 +36,36 @@ function pickVenueName(act: any): string | null {
   const candidates = [
     act?.location?.name,
     act?.venue_name,
+    act?.venueName,
     typeof act?.title === 'string' ? act.title.replace(/^[^@]*\bat\s+/i, '') : '',
+    typeof act?.name === 'string' ? act.name.replace(/^[^@]*\bat\s+/i, '') : '',
   ];
   for (const c of candidates) {
     if (typeof c === 'string') {
       const cleaned = c.trim();
-      if (cleaned && cleaned.length > 1) return cleaned;
+      // Avoid generic placeholders ("Dinner", "Lunch", "the destination", etc.)
+      if (!cleaned || cleaned.length < 2) continue;
+      const lower = cleaned.toLowerCase();
+      if (MEAL_TITLE_RE.test(lower) && lower.split(/\s+/).length <= 1) continue;
+      if (lower === 'the destination' || lower.startsWith('@ the')) continue;
+      return cleaned;
     }
   }
   return null;
 }
 
+function pickAddress(act: any): string | null {
+  const addr = act?.location?.address;
+  if (typeof addr !== 'string') return null;
+  const cleaned = addr.trim();
+  if (!cleaned || cleaned.length < 4) return null;
+  const lower = cleaned.toLowerCase();
+  if (lower === 'the destination' || lower.startsWith('@ the')) return null;
+  return cleaned;
+}
+
 export function deterministicDiningDescription(
-  act: { title?: string; name?: string; location?: { name?: string }; venue_name?: string } | null | undefined,
+  act: { title?: string; name?: string; location?: { name?: string; address?: string }; venue_name?: string } | null | undefined,
   destinationCity?: string,
 ): string {
   if (!act) return '';
@@ -50,12 +73,15 @@ export function deterministicDiningDescription(
   const mealLabel = /breakfast|brunch/i.test(titleStr) ? 'breakfast'
                   : /lunch/i.test(titleStr) ? 'lunch'
                   : /dinner|supper/i.test(titleStr) ? 'dinner'
-                  : /drinks|nightcap|bar|cocktail/i.test(titleStr) ? 'drinks'
+                  : /drinks|nightcap|bar|cocktail|aperitif/i.test(titleStr) ? 'drinks'
+                  : /coffee|cafe|café/i.test(titleStr) ? 'coffee'
                   : 'this stop';
   const venue = pickVenueName(act);
+  const address = pickAddress(act);
   const cityHint = destinationCity ? ` in ${String(destinationCity).split(/[,/]/)[0].trim()}` : '';
   if (venue) {
-    return `Book ahead for ${mealLabel} at ${venue}${cityHint} and ask the staff what's freshest on the menu today.`;
+    const addrHint = address ? ` Located at ${address}.` : '';
+    return `${venue} serves ${mealLabel}${cityHint}.${addrHint} Check opening hours and book ahead — ask the staff what's freshest on the menu today.`;
   }
   return `Pick a well-reviewed local spot for ${mealLabel}${cityHint} — book ahead and ask for the day's specials.`;
 }
