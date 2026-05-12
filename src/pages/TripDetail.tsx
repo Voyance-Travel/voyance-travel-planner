@@ -1929,7 +1929,7 @@ export default function TripDetail() {
         const result = await safeUpdateItineraryData(tripId, JSON.parse(JSON.stringify(itineraryPayload)), {
           itinerary_status: 'ready',
           ...(safeUnlocked !== undefined ? { unlocked_day_count: safeUnlocked } : {}),
-        });
+        }, { allowFrozenWrite: true, reason: 'user-force-save' });
         const error = result?.error;
         
         if (error) {
