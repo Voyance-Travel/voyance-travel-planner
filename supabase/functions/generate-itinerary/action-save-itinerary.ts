@@ -17,7 +17,7 @@ import { buildDayScheduleSummary } from '../_shared/prompt-leak-scrub.ts';
 import { ensureDayDiningDescriptions } from '../_shared/dining-description-backfill.ts';
 import { pruneNonLogisticsAfterCheckout, pruneNonLogisticsAfterAirportTransfer } from '../_shared/post-checkout-prune.ts';
 import { enforceFreshenUpPosition } from '../_shared/freshen-up-position.ts';
-import { fillMissingStartTimes } from '../_shared/timing-cascade.ts';
+import { fillMissingStartTimes, dayChronoKey } from '../_shared/timing-cascade.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
@@ -142,11 +142,34 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
     let activities = Array.isArray(day.activities) ? [...day.activities] : [];
     // Fill missing startTime from endTime − duration BEFORE sort so chronology is coherent.
     fillMissingStartTimes(activities, { dayNumber, path: 'save-itinerary' });
+    // Wrap-aware sort — keeps a 00:55 late-nightlife hotel-return bookend at
+    // the chronological tail instead of jumping to the top of the day.
     activities.sort((a: any, b: any) => {
-      const ta = parseTimeToMinutes(a.startTime || a.start_time || a.time);
-      const tb = parseTimeToMinutes(b.startTime || b.start_time || b.time);
+      const ta = dayChronoKey(a.startTime || a.start_time || a.time);
+      const tb = dayChronoKey(b.startTime || b.start_time || b.time);
       return ta - tb;
     });
+    // One-shot self-heal: pre-existing trips may have been persisted with the
+    // bookend re-ordered to index 0 by the prior raw-minute sort. If a
+    // wrap-window bookend somehow still sits at the head, move it to the tail.
+    {
+      const isLegacyHeadBookend = (a: any): boolean => {
+        if (!a) return false;
+        const t = parseTimeToMinutes(a.startTime || a.start_time || a.time);
+        if (t >= 6 * 60) return false; // not in wrap window
+        const src = String(a.source || '').toLowerCase();
+        if (src === 'bookend-readtime' || src === 'bookend-overnight' || src === 'late_nightlife_bookend') return true;
+        const tags: string[] = Array.isArray(a.tags) ? a.tags.map((x: any) => String(x).toLowerCase()) : [];
+        if (tags.some(x => x === 'bookend-readtime' || x === 'bookend-overnight' || x === 'late_nightlife_bookend')) return true;
+        const title = String(a.title || a.name || '');
+        return /^Return to\b/i.test(title);
+      };
+      if (activities.length > 1 && isLegacyHeadBookend(activities[0])) {
+        const head = activities.shift();
+        activities.push(head);
+        console.log(`[BOOKEND_REORDER] day=${dayNumber} moved tail src="${(head as any)?.source || 'inferred'}" path=save-itinerary`);
+      }
+    }
     stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
     clampAllBookends(activities, { dayNumber, label: 'SAVE' });
     // Unified scrub boundary — single entry point.

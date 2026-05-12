@@ -66,6 +66,27 @@ export function parseTime(t: string | undefined | null): number | null {
   return h * 60 + min;
 }
 
+/**
+ * Wrap-aware sort key for ordering activities WITHIN a single day.
+ *
+ * Times in the early-AM window (default `[00:00, 06:00)`) belong to the *end*
+ * of the parent day — e.g. a 23:30 nightcap followed by a 00:55 hotel-return
+ * bookend. Without this, raw `mins-since-midnight` sorts re-order the bookend
+ * to the TOP of the day. Mirrors `ensureHotelReturnBookend`'s `norm()`.
+ *
+ * Returns `Number.MAX_SAFE_INTEGER` for unparseable / empty inputs so untimed
+ * rows always sort to the end.
+ */
+export function dayChronoKey(
+  startTime: unknown,
+  opts: { wrapBoundaryMin?: number } = {},
+): number {
+  const wrap = opts.wrapBoundaryMin ?? 6 * 60;
+  const t = parseTime(typeof startTime === 'string' ? startTime : null);
+  if (t === null) return Number.MAX_SAFE_INTEGER;
+  return t < wrap ? t + 24 * 60 : t;
+}
+
 export function minutesToTime(m: number): string {
   const h = Math.floor(m / 60) % 24;
   const min = m % 60;
@@ -235,11 +256,9 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
   fillMissingStartTimes(input as any[], { path: 'enforceTimingAndBuffers' });
 
   // Sort chronologically; activities without a startTime go to the end.
-  let activities = [...input].sort((a, b) => {
-    const ta = parseTime(a.startTime) ?? 99999;
-    const tb = parseTime(b.startTime) ?? 99999;
-    return ta - tb;
-  });
+  // Wrap-aware so a 00:55 late-nightlife hotel-return bookend sorts AFTER a
+  // 23:30 nightcap instead of jumping to the top of the day.
+  let activities = [...input].sort((a, b) => dayChronoKey(a.startTime) - dayChronoKey(b.startTime));
 
   // Helper: shift an activity (and all later ones, except locked) by `delta` minutes.
   const cascadeShift = (fromIdx: number, delta: number) => {
@@ -265,6 +284,12 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
     const currEnd = parseTime(curr.endTime);
     const nextStart = parseTime(next.startTime);
     if (currStart === null || nextStart === null) continue;
+
+    // Wrap-aware skip: when the next card sits in the early-AM wrap window
+    // (e.g. 00:55 hotel-return after a 23:30 nightcap), raw minute math says
+    // currEnd > nextStart and would re-shove the bookend by ~hours. Treat
+    // wrap-past-midnight pairs as already-spaced and let cascadeShift skip.
+    if (nextStart < currStart && nextStart < 6 * 60) continue;
 
     // 1. Same-start
     if (currStart === nextStart && !isStructural(next, lockedIds)) {

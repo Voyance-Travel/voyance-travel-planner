@@ -13,6 +13,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { isWeakAddress } from '@/lib/address-quality';
+import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 import { coerceDurationString } from '@/utils/plannerUtils';
 import { useLedgerCostOverrideMap, getLedgerOverride, warnOnceLedgerOverride } from '@/utils/ledgerCostOverride';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
@@ -2676,16 +2677,10 @@ export function EditorialItinerary({
         }
         return patched;
       });
-      // Sort chronologically after applying time patches
-      patchedActivities.sort((a, b) => {
-        const parseMin = (t?: string) => {
-          if (!t) return 9999;
-          const parts = t.match(/(\d{1,2}):(\d{2})/);
-          if (!parts) return 9999;
-          return parseInt(parts[1]) * 60 + parseInt(parts[2]);
-        };
-        return parseMin(a.startTime || a.time) - parseMin(b.startTime || b.time);
-      });
+      // Sort chronologically (wrap-aware) after applying time patches
+      patchedActivities.sort(
+        (a, b) => dayChronoKey(a.startTime || a.time) - dayChronoKey(b.startTime || b.time),
+      );
 
       // Final cascade safety net — resolves any residual overlap/buffer drift
       // produced by partial server patches. Locked rows stay put.
@@ -3577,11 +3572,9 @@ export function EditorialItinerary({
       const nextActivities = [...activities];
       nextActivities[airportIdx] = checkout;
       nextActivities[checkoutIdx] = airport;
-      nextActivities.sort((a, b) => {
-        const ta = parseMins(a.startTime || a.time) ?? 99999;
-        const tb = parseMins(b.startTime || b.time) ?? 99999;
-        return ta - tb;
-      });
+      nextActivities.sort(
+        (a, b) => dayChronoKey(a.startTime || a.time) - dayChronoKey(b.startTime || b.time),
+      );
 
       return prev.map((d, idx) => (idx === lastIdx ? { ...d, activities: nextActivities } : d));
     });
@@ -5235,7 +5228,7 @@ export function EditorialItinerary({
             newDay.activities = newDay.activities.filter((a: EditorialActivity) => !isAccommodationLike(a));
             newDay.activities.push(originalHotel);
             newDay.activities.sort((a: EditorialActivity, b: EditorialActivity) =>
-              (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
+              dayChronoKey(a.startTime || a.time) - dayChronoKey(b.startTime || b.time)
             );
           }
           // Preserve original day title/theme
@@ -5313,7 +5306,7 @@ export function EditorialItinerary({
             data.day.activities = data.day.activities.filter((a: EditorialActivity) => !isAccommodationLike(a));
             data.day.activities.push(originalHotel);
             data.day.activities.sort((a: EditorialActivity, b: EditorialActivity) =>
-              (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
+              dayChronoKey(a.startTime || a.time) - dayChronoKey(b.startTime || b.time)
             );
           }
 
@@ -5546,18 +5539,11 @@ export function EditorialItinerary({
         if (mode === 'replace') {
           const lockedActivities = day.activities.filter(a => a.isLocked);
           const merged = [...lockedActivities, ...newActivities];
-          merged.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+          merged.sort((a, b) => dayChronoKey(a.startTime) - dayChronoKey(b.startTime));
           updated[dayIndex] = { ...day, activities: merged };
         } else {
           const combined = [...day.activities, ...newActivities];
-          combined.sort((a, b) => {
-            const timeA = a.startTime || '';
-            const timeB = b.startTime || '';
-            if (!timeA && !timeB) return 0;
-            if (!timeA) return 1;
-            if (!timeB) return -1;
-            return timeA.localeCompare(timeB);
-          });
+          combined.sort((a, b) => dayChronoKey(a.startTime) - dayChronoKey(b.startTime));
           updated[dayIndex] = { ...day, activities: combined };
         }
       }
@@ -5737,15 +5723,9 @@ export function EditorialItinerary({
         });
         // Auto-sort chronologically when a time changes
         if (updates.startTime || updates.endTime) {
-          updatedActivities.sort((a, b) => {
-            const parseMin = (t?: string) => {
-              if (!t) return 9999;
-              const parts = t.match(/(\d{1,2}):(\d{2})/);
-              if (!parts) return 9999;
-              return parseInt(parts[1]) * 60 + parseInt(parts[2]);
-            };
-            return parseMin(a.startTime || a.time) - parseMin(b.startTime || b.time);
-          });
+          updatedActivities.sort(
+            (a, b) => dayChronoKey(a.startTime || a.time) - dayChronoKey(b.startTime || b.time),
+          );
         }
         return { ...day, activities: updatedActivities };
       });

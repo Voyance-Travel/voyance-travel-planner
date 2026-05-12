@@ -451,7 +451,7 @@ export async function universalQualityPass(
         if (/am/i.test(t) && h === 12) h = 0;
         return h * 60 + mm;
       };
-      const meals = result.filter(isMeal).sort((a, b) => startMins(a) - startMins(b));
+      const meals = result.filter(isMeal).sort((a, b) => (startMins(a) || 0) - (startMins(b) || 0));
       const lunch = meals.find(a => { const s = startMins(a); return s >= 11 * 60 && s < 16 * 60; });
       const dinner = meals.find(a => startMins(a) >= 18 * 60);
       if (lunch && dinner && priceOf(lunch) > 0 && priceOf(dinner) > 0

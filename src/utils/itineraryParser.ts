@@ -13,6 +13,7 @@ import { format, parseISO, addDays } from 'date-fns';
 import { coerceDurationString } from './plannerUtils';
 import { isGhostActivity } from '@/lib/itinerary/hideGhostActivities';
 import { ensureHotelReturnBookend } from '@/lib/itinerary/ensureHotelReturnBookend';
+import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 
 // Strip non-Latin scripts from AI text artifacts before rendering
 const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0600-\u06FF\u0400-\u04FF\u0E00-\u0E7F]+/g;
@@ -668,12 +669,8 @@ export function parseItineraryDays(
       rescued++;
     }
     if (rescued > 0) {
-      // Re-sort chronologically by startTime where possible.
-      merged.sort((x, y) => {
-        const sx = String(x?.startTime || '99:99');
-        const sy = String(y?.startTime || '99:99');
-        return sx.localeCompare(sy);
-      });
+      // Re-sort chronologically (wrap-aware so 00:55 bookends stay at tail).
+      merged.sort((x, y) => dayChronoKey(x?.startTime) - dayChronoKey(y?.startTime));
       winner.activities = merged;
       console.warn(`[itineraryParser] Salvaged ${rescued} dining card(s) from duplicate day ${loser.dayNumber}`);
     }
