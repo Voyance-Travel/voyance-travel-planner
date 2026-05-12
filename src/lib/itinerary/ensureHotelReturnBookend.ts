@@ -139,6 +139,11 @@ export function ensureHotelReturnBookend<T extends any[]>(
     console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=n/a reason=day_contains_departure_terminal`);
     return activities;
   }
+  if ((activities as any[]).some(isHotelReturnBookendActivity)) {
+    // eslint-disable-next-line no-console
+    console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=inferred reason=existing_return_bookend`);
+    return activities;
+  }
 
   // Identify the chronologically last activity by max end_time (fallback
   // start_time). Don't trust array order — the editor injects synthetic
