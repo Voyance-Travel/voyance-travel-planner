@@ -27,8 +27,9 @@ describe('parseItineraryDays — dining preservation (Bruges meal-loss fix)', ()
       ],
     };
     const days = parseItineraryDays(data, '2026-06-01');
-    expect(days[0].activities.length).toBe(2);
-    expect(days[0].activities.map((a: any) => a.startTime).sort()).toEqual(['12:30', '14:00']);
+    const acts = stripBookends(days[0].activities);
+    expect(acts.length).toBe(2);
+    expect(acts.map((a: any) => a.startTime).sort()).toEqual(['12:30', '14:00']);
   });
 
   it('keeps two dining cards with empty startTime (empty-time dedup exempt)', () => {
