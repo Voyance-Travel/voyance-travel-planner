@@ -64,6 +64,23 @@ function pickAddress(act: any): string | null {
   return cleaned;
 }
 
+function inferCuisineCue(venue: string | null): string | null {
+  if (!venue) return null;
+  const v = venue.toLowerCase();
+  if (/\b(maison|boulangerie|patisserie|p[âa]tisserie|kayser|paul|le pain)\b/.test(v)) return 'French bakery classics';
+  if (/\b(trattoria|osteria|ristorante|pizzeria|enoteca)\b/.test(v)) return 'classic Italian fare';
+  if (/\b(sushi|izakaya|ramen|udon|soba|tempura)\b/.test(v)) return 'Japanese specialties';
+  if (/\b(dim sum|wonton|noodle|hot pot|cantonese|szechuan|sichuan|hong kong)\b/.test(v)) return 'Cantonese / Chinese specialties';
+  if (/\b(taqueria|cantina|mezcaler[ií]a|antojer[ií]a)\b/.test(v)) return 'Mexican classics';
+  if (/\b(asador|parrilla|bodega|tapas|taberna|mercado)\b/.test(v)) return 'Spanish small plates';
+  if (/\b(brasserie|bistro|bistrot|caf[eé])\b/.test(v)) return 'classic French bistro fare';
+  if (/\b(steakhouse|chophouse|grill|smokehouse)\b/.test(v)) return 'grilled meats';
+  if (/\b(pho|banh mi|vietnamese)\b/.test(v)) return 'Vietnamese classics';
+  if (/\b(thai|som tam|pad)\b/.test(v)) return 'Thai favorites';
+  if (/\b(meze|kebab|ouzeri|taverna)\b/.test(v)) return 'Mediterranean meze';
+  return null;
+}
+
 export function deterministicDiningDescription(
   act: { title?: string; name?: string; location?: { name?: string; address?: string }; venue_name?: string } | null | undefined,
   destinationCity?: string,
@@ -79,8 +96,12 @@ export function deterministicDiningDescription(
   const venue = pickVenueName(act);
   const address = pickAddress(act);
   const cityHint = destinationCity ? ` in ${String(destinationCity).split(/[,/]/)[0].trim()}` : '';
+  const cuisine = inferCuisineCue(venue);
   if (venue) {
     const addrHint = address ? ` Located at ${address}.` : '';
+    if (cuisine) {
+      return `${venue} serves ${mealLabel}${cityHint} — known for ${cuisine}.${addrHint} Check opening hours and book ahead; ask staff what's freshest today.`;
+    }
     return `${venue} serves ${mealLabel}${cityHint}.${addrHint} Check opening hours and book ahead — ask the staff what's freshest on the menu today.`;
   }
   return `Pick a well-reviewed local spot for ${mealLabel}${cityHint} — book ahead and ask for the day's specials.`;
