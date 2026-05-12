@@ -18,9 +18,10 @@ jobs:
       - name: Vitest
         run: bun run test
       - name: Deno (edge function tests)
-        # Run individual passing test files; persist-day-contract.test.ts has a
-        # pre-existing parse error tracked separately and is excluded.
+        # Glob covers both layouts: <fn>/__tests__/*.test.ts and <fn>/*.test.ts.
+        # Deno dedupes when both patterns match the same file. New test files
+        # are picked up automatically — no workflow edit required.
         run: |
-          deno test --allow-net --allow-env --allow-read \
-            supabase/functions/_shared/__tests__/validate-itinerary-for-persist.test.ts \
-            supabase/functions/_shared/__tests__/validation-gate.test.ts
+          deno test --allow-read --allow-env --allow-net \
+            'supabase/functions/**/__tests__/*.test.ts' \
+            'supabase/functions/**/*.test.ts'

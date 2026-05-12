@@ -36,6 +36,7 @@ Deno.test('does NOT drop legit acronyms in parens like (NYC)', () => {
   const acts = [{ title: 'Visit MoMA (NYC)', startTime: '11:00', category: 'museum' }];
   const { activities } = enforcePersistDayContract(acts);
   assertEquals(activities.length, 1);
+});
 
 Deno.test('drops "find a local spot"', () => {
   const acts = [{ title: 'Lunch — find a local spot', startTime: '12:30', category: 'dining' }];
