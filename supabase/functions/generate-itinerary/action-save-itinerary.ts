@@ -280,6 +280,8 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     console.error(`[save-itinerary] ❌ ${daysWithoutDate.length} days still have no date after normalization — this should not happen`);
   }
 
+  console.log(`[save-itinerary] PRE-VALIDATE counts: ${countDays(itineraryDays)}`);
+
   // ── STEP 2: MEAL COMPLIANCE GUARD ─────────────────────────────
   let mealGuardInjections = 0;
 
