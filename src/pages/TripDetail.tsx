@@ -1319,7 +1319,7 @@ export default function TripDetail() {
                   };
 
                   console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount})`);
-                  await safeUpdateItineraryData(tripId, healedItinerary);
+                  await safeUpdateItineraryData(tripId, healedItinerary, {}, { skipLedgerCheck: true, reason: 'self-heal-rebuild-from-tables' });
 
                   const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
                   setTrip(healedTripData);
