@@ -36,71 +36,72 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
 
   useEffect(() => {
     let cancelled = false;
-    
+    let settled = false;
+
+    // Reset state on each prop change so a new lookup starts cleanly.
+    setIsLoading(true);
+    setUrl(null);
+
+    // Deadline fallback FIRST: established before any async work so a hung
+    // invoke (cold start, OOM, network drop) can never strand the spinner.
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled || settled) return;
+      settled = true;
+      if (import.meta.env.DEV) {
+        console.warn('[RestaurantLink] lookup deadline hit (5s)', { restaurantName, destination });
+      }
+      setUrl(null);
+      setIsLoading(false);
+    }, 5000);
+
     async function lookupUrl() {
-      // Log what we're looking up for debugging
-      // Looking up restaurant URL
-      
       const cacheKey = getCacheKey(restaurantName, destination);
-      
+
+      const finish = (nextUrl: string | null) => {
+        if (cancelled || settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        setUrl(nextUrl);
+        setIsLoading(false);
+      };
+
       // Check cache first
       const cached = urlCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-        // Cache hit
-        if (!cancelled) {
-          setUrl(cached.url); // Will be null if no URL was found
-          setIsLoading(false);
-        }
+        finish(cached.url);
         return;
       }
-      
+
       try {
         const cleanName = cleanRestaurantName(restaurantName);
-        
+
         // If cleaning stripped everything, skip the lookup
         if (!cleanName) {
           urlCache.set(cacheKey, { url: null, timestamp: Date.now() });
-          if (!cancelled) { setUrl(null); setIsLoading(false); }
+          finish(null);
           return;
         }
-        
+
         const { data, error } = await supabase.functions.invoke('lookup-restaurant-url', {
           body: { restaurantName: cleanName, destination }
         });
-        
-        if (!cancelled) {
-          if (error || !data?.success || !data?.url) {
-            // Cache the miss - no URL found
-            // No URL found - cache the miss
-            urlCache.set(cacheKey, { url: null, timestamp: Date.now() });
-            setUrl(null);
-          } else {
-            // Cache the hit
-            // Found URL - cache the hit
-            urlCache.set(cacheKey, { url: data.url, timestamp: Date.now() });
-            setUrl(data.url);
-          }
-          setIsLoading(false);
+
+        if (cancelled || settled) return;
+
+        if (error || !data?.success || !data?.url) {
+          urlCache.set(cacheKey, { url: null, timestamp: Date.now() });
+          finish(null);
+        } else {
+          urlCache.set(cacheKey, { url: data.url, timestamp: Date.now() });
+          finish(data.url);
         }
       } catch (err) {
         console.error('[RestaurantLink] Error looking up URL:', err);
-        if (!cancelled) {
-          setUrl(null);
-          setIsLoading(false);
-        }
+        finish(null);
       }
     }
-    
-    lookupUrl();
 
-    // Deadline fallback: if the edge function hangs (cold start, OOM, network drop),
-    // resolve the spinner after 5s instead of leaving it spinning forever.
-    const timeoutId = window.setTimeout(() => {
-      if (!cancelled) {
-        setUrl(null);
-        setIsLoading(false);
-      }
-    }, 5000);
+    lookupUrl();
 
     return () => {
       cancelled = true;
