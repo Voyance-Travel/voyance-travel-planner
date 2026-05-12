@@ -1,94 +1,74 @@
-## Two deferred items — scoped plan
+## Hotel-Return Survival Telemetry
 
-### 1. Day-1 breakfast guarantor (deterministic post-gen)
+Observation-only instrumentation across the 5 bookend pipeline sites so the next user trip produces one structured `[BOOKEND_SUMMARY]` per day, identifying exactly where the hotel-return card is being lost (emit, strip, clamp, save, or read-time).
 
-**Where it goes**
-`supabase/functions/generate-itinerary/action-generate-trip-day.ts`, immediately after `enforceRequiredMealsFinalGuard` runs and before the post-meal-guard `runStep8` retry.
+Zero behavior change. No new code paths, no new conditions — only `console.log` + a tiny per-day counter object stamped onto `metadata.quality.bookend_trace`.
 
-**Trigger conditions (all must be true)**
-- `dayNumber === 1`
-- Meal policy resolved via `deriveMealPolicy` includes `'breakfast'` in `requiredMeals` (covers morning_arrival <06:30 + full_exploration; correctly skips midday/late arrivals where breakfast isn't expected)
-- No card in the day with category ∈ {breakfast, brunch, cafe} OR title matching `/\b(breakfast|brunch)\b/i` whose `startTime` falls in 06:30–10:30
-- Arrival band (if first-day flight known) is <10:30; otherwise default to true when `requiredMeals` includes breakfast
+### Trace events (single tag, structured payload)
 
-**What it does**
-1. Pull the city's verified breakfast pool — reuse the same source the meal-guard uses:
-   - First: `verified_venues` filtered by destination + `types` containing breakfast/cafe/bakery (`checkVenueCache` style query, but pool-fetch variant)
-   - Fallback: `INLINE_FALLBACK_BREAKFAST` map per city in `_shared/fallback-meals.ts` (already exists for meal-guard)
-2. Pick first unused venue (skip any name already present elsewhere in trip via cross-day dedup canonicalizer)
-3. Construct activity card:
-   - `startTime` = arrival+90min clamped to [08:00, 09:30], default 08:30
-   - `endTime` = start+75min
-   - `category: 'breakfast'`, `mealSlot: 'breakfast'`
-   - `source: 'day1_breakfast_inject'` (new sentinel tag, allowlisted in ghost filter)
-   - Description filled by `_shared/description-fill.ts` (already runs post-guard)
-4. Insert via timing-cascade-aware splice (not naive push) so subsequent activities re-cascade
-5. Log `[DAY1_BREAKFAST_INJECT] day=1 dest=… venue="…" source=verified|fallback`
+All sites emit the same `[BOOKEND_TRACE]` line shape so logs are greppable and aggregable:
 
-**City pool integrity (cross-city guard)**
-- Reuse `detectCrossCityMention` on selected venue name + address before inserting
-- If pool exhausted or all rejected → emit `needsVenuePick` $0 sentinel (consistent with wellness pattern)
-
-**Files touched**
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — new helper call
-- `supabase/functions/_shared/day1-breakfast-inject.ts` — NEW, contains the helper
-- `supabase/functions/_shared/fallback-meals.ts` — verify breakfast pool exists per city; extend if gaps
-- `src/lib/itinerary/hideGhostActivities.ts` — allowlist `source:'day1_breakfast_inject'` (no-op since real venue, but future-proof)
-
-**Test coverage**
-- `_shared/__tests__/day1-breakfast-inject.test.ts`:
-  - morning arrival, no breakfast → injects
-  - morning arrival, breakfast already present → no-op
-  - midday arrival (12:30) → no-op (policy excludes breakfast)
-  - late arrival (22:00) → no-op
-  - exhausted pool → unverified placeholder
-  - cross-city venue rejected, falls through
-
-**Out of scope**
-- Lunch/dinner equivalents (meal-guard handles them)
-- Re-tuning prompt rules
-
----
-
-### 2. Hotel-return survival telemetry (observation only)
-
-**Goal**: prove which path drops the bookend before patching. Zero generation logic changes.
-
-**Instrumentation points**
-1. **Emission** — `runStep8` (universal-quality-pass.ts) — already logs; standardize to:
-   `[BOOKEND_TRACE] day=N stage=emit source=bookend|late_nightlife_bookend|bookend-overnight result=created|skipped reason=…`
-2. **Predawn-strip** — `stripPreDawnHotelReturns` — log per-bookend kept/stripped with source:
-   `[BOOKEND_TRACE] day=N stage=predawn-strip source=… result=kept|stripped`
-3. **Clamp** — `clampAllBookends` — log when endTime clamp fires:
-   `[BOOKEND_TRACE] day=N stage=clamp source=… clamped=true|false originalEnd=… newEnd=…`
-4. **Persist** — `action-save-itinerary normalizeDays` — count bookends entering vs. exiting:
-   `[BOOKEND_TRACE] day=N stage=persist in=K out=M dropped=[id1,id2]`
-5. **Read-time** — `ensureHotelReturnBookend` (parser) — log when synthetic injection happens:
-   `[BOOKEND_TRACE] day=N stage=readtime injected=true|false source=bookend-readtime|late_nightlife_bookend|bookend-overnight reason=…`
-
-**Single-line aggregator (post-save)**
-At end of `action-save-itinerary`, emit one summary line per day:
-```
-[BOOKEND_SUMMARY] tripId=… day=N emitted=Y stripped=N clamped=Y persisted=Y readtimeInjected=N finalSource=…
+```text
+[BOOKEND_TRACE] day=N site=<emit|strip|clamp|save|readtime> action=<emitted|stripped|clamped|persisted|injected|skipped> source=<bookend-validator|late_nightlife_bookend|bookend-synthesized|bookend-readtime|bookend-overnight|n/a> reason=<short>
 ```
 
-**Files touched**
-- `supabase/functions/generate-itinerary/universal-quality-pass.ts` — standardize existing logs
-- `supabase/functions/_shared/clamp-bookend.ts` — add stage tag to existing logs
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — add in/out counter + summary
-- `src/lib/itinerary/ensureHotelReturnBookend.ts` — add readtime stage log
+### Instrumentation sites
 
-**No behavior change**: all `[BOOKEND_TRACE]` lines are pure `console.log`. Zero risk of regression.
+1. **`runStep8` — `supabase/functions/generate-itinerary/universal-quality-pass.ts` (~L262)**
+   Right after the `result.push(card)`: emit `site=emit action=emitted source=${card.source}`. Also emit `site=emit action=skipped reason=<alreadyReturn|airport|no_window|…>` at each existing early-return so we know *why* a day didn't get one.
 
-**Exit criteria**
-After one trip passes through, grep edge logs for `[BOOKEND_SUMMARY]` and identify whichever day shows `emitted=Y persisted=N` or `persisted=Y readtimeInjected=Y` (= persisted bookend was dropped at parse). That tells us the exact leak before writing a fix.
+2. **`stripPreDawnHotelReturns` — `supabase/functions/_shared/predawn-hotel-strip.ts` (~L82)**
+   Inside the splice loop: emit `site=strip action=stripped source=${act.source||'unknown'}` per removal. Existing skip-counter for `late_nightlife_bookend` already logs; reformat to the same tag.
 
----
+3. **`clampAllBookends` / `clampBookendEndTime` — `supabase/functions/_shared/clamp-bookend.ts` (~L160)**
+   Convert the existing `[BOOKEND_CLAMP]` warn to also emit a structured `[BOOKEND_TRACE] site=clamp action=clamped reason=${reason}` line (keep the human-readable warn for now).
 
-### Sequencing
+4. **`action-save-itinerary normalizeDays` — `supabase/functions/generate-itinerary/action-save-itinerary.ts` (~L173–L182, L500–L515)**
+   - At the BOOKEND_REORDER tail-move site: emit `site=save action=reordered`.
+   - After the save-time `runStep8` retry: count whether a bookend now exists on the day; emit `site=save action=persisted source=${terminal.source}` or `action=missing reason=<no_runStep8_match>`.
 
-1. Telemetry first (1 PR, ~30min, zero risk) — ship and let it bake on next user trip
-2. Day-1 breakfast guarantor (1 PR, ~90min, deterministic) — independent, ship in parallel
-3. Once telemetry produces one `[BOOKEND_SUMMARY]` showing the leak, write the targeted bookend-survival fix in a third PR
+5. **`ensureHotelReturnBookend` — `src/lib/itinerary/ensureHotelReturnBookend.ts` (~L201)**
+   At the synthetic injection return: emit `[BOOKEND_TRACE] site=readtime action=injected source=${source}`. Also at the early-return guards (`isTerminalAlready`, `isDepartureTerminal`, late-night non-qualifier, no-times) emit `action=skipped reason=…`.
 
-Shall I proceed with this plan, or adjust the breakfast injection window / telemetry verbosity first?
+### Per-day aggregator
+
+In `action-save-itinerary normalizeDays`, after both the BOOKEND_REORDER block and the save-time `runStep8` retry, emit ONE summary line per day and stamp it onto `metadata.quality.bookend_trace`:
+
+```text
+[BOOKEND_SUMMARY] day=N emitted=<0|1> stripped=<n> clamped=<n> persisted=<0|1> persistedSource=<…|none>
+```
+
+The counts are derived by scanning the day's activities at the end of `normalizeDays` (no extra mutation): `persisted = does the chronologically last card have source ∈ bookend-* / late_nightlife_bookend / category accommodation+TRUE_RETURN_RE`. The emitted/stripped/clamped tallies are accumulated in a tiny per-day `{emitted, stripped, clamped}` object passed by reference (or recomputed from log counters scoped to the loop iteration — easier and same result).
+
+### Read-time aggregator
+
+In the parser path that calls `ensureHotelReturnBookend` (already wired in `parseItineraryParser` Step 4b — no edit needed there beyond the trace lines added in site 5), the existing call site naturally produces one `site=readtime action=injected|skipped` line per day, which is sufficient — no separate summary needed for the read path.
+
+### Files touched
+
+- `supabase/functions/generate-itinerary/universal-quality-pass.ts` (4 trace lines in `runStep8`)
+- `supabase/functions/_shared/predawn-hotel-strip.ts` (1 trace line per removal + reformat existing skip log)
+- `supabase/functions/_shared/clamp-bookend.ts` (1 trace line in `clampBookendEndTime`)
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (3 trace lines + 1 `[BOOKEND_SUMMARY]` per day + stamp on `metadata.quality.bookend_trace`)
+- `src/lib/itinerary/ensureHotelReturnBookend.ts` (4 trace lines: 1 inject, 3 skip reasons)
+
+### Exit criteria
+
+After the user regenerates one trip, grep server + browser logs:
+
+```bash
+grep BOOKEND_SUMMARY  # one line per day
+grep BOOKEND_TRACE    # full pipeline per day
+```
+
+Pattern interpretation:
+- `emitted=1 stripped=1 persisted=0` → predawn-strip is eating valid bookends → fix allowlist.
+- `emitted=0 persisted=0` + `site=emit action=skipped reason=alreadyReturn` on a day with no terminal hotel card → terminal misclassification → tighten `TRUE_RETURN_RE` / `MIDDAY_ACCOM_RE`.
+- `emitted=1 persisted=1` but UI shows none → read-time `parseItineraryDays` ghost filter or `dayChronoKey` sort dropping it.
+- `emitted=0 persisted=0 site=readtime action=injected=0` + `skipped reason=no_times` → terminal card has unparseable times → expand synthesis fallback in `runStep8`.
+
+Once the leak source is identified from one real trip, write the targeted fix in a follow-up PR. No fix in this PR — telemetry only.
+
+### Risk
+
+Zero behavior change. Worst case: log volume increase of ~6–10 lines per day per trip. All lines are `console.log`/`console.warn` — no new exceptions, no new awaits, no schema changes.
