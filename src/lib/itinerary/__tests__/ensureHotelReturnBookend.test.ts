@@ -84,20 +84,53 @@ describe('ensureHotelReturnBookend', () => {
     expect(out).toBe(acts);
   });
 
-  it('respects locked terminal activity', () => {
+  it('locked terminal activity is preserved verbatim and bookend is appended after it', () => {
     const acts = [
-      mk({ title: 'Late dinner', startTime: '20:00', endTime: '22:30', isLocked: true }),
+      mk({ id: 'lk', title: 'Late dinner', startTime: '20:00', endTime: '22:30', isLocked: true }),
     ];
-    const out = ensureHotelReturnBookend(acts, { dayIndex: 0 });
-    expect(out).toBe(acts);
+    const out = ensureHotelReturnBookend(acts, { hotelName: 'The Notary', dayIndex: 0 });
+    expect(out).toHaveLength(2);
+    // Locked row untouched
+    expect(out[0]).toBe(acts[0]);
+    expect((out[0] as any).isLocked).toBe(true);
+    // Bookend appended after it
+    expect(out[1].source).toBe('bookend-readtime');
+    expect(out[1].title).toBe('Return to The Notary');
   });
 
-  it('respects user-source terminal activity', () => {
+  it('user-source terminal dinner still receives a hotel return after it', () => {
     const acts = [
-      mk({ title: 'User picked event', startTime: '20:00', endTime: '22:30', source: 'user' }),
+      mk({ id: 'u1', title: 'User dinner pick', startTime: '20:00', endTime: '22:30', source: 'user' }),
     ];
-    const out = ensureHotelReturnBookend(acts, { dayIndex: 0 });
-    expect(out).toBe(acts);
+    const out = ensureHotelReturnBookend(acts, { hotelName: 'The Notary', dayIndex: 0 });
+    expect(out).toHaveLength(2);
+    expect(out[0]).toBe(acts[0]);
+    expect(out[1].title).toBe('Return to The Notary');
+  });
+
+  it('Milan Day 1: Nabucco dinner ends 23:13 → injects bookend', () => {
+    const acts = [
+      mk({ title: 'Lunch', category: 'dining', startTime: '13:00', endTime: '14:30' }),
+      mk({ title: 'Dinner at Ristorante Nabucco', category: 'dining', startTime: '21:30', endTime: '23:13' }),
+    ];
+    const out = ensureHotelReturnBookend(acts, { hotelName: 'Hotel Spadari', dayIndex: 0 });
+    expect(out).toHaveLength(3);
+    const last = out[out.length - 1];
+    expect(last.title).toBe('Return to Hotel Spadari');
+    expect(last.source).toBe('bookend-readtime');
+  });
+
+  it('Milan Day 2: stale "Travel to Parco Sempione" tail after dinner → bookend still appended after the tail', () => {
+    const acts = [
+      mk({ title: 'Lunch', category: 'dining', startTime: '13:00', endTime: '14:00' }),
+      mk({ title: 'Dinner at Al Coniglio Bianco', category: 'dining', startTime: '20:00', endTime: '21:49' }),
+      mk({ title: 'Travel to Parco Sempione', category: 'transit', startTime: '22:00', endTime: '22:20' }),
+    ];
+    const out = ensureHotelReturnBookend(acts, { hotelName: 'Hotel Spadari', dayIndex: 1 });
+    expect(out).toHaveLength(4);
+    const last = out[out.length - 1];
+    expect(last.title).toBe('Return to Hotel Spadari');
+    expect(last.source).toBe('bookend-readtime');
   });
 
   it('extracts hotel name from existing checkout card on another day', () => {
