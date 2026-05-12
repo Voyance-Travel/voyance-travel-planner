@@ -237,6 +237,10 @@ export async function enforceContractOnDays(
       const dest = perDayDest;
       cleaned = cleaned.filter((a: any) => {
         if (isLockedRow(a)) return true;
+        // Manual-pick meal sentinels carry destination-name strings
+        // ("Lunch — find a local spot in Aruba"); the cross-city detector
+        // can false-positive on them. They're intentional placeholders.
+        if (isManualPickSentinel(a)) return true;
         const cat = String(a?.category || a?.type || '').toLowerCase();
         // Apply only to venue-bearing categories
         if (!/dining|food|restaurant|cafe|bar|nightlife|sightseeing|museum|culture|shopping|wellness|spa|activity|entertainment|relaxation/i.test(cat)) {
