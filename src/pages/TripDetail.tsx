@@ -2293,7 +2293,7 @@ export default function TripDetail() {
     };
     setTrip(prev => prev ? { ...prev, itinerary_data: updatedItinerary as any } : null);
     try {
-      const safeRes = await safeUpdateItineraryData(tripId, updatedItinerary as any);
+      const safeRes = await safeUpdateItineraryData(tripId, updatedItinerary as any, {}, { allowFrozenWrite: true, reason: 'user-archive-orphans' });
       if (safeRes?.error) throw safeRes.error;
       toast.success(`Archived ${archived.length} day${archived.length === 1 ? '' : 's'} outside your trip dates`);
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
