@@ -30,6 +30,11 @@ export interface SafeUpdateOptions {
    *  silently erode meals across reloads. See
    *  mem://constraints/itinerary/ledger-check-mutation-only. */
   skipLedgerCheck?: boolean;
+  /** User-initiated saves MUST set this so the FROZEN gate lets them through
+   *  once a trip has reached ready/generated. Page-load / hydration / self-heal
+   *  paths MUST NEVER set this. See
+   *  mem://constraints/itinerary/frozen-after-ready. */
+  allowFrozenWrite?: boolean;
 }
 
 const MEAL_RE = /\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/i;
