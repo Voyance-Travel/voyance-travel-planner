@@ -16,6 +16,7 @@ import { WelcomeBonusManager } from '@/components/common/WelcomeBonusManager';
 import { SiteOnboardingTour } from '@/components/onboarding/SiteOnboardingTour';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { GlobalErrorHandler } from '@/components/common/GlobalErrorHandler';
+import { PersistIssuesListener } from '@/components/itinerary/PersistIssuesListener';
 import { OAuthReturnHandler } from '@/components/auth/OAuthReturnHandler';
 import { useAnalyticsTracker } from '@/hooks/useAnalyticsTracker';
 import { useAccessibilityClasses } from '@/hooks/useAccessibilityClasses';
@@ -324,6 +325,7 @@ const App = () => (
               
               <PushInitializer />
               <GlobalErrorHandler />
+              <PersistIssuesListener />
               <Toaster />
               <Sonner />
               <BrowserRouter>
