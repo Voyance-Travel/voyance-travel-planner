@@ -79,12 +79,16 @@ export function stripPreDawnHotelReturns(
         act?.startTime
       } start_time=${act?.start_time} time=${act?.time}`,
     );
+    console.log(
+      `[BOOKEND_TRACE] day=${context?.dayNumber ?? '?'} site=strip action=stripped source=${act?.source || 'unknown'} reason=predawn title="${act?.title || ''}"`,
+    );
     activities.splice(i, 1);
     removed++;
   }
 
   if (skippedLateNightlife > 0) {
     console.log(`[${label}] day=${context?.dayNumber ?? '?'} kept ${activities.length} cards (skipped:${skippedLateNightlife} late_nightlife_bookend)`);
+    console.log(`[BOOKEND_TRACE] day=${context?.dayNumber ?? '?'} site=strip action=skipped source=late_nightlife_bookend reason=allowlist count=${skippedLateNightlife}`);
   }
   return removed;
 }
