@@ -407,3 +407,100 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
 
   return { activities, repairs, droppedIds };
 }
+
+/**
+ * Prune stale `late_nightlife_bookend` cards whose chronological-prior
+ * non-bookend activity isn't actually late-nightlife (or whose start
+ * predates the prior's end — impossible chronology).
+ *
+ * The card is normally exempt from `stripPreDawnHotelReturns` /
+ * `isGhostActivity` / `clampAllBookends` (intentional — legitimate
+ * post-midnight returns must survive). When the day's true tail changes
+ * (regen, edit, swap), the bookend stops describing reality but never
+ * gets removed. Result: phantom "12:10 AM Return to Hotel" floats at
+ * the head of the next day's view.
+ *
+ * Mutates `activities` in place. Returns count removed. Sentinel:
+ *   [ORPHAN_BOOKEND_PRUNED] day=N reason=…
+ */
+export function pruneOrphanLateNightlifeBookend(
+  activities: any[],
+  opts: { dayNumber?: number } = {},
+): number {
+  if (!Array.isArray(activities) || activities.length < 2) return 0;
+  const dayLabel = opts.dayNumber != null ? `day=${opts.dayNumber}` : 'day=?';
+
+  const isLateBookend = (a: any): boolean => {
+    if (!a) return false;
+    const src = String(a.source || '').toLowerCase();
+    if (src === 'late_nightlife_bookend') return true;
+    const tags: string[] = Array.isArray(a.tags)
+      ? a.tags.map((x: any) => String(x).toLowerCase())
+      : [];
+    return tags.includes('late_nightlife_bookend');
+  };
+
+  let removed = 0;
+  for (let i = activities.length - 1; i >= 0; i--) {
+    const card = activities[i];
+    if (!isLateBookend(card)) continue;
+
+    // Find the chronologically-prior NON-bookend activity. We use
+    // dayChronoKey so a 23:30 nightcap precedes a 00:10 bookend, and
+    // a 21:00 dinner precedes both.
+    const cardKey = dayChronoKey(card.startTime || card.start_time);
+    let priorIdx = -1;
+    let priorKey = -1;
+    for (let j = 0; j < activities.length; j++) {
+      if (j === i) continue;
+      const other = activities[j];
+      if (isLateBookend(other)) continue;
+      const k = dayChronoKey(other.startTime || other.start_time);
+      if (k === Number.MAX_SAFE_INTEGER) continue;
+      if (k < cardKey && k > priorKey) {
+        priorKey = k;
+        priorIdx = j;
+      }
+    }
+
+    if (priorIdx < 0) {
+      // Bookend with no prior activity at all — definitely orphan.
+      activities.splice(i, 1);
+      removed++;
+      console.warn(`[ORPHAN_BOOKEND_PRUNED] ${dayLabel} reason=no-prior-activity title="${card?.title}"`);
+      continue;
+    }
+
+    const prior = activities[priorIdx];
+    const priorStart = parseTime(prior.startTime || prior.start_time);
+    const priorEnd =
+      parseTime(prior.endTime || prior.end_time) ?? priorStart;
+
+    if (!qualifiesAsLateNightlife(prior, priorStart, priorEnd)) {
+      activities.splice(i, 1);
+      removed++;
+      console.warn(
+        `[ORPHAN_BOOKEND_PRUNED] ${dayLabel} reason=prior-not-nightlife prior="${prior?.title}" (${prior?.startTime}-${prior?.endTime}) bookend="${card?.title}" @ ${card?.startTime}`,
+      );
+      continue;
+    }
+
+    // Impossible chronology: bookend starts BEFORE prior ends.
+    const cardStart = parseTime(card.startTime || card.start_time);
+    if (cardStart != null && priorEnd != null) {
+      // Wrap-aware: if both fall in [00:00, 06:00), use raw mins; otherwise
+      // treat early-AM bookend as "after" any pre-midnight prior end.
+      const cardWrap = cardStart < 6 * 60 ? cardStart + 24 * 60 : cardStart;
+      const priorWrap = priorEnd < 6 * 60 ? priorEnd + 24 * 60 : priorEnd;
+      if (cardWrap < priorWrap) {
+        activities.splice(i, 1);
+        removed++;
+        console.warn(
+          `[ORPHAN_BOOKEND_PRUNED] ${dayLabel} reason=before-prior-end prior="${prior?.title}" end=${prior?.endTime} bookend=${card?.startTime}`,
+        );
+      }
+    }
+  }
+
+  return removed;
+}
