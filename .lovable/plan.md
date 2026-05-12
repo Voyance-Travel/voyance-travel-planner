@@ -1,71 +1,56 @@
-## Goal
+## Stop the reload-loop meal erosion
 
-Close the **timing-shift** branch of the divergence bug that the previous resync fix missed. After verifying, the resync helper, listener, and dispatchers are all wired correctly — but the `EditorialItinerary` sync gate ignores time changes, so the post-cascade times never reach the rendered `days` state until the user refreshes.
+### Root cause (confirmed)
 
-## Root Cause (Verified)
+`TripDetail.fetchTripData()` runs self-heal effects on every hard reload (empty-day version restore + placeholder materialization, lines ~1384–1506). They re-invoke `generate-itinerary` with `action: 'save-itinerary'`, which runs `ledgerCheck` (action-save-itinerary.ts:768). `ledgerCheck` does fuzzy `repeat_already_done` removal (ledger-check.ts:288–322) — an activity on Day N whose title fuzzy-matches anything in `alreadyDone` (Days 1..N-1) is dropped, unless it is locked or matches `isDailyAnchor`. Meals are NOT in `isDailyAnchor`, so a Day-2 "Breakfast at Café X" matches Day-1 "Breakfast at Café X" → dropped → trimmed result is persisted to `trips.itinerary_data` and `itinerary_days` → next reload reads the trimmed version → loop tightens.
 
-`src/components/itinerary/EditorialItinerary.tsx` lines 2228–2243:
+### Fix (two complementary guards)
 
-```ts
-const initialDaysFingerprint = useMemo(() => {
-  return JSON.stringify(initialDays.map(d => ({
-    n: d.dayNumber,
-    d: d.date,
-    a: d.activities.map(a => a.id),   // ← only IDs, no times
-  })));
-}, [initialDays]);
-```
+**1. Skip destructive ledgerCheck on non-mutating saves.**
 
-Activity IDs are stable across the timing cascade. So:
-- Bali symptom (Metis 8:42 PM → 7:22 PM, same id): fingerprint unchanged → `setDays` skipped → stale times stick.
-- Bruges/Istanbul symptom (Sisterfields breakfast id present → absent): fingerprint changes → `setDays` runs → meal disappearance propagates correctly.
+- Add an opt-in flag `skipLedgerCheck?: boolean` (and a `saveReason?: string` for log attribution) to the `save-itinerary` action body in `supabase/functions/generate-itinerary/action-save-itinerary.ts`.
+- When set, bypass STEP 2.6 entirely (the `ledgerCheck` invocation at line 768 and the `itineraryDays = lc.days` writeback at 774–775) — still keep `dayLedgers` snapshot, fulfillment reconcile, and presentation-gate computation, all of which are non-destructive.
+- All TripDetail self-heal call sites pass `skipLedgerCheck: true, saveReason: 'self-heal-<kind>'`:
+  - L1444 (version-history restore save)
+  - L1497 (empty-day placeholder materialization)
+  - Any other reload-time save where the user has not interacted (audit `TripDetail.tsx` for `action: 'save-itinerary'` and `safeUpdateItineraryData`).
+- Mutating call sites (chat actions, manual edits, refresh-day, reorder) keep the default — they should still get ledger enforcement because the user is actively changing the plan.
 
-The previous fix's resync, listener, dispatch, and `parseEditorialDays(trip.itinerary_data)` recomputation all work. The blockage is just this fingerprint.
+**2. Treat meals as recurring (anchor-class) so they survive even when ledger does run.**
 
-## Plan
+In `supabase/functions/generate-itinerary/ledger-check.ts` `repeat_already_done` block (≈line 297):
 
-### 1. Extend the sync fingerprint to include timing
+- Exempt meal-category rows (`dining|breakfast|brunch|lunch|dinner|cafe` OR title matches the meal regex `\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b`) from fuzzy-removal — they SHOULD repeat across days. The same canonical/venue-dedup pass is still run by the cross-day venue dedup helper for actual same-venue repetition; the looser fuzzy match here is what's eating distinct meals.
+- Closure-violation pass (line 324+) is unaffected.
 
-Replace the activity-id-only fingerprint with one that also catches time changes from the cascade:
+### Telemetry & safety
 
-```ts
-a: d.activities.map(a => `${a.id}@${a.startTime || ''}-${a.endTime || ''}#${a.durationMinutes ?? ''}`),
-```
+- Log a single `[save-itinerary] ledgerCheck SKIPPED reason=<saveReason>` line when bypassed.
+- Add `[ledger-check] meal-recurrence exempted day=N title=…` debug when the new exemption fires.
+- Existing `safeUpdateItineraryData` integrity guard already blocks shrinkage when called from React save funnels; this fix closes the path that bypasses it (direct `functions.invoke` from self-heal).
 
-This adds zero new state, no new effects — just a tighter equality check on the same `useMemo`. After a resync that shifted Metis from 8:42 PM to 7:22 PM, the fingerprint will differ → `setDays(initialDays)` fires → user sees post-cascade times immediately.
+### Verification
 
-### 2. Resync after INTEGRITY_BLOCKED writes
+- New Deno test `ledger-check.test.ts`: Day 2 "Breakfast at Cafe Aurora" with Day 1 "Breakfast at Cafe Aurora" in `alreadyDone` is preserved; non-meal duplicate (Louvre) is still removed.
+- New Vitest in `src/lib/itinerary/__tests__/`: mock `supabase.functions.invoke` and assert TripDetail self-heal invocations include `skipLedgerCheck: true`.
+- Manual: reload Faro/Bruges/Istanbul trips ≥3 times; meal counts stable across reloads; `[save-itinerary] ledgerCheck SKIPPED reason=self-heal-…` appears in edge logs; no `repeat_already_done` warnings on meals.
 
-In `src/services/safeUpdateItineraryData.ts`, when `detectShrinkage` blocks the write, the DB is *healthier* than the session, so the session is the one carrying stale/dropped data. Currently we return `{ error: INTEGRITY_BLOCKED }` and never dispatch — which leaves the session diverged.
+### Memory
 
-Add a dispatch on the BLOCKED path too (with a `source: 'integrity-blocked-resync'` tag) so the listener pulls the canonical days and the user's view heals to match the DB. The integrity guard's behavior is unchanged — we still don't write — we just stop hiding the truth from the user.
+- New constraint: `mem://constraints/itinerary/ledger-check-mutation-only` — "ledgerCheck destructive passes (`repeat_already_done`, closure-violation, vibe-clash mutate) only run when the save originates from a user mutation. Reload/self-heal saves MUST pass `skipLedgerCheck: true`. Meals are exempt from `repeat_already_done` regardless." Add to Core index.
 
-### 3. Eliminate the `hasChanges` race for resync
+### Files touched
 
-The current sync gate `if (!hasChanges) setDays(initialDays)` exists to avoid clobbering unsaved edits. But after a successful save, `hasChanges` is set false, then the dispatch fires, then the DB read resolves — so there's a small window where the listener could arrive before `setHasChanges(false)` flushes. To make this robust:
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (gate STEP 2.6)
+- `supabase/functions/generate-itinerary/ledger-check.ts` (meal exemption)
+- `supabase/functions/generate-itinerary/ledger-check.test.ts` (new test)
+- `src/pages/TripDetail.tsx` (pass `skipLedgerCheck` from self-heal sites)
+- `src/services/safeUpdateItineraryData.ts` (forward `skipLedgerCheck` option through to backend save)
+- `src/lib/itinerary/__tests__/selfHealSkipsLedger.test.ts` (new)
+- `mem://constraints/itinerary/ledger-check-mutation-only.md` + `mem://index.md`
 
-- Switch `hasChanges` to `useRef`-backed truth read inside the effect (`const hasChangesRef = useRef(false); … if (!hasChangesRef.current) setDays(initialDays);`), or
-- Equivalently: gate on `hasChanges && !justSaved` where `justSaved` is set by the save handlers immediately around the persist call.
+### Out of scope
 
-Pick whichever matches the existing pattern in this file. The simpler ref approach is preferred unless `hasChanges` is read elsewhere as state.
-
-### 4. Verification
-
-- Add a test extending `resyncItineraryFromDb.test.ts` with the **Bali timing-shift** scenario: same activity ids, shifted startTime/endTime, asserts fingerprint comparison would change.
-- Add a test for the **integrity-blocked resync dispatch**: mock a session-vs-DB shrink, assert dispatch fires with `integrity-blocked-resync` source, assert `error.code === 'INTEGRITY_BLOCKED'` is still returned (behavior preserved).
-- Manual: re-run the Bali generation flow in preview, watch console for `[ITIN_RESYNC_DRIFT] kinds:['terminal_end']` immediately after generation completes, and confirm the times rendered match what a hard-refresh would show.
-
-### 5. Out of Scope
-
-- Not changing `parseEditorialDays`, the cascade itself, or any backend pass.
-- Not removing the `hasChanges` guard for cases where the user has actively edited and not saved — that protection stays.
-- Not extending the fingerprint to include category/title/cost — only timing, which is the verified gap. Extending further risks false positives that would clobber in-flight edits.
-
-## Files Touched
-
-- `src/components/itinerary/EditorialItinerary.tsx` — fingerprint extension; small ref/justSaved adjustment.
-- `src/services/safeUpdateItineraryData.ts` — dispatch on INTEGRITY_BLOCKED path.
-- `src/lib/itinerary/__tests__/resyncItineraryFromDb.test.ts` — Bali timing scenario + integrity-blocked dispatch test.
-- `mem://constraints/itinerary/db-is-source-of-truth.md` — append a "Verified gap & fix" note so the next reviewer doesn't repeat the regression.
-
-No DB migrations. No new edge functions. Roughly 30 lines of code.
+- No change to ledgerCheck's vibe-clash, closure, or fulfillment logic for mutating saves.
+- No change to the integrity guard, fingerprint, or DB-as-source-of-truth wiring (already in place from the prior fix).
+- No change to `itinerary_days` table sync — once the JSON is correct, sync follows.
