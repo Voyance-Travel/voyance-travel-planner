@@ -16,6 +16,7 @@
  */
 
 import { clampBookendEndTime } from './clamp-bookend.ts';
+import { qualifiesAsLateNightlife } from './late-nightlife-predicate.ts';
 
 export interface CascadeActivity {
   id: string;
