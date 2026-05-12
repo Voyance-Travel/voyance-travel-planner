@@ -190,25 +190,3 @@ export function ensureDayDiningDescriptions(
   }
   return c;
 }
-
-export interface DayBackfillCounters {
-  fallback: number;
-  whyThisFits: number;
-  scanned: number;
-}
-
-export function ensureDayDiningDescriptions(
-  activities: any[],
-  destinationCity?: string,
-): DayBackfillCounters {
-  const c: DayBackfillCounters = { fallback: 0, whyThisFits: 0, scanned: 0 };
-  if (!Array.isArray(activities)) return c;
-  for (const act of activities) {
-    if (!isDiningActivity(act)) continue;
-    c.scanned++;
-    const r = ensureDiningDescription(act, destinationCity);
-    if (r.changed && r.source === 'fallback') c.fallback++;
-    else if (r.changed && r.source === 'whyThisFits') c.whyThisFits++;
-  }
-  return c;
-}
