@@ -79,11 +79,42 @@ function findInlineMatch(
   return null;
 }
 
-export type BackfillSource = 'fallback' | 'whyThisFits' | 'noop';
+export type BackfillSource = 'fallback' | 'whyThisFits' | 'venueTemplate' | 'noop';
 
 export interface BackfillResult {
   source: BackfillSource;
   changed: boolean;
+}
+
+/**
+ * Deterministic last-resort dining description.
+ *
+ * Always returns ≥30 chars with an actionable verb so that:
+ *   - the UI never renders an empty dining card body, and
+ *   - the description-fill validator (RESTAURANT_RECOMMENDATION_RE) treats
+ *     it as "satisfactory" and won't blank it again on the next pass.
+ *
+ * Style is intentionally venue-aware-but-conservative — never invents dishes,
+ * just gives the traveler a concrete next step.
+ */
+export function buildDeterministicDiningDescription(
+  act: any,
+  destinationCity?: string,
+): string {
+  const venueRaw = extractVenueName(act);
+  const venue = venueRaw && venueRaw.length > 1 ? venueRaw : null;
+  const titleStr = String(act?.title || act?.name || '');
+  const mealLabel = /breakfast|brunch/i.test(titleStr) ? 'breakfast'
+                  : /lunch/i.test(titleStr) ? 'lunch'
+                  : /dinner|supper/i.test(titleStr) ? 'dinner'
+                  : /drinks|nightcap|bar|cocktail/i.test(titleStr) ? 'drinks'
+                  : 'this stop';
+  const cityHint = destinationCity ? ` in ${String(destinationCity).split(/[,/]/)[0].trim()}` : '';
+
+  if (venue) {
+    return `Book ahead for ${mealLabel} at ${venue}${cityHint} and ask the staff what's freshest on the menu today.`;
+  }
+  return `Pick a well-reviewed local spot for ${mealLabel}${cityHint} — book ahead and ask for the day's specials.`;
 }
 
 /**
