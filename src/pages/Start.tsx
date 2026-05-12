@@ -2389,36 +2389,73 @@ export default function Start() {
         flightSelection = buildFlightSelectionFromLegs(flightLegs, true);
       }
 
-      // Build hotel selection data — supports split stays (multiple hotels)
+      // Build hotel selection data — supports split stays (multiple hotels).
+      // CRITICAL: every entry must carry checkInDate / checkOutDate / totalPrice
+      // so the downstream `syncHotelToLedger` → `computeHotelCostUsd` chain can
+      // multiply pricePerNight by the right number of nights. Without dates the
+      // computer falls back to a single night and the hotel silently disappears
+      // from the trip total even when "Include in budget" was checked.
       let hotelSelection: any[] | null = null;
       let includeHotelInBudget = false;
 
+      const tripStartIso = format(startDate!, 'yyyy-MM-dd');
+      const tripEndIso = format(endDate!, 'yyyy-MM-dd');
+      const tripNightsTotal = Math.max(1, differenceInDays(endDate!, startDate!));
+
+      const nightsBetweenIso = (a?: string | null, b?: string | null): number => {
+        if (!a || !b) return 0;
+        const aMs = new Date(a + 'T00:00:00').getTime();
+        const bMs = new Date(b + 'T00:00:00').getTime();
+        if (isNaN(aMs) || isNaN(bMs) || bMs <= aMs) return 0;
+        return Math.max(1, Math.ceil((bMs - aMs) / 86_400_000));
+      };
+
+      const enrichHotel = (h: any, fallbackCheckIn: string, fallbackCheckOut: string) => {
+        const ci = h.checkInDate || fallbackCheckIn;
+        const co = h.checkOutDate || fallbackCheckOut;
+        const ppn = h.pricePerNight || undefined;
+        const nights = nightsBetweenIso(ci, co) || tripNightsTotal;
+        const totalPrice = ppn ? ppn * nights : undefined;
+        return {
+          name: h.name,
+          address: h.address,
+          neighborhood: h.neighborhood,
+          checkInTime: h.checkInTime,
+          checkOutTime: h.checkOutTime,
+          checkInDate: ci,
+          checkOutDate: co,
+          pricePerNight: ppn,
+          totalPrice,
+          nights,
+          source: 'manual',
+        };
+      };
+
       if (hotelChoice === 'own') {
         if (manualHotelList.length > 0) {
-          // Multi-hotel (split stay)
-          hotelSelection = manualHotelList.map(h => ({
-            name: h.name,
-            address: h.address,
-            neighborhood: h.neighborhood,
-            checkInTime: h.checkInTime,
-            checkOutTime: h.checkOutTime,
-            checkInDate: h.checkInDate,
-            checkOutDate: h.checkOutDate,
-            pricePerNight: h.pricePerNight || undefined,
-            source: 'manual',
-          }));
+          // Multi-hotel (split stay): for entries missing dates, evenly partition
+          // the trip range across the list (matches generator inference at
+          // generation-core.ts ~L450).
+          const N = manualHotelList.length;
+          const nightsPerHotel = Math.max(1, Math.floor(tripNightsTotal / N));
+          hotelSelection = manualHotelList.map((h, i) => {
+            const fallbackCi = (() => {
+              const d = new Date(startDate!);
+              d.setDate(d.getDate() + i * nightsPerHotel);
+              return format(d, 'yyyy-MM-dd');
+            })();
+            const fallbackCo = (() => {
+              const d = new Date(startDate!);
+              const offset = i === N - 1 ? tripNightsTotal : (i + 1) * nightsPerHotel;
+              d.setDate(d.getDate() + offset);
+              return format(d, 'yyyy-MM-dd');
+            })();
+            return enrichHotel(h, fallbackCi, fallbackCo);
+          });
           includeHotelInBudget = manualHotelList.some(h => h.includeInBudget && h.pricePerNight && h.pricePerNight > 0);
         } else if (manualHotel.name) {
           // Single hotel (legacy)
-          hotelSelection = [{
-            name: manualHotel.name,
-            address: manualHotel.address,
-            neighborhood: manualHotel.neighborhood,
-            checkInTime: manualHotel.checkInTime,
-            checkOutTime: manualHotel.checkOutTime,
-            pricePerNight: manualHotel.pricePerNight || undefined,
-            source: 'manual',
-          }];
+          hotelSelection = [enrichHotel(manualHotel, tripStartIso, tripEndIso)];
           includeHotelInBudget = !!(manualHotel.includeInBudget && manualHotel.pricePerNight && manualHotel.pricePerNight > 0);
         }
       }
@@ -2487,6 +2524,34 @@ export default function Start() {
         .single();
 
       if (error) throw error;
+
+      // Eagerly write the hotel cost row into activity_costs so the trip total
+      // includes the hotel from the very first render. Without this we relied
+      // on EditorialItinerary's mount-effect, which silently produced $0 for
+      // trips created here because the hotel entries were missing dates. Fire
+      // and forget — non-fatal if it fails (mount-effect is a backup).
+      if (includeHotelInBudget && hotelSelection && hotelSelection.length > 0) {
+        const tripIdForSync = trip.id;
+        const hotelsForSync = hotelSelection;
+        import('@/services/budgetLedgerSync').then(({ syncHotelToLedger, syncMultiCityHotelsToLedger }) => {
+          if (hotelsForSync.length > 1) {
+            const entries = hotelsForSync
+              .filter((h: any) => h.name && (h.totalPrice || h.pricePerNight))
+              .map((h: any) => ({
+                name: h.name,
+                totalPrice: h.totalPrice || (h.pricePerNight && h.nights ? h.pricePerNight * h.nights : 0),
+              }))
+              .filter(e => e.totalPrice > 0);
+            if (entries.length > 0) {
+              syncMultiCityHotelsToLedger(tripIdForSync, entries)
+                .catch(err => console.warn('[Start] eager multi-hotel sync failed (non-fatal):', err));
+            }
+          } else {
+            syncHotelToLedger(tripIdForSync, hotelsForSync[0] as any)
+              .catch(err => console.warn('[Start] eager hotel sync failed (non-fatal):', err));
+          }
+        });
+      }
 
       // Persist per-city rows for multi-city trips
       if (isMultiCity && multiCityDestinations.length >= 2) {

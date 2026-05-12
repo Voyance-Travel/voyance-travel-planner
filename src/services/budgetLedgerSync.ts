@@ -213,7 +213,7 @@ export async function syncHotelToLedger(
   };
   // daysCount is only used to derive (days-1) nights, so when we have explicit
   // dates compute nights here and pass through nights to keep the result stable.
-  const totalUsd = computeHotelCostUsd(
+  let totalUsd = computeHotelCostUsd(
     null,
     hotelForCompute,
     // If `nights` is set on hotelForCompute the daysCount is ignored.
@@ -224,6 +224,28 @@ export async function syncHotelToLedger(
     null,
     0,
   );
+
+  // DEFENSIVE FALLBACK: legacy trips created via Start.tsx Step 2 sometimes
+  // have a hotel with `pricePerNight` but no dates and no `nights`. Without
+  // this fallback computeHotelCostUsd returns 0 → we'd silently delete the
+  // hotel cost row and the trip total would never include the hotel.
+  // Look up the trip's start/end dates and recompute as ppn × nights.
+  if ((!totalUsd || totalUsd <= 0) && hotel.pricePerNight && hotel.pricePerNight > 0) {
+    const { data: tripRow } = await supabase
+      .from('trips')
+      .select('start_date, end_date')
+      .eq('id', tripId)
+      .maybeSingle();
+    if (tripRow?.start_date && tripRow?.end_date) {
+      const sMs = new Date(tripRow.start_date + 'T00:00:00').getTime();
+      const eMs = new Date(tripRow.end_date + 'T00:00:00').getTime();
+      if (!isNaN(sMs) && !isNaN(eMs) && eMs > sMs) {
+        const fallbackNights = Math.max(1, Math.ceil((eMs - sMs) / 86_400_000));
+        totalUsd = hotel.pricePerNight * fallbackNights;
+        console.log(`[syncHotelToLedger] trip-date fallback: ${fallbackNights} nights × $${hotel.pricePerNight} = $${totalUsd}`);
+      }
+    }
+  }
 
   // NO reference-table estimate. A selected hotel without an explicit price
   // must NOT auto-bill the trip — a $2,850 estimated stay surprised users
