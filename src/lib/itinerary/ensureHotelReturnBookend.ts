@@ -22,6 +22,9 @@ const TRUE_RETURN_RE =
 const CHECKOUT_RE = /\b(?:check[-\s]?out|checkout)\b/i;
 const MIDDAY_ACCOM_RE =
   /\b(?:freshen[-\s]?up|luggage\s+drop|bag\s+drop|settle\s+in|check[-\s]?in|drop\s+(?:bags|luggage))\b/i;
+const HOTEL_RETURN_RE =
+  /(?:return\s+to|back\s+(?:to|at)|head\s+back\s+to|wind\s+down\s+at|retire\s+to|end\s+of\s+day\s+at)\s+(?:your\s+|the\s+|our\s+)?[^,.\n]{0,80}(?:hotel|hostel|inn|resort|lodge|ryokan|riad|marriott|hilton|hyatt|ritz|four\s*seasons|st\.?\s*regis|peninsula|aman|belmond|cipriani|gritti|danieli|kempinski|rosewood|mandarin|raffles|bvlgari|bulgari|conrad|edition|sofitel|fairmont|shangri|intercontinental|westin|sheraton|nobu|notary|spadari)\b/i;
+const BOOKEND_SOURCE_RE = /^(bookend-readtime|bookend-overnight|bookend-validator|bookend-synthesized|late_nightlife_bookend)$/i;
 const AIRPORT_RE = /\b(airport|station|terminal|gate)\b/i;
 const TRANSPORT_CAT_RE = /TRANSPORT|TRANSIT|TRAVEL|LOGISTICS|FLIGHT/;
 const FLIGHT_TITLE_RE = /\b(flight|departure)\b/i;
@@ -46,6 +49,9 @@ function isTerminalAlready(a: any): boolean {
   if (!a) return false;
   const cat = String(a.category || '').toUpperCase();
   const title = String(a.title || a.name || '');
+  // Freshen-up / bag-drop / check-in cards are midday rituals, not terminal
+  // end-of-day bookends — even if the title says "Return to ...".
+  if (MIDDAY_ACCOM_RE.test(title)) return false;
   // True return / checkout titles always count.
   if (TRUE_RETURN_RE.test(title) || CHECKOUT_RE.test(title)) return true;
   // STAY / ACCOMMODATION cards count, except midday rituals (freshen-up,
@@ -55,6 +61,18 @@ function isTerminalAlready(a: any): boolean {
     return true;
   }
   return false;
+}
+
+export function isHotelReturnBookendActivity(a: any): boolean {
+  if (!a) return false;
+  const cat = String(a.category || '').toUpperCase();
+  const title = String(a.title || a.name || '');
+  const source = String(a.source || '').toLowerCase();
+  const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
+  if (MIDDAY_ACCOM_RE.test(title)) return false;
+  if (BOOKEND_SOURCE_RE.test(source) || tags.some((t: string) => BOOKEND_SOURCE_RE.test(t))) return true;
+  if (HOTEL_RETURN_RE.test(title)) return true;
+  return (cat === 'STAY' || cat === 'ACCOMMODATION') && TRUE_RETURN_RE.test(title);
 }
 
 function isDepartureTerminal(a: any): boolean {
@@ -122,6 +140,11 @@ export function ensureHotelReturnBookend<T extends any[]>(
   if ((activities as any[]).some(isDepartureTerminal)) {
     // eslint-disable-next-line no-console
     console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=n/a reason=day_contains_departure_terminal`);
+    return activities;
+  }
+  if ((activities as any[]).some(isHotelReturnBookendActivity)) {
+    // eslint-disable-next-line no-console
+    console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=inferred reason=existing_return_bookend`);
     return activities;
   }
 

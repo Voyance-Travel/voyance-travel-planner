@@ -129,6 +129,53 @@ function parseTimeToMinutes(t?: string): number {
   return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0;
 }
 
+const TRUE_HOTEL_RETURN_RE = /\b(?:return\s+to|back\s+to|head\s+back\s+to|wind\s+down\s+at|retire\s+to|end\s+of\s+day\s+at)\b/i;
+const MIDDAY_ACCOM_RE = /\b(?:freshen[-\s]?up|luggage\s+drop|bag\s+drop|settle\s+in|check[-\s]?in|drop\s+(?:bags|luggage))\b/i;
+const BOOKEND_SOURCE_RE = /^(bookend-readtime|bookend-overnight|bookend-validator|bookend-synthesized|late_nightlife_bookend)$/i;
+
+function isProtectedActivity(a: any): boolean {
+  if (!a) return false;
+  if (a.locked === true || a.is_locked === true || a.isLocked === true) return true;
+  if (a.lock_state === 'locked') return true;
+  return ['user', 'manual', 'extracted', 'pinned'].includes(String(a.source || '').toLowerCase());
+}
+
+function isHotelReturnBookendActivity(a: any): boolean {
+  if (!a) return false;
+  const title = String(a.title || a.name || '');
+  const cat = String(a.category || '').toUpperCase();
+  const source = String(a.source || '').toLowerCase();
+  const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
+  if (MIDDAY_ACCOM_RE.test(title)) return false;
+  if (BOOKEND_SOURCE_RE.test(source) || tags.some((t: string) => BOOKEND_SOURCE_RE.test(t))) return true;
+  return (cat === 'STAY' || cat === 'ACCOMMODATION') && TRUE_HOTEL_RETURN_RE.test(title);
+}
+
+function dedupeHotelReturnBookends(activities: any[], dayNumber: number): any[] {
+  if (!Array.isArray(activities) || activities.length < 2) return activities;
+  const rows = activities
+    .map((activity, index) => ({ activity, index }))
+    .filter(({ activity }) => isHotelReturnBookendActivity(activity));
+  if (rows.length < 2) return activities;
+  const protectedIndexes = new Set(rows.filter(({ activity }) => isProtectedActivity(activity)).map(({ index }) => index));
+  const keepGeneratedIndex = protectedIndexes.size > 0
+    ? -1
+    : rows.reduce((best, row) => {
+        const rowKey = dayChronoKey(row.activity?.startTime || row.activity?.start_time || row.activity?.time);
+        const bestKey = dayChronoKey(best.activity?.startTime || best.activity?.start_time || best.activity?.time);
+        return rowKey >= bestKey ? row : best;
+      }).index;
+  const out = activities.filter((activity, index) => {
+    if (!isHotelReturnBookendActivity(activity)) return true;
+    if (protectedIndexes.has(index)) return true;
+    return index === keepGeneratedIndex;
+  });
+  if (out.length !== activities.length) {
+    console.warn(`[SAVE_BOOKEND_DEDUPE] day=${dayNumber} removed=${activities.length - out.length}`);
+  }
+  return out;
+}
+
 /**
  * Normalize all days: ensure dayNumber, date, sort activities by time.
  * This is the single canonical normalization that runs BEFORE persistence.
@@ -181,6 +228,7 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
     pruneOrphanLateNightlifeBookend(activities, { dayNumber });
     stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
     clampAllBookends(activities, { dayNumber, label: 'SAVE' });
+    activities = dedupeHotelReturnBookends(activities, dayNumber);
     // Unified scrub boundary — single entry point.
     const daySchedule = buildDayScheduleSummary(activities);
     let dayOps: ScrubOps = { ...EMPTY_OPS } as ScrubOps;

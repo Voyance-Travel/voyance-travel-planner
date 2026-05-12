@@ -12,7 +12,7 @@
 import { format, parseISO, addDays } from 'date-fns';
 import { coerceDurationString } from './plannerUtils';
 import { isGhostActivity } from '@/lib/itinerary/hideGhostActivities';
-import { ensureHotelReturnBookend } from '@/lib/itinerary/ensureHotelReturnBookend';
+import { ensureHotelReturnBookend, isHotelReturnBookendActivity } from '@/lib/itinerary/ensureHotelReturnBookend';
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 
 // Strip non-Latin scripts from AI text artifacts before rendering
@@ -167,6 +167,43 @@ export interface EditorialParsedDay extends ParsedDay {
   activities: (ParsedActivity & {
     location?: { name?: string; address?: string };
   })[];
+}
+
+function isProtectedActivity(a: any): boolean {
+  if (!a) return false;
+  if (a.is_locked === true || a.isLocked === true || a.locked === true) return true;
+  if (a.lock_state === 'locked') return true;
+  return ['user', 'manual', 'extracted', 'pinned'].includes(String(a.source || '').toLowerCase());
+}
+
+function dedupeHotelReturnBookends<T extends any[]>(activities: T, dayNumber?: number): T {
+  if (!Array.isArray(activities) || activities.length < 2) return activities;
+  const returnRows = activities
+    .map((activity, index) => ({ activity, index }))
+    .filter(({ activity }) => isHotelReturnBookendActivity(activity));
+  if (returnRows.length < 2) return activities;
+
+  const protectedReturnIndexes = new Set(
+    returnRows.filter(({ activity }) => isProtectedActivity(activity)).map(({ index }) => index),
+  );
+  const keepGeneratedIndex = protectedReturnIndexes.size > 0
+    ? -1
+    : returnRows.reduce((best, row) => {
+        const rowKey = dayChronoKey(row.activity?.startTime || row.activity?.start_time || row.activity?.time);
+        const bestKey = dayChronoKey(best.activity?.startTime || best.activity?.start_time || best.activity?.time);
+        return rowKey >= bestKey ? row : best;
+      }).index;
+
+  const deduped = activities.filter((activity, index) => {
+    if (!isHotelReturnBookendActivity(activity)) return true;
+    if (protectedReturnIndexes.has(index)) return true;
+    return index === keepGeneratedIndex;
+  });
+
+  if (deduped.length !== activities.length) {
+    console.warn(`[itineraryParser] Deduped ${activities.length - deduped.length} duplicate hotel-return bookend(s) on day ${dayNumber ?? '?'}`);
+  }
+  return deduped as unknown as T;
 }
 
 // For ItineraryAssistant component compatibility
@@ -738,11 +775,12 @@ export function parseItineraryDays(
       }
       return !ghost;
     });
+    const dedupedActivities = dedupeHotelReturnBookends(filteredActivities, idx + 1);
     return {
       ...day,
       dayNumber: idx + 1,
       date: calculateDayDate(tripStartDate, idx) || day.date,
-      activities: filteredActivities,
+      activities: dedupedActivities,
     };
   });
 

@@ -94,3 +94,56 @@ describe('parseItineraryDays — dining preservation (Bruges meal-loss fix)', ()
     expect(acts.some((a: any) => a.category === 'dining')).toBe(true);
   });
 });
+
+describe('parseItineraryDays — hotel return dedupe', () => {
+  it('keeps one generated hotel return and does not append a read-time duplicate', () => {
+    const data = {
+      days: [
+        baseDay({
+          activities: [
+            { title: 'Dinner', startTime: '19:00', endTime: '20:30', category: 'dining' },
+            { title: 'Return to The Notary', startTime: '20:45', endTime: '21:10', category: 'accommodation', source: 'bookend-validator' },
+            { title: 'Return to The Notary', startTime: '21:15', endTime: '21:40', category: 'accommodation', source: 'bookend-readtime' },
+          ],
+        }),
+      ],
+    };
+    const days = parseItineraryDays(data, '2026-06-01');
+    const returns = days[0].activities.filter((a: any) => /return to/i.test(String(a.title)));
+    expect(returns).toHaveLength(1);
+    expect(returns[0].startTime).toBe('21:15');
+  });
+
+  it('does not inject hotel return on departure day with flight card', () => {
+    const data = {
+      days: [
+        baseDay({
+          activities: [
+            { title: 'Brunch', startTime: '10:00', endTime: '11:00', category: 'dining' },
+            { title: 'Departure Flight to JFK', startTime: '17:50', endTime: '19:50', category: 'flight' },
+          ],
+        }),
+      ],
+    };
+    const days = parseItineraryDays(data, '2026-06-01');
+    expect(days[0].activities.some((a: any) => /return to/i.test(String(a.title)))).toBe(false);
+  });
+
+  it('preserves locked/manual hotel returns while removing generated duplicates', () => {
+    const data = {
+      days: [
+        baseDay({
+          activities: [
+            { title: 'Return to The Notary', startTime: '20:45', endTime: '21:10', category: 'accommodation', source: 'manual', isLocked: true },
+            { title: 'Return to The Notary', startTime: '21:15', endTime: '21:40', category: 'accommodation', source: 'bookend-readtime' },
+          ],
+        }),
+      ],
+    };
+    const days = parseItineraryDays(data, '2026-06-01');
+    const returns = days[0].activities.filter((a: any) => /return to/i.test(String(a.title)));
+    expect(returns).toHaveLength(1);
+    expect(returns[0].source).toBe('manual');
+    expect(returns[0].isLocked).toBe(true);
+  });
+});
