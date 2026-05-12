@@ -2326,7 +2326,7 @@ export default function TripDetail() {
     };
     setTrip(prev => prev ? { ...prev, itinerary_data: updatedItinerary as any } : null);
     try {
-      const safeRes = await safeUpdateItineraryData(tripId, updatedItinerary as any);
+      const safeRes = await safeUpdateItineraryData(tripId, updatedItinerary as any, {}, { allowFrozenWrite: true, reason: 'user-shift-in-range' });
       if (safeRes?.error) throw safeRes.error;
       toast.success(
         overflow.length > 0
