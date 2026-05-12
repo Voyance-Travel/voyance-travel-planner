@@ -24,6 +24,11 @@ export interface SafeUpdateOptions {
   allowReduction?: boolean;
   /** Free-form caller tag for the integrity log line. */
   reason?: string;
+  /** Reload/self-heal saves MUST set this so the backend skips destructive
+   *  ledgerCheck passes (repeat_already_done / closure / vibe-clash) that
+   *  silently erode meals across reloads. See
+   *  mem://constraints/itinerary/ledger-check-mutation-only. */
+  skipLedgerCheck?: boolean;
 }
 
 const MEAL_RE = /\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/i;
