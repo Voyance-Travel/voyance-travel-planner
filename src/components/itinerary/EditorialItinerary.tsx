@@ -11609,8 +11609,11 @@ function ActivityRow({
             </div>
           )}
           {(() => {
-            const d = sanitizeActivityText(activity.description)
-              || sanitizeActivityText((activity as any)?.personalization?.whyThisFits);
+            const d = resolveActivityDisplayDescription(
+              activity,
+              sanitizeActivityText(activity.description),
+              destination,
+            );
             return d && !compact ? (
               <p className={cn(
                 "text-xs text-muted-foreground leading-relaxed",
