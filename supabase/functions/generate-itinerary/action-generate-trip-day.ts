@@ -2333,42 +2333,6 @@ async function _handleGenerateTripDayInner(
       console.log(`[generate-trip-day] Hotel address consistency: fixed ${addressFixCount} address(es)`);
       }
     }
-
-    // ── DAY-1 BREAKFAST GUARANTOR (multi-day loop) ───────────────────
-    if (dn === 1 && policy.requiredMeals.includes('breakfast')) {
-      try {
-        const { ensureDay1Breakfast } = await import('../_shared/day1-breakfast-inject.ts');
-        const _bf = await ensureDay1Breakfast({
-          activities: updatedDays[i].activities as any[],
-          dayNumber: dn,
-          requiredMeals: policy.requiredMeals,
-          destination: d.city || cityInfo?.cityName || destination || 'the destination',
-          arrivalTime24: savedArrivalTime24,
-          restaurantPool: restaurantPool as any,
-          blockedRestaurants: usedRestaurants || [],
-          supabase,
-        });
-        if (_bf.injected) {
-          updatedDays[i].metadata = updatedDays[i].metadata || {};
-          updatedDays[i].metadata.quality = updatedDays[i].metadata.quality || {};
-          updatedDays[i].metadata.quality.day1_breakfast_inject = {
-            venue: _bf.injectedVenue,
-            poolSize: _bf.poolSize,
-            reason: _bf.reason,
-          };
-          try {
-            const { fillAfterMealGuard } = await import('../_shared/post-meal-guard-fill.ts');
-            await fillAfterMealGuard(
-              updatedDays[i].activities as any[],
-              d.city || cityInfo?.cityName || destination,
-              dn,
-              'generate-trip-day:multi-day-loop:day1-breakfast',
-            );
-          } catch (_e) { /* non-blocking */ }
-        }
-      } catch (_e) { /* non-blocking */ }
-    }
-
   let canonicalCount = existingDays.length;
   try {
     const { count: tableRowCount } = await supabase
