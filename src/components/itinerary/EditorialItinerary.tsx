@@ -5539,18 +5539,11 @@ export function EditorialItinerary({
         if (mode === 'replace') {
           const lockedActivities = day.activities.filter(a => a.isLocked);
           const merged = [...lockedActivities, ...newActivities];
-          merged.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+          merged.sort((a, b) => dayChronoKey(a.startTime) - dayChronoKey(b.startTime));
           updated[dayIndex] = { ...day, activities: merged };
         } else {
           const combined = [...day.activities, ...newActivities];
-          combined.sort((a, b) => {
-            const timeA = a.startTime || '';
-            const timeB = b.startTime || '';
-            if (!timeA && !timeB) return 0;
-            if (!timeA) return 1;
-            if (!timeB) return -1;
-            return timeA.localeCompare(timeB);
-          });
+          combined.sort((a, b) => dayChronoKey(a.startTime) - dayChronoKey(b.startTime));
           updated[dayIndex] = { ...day, activities: combined };
         }
       }
