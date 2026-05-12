@@ -5228,7 +5228,7 @@ export function EditorialItinerary({
             newDay.activities = newDay.activities.filter((a: EditorialActivity) => !isAccommodationLike(a));
             newDay.activities.push(originalHotel);
             newDay.activities.sort((a: EditorialActivity, b: EditorialActivity) =>
-              (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
+              dayChronoKey(a.startTime || a.time) - dayChronoKey(b.startTime || b.time)
             );
           }
           // Preserve original day title/theme
