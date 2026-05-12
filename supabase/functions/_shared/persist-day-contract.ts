@@ -84,6 +84,24 @@ function isLockedRow(a: any): boolean {
   return false;
 }
 
+/**
+ * Deliberate, user-actionable meal placeholders emitted by the meal-guard
+ * when no vetted venue exists for the destination ("Lunch — find a local
+ * spot in Aruba"). They render as a tap-to-pick card. Without this allowlist
+ * the placeholder-name branch + cross-city sweep below silently drop them
+ * on every save, so the meal slot disappears after a hard refresh.
+ */
+function isManualPickSentinel(a: any): boolean {
+  if (!a) return false;
+  if (a.preserveAsManualPick === true || a.preserve_as_manual_pick === true) return true;
+  if (a.needsVenuePick === true || a.needs_venue_pick === true) return true;
+  const source = String(a.source || '').toLowerCase();
+  if (source === 'needs_venue_pick' || source === 'manual_pick') return true;
+  const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
+  if (tags.includes('needs_venue_pick') || tags.includes('preserve_as_manual_pick')) return true;
+  return false;
+}
+
 export type ContractViolation =
   | 'ghost-row'
   | 'placeholder-name'
@@ -153,7 +171,14 @@ export function enforcePersistDayContract<T = any>(
     }
 
     // 3. Placeholder PROSE — identifier fields ONLY.
+    // Allowlist: deliberate manual-pick meal sentinels survive (they render
+    // as a "tap to pick a place" card and are intentionally user-visible).
     if (PLACEHOLDER_NAME_RE.test(idBlob)) {
+      if (isManualPickSentinel(a)) {
+        console.info(`[SENTINEL_KEPT] day=${ctx.dayNumber ?? '?'} title="${title}" reason=manual_pick`);
+        out.push(a);
+        continue;
+      }
       drops.push({ dayNumber: ctx.dayNumber, title, reason: 'placeholder-name' });
       continue;
     }
@@ -212,6 +237,10 @@ export async function enforceContractOnDays(
       const dest = perDayDest;
       cleaned = cleaned.filter((a: any) => {
         if (isLockedRow(a)) return true;
+        // Manual-pick meal sentinels carry destination-name strings
+        // ("Lunch — find a local spot in Aruba"); the cross-city detector
+        // can false-positive on them. They're intentional placeholders.
+        if (isManualPickSentinel(a)) return true;
         const cat = String(a?.category || a?.type || '').toLowerCase();
         // Apply only to venue-bearing categories
         if (!/dining|food|restaurant|cafe|bar|nightlife|sightseeing|museum|culture|shopping|wellness|spa|activity|entertainment|relaxation/i.test(cat)) {

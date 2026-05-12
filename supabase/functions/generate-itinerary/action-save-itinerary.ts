@@ -1065,7 +1065,11 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   };
 
   const extraUpdate: Record<string, any> = {
-    itinerary_status: emptyItineraryDetected ? 'failed' : (persistVerdict.ok ? 'ready' : 'needs_regeneration'),
+    // NOTE: itinerary_status enum is {not_started, queued, generating, partial, ready, failed}.
+    // 'needs_regeneration' is NOT a valid value — using it rolls back the entire trips.update
+    // with Postgres 22P02, leaving partial side-effects (cost-table sync, normalized tables)
+    // and causing post-refresh divergence. Use 'partial' for the non-ok-but-non-empty branch.
+    itinerary_status: emptyItineraryDetected ? 'failed' : (persistVerdict.ok ? 'ready' : 'partial'),
     updated_at: new Date().toISOString(),
     ...(callerExtraUpdate && typeof callerExtraUpdate === 'object' ? callerExtraUpdate : {}),
     metadata: {
