@@ -92,9 +92,19 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
     }
     
     lookupUrl();
-    
+
+    // Deadline fallback: if the edge function hangs (cold start, OOM, network drop),
+    // resolve the spinner after 5s instead of leaving it spinning forever.
+    const timeoutId = window.setTimeout(() => {
+      if (!cancelled) {
+        setUrl(null);
+        setIsLoading(false);
+      }
+    }, 5000);
+
     return () => {
       cancelled = true;
+      window.clearTimeout(timeoutId);
     };
   }, [restaurantName, destination]);
 

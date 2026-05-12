@@ -1,55 +1,37 @@
-# Fix `persist-day-contract.test.ts` parse error + glob CI
+## Plan
 
-## STEP 1 — Root cause (already diagnosed)
+1. **Update `RestaurantLink.tsx` only**
+   - Add a timeout inside the existing `useEffect` so the restaurant-link spinner cannot stay loading forever if `supabase.functions.invoke('lookup-restaurant-url')` never resolves.
+   - Keep the existing cache-hit, empty-name, success, and catch behavior unchanged.
 
-`supabase/functions/_shared/persist-day-contract.test.ts` line 35-39:
+2. **Make the fallback safe**
+   - After `lookupUrl()` starts, set a 5-second deadline.
+   - If the request is still unresolved and the component is still mounted, set `url` to `null` and `isLoading` to `false`.
+   - Clear the timeout in the effect cleanup.
+   - Preserve the existing `cancelled` guard so late async responses cannot update state after unmount.
+
+3. **Verify the exact fix**
+   - Confirm `RestaurantLink.tsx` now contains the timeout fallback.
+   - Run a targeted grep for `setTimeout` in the file and ensure cleanup uses `clearTimeout`.
+
+## Technical detail
+
+The implementation will follow this shape inside the existing effect:
 
 ```ts
-Deno.test('does NOT drop legit acronyms in parens like (NYC)', () => {
-  const acts = [{ title: 'Visit MoMA (NYC)', startTime: '11:00', category: 'museum' }];
-  const { activities } = enforcePersistDayContract(acts);
-  assertEquals(activities.length, 1);
-                                        ← missing `});`
-Deno.test('drops "find a local spot"', () => {
+lookupUrl();
+
+const timeoutId = window.setTimeout(() => {
+  if (!cancelled) {
+    setUrl(null);
+    setIsLoading(false);
+  }
+}, 5000);
+
+return () => {
+  cancelled = true;
+  window.clearTimeout(timeoutId);
+};
 ```
 
-The next `Deno.test(...)` is parsed as a positional argument to the prior call, then EOF hits inside the unclosed expression at line 111 — exactly what Deno reports (`Expected ',', got '<eof>' at 111:4`).
-
-Fix is a single-line insertion of `});` after the `assertEquals(activities.length, 1);` line. No logic change.
-
-## STEP 2 — Verify
-
-```
-deno test --no-run supabase/functions/_shared/persist-day-contract.test.ts   # parses
-deno test --allow-read --allow-env supabase/functions/_shared/persist-day-contract.test.ts  # runs
-```
-
-Both must succeed. Test failures (if any) are out of scope — only the parse error is being closed.
-
-## STEP 3 — Update `.github/workflows/tests.yml`
-
-Replace the explicit two-file Deno step with a glob covering both layout conventions:
-
-```yaml
-- name: Deno (edge function tests)
-  run: |
-    deno test --allow-read --allow-env --allow-net \
-      'supabase/functions/**/__tests__/*.test.ts' \
-      'supabase/functions/**/*.test.ts'
-```
-
-Deno dedupes when both patterns match the same file. This auto-picks up new test files going forward (the original task's stated motivation).
-
-## STEP 4 — Sanity-sweep other test files
-
-Run `deno test --no-run 'supabase/functions/**/*.test.ts' 2>&1 | grep -iE "error|cannot"` and confirm zero hits. If any other file has the same class of error, fix it the same way (add missing `});`); otherwise no further edits.
-
-## STEP 5 — Local CI dry-run
-
-`deno test --no-run 'supabase/functions/**/__tests__/*.test.ts' 'supabase/functions/**/*.test.ts'` to confirm the glob resolves under bash and parses everything. Push verification (`git commit --allow-empty`) is out of scope for this agent — note in closing message that the workflow will fire on the next real push.
-
-## Files
-
-- **Edit** `supabase/functions/_shared/persist-day-contract.test.ts` — insert `});` after line 38
-- **Edit** `.github/workflows/tests.yml` — replace explicit file list with glob
-- **Possibly edit** any other file flagged by STEP 4 (none expected)
+No backend, dining-description, itinerary, or CI files will be changed.
