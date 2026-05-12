@@ -1849,6 +1849,16 @@ export function EditorialItinerary({
         const cutoffMinutes = depMinutes - bufferMinutes;
 
         updatedActivities = updatedActivities.filter(act => {
+          // Drop synthetic read-time hotel-return bookends — see final-departure
+          // filter below for rationale.
+          const aSource = String((act as any).source || '');
+          const aTags: string[] = Array.isArray((act as any).tags) ? (act as any).tags : [];
+          const isReadTimeBookend =
+            (typeof act.id === 'string' && act.id.startsWith('bookend-readtime-')) ||
+            aSource === 'bookend-readtime' || aSource === 'bookend-overnight' ||
+            aTags.includes('bookend-readtime') || aTags.includes('bookend-overnight');
+          if (isReadTimeBookend) return false;
+
           // Keep all synthetic cards (transport, hotel, etc.)
           if ((act as any).__syntheticTravel || (act as any).__syntheticDeparture ||
               (act as any).__interCityTransport || (act as any).__hotelCheckout ||
@@ -1857,12 +1867,14 @@ export function EditorialItinerary({
               act.id.startsWith('travel-')) {
             return true;
           }
-          // Preserve AI-generated check-in/checkout/accommodation cards
+          // Preserve AI-generated check-in/checkout cards, but NOT a generic
+          // "Return to hotel" row on a day the traveler is leaving the city.
           const tLower = (act.title || '').toLowerCase();
           const catLower = (act.category || '').toLowerCase();
-          const isAccommodationCard = catLower === 'accommodation' ||
+          const isReturnToHotel = /\b(?:return|head\s+back|back)\s+to\b/i.test(act.title || '');
+          const isAccommodationCard = !isReturnToHotel && (catLower === 'accommodation' ||
             tLower.includes('check-in') || tLower.includes('checkin') || tLower.includes('check in') ||
-            tLower.includes('check-out') || tLower.includes('checkout') || tLower.includes('check out');
+            tLower.includes('check-out') || tLower.includes('checkout') || tLower.includes('check out'));
           if (isAccommodationCard) return true;
           // No time = keep (safe fallback)
           if (!act.startTime) return true;
