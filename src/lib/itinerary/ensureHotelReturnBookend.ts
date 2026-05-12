@@ -49,6 +49,9 @@ function isTerminalAlready(a: any): boolean {
   if (!a) return false;
   const cat = String(a.category || '').toUpperCase();
   const title = String(a.title || a.name || '');
+  // Freshen-up / bag-drop / check-in cards are midday rituals, not terminal
+  // end-of-day bookends — even if the title says "Return to ...".
+  if (MIDDAY_ACCOM_RE.test(title)) return false;
   // True return / checkout titles always count.
   if (TRUE_RETURN_RE.test(title) || CHECKOUT_RE.test(title)) return true;
   // STAY / ACCOMMODATION cards count, except midday rituals (freshen-up,
@@ -66,7 +69,7 @@ export function isHotelReturnBookendActivity(a: any): boolean {
   const title = String(a.title || a.name || '');
   const source = String(a.source || '').toLowerCase();
   const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
-  if (MIDDAY_ACCOM_RE.test(title) && !TRUE_RETURN_RE.test(title)) return false;
+  if (MIDDAY_ACCOM_RE.test(title)) return false;
   if (BOOKEND_SOURCE_RE.test(source) || tags.some((t: string) => BOOKEND_SOURCE_RE.test(t))) return true;
   if (HOTEL_RETURN_RE.test(title)) return true;
   return (cat === 'STAY' || cat === 'ACCOMMODATION') && TRUE_RETURN_RE.test(title);
