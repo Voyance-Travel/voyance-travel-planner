@@ -231,13 +231,20 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
 // HELPERS
 // =============================================================================
 
-function meal(mode: DayMode, meals: RequiredMeal[], usableHours: number, text: string): MealPolicy {
+function meal(
+  mode: DayMode,
+  meals: RequiredMeal[],
+  usableHours: number,
+  text: string,
+  breakfastMode: 'breakfast' | 'brunch' = 'breakfast',
+): MealPolicy {
   return {
     dayMode: mode,
     requiredMeals: meals,
     mealInstructionText: text,
     isFullExplorationDay: false,
     usableHours,
+    breakfastMode,
   };
 }
 
