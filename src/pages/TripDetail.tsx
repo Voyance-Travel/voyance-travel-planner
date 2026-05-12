@@ -73,7 +73,6 @@ import {
   TRIP_PERSISTED_EVENT,
   resyncItineraryFromDb,
   reportItineraryDrift,
-  dispatchTripPersisted,
   type TripPersistedDetail,
 } from '@/lib/itinerary/resyncItineraryFromDb';
 import { normalizeFlightSelection } from '@/utils/normalizeFlightSelection';
