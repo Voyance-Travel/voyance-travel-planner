@@ -256,11 +256,9 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
   fillMissingStartTimes(input as any[], { path: 'enforceTimingAndBuffers' });
 
   // Sort chronologically; activities without a startTime go to the end.
-  let activities = [...input].sort((a, b) => {
-    const ta = parseTime(a.startTime) ?? 99999;
-    const tb = parseTime(b.startTime) ?? 99999;
-    return ta - tb;
-  });
+  // Wrap-aware so a 00:55 late-nightlife hotel-return bookend sorts AFTER a
+  // 23:30 nightcap instead of jumping to the top of the day.
+  let activities = [...input].sort((a, b) => dayChronoKey(a.startTime) - dayChronoKey(b.startTime));
 
   // Helper: shift an activity (and all later ones, except locked) by `delta` minutes.
   const cascadeShift = (fromIdx: number, delta: number) => {
