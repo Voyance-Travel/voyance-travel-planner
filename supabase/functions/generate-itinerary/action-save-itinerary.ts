@@ -508,6 +508,8 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       _harvestSave(itineraryDays[i].activities);
     }
 
+    console.log(`[save-itinerary] POST-VALIDATE counts (post meal-guard): ${countDays(itineraryDays)}`);
+
     if (mealGuardInjections > 0) {
       console.log(`[save-itinerary] Meal guard total: ${mealGuardInjections} meals injected across trip`);
       (itinerary as any).days = itineraryDays;
