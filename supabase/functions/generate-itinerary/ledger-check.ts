@@ -294,9 +294,25 @@ export async function ledgerCheck(
     const doneCanon = ledger.alreadyDone
       .map((p) => canonicalActivityVenueName(p.title))
       .filter((s) => s && s.length > 3);
+    const MEAL_TITLE_RE = /\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/i;
+    const MEAL_CATEGORIES = new Set(['dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe']);
+    const isMealRow = (a: any): boolean => {
+      const cat = String(a?.category || a?.type || '').toLowerCase();
+      if (MEAL_CATEGORIES.has(cat)) return true;
+      const t = String(a?.title || a?.name || '');
+      return MEAL_TITLE_RE.test(t);
+    };
     day.activities = day.activities.filter((a: any) => {
       if (a.locked || a.isLocked || a.lockedSource) return true;
       if (isDailyAnchor(a)) return true;
+      // Meals SHOULD repeat across days — same name on Day 1 and Day 2 is
+      // valid (e.g. "Breakfast at Cafe Aurora"). The cross-day venue dedup
+      // pass handles real same-product repetition (e.g. Louvre on consecutive
+      // days). See mem://constraints/itinerary/ledger-check-mutation-only.
+      if (isMealRow(a)) {
+        console.log(`[ledger-check] meal-recurrence exempted day=${dayNum} title="${a.title || a.name}"`);
+        return true;
+      }
       const t = (a.title || a.name || '').toLowerCase().trim();
       if (!t) return true;
       // Substring fuzzyMatch against raw titles (legacy behavior).

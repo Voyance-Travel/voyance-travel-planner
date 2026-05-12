@@ -711,6 +711,8 @@ export default function TripDetail() {
         const safeRes = await safeUpdateItineraryData(
           localTrip.id,
           localTrip.itinerary_data as any,
+          {},
+          { skipLedgerCheck: true, reason: 'self-heal-local-sync' },
         );
         if (safeRes?.error) {
           console.error('[TripDetail] Failed to sync itinerary_data via boundary:', safeRes.error);
@@ -1317,7 +1319,7 @@ export default function TripDetail() {
                   };
 
                   console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount})`);
-                  await safeUpdateItineraryData(tripId, healedItinerary);
+                  await safeUpdateItineraryData(tripId, healedItinerary, {}, { skipLedgerCheck: true, reason: 'self-heal-rebuild-from-tables' });
 
                   const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
                   setTrip(healedTripData);
@@ -1446,11 +1448,13 @@ export default function TripDetail() {
                           action: 'save-itinerary',
                           tripId: tripId!,
                           itinerary: mergedItinerary,
+                          skipLedgerCheck: true,
+                          saveReason: 'self-heal-version-restore',
                         },
                       });
                     } catch (saveErr) {
                       console.error('[TripDetail] Backend save after version restore failed, falling back to direct write:', saveErr);
-                      await safeUpdateItineraryData(tripId!, mergedItinerary);
+                      await safeUpdateItineraryData(tripId!, mergedItinerary, {}, { skipLedgerCheck: true, reason: 'self-heal-version-restore-fallback' });
                     }
                     queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
                     toast.success(`Restored ${restoredCount} day${restoredCount > 1 ? 's' : ''} from history`);
@@ -1495,11 +1499,17 @@ export default function TripDetail() {
                     const mergedFresh = { ...freshItinData, days: freshDays };
                     try {
                       await supabase.functions.invoke('generate-itinerary', {
-                        body: { action: 'save-itinerary', tripId: tripId!, itinerary: mergedFresh },
+                        body: {
+                          action: 'save-itinerary',
+                          tripId: tripId!,
+                          itinerary: mergedFresh,
+                          skipLedgerCheck: true,
+                          saveReason: 'self-heal-empty-day-placeholder',
+                        },
                       });
                     } catch (saveErr) {
                       console.error('[TripDetail] Backend save after placeholder materialization failed:', saveErr);
-                      await safeUpdateItineraryData(tripId!, mergedFresh);
+                      await safeUpdateItineraryData(tripId!, mergedFresh, {}, { skipLedgerCheck: true, reason: 'self-heal-empty-day-placeholder-fallback' });
                     }
                     queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
                     setIncompleteDays(unresolvedDays);
