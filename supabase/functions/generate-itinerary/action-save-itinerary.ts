@@ -22,6 +22,16 @@ import { fillMissingStartTimes } from '../_shared/timing-cascade.ts';
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
 
+/** Compact per-day activity + dining count snapshot for erosion-pattern observability. */
+const countDays = (days: any[]) =>
+  (Array.isArray(days) ? days : []).map((d: any, i: number) => {
+    const acts = Array.isArray(d?.activities) ? d.activities : [];
+    const dining = acts.filter((a: any) =>
+      /dining|food|restaurant/i.test(String(a?.category || ''))
+    ).length;
+    return `day${i + 1}=${acts.length}(dining:${dining})`;
+  }).join(' ');
+
 /** After a leg finishes generating, check if there's a queued next leg and kick it off. */
 export async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<void> {
   try {
@@ -270,6 +280,8 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     console.error(`[save-itinerary] ❌ ${daysWithoutDate.length} days still have no date after normalization — this should not happen`);
   }
 
+  console.log(`[save-itinerary] PRE-VALIDATE counts: ${countDays(itineraryDays)}`);
+
   // ── STEP 2: MEAL COMPLIANCE GUARD ─────────────────────────────
   let mealGuardInjections = 0;
 
@@ -495,6 +507,8 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       // never reuse a venue that was just kept or injected.
       _harvestSave(itineraryDays[i].activities);
     }
+
+    console.log(`[save-itinerary] POST-VALIDATE counts (post meal-guard): ${countDays(itineraryDays)}`);
 
     if (mealGuardInjections > 0) {
       console.log(`[save-itinerary] Meal guard total: ${mealGuardInjections} meals injected across trip`);
@@ -786,6 +800,8 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         itineraryDays = lc.days;
         (itinerary as any).days = itineraryDays;
       }
+      console.log(`[save-itinerary] POST-VALIDATE counts (post ledgerCheck, skipped=${skipLedgerCheck}): ${countDays(itineraryDays)}`);
+
 
       // Attach per-day warnings onto the persisted ledger snapshots so the
       // front-end can surface unresolved/violated user intents.
