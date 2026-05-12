@@ -12,6 +12,7 @@
 import { format, parseISO, addDays } from 'date-fns';
 import { coerceDurationString } from './plannerUtils';
 import { isGhostActivity } from '@/lib/itinerary/hideGhostActivities';
+import { ensureHotelReturnBookend } from '@/lib/itinerary/ensureHotelReturnBookend';
 
 // Strip non-Latin scripts from AI text artifacts before rendering
 const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0600-\u06FF\u0400-\u04FF\u0E00-\u0E7F]+/g;
@@ -747,6 +748,31 @@ export function parseItineraryDays(
       activities: filteredActivities,
     };
   });
+
+  // Step 4b: Read-time hotel-return safety net. Mirrors runStep8 at display
+  // time so legacy trips and gray-zone end times still show a "Return to
+  // {hotel}" card. Pure UI — never written to DB. The departure day is the
+  // last day in the trip whose terminal activity is a flight/airport transfer.
+  const allTripActivities = result.flatMap((d) => d.activities || []);
+  const lastDayIdx = result.length - 1;
+  const lastDayActs = result[lastDayIdx]?.activities || [];
+  const lastCard = lastDayActs[lastDayActs.length - 1] as any;
+  const departureDayIdx =
+    lastCard &&
+    (String(lastCard.category || '').toUpperCase() === 'FLIGHT' ||
+      /\b(flight|departure|airport|terminal|gate)\b/i.test(String(lastCard.title || '')))
+      ? lastDayIdx
+      : -1;
+  for (let i = 0; i < result.length; i++) {
+    const withBookend = ensureHotelReturnBookend(result[i].activities, {
+      isDepartureDay: i === departureDayIdx,
+      allTripActivities,
+      dayIndex: i,
+    });
+    if (withBookend !== result[i].activities) {
+      result[i] = { ...result[i], activities: withBookend as any };
+    }
+  }
 
   // Step 5: Day-count mismatch detection (diagnostic only, skip for partial/in-progress data)
   if (tripStartDate && tripEndDate && !options?.partial) {
