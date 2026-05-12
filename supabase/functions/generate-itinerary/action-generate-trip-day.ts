@@ -1899,6 +1899,47 @@ async function _handleGenerateTripDayInner(
             } catch (_e) { /* non-blocking */ }
           }
 
+          // ── DAY-1 BREAKFAST GUARANTOR ────────────────────────────────
+          // Belt-and-braces: re-verify breakfast on Day 1 with a breakfast-only
+          // pool (INLINE_FALLBACK_RESTAURANTS + verified_venues bakery/cafe).
+          // Closes the recurring "Day 1 breakfast missing" pattern when the
+          // earlier per-day pool lacked breakfast-mealType venues.
+          if (dayNumber === 1 && _fmgPolicy.requiredMeals.includes('breakfast')) {
+            try {
+              const { ensureDay1Breakfast } = await import('../_shared/day1-breakfast-inject.ts');
+              const _bf = await ensureDay1Breakfast({
+                activities: dayResult.activities as any[],
+                dayNumber,
+                requiredMeals: _fmgPolicy.requiredMeals,
+                destination: cityInfo?.cityName || destination || 'the destination',
+                arrivalTime24: savedArrTime24Hoisted,
+                restaurantPool: restaurantPool as any,
+                blockedRestaurants: usedRestaurants || [],
+                supabase,
+              });
+              if (_bf.injected) {
+                dayResult.metadata = dayResult.metadata || {};
+                dayResult.metadata.quality = dayResult.metadata.quality || {};
+                dayResult.metadata.quality.day1_breakfast_inject = {
+                  venue: _bf.injectedVenue,
+                  poolSize: _bf.poolSize,
+                  reason: _bf.reason,
+                };
+                // Run the description backstop again — the inject path mirrors
+                // the meal-guard sentinel shape (empty description on failure).
+                try {
+                  const { fillAfterMealGuard } = await import('../_shared/post-meal-guard-fill.ts');
+                  await fillAfterMealGuard(
+                    dayResult.activities as any[],
+                    cityInfo?.cityName || destination,
+                    dayNumber,
+                    'generate-trip-day:day1-breakfast-inject',
+                  );
+                } catch (_e) { /* non-blocking */ }
+              }
+            } catch (_e) { /* non-blocking */ }
+          }
+
           // RS.M.I3: cache the meal policy used during generation so action-save-itinerary
           // (and the health engine) can prefer it instead of re-deriving from possibly-changed
           // flight times. Mirrors action-generate-day.ts:336-346. Written unconditionally.
@@ -2290,10 +2331,8 @@ async function _handleGenerateTripDayInner(
     }
     if (addressFixCount > 0) {
       console.log(`[generate-trip-day] Hotel address consistency: fixed ${addressFixCount} address(es)`);
+      }
     }
-  }
-
-
   let canonicalCount = existingDays.length;
   try {
     const { count: tableRowCount } = await supabase
