@@ -264,6 +264,7 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
   }
   result.push(card);
   console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}${lateNightBleed ? ' (late-nightlife bleed)' : ''}`);
+  console.log(`[BOOKEND_TRACE] day=${dayIndex + 1} site=emit action=emitted source=${card.source} reason=ok startTime=${startTime24} endTime=${endTime24}`);
 }
 
 
