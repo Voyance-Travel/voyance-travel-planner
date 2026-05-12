@@ -170,6 +170,11 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
         console.log(`[BOOKEND_REORDER] day=${dayNumber} moved tail src="${(head as any)?.source || 'inferred'}" path=save-itinerary`);
       }
     }
+    // Drop stale `late_nightlife_bookend` cards whose chronological-prior
+    // non-bookend isn't actually nightlife (or whose start predates the
+    // prior's end). The save-time `runStep8` retry below re-injects a
+    // fresh bookend when the day still warrants one.
+    pruneOrphanLateNightlifeBookend(activities, { dayNumber });
     stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
     clampAllBookends(activities, { dayNumber, label: 'SAVE' });
     // Unified scrub boundary — single entry point.
