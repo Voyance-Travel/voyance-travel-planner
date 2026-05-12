@@ -2145,6 +2145,7 @@ export default function TripDetail() {
           end_date: newEndDate,
           hotel_selection: updatedHotelSelection as any,
         },
+        { allowFrozenWrite: true, reason: 'user-date-change' },
       );
       const error = safeRes?.error;
 
