@@ -171,6 +171,7 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
         const head = activities.shift();
         activities.push(head);
         console.log(`[BOOKEND_REORDER] day=${dayNumber} moved tail src="${(head as any)?.source || 'inferred'}" path=save-itinerary`);
+        console.log(`[BOOKEND_TRACE] day=${dayNumber} site=save action=reordered source=${(head as any)?.source || 'inferred'} reason=legacy_head_bookend`);
       }
     }
     // Drop stale `late_nightlife_bookend` cards whose chronological-prior
@@ -532,6 +533,37 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
             }
           } catch (_e) { /* non-blocking */ }
         }
+      } catch (_e) { /* non-blocking */ }
+
+      // ── BOOKEND_SUMMARY (observation only) ─────────────────────────
+      // One structured line per day so the whole hotel-return pipeline can be
+      // diffed across emit/strip/clamp/save sites. See mem://constraints/itinerary/day-end-hotel-return-bookend.
+      try {
+        const _bsActs = itineraryDays[i]?.activities || [];
+        const _bsLast = _bsActs.length ? _bsActs[_bsActs.length - 1] : null;
+        const _bsLastSrc = String((_bsLast as any)?.source || '').toLowerCase();
+        const _bsLastTitle = String((_bsLast as any)?.title || '');
+        const _bsLastCat = String((_bsLast as any)?.category || '').toLowerCase();
+        const _bsPersisted =
+          /^(bookend-readtime|bookend-overnight|bookend-validator|bookend-synthesized|late_nightlife_bookend)$/.test(_bsLastSrc) ||
+          ((_bsLastCat === 'accommodation' || _bsLastCat === 'stay') &&
+           /\b(?:return\s+to|back\s+to|head\s+back\s+to)\b/i.test(_bsLastTitle));
+        const _bsSaveTime = !!itineraryDays[i]?.metadata?.quality?.hotel_return_save_time;
+        const _bsClamped = itineraryDays[i]?.metadata?.quality?.bookend_clamped_count || 0;
+        itineraryDays[i].metadata = itineraryDays[i].metadata || {};
+        itineraryDays[i].metadata.quality = itineraryDays[i].metadata.quality || {};
+        itineraryDays[i].metadata.quality.bookend_trace = {
+          persisted: _bsPersisted,
+          persistedSource: _bsPersisted ? (_bsLastSrc || 'inferred') : 'none',
+          saveTimeInjected: _bsSaveTime,
+          lastTitle: _bsLastTitle,
+          lastEnd: (_bsLast as any)?.end_time || (_bsLast as any)?.endTime || null,
+          isDepartureDay: !!isLastDay,
+          clampedCount: _bsClamped,
+        };
+        console.log(
+          `[BOOKEND_SUMMARY] day=${dayNumber} persisted=${_bsPersisted ? 1 : 0} persistedSource=${_bsPersisted ? (_bsLastSrc || 'inferred') : 'none'} saveTimeInjected=${_bsSaveTime ? 1 : 0} clamped=${_bsClamped} isDepartureDay=${isLastDay ? 1 : 0} lastTitle="${_bsLastTitle}"`,
+        );
       } catch (_e) { /* non-blocking */ }
 
       // Always update trip-wide blocked set after this day so later days

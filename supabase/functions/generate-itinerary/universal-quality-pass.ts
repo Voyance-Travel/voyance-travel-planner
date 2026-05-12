@@ -130,10 +130,14 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
   const alreadyReturn =
     titleIsTrueReturn ||
     ((lastCat === 'STAY' || lastCat === 'ACCOMMODATION') && !titleIsMiddayAccom);
-  if (alreadyReturn) return;
+  if (alreadyReturn) {
+    console.log(`[BOOKEND_TRACE] day=${dayIndex + 1} site=emit action=skipped source=n/a reason=alreadyReturn lastTitle="${lastTitle}" lastCat=${lastCat}`);
+    return;
+  }
   // Skip logistics tails (airport/station transfers)
   if (/\b(airport|station|terminal|gate)\b/i.test(lastTitle) &&
       /TRANSPORT|TRANSIT|TRAVEL|LOGISTICS/.test(lastCat)) {
+    console.log(`[BOOKEND_TRACE] day=${dayIndex + 1} site=emit action=skipped source=n/a reason=airport_terminal lastTitle="${lastTitle}"`);
     return;
   }
 
@@ -260,6 +264,7 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
   }
   result.push(card);
   console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}${lateNightBleed ? ' (late-nightlife bleed)' : ''}`);
+  console.log(`[BOOKEND_TRACE] day=${dayIndex + 1} site=emit action=emitted source=${card.source} reason=ok startTime=${startTime24} endTime=${endTime24}`);
 }
 
 

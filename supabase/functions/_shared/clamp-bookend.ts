@@ -160,6 +160,9 @@ export function clampBookendEndTime(act: any, opts: ClampBookendOptions = {}): C
   console.warn(
     `${tag} ${dayLabel}clamped "${act.title}" from ${beforeStart}–${beforeEnd} to ${newStartStr}–${newEndStr} (${newDur}m, reason=${reason})`,
   );
+  console.log(
+    `[BOOKEND_TRACE] day=${opts.dayNumber ?? '?'} site=clamp action=clamped source=${act?.source || 'unknown'} reason=${reason} before=${beforeStart}-${beforeEnd} after=${newStartStr}-${newEndStr}`,
+  );
 
   return {
     changed: true,
