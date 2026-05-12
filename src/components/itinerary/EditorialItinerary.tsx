@@ -2225,22 +2225,31 @@ export function EditorialItinerary({
   // Only sync if there are no unsaved local changes to avoid overwriting user edits
   // Use a content-based fingerprint instead of reference equality to avoid
   // false positives when the parent re-creates the array on every render.
+  // Fingerprint includes startTime/endTime/durationMinutes so the post-cascade
+  // resync from DB (same activity ids, shifted times) actually reaches setDays
+  // and the user sees the canonical pre-refresh==post-refresh state.
+  // See mem://constraints/itinerary/db-is-source-of-truth.
   const initialDaysFingerprint = useMemo(() => {
     return JSON.stringify(initialDays.map(d => ({
       n: d.dayNumber,
       d: d.date,
-      a: d.activities.map(a => a.id),
+      a: d.activities.map(a => `${a.id}@${a.startTime || ''}-${a.endTime || ''}#${(a as any).durationMinutes ?? ''}`),
     })));
   }, [initialDays]);
   const prevFingerprintRef = useRef(initialDaysFingerprint);
+  // Mirror hasChanges into a ref so the resync listener path (which fires after
+  // a successful save where setHasChanges(false) may not have flushed) reads
+  // the latest truth without waiting for a re-render.
+  const hasChangesRef = useRef(hasChanges);
+  useEffect(() => { hasChangesRef.current = hasChanges; }, [hasChanges]);
   useEffect(() => {
     if (initialDaysFingerprint !== prevFingerprintRef.current) {
       prevFingerprintRef.current = initialDaysFingerprint;
-      if (!hasChanges) {
+      if (!hasChangesRef.current) {
         setDays(initialDays);
       }
     }
-  }, [initialDaysFingerprint, hasChanges]);
+  }, [initialDaysFingerprint]);
 
   // Notify parent of local days changes so sibling components (e.g. ItineraryAssistant) stay in sync
   const daysFingerprint = useMemo(() => JSON.stringify(days.map(d => ({ n: d.dayNumber, a: d.activities.map(a => a.id) }))), [days]);
