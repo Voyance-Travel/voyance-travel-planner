@@ -67,24 +67,55 @@ Deno.test("daily anchors (Return to Hotel, Freshen Up, transfers) survive dedup 
   assertEquals(anchorWarnings.length, 0, "anchor activities must not produce repeat warnings");
 });
 
-Deno.test("non-anchor duplicates ARE still removed (e.g. revisiting same museum)", async () => {
+Deno.test("non-anchor non-meal duplicates ARE still removed (e.g. revisiting same museum)", async () => {
   const days = [
     {
       dayNumber: 2,
       activities: [
         { title: "Louvre Museum", category: "sightseeing" },
-        { title: "Lunch: Girafe", category: "dining" },
       ],
     },
   ];
 
   const ledgers = [
-    mkLedger(2, ["Louvre Museum", "Lunch: Girafe"]),
+    mkLedger(2, ["Louvre Museum"]),
   ];
 
   const res = await ledgerCheck(days, ledgers);
-  assertEquals(res.removed, 2, "non-anchor duplicates must still be removed");
+  assertEquals(res.removed, 1, "non-anchor non-meal duplicate must still be removed");
   assertEquals(res.days[0].activities.length, 0);
+});
+
+Deno.test("meal rows are exempted from repeat_already_done (reload-loop erosion fix)", async () => {
+  // Reload self-heal previously trimmed Day-N "Breakfast at Cafe X" because
+  // Day 1 already had it. Meals SHOULD recur.
+  const days = [
+    {
+      dayNumber: 2,
+      activities: [
+        { title: "Breakfast at Cafe Aurora", category: "dining" },
+        { title: "Lunch: Girafe", category: "restaurant" },
+        { title: "Dinner at Metis", category: "dinner" },
+        // No category but meal-keyword in title — also exempt.
+        { title: "A casual brunch nearby" },
+      ],
+    },
+  ];
+
+  const ledgers = [
+    mkLedger(2, [
+      "Breakfast at Cafe Aurora",
+      "Lunch: Girafe",
+      "Dinner at Metis",
+      "A casual brunch nearby",
+    ]),
+  ];
+
+  const res = await ledgerCheck(days, ledgers);
+  assertEquals(res.removed, 0, "no meal rows should be removed");
+  assertEquals(res.days[0].activities.length, 4, "all four meal rows survive");
+  const mealWarnings = res.warnings.filter((w) => w.kind === "repeat_already_done");
+  assertEquals(mealWarnings.length, 0, "meals must not emit repeat warnings");
 });
 
 Deno.test("vibe clash auto-mutates tomorrow's splurge dinner when not locked", async () => {
