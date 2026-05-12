@@ -171,15 +171,17 @@ export function enforcePersistDayContract<T = any>(
     }
 
     // 3. Placeholder PROSE — identifier fields ONLY.
+    // Allowlist: deliberate manual-pick meal sentinels survive (they render
+    // as a "tap to pick a place" card and are intentionally user-visible).
     if (PLACEHOLDER_NAME_RE.test(idBlob)) {
+      if (isManualPickSentinel(a)) {
+        console.info(`[SENTINEL_KEPT] day=${ctx.dayNumber ?? '?'} title="${title}" reason=manual_pick`);
+        out.push(a);
+        continue;
+      }
       drops.push({ dayNumber: ctx.dayNumber, title, reason: 'placeholder-name' });
       continue;
     }
-
-    out.push(a);
-  }
-
-  return { activities: out, drops };
 }
 
 /**
