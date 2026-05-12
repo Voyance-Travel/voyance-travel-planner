@@ -1504,22 +1504,29 @@ export default function TripDetail() {
                     freshDays.sort((a: any, b: any) => (a.dayNumber || 0) - (b.dayNumber || 0));
 
                     const mergedFresh = { ...freshItinData, days: freshDays };
-                    try {
-                      await supabase.functions.invoke('generate-itinerary', {
-                        body: {
-                          action: 'save-itinerary',
-                          tripId: tripId!,
-                          itinerary: mergedFresh,
-                          skipLedgerCheck: true,
-                          saveReason: 'self-heal-empty-day-placeholder',
-                        },
-                      });
-                    } catch (saveErr) {
-                      console.error('[TripDetail] Backend save after placeholder materialization failed:', saveErr);
-                      await safeUpdateItineraryData(tripId!, mergedFresh, {}, { skipLedgerCheck: true, reason: 'self-heal-empty-day-placeholder-fallback' });
+                    const prevFp = itineraryFingerprint(freshItinData);
+                    const nextFp = itineraryFingerprint(mergedFresh);
+                    if (prevFp === nextFp) {
+                      console.log(`[TripDetail] Self-heal empty-day-placeholder no-op: payload identical to current state (fp=${nextFp}), skipping write`);
+                      setIncompleteDays(unresolvedDays);
+                    } else {
+                      try {
+                        await supabase.functions.invoke('generate-itinerary', {
+                          body: {
+                            action: 'save-itinerary',
+                            tripId: tripId!,
+                            itinerary: mergedFresh,
+                            skipLedgerCheck: true,
+                            saveReason: 'self-heal-empty-day-placeholder',
+                          },
+                        });
+                      } catch (saveErr) {
+                        console.error('[TripDetail] Backend save after placeholder materialization failed:', saveErr);
+                        await safeUpdateItineraryData(tripId!, mergedFresh, {}, { skipLedgerCheck: true, reason: 'self-heal-empty-day-placeholder-fallback' });
+                      }
+                      queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+                      setIncompleteDays(unresolvedDays);
                     }
-                    queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
-                    setIncompleteDays(unresolvedDays);
                   }
                 } catch (err) {
                   console.error('[TripDetail] Self-heal (version restore + placeholders) failed:', err);
