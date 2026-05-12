@@ -800,6 +800,8 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         itineraryDays = lc.days;
         (itinerary as any).days = itineraryDays;
       }
+      console.log(`[save-itinerary] POST-VALIDATE counts (post ledgerCheck, skipped=${skipLedgerCheck}): ${countDays(itineraryDays)}`);
+
 
       // Attach per-day warnings onto the persisted ledger snapshots so the
       // front-end can surface unresolved/violated user intents.
