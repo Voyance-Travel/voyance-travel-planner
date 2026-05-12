@@ -334,6 +334,9 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
   // Pre-walk: fill missing startTime from endTime − durationMinutes so the sort
   // (and all downstream pair logic) sees a coherent chronology. Mutates input.
   fillMissingStartTimes(input as any[], { path: 'enforceTimingAndBuffers' });
+  // Pre-walk #2: assign canonical times to dining cards with no time/end/duration
+  // ("floating Day 3 dinner card") so they anchor visibly or drop as dupes.
+  assignFloatingMealTimes(input as any[], { path: 'enforceTimingAndBuffers' });
 
   // Sort chronologically; activities without a startTime go to the end.
   // Wrap-aware so a 00:55 late-nightlife hotel-return bookend sorts AFTER a
