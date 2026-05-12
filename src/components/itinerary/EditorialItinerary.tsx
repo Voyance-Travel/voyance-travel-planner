@@ -70,6 +70,7 @@ import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import { useActivityImageWriteback } from '@/hooks/useActivityImageWriteback';
 import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
+import { resolveActivityDisplayDescription } from '@/lib/itinerary/diningDescriptionFallback';
 import { getDisplayDayTitle } from '@/utils/dayTitleCoherence';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { parseEditorialDays } from '@/utils/itineraryParser';
@@ -11443,8 +11444,11 @@ function ActivityRow({
 
         {/* Description — fall back to personalization.whyThisFits when blank */}
         {(() => {
-          const d = sanitizeActivityText(activity.description)
-            || sanitizeActivityText((activity as any)?.personalization?.whyThisFits);
+          const d = resolveActivityDisplayDescription(
+            activity,
+            sanitizeActivityText(activity.description),
+            destination,
+          );
           return d ? (
             <p className="text-base text-muted-foreground leading-relaxed mt-2">
               {d}
@@ -11605,8 +11609,11 @@ function ActivityRow({
             </div>
           )}
           {(() => {
-            const d = sanitizeActivityText(activity.description)
-              || sanitizeActivityText((activity as any)?.personalization?.whyThisFits);
+            const d = resolveActivityDisplayDescription(
+              activity,
+              sanitizeActivityText(activity.description),
+              destination,
+            );
             return d && !compact ? (
               <p className={cn(
                 "text-xs text-muted-foreground leading-relaxed",
@@ -11998,8 +12005,11 @@ function ActivityRow({
                   )}
                   {/* Description — hidden in compact mode; falls back to whyThisFits */}
                   {(() => {
-                    const d = sanitizeActivityText(activity.description)
-                      || sanitizeActivityText((activity as any)?.personalization?.whyThisFits);
+                    const d = resolveActivityDisplayDescription(
+                      activity,
+                      sanitizeActivityText(activity.description),
+                      destination,
+                    );
                     return d && !compact ? (
                       <p className={cn(
                         "text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed",

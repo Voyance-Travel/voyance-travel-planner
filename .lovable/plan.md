@@ -1,43 +1,33 @@
-## Why your hotel total is missing
+## Plan: restore dining descriptions end-to-end
 
-You entered the hotel + nightly price + checked "include" in **Step 2 of the planner** (`src/pages/Start.tsx`). When the trip is created, three things are written to the database:
+### What I found
+- The canonical JSON in `trips.itinerary_data` for the latest Milan trip is missing all dining rows entirely, while `itinerary_activities` has the dining rows and most descriptions.
+- The renderer is reading the degraded JSON path, so users see venue/location/price/link but no blurb for meals.
+- The backend description filler exists, but it can still leave blanks when the LLM skips a row or when normalized table data is not reconciled back into `trips.itinerary_data`.
 
-1. `hotel_selection` JSON (name, price-per-night, etc.)
-2. `budget_include_hotel = true` (the toggle you flipped)
-3. **No row in `activity_costs`** for the hotel.
+### Changes to implement
+1. **Make save-time description filling deterministic**
+   - Update the dining description helper so every dining card gets a non-empty, actionable description even if the AI fill fails.
+   - Prefer sources in this order: existing valid description, inline fallback restaurant description, `personalization.whyThisFits`, venue-aware deterministic fallback.
+   - Treat restaurant-link loading text separately; it should never be mistaken for description copy.
 
-Trip totals are read from `activity_costs` by the resolver in `src/services/canonicalCostRows.ts`. With no hotel row, hotel cost = $0 in the total. The `EditorialItinerary` mount-effect is *supposed* to back-fill that row by calling `syncHotelToLedger` once on first view — but it silently produces $0 (or only one night) for trips that came out of Step 2 because:
+2. **Reconcile normalized dining rows back into the JSON itinerary**
+   - In the itinerary save/generation path, before persisting `trips.itinerary_data`, merge missing dining activities/descriptions from `itinerary_activities` when the normalized table has fuller dining data for the same trip/day.
+   - Preserve universal locking and avoid overwriting user-edited/manual rows.
+   - Log a compact sentinel like `[DINING_JSON_RECONCILE] day=N inserted=X described=Y`.
 
-- Step 2's single-hotel write at `Start.tsx` lines 2413–2421 stores `pricePerNight` but **omits `checkInDate` / `checkOutDate` / `nights` / `totalPrice`**.
-- `syncHotelToLedger` → `computeHotelCostUsd` then has nothing to multiply by, so it falls through to `pricePerNight × Math.max(1, daysCount−1)` with `daysCount=1`, which gives only one night (and for split-stay arrays often gives 0 because dates are missing on most entries).
+3. **Harden frontend display fallback**
+   - Add a shared dining-description resolver used by `EditorialItinerary` so dining cards display `description`, then `personalization.whyThisFits`, then a safe venue-aware fallback when data is still missing.
+   - Ensure the fallback only applies to dining cards and does not alter saved data from the UI.
 
-Net result: even with "include in budget" checked, the hotel either contributes nothing or one night to the total.
-
-## Fix
-
-Two small, surgical changes — no logic refactor, no UI redesign.
-
-### 1. `src/pages/Start.tsx` — write complete hotel data
-
-In the trip-insert block (around lines 2392–2425):
-
-- For the single-hotel branch (legacy, `manualHotel.name` only), also write `checkInDate = trip.start_date`, `checkOutDate = trip.end_date`, and a derived `totalPrice = pricePerNight × nights`.
-- For the multi-hotel branch (`manualHotelList`), for any entry that has `pricePerNight` but no `checkInDate`/`checkOutDate`, fill them in by evenly partitioning the trip range across the list (same heuristic the generator already uses at `generation-core.ts` ~line 450). Compute and persist `totalPrice` per entry.
-- Immediately after `supabase.from('trips').insert(...)` succeeds and we have `trip.id`, when `includeHotelInBudget` is true call `syncHotelToLedger(trip.id, primaryHotel)` (single) or `syncMultiCityHotelsToLedger(trip.id, entries)` (split-stay / multi-city). Do not wait for the user to land on `TripDetail` for the back-fill to fire.
-
-### 2. `src/services/budgetLedgerSync.ts` — defensive fallback
-
-In `syncHotelToLedger`, when `totalUsd` resolves to 0 but `hotel.pricePerNight > 0`, look up the trip's `start_date`/`end_date` (one extra `select`) and recompute as `pricePerNight × nightsBetween(start, end)` before giving up and calling `removeLogisticsCost`. This guarantees that any older trip already in the database gets healed on next view by the existing `EditorialItinerary` mount-effect, without users needing to re-enter the hotel.
+4. **Add regression coverage**
+   - Add focused tests for:
+     - blank dining description becomes an actionable fallback,
+     - templated/generic dining text is replaced,
+     - JSON itinerary dining rows are preserved/reconciled from normalized activities,
+     - non-dining activities are not affected.
 
 ### Verification
-
-- Create a fresh trip via Start → Step 2 → enter hotel name, $/night, check "Include in budget" → generate. Open `Payments` tab and the trip header total: hotel line should appear as `pricePerNight × nights` and be folded into the total.
-- Pre-existing affected trip: just open it once. The mount-effect + new fallback in `syncHotelToLedger` will write the hotel row to `activity_costs`; total updates on the next snapshot tick.
-- `psql` check: `select category, total_cost_cents from activity_costs where trip_id='…' and category='hotel';` should return one row.
-
-## Files touched
-
-- `src/pages/Start.tsx` — enrich hotel write + eager sync call (≈ 25 lines).
-- `src/services/budgetLedgerSync.ts` — date-range fallback in `syncHotelToLedger` (≈ 15 lines).
-
-No schema changes, no edge function changes, no new flags. Existing tests in `src/services/__tests__/budgetLedgerSync.test.ts` cover the manual-payment guard; I'll add one case for the "no dates, fall back to trip span" branch.
+- Run targeted tests for the new helpers.
+- Query a recent Milan/Faro/Bruges/Bali trip shape to confirm dining rows/descriptions are present in the saved JSON after the save path.
+- Check source greps for the new sentinel and shared resolver.
