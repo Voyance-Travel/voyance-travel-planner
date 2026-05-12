@@ -1105,5 +1105,23 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // Trigger next journey leg if applicable
   await triggerNextJourneyLeg(supabase, tripId);
 
-  return okJson({ success: true, normalized: true, mealGuardInjections });
+  if (!persistVerdict.ok) {
+    return okJson({
+      success: false,
+      code: 'NEEDS_REGENERATION',
+      message: 'Itinerary saved with issues — some days need attention.',
+      persistedDespiteErrors: true,
+      normalized: true,
+      mealGuardInjections,
+      errors: persistVerdict.errors,
+      warnings: persistVerdict.warnings,
+    }, 422);
+  }
+
+  return okJson({
+    success: true,
+    normalized: true,
+    mealGuardInjections,
+    warnings: persistVerdict.warnings,
+  });
 }
