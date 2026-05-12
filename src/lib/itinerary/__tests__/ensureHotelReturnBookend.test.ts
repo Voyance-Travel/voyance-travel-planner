@@ -166,7 +166,7 @@ describe('ensureHotelReturnBookend', () => {
   });
 
   it('00:00–02:30 with non-nightlife terminal → no injection (avoid fabrication)', () => {
-    const acts = [mk({ title: 'Random late activity', category: 'cultural', startTime: '23:30', endTime: '01:30' })];
+    const acts = [mk({ title: 'Random late activity', category: 'cultural', startTime: '00:30', endTime: '01:30' })];
     const out = ensureHotelReturnBookend(acts, { dayIndex: 0 });
     expect(out).toBe(acts);
   });
