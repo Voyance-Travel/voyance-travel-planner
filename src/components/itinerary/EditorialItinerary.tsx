@@ -2677,16 +2677,10 @@ export function EditorialItinerary({
         }
         return patched;
       });
-      // Sort chronologically after applying time patches
-      patchedActivities.sort((a, b) => {
-        const parseMin = (t?: string) => {
-          if (!t) return 9999;
-          const parts = t.match(/(\d{1,2}):(\d{2})/);
-          if (!parts) return 9999;
-          return parseInt(parts[1]) * 60 + parseInt(parts[2]);
-        };
-        return parseMin(a.startTime || a.time) - parseMin(b.startTime || b.time);
-      });
+      // Sort chronologically (wrap-aware) after applying time patches
+      patchedActivities.sort(
+        (a, b) => dayChronoKey(a.startTime || a.time) - dayChronoKey(b.startTime || b.time),
+      );
 
       // Final cascade safety net — resolves any residual overlap/buffer drift
       // produced by partial server patches. Locked rows stay put.
