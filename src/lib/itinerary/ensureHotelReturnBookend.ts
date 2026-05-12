@@ -125,27 +125,10 @@ export function ensureHotelReturnBookend<T extends any[]>(
   if (!Array.isArray(activities) || activities.length === 0) return activities;
   if (opts.isDepartureDay) return activities;
 
-  // Find chronologically last activity (mirror runStep8's start-time scan).
-  let lastIdx = activities.length - 1;
-  let lastMins = parseTime(
-    (activities[lastIdx] as any)?.startTime ??
-      (activities[lastIdx] as any)?.start_time ??
-      (activities[lastIdx] as any)?.endTime ??
-      (activities[lastIdx] as any)?.end_time,
-  ) ?? -1;
-  for (let i = activities.length - 2; i >= 0; i--) {
-    const m = parseTime(
-      (activities[i] as any)?.startTime ??
-        (activities[i] as any)?.start_time ??
-        (activities[i] as any)?.endTime ??
-        (activities[i] as any)?.end_time,
-    );
-    if (m !== null && m > lastMins) {
-      lastMins = m;
-      lastIdx = i;
-    }
-  }
-  const last = activities[lastIdx] as any;
+  // Use the array tail — that's what the user actually sees as the day's
+  // last card. The generator's chronological re-sort runs upstream; by the
+  // time we reach the read-time path the array order is the truth.
+  const last = activities[activities.length - 1] as any;
   if (!last) return activities;
 
   // Idempotency / lock / departure-style guards.
