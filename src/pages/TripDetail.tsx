@@ -711,6 +711,8 @@ export default function TripDetail() {
         const safeRes = await safeUpdateItineraryData(
           localTrip.id,
           localTrip.itinerary_data as any,
+          {},
+          { skipLedgerCheck: true, reason: 'self-heal-local-sync' },
         );
         if (safeRes?.error) {
           console.error('[TripDetail] Failed to sync itinerary_data via boundary:', safeRes.error);
