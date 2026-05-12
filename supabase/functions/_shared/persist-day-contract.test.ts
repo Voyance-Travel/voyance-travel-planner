@@ -18,6 +18,24 @@ Deno.test('drops "Spa Time — find a venue"', () => {
   assertEquals(drops[0].reason, 'placeholder-name');
 });
 
+Deno.test('keeps "Lunch — find a local spot in Aruba" with preserveAsManualPick=true', () => {
+  const acts = [
+    { title: 'Lunch — find a local spot in Aruba', startTime: '13:00', category: 'dining', preserveAsManualPick: true },
+  ];
+  const { activities, drops } = enforcePersistDayContract(acts);
+  assertEquals(activities.length, 1);
+  assertEquals(drops.length, 0);
+});
+
+Deno.test('drops "Lunch — find a local spot in Aruba" without sentinel flag', () => {
+  const acts = [
+    { title: 'Lunch — find a local spot in Aruba', startTime: '13:00', category: 'dining' },
+  ];
+  const { activities, drops } = enforcePersistDayContract(acts);
+  assertEquals(activities.length, 0);
+  assertEquals(drops[0].reason, 'placeholder-name');
+});
+
 Deno.test('drops prompt artifact "(AESTHETIC slot)"', () => {
   const acts = [{ title: 'Dinner (AESTHETIC slot)', startTime: '19:00', category: 'dining' }];
   const { activities, drops } = enforcePersistDayContract(acts);
