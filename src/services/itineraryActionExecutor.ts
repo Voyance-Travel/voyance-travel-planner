@@ -965,6 +965,12 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
       return { success: false, error: saveError.message || 'save_failed' };
     }
     console.log('[ActionExecutor] Trip itinerary saved via backend (normalized + meal-guarded)');
+    // Notify session listeners to resync from DB so chat actions don't leave
+    // a pre-cascade view sitting on screen until the next refresh.
+    try {
+      const { dispatchTripPersisted } = await import('@/lib/itinerary/resyncItineraryFromDb');
+      dispatchTripPersisted({ tripId, prevDays: sortedDays as unknown[], source: 'ActionExecutor' });
+    } catch { /* non-fatal */ }
     return { success: true };
   } catch (err: any) {
     console.error('[ActionExecutor] Update error:', err);
