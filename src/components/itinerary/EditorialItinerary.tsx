@@ -3340,7 +3340,7 @@ export function EditorialItinerary({
         if (parsedMetadata) {
           itineraryToPersist.metadata = { ...parsedMetadata, lastUpdated: new Date().toISOString() };
         }
-        const res = await safeUpdateItineraryData(tripId, itineraryToPersist);
+        const res = await safeUpdateItineraryData(tripId, itineraryToPersist, {}, { allowFrozenWrite: true, reason: 'user-editor-save' });
         if (res?.error) throw res.error;
         setHasChanges(false);
         setLastSaved(new Date());
@@ -5732,7 +5732,7 @@ export function EditorialItinerary({
         if (parsedMetadata) {
           itineraryToPersist.metadata = { ...parsedMetadata, lastUpdated: new Date().toISOString() };
         }
-        const res = await safeUpdateItineraryData(tripId, itineraryToPersist);
+        const res = await safeUpdateItineraryData(tripId, itineraryToPersist, {}, { allowFrozenWrite: true, reason: 'user-editor-save' });
         if (res?.error) throw res.error;
         setHasChanges(false);
         setLastSaved(new Date());
@@ -8222,7 +8222,7 @@ export function EditorialItinerary({
                     if (parsedMetadata) {
                       itineraryToPersist.metadata = { ...parsedMetadata, lastUpdated: new Date().toISOString() };
                     }
-                    const res = await safeUpdateItineraryData(tripId, itineraryToPersist);
+                    const res = await safeUpdateItineraryData(tripId, itineraryToPersist, {}, { allowFrozenWrite: true, reason: 'user-editor-save' });
                     if (res?.error) throw res.error;
                     setHasChanges(false);
                     setLastSaved(new Date());
