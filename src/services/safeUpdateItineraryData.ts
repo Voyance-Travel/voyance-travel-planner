@@ -124,6 +124,7 @@ export async function safeUpdateItineraryData(
         tripId,
         itinerary: merged,
         extraUpdate: { ...extraFields, updated_at: new Date().toISOString() },
+        ...(options.skipLedgerCheck ? { skipLedgerCheck: true, saveReason: options.reason || 'safeUpdateItineraryData-skipLedger' } : {}),
       },
     });
     if (error) {
