@@ -1,59 +1,72 @@
-## Why some days don't end with "Return to Hotel"
+## Goal
 
-Pulled the last 4 trips from the database. The newest (Bali) has bookends on every non-departure day. The older 3 (Seoul + 2 Bruges trips) don't — they were generated **before** the recent `runStep8` hardening shipped (14:00 floor + save-time safety net + late-nightlife branch). On disk those days simply don't have a hotel-return card.
+Make the saved DB state the **single source of truth** for what the user sees. Pre-refresh and post-refresh should render the same thing — no more "the reload changed my times / added my hotel return / dropped my dinner".
 
-There's also one edge case the current generator still misses: a day whose last activity ends **after 02:30** (e.g. Seoul Day 1 ended at 02:50 — outside both the standard 14:00–23:59 window and the late-nightlife 00:00–02:30 cap). `runStep8` correctly refuses to fabricate a bookend in that gray zone, so the day ships without one.
+## Root Cause
 
-The generator pipeline is right. We just need a **read-time** safety net so existing trips and gray-zone days still display a hotel-return card to the user.
+After generation (and after some chat/save actions), the session holds an **in-memory** copy of the days that was assembled before the backend's final pass — `enforceTimingAndBuffers`, terminal cleanup, hotel-return bookend, post-checkout pruning, etc. The backend then runs those passes during `safeUpdateItineraryData` → `action-save-itinerary`, which re-writes `itinerary_data` to a normalized version. The session never re-reads that version, so:
 
-## What to build
+- **Bali symptom**: pre-refresh times = pre-cascade; post-refresh times = post-cascade (~1.5h earlier).
+- **Hotel-return symptom**: the read-time `ensureHotelReturnBookend` runs in `parseItineraryDays`, but the in-memory `generatedDays` produced by `ItineraryGenerator.fetchCompletedDaysFromBackend` are merged from `itinerary_days` rows + raw `itinerary_data.activities` and handed to the editor without going through that parser path consistently. After refresh, `parseEditorialDays` runs cleanly and the bookend appears.
+- **Bruges/Istanbul symptom**: when save-itinerary's normalization rejects/drops a meal card, the session still shows the pre-save card, but the DB no longer has it. Refresh exposes the loss.
 
-### 1. Read-time hotel-return injector (frontend, non-destructive)
+The fix is **resync, not re-normalize-on-client**. Treat any local mutation as optimistic and reconcile from DB after the server confirms.
 
-New helper `ensureHotelReturnBookend(activities, opts)` in `src/lib/itinerary/`, called from `parseItineraryDays` right after `filterGhostActivities`. Pure display-layer — never writes to DB.
+## Plan
 
-Behavior (mirrors `runStep8` exactly so we don't conflict with existing rules):
+### 1. Add a single "resync from DB" helper in TripDetail
 
-- **Skip** if departure day (last activity is a flight/airport transfer, or `isLastDay` flag set)
-- **Skip** if the day is empty
-- **Skip** if the last card is already a true hotel return (`TRUE_RETURN_RE` / `CHECKOUT_RE` / `STAY` / `ACCOMMODATION` minus midday `freshen-up|luggage drop|check-in`) — same predicate as `runStep8`
-- **Skip** locked / user / manual / extracted / pinned terminal cards (universal locking)
-- Otherwise inject a synthetic card:
-  - `title: "Return to {hotelName}"` (resolved from trip metadata `selected_hotel.name` / `hotel.name` / `accommodation.name`, fallback `"Return to Your Hotel"`)
-  - `startTime` = clamp(lastEnd + 15min, 19:00, 23:30) for the 14:00–23:59 window; for 00:00–02:30 late-nightlife tail, place 25 min after lastEnd capped at 02:55
-  - For the **gray-zone edge case** (lastEnd between 02:31 and 13:59): use the **next morning** assumption — render as "Return to {hotel} (overnight)" anchored at lastEnd + 25 min, no time clamping. This handles Seoul Day 1's 02:50 finish.
-  - `category: 'accommodation'`, `cost: 0`, `source: 'bookend-readtime'`, `synthetic: true`
-  - Description: brief turn-by-turn-friendly copy ("Head back to {hotel} for the night.") so the directions are useful, per the user's request.
+Create `resyncItineraryFromDb(tripId)` that:
+- Reads `trips.itinerary_data, start_date, end_date, itinerary_status, metadata` once.
+- Writes the result into the same `setTrip(...)` slot that handlers already use.
+- Is idempotent and safe to call multiple times.
+- Returns the parsed `EditorialDay[]` for callers that want to diff.
 
-### 2. UI marker for synthetic cards (subtle)
+This is the single resync primitive the rest of the plan uses.
 
-In `EditorialItinerary.tsx` activity card render, when `source === 'bookend-readtime'`, render with the same hotel-return styling as today but suppress edit/lock/cost actions (it's display-only). No new visual treatment beyond the existing hotel-return card style — keeps the UI calm.
+### 2. Resync after every persisted mutation
 
-### 3. Make `runStep8` cover the 02:31–13:59 gray zone going forward
+After these calls *resolve successfully*, call `resyncItineraryFromDb(tripId)`:
 
-In `supabase/functions/generate-itinerary/universal-quality-pass.ts` `runStep8`, extend the synthesis fallback so when `endMinsParsed` falls in 02:31–13:59 (currently silently rejected), we still emit a bookend at `lastEnd + 25min` with `source: 'bookend-overnight'`. Same brand-aware ghost-filter exemption as `late_nightlife_bookend`.
+- `handleGenerationComplete` — after the `safeUpdateItineraryData` force-save (line ~1868). Replaces the in-memory `itineraryPayload` with whatever the backend actually persisted (post-cascade, post-bookend, post-cleanup).
+- `EditorialItinerary.handleSave` and the other 3 in-component save paths that already call `safeUpdateItineraryData` / `action-save-itinerary`.
+- The chat action executor's persistence callers (`rewrite/swap/regenerate/pacing/filter`) — already gated by `PersistResult.ok`; just resync after `ok`.
+- Refresh-day / fix-timing flows.
 
-### 4. Optional one-shot backfill (deferred, ask before running)
+This is one new call per site. No new abstractions, no behavior change beyond "what you see now matches what's on disk".
 
-A migration/script that re-applies `runStep8` to every existing trip's `itinerary_data.days` and writes back via `safeUpdateItineraryData` (so it goes through `persistTripItinerary` and respects the no-regression guard). I'd rather **not** ship this in the same pass — the read-time injector solves the user-visible symptom immediately without touching persisted data. We can run the backfill after we've verified the read-time net behaves on your live trips.
+### 3. Drop the duplicate normalize on the client
 
-## Files touched
+`ItineraryGenerator.fetchCompletedDaysFromBackend` currently merges `itinerary_days` rows with `itinerary_data` JSON in an ad-hoc shape. After step 2 lands, the resync immediately replaces those days with the canonical JSON. So we can simplify: the generator's `onComplete` payload becomes a hand-off signal, and the `setTrip` write of `generatedDays` becomes a transient optimistic state that the resync overrides within ~100ms. No change to the celebration/ready timing.
 
-- `src/lib/itinerary/ensureHotelReturnBookend.ts` — new helper
-- `src/utils/itineraryParser.ts` (or wherever `parseItineraryDays` lives) — call new helper after `filterGhostActivities`
-- `src/components/itinerary/EditorialItinerary.tsx` — minimal render guard for `source === 'bookend-readtime'`
-- `supabase/functions/generate-itinerary/universal-quality-pass.ts` — extend `runStep8` synthesis to cover 02:31–13:59 gray zone, emit `source: 'bookend-overnight'`
-- `src/lib/itinerary/hideGhostActivities.ts` — add `'bookend-overnight'` and `'bookend-readtime'` to the source allowlist (alongside `late_nightlife_bookend`)
-- Tests:
-  - `src/lib/itinerary/__tests__/ensureHotelReturnBookend.test.ts` — covers all 4 reproduced cases (Bruges Day 1 nightcap 22:36, Bruges Day 1 nightcap 00:16, Bruges Day 2 dinner 20:15, Seoul Day 1 02:50), departure-day skip, locked-skip, idempotency
-  - Extend `bookend-edge-cases.test.ts` for the new 02:31–13:59 branch
+### 4. Add a divergence sentinel (telemetry, not a fix)
 
-## Memory updates
+In `resyncItineraryFromDb`, before overwriting state, compare the in-memory days vs the DB days at a coarse level:
+- meaningful activity count per day
+- terminal `endTime` per day
+- presence of hotel-return bookend per day
 
-- New: `mem://constraints/itinerary/read-time-hotel-return-bookend` — describes the read-time injector, source tags `bookend-readtime` / `bookend-overnight`, and that it's display-only
-- Update Core "Believable Human Day" to note the read-time net exists for legacy trips and gray-zone end times
+If they differ, emit a single structured `console.warn('[ITIN_RESYNC_DRIFT]', {tripId, day, kind})`. This gives us evidence for the next round (e.g. if save-itinerary is silently dropping cards, we'll see it in logs without needing user repros).
 
-## Out of scope (per user)
+### 5. Out of scope (intentionally)
 
-- No changes to the regression-overwrite guard, departure-day enforcement, freshen-up positioning, validation gates, or any other existing itinerary rule
-- No backfill migration in this pass (proposed as a follow-up)
+- **Not** changing `enforceTimingAndBuffers`, `runStep8`, terminal cleanup, the no-regression guard, or any backend pass. Those are working as designed; the bug is purely that the client doesn't re-read after they run.
+- **Not** removing the read-time `ensureHotelReturnBookend` — it's still useful for legacy trips and as belt-and-suspenders.
+- **Not** refactoring optimistic update infrastructure. A direct `select → setTrip` resync is the smallest change that fully closes the divergence.
+- No DB migrations. No new edge functions.
+
+## Files Touched
+
+- `src/pages/TripDetail.tsx` — add `resyncItineraryFromDb`; call it after `handleGenerationComplete`'s force-save and after the existing save handlers.
+- `src/components/itinerary/EditorialItinerary.tsx` — call resync after the 3 in-component save paths.
+- `src/lib/itinerary/itineraryActionExecutor.ts` (or wherever `updateTripItinerary` lives) — call resync on `PersistResult.ok`.
+- `src/components/itinerary/ItineraryGenerator.tsx` — minor: keep `fetchCompletedDaysFromBackend` for the celebration handoff but document that it's transient.
+- New test `src/pages/__tests__/resyncItinerary.test.ts` — unit-test the resync helper (matches DB shape, emits drift warn when diverged).
+- New memory entry `mem://constraints/itinerary/db-is-source-of-truth` documenting the rule.
+
+## Verification
+
+1. Generate a Bali-style trip. Check that pre-refresh times == post-refresh times (Metis dinner, nightcap, hotel return).
+2. Generate a Bruges-style trip with the meal-drop pattern. Pre-refresh and post-refresh meal counts must match. If save-itinerary dropped a meal, the `[ITIN_RESYNC_DRIFT]` warn fires and we have a repro to chase next.
+3. Apply a chat action ("swap dinner"). After the toast, no refresh required to see the canonical version.
+4. Existing `no-raw-itinerary-fallback-writes` and persist-regression tests still pass.

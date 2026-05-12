@@ -121,6 +121,14 @@ export async function safeUpdateItineraryData(
       console.error('[safeUpdateItineraryData] backend save failed (no raw fallback):', error);
       return { error };
     }
+    // Notify session listeners (e.g. TripDetail) to resync from DB so the
+    // post-cascade / post-bookend / post-cleanup state is what the user sees,
+    // matching what they'd see after a hard refresh.
+    // See mem://constraints/itinerary/db-is-source-of-truth.
+    try {
+      const { dispatchTripPersisted } = await import('@/lib/itinerary/resyncItineraryFromDb');
+      dispatchTripPersisted({ tripId, prevDays: nextDays, source: options.reason || 'safeUpdateItineraryData' });
+    } catch { /* non-fatal */ }
     return { error: null };
   } catch (err) {
     console.error('[safeUpdateItineraryData] failed:', err);
