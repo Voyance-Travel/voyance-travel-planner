@@ -12005,8 +12005,11 @@ function ActivityRow({
                   )}
                   {/* Description — hidden in compact mode; falls back to whyThisFits */}
                   {(() => {
-                    const d = sanitizeActivityText(activity.description)
-                      || sanitizeActivityText((activity as any)?.personalization?.whyThisFits);
+                    const d = resolveActivityDisplayDescription(
+                      activity,
+                      sanitizeActivityText(activity.description),
+                      destination,
+                    );
                     return d && !compact ? (
                       <p className={cn(
                         "text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed",
