@@ -5723,15 +5723,9 @@ export function EditorialItinerary({
         });
         // Auto-sort chronologically when a time changes
         if (updates.startTime || updates.endTime) {
-          updatedActivities.sort((a, b) => {
-            const parseMin = (t?: string) => {
-              if (!t) return 9999;
-              const parts = t.match(/(\d{1,2}):(\d{2})/);
-              if (!parts) return 9999;
-              return parseInt(parts[1]) * 60 + parseInt(parts[2]);
-            };
-            return parseMin(a.startTime || a.time) - parseMin(b.startTime || b.time);
-          });
+          updatedActivities.sort(
+            (a, b) => dayChronoKey(a.startTime || a.time) - dayChronoKey(b.startTime || b.time),
+          );
         }
         return { ...day, activities: updatedActivities };
       });
