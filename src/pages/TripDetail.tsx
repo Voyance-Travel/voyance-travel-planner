@@ -9,6 +9,7 @@ import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { enforceMealTimeCoherence } from '@/utils/mealTimeCoherence';
 import { safeUpdateItineraryData } from '@/services/safeUpdateItineraryData';
+import { itineraryFingerprint } from '@/lib/itinerary/itineraryFingerprint';
 import { detectOrphanActivities } from '@/lib/itinerary/detectOrphanActivities';
 import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, PenLine, Coins, Calendar, Clock, AlertTriangle } from 'lucide-react';
 import { CREDIT_COSTS } from '@/config/pricing';
