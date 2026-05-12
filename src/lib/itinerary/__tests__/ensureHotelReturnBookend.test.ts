@@ -160,4 +160,24 @@ describe('ensureHotelReturnBookend', () => {
     const out = ensureHotelReturnBookend(acts, { dayIndex: 0 });
     expect(out).toBe(acts);
   });
+
+  it('flight card present but NOT array-tail → no bookend (defense-in-depth)', () => {
+    const acts = [
+      mk({ title: 'Brunch', category: 'dining', startTime: '10:00', endTime: '11:00' }),
+      mk({ title: 'Departure Flight to JFK', category: 'flight', startTime: '17:50', endTime: '19:50' }),
+      mk({ title: 'Quick gallery visit', category: 'activity', startTime: '14:00', endTime: '15:00' }),
+    ];
+    const out = ensureHotelReturnBookend(acts, { dayIndex: 2 });
+    expect(out).toBe(acts);
+  });
+
+  it('airport-transfer mid-array followed by stale leisure → no bookend', () => {
+    const acts = [
+      mk({ title: 'Checkout', category: 'accommodation', startTime: '11:00', endTime: '11:30' }),
+      mk({ title: 'Transfer to Airport', category: 'transport', startTime: '12:00', endTime: '12:45' }),
+      mk({ title: 'Stroll along the river', category: 'activity', startTime: '13:00', endTime: '14:00' }),
+    ];
+    const out = ensureHotelReturnBookend(acts, { dayIndex: 3 });
+    expect(out).toBe(acts);
+  });
 });
