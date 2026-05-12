@@ -775,11 +775,12 @@ export function parseItineraryDays(
       }
       return !ghost;
     });
+    const dedupedActivities = dedupeHotelReturnBookends(filteredActivities, idx + 1);
     return {
       ...day,
       dayNumber: idx + 1,
       date: calculateDayDate(tripStartDate, idx) || day.date,
-      activities: filteredActivities,
+      activities: dedupedActivities,
     };
   });
 
