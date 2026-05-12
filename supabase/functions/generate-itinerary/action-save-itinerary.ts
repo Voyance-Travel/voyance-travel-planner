@@ -143,6 +143,8 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
     let activities = Array.isArray(day.activities) ? [...day.activities] : [];
     // Fill missing startTime from endTime − duration BEFORE sort so chronology is coherent.
     fillMissingStartTimes(activities, { dayNumber, path: 'save-itinerary' });
+    // Anchor floating meal cards (no time/end/duration) to canonical slots, or drop dupes.
+    assignFloatingMealTimes(activities, { dayNumber, path: 'save-itinerary' });
     // Wrap-aware sort — keeps a 00:55 late-nightlife hotel-return bookend at
     // the chronological tail instead of jumping to the top of the day.
     activities.sort((a: any, b: any) => {
