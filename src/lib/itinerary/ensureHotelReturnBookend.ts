@@ -51,13 +51,6 @@ function fmt(mins: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-function isLockedOrUser(a: any): boolean {
-  if (!a) return false;
-  if (a.is_locked === true || a.isLocked === true) return true;
-  const src = String(a.source || '').toLowerCase();
-  return src === 'user' || src === 'manual' || src === 'extracted' || src === 'pinned';
-}
-
 function isTerminalAlready(a: any): boolean {
   if (!a) return false;
   const cat = String(a.category || '').toUpperCase();

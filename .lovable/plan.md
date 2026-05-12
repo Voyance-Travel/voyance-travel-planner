@@ -1,33 +1,30 @@
-## Plan: restore dining descriptions end-to-end
+## Plan
 
-### What I found
-- The canonical JSON in `trips.itinerary_data` for the latest Milan trip is missing all dining rows entirely, while `itinerary_activities` has the dining rows and most descriptions.
-- The renderer is reading the degraded JSON path, so users see venue/location/price/link but no blurb for meals.
-- The backend description filler exists, but it can still leave blanks when the LLM skips a row or when normalized table data is not reconciled back into `trips.itinerary_data`.
+1. **Fix the read-time hotel-return safety net**
+   - Update `ensureHotelReturnBookend` so it identifies the true chronological terminal activity instead of trusting array order.
+   - Move the terminal card to the tail before appending the hotel return, matching the backend `runStep8` behavior.
+   - Remove the overly broad skip for terminal `source: "user"` / `manual` rows; the rule should preserve locked rows, but still append a return after a user-added dinner or activity.
+   - Add explicit coverage for the reported cases:
+     - Day ends at dinner around `23:13` → append `Return to {hotel}`.
+     - Day has dinner at `21:49` followed by a stale `Travel to Parco Sempione` transport card → append return after the chronological tail so the visible day does not end at the park.
 
-### Changes to implement
-1. **Make save-time description filling deterministic**
-   - Update the dining description helper so every dining card gets a non-empty, actionable description even if the AI fill fails.
-   - Prefer sources in this order: existing valid description, inline fallback restaurant description, `personalization.whyThisFits`, venue-aware deterministic fallback.
-   - Treat restaurant-link loading text separately; it should never be mistaken for description copy.
+2. **Fix save-time hotel-return persistence parity**
+   - Update backend `runStep8` to use the same lock semantics as the universal locking protocol: locked/pinned/manual activities are not modified or reordered, but they should not block appending a hotel return after them.
+   - Ensure non-departure days always get a terminal hotel-return card after the latest non-departure activity when the last activity ends in the accepted evening window.
+   - Keep departure-day behavior unchanged.
 
-2. **Reconcile normalized dining rows back into the JSON itinerary**
-   - In the itinerary save/generation path, before persisting `trips.itinerary_data`, merge missing dining activities/descriptions from `itinerary_activities` when the normalized table has fuller dining data for the same trip/day.
-   - Preserve universal locking and avoid overwriting user-edited/manual rows.
-   - Log a compact sentinel like `[DINING_JSON_RECONCILE] day=N inserted=X described=Y`.
+3. **Prevent stale post-dinner travel tails from becoming the final destination**
+   - Add a targeted guard for terminal local transport/travel cards after dinner that point to a non-hotel venue.
+   - The guard will not delete user-locked items; it will append the hotel return after them so the final visible destination is still the hotel.
 
-3. **Harden frontend display fallback**
-   - Add a shared dining-description resolver used by `EditorialItinerary` so dining cards display `description`, then `personalization.whyThisFits`, then a safe venue-aware fallback when data is still missing.
-   - Ensure the fallback only applies to dining cards and does not alter saved data from the UI.
+4. **Add regression tests**
+   - Extend `ensureHotelReturnBookend.test.ts` for:
+     - Nabucco-style late dinner ending `23:13`.
+     - Al Coniglio Bianco followed by `Travel to Parco Sempione` ending the day.
+     - User-source/manual terminal dinner still receiving a hotel return.
+     - Locked terminal rows remaining unmodified, with no reordering.
+   - Add/extend backend tests around `runStep8` for the same terminal selection and lock-preservation behavior.
 
-4. **Add regression coverage**
-   - Add focused tests for:
-     - blank dining description becomes an actionable fallback,
-     - templated/generic dining text is replaced,
-     - JSON itinerary dining rows are preserved/reconciled from normalized activities,
-     - non-dining activities are not affected.
-
-### Verification
-- Run targeted tests for the new helpers.
-- Query a recent Milan/Faro/Bruges/Bali trip shape to confirm dining rows/descriptions are present in the saved JSON after the save path.
-- Check source greps for the new sentinel and shared resolver.
+5. **Validate**
+   - Run the relevant targeted tests only.
+   - Confirm grep signals for the new regression cases and lock-safe behavior.
