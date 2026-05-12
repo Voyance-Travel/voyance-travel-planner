@@ -24,7 +24,7 @@ Deno.test("isTemplatedDiningDescription detects meal-guard leak", () => {
   );
 });
 
-Deno.test("templated leak is blanked when no inline match (so LLM backstop refills)", () => {
+Deno.test("templated leak with no inline match → deterministic venue template (never blank)", () => {
   const act: any = {
     category: "dining",
     title: "Dinner at Refter",
@@ -32,9 +32,14 @@ Deno.test("templated leak is blanked when no inline match (so LLM backstop refil
     description: "Dinner at Refter — a real local spot worth visiting",
   };
   const r = ensureDiningDescription(act, "Bruges");
-  // Bruges + Refter not in inline DB → blanked, marked changed=true, source=noop
+  // No inline DB hit → falls through to deterministic venueTemplate.
   assertEquals(r.changed, true);
-  assertEquals(act.description, "");
+  assertEquals(r.source, "venueTemplate");
+  assertEquals(typeof act.description, "string");
+  assertEquals(act.description.length >= 30, true);
+  // Must mention venue and contain an actionable verb.
+  assertEquals(/Refter/.test(act.description), true);
+  assertEquals(/(book|ask|order|try|request|don'?t miss|pick)/i.test(act.description), true);
 });
 
 Deno.test("dining card with empty description + venue in inline DB → filled from inline DB", () => {
@@ -72,16 +77,29 @@ Deno.test("dining card with empty description + venue NOT in inline DB + whyThis
   );
 });
 
-Deno.test("dining card with empty description + nothing else → left blank (noop)", () => {
+Deno.test("dining card with empty description + nothing else → deterministic template (never blank)", () => {
   const act: any = {
     category: "dining",
     title: "Dinner at Mystery Spot",
     description: "",
   };
   const r = ensureDiningDescription(act, "Paris");
-  assertEquals(r.source, "noop");
-  assertEquals(r.changed, false);
-  assertEquals(act.description, "");
+  assertEquals(r.source, "venueTemplate");
+  assertEquals(r.changed, true);
+  assertEquals(act.description.length >= 30, true);
+  assertEquals(/Mystery Spot/.test(act.description), true);
+});
+
+Deno.test("dining card with no venue at all → deterministic template still actionable", () => {
+  const act: any = {
+    category: "dining",
+    title: "Lunch",
+    description: "",
+  };
+  const r = ensureDiningDescription(act, "Lisbon");
+  assertEquals(r.source, "venueTemplate");
+  assertEquals(act.description.length >= 30, true);
+  assertEquals(/lunch/i.test(act.description), true);
 });
 
 Deno.test("non-dining activity is untouched even with empty description", () => {
