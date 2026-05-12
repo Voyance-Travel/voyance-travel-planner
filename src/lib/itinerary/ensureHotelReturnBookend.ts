@@ -22,6 +22,9 @@ const TRUE_RETURN_RE =
 const CHECKOUT_RE = /\b(?:check[-\s]?out|checkout)\b/i;
 const MIDDAY_ACCOM_RE =
   /\b(?:freshen[-\s]?up|luggage\s+drop|bag\s+drop|settle\s+in|check[-\s]?in|drop\s+(?:bags|luggage))\b/i;
+const HOTEL_RETURN_RE =
+  /(?:return\s+to|back\s+(?:to|at)|head\s+back\s+to|wind\s+down\s+at|retire\s+to|end\s+of\s+day\s+at)\s+(?:your\s+|the\s+|our\s+)?[^,.\n]{0,80}(?:hotel|hostel|inn|resort|lodge|ryokan|riad|marriott|hilton|hyatt|ritz|four\s*seasons|st\.?\s*regis|peninsula|aman|belmond|cipriani|gritti|danieli|kempinski|rosewood|mandarin|raffles|bvlgari|bulgari|conrad|edition|sofitel|fairmont|shangri|intercontinental|westin|sheraton|nobu|notary|spadari)\b/i;
+const BOOKEND_SOURCE_RE = /^(bookend-readtime|bookend-overnight|bookend-validator|bookend-synthesized|late_nightlife_bookend)$/i;
 const AIRPORT_RE = /\b(airport|station|terminal|gate)\b/i;
 const TRANSPORT_CAT_RE = /TRANSPORT|TRANSIT|TRAVEL|LOGISTICS|FLIGHT/;
 const FLIGHT_TITLE_RE = /\b(flight|departure)\b/i;
@@ -55,6 +58,18 @@ function isTerminalAlready(a: any): boolean {
     return true;
   }
   return false;
+}
+
+export function isHotelReturnBookendActivity(a: any): boolean {
+  if (!a) return false;
+  const cat = String(a.category || '').toUpperCase();
+  const title = String(a.title || a.name || '');
+  const source = String(a.source || '').toLowerCase();
+  const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
+  if (MIDDAY_ACCOM_RE.test(title) && !TRUE_RETURN_RE.test(title)) return false;
+  if (BOOKEND_SOURCE_RE.test(source) || tags.some((t: string) => BOOKEND_SOURCE_RE.test(t))) return true;
+  if (HOTEL_RETURN_RE.test(title)) return true;
+  return (cat === 'STAY' || cat === 'ACCOMMODATION') && TRUE_RETURN_RE.test(title);
 }
 
 function isDepartureTerminal(a: any): boolean {
