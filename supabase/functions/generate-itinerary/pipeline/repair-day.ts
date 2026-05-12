@@ -3806,6 +3806,12 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 15y. PRUNE ORPHAN LATE-NIGHTLIFE BOOKENDS --------------------------------
+  // Drop stale `late_nightlife_bookend` cards whose chronological-prior
+  // non-bookend isn't actually nightlife. Save-time runStep8 retry will
+  // re-inject a fresh bookend when warranted.
+  pruneOrphanLateNightlifeBookend(activities, { dayNumber });
+
   // --- 15z. FINAL DEPARTURE-DAY LOGISTICS ENFORCEMENT (consolidated) -----------
   // Last-line-of-defense after every other repair has finished mutating the day.
   // Guarantees on a true departure day:
