@@ -22,6 +22,16 @@ import { fillMissingStartTimes } from '../_shared/timing-cascade.ts';
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
 
+/** Compact per-day activity + dining count snapshot for erosion-pattern observability. */
+const countDays = (days: any[]) =>
+  (Array.isArray(days) ? days : []).map((d: any, i: number) => {
+    const acts = Array.isArray(d?.activities) ? d.activities : [];
+    const dining = acts.filter((a: any) =>
+      /dining|food|restaurant/i.test(String(a?.category || ''))
+    ).length;
+    return `day${i + 1}=${acts.length}(dining:${dining})`;
+  }).join(' ');
+
 /** After a leg finishes generating, check if there's a queued next leg and kick it off. */
 export async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<void> {
   try {
