@@ -262,6 +262,10 @@ export function ensureHotelReturnBookend<T extends any[]>(
   console.debug(
     `[QUALITY] day=${(opts.dayIndex ?? 0) + 1} read-time hotel-return appended (${source}, lastEnd=${fmt(lastEndMins)})`,
   );
+  // eslint-disable-next-line no-console
+  console.log(
+    `[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=injected source=${source} reason=ok startTime=${startTime} endTime=${endTime} lastEnd=${fmt(lastEndMins)}`,
+  );
 
   return [...activities, card] as unknown as T;
 }
