@@ -1,48 +1,56 @@
-## Plan — Day 1 arrival breakfast/brunch coverage
+## Plan
 
-### Root cause (one line)
+You’re right: this is not primarily a compact-card/UI issue. I checked the saved Hong Kong trip data directly and found dining rows with `description` literally empty in `trips.itinerary_data`:
 
-`supabase/functions/generate-itinerary/meal-policy.ts:144` gates breakfast on `arrivalMins < 630` (10:30 AM). Any flight landing at or after 10:30 AM drops to `['lunch', 'dinner']` and the morning meal is silently skipped — which matches Milan, Mallorca, Faro, and Bruges (all had real-world arrivals between ~10:30 AM and ~12:30 PM).
+- Day 3 `Breakfast: Maison Eric Kayser` → `desc_len = 0`
+- Day 3 `Lunch: Ho Lee Fook` → `desc_len = 0`
 
-This is a one-knob policy bug, not a downstream rendering bug. Fix at the source.
+So the renderer can’t show cuisine/dish copy because the persisted activity JSON sometimes has no description. Day 2 in the current saved Hong Kong record does have descriptions for Fineprint / Kau Kee / Caprice, which means the bug is intermittent by generation path/day, not just a card-size issue.
 
-### What changes (one file, plus prompt copy)
+### Root cause to fix
 
-`supabase/functions/generate-itinerary/meal-policy.ts`
+The rich description fill exists, but it is not guaranteed at the single final persistence boundary.
 
-1. **Widen the morning-meal window for arrival days.**
-   Replace the single 10:30 AM threshold with two bands:
-   - `arrivalMins < 630` (before 10:30 AM) → `['breakfast', 'lunch', 'dinner']` — unchanged.
-   - `arrivalMins >= 630 && arrivalMins < 720` (10:30 AM – 12:00 PM) → `['breakfast', 'lunch', 'dinner']` BUT label the morning meal contextually as a *brunch / late café stop*. This is the missing band that closes Milan/Mallorca/Faro/Bruges.
-   - `arrivalMins >= 720 && arrivalMins < 780` (12:00 – 1:00 PM) → `['lunch', 'dinner']` — unchanged. Lunch IS the first meal here.
-   - `arrivalMins >= 780` and beyond → unchanged.
+Current problem:
 
-2. **Pass arrival context into the breakfast prompt line.**
-   The existing breakfast directive at line 282 always says "Breakfast at <Hotel Restaurant>". For the 10:30–12:00 brunch band, swap the directive to a brunch / late-morning café prompt so the LLM doesn't try to schedule an 8 AM hotel breakfast on a day the guest is still on a plane.
-   - Add `mode: 'breakfast' | 'brunch'` to `MealPolicy` (defaults to `'breakfast'`).
-   - Set `'brunch'` on the new 10:30–12:00 arrival band.
-   - In the prompt builder, branch the breakfast line: brunch variant tells the model to schedule "a real named café or brunch spot near the hotel between 11:00 AM and 12:30 PM, after luggage drop and before lunch."
+```text
+Some generation paths/day repairs fill descriptions
+        ↓
+Other generation-core final-save path can persist blank dining descriptions
+        ↓
+UI receives activity.description = ""
+        ↓
+Dining card has no cuisine/dish/ordering copy
+```
 
-3. **Same widening for unknown arrival time (line 150).**
-   Already required `breakfast` — no change.
+The existing helper `fillMissingDescriptions` can write rich copy like “Order the…” / “Try the…”, but `generation-core.ts` only calls post-meal-guard fill in one specific branch. If the LLM simply emits a normal dining card with a blank description, and that card wasn’t injected by the meal guard, it can reach `persistTripItinerary` blank.
 
-### Why this is the right fix
+## Implementation steps
 
-- The four-city pattern is consistent with arrivals just past the 10:30 AM cutoff. Widening to noon directly catches them.
-- We do not weaken the late-arrival cases (≥12:00 PM lunch-first; ≥5:00 PM dinner-only; ≥8:00 PM dinner-optional) — those remain correct.
-- All downstream meal-guard, validation-gate, and budget logic already treats brunch as a breakfast slot (see `_shared/meal-detection`, `MEAL_TITLE_RE` in dining helpers). No knock-on schema work.
-- One file, one new policy field, one prompt branch. No DB migration. No frontend changes.
+### 1. Add a final rich dining-description fill before final generation save
+- In `supabase/functions/generate-itinerary/generation-core.ts`, immediately before the final `persistTripItinerary(..., label: 'final-save')`, run `fillMissingDescriptions` across every day’s activities.
+- This catches normal dining cards that were not meal-guard injections.
+- Keep the existing 8s/day timeout and non-blocking behavior.
 
-### Out of scope
+### 2. Add deterministic persistence-boundary protection
+- In `supabase/functions/_shared/persist-itinerary.ts`, import/run `ensureDayDiningDescriptions` for every day before writing `trips.itinerary_data`.
+- This is the “never persist blank dining description” safety net for all write paths, including future regressions.
+- Use each day’s `cityName` / `city` when available, falling back to trip destination.
 
-- The "Loading… Finding restaurant…" stuck state (`RestaurantLink.tsx`) — separate URL-lookup bug.
-- Departure-day breakfast logic (already correct).
-- Mid-trip breakfast variety rules (already enforced by `[ledger-check] meal-recurrence exempted`).
+### 3. Improve the deterministic fallback enough to be useful
+- Update `supabase/functions/_shared/dining-description-backfill.ts` and frontend mirror `src/lib/itinerary/diningDescriptionFallback.ts` so the last-resort fallback is not just “book ahead.”
+- It should include venue + meal type + safe cuisine cue when inferable from category/title/location, without inventing fake signature dishes.
+- Example: “Use this breakfast stop at Maison Eric Kayser for French bakery staples; ask what came out of the oven most recently.”
 
-### Verification
+### 4. Keep the UI fallback as a final display-only guard
+- Leave `resolveActivityDisplayDescription` wired in `EditorialItinerary.tsx`.
+- Do not rely on UI as the real fix; it remains only a display safety net for legacy/unsaved data.
 
-After implement, regenerate a Day 1 with arrival between 10:30 AM and 12:00 PM. Day 1 should contain a brunch/café card scheduled 11:00 AM–12:30 PM, then lunch and dinner. Add a unit test in `meal-policy.test.ts` covering 10:45 AM, 11:30 AM, and 12:30 PM arrivals.
+### 5. Verification
+- Add/adjust targeted tests so a generated itinerary with blank dining descriptions is filled before final persistence.
+- Verify with a database-shaped sample that `persistTripItinerary` mutates blank dining rows to non-empty descriptions.
+- Confirm the specific Hong Kong pattern can no longer save Day 3 breakfast/lunch with `description = ''`.
 
-### Memory entry
+## Separate issue
 
-Add `mem://constraints/itinerary/day1-arrival-brunch-band` recording the widened 10:30 AM – 12:00 PM brunch band so this pattern doesn't get re-tightened in a future cleanup pass.
+The text `Loading... Finding restaurant...` is from `RestaurantLink.tsx` and is URL lookup/loading state, not the meal description. I won’t treat that as the main fix here; the priority is making `activity.description` present before save.
