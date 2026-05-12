@@ -127,8 +127,17 @@ export function ensureHotelReturnBookend<T extends any[]>(
   // start_time). Don't trust array order — the editor injects synthetic
   // transport / departure cards mid-stream and stale "Travel to <park>"
   // tails can survive past the day's true terminal anchor.
+  //
+  // Wrap-aware: times in [00:00, 05:59] are treated as the *following* day
+  // so a 00:16 nightcap or a 02:50 cultural endpoint outranks an earlier
+  // 21:00 dinner. Without this, the late-nightlife / overnight branches
+  // below would never trigger when an earlier dinner exists.
+  const WRAP_BOUNDARY = 6 * 60;
+  const ONE_DAY = 24 * 60;
+  const norm = (t: number) => (t < WRAP_BOUNDARY ? t + ONE_DAY : t);
   let lastIdx = -1;
-  let lastTime = -1;
+  let lastTimeRaw = -1;
+  let lastRank = -1;
   for (let i = 0; i < activities.length; i++) {
     const a = activities[i] as any;
     const t =
@@ -137,8 +146,10 @@ export function ensureHotelReturnBookend<T extends any[]>(
       parseTime(a?.startTime) ??
       parseTime(a?.start_time);
     if (t == null) continue;
-    if (t >= lastTime) {
-      lastTime = t;
+    const rank = norm(t);
+    if (rank >= lastRank) {
+      lastRank = rank;
+      lastTimeRaw = t;
       lastIdx = i;
     }
   }
@@ -157,7 +168,7 @@ export function ensureHotelReturnBookend<T extends any[]>(
   if (isTerminalAlready(last)) return activities;
   if (isDepartureTerminal(last)) return activities;
 
-  const lastEndMins = lastTime >= 0 ? lastTime : null;
+  const lastEndMins = lastTimeRaw >= 0 ? lastTimeRaw : null;
   if (lastEndMins === null) return activities;
 
   const hotel =
