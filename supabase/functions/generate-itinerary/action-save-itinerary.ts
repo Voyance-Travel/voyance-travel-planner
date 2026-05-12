@@ -18,7 +18,7 @@ import { buildDayScheduleSummary } from '../_shared/prompt-leak-scrub.ts';
 import { ensureDayDiningDescriptions } from '../_shared/dining-description-backfill.ts';
 import { pruneNonLogisticsAfterCheckout, pruneNonLogisticsAfterAirportTransfer } from '../_shared/post-checkout-prune.ts';
 import { enforceFreshenUpPosition } from '../_shared/freshen-up-position.ts';
-import { fillMissingStartTimes, dayChronoKey, pruneOrphanLateNightlifeBookend } from '../_shared/timing-cascade.ts';
+import { fillMissingStartTimes, assignFloatingMealTimes, dayChronoKey, pruneOrphanLateNightlifeBookend } from '../_shared/timing-cascade.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
