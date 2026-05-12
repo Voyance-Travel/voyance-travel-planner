@@ -171,6 +171,7 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
         const head = activities.shift();
         activities.push(head);
         console.log(`[BOOKEND_REORDER] day=${dayNumber} moved tail src="${(head as any)?.source || 'inferred'}" path=save-itinerary`);
+        console.log(`[BOOKEND_TRACE] day=${dayNumber} site=save action=reordered source=${(head as any)?.source || 'inferred'} reason=legacy_head_bookend`);
       }
     }
     // Drop stale `late_nightlife_bookend` cards whose chronological-prior
