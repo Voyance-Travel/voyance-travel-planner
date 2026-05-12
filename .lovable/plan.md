@@ -1,86 +1,106 @@
 ## Problem
 
-Late-nightlife and overnight hotel-return bookends have startTimes like `00:55` / `00:39` (correct — they close a day whose terminal nightcap ended at 00:30). They're correctly **appended** to the parent day's activity array by `runStep8` and `ensureHotelReturnBookend`, but every downstream sort then compares raw `"HH:MM"` strings or raw minutes-from-midnight. Result: `00:55` sorts before `09:00`, the bookend is re-ordered to the **top** of its own day, and on render the day "opens" with a "Return to Milan Marriott Hotel @ 12:55 AM" card.
+Two failure modes producing the user-visible "Day 2 missing return + phantom 12:10 AM at top":
 
-The intent (close the prior day with a hotel return) is right; the chronology is broken by non-wrap-aware sorting.
+1. **Late-nightlife predicate too narrow.** Both `runStep8` (`universal-quality-pass.ts`) and `ensureHotelReturnBookend` (`src/lib/itinerary/ensureHotelReturnBookend.ts`) gate the post-midnight bookend on:
 
-## Root Cause
+   ```
+   LATE_NIGHTLIFE_TITLE_RE = /\b(speakeasy|nightclub|cocktail|nightcap|club|lounge|bar|aperitif|aperitivo)\b/i
+   LATE_NIGHTLIFE_CATS = { NIGHTLIFE, BAR, ENTERTAINMENT, COCKTAILS, LOUNGE }
+   ```
 
-`ensureHotelReturnBookend` already implements wrap-aware ranking (treat `[00:00, 06:00)` as `+24h`) when picking the chronologically-last activity. None of the sort sites that consume the resulting array do the same.
+   "La Rosa **Vermutería**" matches neither — `vermutería`, `vermut`, `taberna`, `bodega`, `wine bar`, `tavern`, `pub`, `cava`, `digestif` are all missed, and the day's primary `category` is often `dining` / `drinks`, neither in the set. Result: nightcap ends 00:15 → bookend skipped → Day 2 ends mid-air.
 
-Sort sites that re-shuffle the bookend to the top:
-
-Backend (writes back to DB → bug becomes persistent):
-- `supabase/functions/_shared/timing-cascade.ts:238` — `enforceTimingAndBuffers` sorts by `parseTime(startTime) ?? 99999`. Runs in repair-day §16, save-itinerary STEP 2.9, and the editor's `cascade` net.
-- `supabase/functions/generate-itinerary/universal-quality-pass.ts:454` — meal sort (lower-impact, but same pattern).
-
-Frontend (display + transient state):
-- `src/utils/itineraryParser.ts:672` — salvageDining merge sort.
-- `src/components/itinerary/EditorialItinerary.tsx` — six sort sites: 2680, 3580, 5237, 5315, 5549, 5553, 5740.
+2. **Stale orphan bookend persisted from a prior generation pass** sits on Day 2 as a `late_nightlife_bookend` with `startTime` `00:10` even though Day 2's true tail isn't a late-night card. Because the source is `late_nightlife_bookend`, every defensive layer (`stripPreDawnHotelReturns`, `isGhostActivity`, `clampAllBookends`) intentionally **exempts** it, so it survives forever. Once it's the only `late_nightlife_bookend` on a day whose chronological tail is now a normal-evening or wrap-window non-nightlife card, it ends up looking like a phantom "12:10 AM" header item.
 
 ## Plan
 
-### 1. Add a shared wrap-aware comparator
+### 1. Broaden the late-nightlife predicate (single shared definition)
 
-**Backend** — extend `supabase/functions/_shared/time-parse.ts` with:
+Create `supabase/functions/_shared/late-nightlife-predicate.ts` with:
 
 ```ts
-// Sort-key for chronological order within a single day. Times in the early
-// AM (00:00–05:59) belong to the *end* of the day when any activity ends
-// after the wrap boundary (e.g. a 23:30 nightcap followed by a 00:55
-// hotel return). Mirrors ensureHotelReturnBookend's `norm()`.
-export function dayChronoKey(startTime: unknown, opts?: { wrapBoundaryMin?: number }): number;
+export const LATE_NIGHTLIFE_TITLE_RE =
+  /\b(speakeasy|nightclub|cocktail|nightcap|club|lounge|bar|aperitif|aperitivo|
+       vermut|vermuteria|vermutería|taberna|bodega|tavern|pub|wine\s*bar|
+       cava|digestif|late\s*drinks|after[-\s]?dinner\s*drinks|drinks?)\b/i;
+export const LATE_NIGHTLIFE_CATS = new Set([
+  'NIGHTLIFE','BAR','ENTERTAINMENT','COCKTAILS','LOUNGE','DRINKS',
+]);
+
+// Time-anchored fallback: a long evening activity (start ≥ 21:00) that
+// runs into the wrap window (end 00:00–02:30) is *empirically* nightlife
+// even when the title doesn't carry the keyword. This is the Mallorca
+// "La Rosa Vermutería 21:30 → 00:15" miss.
+export function isLateNightlikeTail(startMins: number | null, endMins: number | null): boolean {
+  if (startMins == null || endMins == null) return false;
+  if (startMins < 21 * 60) return false;
+  return endMins >= 0 && endMins <= 2 * 60 + 30;
+}
+
+export function qualifiesAsLateNightlife(act: any, startMins: number | null, endMins: number | null): boolean {
+  const t = String(act?.title || act?.name || '');
+  const c = String(act?.category || '').toUpperCase();
+  return LATE_NIGHTLIFE_TITLE_RE.test(t)
+    || LATE_NIGHTLIFE_CATS.has(c)
+    || isLateNightlikeTail(startMins, endMins);
+}
 ```
 
-Behavior: parse `HH:MM` (am/pm-aware via existing `parseTimeAmPm`); return `mins + 1440` when `mins < wrapBoundary` (default 360 = 06:00); return `Number.MAX_SAFE_INTEGER` for unparseable / empty so untimed rows still go to the bottom.
+Mirror as `src/lib/itinerary/lateNightlifePredicate.ts` (FE, identical semantics).
 
-**Frontend** — new `src/lib/itinerary/dayChronoKey.ts` with the same semantics; used by every sort that orders activities within a single day.
+Wire:
+- `universal-quality-pass.ts` `runStep8` — replace inline regex/set + the `titleNightlife || catNightlife` check with `qualifiesAsLateNightlife(lastActivity, startMinsParsed, endMinsParsed)`.
+- `ensureHotelReturnBookend.ts` — same.
+- `predawn-hotel-strip.ts` — leaves the source/tag-based exemption alone (still needed for the persisted card).
 
-Both implementations get a tiny test pinning: `[09:00, 23:30, 00:55, untimed]` → `[09:00, 23:30, 00:55, untimed]`.
+This single change fixes Day 2 (vermutería bookend now generates).
 
-### 2. Wire the comparator at every sort site
+### 2. Self-heal stale orphan late-nightlife bookends
 
-Backend:
-- `timing-cascade.ts:238` — replace raw parseTime with `dayChronoKey`.
-- `universal-quality-pass.ts:454` — same. (Meals never wrap, so this is defensive.)
+The persisted `00:10` card on Day 2 needs to be removed at the next save so a fresh, correctly-timed bookend takes its place.
 
-Frontend (6 sites):
-- `itineraryParser.ts:672` (salvageDining merge)
-- `EditorialItinerary.tsx:2680` (apply-time-patches)
-- `EditorialItinerary.tsx:3580` (departure swap re-sort)
-- `EditorialItinerary.tsx:5237` and `5315` (regen accommodation re-insert)
-- `EditorialItinerary.tsx:5549` and `5553` (import merge/append)
-- `EditorialItinerary.tsx:5740` (edit-activity time auto-sort)
+Add `pruneOrphanLateNightlifeBookend(activities, dayNumber)` in `_shared/timing-cascade.ts`:
 
-Day-level sort (`itineraryParser.ts:724`, by `Date`/`dayNumber`) is unchanged — that's cross-day, not within-day.
+- Scan for cards with `source === 'late_nightlife_bookend'` (or tag).
+- For each, find the chronologically-prior **non-bookend** activity (by `dayChronoKey`).
+- If that prior activity is **not** late-nightlife (per `qualifiesAsLateNightlife` using its real start/end), or if the bookend's start is **before** the prior's end (impossible chronology), remove the bookend. Sentinel: `[ORPHAN_BOOKEND_PRUNED] day=N reason=…`.
 
-### 3. One-shot self-heal for already-persisted trips
+Wire:
+- `action-save-itinerary.ts` `normalizeDays` — call AFTER the wrap-aware sort + the existing `[BOOKEND_REORDER]` self-heal, BEFORE `stripPreDawnHotelReturns`. After this prune, the day either has no bookend (covered by §3) or a clean one.
+- `pipeline/repair-day.ts` — call once before §15z final logistics enforcement.
 
-The bug has already been written to disk on existing trips (`enforceTimingAndBuffers` re-ordered the bookend during prior saves). Fix-forward without a migration:
+### 3. Re-run bookend after orphan prune
 
-- In `action-save-itinerary` `normalizeDays`, after the wrap-aware cascade runs, detect bookends (`source` ∈ `{bookend-readtime, bookend-overnight, late_nightlife_bookend}` OR `tags` includes any of those) sitting at index 0 with `startTime < 06:00`, and move them to the chronological tail. Sentinel: `[BOOKEND_REORDER] day=N moved tail src=…`.
-- The `enforceTimingAndBuffers` switch alone repairs the order on the very next save without touching unrelated rows.
+In both `normalizeDays` (save) and `parseItineraryDays` Step 4b (read), once an orphan was pruned, re-evaluate whether the day now needs a bookend:
+
+- **Save side**: after `pruneOrphanLateNightlifeBookend`, re-run `runStep8(activities, dayNumber - 1, hotelName)` if `removed > 0`. Hotel name is already extracted from prior runs (memo on the day's STAY card or top-level metadata).
+- **Read side**: `ensureHotelReturnBookend` is already called per-day after Step 4 — no change needed once §1 broadens the predicate.
 
 ### 4. Tests
 
-- `_shared/__tests__/time-parse.test.ts`: `dayChronoKey` ordering with wrap and untimed.
-- `_shared/__tests__/timing-cascade.test.ts`: 4-activity day `[09:00 brunch, 18:00 wine bar, 23:30 nightcap, 00:55 hotel return (source: late_nightlife_bookend)]` — assert post-cascade order is exactly that, and the bookend is **last**, not first.
-- `src/lib/itinerary/__tests__/dayChronoKey.test.ts`: same semantics on the FE helper.
-- Extend `ensureHotelReturnBookend.test.ts` with an end-to-end pass: parse → cascade simulation → expect bookend at `acts[acts.length - 1]` with start `00:55`.
+- `supabase/functions/_shared/__tests__/late-nightlife-predicate.test.ts` — new. Pins:
+  - `"La Rosa Vermutería"` cat=`drinks` → qualifies.
+  - `"Wine Bar Bodega Z"` cat=`dining` → qualifies (title regex).
+  - Untitled card start=21:30 end=00:15 → qualifies via `isLateNightlikeTail`.
+  - Plain dinner ending 22:30 → does NOT qualify (out of wrap window).
+- `supabase/functions/_shared/__tests__/timing-cascade-orphan.test.ts` — new. 3-activity day `[breakfast 09:00, museum 14:00, dinner 21:00→22:30, late_nightlife_bookend 00:10]` → bookend pruned; sentinel emitted.
+- Extend `late-nightlife-source-survival.test.ts` with a Mallorca-shaped vermutería day → bookend appears at tail.
+- Extend `src/lib/itinerary/__tests__/ensureHotelReturnBookend.test.ts` with vermutería + cat=`drinks` case.
 
 ## Out of Scope
 
-- No changes to the late-nightlife windowing in `runStep8` / `ensureHotelReturnBookend` (`02:55` cap stays).
-- No changes to ghost-activity filtering or the `late_nightlife_bookend` exemption — those are already correct.
-- No DB migration; one-shot reorder in `normalizeDays` self-heals legacy trips on first save.
+- No changes to `dayChronoKey`, `clampAllBookends`, `isGhostActivity`, or the `[BOOKEND_REORDER]` self-heal added in the prior pass — all still correct.
+- No DB migration; the orphan-prune at save-time self-heals legacy trips on next save.
+- Day 1 (working) is untouched.
 
 ## Files Touched
 
-- `supabase/functions/_shared/time-parse.ts` (+ `dayChronoKey`)
-- `supabase/functions/_shared/timing-cascade.ts` (sort swap)
-- `supabase/functions/generate-itinerary/universal-quality-pass.ts` (sort swap)
-- `supabase/functions/action-save-itinerary/index.ts` (one-shot reorder in `normalizeDays`)
-- `src/lib/itinerary/dayChronoKey.ts` (new)
-- `src/utils/itineraryParser.ts` (sort swap at line 672)
-- `src/components/itinerary/EditorialItinerary.tsx` (6 sort swaps)
-- 4 test files (new + extended)
+- `supabase/functions/_shared/late-nightlife-predicate.ts` (new)
+- `supabase/functions/_shared/timing-cascade.ts` (+ `pruneOrphanLateNightlifeBookend`)
+- `supabase/functions/generate-itinerary/universal-quality-pass.ts` (use shared predicate)
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (wire prune + re-run runStep8)
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (wire prune)
+- `src/lib/itinerary/lateNightlifePredicate.ts` (new, FE mirror)
+- `src/lib/itinerary/ensureHotelReturnBookend.ts` (use shared predicate)
+- 4 test files (3 new + 1 extended)

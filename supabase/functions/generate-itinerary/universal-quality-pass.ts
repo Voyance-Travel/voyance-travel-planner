@@ -82,16 +82,12 @@ const DEDUP_SKIP_CATS = new Set([
  * activity (when last activity ends 17:00–23:59). Extracted so the orchestrator
  * can defer this step (e.g., when dinner is required-but-missing).
  */
-// Late-nightlife categories that legitimately end past midnight. When such an
-// activity is the day's terminal anchor, we still need a hotel-return bookend
-// (Bug B2: Paradiso speakeasy ending 00:20 on Barcelona Day 2 shipped with no
-// return). The card is marked `source: 'late_nightlife_bookend'` so the UI
-// ghost filter (hideGhostActivities.ts) exempts it from the pre-dawn / wrap
-// suppression that targets phantom returns.
-const LATE_NIGHTLIFE_CATS = new Set([
-  'NIGHTLIFE', 'BAR', 'ENTERTAINMENT', 'COCKTAILS', 'LOUNGE',
-]);
-const LATE_NIGHTLIFE_TITLE_RE = /\b(speakeasy|nightclub|cocktail|nightcap|club|lounge|bar|aperitif|aperitivo)\b/i;
+// Late-nightlife predicate (shared, broadened). Title regex now covers
+// vermut/wine bar/taberna/bodega/pub/tavern; cats include DRINKS; and a
+// time-anchored fallback (start ≥ 21:00, end 00:00–02:30) catches every
+// long evening activity regardless of label. Closes Mallorca "La Rosa
+// Vermutería 21:30 → 00:15" miss.
+import { qualifiesAsLateNightlife } from '../_shared/late-nightlife-predicate.ts';
 
 export function runStep8(result: any[], dayIndex: number, hotelName?: string): void {
   if (!result || result.length === 0) return;
@@ -163,13 +159,10 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
     if (h >= 14 && h <= 23) {
       startTime24 = `${String(h).padStart(2, '0')}:${minStr}`;
     } else if (h >= 0 && h <= 2) {
-      // B2: late-nightlife bleed. Only accept when the prior activity is
-      // unambiguously evening nightlife (start ≥ 21:00) so we don't bless a
-      // genuinely broken card.
-      const startHour = startMinsParsed !== null ? Math.floor(startMinsParsed / 60) : -1;
-      const titleNightlife = LATE_NIGHTLIFE_TITLE_RE.test(lastTitle);
-      const catNightlife = LATE_NIGHTLIFE_CATS.has(lastCat);
-      if (startHour >= 21 && (titleNightlife || catNightlife)) {
+      // B2: late-nightlife bleed. Use the shared broadened predicate so
+      // vermutería/wine-bar/etc. and time-anchored long-evening activities
+      // also qualify (closes Mallorca "La Rosa Vermutería 21:30 → 00:15" miss).
+      if (qualifiesAsLateNightlife(lastActivity, startMinsParsed, endMinsParsed)) {
         startTime24 = `${String(h).padStart(2, '0')}:${minStr}`;
         lateNightBleed = true;
       }

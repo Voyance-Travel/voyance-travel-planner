@@ -32,7 +32,7 @@ import {
 } from '../flight-hotel-context.ts';
 import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-utils.ts';
 import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../fix-placeholders.ts';
-import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
+import { enforceTimingAndBuffers, pruneOrphanLateNightlifeBookend } from '../../_shared/timing-cascade.ts';
 import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
 import { scrubBodyPromptLeaks, scrubTitleLeaks, buildDayScheduleSummary } from '../../_shared/prompt-leak-scrub.ts';
 import { scrubActivity, formatOps, opsHadChange } from '../../_shared/scrub-activity.ts';
@@ -3805,6 +3805,12 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       console.log(`[WALK_OVER_THRESHOLD] day=${dayNumber} tier=${tierLabel} idx=${idx} ${before.method} ${curDur}min/${distM}m → ${tier.method} ${tier.durationMinutes}min/$${tier.costAmount}`);
     }
   }
+
+  // --- 15y. PRUNE ORPHAN LATE-NIGHTLIFE BOOKENDS --------------------------------
+  // Drop stale `late_nightlife_bookend` cards whose chronological-prior
+  // non-bookend isn't actually nightlife. Save-time runStep8 retry will
+  // re-inject a fresh bookend when warranted.
+  pruneOrphanLateNightlifeBookend(activities, { dayNumber });
 
   // --- 15z. FINAL DEPARTURE-DAY LOGISTICS ENFORCEMENT (consolidated) -----------
   // Last-line-of-defense after every other repair has finished mutating the day.

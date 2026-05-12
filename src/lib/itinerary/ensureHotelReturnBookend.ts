@@ -14,6 +14,8 @@
  * Memory: mem://constraints/itinerary/read-time-hotel-return-bookend
  */
 
+import { qualifiesAsLateNightlife } from './lateNightlifePredicate';
+
 // — Same predicates as runStep8 (universal-quality-pass.ts:128–141) —
 const TRUE_RETURN_RE =
   /\b(?:return\s+to|back\s+to|head\s+back\s+to|wind\s+down\s+at|retire\s+to|end\s+of\s+day\s+at)\b/i;
@@ -23,17 +25,6 @@ const MIDDAY_ACCOM_RE =
 const AIRPORT_RE = /\b(airport|station|terminal|gate)\b/i;
 const TRANSPORT_CAT_RE = /TRANSPORT|TRANSIT|TRAVEL|LOGISTICS|FLIGHT/;
 const FLIGHT_TITLE_RE = /\b(flight|departure)\b/i;
-
-// Late-nightlife branch — same as runStep8 (lines 91–94)
-const LATE_NIGHTLIFE_CATS = new Set([
-  'NIGHTLIFE',
-  'BAR',
-  'ENTERTAINMENT',
-  'COCKTAILS',
-  'LOUNGE',
-]);
-const LATE_NIGHTLIFE_TITLE_RE =
-  /\b(speakeasy|nightclub|cocktail|nightcap|club|lounge|bar|aperitif|aperitivo)\b/i;
 
 function parseTime(raw: unknown): number | null {
   if (typeof raw !== 'string' || !raw) return null;
@@ -193,10 +184,12 @@ export function ensureHotelReturnBookend<T extends any[]>(
     description = `Head back to ${titleHotel} for the night.`;
     tags = ['hotel', 'rest', 'bookend-readtime'];
   } else if (lastEndMins >= 0 && lastEndMins <= 2 * 60 + 30) {
-    // Late-nightlife bleed — short taxi home, capped at 02:55.
-    const titleNightlife = LATE_NIGHTLIFE_TITLE_RE.test(String(last.title || last.name || ''));
-    const catNightlife = LATE_NIGHTLIFE_CATS.has(String(last.category || '').toUpperCase());
-    if (!titleNightlife && !catNightlife) {
+    // Late-nightlife bleed — short taxi home, capped at 02:55. Use the
+    // shared broadened predicate (vermutería/wine bar/taberna/etc. plus
+    // time-anchored fallback start≥21:00).
+    const lastStartMins =
+      parseTime((last as any)?.startTime) ?? parseTime((last as any)?.start_time);
+    if (!qualifiesAsLateNightlife(last, lastStartMins, lastEndMins)) {
       // 00:00–02:30 but not nightlife — don't fabricate; let it ship as-is.
       return activities;
     }

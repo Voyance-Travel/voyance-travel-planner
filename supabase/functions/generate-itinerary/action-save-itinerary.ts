@@ -17,7 +17,7 @@ import { buildDayScheduleSummary } from '../_shared/prompt-leak-scrub.ts';
 import { ensureDayDiningDescriptions } from '../_shared/dining-description-backfill.ts';
 import { pruneNonLogisticsAfterCheckout, pruneNonLogisticsAfterAirportTransfer } from '../_shared/post-checkout-prune.ts';
 import { enforceFreshenUpPosition } from '../_shared/freshen-up-position.ts';
-import { fillMissingStartTimes, dayChronoKey } from '../_shared/timing-cascade.ts';
+import { fillMissingStartTimes, dayChronoKey, pruneOrphanLateNightlifeBookend } from '../_shared/timing-cascade.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
@@ -170,6 +170,11 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
         console.log(`[BOOKEND_REORDER] day=${dayNumber} moved tail src="${(head as any)?.source || 'inferred'}" path=save-itinerary`);
       }
     }
+    // Drop stale `late_nightlife_bookend` cards whose chronological-prior
+    // non-bookend isn't actually nightlife (or whose start predates the
+    // prior's end). The save-time `runStep8` retry below re-injects a
+    // fresh bookend when the day still warrants one.
+    pruneOrphanLateNightlifeBookend(activities, { dayNumber });
     stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
     clampAllBookends(activities, { dayNumber, label: 'SAVE' });
     // Unified scrub boundary — single entry point.
