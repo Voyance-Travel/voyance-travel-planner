@@ -3336,12 +3336,6 @@ async function _handleGenerateTripDayInner(
       label: 'generate-trip-day:final',
       extraUpdate: {
         itinerary_status: finalStatus,
-        // Stamp itinerary_frozen_at on first ready transition so page-load
-        // self-heal writes are permanently blocked. See
-        // mem://constraints/itinerary/frozen-after-ready.
-        ...(finalStatus === 'ready' && !(meta as any)?.itinerary_frozen_at
-          ? { /* metadata field is set below */ }
-          : {}),
         unlocked_day_count: newUnlocked,
         metadata: {
           ...meta,
@@ -3359,6 +3353,11 @@ async function _handleGenerateTripDayInner(
           empty_days_at_completion: emptyDaysList.length > 0 ? emptyDaysList : null,
           bare_itinerary_detected: !hasEnoughMeaningful || null,
           meaningful_activity_count: meaningfulActivityCount,
+          // FREEZE STAMP — first ready transition. See
+          // mem://constraints/itinerary/frozen-after-ready.
+          ...(finalStatus === 'ready'
+            ? { itinerary_frozen_at: (meta as any)?.itinerary_frozen_at || new Date().toISOString() }
+            : {}),
         },
       },
     });
