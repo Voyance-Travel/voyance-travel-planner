@@ -12,6 +12,7 @@ import { ledgerCheck } from './ledger-check.ts';
 import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
+import { validateItineraryForPersist } from '../_shared/validate-itinerary-for-persist.ts';
 import { scrubActivity, addOps, formatOps, EMPTY_OPS, type ScrubOps } from '../_shared/scrub-activity.ts';
 import { buildDayScheduleSummary } from '../_shared/prompt-leak-scrub.ts';
 import { ensureDayDiningDescriptions } from '../_shared/dining-description-backfill.ts';
@@ -1004,17 +1005,40 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // the shared persistTripItinerary helper so every write path enforces the
   // same boundary contract.
   const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
+
+  // ── PERSIST VALIDATION GATE (LOCK 3) ─────────────────────────────
+  // Run the dry-run gate BEFORE persist so we can stamp metadata in the
+  // same write. The trip still persists (so the user keeps their work),
+  // but a 422 is returned with the per-day issues for the UI banner.
+  // See .lovable/plan.md (Stage 1).
+  const persistVerdict = validateItineraryForPersist((itinerary as any).days || [], {
+    destination: (currentTrip as any)?.destination ?? null,
+    arrivalTime24: savedArrivalTime24,
+    departureTime24: savedDepartureTime24,
+  });
+  if (!persistVerdict.ok) {
+    console.warn(
+      `[PERSIST_GATE] tripId=${tripId} errors=${persistVerdict.errors.length} ` +
+      `warnings=${persistVerdict.warnings.length} codes=[${[...new Set(persistVerdict.errors.map(e => e.code))].join(',')}]`,
+    );
+  }
+
+  const persistValidationStamp = {
+    checked_at: new Date().toISOString(),
+    ok: persistVerdict.ok,
+    errors: persistVerdict.errors,
+    warnings: persistVerdict.warnings,
+  };
+
   const extraUpdate: Record<string, any> = {
-    itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',
+    itinerary_status: emptyItineraryDetected ? 'failed' : (persistVerdict.ok ? 'ready' : 'needs_regeneration'),
     updated_at: new Date().toISOString(),
     ...(callerExtraUpdate && typeof callerExtraUpdate === 'object' ? callerExtraUpdate : {}),
-    ...(emptyItineraryDetected && {
-      metadata: {
-        ...existingMetadataForEmpty,
-        generation_failure_reason: failureReason,
-        empty_itinerary_detected_at: new Date().toISOString(),
-      },
-    }),
+    metadata: {
+      ...(callerExtraUpdate?.metadata || {}),
+      ...(emptyItineraryDetected ? { ...existingMetadataForEmpty, generation_failure_reason: failureReason, empty_itinerary_detected_at: new Date().toISOString() } : {}),
+      persist_validation: persistValidationStamp,
+    },
   };
   const { error, regressionBlocked } = await persistTripItinerary(supabase, tripId, itinerary, {
     destination: (currentTrip as any)?.destination ?? null,
@@ -1081,5 +1105,23 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // Trigger next journey leg if applicable
   await triggerNextJourneyLeg(supabase, tripId);
 
-  return okJson({ success: true, normalized: true, mealGuardInjections });
+  if (!persistVerdict.ok) {
+    return okJson({
+      success: false,
+      code: 'NEEDS_REGENERATION',
+      message: 'Itinerary saved with issues — some days need attention.',
+      persistedDespiteErrors: true,
+      normalized: true,
+      mealGuardInjections,
+      errors: persistVerdict.errors,
+      warnings: persistVerdict.warnings,
+    }, 422);
+  }
+
+  return okJson({
+    success: true,
+    normalized: true,
+    mealGuardInjections,
+    warnings: persistVerdict.warnings,
+  });
 }

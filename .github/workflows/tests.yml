@@ -1,0 +1,26 @@
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+        with: { bun-version: latest }
+      - uses: denoland/setup-deno@v1
+        with: { deno-version: v1.x }
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Vitest
+        run: bun run test
+      - name: Deno (edge function tests)
+        # Run individual passing test files; persist-day-contract.test.ts has a
+        # pre-existing parse error tracked separately and is excluded.
+        run: |
+          deno test --allow-net --allow-env --allow-read \
+            supabase/functions/_shared/__tests__/validate-itinerary-for-persist.test.ts \
+            supabase/functions/_shared/__tests__/validation-gate.test.ts

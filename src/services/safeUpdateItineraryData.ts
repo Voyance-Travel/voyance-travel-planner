@@ -138,7 +138,7 @@ export async function safeUpdateItineraryData(
     const preservedDays = preserveLedgerCosts(prevDays, nextDays);
     const merged = { ...nextItinerary, days: preservedDays };
 
-    const { error } = await supabase.functions.invoke('generate-itinerary', {
+    const { data, error } = await supabase.functions.invoke('generate-itinerary', {
       body: {
         action: 'save-itinerary',
         tripId,
@@ -147,6 +147,32 @@ export async function safeUpdateItineraryData(
         ...(options.skipLedgerCheck ? { skipLedgerCheck: true, saveReason: options.reason || 'safeUpdateItineraryData-skipLedger' } : {}),
       },
     });
+
+    // Persist gate (HTTP 422) — supabase-js surfaces this as an error with the
+    // 422 body inside error.context. The trip DID persist; we only need to
+    // surface the per-day verdict to the user. See .lovable/plan.md (LOCK 3).
+    if (error && (error as any)?.context?.status === 422) {
+      try {
+        const ctx = (error as any).context;
+        const body = typeof ctx.json === 'function' ? await ctx.json() : null;
+        if (body?.code === 'NEEDS_REGENERATION') {
+          try {
+            window.dispatchEvent(new CustomEvent('itinerary-persist-issues', {
+              detail: { tripId, ...body },
+            }));
+          } catch { /* non-fatal */ }
+          try {
+            const { dispatchTripPersisted } = await import('@/lib/itinerary/resyncItineraryFromDb');
+            dispatchTripPersisted({ tripId, prevDays: nextDays, source: 'persist-gate-flagged' });
+          } catch { /* non-fatal */ }
+          console.warn('[safeUpdateItineraryData] persist gate flagged issues:', body);
+          return { error: null, persistVerdict: body } as any;
+        }
+      } catch (parseErr) {
+        console.warn('[safeUpdateItineraryData] could not parse 422 body:', parseErr);
+      }
+    }
+
     if (error) {
       // IMPORTANT: do NOT fall back to a raw `trips.update({ itinerary_data })`
       // here. The raw write bypasses the persist-day contract (ghost rows,
