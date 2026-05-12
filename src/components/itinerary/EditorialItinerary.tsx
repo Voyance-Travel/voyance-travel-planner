@@ -3572,11 +3572,9 @@ export function EditorialItinerary({
       const nextActivities = [...activities];
       nextActivities[airportIdx] = checkout;
       nextActivities[checkoutIdx] = airport;
-      nextActivities.sort((a, b) => {
-        const ta = parseMins(a.startTime || a.time) ?? 99999;
-        const tb = parseMins(b.startTime || b.time) ?? 99999;
-        return ta - tb;
-      });
+      nextActivities.sort(
+        (a, b) => dayChronoKey(a.startTime || a.time) - dayChronoKey(b.startTime || b.time),
+      );
 
       return prev.map((d, idx) => (idx === lastIdx ? { ...d, activities: nextActivities } : d));
     });
