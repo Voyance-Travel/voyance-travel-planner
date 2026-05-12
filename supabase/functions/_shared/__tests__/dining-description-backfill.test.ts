@@ -154,10 +154,16 @@ Deno.test("ensureDayDiningDescriptions returns counters", () => {
         whyThisFits: "Picked because traveler wanted casual lunches.",
       },
     },
+    {
+      category: "dining",
+      title: "Breakfast at Mystery Cafe",
+      description: "",
+    },
     { category: "museum", title: "Louvre", description: "" },
   ];
   const c = ensureDayDiningDescriptions(acts, "Paris");
-  assertEquals(c.scanned, 2);
+  assertEquals(c.scanned, 3);
   assertEquals(c.fallback, 1);
   assertEquals(c.whyThisFits, 1);
+  assertEquals(c.venueTemplate, 1);
 });
