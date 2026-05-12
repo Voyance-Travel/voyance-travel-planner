@@ -14,6 +14,8 @@
  * Memory: mem://constraints/itinerary/read-time-hotel-return-bookend
  */
 
+import { qualifiesAsLateNightlife } from './lateNightlifePredicate';
+
 // — Same predicates as runStep8 (universal-quality-pass.ts:128–141) —
 const TRUE_RETURN_RE =
   /\b(?:return\s+to|back\s+to|head\s+back\s+to|wind\s+down\s+at|retire\s+to|end\s+of\s+day\s+at)\b/i;
@@ -23,17 +25,6 @@ const MIDDAY_ACCOM_RE =
 const AIRPORT_RE = /\b(airport|station|terminal|gate)\b/i;
 const TRANSPORT_CAT_RE = /TRANSPORT|TRANSIT|TRAVEL|LOGISTICS|FLIGHT/;
 const FLIGHT_TITLE_RE = /\b(flight|departure)\b/i;
-
-// Late-nightlife branch — same as runStep8 (lines 91–94)
-const LATE_NIGHTLIFE_CATS = new Set([
-  'NIGHTLIFE',
-  'BAR',
-  'ENTERTAINMENT',
-  'COCKTAILS',
-  'LOUNGE',
-]);
-const LATE_NIGHTLIFE_TITLE_RE =
-  /\b(speakeasy|nightclub|cocktail|nightcap|club|lounge|bar|aperitif|aperitivo)\b/i;
 
 function parseTime(raw: unknown): number | null {
   if (typeof raw !== 'string' || !raw) return null;
