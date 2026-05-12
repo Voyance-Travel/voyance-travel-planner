@@ -1454,7 +1454,7 @@ export default function TripDetail() {
                       });
                     } catch (saveErr) {
                       console.error('[TripDetail] Backend save after version restore failed, falling back to direct write:', saveErr);
-                      await safeUpdateItineraryData(tripId!, mergedItinerary);
+                      await safeUpdateItineraryData(tripId!, mergedItinerary, {}, { skipLedgerCheck: true, reason: 'self-heal-version-restore-fallback' });
                     }
                     queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
                     toast.success(`Restored ${restoredCount} day${restoredCount > 1 ? 's' : ''} from history`);
