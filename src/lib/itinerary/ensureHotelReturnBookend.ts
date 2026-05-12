@@ -112,7 +112,11 @@ export function ensureHotelReturnBookend<T extends any[]>(
   opts: EnsureBookendOptions = {},
 ): T {
   if (!Array.isArray(activities) || activities.length === 0) return activities;
-  if (opts.isDepartureDay) return activities;
+  if (opts.isDepartureDay) {
+    // eslint-disable-next-line no-console
+    console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=n/a reason=departure_day`);
+    return activities;
+  }
 
   // Identify the chronologically last activity by max end_time (fallback
   // start_time). Don't trust array order — the editor injects synthetic
@@ -156,11 +160,23 @@ export function ensureHotelReturnBookend<T extends any[]>(
   // Idempotency / departure-style guards. We deliberately do NOT skip on
   // user/manual/locked source — those rows just shouldn't be modified, but
   // the day still needs a hotel return.
-  if (isTerminalAlready(last)) return activities;
-  if (isDepartureTerminal(last)) return activities;
+  if (isTerminalAlready(last)) {
+    // eslint-disable-next-line no-console
+    console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=${String((last as any)?.source || 'inferred')} reason=already_terminal title="${String((last as any)?.title || '')}"`);
+    return activities;
+  }
+  if (isDepartureTerminal(last)) {
+    // eslint-disable-next-line no-console
+    console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=n/a reason=departure_terminal title="${String((last as any)?.title || '')}"`);
+    return activities;
+  }
 
   const lastEndMins = lastTimeRaw >= 0 ? lastTimeRaw : null;
-  if (lastEndMins === null) return activities;
+  if (lastEndMins === null) {
+    // eslint-disable-next-line no-console
+    console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=n/a reason=no_times`);
+    return activities;
+  }
 
   const hotel =
     (opts.hotelName && opts.hotelName.trim()) ||
