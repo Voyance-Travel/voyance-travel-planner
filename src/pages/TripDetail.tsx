@@ -1912,7 +1912,14 @@ export default function TripDetail() {
           console.error('[TripDetail] Failed to force-save itinerary:', error);
         } else {
           console.log('[TripDetail] Itinerary force-saved successfully');
-          
+
+          // Resync from DB so session reflects post-cascade/post-bookend state.
+          dispatchTripPersisted({
+            tripId,
+            prevDays: itineraryPayload.days,
+            source: 'handleGenerationComplete',
+          });
+
           // Invalidate entitlements so UI immediately reflects new unlocked_day_count
           queryClient.invalidateQueries({ queryKey: ['entitlements'] });
           
