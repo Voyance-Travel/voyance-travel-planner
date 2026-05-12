@@ -146,7 +146,7 @@ function isHotelReturnBookendActivity(a: any): boolean {
   const cat = String(a.category || '').toUpperCase();
   const source = String(a.source || '').toLowerCase();
   const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
-  if (MIDDAY_ACCOM_RE.test(title) && !TRUE_HOTEL_RETURN_RE.test(title)) return false;
+  if (MIDDAY_ACCOM_RE.test(title)) return false;
   if (BOOKEND_SOURCE_RE.test(source) || tags.some((t: string) => BOOKEND_SOURCE_RE.test(t))) return true;
   return (cat === 'STAY' || cat === 'ACCOMMODATION') && TRUE_HOTEL_RETURN_RE.test(title);
 }
