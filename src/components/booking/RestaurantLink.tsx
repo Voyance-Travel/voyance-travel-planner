@@ -36,7 +36,24 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
 
   useEffect(() => {
     let cancelled = false;
-    
+    let settled = false;
+
+    // Reset state on each prop change so a new lookup starts cleanly.
+    setIsLoading(true);
+    setUrl(null);
+
+    // Deadline fallback FIRST: established before any async work so a hung
+    // invoke (cold start, OOM, network drop) can never strand the spinner.
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled || settled) return;
+      settled = true;
+      if (import.meta.env.DEV) {
+        console.warn('[RestaurantLink] lookup deadline hit (5s)', { restaurantName, destination });
+      }
+      setUrl(null);
+      setIsLoading(false);
+    }, 5000);
+
     async function lookupUrl() {
       // Log what we're looking up for debugging
       // Looking up restaurant URL
