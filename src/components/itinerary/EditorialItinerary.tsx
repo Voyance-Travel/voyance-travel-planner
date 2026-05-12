@@ -3836,14 +3836,24 @@ export function EditorialItinerary({
 
   // Derive local currency robustly (destinationInfo is often undefined on TripDetail)
   // IMPORTANT: If the trip is in the Eurozone, prefer EUR even if some upstream metadata is wrong.
-  const countryCurrency = inferCurrencyFromCountry(destinationCountry);
+  // SAR/territory override: Hong Kong, Macau, and Taiwan trips often arrive with destinationCountry="China",
+  // which would otherwise resolve to CNY. Detect by destination string and pin the correct currency first.
+  const destLowerEarly = (destination || '').toLowerCase();
+  const sarOverride: string | null =
+    /\bhong\s*kong\b|\bhk\b/.test(destLowerEarly) ? 'HKD'
+    : /\bmacau\b|\bmacao\b/.test(destLowerEarly) ? 'MOP'
+    : /\btaiwan\b|\btaipei\b|\bkaohsiung\b/.test(destLowerEarly) ? 'TWD'
+    : /\bpuerto\s*rico\b|\bsan\s*juan\b/.test(destLowerEarly) ? 'USD'
+    : null;
+
+  const countryCurrency = sarOverride ?? inferCurrencyFromCountry(destinationCountry);
   const destinationCurrency =
     normalizeCurrencyCode(destinationInfo?.currency) ||
     normalizeCurrencyCode(destinationInfo?.currencySymbol);
   const daysCurrency = inferCurrencyFromDays(days);
 
   // Also try to infer USD from destination string directly (e.g. "Austin, Texas", "New York, NY")
-  const destLower = (destination || '').toLowerCase();
+  const destLower = destLowerEarly;
   const isUSDestination =
     countryCurrency === 'USD' ||
     destLower.includes('texas') || destLower.includes(', tx') ||
@@ -3853,6 +3863,7 @@ export function EditorialItinerary({
     destLower.includes(', us');
 
   const localCurrency =
+    sarOverride ||
     (countryCurrency && destinationCurrency && countryCurrency !== destinationCurrency
       ? countryCurrency
       : destinationCurrency) ||

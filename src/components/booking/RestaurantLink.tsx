@@ -47,9 +47,9 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
     const timeoutId = window.setTimeout(() => {
       if (cancelled || settled) return;
       settled = true;
-      if (import.meta.env.DEV) {
-        console.warn('[RestaurantLink] lookup deadline hit (5s)', { restaurantName, destination });
-      }
+      // Production-safe: always log so we can distinguish "edge fn hung" from
+      // "component remounted" in user-reported stuck-spinner cases.
+      console.info('[RestaurantLink] lookup deadline hit (5s)', { restaurantName, destination });
       setUrl(null);
       setIsLoading(false);
     }, 5000);
