@@ -69,6 +69,12 @@ import { initiateBooking } from '@/services/tripPaymentsAPI';
 import { toast } from 'sonner';
 import { normalizeLegacyHotelSelection, type HotelBooking } from '@/utils/hotelValidation';
 import { parseEditorialDays, parseAssistantDays } from '@/utils/itineraryParser';
+import {
+  TRIP_PERSISTED_EVENT,
+  resyncItineraryFromDb,
+  reportItineraryDrift,
+  type TripPersistedDetail,
+} from '@/lib/itinerary/resyncItineraryFromDb';
 import { normalizeFlightSelection } from '@/utils/normalizeFlightSelection';
 import { injectHotelActivitiesIntoDays, injectMultiHotelActivities } from '@/utils/injectHotelActivities';
 import { patchItineraryWithHotel, patchItineraryWithMultipleHotels } from '@/services/hotelItineraryPatch';
@@ -323,6 +329,37 @@ export default function TripDetail() {
     }
     return () => { if (stalledTimerRef.current) clearTimeout(stalledTimerRef.current); };
   }, [generationStalled, trip?.itinerary_status]);
+
+  // Single source of truth: when any save site reports a successful persist,
+  // re-read the canonical itinerary_data from DB and apply it to local state.
+  // Closes the "pre-refresh ≠ post-refresh" divergence (timing cascade,
+  // hotel-return bookend, dropped meals). See mem://constraints/itinerary/db-is-source-of-truth.
+  useEffect(() => {
+    if (!tripId) return;
+    const handler = async (evt: Event) => {
+      const detail = (evt as CustomEvent<TripPersistedDetail>).detail;
+      if (!detail || detail.tripId !== tripId) return;
+      try {
+        const fresh = await resyncItineraryFromDb(tripId);
+        if (!fresh || !fresh.itineraryData) return;
+        const dbDays = (fresh.itineraryData as { days?: unknown[] })?.days;
+        reportItineraryDrift(tripId, detail.prevDays, dbDays, detail.source);
+        setTrip((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            itinerary_data: fresh.itineraryData as Trip['itinerary_data'],
+            itinerary_status: (fresh.itineraryStatus as Trip['itinerary_status']) ?? prev.itinerary_status,
+            ...(fresh.metadata ? { metadata: fresh.metadata as Trip['metadata'] } : {}),
+          };
+        });
+      } catch (err) {
+        console.warn('[TripDetail] resync after persist failed:', err);
+      }
+    };
+    window.addEventListener(TRIP_PERSISTED_EVENT, handler);
+    return () => window.removeEventListener(TRIP_PERSISTED_EVENT, handler);
+  }, [tripId]);
 
   const generationPoller = useGenerationPoller({
     tripId: tripId || null,
