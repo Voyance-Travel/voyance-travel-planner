@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { preserveLedgerCosts } from '@/utils/preserveLedgerCosts';
+import { itineraryFingerprint } from '@/lib/itinerary/itineraryFingerprint';
 
 /**
  * Direct trips.itinerary_data writes from React state can silently downgrade
@@ -93,6 +94,25 @@ export async function safeUpdateItineraryData(
 
     const prevDays = (current?.itinerary_data as any)?.days ?? [];
     const nextDays = nextItinerary?.days ?? [];
+
+    // Self-heal no-op gate: when the caller is a reload/self-heal path
+    // (skipLedgerCheck:true), short-circuit when the proposed payload is
+    // byte-equivalent to what's already on disk. Skipping the write — and
+    // crucially, the TRIP_PERSISTED_EVENT dispatch — breaks the
+    // reload → resync → self-heal-effect → save loop. Mutating saves
+    // (no skipLedgerCheck) are unaffected because the server may legitimately
+    // mutate byte-equal payloads via meal-guard / scrub / cascade.
+    // See mem://constraints/itinerary/ledger-check-mutation-only.
+    if (options.skipLedgerCheck) {
+      const prevFp = itineraryFingerprint(current?.itinerary_data as any);
+      const nextFp = itineraryFingerprint(nextItinerary);
+      if (prevFp === nextFp) {
+        console.log(
+          `[safeUpdateItineraryData] Self-heal no-op: payload identical to DB (reason=${options.reason || 'unspecified'}, fp=${nextFp}) — skipping write`,
+        );
+        return { error: null };
+      }
+    }
 
     // Integrity guard — block silent destructive writes from page-load paths.
     if (!options.allowReduction) {

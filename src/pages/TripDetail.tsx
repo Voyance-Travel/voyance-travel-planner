@@ -9,6 +9,7 @@ import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { enforceMealTimeCoherence } from '@/utils/mealTimeCoherence';
 import { safeUpdateItineraryData } from '@/services/safeUpdateItineraryData';
+import { itineraryFingerprint } from '@/lib/itinerary/itineraryFingerprint';
 import { detectOrphanActivities } from '@/lib/itinerary/detectOrphanActivities';
 import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, PenLine, Coins, Calendar, Clock, AlertTriangle } from 'lucide-react';
 import { CREDIT_COSTS } from '@/config/pricing';
@@ -1442,22 +1443,28 @@ export default function TripDetail() {
                   // Save restored days back if any were recovered
                   if (restoredCount > 0) {
                     const mergedItinerary = { ...currentItinData, days: currentDays };
-                    try {
-                      await supabase.functions.invoke('generate-itinerary', {
-                        body: {
-                          action: 'save-itinerary',
-                          tripId: tripId!,
-                          itinerary: mergedItinerary,
-                          skipLedgerCheck: true,
-                          saveReason: 'self-heal-version-restore',
-                        },
-                      });
-                    } catch (saveErr) {
-                      console.error('[TripDetail] Backend save after version restore failed, falling back to direct write:', saveErr);
-                      await safeUpdateItineraryData(tripId!, mergedItinerary, {}, { skipLedgerCheck: true, reason: 'self-heal-version-restore-fallback' });
+                    const prevFp = itineraryFingerprint(currentItinData);
+                    const nextFp = itineraryFingerprint(mergedItinerary);
+                    if (prevFp === nextFp) {
+                      console.log(`[TripDetail] Self-heal version-restore no-op: payload identical to current state (fp=${nextFp}), skipping write`);
+                    } else {
+                      try {
+                        await supabase.functions.invoke('generate-itinerary', {
+                          body: {
+                            action: 'save-itinerary',
+                            tripId: tripId!,
+                            itinerary: mergedItinerary,
+                            skipLedgerCheck: true,
+                            saveReason: 'self-heal-version-restore',
+                          },
+                        });
+                      } catch (saveErr) {
+                        console.error('[TripDetail] Backend save after version restore failed, falling back to direct write:', saveErr);
+                        await safeUpdateItineraryData(tripId!, mergedItinerary, {}, { skipLedgerCheck: true, reason: 'self-heal-version-restore-fallback' });
+                      }
+                      queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+                      toast.success(`Restored ${restoredCount} day${restoredCount > 1 ? 's' : ''} from history`);
                     }
-                    queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
-                    toast.success(`Restored ${restoredCount} day${restoredCount > 1 ? 's' : ''} from history`);
                   }
 
                   // Step 2: For days with NO version history, materialize empty placeholders
@@ -1497,22 +1504,29 @@ export default function TripDetail() {
                     freshDays.sort((a: any, b: any) => (a.dayNumber || 0) - (b.dayNumber || 0));
 
                     const mergedFresh = { ...freshItinData, days: freshDays };
-                    try {
-                      await supabase.functions.invoke('generate-itinerary', {
-                        body: {
-                          action: 'save-itinerary',
-                          tripId: tripId!,
-                          itinerary: mergedFresh,
-                          skipLedgerCheck: true,
-                          saveReason: 'self-heal-empty-day-placeholder',
-                        },
-                      });
-                    } catch (saveErr) {
-                      console.error('[TripDetail] Backend save after placeholder materialization failed:', saveErr);
-                      await safeUpdateItineraryData(tripId!, mergedFresh, {}, { skipLedgerCheck: true, reason: 'self-heal-empty-day-placeholder-fallback' });
+                    const prevFp = itineraryFingerprint(freshItinData);
+                    const nextFp = itineraryFingerprint(mergedFresh);
+                    if (prevFp === nextFp) {
+                      console.log(`[TripDetail] Self-heal empty-day-placeholder no-op: payload identical to current state (fp=${nextFp}), skipping write`);
+                      setIncompleteDays(unresolvedDays);
+                    } else {
+                      try {
+                        await supabase.functions.invoke('generate-itinerary', {
+                          body: {
+                            action: 'save-itinerary',
+                            tripId: tripId!,
+                            itinerary: mergedFresh,
+                            skipLedgerCheck: true,
+                            saveReason: 'self-heal-empty-day-placeholder',
+                          },
+                        });
+                      } catch (saveErr) {
+                        console.error('[TripDetail] Backend save after placeholder materialization failed:', saveErr);
+                        await safeUpdateItineraryData(tripId!, mergedFresh, {}, { skipLedgerCheck: true, reason: 'self-heal-empty-day-placeholder-fallback' });
+                      }
+                      queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+                      setIncompleteDays(unresolvedDays);
                     }
-                    queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
-                    setIncompleteDays(unresolvedDays);
                   }
                 } catch (err) {
                   console.error('[TripDetail] Self-heal (version restore + placeholders) failed:', err);
