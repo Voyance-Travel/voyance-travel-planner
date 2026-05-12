@@ -1,46 +1,55 @@
-# Wire global toast listener for `itinerary-persist-issues`
+# Fix `persist-day-contract.test.ts` parse error + glob CI
 
-When `action-save-itinerary` returns 422, `safeUpdateItineraryData` already dispatches a `itinerary-persist-issues` `CustomEvent` on `window`. Today nothing listens, so users never see the gate's findings. This wires a single global listener that surfaces day-grouped sonner toasts.
+## STEP 1 — Root cause (already diagnosed)
+
+`supabase/functions/_shared/persist-day-contract.test.ts` line 35-39:
+
+```ts
+Deno.test('does NOT drop legit acronyms in parens like (NYC)', () => {
+  const acts = [{ title: 'Visit MoMA (NYC)', startTime: '11:00', category: 'museum' }];
+  const { activities } = enforcePersistDayContract(acts);
+  assertEquals(activities.length, 1);
+                                        ← missing `});`
+Deno.test('drops "find a local spot"', () => {
+```
+
+The next `Deno.test(...)` is parsed as a positional argument to the prior call, then EOF hits inside the unclosed expression at line 111 — exactly what Deno reports (`Expected ',', got '<eof>' at 111:4`).
+
+Fix is a single-line insertion of `});` after the `assertEquals(activities.length, 1);` line. No logic change.
+
+## STEP 2 — Verify
+
+```
+deno test --no-run supabase/functions/_shared/persist-day-contract.test.ts   # parses
+deno test --allow-read --allow-env supabase/functions/_shared/persist-day-contract.test.ts  # runs
+```
+
+Both must succeed. Test failures (if any) are out of scope — only the parse error is being closed.
+
+## STEP 3 — Update `.github/workflows/tests.yml`
+
+Replace the explicit two-file Deno step with a glob covering both layout conventions:
+
+```yaml
+- name: Deno (edge function tests)
+  run: |
+    deno test --allow-read --allow-env --allow-net \
+      'supabase/functions/**/__tests__/*.test.ts' \
+      'supabase/functions/**/*.test.ts'
+```
+
+Deno dedupes when both patterns match the same file. This auto-picks up new test files going forward (the original task's stated motivation).
+
+## STEP 4 — Sanity-sweep other test files
+
+Run `deno test --no-run 'supabase/functions/**/*.test.ts' 2>&1 | grep -iE "error|cannot"` and confirm zero hits. If any other file has the same class of error, fix it the same way (add missing `});`); otherwise no further edits.
+
+## STEP 5 — Local CI dry-run
+
+`deno test --no-run 'supabase/functions/**/__tests__/*.test.ts' 'supabase/functions/**/*.test.ts'` to confirm the glob resolves under bash and parses everything. Push verification (`git commit --allow-empty`) is out of scope for this agent — note in closing message that the workflow will fire on the next real push.
 
 ## Files
 
-**New** `src/components/itinerary/PersistIssuesListener.tsx`
-- Renders `null`. `useEffect` adds/removes a `window` listener for `itinerary-persist-issues`.
-- Reads `detail = { tripId, errors[], warnings[], persistedDespiteErrors }`.
-- Groups issues by `dayNumber` (fallback bucket for trip-level).
-- Emits one toast per day: `toast.error` if the day contains any error, else `toast.warning`. Heading "Day N needs regeneration" (or "Trip needs regeneration"). Description = newline-joined human strings. `duration: 10000`.
-- Dedupe: keep a short-lived `Set<string>` of `${tripId}:${day}:${codes.sorted().join(',)}` cleared after 5s so reload-driven repeat events don't double-toast.
-
-**Edited** `src/App.tsx`
-- Import `PersistIssuesListener` and mount once inside `<TooltipProvider>` near other global listeners (`<GlobalErrorHandler />`, `<OAuthReturnHandler />`). Single mount only.
-
-## Issue code mapping (matches actual codes emitted by `validate-itinerary-for-persist.ts`)
-
-```text
-EMPTY_DAY                 → "Day N has no activities"
-MISSING_REQUIRED_MEAL     → "Day N: <detail or 'meal missing'>"
-EMPTY_DINING_DESCRIPTION  → "Day N: restaurant card missing description"
-PHANTOM_PREDAWN_CARD      → "Day N: <detail or 'phantom pre-dawn card'>"
-OVERLONG_ACTIVITY         → "Day N: <detail or 'activity > 6h'>"
-WRAP_GAP_OVER_3H          → "Day N: 3+ hour unscheduled gap"
-MISSING_HOTEL_RETURN      → "Day N: no hotel return at end of day"
-CURRENCY_MISMATCH         → "Currency mismatch on Day N"
-```
-All strings end with " — regenerate this day to fix" (skipped for trip-level CURRENCY_MISMATCH which already reads naturally).
-
-Note: the original Lovable prompt used short codes (`MISSING_MEAL`, `PHANTOM_PREDAWN`, `DEAD_GAP_GT_3H`). I'm using the canonical codes already produced by the gate so the mapping actually fires; the human strings are unchanged in spirit.
-
-## Toast lib
-
-App uses both shadcn `Toaster` and sonner `Toaster`. Use `import { toast } from 'sonner'` per project guidance.
-
-## Verify
-
-1. Manually delete dinner from a day and trigger a save — expect one grouped toast per affected day.
-2. `rg -n "itinerary-persist-issues" src/` → 2 hits (dispatcher + listener).
-3. Trigger same save twice within 5s — expect single toast (dedupe).
-4. Confirm no duplicate listeners after route changes (single mount in App).
-
-## Out of scope
-
-Per-day inline banners with "Regenerate Day N" CTA on the itinerary view — deferred.
+- **Edit** `supabase/functions/_shared/persist-day-contract.test.ts` — insert `});` after line 38
+- **Edit** `.github/workflows/tests.yml` — replace explicit file list with glob
+- **Possibly edit** any other file flagged by STEP 4 (none expected)
