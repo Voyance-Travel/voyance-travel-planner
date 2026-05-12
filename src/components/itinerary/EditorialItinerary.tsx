@@ -11961,6 +11961,23 @@ function ActivityRow({
                         <span className="leading-snug line-clamp-2 sm:line-clamp-none">{address}</span>
                       </div>
                     )}
+                    {/* Description — also rendered in the venue branch so dining cards
+                        with a known restaurant still show their blurb. Mirrors the
+                        no-venue branch (resolveActivityDisplayDescription handles
+                        existing description, whyThisFits, and dining fallback). */}
+                    {!compact && (() => {
+                      const d = resolveActivityDisplayDescription(
+                        activity,
+                        sanitizeActivityText(activity.description),
+                        destination,
+                      );
+                      return d ? (
+                        <p className={cn(
+                          "text-xs sm:text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed",
+                          !canViewPremium && "blur-sm pointer-events-none select-none"
+                        )}>{d}</p>
+                      ) : null;
+                    })()}
                   </>
                 );
               }
