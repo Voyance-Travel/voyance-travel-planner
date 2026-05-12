@@ -8,6 +8,12 @@ const baseDay = (overrides: any = {}) => ({
   ...overrides,
 });
 
+// `parseItineraryDays` runs the read-time hotel-return safety net (Step 4b),
+// which can append a synthetic bookend card. These dedup tests only care
+// about the parser's own output — strip bookend cards before counting.
+const stripBookends = (acts: any[]) =>
+  acts.filter(a => !String(a?.source || '').startsWith('bookend-'));
+
 describe('parseItineraryDays — dining preservation (Bruges meal-loss fix)', () => {
   it('keeps two dining cards with same title but different startTimes', () => {
     const data = {
