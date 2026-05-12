@@ -87,6 +87,29 @@ export interface BackfillResult {
 }
 
 /**
+ * Heuristic cuisine cue from venue name. Conservative — only fires on
+ * unambiguous tokens. Never invents specific dishes.
+ */
+function inferCuisineCue(venue: string | null): string | null {
+  if (!venue) return null;
+  const v = venue.toLowerCase();
+  if (/\b(maison|boulangerie|patisserie|p[âa]tisserie|kayser|paul|le pain)\b/.test(v)) return 'French bakery classics';
+  if (/\b(trattoria|osteria|ristorante|pizzeria|enoteca)\b/.test(v)) return 'classic Italian fare';
+  if (/\b(sushi|izakaya|ramen|udon|soba|tempura)\b/.test(v)) return 'Japanese specialties';
+  if (/\b(dim sum|wonton|noodle|hot pot|cantonese|szechuan|sichuan|hong kong)\b/.test(v)) return 'Cantonese / Chinese specialties';
+  if (/\b(taqueria|cantina|mezcaler[ií]a|antojer[ií]a)\b/.test(v)) return 'Mexican classics';
+  if (/\b(asador|parrilla|bodega|tapas|taberna|mercado)\b/.test(v)) return 'Spanish small plates';
+  if (/\b(brasserie|bistro|bistrot|caf[eé])\b/.test(v)) return 'classic French bistro fare';
+  if (/\b(steakhouse|chophouse|grill|smokehouse)\b/.test(v)) return 'grilled meats';
+  if (/\b(pho|banh mi|vietnamese)\b/.test(v)) return 'Vietnamese classics';
+  if (/\b(thai|som tam|pad)\b/.test(v)) return 'Thai favorites';
+  if (/\b(meze|kebab|ouzeri|taverna)\b/.test(v)) return 'Mediterranean meze';
+  if (/\b(deli|delicatessen|smokehouse)\b/.test(v)) return 'deli classics';
+  if (/\b(creperie|crêperie)\b/.test(v)) return 'sweet and savory crêpes';
+  return null;
+}
+
+/**
  * Deterministic last-resort dining description.
  *
  * Always returns ≥30 chars with an actionable verb so that:
@@ -95,7 +118,8 @@ export interface BackfillResult {
  *     it as "satisfactory" and won't blank it again on the next pass.
  *
  * Style is intentionally venue-aware-but-conservative — never invents dishes,
- * just gives the traveler a concrete next step.
+ * just gives the traveler a concrete next step plus a cuisine cue when the
+ * venue name makes one unambiguous.
  */
 export function buildDeterministicDiningDescription(
   act: any,
@@ -110,8 +134,12 @@ export function buildDeterministicDiningDescription(
                   : /drinks|nightcap|bar|cocktail/i.test(titleStr) ? 'drinks'
                   : 'this stop';
   const cityHint = destinationCity ? ` in ${String(destinationCity).split(/[,/]/)[0].trim()}` : '';
+  const cuisine = inferCuisineCue(venue);
 
   if (venue) {
+    if (cuisine) {
+      return `Stop in for ${mealLabel} at ${venue}${cityHint} for ${cuisine}; ask the staff what's freshest today and book ahead if you can.`;
+    }
     return `Book ahead for ${mealLabel} at ${venue}${cityHint} and ask the staff what's freshest on the menu today.`;
   }
   return `Pick a well-reviewed local spot for ${mealLabel}${cityHint} — book ahead and ask for the day's specials.`;
