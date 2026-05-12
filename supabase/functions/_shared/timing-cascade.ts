@@ -285,6 +285,12 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
     const nextStart = parseTime(next.startTime);
     if (currStart === null || nextStart === null) continue;
 
+    // Wrap-aware skip: when the next card sits in the early-AM wrap window
+    // (e.g. 00:55 hotel-return after a 23:30 nightcap), raw minute math says
+    // currEnd > nextStart and would re-shove the bookend by ~hours. Treat
+    // wrap-past-midnight pairs as already-spaced and let cascadeShift skip.
+    if (nextStart < currStart && nextStart < 6 * 60) continue;
+
     // 1. Same-start
     if (currStart === nextStart && !isStructural(next, lockedIds)) {
       const anchorEnd = currEnd ?? (currStart + (curr.durationMinutes || 30));
