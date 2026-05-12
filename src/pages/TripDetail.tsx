@@ -1497,7 +1497,13 @@ export default function TripDetail() {
                     const mergedFresh = { ...freshItinData, days: freshDays };
                     try {
                       await supabase.functions.invoke('generate-itinerary', {
-                        body: { action: 'save-itinerary', tripId: tripId!, itinerary: mergedFresh },
+                        body: {
+                          action: 'save-itinerary',
+                          tripId: tripId!,
+                          itinerary: mergedFresh,
+                          skipLedgerCheck: true,
+                          saveReason: 'self-heal-empty-day-placeholder',
+                        },
                       });
                     } catch (saveErr) {
                       console.error('[TripDetail] Backend save after placeholder materialization failed:', saveErr);
