@@ -1,37 +1,94 @@
-### Status read on the 8 items you raised
+## Two deferred items — scoped plan
 
-| # | Issue | Has it been touched? | Verdict |
-|---|---|---|---|
-| 1 | Day 2 hotel-return appearing on Mallorca/Day 2 | Yes — `runStep8` 14:00 floor, late-nightlife branch, predawn-strip allowlist, source-survival, AM/PM parser, read-time bookend | Improving as you observed; inconsistency is mostly the source-tag dropping somewhere along persist/parse. Not "fixed". |
-| 2 | Inline gap warning banner ("Suggest something") | Yes — `detectGapsForDay` + `TripHealthPanel` ghost-reading filter | Working as intended. |
-| 3 | Day 1 breakfast missing across 5 cities | **No targeted fix has shipped.** The Day-1 arrival band rule exists in prompt + memory, but there's no deterministic post-gen guarantor. Still a prompt-only constraint, which is why it leaks. | **Open.** |
-| 4 | Day 3 floating no-time dinner card | Partially — `fillMissingStartTimes` fills `startTime = endTime − duration`. It only triggers when `endTime` AND `durationMinutes` both exist. If neither is set on a dining card, it still floats. | **Open for the no-time-at-all variant.** |
-| 5 | "Loading… / Finding restaurant…" stuck spinner | Yes — `RestaurantLink.tsx` now has a 5s `setTimeout` deadline armed before the async invoke (last loop). | Fix is in code. If you still see it after a fresh deploy, the dev console will print `[RestaurantLink] lookup deadline hit (5s)` — that distinguishes "edge fn hangs" from "component remounts". Need that signal to confirm. |
-| 6 | Midnight orphan card at top of next day | Yes — `dayChronoKey` wrap-aware sort + `BOOKEND_REORDER` legacy reorder + `ensureHotelReturnBookend` allowlist | Should be fixed for new saves; legacy trips self-heal on next save. If still seen, it's a parser path that bypasses `dayChronoKey`. |
-| 7 | Hong Kong CNY instead of HKD | **No.** No destination→currency resolver exists in shared code (`exchange-rates.ts` only holds rates). HK is being inferred from country=China upstream somewhere. **New regression, untouched.** | **Open.** |
-| 8 | Venue curation strong | N/A | Keep. |
+### 1. Day-1 breakfast guarantor (deterministic post-gen)
 
-### Plan — fix the four still-open items (no over-scoping)
+**Where it goes**
+`supabase/functions/generate-itinerary/action-generate-trip-day.ts`, immediately after `enforceRequiredMealsFinalGuard` runs and before the post-meal-guard `runStep8` retry.
 
-1. **Hong Kong currency (#7) — highest user-trust hit, smallest fix.**
-   - Add `_shared/destination-currency.ts` with an explicit map for the SARs and known exceptions (HK→HKD, Macau→MOP, Taiwan→TWD, Puerto Rico→USD, etc.) layered on top of country→currency.
-   - Wire it into the cost-snapshot writer (`writeActivityCostsFromItinerary`) and the budget snapshot reader so HK trips stop inheriting CN currency.
-   - Backfill: one-shot repair pass for any active trip where `destination` matches HK and `currency` is CNY.
+**Trigger conditions (all must be true)**
+- `dayNumber === 1`
+- Meal policy resolved via `deriveMealPolicy` includes `'breakfast'` in `requiredMeals` (covers morning_arrival <06:30 + full_exploration; correctly skips midday/late arrivals where breakfast isn't expected)
+- No card in the day with category ∈ {breakfast, brunch, cafe} OR title matching `/\b(breakfast|brunch)\b/i` whose `startTime` falls in 06:30–10:30
+- Arrival band (if first-day flight known) is <10:30; otherwise default to true when `requiredMeals` includes breakfast
 
-2. **Day-1 breakfast guarantor (#3) — deterministic, not prompt.**
-   - In `repair-day` after the meal-guard, add a Day-1-specific rule: if arrival band <10:30 AND no breakfast/brunch card exists in the morning window, inject one from the city's verified breakfast pool (same fallback DB the meal-guard already uses).
-   - Sentinel `[DAY1_BREAKFAST_INJECT]`. No new prompt rules.
+**What it does**
+1. Pull the city's verified breakfast pool — reuse the same source the meal-guard uses:
+   - First: `verified_venues` filtered by destination + `types` containing breakfast/cafe/bakery (`checkVenueCache` style query, but pool-fetch variant)
+   - Fallback: `INLINE_FALLBACK_BREAKFAST` map per city in `_shared/fallback-meals.ts` (already exists for meal-guard)
+2. Pick first unused venue (skip any name already present elsewhere in trip via cross-day dedup canonicalizer)
+3. Construct activity card:
+   - `startTime` = arrival+90min clamped to [08:00, 09:30], default 08:30
+   - `endTime` = start+75min
+   - `category: 'breakfast'`, `mealSlot: 'breakfast'`
+   - `source: 'day1_breakfast_inject'` (new sentinel tag, allowlisted in ghost filter)
+   - Description filled by `_shared/description-fill.ts` (already runs post-guard)
+4. Insert via timing-cascade-aware splice (not naive push) so subsequent activities re-cascade
+5. Log `[DAY1_BREAKFAST_INJECT] day=1 dest=… venue="…" source=verified|fallback`
 
-3. **Floating no-time dinner card (#4).**
-   - Extend `fillMissingStartTimes` so a dining card with neither `startTime` nor `endTime` gets assigned the canonical dinner slot (19:30 default, or 20:00 luxury) when it's the only dinner of the day. If a dinner with a time already exists, drop the timeless duplicate.
-   - Add a save-time net in `action-save-itinerary normalizeDays`.
+**City pool integrity (cross-city guard)**
+- Reuse `detectCrossCityMention` on selected venue name + address before inserting
+- If pool exhausted or all rejected → emit `needsVenuePick` $0 sentinel (consistent with wellness pattern)
 
-4. **RestaurantLink spinner verification (#5).**
-   - The code fix is in place. To close the loop, add one production-safe info log on the timeout-fire path (not dev-only), so if it still spins we'll see it in BrowserConsole. If we see `[RestaurantLink] lookup deadline hit` repeatedly, the next step is to short-circuit the `lookup-restaurant-url` invoke with an `AbortController` so the fetch is actually killed (not just the UI state cleared) — currently the hung invoke can hold a connection open and block other invokes on the same channel.
+**Files touched**
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — new helper call
+- `supabase/functions/_shared/day1-breakfast-inject.ts` — NEW, contains the helper
+- `supabase/functions/_shared/fallback-meals.ts` — verify breakfast pool exists per city; extend if gaps
+- `src/lib/itinerary/hideGhostActivities.ts` — allowlist `source:'day1_breakfast_inject'` (no-op since real venue, but future-proof)
 
-5. **Hotel-return inconsistency (#1) — observe before patching.**
-   - Add structured telemetry that logs, per day, whether a bookend was emitted, by which source, and whether it survived to the persisted JSON. Don't change generation logic this round. Once we have one trip's worth of `[BOOKEND_TRACE day=N source=… survived=true|false]`, we'll know exactly which leak is left.
+**Test coverage**
+- `_shared/__tests__/day1-breakfast-inject.test.ts`:
+  - morning arrival, no breakfast → injects
+  - morning arrival, breakfast already present → no-op
+  - midday arrival (12:30) → no-op (policy excludes breakfast)
+  - late arrival (22:00) → no-op
+  - exhausted pool → unverified placeholder
+  - cross-city venue rejected, falls through
 
-### Out of scope this round
-- Re-tuning the meal-pacing prompt (all four open items above are deterministic-pass fixes, not prompt fixes).
-- Touching the gap-banner UI (#2) or venue curation (#8) — both are working.
+**Out of scope**
+- Lunch/dinner equivalents (meal-guard handles them)
+- Re-tuning prompt rules
+
+---
+
+### 2. Hotel-return survival telemetry (observation only)
+
+**Goal**: prove which path drops the bookend before patching. Zero generation logic changes.
+
+**Instrumentation points**
+1. **Emission** — `runStep8` (universal-quality-pass.ts) — already logs; standardize to:
+   `[BOOKEND_TRACE] day=N stage=emit source=bookend|late_nightlife_bookend|bookend-overnight result=created|skipped reason=…`
+2. **Predawn-strip** — `stripPreDawnHotelReturns` — log per-bookend kept/stripped with source:
+   `[BOOKEND_TRACE] day=N stage=predawn-strip source=… result=kept|stripped`
+3. **Clamp** — `clampAllBookends` — log when endTime clamp fires:
+   `[BOOKEND_TRACE] day=N stage=clamp source=… clamped=true|false originalEnd=… newEnd=…`
+4. **Persist** — `action-save-itinerary normalizeDays` — count bookends entering vs. exiting:
+   `[BOOKEND_TRACE] day=N stage=persist in=K out=M dropped=[id1,id2]`
+5. **Read-time** — `ensureHotelReturnBookend` (parser) — log when synthetic injection happens:
+   `[BOOKEND_TRACE] day=N stage=readtime injected=true|false source=bookend-readtime|late_nightlife_bookend|bookend-overnight reason=…`
+
+**Single-line aggregator (post-save)**
+At end of `action-save-itinerary`, emit one summary line per day:
+```
+[BOOKEND_SUMMARY] tripId=… day=N emitted=Y stripped=N clamped=Y persisted=Y readtimeInjected=N finalSource=…
+```
+
+**Files touched**
+- `supabase/functions/generate-itinerary/universal-quality-pass.ts` — standardize existing logs
+- `supabase/functions/_shared/clamp-bookend.ts` — add stage tag to existing logs
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — add in/out counter + summary
+- `src/lib/itinerary/ensureHotelReturnBookend.ts` — add readtime stage log
+
+**No behavior change**: all `[BOOKEND_TRACE]` lines are pure `console.log`. Zero risk of regression.
+
+**Exit criteria**
+After one trip passes through, grep edge logs for `[BOOKEND_SUMMARY]` and identify whichever day shows `emitted=Y persisted=N` or `persisted=Y readtimeInjected=Y` (= persisted bookend was dropped at parse). That tells us the exact leak before writing a fix.
+
+---
+
+### Sequencing
+
+1. Telemetry first (1 PR, ~30min, zero risk) — ship and let it bake on next user trip
+2. Day-1 breakfast guarantor (1 PR, ~90min, deterministic) — independent, ship in parallel
+3. Once telemetry produces one `[BOOKEND_SUMMARY]` showing the leak, write the targeted bookend-survival fix in a third PR
+
+Shall I proceed with this plan, or adjust the breakfast injection window / telemetry verbosity first?
