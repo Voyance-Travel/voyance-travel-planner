@@ -228,6 +228,7 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
     pruneOrphanLateNightlifeBookend(activities, { dayNumber });
     stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
     clampAllBookends(activities, { dayNumber, label: 'SAVE' });
+    activities = dedupeHotelReturnBookends(activities, dayNumber);
     // Unified scrub boundary — single entry point.
     const daySchedule = buildDayScheduleSummary(activities);
     let dayOps: ScrubOps = { ...EMPTY_OPS } as ScrubOps;
