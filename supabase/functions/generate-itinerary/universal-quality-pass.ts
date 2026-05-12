@@ -159,13 +159,10 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
     if (h >= 14 && h <= 23) {
       startTime24 = `${String(h).padStart(2, '0')}:${minStr}`;
     } else if (h >= 0 && h <= 2) {
-      // B2: late-nightlife bleed. Only accept when the prior activity is
-      // unambiguously evening nightlife (start ≥ 21:00) so we don't bless a
-      // genuinely broken card.
-      const startHour = startMinsParsed !== null ? Math.floor(startMinsParsed / 60) : -1;
-      const titleNightlife = LATE_NIGHTLIFE_TITLE_RE.test(lastTitle);
-      const catNightlife = LATE_NIGHTLIFE_CATS.has(lastCat);
-      if (startHour >= 21 && (titleNightlife || catNightlife)) {
+      // B2: late-nightlife bleed. Use the shared broadened predicate so
+      // vermutería/wine-bar/etc. and time-anchored long-evening activities
+      // also qualify (closes Mallorca "La Rosa Vermutería 21:30 → 00:15" miss).
+      if (qualifiesAsLateNightlife(lastActivity, startMinsParsed, endMinsParsed)) {
         startTime24 = `${String(h).padStart(2, '0')}:${minStr}`;
         lateNightBleed = true;
       }
