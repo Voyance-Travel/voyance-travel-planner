@@ -42,9 +42,24 @@ export function isGhostActivity(a: any): boolean {
   // (e.g., taxi home from a speakeasy ending 00:20). Exempt from pre-dawn
   // suppression — runStep8 only emits these when the prior activity is
   // unambiguous nightlife starting ≥21:00.
-  if (source === 'late_nightlife_bookend') return false;
+  // Also exempt:
+  //   • bookend-readtime  — display-only synthetic injected by ensureHotelReturnBookend
+  //   • bookend-overnight — runStep8 gray-zone (02:31–13:59) injection
+  if (
+    source === 'late_nightlife_bookend' ||
+    source === 'bookend-readtime' ||
+    source === 'bookend-overnight'
+  ) {
+    return false;
+  }
   const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
-  if (tags.includes('late_nightlife_bookend')) return false;
+  if (
+    tags.includes('late_nightlife_bookend') ||
+    tags.includes('bookend-readtime') ||
+    tags.includes('bookend-overnight')
+  ) {
+    return false;
+  }
 
   const title = String(a.title || a.name || '');
 
