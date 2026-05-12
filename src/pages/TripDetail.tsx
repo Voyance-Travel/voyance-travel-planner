@@ -1446,6 +1446,8 @@ export default function TripDetail() {
                           action: 'save-itinerary',
                           tripId: tripId!,
                           itinerary: mergedItinerary,
+                          skipLedgerCheck: true,
+                          saveReason: 'self-heal-version-restore',
                         },
                       });
                     } catch (saveErr) {
