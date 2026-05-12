@@ -184,10 +184,12 @@ export function ensureHotelReturnBookend<T extends any[]>(
     description = `Head back to ${titleHotel} for the night.`;
     tags = ['hotel', 'rest', 'bookend-readtime'];
   } else if (lastEndMins >= 0 && lastEndMins <= 2 * 60 + 30) {
-    // Late-nightlife bleed — short taxi home, capped at 02:55.
-    const titleNightlife = LATE_NIGHTLIFE_TITLE_RE.test(String(last.title || last.name || ''));
-    const catNightlife = LATE_NIGHTLIFE_CATS.has(String(last.category || '').toUpperCase());
-    if (!titleNightlife && !catNightlife) {
+    // Late-nightlife bleed — short taxi home, capped at 02:55. Use the
+    // shared broadened predicate (vermutería/wine bar/taberna/etc. plus
+    // time-anchored fallback start≥21:00).
+    const lastStartMins =
+      parseTime((last as any)?.startTime) ?? parseTime((last as any)?.start_time);
+    if (!qualifiesAsLateNightlife(last, lastStartMins, lastEndMins)) {
       // 00:00–02:30 but not nightlife — don't fabricate; let it ship as-is.
       return activities;
     }
