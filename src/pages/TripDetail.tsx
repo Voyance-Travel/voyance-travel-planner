@@ -2232,6 +2232,7 @@ export default function TripDetail() {
           tripId,
           itineraryData as any,
           extraFields,
+          { allowFrozenWrite: true, reason: 'user-undo-date-change' },
         );
         error = safeRes?.error ?? null;
       } else {
