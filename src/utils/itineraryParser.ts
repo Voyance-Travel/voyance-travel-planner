@@ -668,12 +668,8 @@ export function parseItineraryDays(
       rescued++;
     }
     if (rescued > 0) {
-      // Re-sort chronologically by startTime where possible.
-      merged.sort((x, y) => {
-        const sx = String(x?.startTime || '99:99');
-        const sy = String(y?.startTime || '99:99');
-        return sx.localeCompare(sy);
-      });
+      // Re-sort chronologically (wrap-aware so 00:55 bookends stay at tail).
+      merged.sort((x, y) => dayChronoKey(x?.startTime) - dayChronoKey(y?.startTime));
       winner.activities = merged;
       console.warn(`[itineraryParser] Salvaged ${rescued} dining card(s) from duplicate day ${loser.dayNumber}`);
     }
