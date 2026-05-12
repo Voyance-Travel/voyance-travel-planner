@@ -129,6 +129,33 @@ export async function persistTripItinerary(
     console.warn(`[${label}] duration normalization failed (non-blocking):`, e);
   }
 
+  // 3b. Dining description deterministic safety net — guarantees no dining
+  // card persists with an empty `description`. Runs at the single boundary
+  // so every write path (final-save, save-itinerary, repair-costs, lock
+  // toggles, generation-core) is covered. Uses INLINE_FALLBACK_RESTAURANTS
+  // → personalization.whyThisFits → deterministic venue+meal+cuisine
+  // template. Never blocks on errors.
+  try {
+    const { ensureDayDiningDescriptions } = await import('./dining-description-backfill.ts');
+    let totalFallback = 0, totalWhy = 0, totalTemplate = 0, totalScanned = 0;
+    for (const day of days) {
+      if (!day || !Array.isArray(day.activities)) continue;
+      const cityForDay = day.city || day.cityName || options.destination || undefined;
+      const c = ensureDayDiningDescriptions(day.activities, cityForDay);
+      totalFallback += c.fallback;
+      totalWhy += c.whyThisFits;
+      totalTemplate += c.venueTemplate;
+      totalScanned += c.scanned;
+    }
+    if (totalFallback + totalWhy + totalTemplate > 0) {
+      console.log(
+        `[${label}] [DINING_DESC_PERSIST_NET] scanned=${totalScanned} fallback=${totalFallback} whyThisFits=${totalWhy} template=${totalTemplate}`,
+      );
+    }
+  } catch (e) {
+    console.warn(`[${label}] dining-description persist net failed (non-blocking):`, e);
+  }
+
   // 4. Regression guard — fetch the on-disk version and refuse to overwrite a
   //    healthy `days` array with a materially worse one. The completeness
   //    probe already classifies skeleton/incomplete plans; this layer makes

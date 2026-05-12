@@ -3039,6 +3039,24 @@ export async function finalSaveItinerary(
       console.warn('[Stage 6] Could not compute end_date:', e);
     }
 
+    // ── PRE-SAVE DESCRIPTION FILL ────────────────────────────────
+    // Backstop blank dining/activity descriptions (esp. dining cards the LLM
+    // emitted with an empty `description`) before final persist. Per-day
+    // batched Gemini-flash call — 8s timeout each, non-blocking on failure.
+    // Mirrors action-generate-trip-day.ts post-repair fill, so generation-core
+    // (Stage 2 happy-path) never persists a dining card without copy.
+    try {
+      const { fillMissingDescriptions } = await import('../_shared/description-fill.ts');
+      const apiKey = Deno.env.get('LOVABLE_API_KEY') || undefined;
+      const daysForFill = (frontendReadyData?.days || frontendReadyData?.itinerary?.days || []) as any[];
+      await Promise.all(daysForFill.map((d: any, idx: number) => {
+        const cityForDay = d?.city || d?.cityName || context.destination;
+        return fillMissingDescriptions(d?.activities || [], cityForDay, apiKey, d?.dayNumber || idx + 1);
+      }));
+    } catch (e) {
+      console.warn('[Stage 6] pre-save description-fill failed (non-blocking):', e);
+    }
+
     // ── EMPTY / INCOMPLETE ITINERARY GATE ────────────────────────
     // Detect skeleton itineraries (hotel-only / no real activities) AND
     // degenerate ones (hotel + a single placeholder filler) and mark the
