@@ -182,6 +182,11 @@ export function enforcePersistDayContract<T = any>(
       drops.push({ dayNumber: ctx.dayNumber, title, reason: 'placeholder-name' });
       continue;
     }
+
+    out.push(a);
+  }
+
+  return { activities: out, drops };
 }
 
 /**
