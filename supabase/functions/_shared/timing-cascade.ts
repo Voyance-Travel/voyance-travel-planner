@@ -66,6 +66,27 @@ export function parseTime(t: string | undefined | null): number | null {
   return h * 60 + min;
 }
 
+/**
+ * Wrap-aware sort key for ordering activities WITHIN a single day.
+ *
+ * Times in the early-AM window (default `[00:00, 06:00)`) belong to the *end*
+ * of the parent day — e.g. a 23:30 nightcap followed by a 00:55 hotel-return
+ * bookend. Without this, raw `mins-since-midnight` sorts re-order the bookend
+ * to the TOP of the day. Mirrors `ensureHotelReturnBookend`'s `norm()`.
+ *
+ * Returns `Number.MAX_SAFE_INTEGER` for unparseable / empty inputs so untimed
+ * rows always sort to the end.
+ */
+export function dayChronoKey(
+  startTime: unknown,
+  opts: { wrapBoundaryMin?: number } = {},
+): number {
+  const wrap = opts.wrapBoundaryMin ?? 6 * 60;
+  const t = parseTime(typeof startTime === 'string' ? startTime : null);
+  if (t === null) return Number.MAX_SAFE_INTEGER;
+  return t < wrap ? t + 24 * 60 : t;
+}
+
 export function minutesToTime(m: number): string {
   const h = Math.floor(m / 60) % 24;
   const min = m % 60;
