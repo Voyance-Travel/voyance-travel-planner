@@ -751,15 +751,28 @@ export function parseItineraryDays(
   // {hotel}" card. Pure UI — never written to DB. The departure day is the
   // last day in the trip whose terminal activity is a flight/airport transfer.
   const allTripActivities = result.flatMap((d) => d.activities || []);
-  const lastDayIdx = result.length - 1;
-  const lastDayActs = result[lastDayIdx]?.activities || [];
-  const lastCard = lastDayActs[lastDayActs.length - 1] as any;
-  const departureDayIdx =
-    lastCard &&
-    (String(lastCard.category || '').toUpperCase() === 'FLIGHT' ||
-      /\b(flight|departure|airport|terminal|gate)\b/i.test(String(lastCard.title || '')))
-      ? lastDayIdx
-      : -1;
+  // Departure-day detection: any day whose activities contain a flight or
+  // airport/terminal/gate transport card is a departure day. Don't trust
+  // array order — stale leisure cards or previously-injected synthetic
+  // returns can sit after the real flight.
+  const dayHasDepartureTerminal = (acts: any[]) =>
+    (acts || []).some((a) => {
+      const cat = String(a?.category || '').toUpperCase();
+      const title = String(a?.title || a?.name || '');
+      if (cat === 'FLIGHT' || /\b(flight|departure)\b/i.test(title)) return true;
+      if (
+        /TRANSPORT|TRANSIT|TRAVEL|LOGISTICS/.test(cat) &&
+        /\b(airport|terminal|gate|station)\b/i.test(title)
+      ) return true;
+      return false;
+    });
+  let departureDayIdx = -1;
+  for (let i = result.length - 1; i >= 0; i--) {
+    if (dayHasDepartureTerminal(result[i]?.activities || [])) {
+      departureDayIdx = i;
+      break;
+    }
+  }
   for (let i = 0; i < result.length; i++) {
     const withBookend = ensureHotelReturnBookend(result[i].activities, {
       isDepartureDay: i === departureDayIdx,
