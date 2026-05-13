@@ -142,6 +142,45 @@ describe('resolveCanonicalCostRows', () => {
       expect(r.totalCents).toBe(0);
       expect(r.effectiveTotalCents).toBe(0);
     });
+
+    // Regression: header strip showed "Days MAD 14,288 + Hotel MAD 5,224 =
+    // Trip Total MAD 14,288" because the override branch fired even with
+    // no manual hotel payment, computing delta = 0 − canonical = −canonical
+    // and silently subtracting the Day-0 hotel back out of effectiveTotalCents.
+    // See mem://constraints/finance/header-strip-mirrors-snapshot.
+    it('Day-0 hotel row + NO manual hotel payment → delta=0, effectiveTotalCents includes hotel', () => {
+      const live = [
+        { id: 'a1', dayNumber: 1, name: 'Museum', category: 'activity', jsonCost: 0 },
+      ];
+      const costs = [
+        { activity_id: null,  day_number: 0, category: 'hotel',    cost_per_person_usd: 261, num_travelers: 2, source: 'logistics-sync' },
+        { activity_id: 'a1',  day_number: 1, category: 'activity', cost_per_person_usd: 100, num_travelers: 2 },
+      ];
+      const r = resolveCanonicalCostRows({
+        costs: costs as any, liveActivities: live, includeHotel: true, includeFlight: false, manualPayments: [],
+      });
+      // Hotel: 261*2=$522=52,200c. Activity: 100*2=$200=20,000c. Total $722=72,200c.
+      expect(r.canonicalDay0HotelCents).toBe(52200);
+      expect(r.manualHotelCents).toBe(0);
+      expect(r.manualHotelDelta).toBe(0); // ← was −52200 before fix
+      expect(r.totalCents).toBe(72200);
+      expect(r.effectiveTotalCents).toBe(72200); // ← was 20000 before fix (days only)
+    });
+
+    it('Day-0 flight row + NO manual flight payment → delta=0, effectiveTotalCents includes flight when toggle on', () => {
+      const live: any[] = [];
+      const costs = [
+        { activity_id: null, day_number: 0, category: 'flight', cost_per_person_usd: 600, num_travelers: 2, source: 'logistics-sync' },
+      ];
+      const r = resolveCanonicalCostRows({
+        costs: costs as any, liveActivities: live, includeHotel: false, includeFlight: true, manualPayments: [],
+      });
+      expect(r.canonicalDay0FlightCents).toBe(120000);
+      expect(r.manualFlightCents).toBe(0);
+      expect(r.manualFlightDelta).toBe(0);
+      expect(r.totalCents).toBe(120000);
+      expect(r.effectiveTotalCents).toBe(120000);
+    });
   });
 
   // Regression: archive_orphan_trip_payments was archiving manual-* rows
