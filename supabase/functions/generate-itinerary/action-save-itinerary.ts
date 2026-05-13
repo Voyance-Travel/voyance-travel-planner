@@ -11,6 +11,7 @@ import { buildDayLedger, type DayLedger } from './day-ledger.ts';
 import { ledgerCheck } from './ledger-check.ts';
 import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
+import { normalizePredawnCascade } from '../_shared/predawn-cascade-normalize.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
 import { validateItineraryForPersist } from '../_shared/validate-itinerary-for-persist.ts';
 import { scrubActivity, addOps, formatOps, EMPTY_OPS, type ScrubOps } from '../_shared/scrub-activity.ts';
@@ -220,6 +221,17 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
         console.log(`[BOOKEND_REORDER] day=${dayNumber} moved tail src="${(head as any)?.source || 'inferred'}" path=save-itinerary`);
         console.log(`[BOOKEND_TRACE] day=${dayNumber} site=save action=reordered source=${(head as any)?.source || 'inferred'} reason=legacy_head_bookend`);
       }
+    }
+    // Pre-dawn cascade heal — shifts the leading [00:00, 05:00) block of
+    // non-bookend / non-locked / non-departure cards forward to start at
+    // 09:00 so the user never sees "Moco Museum 1:33 AM" on Day 2.
+    // See mem://constraints/itinerary/late-nightlife-no-next-day-bleed.
+    {
+      const predawn = normalizePredawnCascade(activities, idx, {
+        dayNumber,
+        site: 'save-itinerary',
+      });
+      if (predawn.changed) activities = predawn.activities;
     }
     // Drop stale `late_nightlife_bookend` cards whose chronological-prior
     // non-bookend isn't actually nightlife (or whose start predates the

@@ -1888,6 +1888,48 @@ export default function TripDetail() {
     })();
   }, [trip, loading, tripId]);
 
+  // One-shot legacy heal: shift Day-N≥2 leading pre-dawn activity blocks
+  // forward to start at 09:00. Lazy heal for trips persisted before the
+  // prevention layers shipped (Amsterdam Moco 1:33 AM cascade pattern).
+  // See mem://constraints/itinerary/late-nightlife-no-next-day-bleed.
+  const predawnHealAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (!trip || loading || !tripId || predawnHealAttemptedRef.current) return;
+    if (!hasItineraryData(trip)) return;
+    const itinData = trip.itinerary_data as { days?: Array<{ activities?: unknown[] }> } | null;
+    const days = Array.isArray(itinData?.days) ? itinData!.days! : [];
+    if (days.length < 2) return;
+    predawnHealAttemptedRef.current = true;
+    (async () => {
+      try {
+        const { normalizePredawnCascade } = await import('@/lib/itinerary/normalizePredawnCascade');
+        const healedDays = days.map((d, idx) => {
+          const acts = Array.isArray(d?.activities) ? d.activities : [];
+          const res = normalizePredawnCascade(acts as any[], idx, {
+            dayNumber: idx + 1,
+            site: 'trip-detail-self-heal',
+          });
+          return res.changed ? { ...d, activities: res.activities } : d;
+        });
+        const totalShifted = healedDays.reduce((sum, d, i) => {
+          const orig = (days[i]?.activities || []) as any[];
+          const next = (d?.activities || []) as any[];
+          return sum + (orig !== next ? 1 : 0);
+        }, 0);
+        if (totalShifted === 0) return;
+        console.warn(`[PREDAWN_CASCADE_HEAL] tripId=${tripId} daysShifted=${totalShifted} — persisting`);
+        await safeUpdateItineraryData(
+          tripId,
+          { ...(itinData || {}), days: healedDays } as any,
+          {},
+          { skipLedgerCheck: true, reason: 'self-heal-predawn-cascade' },
+        );
+      } catch (err) {
+        console.warn('[TripDetail] Pre-dawn cascade self-heal failed (non-critical):', err);
+      }
+    })();
+  }, [trip, loading, tripId]);
+
   // Auto-prompt debrief modal for completed trips without feedback
   useEffect(() => {
     if (

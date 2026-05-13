@@ -1,66 +1,54 @@
-## Bug
+## Day-2 Pre-Dawn Cascade — Defense Layer
 
-Inside the **Budget by Category** card on the Budget tab, the footer line `Total from itinerary` (BudgetTab.tsx L1206–1212) sits visually at the bottom of the **Discretionary** subsection and reads as "sum of discretionary" — even though the value is `snapshot.tripTotalCents`, which already folds in hotel + flight per the user's `budget_include_hotel` / `budget_include_flight` toggles.
+The midnight-orphan prevention work (`stripBookendsForPrompt`, parser stale-head drop, `dayChronoKey` wrap-aware sort, `Late Night` band) cures the *bookend* leak path and reorders display, but it does **not** cure the visible symptom for either of these two cases:
 
-The numbers are correct; the label and placement are misleading.
+1. **Fresh generations**: the LLM, even with a clean prompt, can independently emit pre-dawn timestamps for a real activity (`Moco Museum 01:33`, `Walk through Jordaan 03:26`). Nothing currently rejects/normalizes that on the way in.
+2. **Legacy persisted trips** (Amsterdam, etc.): the bad timestamps are already on disk. `dayChronoKey` only re-sorts them to the day's tail under a "Late Night" header — the user still sees "Moco Museum · 1:33 AM" on Day 2.
 
-## Confirmed mechanics
+This plan adds a single normalization layer that catches both.
 
-- `snapshot.tripTotalCents` (resolveCanonicalCostRows → effectiveTotalCents) **already includes** hotel and flight whenever the corresponding toggle is on (`budget_include_hotel` defaults true; `budget_include_flight` defaults false). Memory: `mem://constraints/payments/single-resolver-manual-fold`, `mem://technical/finance/budget-visibility-policy`.
-- The same `snapshot.tripTotalCents` also drives the **Trip Expenses** big-number card (L928–999). So the lower line is partially redundant — its only purpose is footer validation under the category breakdown.
-- The category breakdown itself splits into **Fixed Costs** (hotel/flight, when included) and **Discretionary** (food/activities/transit/misc). The "Total from itinerary" sits after the Discretionary list with only a thin `border-t` separator, which is what makes it read as a discretionary subtotal.
+### Approach
 
-## Fix (UI / labeling only — no math, no resolver changes)
+Add `normalizeDay2PredawnCascade(day, dayIndex)` (`supabase/functions/_shared/predawn-cascade-normalize.ts` + frontend mirror at `src/lib/itinerary/normalizePredawnCascade.ts`).
 
-Scope: `src/components/planner/budget/BudgetTab.tsx` only. No backend, no hooks, no `useTripFinancialSnapshot`.
+For Day N ≥ 2, identify the **leading pre-dawn block** = consecutive non-bookend, non-locked, non-departure-logistics activities whose `startTime` is in `[00:00, 05:00)` AND whose `source` is **not** in the bookend allowlist (`bookend-readtime` / `bookend-overnight` / `bookend-validator` / `bookend-synthesized` / `late_nightlife_bookend`).
 
-### 1. Rename and re-scope the footer line
+If the block exists and has ≥ 1 card:
+- Compute `shiftMin = 9*60 − firstStartMin` (round so the first card lands at 09:00).
+- Apply the same shift to every card in the block, preserving relative spacing.
+- For the LAST card of the block: if its end overlaps the next non-shifted card's start, leave the cascade rule (`enforceTimingAndBuffers`) to settle the seam — no special-casing here.
+- Stamp `metadata.normalized_predawn_cascade = { dayNumber, count, shiftMin }` on the day for telemetry.
+- Sentinel: `[PREDAWN_CASCADE_NORMALIZE] day=N count=K shiftMin=±M`.
 
-Replace the static label `"Total from itinerary"` with a label that names what's actually summed:
+Locked / `manual` / `extracted` / `pinned` / `user_added` / `bookend-*` source / departure-logistics rows are **always exempt** (mirrors universal locking + bookend allowlist).
 
-- Default copy: `"Trip total"` (bolder weight) with secondary caption listing the contributors based on toggle state, e.g.:
-  - hotel ON + flight OFF → `"Hotel + dining + activities + transit"`
-  - hotel ON + flight ON → `"Hotel + flight + dining + activities + transit"`
-  - hotel OFF + flight OFF → `"Dining + activities + transit only · hotel & flight excluded"` (muted amber)
-  - hotel OFF + flight ON → `"Flight + dining + activities + transit · hotel excluded"`
+### Wire-in points
 
-The exclusion variants get a tiny inline `Info` icon → tooltip explaining the toggle is the lever (matches the existing toggle UI further down the page) so users know how to flip back.
+1. **Save-time, fresh-write net** — call inside `action-save-itinerary` `normalizeDays` step, immediately before `enforceTimingAndBuffers`. Catches any LLM output that slipped past prompt prevention.
+2. **Generate-time, per-day repair** — call at end of `repairDay` in `repair-day.ts`, after `§16` cascade. Belt-and-braces.
+3. **Read-time, legacy heal** — call inside `parseItineraryDays` Step 4 (after the existing stale-head bookend drop). Returns the normalized day for display **and** triggers a one-shot `safeUpdateItineraryData('self-heal-predawn-cascade')` from `TripDetail` when any day reports `normalized.count > 0`, so legacy persisted trips heal on first load (mirrors the existing sparse-JSON resync trigger).
 
-### 2. Make the footer visually separate from Discretionary
+### Out of scope (explicit)
 
-Increase visual separation so the line reads as a card footer, not a list item:
-- Bump `pt-3 border-t border-border` → `pt-4 mt-2 border-t-2 border-border`
-- Add a leading `<TrendingUp />` icon (matching Trip Expenses card) so it visually echoes the top KPI rather than blending into the list rows.
-- Right-align as a two-row stack: bold value on top, faint contributor caption below.
+- No prompt changes.
+- No change to `stripBookendsForPrompt`, parser stale-head drop, `dayChronoKey`, or the `Late Night` band — they stay.
+- No touching of `late_nightlife_bookend` source rows (those are legitimate 00:16 / 00:55 hotel-returns and are explicitly allowlisted).
+- No backfill migration — heal happens lazily on first load via the parse-time path.
 
-### 3. Drop the `> 0` gate that hides the footer on empty itineraries
+### Files
 
-Currently `snapshot.tripTotalCents > 0` hides the line entirely. Keep the gate but show a single muted "—" placeholder when the snapshot is loading so the footer position doesn't jump after data arrives. (Don't render anything when there's truly no itinerary, matching the existing `hasNoMeaningfulActivities` empty-state above.)
+- new: `supabase/functions/_shared/predawn-cascade-normalize.ts`
+- new: `src/lib/itinerary/normalizePredawnCascade.ts`
+- edit: `supabase/functions/generate-itinerary/action-save-itinerary.ts` (call in `normalizeDays`)
+- edit: `supabase/functions/_shared/repair-day.ts` (call after §16)
+- edit: `src/utils/itineraryParser.ts` (call inside Step 4 map; expose `__predawnNormalizedDays` count on the parser result)
+- edit: `src/pages/TripDetail.tsx` (one-shot self-heal trigger when count > 0)
 
-### 4. (Optional within same edit) Tiny in-place breakdown
+### Tests
 
-Add a one-line decomposition right under the bold total, reusing values already in `allocations`:
+- new: `src/lib/itinerary/__tests__/normalizePredawnCascade.test.ts` — Amsterdam Day 2 fixture (Moco 01:33 + walks 03:26 / 06:31) → first card at 09:00, ~94-min relative spacing preserved; locked rows untouched; `late_nightlife_bookend` 00:55 untouched; departure-day untouched.
+- new: parity test in `supabase/functions/generate-itinerary/__tests__/predawn-cascade-normalize.test.ts` — same fixture.
 
-```
-$1,840  Trip total
-        Hotel $720 · Activities $1,120
-```
+### Memory
 
-This leaves zero ambiguity about scope. Fixed-cost rows are pulled from `allocations.filter(a => a.kind === 'fixed')` (already computed); discretionary subtotal = `tripTotalCents − sum(fixed)`. Skip rendering when only one category is present so we don't repeat the headline number.
-
-## Out of scope
-
-- Resolver/snapshot math (already correct).
-- Trip Expenses big-number card at the top (already labeled clearly).
-- Toggle behavior (`Include Hotel in Budget`, `Include Flights in Budget`) — works correctly.
-- Payments tab and any cost-table/ledger work.
-
-## Files
-
-- `src/components/planner/budget/BudgetTab.tsx` — only file touched. Edits localized to L1206–1212 plus a small helper for the contributor caption near the top of the component.
-
-## Verification
-
-- Manual preview check on a trip with hotel toggle ON and OFF; confirm the caption flips and the math equals the headline `Trip Expenses` figure in both states.
-- Eyeball with both 1-traveler and N-traveler trips (no per-person change here, but confirm layout doesn't wrap awkwardly).
-- No tests required (pure presentation change, deterministic from existing snapshot fields).
+Update `mem://constraints/itinerary/late-nightlife-no-next-day-bleed` with the 5th defense layer and add a Core line summarizing the heal contract.

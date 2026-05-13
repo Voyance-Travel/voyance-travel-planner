@@ -14,6 +14,7 @@ import { coerceDurationString } from './plannerUtils';
 import { isGhostActivity } from '@/lib/itinerary/hideGhostActivities';
 import { ensureHotelReturnBookend, isHotelReturnBookendActivity } from '@/lib/itinerary/ensureHotelReturnBookend';
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
+import { normalizePredawnCascade } from '@/lib/itinerary/normalizePredawnCascade';
 
 // Strip non-Latin scripts from AI text artifacts before rendering
 const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0600-\u06FF\u0400-\u04FF\u0E00-\u0E7F]+/g;
@@ -801,6 +802,7 @@ export function parseItineraryDays(
     const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
     return tags.some((t: string) => STALE_HEAD_BOOKEND_SOURCE_RE.test(t));
   };
+  let predawnNormalizedTotal = 0;
   const result = deduped.map((day, idx) => {
     const filteredActivities = (day.activities || []).filter((a) => {
       const ghost = isGhostActivity(a);
@@ -820,6 +822,18 @@ export function parseItineraryDays(
         `[BOOKEND_TRACE] day=${idx + 1} site=parse action=dropped source=${dropped?.source || 'inferred'} reason=stale_next_day_head title="${dropped?.title || ''}"`,
       );
       dedupedActivities = dedupedActivities.slice(1);
+    }
+    // Pre-dawn cascade heal: shift the leading [00:00, 05:00) block of
+    // non-bookend / non-locked / non-departure cards forward so the day
+    // doesn't display "Moco Museum 1:33 AM". See
+    // mem://constraints/itinerary/late-nightlife-no-next-day-bleed.
+    const predawn = normalizePredawnCascade(dedupedActivities, idx, {
+      dayNumber: idx + 1,
+      site: 'parser-step4',
+    });
+    if (predawn.changed) {
+      predawnNormalizedTotal += predawn.count;
+      dedupedActivities = predawn.activities;
     }
     return {
       ...day,
