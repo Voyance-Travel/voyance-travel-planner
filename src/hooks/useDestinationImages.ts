@@ -167,6 +167,7 @@ export function useDestinationImages(
           const ordered = rotateDeterministic(curatedUrls, seed);
           
           for (const u of ordered) {
+            if (isUntrustedHeroUrl(u)) continue;
             if (await isUrlLoadable(u)) {
               if (!cancelled) setHeroImage(u);
               return;
