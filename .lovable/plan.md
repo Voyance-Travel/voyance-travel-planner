@@ -1,47 +1,60 @@
-## Problem
+## Root cause
 
-The header strip renders `Days (group) X + Hotel Y = Trip Total Z` from three independent sources:
+The "floating dining card on every departure day" is the **`preserveAsManualPick` exemption colliding with the meal-persist invariant** in `action-save-itinerary.ts`.
 
-- `daysGroupUsd` ← `useTripDayBreakdown` (own Supabase fetch over `activity_costs`)
-- `hotelChipUsd` / `flightChipUsd` ← `useTripFinancialSnapshot.effectiveHotelCents/effectiveFlightCents` (separate fetch)
-- `tripTotalUsd` ← `useTripFinancialSnapshot.tripTotalCents` (same snapshot fetch)
+Trace:
 
-Because the two hooks fetch independently and refetch on different cadences, the three numbers can transiently disagree. The current safety net (`stripDrift`) only fires when `chipSum > tripTotal + 1`. It does not protect the symmetric failure mode the user is reporting — `tripTotal == daysGroup` while `hotelChip > 0` — because that branch evaluates `false` and the chip-sum override is skipped, so the rendered equation reads `X + Y = X`. Confirmed across Casablanca, Kyoto, Osaka, Amsterdam (all with a Day-0 hotel row in `activity_costs` and `budget_include_hotel = true`).
+1. **STEP 2.6 — meal-persist invariant** (`action-save-itinerary.ts` lines ~743–810) iterates every day, including the last one. If `detectMealSlots` doesn't see a meal that `deriveMealPolicy` requires, it pushes a sentinel card:
+   - `title: "Lunch — find a local spot in <city>"` / `"Dinner — …"`
+   - Hard-coded times: breakfast 08:30–09:30, lunch **12:30–13:30**, dinner **19:30–21:00**
+   - `metadata.preserveAsManualPick: true`, `needsVenuePick: true`
+2. **STEP 2.65 — §15z save-time net** runs right after on the last day. Its `isExempt(a)` check returns `true` for `metadata.preserveAsManualPick`, so the just-injected sentinel is **never evaluated against the transfer cutoff**.
+3. With a typical departure (e.g. 21:00 flight → transfer at ~18:00, or 14:00 flight → transfer at ~11:00), the sentinel's hard-coded slot lands **after** the transfer, producing the visible "dining card after the airport transfer" pattern. The UI renders it without a time chip because `needsVenuePick` / `preserveAsManualPick` cards are styled as unverified placeholders.
 
-This is a presentation bug. No backend math changes.
+This explains the 12/12 reproduction: any departure day where the model didn't emit a real lunch/dinner before the transfer trips this — and on a departure day there usually isn't one, by design.
 
-## Fix
+## Fix (two layers, repair-day owns the contract; save mirrors)
 
-Make the equation balance every render, regardless of which hook is mid-fetch.
+### 1. `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — §15z
 
-### 1. `src/components/itinerary/EditorialItinerary.tsx` — header strip block (~lines 6109-6198)
+In `enforceDepartureDayLogistics`, narrow the `isExempt` rule **on departure days**:
 
-- Compute `chipSumUsd = daysGroupUsd + hotelChipUsd + flightChipUsd` first.
-- Replace the asymmetric `stripDrift` check with a symmetric one:
-  - `displayedTripTotalUsd = max(tripTotalUsd, chipSumUsd)` whenever a hotel or flight chip is visible AND either side has loaded. This is the value rendered as "Trip Total" on the right.
-  - The reserve/adjustment chip is then `displayedTripTotalUsd − daysGroup − hotel − flight` — by construction `≥ 0`, and when it's `> 0.5` we render it as "Reserve & adjustments" exactly as today.
-- Add a "Reconciling…" hint (small muted text, no spinner) when `tripTotalUsd` and `chipSumUsd` differ by more than `$1` AND neither hook is in `loading` — so users see the equation balance immediately while a brief explanation acknowledges the late refetch. Suppress the hint inside the existing 4 s stabilisation window already used by the snapshot hook.
-- Keep the existing dev-only `[STRIP_DRIFT]` warn but extend it to also fire on the symmetric case (`chipSumUsd + 1 < tripTotalUsd`) for telemetry.
+- `userAdded` / `userEdited` / `isManual` / `extracted` / `pinned` and explicit lock signals stay fully exempt (user intent is sacred).
+- `metadata.preserveAsManualPick` (system-injected sentinel) is **no longer exempt** when:
+  - the row has no placeable start time (`pickStart(a) < 0`), **or**
+  - the row's start sits at/after `cutoffMin` (transfer start, or noon when no flight).
+  
+  In those cases the sentinel is dropped with a new repair action `final_enforce_dropped_manual_pick_post_transfer` and sentinel log `[DEPARTURE_MANUAL_PICK_PRUNED]`.
 
-### 2. `src/components/itinerary/__tests__/EditorialItinerary.headerStrip.test.tsx` (new)
+A preserveAsManualPick sentinel that *does* fit cleanly before the cutoff (e.g. breakfast at 08:30 with a 14:00 flight) is still kept — that's correct behavior.
 
-Three deterministic cases driven directly against the strip's pure render helpers (extract the math into a small `computeHeaderStripValues` helper in the same file or a sibling module so it's testable without rendering the 12K-line component):
+### 2. `supabase/functions/generate-itinerary/action-save-itinerary.ts` — STEP 2.6 (don't inject the impossible meal in the first place)
 
-- `tripTotal === daysGroup` and `hotel > 0` → displayed Trip Total equals `daysGroup + hotel`, no negative reserve.
-- `tripTotal > daysGroup + hotel` (Day-0 reserve genuinely present) → reserve chip surfaces the positive remainder, displayed Trip Total equals `tripTotal`.
-- `tripTotal < daysGroup + hotel` (existing drift case) → displayed Trip Total equals `chipSum`, behaviour preserved.
+When the day is the last day and we have `savedDepartureTime24`:
 
-### 3. `mem://constraints/finance/header-strip-mirrors-snapshot` — append note
+- Compute `transferCutoffMin = depMin − buffer` (`180` for flight, `120` for train; mirror existing constants used in §15z).
+- Filter `stillMissing` so we only inject a sentinel when `SLOT_TIMES[meal].start` is **≥ 60 min** before `transferCutoffMin`. Otherwise log `[MEAL_PERSIST_SKIP_DEPARTURE] day=N meal=lunch slot=12:30 cutoff=11:00` and skip.
 
-Document the new invariant: "The visible equation is always `Days + Hotel + Flight + Reserve ≡ Trip Total`, achieved by displaying `max(snapshotTotal, chipSum)` on the RHS and folding any positive remainder into Reserve. Snapshot total is still the source of truth for any other consumer (Budget tab, Payments tab); only this strip's RHS adjusts for visible balance."
+This keeps the invariant honest (no silent meal deletion on normal days) while preventing the pathological "inject lunch at 12:30 even though we're already at the airport at 11:00" case.
+
+### 3. Tests
+
+- `supabase/functions/generate-itinerary/__tests__/departure-day-manual-pick-prune.test.ts` (new):
+  - Departure 21:00 flight + injected dinner sentinel at 19:30 with `preserveAsManualPick:true` → §15z drops it.
+  - Departure 14:00 flight + injected lunch sentinel at 12:30 with `preserveAsManualPick:true` → §15z drops it.
+  - Departure 22:00 flight + injected breakfast sentinel at 08:30 with `preserveAsManualPick:true` → kept.
+  - User-added (`userAdded:true`) untimed dining on departure day → still kept (sacred).
+- `supabase/functions/generate-itinerary/__tests__/save-itinerary-departure-day.test.ts` (extend):
+  - 14:00 flight + missing lunch → STEP 2.6 logs `MEAL_PERSIST_SKIP_DEPARTURE` and does not inject.
+
+### 4. Memory
+
+Update `mem://constraints/itinerary/departure-day-save-time-enforcement` to record the new rule:
+
+> System-injected `preserveAsManualPick` meal sentinels are NOT exempt from §15z on departure days when they fall at/after transfer cutoff or are untimed. User-added rows remain fully exempt. STEP 2.6 also pre-filters `stillMissing` against `transferCutoffMin − 60` to avoid injecting impossible meals.
 
 ## Out of scope
 
-- Canonical resolver, `useTripFinancialSnapshot`, `useTripDayBreakdown`, and the `activity_costs` write paths are not touched.
-- Budget tab and Payments tab still read the unmodified `tripTotalCents` from the snapshot.
-- No SQL migration.
-
-## Risks
-
-- The "displayed total" can briefly exceed the canonical `tripTotalCents` by the hotel/flight delta when one fetch is stale. Acceptable: the chip values are themselves canonical (Day-0 rows / manual override aware), so the displayed RHS is always a real cost the user owes — never an inflated phantom. The next refetch (≤ ~600 ms via the `booking-changed` follow-up timer) reconciles silently.
-- Tests run against an extracted pure helper; no need to mount `EditorialItinerary` in jsdom.
+- No prompt changes — this is purely a save-time / repair contract fix.
+- UI rendering of `preserveAsManualPick` cards is unchanged; the cards just won't be persisted on departure days when impossible.
+- Non-departure days continue to use the meal-persist invariant exactly as today.
