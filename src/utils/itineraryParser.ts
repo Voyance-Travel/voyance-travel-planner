@@ -821,6 +821,18 @@ export function parseItineraryDays(
       );
       dedupedActivities = dedupedActivities.slice(1);
     }
+    // Pre-dawn cascade heal: shift the leading [00:00, 05:00) block of
+    // non-bookend / non-locked / non-departure cards forward so the day
+    // doesn't display "Moco Museum 1:33 AM". See
+    // mem://constraints/itinerary/late-nightlife-no-next-day-bleed.
+    const predawn = normalizePredawnCascade(dedupedActivities, idx, {
+      dayNumber: idx + 1,
+      site: 'parser-step4',
+    });
+    if (predawn.changed) {
+      predawnNormalizedTotal += predawn.count;
+      dedupedActivities = predawn.activities;
+    }
     return {
       ...day,
       dayNumber: idx + 1,
