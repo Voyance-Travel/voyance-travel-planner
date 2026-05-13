@@ -344,14 +344,38 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
   let activities = [...input].sort((a, b) => dayChronoKey(a.startTime) - dayChronoKey(b.startTime));
 
   // Helper: shift an activity (and all later ones, except locked) by `delta` minutes.
+  // Caps per-activity cumulative shift at 120 min so a single bad-duration upstream
+  // (e.g. 9-hour cocktail bar) cannot destroy the whole day's schedule by pushing
+  // every subsequent card past the cutoff. Activities that hit the cap retain their
+  // original times and a repair note is emitted.
+  const MAX_CUMULATIVE_SHIFT = 120;
+  const cumulativeShiftById = new Map<string, number>();
   const cascadeShift = (fromIdx: number, delta: number) => {
     if (delta <= 0) return;
     for (let j = fromIdx; j < activities.length; j++) {
-      if (lockedIds.has(activities[j].id)) continue;
-      const s = parseTime(activities[j].startTime);
-      const e = parseTime(activities[j].endTime);
-      if (s !== null) activities[j].startTime = minutesToTime(s + delta);
-      if (e !== null) activities[j].endTime = minutesToTime(e + delta);
+      const act = activities[j];
+      if (lockedIds.has(act.id)) continue;
+      const currentShift = cumulativeShiftById.get(act.id) ?? 0;
+      const allowedDelta = Math.max(0, MAX_CUMULATIVE_SHIFT - currentShift);
+      const applyDelta = Math.min(delta, allowedDelta);
+      if (applyDelta <= 0) {
+        if (currentShift >= MAX_CUMULATIVE_SHIFT) {
+          repairs.push({
+            type: 'overlap_fix',
+            activityId: act.id,
+            activityTitle: act.title,
+            before: `${act.title} @ ${act.startTime}`,
+            after: `${act.title} @ ${act.startTime}`,
+            message: `"${act.title}" reached the ${MAX_CUMULATIVE_SHIFT}-min cumulative shift cap — leaving in place. An upstream activity has an excessive duration; review and edit.`,
+          });
+        }
+        continue;
+      }
+      const s = parseTime(act.startTime);
+      const e = parseTime(act.endTime);
+      if (s !== null) act.startTime = minutesToTime(s + applyDelta);
+      if (e !== null) act.endTime = minutesToTime(e + applyDelta);
+      cumulativeShiftById.set(act.id, currentShift + applyDelta);
     }
   };
 
