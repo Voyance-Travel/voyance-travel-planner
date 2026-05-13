@@ -510,6 +510,12 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       manualFlightDelta: canonical.manualFlightDelta,
       loading: false,
     });
+    } catch (err) {
+      // A network/auth blip must NOT wedge the spinner forever. Surface as
+      // $0 + a console.warn so the next event-driven refetch can recover.
+      console.warn('[useTripFinancialSnapshot] fetchData failed — clearing loading', err);
+      setData(prev => ({ ...prev, loading: false }));
+    }
   }, [tripId]);
 
   useEffect(() => {
