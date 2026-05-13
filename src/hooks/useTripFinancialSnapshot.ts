@@ -550,6 +550,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       // $0 + a console.warn so the next event-driven refetch can recover.
       console.warn('[useTripFinancialSnapshot] fetchData failed — clearing loading', err);
       setData(prev => ({ ...prev, loading: false }));
+    } finally {
+      clearTimeout(safetyTimer);
     }
   }, [tripId]);
 
