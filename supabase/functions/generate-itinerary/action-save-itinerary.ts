@@ -792,6 +792,66 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     }
   }
 
+  // ── STEP 2.65: DEPARTURE-DAY LOGISTICS NET (§15z save-time) ──────
+  // Catch-all safety net mirroring repair-day's §15z. Closes the recurring
+  // "floating dining card on departure day" bug where any upstream code path
+  // (meal-guard, manual edit, undo/redo, chat-action, optimistic patch) added
+  // an untimed or post-cutoff dining/leisure card. §15z drops them, retimes
+  // checkout/transfer to flight-aware caps. Idempotent — only runs on last day.
+  // See mem://constraints/itinerary/departure-day-save-time-enforcement
+  if (totalDays > 0 && itineraryDays.length > 0) {
+    try {
+      const { enforceDepartureDayLogistics } = await import('./pipeline/repair-day.ts');
+      const tripMetaForNet = ((trip as any)?.metadata || {}) as Record<string, any>;
+      const hotelNameNet: string =
+        tripMetaForNet?.selected_hotel?.name ||
+        tripMetaForNet?.hotel?.name ||
+        tripMetaForNet?.accommodation?.name ||
+        'your hotel';
+      const hotelAddressNet: string =
+        tripMetaForNet?.selected_hotel?.address ||
+        tripMetaForNet?.hotel?.address ||
+        tripMetaForNet?.accommodation?.address ||
+        '';
+      const lastIdx = itineraryDays.length - 1;
+      const lastDay = itineraryDays[lastIdx];
+      if (lastDay?.activities && Array.isArray(lastDay.activities)) {
+        const lockedIds = new Set<string>(
+          (lastDay.activities as any[])
+            .filter((a) => a?.locked === true || a?.isLocked === true || a?.is_locked === true || a?.lock_state === 'locked')
+            .map((a) => String(a.id))
+            .filter(Boolean)
+        );
+        const beforeLen = lastDay.activities.length;
+        const enforcement = enforceDepartureDayLogistics({
+          activities: lastDay.activities as any[],
+          dayNumber: lastDay.dayNumber || (lastIdx + 1),
+          hotelName: hotelNameNet,
+          hotelAddress: hotelAddressNet,
+          returnDepartureTime24: savedDepartureTime24,
+          isLastDay: true,
+          lockedIds,
+        } as any);
+        if (Array.isArray(enforcement?.activities)) {
+          lastDay.activities = enforcement.activities;
+        }
+        const droppedCount = beforeLen - (lastDay.activities?.length || 0);
+        const repairs = enforcement?.repairs || [];
+        if (repairs.length > 0 || droppedCount !== 0) {
+          (lastDay as any).metadata = (lastDay as any).metadata || {};
+          (lastDay as any).metadata.quality = (lastDay as any).metadata.quality || {};
+          (lastDay as any).metadata.quality.save_time_departure_repairs = repairs;
+          console.log(
+            `[SAVE_DEPARTURE_NET] day=${lastDay.dayNumber || (lastIdx + 1)} dropped=${Math.max(0, droppedCount)} repairs=${repairs.length} depTime=${savedDepartureTime24 || 'n/a'}`
+          );
+        }
+        (itinerary as any).days = itineraryDays;
+      }
+    } catch (netErr) {
+      console.warn('[save-itinerary] STEP 2.65 departure-day net failed (non-blocking):', netErr);
+    }
+  }
+
   // ── STEP 2.7: DINING DESCRIPTION BACKSTOP ─────────────────────────
   // Final pass that fills any blank/templated dining blurbs before persistence.
   // Catches:
