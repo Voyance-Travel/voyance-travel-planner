@@ -331,6 +331,17 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
               console.info(
                 `[useTripFinancialSnapshot] auto-archived ${count} orphan payment${count === 1 ? '' : 's'} for trip ${tripId}`
               );
+              // Sentinel — fires if the SQL RPC archives more rows than the JS
+              // orphan set contained. JS deliberately excludes manual-* rows
+              // from orphan detection (lines ~238-239); a higher count here
+              // means the RPC archived a manual row, silently dropping its
+              // amount from the trip total. Migration on 2026-05-13 closes
+              // this; the log stays as an early-warning if regression occurs.
+              if (count > orphanPaymentItemIds.size) {
+                console.warn(
+                  `[useTripFinancialSnapshot] orphan archive over-count ${count} > js=${orphanPaymentItemIds.size} — manual leak suspected (tripId=${tripId})`
+                );
+              }
               window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
             }
           });
