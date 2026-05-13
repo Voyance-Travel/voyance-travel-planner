@@ -203,7 +203,33 @@ export function assignFloatingMealTimes(
     if (!kind) continue;
 
     if (slotTaken[kind]) {
-      // A timed card for this meal already exists — drop the floating duplicate.
+      // A timed card for this meal already exists. Before dropping the floating
+      // duplicate, ensure it does NOT carry real venue content (name, address,
+      // description). Content preservation is non-negotiable: a meal-guard stub
+      // can have a time while the real LLM-generated card was left floating —
+      // dropping the wrong one removes the real content.
+      const hasRealVenue = !!(
+        (a?.location?.name && String(a.location.name).trim() && !/^your hotel$/i.test(String(a.location.name).trim())) ||
+        (a?.venue_name && String(a.venue_name).trim()) ||
+        (a?.restaurant?.name && String(a.restaurant.name).trim())
+      );
+      const hasRealDescription = typeof a?.description === 'string' && a.description.trim().length >= 30;
+      if (hasRealVenue || hasRealDescription) {
+        // Treat THIS as the canonical card — assign default times and keep.
+        // Mark the slot as still taken so any further duplicates in this pass do drop.
+        const slot = DEFAULT_SLOT[kind];
+        if (slot) {
+          const { start, end } = isLux ? slot.lux : slot;
+          a.startTime = start;
+          a.start_time = start;
+          a.time = start;
+          a.endTime = end;
+          a.end_time = end;
+          assigned++;
+          console.log(`[FLOATING_MEAL_PROMOTE] day=${day} kind=${kind} title="${a.title || a.name || ''}" reason=real_content path=${path}`);
+        }
+        continue;
+      }
       activities.splice(i, 1);
       dropped++;
       console.log(`[FLOATING_MEAL_DROP] day=${day} kind=${kind} title="${a.title || a.name || ''}" path=${path}`);
