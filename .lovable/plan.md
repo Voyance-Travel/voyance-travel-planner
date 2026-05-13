@@ -1,80 +1,49 @@
-## Diagnosis
+# Health Engine Meal False-Positive Fix
 
-The trip's `hotel_selection` is literally storing the wrong property:
+## Root cause
 
-```
-name:    "The Ritz-Carlton, Laguna Niguel"
-address: "One Ritz Carlton Dr, Dana Point, CA 92629, USA"
-placeId: "ChIJ16OptRTw3IAR17XzKe_9RMI"   ← Laguna Niguel CA
-trip.destination: "San Juan"
-```
+`TripHealthPanel.tsx` (lines 133–154) detects which meals are present by looking **only for the words "breakfast / brunch / lunch / dinner / supper" in the activity title**. Real venue cards — Pinky's, José Enrique, Santaella, Kasalta, La Casita Blanca, the Mezzanine nightcap — don't contain those words in their titles, so every legitimate dining card registers as "no meal detected." The result: Days 2 and 3 show "missing breakfast, lunch, dinner" even though all three meals are clearly on the page, dragging the score from ~70 to 40.
 
-Every itinerary card that mentions the hotel (check-in, freshen-up, return, checkout, payments) renders this address verbatim. It survives refresh because the bad data is on `trips.hotel_selection`, not in `itinerary_data`.
+The data the engine reads is identical to what's rendered (same `parseItineraryDays` output) — there is no backend/frontend drift here. The classifier itself is wrong.
 
-Two upstream paths produce this:
+## Fix
 
-1. **`enrichHotelByName(name, destination)`** in `supabase/functions/hotels/index.ts:679` queries Google Places with `${hotelName} ${destination}`. When the name already contains a foreign city ("…, Laguna Niguel"), that token dominates the search and Google returns the California property. There is no country/destination sanity check on the result before we store `placeId` / `address`.
-2. **`normalizeLegacyHotelSelection`** stamps `id: 'migrated-…'` and accepts whatever `name` + `address` was passed in. No validation that the address belongs to the trip destination.
+Replace the title-only classifier with a **time-window + metadata** classifier that matches what the backend repair pipeline already uses to decide meal slots.
 
-Result: brand resolution is correct, geographic resolution is broken, and there is no guard that catches the mismatch.
+For every activity whose category is `dining | restaurant | food | cafe | breakfast | brunch | lunch | dinner` (or whose `mealSlot` / `metadata.mealSlot` is set):
 
-## Fix Plan
+1. If `mealSlot` (or `metadata.mealSlot`) ∈ {breakfast, brunch, lunch, dinner} → use it directly. Brunch counts as breakfast.
+2. Else if title contains the meal word → use it (current behavior).
+3. Else fall back to **start-time window**:
+   - 05:30–10:29 → breakfast
+   - 10:30–11:59 → brunch (counts as breakfast)
+   - 12:00–15:29 → lunch
+   - 17:30–23:59 + 00:00–02:30 (late nightcap dinner edge) → dinner
+   - 15:30–17:29 → snack/cafe (does **not** satisfy any required meal)
 
-Three layers of defense plus a one-shot data correction. Mirrors the existing "Cross-City Fallback Integrity" / `detectCountryMismatch` pattern used elsewhere in the pipeline.
+Activities tagged `nightcap` / drinks-only (per existing `EXPLICIT_DRINKS_RE` in shared scrub) are excluded from the dinner detection — that rule already exists upstream and we mirror it here so the Mezzanine nightcap doesn't falsely satisfy "dinner" on a day that legitimately needs dinner.
 
-### 1. Scope hotel enrichment to the destination (backend)
+## Scope
 
-`supabase/functions/hotels/index.ts` — `enrichHotelByName`:
+Single file, frontend only:
 
-- Pre-strip foreign-city tokens from the input `hotelName` before querying. Use shared `detectCountryMismatch(name, destination)` + a sibling-city scan (re-use `crossCityFilter`/`address-city-resolve`) to detect when the name itself names another locale; if found, query with `${brandStem} ${destination}` instead of `${nameAsIs} ${destination}` (e.g. "Ritz-Carlton San Juan" not "Ritz-Carlton Laguna Niguel San Juan").
-- After Google returns a result, **validate** `place.formattedAddress` against the trip destination using `detectCountryMismatch` and an in-country city check. If the result is in the wrong country/city, return `{ success: false, reason: 'destination_mismatch', candidate: {...} }` instead of writing it.
-- Same guard in `autoEnrichHotels` (the bulk path used by `searchHotels`).
+- `src/components/trip/TripHealthPanel.tsx` — replace the meal-detection block (lines 133–155) with the classifier above. Extract a small `classifyMealSlot(activity)` helper at top of file for testability.
 
-### 2. Validate at write time (frontend)
+No backend changes, no schema changes, no prompt changes, no persisted state changes. The `persistedMeals` source-of-truth read for `requiredMeals` (lines 113–131) stays intact — only the **detected** side is being fixed.
 
-New helper `src/utils/hotelDestinationGuard.ts`:
+## Out of scope
 
-- `validateHotelMatchesDestination(hotel, destination): { ok, reason }` — runs `detectCountryMismatch` on `address` AND a name-token check (rejects names like "X, Laguna Niguel" when destination is San Juan).
+- Backend MEAL_AUDIT stamping (would help, but is a separate hardening task).
+- Score weighting changes.
+- Departure-day / arrival-day meal-policy logic (already correct).
 
-Wire into the three writers:
-- `src/services/supabase/trips.ts` (any `hotel_selection` insert/update).
-- `src/contexts/TripPlannerContext.tsx` save path (line ~288).
-- `src/components/trip/TripConfirmationBanner.tsx` confirm path (line ~126).
+## Verification
 
-If validation fails: drop `address` / `placeId` / `website` / `images` (keep brand name + dates), trigger re-enrichment scoped to destination, and surface a toast explaining the mismatch so the user can pick the right property.
+- Reload the San Juan trip — Days 2 and 3 should clear "missing breakfast/lunch/dinner" warnings; score should rise back into the ~70 band.
+- Existing meal-policy tests still pass (they test the policy, not the detector).
+- Add a small unit test asserting `classifyMealSlot` returns `lunch` for a dining card with `startTime: '12:30'` and title `José Enrique`, and `dinner` for `startTime: '19:45'` title `Santaella`.
 
-### 3. Self-heal already-bad trips
+## Technical notes
 
-One-shot edge function `repair-hotel-destination` (or a small admin script) that, for trips where `hotel_selection.address` fails `detectCountryMismatch(addr, destination)`:
-- Strip stale address/placeId/website/images/googleMapsUrl from `hotel_selection`.
-- Call the patched `enrichHotelByName(brandStem, destination)`; if it returns a destination-matching result, write it back; otherwise leave only the brand name + dates flagged `needsHotelPick`.
-- Then call `patchItineraryWithMultipleHotels` (already exists in `src/services/hotelItineraryPatch.ts`) so every accommodation card (check-in, luggage drop, freshen-up, return, checkout) re-renders with the corrected address.
-
-Run this once for trip `fea55309-9708-448e-b105-19b712d533ca` immediately to clear the user's current symptom.
-
-### 4. Tests
-
-- `supabase/functions/hotels/__tests__/enrich-destination-guard.test.ts`: "Ritz-Carlton, Laguna Niguel" + dest "San Juan" → either re-queried as "Ritz-Carlton San Juan" or rejected with `destination_mismatch`.
-- `src/utils/__tests__/hotelDestinationGuard.test.ts`: country mismatch + sibling-city mismatch + happy-path cases.
-
-### Out of scope
-
-- Itinerary generation prompt (the data flowing in is wrong; fixing the source fixes every card).
-- Hotel UI/search affordances beyond the validation toast.
-- Cost reconciliation (totalPrice stays as user entered).
-
-### Memory
-
-Add `mem://constraints/hotel/destination-resolution-guard` capturing the rule: "Hotel enrichment + write paths MUST verify the resolved address sits in the trip destination's country/city; mismatches are rejected, not stored." Index entry under Core.
-
-Files to touch:
-- `supabase/functions/hotels/index.ts`
-- `supabase/functions/_shared/address-city-resolve.ts` (export sibling-city helper if not already)
-- `src/utils/hotelDestinationGuard.ts` (new)
-- `src/utils/hotelValidation.ts` (call guard in normalize)
-- `src/services/supabase/trips.ts`
-- `src/contexts/TripPlannerContext.tsx`
-- `src/components/trip/TripConfirmationBanner.tsx`
-- `supabase/functions/repair-hotel-destination/index.ts` (new, one-shot)
-- Tests above
-- `mem://index.md` + new constraint file
+- Time-parse uses the existing `parseTimeAmPm` helper from `_shared/time-parse.ts` (already mirrored frontend-side in `src/lib/itinerary/dayChronoKey.ts`).
+- The classifier returns `null` for non-meal dining (afternoon coffee, snack, drinks-only nightcap), so it never inflates the detected set.
