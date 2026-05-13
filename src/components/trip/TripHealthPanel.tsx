@@ -131,15 +131,10 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
     })();
 
     if (requiredMeals.length > 0) {
-      const DINING_CATS = ['dining', 'restaurant', 'food'];
       const detectedMeals = new Set<string>();
       for (const a of realActivities) {
-        const cat = (a.category || a.type || '').toLowerCase();
-        const title = (a.title || a.name || '').toLowerCase();
-        if (!DINING_CATS.some((c) => cat.includes(c))) continue;
-        if (title.includes('breakfast') || title.includes('brunch')) detectedMeals.add('breakfast');
-        else if (title.includes('lunch')) detectedMeals.add('lunch');
-        else if (title.includes('dinner') || title.includes('supper')) detectedMeals.add('dinner');
+        const slot = classifyMealSlot(a);
+        if (slot) detectedMeals.add(slot);
       }
       const missingMeals = requiredMeals.filter((m) => !detectedMeals.has(m));
       if (missingMeals.length > 0) {
@@ -375,6 +370,44 @@ function parseTime(timeStr: string): number {
     return parseInt(match24[1], 10) * 60 + parseInt(match24[2], 10);
   }
   return 0;
+}
+
+/**
+ * Classify a dining activity into a meal slot using metadata + time-window.
+ * Returns 'breakfast' | 'lunch' | 'dinner' or null. Brunch counts as breakfast.
+ * Drinks-only / nightcap items never satisfy dinner.
+ */
+const DINING_CAT_RE = /(dining|restaurant|food|cafe|breakfast|brunch|lunch|dinner|supper)/i;
+const DRINKS_ONLY_RE = /\b(nightcap|cocktail|aperitif|aperitivo|drinks?|bar|speakeasy|wine bar|pub)\b/i;
+export function classifyMealSlot(a: any): 'breakfast' | 'lunch' | 'dinner' | null {
+  const cat = String(a?.category || a?.type || '').toLowerCase();
+  const title = String(a?.title || a?.name || '').toLowerCase();
+  const explicit = String(a?.mealSlot || a?.metadata?.mealSlot || '').toLowerCase();
+
+  const isDining = DINING_CAT_RE.test(cat) || DINING_CAT_RE.test(title) || !!explicit;
+  if (!isDining) return null;
+
+  // 1. Explicit metadata wins
+  if (explicit === 'breakfast' || explicit === 'brunch') return 'breakfast';
+  if (explicit === 'lunch') return 'lunch';
+  if (explicit === 'dinner' || explicit === 'supper') return 'dinner';
+
+  // 2. Title keyword
+  if (/\b(breakfast|brunch)\b/.test(title)) return 'breakfast';
+  if (/\b(lunch)\b/.test(title)) return 'lunch';
+  if (/\b(dinner|supper)\b/.test(title)) return 'dinner';
+
+  // 3. Drinks-only never counts as dinner
+  if (DRINKS_ONLY_RE.test(title)) return null;
+
+  // 4. Start-time window
+  const start = parseTime(a?.startTime || '');
+  if (start <= 0) return null;
+  if (start >= 330 && start < 630) return 'breakfast';   // 05:30–10:29
+  if (start >= 630 && start < 720) return 'breakfast';   // 10:30–11:59 (brunch)
+  if (start >= 720 && start < 930) return 'lunch';       // 12:00–15:29
+  if (start >= 1050 || start < 150) return 'dinner';     // 17:30–23:59 + 00:00–02:29
+  return null; // 15:30–17:29 = snack/cafe
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
