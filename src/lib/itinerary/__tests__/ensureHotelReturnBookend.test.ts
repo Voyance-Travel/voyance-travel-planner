@@ -190,4 +190,35 @@ describe('ensureHotelReturnBookend', () => {
     const out = ensureHotelReturnBookend(acts, { dayIndex: 3 });
     expect(out).toBe(acts);
   });
+
+  it('Casablanca Day 2: existing 20:15 hotel return + 23:29 nightcap → appends second bookend', () => {
+    const acts = [
+      mk({ title: 'Lunch', category: 'dining', startTime: '12:30', endTime: '13:30' }),
+      mk({ title: 'Dinner: Rouget de l’Isle', category: 'dining', startTime: '19:00', endTime: '20:15' }),
+      mk({
+        title: 'Return to Casablanca Marriott Hotel',
+        category: 'accommodation',
+        startTime: '20:15',
+        endTime: '20:40',
+        source: 'bookend-validator',
+      }),
+      mk({
+        title: 'Nightcap at La Sqala',
+        category: 'dining',
+        startTime: '23:29',
+        endTime: '23:44',
+      }),
+    ];
+    const out = ensureHotelReturnBookend(acts, {
+      hotelName: 'Casablanca Marriott Hotel',
+      dayIndex: 1,
+    });
+    // Earlier 20:15 return must NOT suppress; a fresh bookend is appended
+    // after the 23:29 nightcap (standard 14–23 window → clamped 19:00–23:30).
+    expect(out.length).toBe(acts.length + 1);
+    const last = out[out.length - 1];
+    expect(last.title).toBe('Return to Casablanca Marriott Hotel');
+    expect(last.startTime >= '23:00' && last.startTime <= '23:30').toBe(true);
+    expect(last.endTime <= '23:59').toBe(true);
+  });
 });
