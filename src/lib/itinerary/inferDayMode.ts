@@ -47,6 +47,48 @@ function firstNonBookendStart(day: any): number | null {
   return inferArrivalMinsFromSchedule(day?.activities);
 }
 
+// Tail-side mirror of inferArrivalMinsFromSchedule. Returns the LATEST
+// non-bookend, non-transport endTime in minutes, used as last-resort
+// departure-clock fallback when flight selection has no clock data.
+const TAIL_SKIP_CAT_RE = /(check[\s-]?in|check[\s-]?out|hotel|accommodation|transit|transport|transfer|travel|logistics|commute|bookend|hotel_return|airport_transfer|return)/i;
+const TAIL_SKIP_TITLE_RE = /^\s*(?:travel|transfer|drive|taxi|metro|train|bus|tram|ride|airport|return to|return home|check[- ]?out|check[- ]?in|departure)\b/i;
+function parseHHMM(s: unknown): number | null {
+  if (typeof s !== 'string') return null;
+  const t = s.trim();
+  if (!t) return null;
+  const iso = t.match(/T(\d{1,2}):(\d{2})/);
+  if (iso) return parseInt(iso[1], 10) * 60 + parseInt(iso[2], 10);
+  const ampm = t.toUpperCase().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+  if (ampm) {
+    let h = parseInt(ampm[1], 10);
+    const m = parseInt(ampm[2], 10);
+    const p = ampm[3];
+    if (p === 'PM' && h !== 12) h += 12;
+    if (p === 'AM' && h === 12) h = 0;
+    return h * 60 + m;
+  }
+  return null;
+}
+function lastNonBookendEnd(day: any): number | null {
+  const acts = day?.activities;
+  if (!Array.isArray(acts)) return null;
+  let latest: number | null = null;
+  for (const a of acts) {
+    if (!a || typeof a !== 'object') continue;
+    const cat = String((a as any).category || (a as any).type || '').toLowerCase();
+    if (TAIL_SKIP_CAT_RE.test(cat)) continue;
+    const title = String((a as any).title || (a as any).name || '');
+    if (TAIL_SKIP_TITLE_RE.test(title)) continue;
+    const m = parseHHMM(
+      (a as any).endTime || (a as any).end_time ||
+      (a as any).startTime || (a as any).time || (a as any).start_time
+    );
+    if (m === null || m <= 0) continue;
+    if (latest === null || m > latest) latest = m;
+  }
+  return latest;
+}
+
 export interface InferDayModeInput {
   day: any;
   dayIndex: number;     // 0-based
@@ -97,7 +139,7 @@ export function inferDayModeFallback({
   const departureRaw =
     ret.departure_time ?? ret.departureTime ?? ret.departure ??
     fs.departure_time ?? fs.departureTime;
-  const departureMin = parseClockToMinutes(departureRaw);
+  const departureMin = parseClockToMinutes(departureRaw) ?? lastNonBookendEnd(day);
   if (departureMin === null) return null;
 
   if (departureMin >= 18 * 60) {
