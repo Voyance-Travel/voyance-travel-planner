@@ -223,6 +223,8 @@ describe('ensureHotelReturnBookend', () => {
     expect(last.title).toBe('Return to Casablanca Marriott Hotel');
     expect(last.startTime >= '23:00' && last.startTime <= '23:30').toBe(true);
     expect(last.endTime <= '23:59').toBe(true);
+  });
+
 
   it('Osaka Day 1: arrival flight + nightcap tail → still injects bookend (arrival ≠ departure terminal)', () => {
     const acts = [
