@@ -207,19 +207,23 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
       return /^(?:return to (?:the )?hotel|return to )/i.test(title);
     };
     const timed = activities
-      .filter((a: any) => a.startTime && a.endTime)
+      .filter((a: any) => (getDisplayStartTime(a)) && (getDisplayEndTime(a)))
       .filter((a: any) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
       // Drop hotel-return bookends — they're decorative and routinely wrap
       // past midnight; should never anchor a buffer/overlap warning.
       .filter((a: any) => !isHotelReturn(a))
-      .map((a: any) => ({
-        name: a.name || a.title,
-        category: a.category,
-        start: parseTime(a.startTime),
-        end: parseTime(a.endTime),
-        startStr: String(a.startTime),
-        endStr: String(a.endTime),
-      }))
+      .map((a: any) => {
+        const startStr = getDisplayStartTime(a);
+        const endStr = getDisplayEndTime(a);
+        return {
+          name: a.name || a.title,
+          category: a.category,
+          start: parseTime(startStr),
+          end: parseTime(endStr),
+          startStr: String(startStr),
+          endStr: String(endStr),
+        };
+      })
       .filter((a: { start: number; end: number }) => a.start > 0 || a.end > 0)
       // Drop wrap-past-midnight residue. Treat end===0 with start>0 as wrap
       // too (e.g. anything ending exactly at 00:00) — would otherwise false-negative.
