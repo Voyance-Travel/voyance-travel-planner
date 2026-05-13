@@ -736,14 +736,28 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         const dayNumber = day.dayNumber || (i + 1);
         const isFirstDay = dayNumber === 1;
         const isLastDay = dayNumber === totalDays;
+        // Match STEP 2's stale-cache reconciliation: if cached policy was
+        // built without flight info we now have, trust freshly derived policy.
+        // See mem://constraints/itinerary/departure-day-save-time-enforcement
         const cachedPolicy = (day as any)?.metadata?.quality?.meal_policy_at_generation;
-        const policy = (cachedPolicy && Array.isArray(cachedPolicy.requiredMeals))
-          ? ({ requiredMeals: cachedPolicy.requiredMeals as RequiredMeal[] } as any)
-          : deriveMealPolicy({
-              dayNumber, totalDays, isFirstDay, isLastDay,
-              arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
-              departureTime24: isLastDay ? savedDepartureTime24 : undefined,
-            });
+        const freshPolicy = deriveMealPolicy({
+          dayNumber, totalDays, isFirstDay, isLastDay,
+          arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
+          departureTime24: isLastDay ? savedDepartureTime24 : undefined,
+        });
+        let policy: any;
+        if (cachedPolicy && Array.isArray(cachedPolicy.requiredMeals)) {
+          const cachedMeals = (cachedPolicy.requiredMeals as RequiredMeal[]).slice().sort().join(',');
+          const freshMeals = freshPolicy.requiredMeals.slice().sort().join(',');
+          const reconcilable =
+            (isLastDay && savedDepartureTime24 && cachedMeals !== freshMeals) ||
+            (isFirstDay && savedArrivalTime24 && cachedMeals !== freshMeals);
+          policy = reconcilable
+            ? freshPolicy
+            : { requiredMeals: cachedPolicy.requiredMeals as RequiredMeal[] };
+        } else {
+          policy = freshPolicy;
+        }
         if (!policy.requiredMeals?.length) continue;
         const detected = detectMealSlots(day.activities);
         const stillMissing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
