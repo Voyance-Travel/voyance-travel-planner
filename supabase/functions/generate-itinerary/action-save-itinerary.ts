@@ -11,6 +11,7 @@ import { buildDayLedger, type DayLedger } from './day-ledger.ts';
 import { ledgerCheck } from './ledger-check.ts';
 import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
+import { normalizePredawnCascade } from '../_shared/predawn-cascade-normalize.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
 import { validateItineraryForPersist } from '../_shared/validate-itinerary-for-persist.ts';
 import { scrubActivity, addOps, formatOps, EMPTY_OPS, type ScrubOps } from '../_shared/scrub-activity.ts';
