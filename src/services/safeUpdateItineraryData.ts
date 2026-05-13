@@ -207,6 +207,20 @@ export async function safeUpdateItineraryData(
       console.error('[safeUpdateItineraryData] backend save failed (no raw fallback):', error);
       return { error };
     }
+    // Regression-blocked save: backend kept the healthier on-disk plan instead
+    // of writing our smaller payload. The session must NOT keep the rejected
+    // payload in local state — force an immediate canonical resync so the UI
+    // reflects what the database actually persisted.
+    if ((data as any)?.regressionBlocked) {
+      console.warn(
+        `[safeUpdateItineraryData] regression blocked by backend (reason=${options.reason || 'unspecified'}, tripId=${tripId}) — forcing canonical resync`,
+      );
+      try {
+        const { dispatchTripPersisted } = await import('@/lib/itinerary/resyncItineraryFromDb');
+        dispatchTripPersisted({ tripId, prevDays: nextDays, source: `regression-blocked:${options.reason || 'unspecified'}` });
+      } catch { /* non-fatal */ }
+      return { error: null, regressionBlocked: true } as any;
+    }
     // Notify session listeners (e.g. TripDetail) to resync from DB so the
     // post-cascade / post-bookend / post-cleanup state is what the user sees,
     // matching what they'd see after a hard refresh.
