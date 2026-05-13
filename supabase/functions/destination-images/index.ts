@@ -1559,7 +1559,17 @@ async function fetchImageTiered(
           const reusable = reuseRows.find((row: any) => {
             const candidate = String(row.alt_text || row.entity_key || '');
             const score = calculateMatchScore(venueTokens, candidate);
-            return score >= 0.4 && row.image_url && !row.image_url.startsWith('data:');
+            if (score < 0.4 || !row.image_url || row.image_url.startsWith('data:')) return false;
+            // Cross-city geo guard (destination heroes especially): a reuse row
+            // labelled with another famous city in the destination's country
+            // (e.g. "Chefchaouen" returned for a Casablanca request) must not
+            // be served. Same bug class as the Montreal alpine-lake hero.
+            const xcity = detectCrossCityMention(candidate, destination);
+            if (xcity) {
+              console.log(`[Images] cross-city reuse blocked: alt="${candidate}" dest="${destination}" → "${xcity}"`);
+              return false;
+            }
+            return true;
           });
           if (reusable) {
             console.log(`[Images] 💰 6mo-reuse hit for "${cleanName}" → reusing row "${reusable.entity_key}"`);
