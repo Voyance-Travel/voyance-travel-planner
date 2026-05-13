@@ -555,7 +555,7 @@ export function TripHealthPanel({
       completionPct: completion,
       daysPlanned: planned,
     };
-  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere, refreshResultsByDay]);
+  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere, refreshResultsByDay, tripFlightSelection]);
 
   // ── Stabilize warnings against transient/loading day data ────────────────
   // Errors commit immediately (user-actionable). Warnings only commit after
