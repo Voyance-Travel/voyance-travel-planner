@@ -127,7 +127,8 @@ async function getDbCuratedHeroUrl(destination: string): Promise<string | null> 
       .limit(1);
 
     if (error || !data || data.length === 0) return null;
-    return (data[0] as any).image_url || null;
+    const url = (data[0] as any).image_url || null;
+    return url && !isUntrustedHeroUrl(url) ? url : null;
   } catch {
     return null;
   }
