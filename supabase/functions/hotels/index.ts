@@ -730,14 +730,17 @@ async function enrichHotelByName(
   }
 
   try {
-    const textQuery = `${hotelName} ${destination}`;
-    console.log('[Hotels] Enriching hotel:', textQuery);
+    // Strip foreign-city tokens from the input name so dest dominates the query
+    // (e.g. "The Ritz-Carlton, Laguna Niguel" + dest=San Juan → "The Ritz-Carlton San Juan")
+    const safeName = stripForeignCityFromName(hotelName, destination);
+    const textQuery = `${safeName} ${destination}`;
+    console.log('[Hotels] Enriching hotel:', textQuery, safeName !== hotelName ? `(stripped from "${hotelName}")` : '');
 
     const enrichResult = await googlePlacesTextSearch(
       {
         textQuery,
         includedType: 'lodging',
-        maxResultCount: 1,
+        maxResultCount: 3, // fetch a few so we can pick a destination-matching candidate
         languageCode: 'en',
         fieldMask:
           'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos',
@@ -750,11 +753,25 @@ async function enrichHotelByName(
       return { success: false, message: 'API error' };
     }
 
-    const place = enrichResult.data?.places?.[0];
+    const candidates: any[] = enrichResult.data?.places || [];
+    // Pick the first candidate whose address sits in the destination's country/city
+    let place: any = null;
+    let lastReject: { addr: string; reason: string } | null = null;
+    for (const c of candidates) {
+      const match = hotelMatchesDestination(c.formattedAddress, destination);
+      if (match.ok) { place = c; break; }
+      lastReject = { addr: c.formattedAddress || '(no address)', reason: match.reason };
+      console.warn(`[Hotels] Rejecting candidate: ${c.displayName?.text} — ${match.reason}`);
+    }
 
     if (!place) {
-      console.log('[Hotels] No place found for:', hotelName);
-      return { success: false, message: 'Hotel not found' };
+      console.log('[Hotels] No destination-matching candidate for:', hotelName, lastReject);
+      return {
+        success: false,
+        message: 'Hotel not found in destination',
+        reason: 'destination_mismatch',
+        rejectedAddress: lastReject?.addr,
+      };
     }
 
     // Download photos to Supabase Storage to avoid repeated Google API calls
