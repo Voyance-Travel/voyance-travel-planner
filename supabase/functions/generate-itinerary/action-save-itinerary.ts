@@ -227,7 +227,6 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
     // 09:00 so the user never sees "Moco Museum 1:33 AM" on Day 2.
     // See mem://constraints/itinerary/late-nightlife-no-next-day-bleed.
     {
-      const { normalizePredawnCascade } = await import('../_shared/predawn-cascade-normalize.ts');
       const predawn = normalizePredawnCascade(activities, idx, {
         dayNumber,
         site: 'save-itinerary',
