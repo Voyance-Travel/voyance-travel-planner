@@ -1320,63 +1320,173 @@ export default function TripDetail() {
               );
             }
             try {
-              // Rebuild directly from itinerary_days — the table stores embedded activities
-              {
-                const { data: fullDayRows } = await supabase
+              // Rebuild from BOTH the itinerary_days jsonb AND the per-row
+              // itinerary_activities table. The latter is the canonical write
+              // source for fresh generation and routinely contains meals/
+              // activities that the embedded jsonb has lost (Casablanca pattern:
+              // JSON Day 2 = 4 cards w/ no meals; activity rows include
+              // Breakfast/Lunch/Dinner). Per-row data is preferred when it
+              // contains meal cards the embedded jsonb is missing.
+              const [fullDayRowsRes, fullActivityRowsRes] = await Promise.all([
+                supabase
                   .from('itinerary_days')
-                  .select('day_number, date, title, theme, description, weather, activities')
+                  .select('id, day_number, date, title, theme, description, weather, activities')
                   .eq('trip_id', tripId)
-                  .order('day_number');
+                  .order('day_number'),
+                supabase
+                  .from('itinerary_activities')
+                  .select('itinerary_day_id, sort_order, start_time, end_time, title, name, description, category, location, cost, tags, photos, transportation, duration_minutes, is_locked, booking_required, tips, walking_distance, walking_time, rating, website, viator_product_code, extra_data, external_id, suggested_for')
+                  .eq('trip_id', tripId)
+                  .order('sort_order'),
+              ]);
+              const fullDayRows = fullDayRowsRes.data;
+              const allActivityRows = fullActivityRowsRes.data || [];
 
-                if (fullDayRows && fullDayRows.length >= jsonDayCount) {
-                  const jsonDaysByNumber = new Map<number, any>();
-                  for (const d of (itinData?.days || []) as any[]) {
-                    if (d?.dayNumber) jsonDaysByNumber.set(d.dayNumber, d);
+              if (fullDayRows && fullDayRows.length >= jsonDayCount) {
+                // Group activity rows by day_id and dedupe by
+                // (start_time|end_time|category|lower(title)). Closes the
+                // duplicate-transport-row pattern observed in Casablanca where
+                // identical "Travel to Marriott" rows appear ~10x.
+                const rowsByDayId = new Map<string, any[]>();
+                for (const r of allActivityRows as any[]) {
+                  const did = r?.itinerary_day_id;
+                  if (!did) continue;
+                  const arr = rowsByDayId.get(did) || [];
+                  arr.push(r);
+                  rowsByDayId.set(did, arr);
+                }
+                const dedupeRows = (rows: any[]): any[] => {
+                  const seen = new Set<string>();
+                  const out: any[] = [];
+                  for (const r of rows) {
+                    const k = `${r.start_time || ''}|${r.end_time || ''}|${(r.category || '').toLowerCase()}|${(r.title || r.name || '').toLowerCase().trim()}`;
+                    if (seen.has(k)) continue;
+                    seen.add(k);
+                    out.push(r);
+                  }
+                  return out;
+                };
+                // Convert a per-row record into the itinerary JSON activity shape.
+                const rowToActivity = (r: any): any => {
+                  const startTime = r.start_time || undefined;
+                  const endTime = r.end_time || undefined;
+                  const title = r.title || r.name || 'Activity';
+                  return {
+                    id: r.external_id || `${r.itinerary_day_id}-${r.sort_order}`,
+                    title,
+                    name: title,
+                    description: r.description || '',
+                    category: r.category || undefined,
+                    startTime,
+                    endTime,
+                    time: startTime,
+                    durationMinutes: r.duration_minutes ?? undefined,
+                    location: r.location || undefined,
+                    cost: r.cost || undefined,
+                    estimatedCost: r.cost || undefined,
+                    tags: Array.isArray(r.tags) ? r.tags : [],
+                    photos: r.photos || undefined,
+                    transportation: r.transportation || undefined,
+                    isLocked: !!r.is_locked,
+                    bookingRequired: !!r.booking_required,
+                    tips: r.tips || undefined,
+                    walkingDistance: r.walking_distance || undefined,
+                    walkingTime: r.walking_time || undefined,
+                    rating: r.rating || undefined,
+                    website: r.website || undefined,
+                    viatorProductCode: r.viator_product_code || undefined,
+                    extra_data: r.extra_data || undefined,
+                    suggested_for: r.suggested_for || undefined,
+                  };
+                };
+                const isMealActivity = (a: any): boolean => {
+                  const cat = String(a?.category || '').toLowerCase();
+                  if (/dining|restaurant|breakfast|brunch|lunch|dinner|cafe|food/.test(cat)) return true;
+                  const t = String(a?.title || a?.name || '').toLowerCase();
+                  return /\b(breakfast|brunch|lunch|dinner|supper)\b/.test(t);
+                };
+
+                const jsonDaysByNumber = new Map<number, any>();
+                for (const d of (itinData?.days || []) as any[]) {
+                  if (d?.dayNumber) jsonDaysByNumber.set(d.dayNumber, d);
+                }
+
+                let recoveryUsed = false;
+                const rebuiltDays = fullDayRows.map((row: any) => {
+                  const existingJsonDay = jsonDaysByNumber.get(row.day_number);
+                  const jsonActivities: any[] = Array.isArray(existingJsonDay?.activities) ? existingJsonDay.activities : [];
+                  const embeddedActivities: any[] = Array.isArray(row.activities) ? row.activities : [];
+                  const perRowActivities: any[] = dedupeRows(rowsByDayId.get(row.id) || []).map(rowToActivity);
+
+                  // Pick the candidate sources by meal-coverage first, then count.
+                  const score = (acts: any[]) => {
+                    if (!acts || acts.length === 0) return -1;
+                    const meals = acts.filter(isMealActivity).length;
+                    return meals * 1000 + acts.length;
+                  };
+                  const jsonScore = score(jsonActivities);
+                  const embeddedScore = score(embeddedActivities);
+                  const perRowScore = score(perRowActivities);
+
+                  const best = Math.max(jsonScore, embeddedScore, perRowScore);
+                  let chosen: any[] = jsonActivities;
+                  let chosenSource: 'json' | 'embedded' | 'per-row' = 'json';
+                  if (best === perRowScore && perRowScore > jsonScore) {
+                    chosen = perRowActivities;
+                    chosenSource = 'per-row';
+                  } else if (best === embeddedScore && embeddedScore > jsonScore) {
+                    chosen = embeddedActivities;
+                    chosenSource = 'embedded';
+                  }
+                  if (chosenSource !== 'json') {
+                    recoveryUsed = true;
+                    console.warn('[HEALTH_JSON_SPARSE_RESYNC]', {
+                      tripId, day: row.day_number,
+                      jsonCount: jsonActivities.length,
+                      embeddedCount: embeddedActivities.length,
+                      perRowCount: perRowActivities.length,
+                      chosenSource,
+                      jsonMeals: jsonActivities.filter(isMealActivity).length,
+                      perRowMeals: perRowActivities.filter(isMealActivity).length,
+                    });
                   }
 
-                  const rebuiltDays = fullDayRows.map((row: any) => {
-                    const existingJsonDay = jsonDaysByNumber.get(row.day_number);
-                    const jsonActivities = existingJsonDay?.activities;
-                    const tableActivities = Array.isArray(row.activities) ? row.activities : [];
-
-                    const jsonCount = Array.isArray(jsonActivities) ? jsonActivities.length : 0;
-                    const tableCount = tableActivities.length;
-
-                    // Prefer the richer source: if table has materially more
-                    // activities, swap JSON's sparse list for the table's.
-                    if (existingJsonDay && tableCount >= 3 && jsonCount < tableCount * 0.6) {
-                      return { ...existingJsonDay, activities: tableActivities };
-                    }
-                    if (existingJsonDay && jsonCount > 0) {
-                      return existingJsonDay;
-                    }
-                    if (existingJsonDay && jsonCount === 0 && tableCount > 0) {
-                      return { ...existingJsonDay, activities: tableActivities };
-                    }
-                    if (existingJsonDay) {
-                      return existingJsonDay;
-                    }
-                    return {
-                      dayNumber: row.day_number,
-                      date: row.date,
-                      theme: row.theme || row.title || `Day ${row.day_number}`,
-                      description: row.description || '',
-                      weather: row.weather || undefined,
-                      activities: tableActivities,
-                    };
-                  });
-
-                  const healedItinerary = {
-                    ...(itinData || {}),
-                    days: rebuiltDays,
+                  const baseDay = existingJsonDay || {
+                    dayNumber: row.day_number,
+                    date: row.date,
+                    theme: row.theme || row.title || `Day ${row.day_number}`,
+                    description: row.description || '',
+                    weather: row.weather || undefined,
                   };
+                  return { ...baseDay, activities: chosen };
+                });
 
-                  console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount}); reason=${dayCountDrift ? 'day-count' : 'per-day-activity-count'}`);
-                  await safeUpdateItineraryData(tripId, healedItinerary, {}, { skipLedgerCheck: true, reason: 'self-heal-rebuild-from-tables' });
+                const healedItinerary = {
+                  ...(itinData || {}),
+                  days: rebuiltDays,
+                };
 
-                  const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
-                  setTrip(healedTripData);
-                }
+                // When recovery actually upgraded a day from per-row data, use
+                // a non-`self-heal-` reason + allowFrozenWrite so both the
+                // client gate and the server FROZEN gate let the write through.
+                // See mem://constraints/itinerary/frozen-after-ready (recovery
+                // is not a self-heal effect — it's restoring lost canonical
+                // truth from another canonical store).
+                const reason = recoveryUsed ? 'recovery-rebuild-sparse-json' : 'self-heal-rebuild-from-tables';
+                console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount}); recoveryUsed=${recoveryUsed}, reason=${reason}`);
+                await safeUpdateItineraryData(
+                  tripId,
+                  healedItinerary,
+                  {},
+                  {
+                    skipLedgerCheck: true,
+                    reason,
+                    ...(recoveryUsed ? { allowFrozenWrite: true, allowReduction: true } : {}),
+                  },
+                );
+
+                const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
+                setTrip(healedTripData);
               }
             } catch (healErr) {
               console.error('[TripDetail] Self-heal rebuild failed:', healErr);
