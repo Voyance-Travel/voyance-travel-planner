@@ -814,6 +814,26 @@ serve(async (req) => {
 
     const housekeeping = async () => {
       try {
+        // ── Promote pending_credit_charges row to 'completed' now that the
+        // spend has fully committed (FIFO + ledger finalized). Without this,
+        // useStalePendingChargeRefund will auto-refund on the next page load
+        // 2+ minutes later, silently granting the user free credits on every
+        // hard refresh of an already-generated trip.
+        if (pendingChargeId) {
+          const { error: completeErr } = await supabaseAdmin
+            .from('pending_credit_charges')
+            .update({
+              status: 'completed',
+              resolved_at: new Date().toISOString(),
+              resolution_note: 'Spend committed (FIFO + ledger finalized)',
+            })
+            .eq('id', pendingChargeId)
+            .eq('status', 'pending'); // only flip if still pending — never overwrite refunded/failed
+          if (completeErr) {
+            console.error('[spend-credits] Failed to mark pending charge completed (non-fatal):', completeErr);
+          }
+        }
+
         // ── Cost tracking for hotel_search (for Unit Economics dashboard) ──
         if (action === 'hotel_search' && tripId) {
           const { error: costErr } = await supabaseAdmin
