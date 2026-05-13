@@ -106,14 +106,27 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
     }
 
     // ── HC.1: required-meal / thin-day / large-gap checks ──────────────────
-    // Mirrors server deriveMealPolicy + density protocol so the panel
-    // surfaces the same gaps the repair pipeline would.
+    // PREFER the server's persisted meal policy so the panel can never drift
+    // from what the repair pipeline actually enforced. Falls back to a
+    // dayMode-derived inference only when the persisted list is absent.
     const dayMode: string = day?.metadata?.quality?.dayMode || '';
+    const persistedMeals = day?.metadata?.quality?.requiredMeals
+      ?? day?.metadata?.mealPolicy?.requiredMeals
+      ?? null;
     const requiredMeals: string[] = (() => {
-      if (dayMode === 'late_arrival' || dayMode === 'full_day_event') return [];
+      if (Array.isArray(persistedMeals)) {
+        return persistedMeals.filter((m: unknown): m is string =>
+          typeof m === 'string' && (m === 'breakfast' || m === 'lunch' || m === 'dinner')
+        );
+      }
+      if (dayMode === 'late_arrival' || dayMode === 'full_day_event' || dayMode === 'early_departure_no_meal') return [];
       if (dayMode === 'early_departure') return ['breakfast'];
       if (dayMode === 'midday_arrival') return ['lunch', 'dinner'];
-      if (dayMode === 'midday_departure' || dayMode === 'afternoon_departure') return ['breakfast', 'lunch'];
+      if (dayMode === 'midday_departure') return ['breakfast'];
+      if (dayMode === 'afternoon_departure') return ['breakfast'];
+      // morning_arrival default: assume late-morning brunch covers AM meal —
+      // do NOT require breakfast on first days when dayMode is unknown.
+      if (dayMode === 'morning_arrival') return ['lunch', 'dinner'];
       return ['breakfast', 'lunch', 'dinner'];
     })();
 

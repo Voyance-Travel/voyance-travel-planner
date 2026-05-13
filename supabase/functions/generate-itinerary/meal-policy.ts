@@ -149,16 +149,22 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
       }
       // Before noon — morning arrival, nearly full day.
       // Three bands so the morning meal is never silently skipped:
-      //   < 10:30  → traditional breakfast
-      //   10:30–12 → brunch / late-morning café (NEW — closes Milan/Mallorca/Faro/Bruges Day-1 gaps)
+      //   < 09:30  → traditional breakfast (early arrivals only)
+      //   09:30–12 → brunch / late-morning café (covers AM meal in one stop)
       //   ≥ 12     → handled by the >= 720 branch above (lunch-first)
+      // 09:30 cutoff: a 10:00–10:30 arrival is still settling in by the time
+      // a real breakfast slot would close — brunch covers it without forcing
+      // an early hotel breakfast or a phantom "missing breakfast" warning.
       // See mem://constraints/itinerary/day1-arrival-brunch-band
-      if (arrivalMins < 630) {
+      if (arrivalMins < 570) {
         const meals: RequiredMeal[] = ['breakfast', 'lunch', 'dinner'];
         return meal('morning_arrival', meals, usableHours,
           buildMealText(meals, 'morning arrival'));
       }
-      const meals: RequiredMeal[] = ['breakfast', 'lunch', 'dinner'];
+      // Brunch day — single late-morning café covers the AM meal.
+      // Required meals are lunch + dinner; the AI brief still calls for a
+      // brunch stop via the 'brunch' breakfastMode flag.
+      const meals: RequiredMeal[] = ['lunch', 'dinner'];
       return meal('morning_arrival', meals, usableHours,
         buildMealText(meals, 'late-morning arrival (brunch day)'),
         'brunch');
@@ -190,9 +196,12 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
           'Midday departure — breakfast near hotel, then checkout. Quick morning activity possible.');
       }
       if (depMins < 1080) {
-        // 3-6 PM — afternoon departure
-        return meal('afternoon_departure', ['breakfast', 'lunch'], usableHours,
-          'Afternoon departure — breakfast + lunch. Morning activities possible before checkout.');
+        // 3-6 PM — afternoon departure. Drop lunch: with a 3-6 PM flight,
+        // checkout pushes to ~10-11 AM and transfer starts ~12-3 PM.
+        // A sit-down lunch crammed in between feels rushed and
+        // contradicts the "head to the airport" framing.
+        return meal('afternoon_departure', ['breakfast'], usableHours,
+          'Afternoon departure — breakfast only. Checkout, then head straight to the airport. No scheduled lunch (the traveler will eat in transit or at the airport).');
       }
       // After 6 PM — late departure, nearly full day
       return meal('late_departure', ['breakfast', 'lunch', 'dinner'], usableHours,

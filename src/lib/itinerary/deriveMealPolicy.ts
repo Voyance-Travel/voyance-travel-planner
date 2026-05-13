@@ -78,7 +78,9 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
         const meals: RequiredMeal[] = arrivalMins < 780 ? ['lunch', 'dinner'] : ['dinner'];
         return mk('midday_arrival', meals, usableHours);
       }
-      const meals: RequiredMeal[] = arrivalMins < 630 ? ['breakfast', 'lunch', 'dinner'] : ['lunch', 'dinner'];
+      // Breakfast only required when arriving before 09:30 (570 min).
+      // 09:30–12:00 lands too late for a sit-down breakfast — brunch/lunch covers it.
+      const meals: RequiredMeal[] = arrivalMins < 570 ? ['breakfast', 'lunch', 'dinner'] : ['lunch', 'dinner'];
       return mk('morning_arrival', meals, usableHours);
     }
     return mk('morning_arrival', ['breakfast', 'lunch', 'dinner'], usableHours);
@@ -90,10 +92,12 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
       if (depMins < 600) return mk('early_departure', [], usableHours);
       if (depMins < 720) return mk('early_departure', ['breakfast'], usableHours);
       if (depMins < 900) return mk('midday_departure', ['breakfast'], usableHours);
-      if (depMins < 1080) return mk('afternoon_departure', ['breakfast', 'lunch'], usableHours);
+      // 3-6 PM departure: breakfast only — a lunch crammed before the airport
+      // is awkward. Late_departure (≥6 PM) keeps the full breakfast+lunch+dinner.
+      if (depMins < 1080) return mk('afternoon_departure', ['breakfast'], usableHours);
       return mk('late_departure', ['breakfast', 'lunch', 'dinner'], usableHours);
     }
-    return mk('midday_departure', ['breakfast', 'lunch'], usableHours);
+    return mk('midday_departure', ['breakfast'], usableHours);
   }
 
   return {
