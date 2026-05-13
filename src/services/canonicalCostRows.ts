@@ -126,6 +126,31 @@ function rowCentsFor(row: CanonicalCostInputRow): number {
   return Math.round(perPerson * travelers * 100);
 }
 
+/** Dev-only diagnostic: warn when a hotel/flight row is dropped from the
+ *  canonical resolver. Used to trace silent leaks where the per-row chip
+ *  shows a value but the trip total excludes it (Casablanca pattern). */
+function hotelFlightDropDiagnostic(
+  cat: string,
+  row: CanonicalCostInputRow,
+  reason: 'walking-leg' | 'toggle-off' | 'zero-cents' | 'orphan',
+  includeHotel: boolean,
+  includeFlight: boolean,
+): void {
+  if (typeof import.meta === 'undefined' || !(import.meta as any).env?.DEV) return;
+  const expected = (cat === 'hotel' && includeHotel)
+    || ((cat === 'flight' || cat === 'flights') && includeFlight);
+  if (!expected) return;
+  // eslint-disable-next-line no-console
+  console.warn(`[canonicalCostRows] ${cat}-row-dropped reason=${reason}`, {
+    id: row.id,
+    day_number: row.day_number,
+    activity_id: row.activity_id,
+    cost_per_person_usd: row.cost_per_person_usd,
+    num_travelers: row.num_travelers,
+    source: row.source,
+  });
+}
+
 export interface ResolveCanonicalArgs {
   costs: CanonicalCostInputRow[];
   liveActivities: CanonicalLiveActivity[];
@@ -224,7 +249,16 @@ export function resolveCanonicalCostRows({
       ? liveById.get(effectiveActivityId) || null
       : null;
 
-    if (!isLogisticsRow && row.activity_id && !lookup) {
+    // Hotel/flight rows are NEVER dropped by the orphan branch — they have
+    // no live-activity counterpart by construction (Day-0 logistics) and the
+    // header strip equation (Days + Hotel + Flight = Trip Total) breaks when
+    // they disappear. Even if `day_number` ever coerces to non-zero on a
+    // legacy row, this guard preserves the row so the snapshot stays
+    // consistent with the per-row Hotel/Flight chips. See
+    // mem://constraints/finance/header-strip-mirrors-snapshot.
+    const isAccommodationOrFlight = cat === 'hotel' || cat === 'flight' || cat === 'flights';
+
+    if (!isLogisticsRow && !isAccommodationOrFlight && row.activity_id && !lookup) {
       const mapped = normalizeCanonicalCategory(cat, '');
       const rescued = mapped ? popRescue(dayNumber, mapped) : null;
       if (rescued) {
@@ -234,13 +268,28 @@ export function resolveCanonicalCostRows({
         rescueTag = 'orphan-id';
       } else {
         // Drop: no live activity for this slot.
+        if (
+          typeof import.meta !== 'undefined' &&
+          (import.meta as any).env?.DEV
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn('[canonicalCostRows] orphan row dropped', {
+            id: row.id,
+            cat,
+            day_number: row.day_number,
+            activity_id: row.activity_id,
+          });
+        }
         continue;
       }
     }
 
     // Walking legs are always free, regardless of stored category. Skip
     // entirely so the header total agrees with Payments.
-    if (lookup && isWalkingLeg({ title: lookup.name })) continue;
+    if (lookup && isWalkingLeg({ title: lookup.name })) {
+      if (isAccommodationOrFlight) hotelFlightDropDiagnostic(cat, row, 'walking-leg', includeHotel, includeFlight);
+      continue;
+    }
 
     let cents = rowCentsFor(row);
 
@@ -258,8 +307,14 @@ export function resolveCanonicalCostRows({
     else if (cat === 'flight') flightCents += cents;
     else if (cat === 'misc') loggedMiscCents += cents;
 
-    if (!shouldCountRow(row, includeHotel, includeFlight)) continue;
-    if (cents <= 0) continue;
+    if (!shouldCountRow(row, includeHotel, includeFlight)) {
+      if (isAccommodationOrFlight) hotelFlightDropDiagnostic(cat, row, 'toggle-off', includeHotel, includeFlight);
+      continue;
+    }
+    if (cents <= 0) {
+      if (isAccommodationOrFlight) hotelFlightDropDiagnostic(cat, row, 'zero-cents', includeHotel, includeFlight);
+      continue;
+    }
 
     totalCents += cents;
     out.push({
