@@ -2258,11 +2258,18 @@ export function EditorialItinerary({
   // resync from DB (same activity ids, shifted times) actually reaches setDays
   // and the user sees the canonical pre-refresh==post-refresh state.
   // See mem://constraints/itinerary/db-is-source-of-truth.
+  // Fingerprint includes meal-relevant fields (category, title, mealSlot) so a
+  // parent push that changes only those (e.g. classifier rewrite, AI repair)
+  // still resyncs into local state. See mem://constraints/itinerary/db-is-source-of-truth.
   const initialDaysFingerprint = useMemo(() => {
     return JSON.stringify(initialDays.map(d => ({
       n: d.dayNumber,
       d: d.date,
-      a: d.activities.map(a => `${a.id}@${a.startTime || ''}-${a.endTime || ''}#${(a as any).durationMinutes ?? ''}`),
+      a: d.activities.map(a => {
+        const r = a as any;
+        const slot = r.mealSlot ?? r.meal_slot ?? r.metadata?.meal_slot ?? r.metadata?.mealSlot ?? '';
+        return `${a.id}@${a.startTime || r.time || ''}-${a.endTime || ''}#${r.durationMinutes ?? ''}|${(r.category || r.type || '').toLowerCase()}|${(a.title || r.name || '').toLowerCase()}|${slot}`;
+      }),
     })));
   }, [initialDays]);
   const prevFingerprintRef = useRef(initialDaysFingerprint);
