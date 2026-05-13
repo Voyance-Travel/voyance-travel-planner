@@ -532,6 +532,17 @@ async function getGooglePlacesPhoto(
           continue;
         }
 
+        // Cross-city geo guard for destination heroes — if the resolved place
+        // sits in another famous city in the same country (e.g. Chefchaouen
+        // returned for a Casablanca text-search), drop it.
+        if (entityType === 'destination') {
+          const xcity = detectCrossCityMention(`${displayName} ${address}`, destination);
+          if (xcity) {
+            console.log(`[Images] Rejecting (cross-city ${xcity}):`, displayName, '|', address);
+            continue;
+          }
+        }
+
         // Calculate match score
         const score = calculateMatchScore(venueTokens, displayName);
 
