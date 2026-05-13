@@ -279,6 +279,7 @@ export function InlineBookingActions({
     }
   };
 
+  const selectMutation = useSelectActivity();
   const deselectMutation = useDeselectActivity();
   
   const bookingState = activity.bookingState || 'not_selected';
