@@ -19,6 +19,7 @@ import {
 import { getHeroImageByName, getDestinationCanonicalImage } from '@/services/destinationImagesAPI';
 import { supabase } from '@/integrations/supabase/client';
 import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
+import { detectCrossCityMention } from '@/lib/crossCityFilter';
 
 /**
  * Shared predicate: a seeded hero URL we should treat as broken/unusable.
@@ -170,7 +171,14 @@ export function useTripHeroImage({
       .then((result) => {
         if (cancelled) return;
         setApiFetched(true);
-        if (result?.url && !isUntrustedHeroUrl(result.url)) {
+        // Cross-city geo guard — defense in depth so a stale curated row
+        // mentioning the wrong city in the same country (Casablanca →
+        // Chefchaouen, Casablanca trip; Montreal alpine-lake class) never
+        // renders. We treat it as apiFailed so the chain falls to gradient.
+        const xcity = result?.alt
+          ? detectCrossCityMention(result.alt, destination)
+          : null;
+        if (result?.url && !isUntrustedHeroUrl(result.url) && !xcity) {
           setApiImageUrl(result.url);
           if (result.source === 'unsplash' && result.photographer) {
             setApiAttribution({
@@ -181,6 +189,11 @@ export function useTripHeroImage({
             });
           }
         } else {
+          if (xcity) {
+            console.warn(
+              `[useTripHeroImage] cross-city blocked dest="${destination}" alt="${result?.alt}" → "${xcity}"`,
+            );
+          }
           setApiFailed(true);
         }
       })

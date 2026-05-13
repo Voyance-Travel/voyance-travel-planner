@@ -3,6 +3,7 @@ import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import { useHeroImage, getDestinationCanonicalImage, writeBackDestinationCanonicalImage } from '@/services/destinationImagesAPI';
 import { getDestinationImage, hasCuratedImages } from '@/utils/destinationImages';
 import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
+import { detectCrossCityMention } from '@/lib/crossCityFilter';
 import { useQuery } from '@tanstack/react-query';
 
 interface DestinationHeroImageProps {
@@ -98,18 +99,25 @@ export default function DestinationHeroImage({
   const writtenBackRef = useRef(false);
   useEffect(() => {
     if (writtenBackRef.current) return;
-    if (apiData?.url && !isUntrustedHeroUrl(apiData.url) && !canonicalUrl) {
+    const altForGuard = apiData?.alt || '';
+    const xcity = altForGuard ? detectCrossCityMention(altForGuard, destinationName) : null;
+    if (apiData?.url && !isUntrustedHeroUrl(apiData.url) && !xcity && !canonicalUrl) {
       writtenBackRef.current = true;
       writeBackDestinationCanonicalImage(destinationName, apiData.url);
     }
-  }, [apiData?.url, canonicalUrl, destinationName]);
+  }, [apiData?.url, apiData?.alt, canonicalUrl, destinationName]);
 
   const fallback = useMemo(() => generateGradientDataUrl(destinationName), [destinationName]);
 
   // Trusted-only sources at every tier; gradient is the always-safe terminal.
   const trustedCanonical = canonicalUrl && !isUntrustedHeroUrl(canonicalUrl) ? canonicalUrl : null;
   const trustedCurated = curatedSrc && !isUntrustedHeroUrl(curatedSrc) ? curatedSrc : null;
-  const trustedApi = apiData?.url && !isUntrustedHeroUrl(apiData.url) ? apiData.url : null;
+  const apiAlt = apiData?.alt || '';
+  const apiCrossCity = apiAlt ? detectCrossCityMention(apiAlt, destinationName) : null;
+  if (apiCrossCity) {
+    console.warn(`[DestinationHeroImage] cross-city blocked dest="${destinationName}" alt="${apiAlt}" → "${apiCrossCity}"`);
+  }
+  const trustedApi = apiData?.url && !isUntrustedHeroUrl(apiData.url) && !apiCrossCity ? apiData.url : null;
 
   // Final image: canonical DB > curated [0] > API resolved > gradient
   const src = trustedCanonical || trustedCurated || trustedApi || fallback;

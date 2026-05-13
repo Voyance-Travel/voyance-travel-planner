@@ -70,6 +70,65 @@ const COUNTRY_CITY_TOKENS: Record<string, Array<{ re: RegExp; name: string }>> =
     { re: /\bhiroshima\b/i, name: 'Hiroshima' },
     { re: /\b(sapporo)\b/i, name: 'Sapporo' },
   ],
+  morocco: [
+    { re: /\bcasablanca\b/i, name: 'Casablanca' },
+    { re: /\b(marrakech|marrakesh)\b/i, name: 'Marrakech' },
+    { re: /\b(fez|fes|fès)\b/i, name: 'Fez' },
+    { re: /\brabat\b/i, name: 'Rabat' },
+    { re: /\b(tangier|tanger)\b/i, name: 'Tangier' },
+    { re: /\bchefchaouen\b/i, name: 'Chefchaouen' },
+    { re: /\bessaouira\b/i, name: 'Essaouira' },
+    { re: /\bagadir\b/i, name: 'Agadir' },
+    { re: /\b(meknes|meknès)\b/i, name: 'Meknes' },
+  ],
+  turkey: [
+    { re: /\bistanbul\b/i, name: 'Istanbul' },
+    { re: /\bankara\b/i, name: 'Ankara' },
+    { re: /\b(izmir|i̇zmir)\b/i, name: 'Izmir' },
+    { re: /\bantalya\b/i, name: 'Antalya' },
+    { re: /\bcappadocia\b/i, name: 'Cappadocia' },
+  ],
+  india: [
+    { re: /\b(delhi|new delhi)\b/i, name: 'Delhi' },
+    { re: /\b(mumbai|bombay)\b/i, name: 'Mumbai' },
+    { re: /\bjaipur\b/i, name: 'Jaipur' },
+    { re: /\bagra\b/i, name: 'Agra' },
+    { re: /\bgoa\b/i, name: 'Goa' },
+    { re: /\b(bengaluru|bangalore)\b/i, name: 'Bengaluru' },
+    { re: /\b(kolkata|calcutta)\b/i, name: 'Kolkata' },
+    { re: /\b(chennai|madras)\b/i, name: 'Chennai' },
+  ],
+  thailand: [
+    { re: /\bbangkok\b/i, name: 'Bangkok' },
+    { re: /\bchiang mai\b/i, name: 'Chiang Mai' },
+    { re: /\bphuket\b/i, name: 'Phuket' },
+    { re: /\bkrabi\b/i, name: 'Krabi' },
+  ],
+  vietnam: [
+    { re: /\bhanoi\b/i, name: 'Hanoi' },
+    { re: /\b(ho chi minh|saigon)\b/i, name: 'Ho Chi Minh City' },
+    { re: /\bhoi an\b/i, name: 'Hoi An' },
+    { re: /\b(da nang|danang)\b/i, name: 'Da Nang' },
+  ],
+  brazil: [
+    { re: /\b(rio de janeiro|rio)\b/i, name: 'Rio de Janeiro' },
+    { re: /\b(são paulo|sao paulo)\b/i, name: 'São Paulo' },
+    { re: /\bsalvador\b/i, name: 'Salvador' },
+    { re: /\b(brasília|brasilia)\b/i, name: 'Brasília' },
+  ],
+  argentina: [
+    { re: /\bbuenos aires\b/i, name: 'Buenos Aires' },
+    { re: /\bmendoza\b/i, name: 'Mendoza' },
+    { re: /\bbariloche\b/i, name: 'Bariloche' },
+  ],
+  mexico: [
+    { re: /\b(mexico city|cdmx|ciudad de méxico|ciudad de mexico)\b/i, name: 'Mexico City' },
+    { re: /\bcancun\b/i, name: 'Cancun' },
+    { re: /\btulum\b/i, name: 'Tulum' },
+    { re: /\boaxaca\b/i, name: 'Oaxaca' },
+    { re: /\bguadalajara\b/i, name: 'Guadalajara' },
+    { re: /\b(mérida|merida)\b/i, name: 'Mérida' },
+  ],
 };
 
 /** Map a destination string ("Venice, Italy", "Rome", "Paris, France") to a country key. */
@@ -93,6 +152,30 @@ function inferCountry(destination: string): string | null {
   if (/\bjapan\b/.test(d) ||
       /\b(tokyo|kyoto|osaka|hiroshima|sapporo)\b/.test(d))
     return 'japan';
+  if (/\bmorocco\b/.test(d) ||
+      /\b(casablanca|marrakech|marrakesh|fez|fes|fès|rabat|tangier|tanger|chefchaouen|essaouira|agadir|meknes|meknès)\b/.test(d))
+    return 'morocco';
+  if (/\b(turkey|türkiye)\b/.test(d) ||
+      /\b(istanbul|ankara|izmir|antalya|cappadocia)\b/.test(d))
+    return 'turkey';
+  if (/\bindia\b/.test(d) ||
+      /\b(delhi|mumbai|bombay|jaipur|agra|goa|bengaluru|bangalore|kolkata|calcutta|chennai|madras)\b/.test(d))
+    return 'india';
+  if (/\bthailand\b/.test(d) ||
+      /\b(bangkok|chiang mai|phuket|krabi)\b/.test(d))
+    return 'thailand';
+  if (/\bvietnam\b/.test(d) ||
+      /\b(hanoi|ho chi minh|saigon|hoi an|da nang|danang)\b/.test(d))
+    return 'vietnam';
+  if (/\bbrazil\b/.test(d) ||
+      /\b(rio de janeiro|são paulo|sao paulo|salvador|brasília|brasilia)\b/.test(d))
+    return 'brazil';
+  if (/\bargentina\b/.test(d) ||
+      /\b(buenos aires|mendoza|bariloche)\b/.test(d))
+    return 'argentina';
+  if (/\bmexico\b/.test(d) ||
+      /\b(mexico city|cdmx|ciudad de méxico|ciudad de mexico|cancun|tulum|oaxaca|guadalajara|mérida|merida)\b/.test(d))
+    return 'mexico';
   return null;
 }
 

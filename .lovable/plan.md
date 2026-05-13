@@ -1,96 +1,80 @@
-# "Calculating…" Spinner Never Resolves
+## Hero Image — Cross-City Geo-Mismatch Guard (Morocco + reuse gates)
 
-## Root cause
+### Root cause
 
-The header spinner is driven by `isBudgetCalculating = isBudgetGenerating || financialSnapshot.loading` (`EditorialItinerary.tsx:3778`). `financialSnapshot.loading` flips false at the end of `fetchData`, so the live offender is `isBudgetGenerating`.
-
-`useTripBudget.isGenerating` reads `summary.isGenerating`, which `tripBudgetService.getBudgetSummary` derives as:
+`Trips.destination = 'Casablanca'` has no seeded hero, no `destinations.hero_image_url`, no DB curated row. Live edge fetch (`destination-images`) returns:
 
 ```
-['queued','generating','partial'].includes(trips.itinerary_status)
+id: reuse-e4571ab4-…    place_id: ChIJz7FTJ4TSpw0ROXEneo0Yctg
+alt: "Ancienne Medina"  source: curated   destination: Casablanca
 ```
 
-…and `useTripBudget` polls every 4 s while that flag is true (`refetchInterval`).
+So the cache row is *labelled* Casablanca/Ancienne Medina, but its photo content is the recognizable blue alley of Chefchaouen (350 km north of Casablanca). Two compounding holes:
 
-Verified in DB — all three reproed trips (Montreal `70f165a8…`, San Juan `fea55309…`, Mexico City `5f54686e…`) have:
+1. **No Morocco entries in `COUNTRY_CITY_TOKENS`** (`src/lib/crossCityFilter.ts` + `supabase/functions/generate-itinerary/cross-city-filter.ts`). Even if alt_text *had* said "Chefchaouen", the cross-city detector wouldn't have fired — Morocco isn't covered.
+2. **No cross-city sanity gate on the image-resolution paths.** Three reuse paths in `supabase/functions/destination-images/index.ts` return rows by fuzzy alt_text/entity_key match without checking whether the matched venue actually belongs in the requested destination's city:
+   - TIER 1c — 6-month destination reuse (line ~1539)
+   - TIER 1.5 — cross-share lookup in `attractions`/`activities` tables (line ~1584)
+   - `tryUnsplashFallback` `Casablanca landmark` (Unsplash relevance returns Chefchaouen). This is already neutralised on the *display* side by `isUntrustedHeroUrl`, but the edge function still pays for the call and may write a bad row to disk that later gets reused via place_id by other code paths.
 
-```
-itinerary_status = 'partial'
-metadata.itinerary_frozen_at IS NOT NULL
-3 / 3 days populated, every day ≥ 3 activities
-chain_error / generation_error: NULL
-```
+Same bug class as the Montreal "alpine lake" hero — content-misidentified images survive because nothing validates content vs. destination after resolution.
 
-The chain final-pass in `action-generate-trip-day.ts:2808` requires `noFailedDays` to flip status to `'ready'`. `noFailedDays` reads `metadata.failed_day_numbers` — and that array is **never cleared** when a previously failed day succeeds on retry. So a trip that fails day 2 once, retries it successfully, and then completes day 3 stays `'partial'` forever even though all days are real and complete. Status is also `'partial'` in plain "almost-but-not-quite-meaningful" cases (`hasEnoughMeaningful` false).
+### Fix (4 layers)
 
-`'partial'` is a terminal state — no further writes are coming — but the FE treats it as "still generating", polls forever, and never lets the spinner resolve.
+**1. Country-token coverage — Morocco (and a few other recurring blanks)**
 
-## Fix — three layers
+Add to both `COUNTRY_CITY_TOKENS` mirrors and their `inferCountry` switches:
+- morocco: Casablanca, Marrakech, Fez/Fes, Rabat, Tangier/Tanger, Chefchaouen, Essaouira, Agadir, Meknes
+- turkey: Istanbul, Ankara, Izmir, Antalya, Cappadocia
+- india: Delhi, Mumbai, Jaipur, Agra, Goa, Bengaluru, Kolkata, Chennai
+- thailand: Bangkok, Chiang Mai, Phuket, Krabi
+- vietnam: Hanoi, Ho Chi Minh / Saigon, Hoi An, Da Nang
+- brazil: Rio de Janeiro, São Paulo, Salvador, Brasília
+- argentina: Buenos Aires, Mendoza, Bariloche
+- mexico (for safety in `client mirror`): Mexico City/CDMX, Cancun, Tulum, Oaxaca, Guadalajara, Mérida
 
-### 1. FE: treat frozen + non-active statuses as done
+Keep existing entries; this is purely additive.
 
-**`src/services/tripBudgetService.ts`** (~L658) — also select `metadata` and exclude `partial` once the itinerary is frozen:
+**2. Cross-city gate inside the edge resolver**
 
-```ts
-const { data: tripRow } = await supabase
-  .from('trips')
-  .select('itinerary_status, metadata')
-  .eq('id', tripId).maybeSingle();
+In `supabase/functions/destination-images/index.ts`, when `entityType === 'destination'`:
 
-const status = (tripRow?.itinerary_status as string | undefined) ?? '';
-const frozenAt = (tripRow?.metadata as any)?.itinerary_frozen_at;
-// 'partial' is terminal — no more writes are coming. Only the truly-active
-// statuses keep the calculating spinner alive. `frozenAt` is belt-and-suspenders
-// for any future status added to the active set.
-const isGenerating =
-  (status === 'queued' || status === 'generating') && !frozenAt;
-```
+- TIER 1c reuse loop: before returning a `reusable` row, run `detectCrossCityMention(reusable.alt_text + ' ' + reusable.entity_key, destination)`. If non-null → skip that row, continue scanning, and log `[Images] cross-city reuse blocked: alt="X" dest="Casablanca" → "Chefchaouen"`.
+- TIER 1.5 attractions/activities lookups: same guard on `name`.
+- `getGooglePlacesPhoto`: after the Places `searchText` resolves, check `result.formattedAddress || result.displayName` against the destination — drop and try the next candidate on mismatch.
+- `tryUnsplashFallback`: check `best.alt_description + ' ' + best.description` against destination; reject on cross-city mention so we don't burn an Unsplash request *and* a storage write on a wrong-content photo.
 
-This kills the permanent spinner on every existing stuck trip, stops the 4 s polling loop, and is forward-safe: any future generator path that legitimately needs more writes still flips status to `generating` first.
+Import `detectCrossCityMention` from the existing shared `cross-city-filter.ts` (it already lives next door in `generate-itinerary/`); promote it to `_shared/` if cleaner.
 
-### 2. FE: snapshot resilience
+**3. Read-time gate at every hero consumer**
 
-**`src/hooks/useTripFinancialSnapshot.ts`** `fetchData` has no try/catch. If a Supabase call ever throws (offline, auth blip, RLS denial), `loading` stays `true` forever and the header spinner sticks. Wrap the body in try/catch with `finally { setData(prev => ({ ...prev, loading: false })) }` so a transient failure surfaces as $0 + a console.warn, not a permanent spinner. Existing happy path and event listeners untouched.
+In `useTripHeroImage` (TIER 4 API branch), `useDestinationImages` (TIER 3 API branch), and `DestinationHeroImage` (TIER 3 API branch): after the API resolves, run `detectCrossCityMention(result.alt || '', destination)` and treat a hit as `apiFailed = true` so the chain falls through to gradient instead of rendering a wrong-city photo. Read-time defense in depth so a stale curated DB row doesn't slip through if the edge gate misses.
 
-### 3. BE: close the chain leak + one-shot backfill
+**4. One-shot cleanup**
 
-**`supabase/functions/generate-itinerary/action-generate-trip-day.ts`** (final-pass, ~L2770–2810):
+Migration:
+- Blacklist the two Casablanca rows in `curated_images` keyed on the offending `place_id ChIJz7FTJ4TSpw0ROXEneo0Yctg` so the `reuse-` lookup stops returning them. (`is_blacklisted = true`, `quality_score = 0`.)
+- Sweep `curated_images` where `entity_type='destination'` and `detectCrossCityMention(alt_text, destination)` is non-null → blacklist. Implement as a SQL function or run from a one-shot Deno script invoking the helper, similar to the Montreal alpine-lake one-shot purge.
+- Clear `trips.metadata.hero_image` for any trip whose stored URL points at a now-blacklisted row, so the next render re-resolves cleanly.
 
-- After computing `allDaysHaveActivities && dayCountMatches && hasEnoughMeaningful`, if those three are true, clear stale `failed_day_numbers` from the metadata write so a previously-failed-then-recovered day no longer pins the status to `partial`. Concretely: when persisting the final update (`extraUpdate.metadata`, ~L3379), set `failed_day_numbers: isComplete ? [] : (current ?? [])` and recompute `isComplete` after the clear (or just compute it ignoring `failed_day_numbers` when the recovery conditions are met).
-- Keep the `partial` status path for the genuinely-still-broken cases (empty days, bare itineraries) so we don't paper over real failures.
+### Verification
 
-**One-shot migration** — backfill the trips already stuck. Owner-safe, idempotent:
+- New unit test in `src/lib/__tests__/crossCityFilter.morocco.test.ts`:
+  - `detectCrossCityMention('Chefchaouen blue alley', 'Casablanca')` returns `'Chefchaouen'`
+  - `detectCrossCityMention('Hassan II Mosque', 'Casablanca')` returns `null`
+  - `detectCrossCityMention('Marrakech medina', 'Fez')` returns `'Marrakech'`
+- Edge integration test (or curl after deploy) on `Casablanca` returns a `source: 'gradient'` or a Casablanca-only hit.
+- Smoke check on `Mexico City` / `Montreal` / `San Juan` to confirm no regression.
 
-```sql
-UPDATE public.trips
-SET itinerary_status = 'ready',
-    metadata = metadata - 'failed_day_numbers'
-WHERE itinerary_status = 'partial'
-  AND metadata ? 'itinerary_frozen_at'
-  AND itinerary_data ? 'days'
-  AND (
-    SELECT bool_and(jsonb_array_length(coalesce(d->'activities','[]'::jsonb)) >= 3)
-    FROM jsonb_array_elements(itinerary_data->'days') d
-  );
-```
+### Files to edit
 
-## Files
-
-- `src/services/tripBudgetService.ts` — ~L650-660
-- `src/hooks/useTripFinancialSnapshot.ts` — wrap `fetchData` body
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — final-pass status + `failed_day_numbers` clear
-- New migration: `*_unstick_partial_frozen_trips.sql`
-- Memory: new `mem://constraints/itinerary/calculating-spinner-resolves` entry; index update
-
-## Acceptance
-
-- All 3 stuck trips (Montreal/SJU/CDMX) load with `itinerary_status='ready'` after the migration; spinner resolves on first frame.
-- A future trip that has day 2 fail-then-succeed in the chain reaches `ready`, not `partial`.
-- A genuinely incomplete trip (one fully empty day) still shows `partial` and the spinner remains until the user regenerates that day — by design.
-- A transient Supabase fetch error in `useTripFinancialSnapshot` no longer wedges the spinner; total reads $0 with a console.warn until the next event-driven refetch.
-
-## Out of scope
-
-- BudgetTab "Calculating…" pill (`BudgetTab.tsx:950`) — same `isGenerating` source, fixed by layer 1 automatically.
-- The misc-reserve / orphan-archival logic — unrelated.
-- TransitPreview's local "Calculating" — different code path (per-leg), not implicated.
+- `src/lib/crossCityFilter.ts` (+ Morocco/Turkey/India/Thailand/Vietnam/Brazil/Argentina/Mexico tokens, expand `inferCountry`)
+- `supabase/functions/generate-itinerary/cross-city-filter.ts` (mirror)
+- `supabase/functions/destination-images/index.ts` (TIER 1c / 1.5 / Google Places / Unsplash gates)
+- `src/hooks/useTripHeroImage.ts` (read-time API gate)
+- `src/hooks/useDestinationImages.ts` (read-time API gate)
+- `src/components/common/DestinationHeroImage.tsx` (read-time API gate via `apiData.alt`)
+- `supabase/migrations/<ts>_blacklist_cross_city_destination_heroes.sql` (one-shot cleanup)
+- `src/lib/__tests__/crossCityFilter.morocco.test.ts` (new)
+- `mem://constraints/visual/hero-image-resolver-policy` (add cross-city gate clause)
+- `mem://index.md` (update the existing entry's one-liner)

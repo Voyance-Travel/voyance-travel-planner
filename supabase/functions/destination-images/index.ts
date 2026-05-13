@@ -5,6 +5,7 @@ import { trackCost, type CostTracker } from "../_shared/cost-tracker.ts";
 import { checkVenueCache, cacheVenueResult } from "../_shared/venue-cache.ts";
 import { googlePlacesTextSearch } from "../_shared/google-api.ts";
 import { isGoogleBillableUrl } from "../_shared/is-google-billable.ts";
+import { detectCrossCityMention } from "../generate-itinerary/cross-city-filter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -529,6 +530,17 @@ async function getGooglePlacesPhoto(
         if (isBadPlaceByKeyword(displayName, address)) {
           console.log("[Images] Rejecting (bad keyword):", displayName);
           continue;
+        }
+
+        // Cross-city geo guard for destination heroes — if the resolved place
+        // sits in another famous city in the same country (e.g. Chefchaouen
+        // returned for a Casablanca text-search), drop it.
+        if (entityType === 'destination') {
+          const xcity = detectCrossCityMention(`${displayName} ${address}`, destination);
+          if (xcity) {
+            console.log(`[Images] Rejecting (cross-city ${xcity}):`, displayName, '|', address);
+            continue;
+          }
         }
 
         // Calculate match score
@@ -1558,7 +1570,17 @@ async function fetchImageTiered(
           const reusable = reuseRows.find((row: any) => {
             const candidate = String(row.alt_text || row.entity_key || '');
             const score = calculateMatchScore(venueTokens, candidate);
-            return score >= 0.4 && row.image_url && !row.image_url.startsWith('data:');
+            if (score < 0.4 || !row.image_url || row.image_url.startsWith('data:')) return false;
+            // Cross-city geo guard (destination heroes especially): a reuse row
+            // labelled with another famous city in the destination's country
+            // (e.g. "Chefchaouen" returned for a Casablanca request) must not
+            // be served. Same bug class as the Montreal alpine-lake hero.
+            const xcity = detectCrossCityMention(candidate, destination);
+            if (xcity) {
+              console.log(`[Images] cross-city reuse blocked: alt="${candidate}" dest="${destination}" → "${xcity}"`);
+              return false;
+            }
+            return true;
           });
           if (reusable) {
             console.log(`[Images] 💰 6mo-reuse hit for "${cleanName}" → reusing row "${reusable.entity_key}"`);
@@ -1599,21 +1621,34 @@ async function fetchImageTiered(
           .ilike('name', `%${cleanName}%`)
           .limit(1),
       ]);
+      const sharedName =
+        attractionRes?.data?.[0]?.name ||
+        activityRes?.data?.[0]?.name ||
+        '';
       const sharedUrl =
         attractionRes?.data?.[0]?.image_url ||
         activityRes?.data?.[0]?.image_url ||
         null;
       if (sharedUrl && typeof sharedUrl === 'string' && !sharedUrl.startsWith('data:')) {
-        console.log(`[Images] ✅ Shared-table hit for "${cleanName}" — skipping Google`);
-        return {
-          id: `shared-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 60)}`,
-          url: sharedUrl,
-          alt: `${cleanName} photo`,
-          type: entityType === 'destination' ? 'hero' : 'activity',
-          source: 'shared',
-          width: 1200,
-          height: 800,
-        };
+        // Cross-city geo guard for destination heroes (and venue lookups too —
+        // we never want a famous wrong-city venue swapped in by name match).
+        const xcity = entityType === 'destination'
+          ? detectCrossCityMention(`${sharedName}`, destination)
+          : null;
+        if (xcity) {
+          console.log(`[Images] cross-city shared-table blocked: name="${sharedName}" dest="${destination}" → "${xcity}"`);
+        } else {
+          console.log(`[Images] ✅ Shared-table hit for "${cleanName}" — skipping Google`);
+          return {
+            id: `shared-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 60)}`,
+            url: sharedUrl,
+            alt: `${cleanName} photo`,
+            type: entityType === 'destination' ? 'hero' : 'activity',
+            source: 'shared',
+            width: 1200,
+            height: 800,
+          };
+        }
       }
     } catch (sharedErr) {
       console.warn('[Images] Shared-table lookup failed:', sharedErr);
@@ -1625,17 +1660,26 @@ async function fetchImageTiered(
   if (entityType === 'destination') {
     const unsplashImage = await tryUnsplashFallback(destination);
     if (unsplashImage) {
-      const persistentUnsplash = await ensurePersistentStorageUrl(
-        unsplashImage,
-        entityType,
-        venueName,
-        destination
-      );
-      await cacheImage(supabase, entityType, cleanName, destination, persistentUnsplash, 0.85);
-      if (cleanName !== venueName) {
-        await cacheImage(supabase, entityType, venueName, destination, persistentUnsplash, 0.85);
+      // Cross-city geo guard: Unsplash relevance can return famous photos from
+      // a different city in the same country (e.g. Chefchaouen blue alley for
+      // a "Casablanca landmark" search). Drop and let Google Places try next.
+      const altText = `${unsplashImage.alt || ''}`;
+      const xcity = detectCrossCityMention(altText, destination);
+      if (xcity) {
+        console.log(`[Images] cross-city Unsplash blocked: alt="${altText}" dest="${destination}" → "${xcity}"`);
+      } else {
+        const persistentUnsplash = await ensurePersistentStorageUrl(
+          unsplashImage,
+          entityType,
+          venueName,
+          destination
+        );
+        await cacheImage(supabase, entityType, cleanName, destination, persistentUnsplash, 0.85);
+        if (cleanName !== venueName) {
+          await cacheImage(supabase, entityType, venueName, destination, persistentUnsplash, 0.85);
+        }
+        return persistentUnsplash;
       }
-      return persistentUnsplash;
     }
   }
 
