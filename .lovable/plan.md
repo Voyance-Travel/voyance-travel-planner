@@ -1,27 +1,17 @@
 ## Plan
 
-1. **Make meal detection use the same visible time source as the health engine**
-   - Update `classifyMealSlot` so it checks `startTime`, `start_time`, `time`, `displayStartTime`, `adjustedStartTime`, and `metadata.displayStart` instead of only `startTime`.
-   - This addresses meal cards that render correctly but are invisible to the health classifier because their time is stored under a legacy/display field.
+1. **Patch the read-time bookend guard**
+   - Update `ensureHotelReturnBookend` so a terminal hotel-property nightcap does **not** count as an already-terminal accommodation card just because it is categorized as `accommodation` or names a hotel brand.
+   - Treat accommodation as terminal only when it is a true stay/checkout/return/check-in style card, not when the title/category/content indicates `nightcap`, `cocktail`, `bar`, `lounge`, or drinks.
 
-2. **Harden dining classification for real meal cards**
-   - Preserve the existing exclusions for sights/transit/drinks-only.
-   - Add support for common fields already present in itinerary data, such as `meal_slot`, `mealType`, `metadata.meal_slot`, `timeBlockType`, and dining tags.
-   - Add a same-day fallback: if a day has exactly one plausible dining card in the breakfast/lunch/dinner window, count it for that slot even if category drifted.
+2. **Mirror the same rule in backend generation**
+   - Update `runStep8` in the itinerary quality pass so generated/persisted plans also append a return after “Four Seasons property nightcap”-style tails.
+   - Keep existing protections for real checkout, stay, airport transfer, and departure-day logic.
 
-3. **Stop thin-schedule false positives on departure days**
-   - Make the thin-day skip use an inferred departure mode when persisted `dayMode` is missing/stale.
-   - Also treat a last day with a flight/airport-transfer/check-out terminal card as a departure day and skip “only 1 activity” warnings.
+3. **Add regression coverage**
+   - Add frontend tests for: `Nightcap at Four Seasons Bar/Lounge` ending the day should append `Return to Four Seasons Hotel Osaka`.
+   - Add/update backend tests around `runStep8` for the same pattern so the issue doesn’t reappear in persisted generation.
 
-4. **Add regression coverage**
-   - Add tests for:
-     - meals stored with `time`/`start_time` rather than `startTime`;
-     - persisted full-day meal policy with visible meals detected correctly;
-     - last-day afternoon departure skipping lunch/dinner and thin-day warnings;
-     - departure-day terminal card fallback when flight metadata is missing.
-
-## Technical notes
-
-- Primary files: `src/components/trip/TripHealthPanel.tsx` and its test files.
-- No backend schema changes needed.
-- The fix will keep the existing rule that drinks-only/nightcaps do not satisfy dinner.
+4. **Validate targeted behavior**
+   - Run the focused hotel-return tests only.
+   - Confirm normal terminal hotel cards remain idempotent and departure days still skip return injection.
