@@ -656,29 +656,56 @@ export async function getBudgetSummary(tripId: string, totalDays?: number): Prom
     .eq('id', tripId)
     .maybeSingle();
   const status = (tripRow?.itinerary_status as string | undefined) ?? '';
-  const frozenAt = (tripRow?.metadata as any)?.itinerary_frozen_at;
+  const meta = (tripRow?.metadata as any) || {};
+  const frozenAt = meta?.itinerary_frozen_at;
   // 'partial' is terminal — no more writes are coming, so it must NOT keep the
   // "Calculating…" spinner alive (which also drives a 4s polling loop).
   // `frozenAt` is belt-and-suspenders: any status, once frozen, is done.
   const isLive = status === 'queued' || status === 'generating';
-  // Stale-generation gate: a trip whose chain orchestrator crashed before
-  // stamping `itinerary_frozen_at` would otherwise leave the "Calculating…"
-  // spinner spinning forever (and drive an endless 4s polling loop). The
-  // chain generator finishes well within 8 minutes for any trip, so once
-  // `updated_at` is older than 10 minutes we treat the trip as stalled and
-  // flip the spinner off — the user sees whatever was written so far.
-  const STALE_GENERATION_MS = 10 * 60 * 1000;
+
+  // Heartbeat-based stale gate. We previously used `trips.updated_at`, but
+  // unrelated writes (cost-table sync, manual edits, hotel toggles, etc.)
+  // refresh that column and made it impossible for a stuck `generating` row
+  // to ever clear — the spinner would persist indefinitely. The chain
+  // generator stamps `metadata.generation_heartbeat` every per-day pass and
+  // `metadata.generation_completed_at` on terminal completion; both are
+  // strictly tied to actual generation activity.
+  const HEARTBEAT_STALE_MS = 3 * 60 * 1000; // 3 min without a heartbeat = stalled
+  const heartbeatMs = meta?.generation_heartbeat
+    ? new Date(meta.generation_heartbeat as string).getTime()
+    : 0;
+  const completedAt = meta?.generation_completed_at
+    ? new Date(meta.generation_completed_at as string).getTime()
+    : 0;
+  const heartbeatAge = heartbeatMs > 0 ? Date.now() - heartbeatMs : Infinity;
+  const heartbeatStale = isLive && !frozenAt && heartbeatAge >= HEARTBEAT_STALE_MS;
+
+  // Content gate: if the ledger already has meaningful cost rows, the
+  // "Calculating…" spinner is misleading — the displayed totals are the real
+  // numbers, not in-flight estimates. This catches trips whose chain crashed
+  // mid-run after writing most/all rows but never stamped frozen_at.
+  const hasMeaningfulLedger = ledger.length >= 3;
+
+  // Fallback for trips with no heartbeat ever recorded (legacy rows): use the
+  // wider `updated_at` window of 10 minutes so we don't false-positive on a
+  // freshly queued trip that hasn't stamped its first heartbeat yet.
+  const LEGACY_STALE_MS = 10 * 60 * 1000;
   const updatedAtMs = tripRow?.updated_at
     ? new Date(tripRow.updated_at as string).getTime()
     : 0;
-  const ageMs = updatedAtMs > 0 ? Date.now() - updatedAtMs : 0;
-  const isStale = isLive && !frozenAt && ageMs >= STALE_GENERATION_MS;
-  if (isStale) {
+  const legacyStale = isLive && !frozenAt && heartbeatMs === 0 &&
+    updatedAtMs > 0 && Date.now() - updatedAtMs >= LEGACY_STALE_MS;
+
+  const isStale = heartbeatStale || legacyStale || (isLive && !!completedAt);
+
+  if (isStale || (isLive && hasMeaningfulLedger && heartbeatAge >= HEARTBEAT_STALE_MS)) {
     console.warn(
-      `[getBudgetSummary] stale generation detected — flipping isGenerating off (tripId=${tripId} status=${status} ageMs=${ageMs})`,
+      `[getBudgetSummary] stale generation detected — flipping isGenerating off (tripId=${tripId} status=${status} heartbeatAgeMs=${heartbeatAge} ledgerRows=${ledger.length})`,
     );
   }
-  const isGenerating = isLive && !frozenAt && !isStale;
+
+  const isGenerating = isLive && !frozenAt && !isStale &&
+    !(hasMeaningfulLedger && heartbeatAge >= HEARTBEAT_STALE_MS);
 
   let committedHotel = 0;
   let committedFlight = 0;
