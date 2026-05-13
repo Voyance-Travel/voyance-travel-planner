@@ -151,6 +151,12 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
         tripFlightSelection: opts?.tripFlightSelection,
       });
       if (inferred) return inferred.requiredMeals;
+      // First/last day with no persisted policy AND no flight clock to
+      // infer from — DO NOT demand all three meals. Backend would have
+      // stamped requiredMeals if it intended to enforce them; absence
+      // means we can't reason about arrival/departure context and should
+      // not generate false-positive missing-meal warnings.
+      if (dayIndex === 0 || dayIndex === totalDays - 1) return [];
       return ['breakfast', 'lunch', 'dinner'];
     })();
 
