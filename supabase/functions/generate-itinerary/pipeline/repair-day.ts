@@ -4061,10 +4061,21 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
   // and `fillMissingStartTimes` may not have run yet on the path that reaches us.
   const pickStart = (a: any): number => parseTimeToMinutes(a?.startTime || a?.start_time || a?.time || '') ?? -1;
   const pickEnd = (a: any): number => parseTimeToMinutes(a?.endTime || a?.end_time || '') ?? -1;
+  // User-added rows are sacred. System-injected `preserveAsManualPick` meal
+  // sentinels are NOT exempt on departure days when they fall at/after the
+  // transfer cutoff or are untimed — those are the source of the recurring
+  // "floating dining card after the airport transfer" leak.
+  // See mem://constraints/itinerary/departure-day-save-time-enforcement
   const isExempt = (a: any): boolean => {
     if (a?.userAdded || a?.userEdited || a?.isManual || a?.extracted || a?.pinned) return true;
     const meta = a?.metadata || {};
-    if (meta.preserveAsManualPick) return true;
+    if (meta.preserveAsManualPick) {
+      const s = parseTimeToMinutes(a?.startTime || a?.start_time || a?.time || '') ?? -1;
+      // Drop exemption when sentinel has no placeable time OR sits at/after cutoff.
+      if (s < 0) return false;
+      if (s >= cutoffMin) return false;
+      return true;
+    }
     return false;
   };
   const filtered: any[] = [];
