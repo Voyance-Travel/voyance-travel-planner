@@ -112,6 +112,15 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   // The hash also lets a content change re-trigger if the user adds priced
   // items after the first attempt.
   const lastBackfillFingerprintRef = useRef<string | null>(null);
+  // One-shot suppress flag for the next computed delta toast. Set when a
+  // `booking-changed` event arrives with `detail.silent: true` (system-driven
+  // reconciliation: PaymentsTab tab-mount, expire-stale, orphan-archive,
+  // sync-trip-cost-table backfill). Prevents phantom "Trip total changed by
+  // ±$X" toasts when the user took no action.
+  const suppressNextToastRef = useRef<{ active: boolean; reason: string }>({
+    active: false,
+    reason: '',
+  });
 
   const fetchData = useCallback(async () => {
     if (!tripId) {
@@ -366,7 +375,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
                   `[useTripFinancialSnapshot] orphan archive over-count ${count} > js=${orphanPaymentItemIds.size} — manual leak suspected (tripId=${tripId})`
                 );
               }
-              window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
+              window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId, silent: true, reason: 'orphan-archive' } }));
             }
           });
       }
@@ -425,7 +434,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
             return;
           }
           console.info(`[useTripFinancialSnapshot] auto-backfilled activity_costs for trip ${tripId}`);
-          window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
+          window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId, silent: true, reason: 'backfill' } }));
         });
     }
 
@@ -482,7 +491,13 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
 
       // Defensive guard: warn on large unexpected jumps. Threshold = 25%.
       const ratio = prev > 0 ? Math.abs(delta.deltaCents) / prev : Infinity;
-      if (ratio > 0.25 && lastWarnedTotalRef.current !== totalCents) {
+      // Consume one-shot suppression flag from a silent system-driven event.
+      const suppressed = suppressNextToastRef.current.active;
+      const suppressReason = suppressNextToastRef.current.reason;
+      if (suppressed) {
+        suppressNextToastRef.current = { active: false, reason: '' };
+      }
+      if (ratio > 0.25 && lastWarnedTotalRef.current !== totalCents && !suppressed) {
         lastWarnedTotalRef.current = totalCents;
         const sign = delta.deltaCents >= 0 ? '+' : '−';
         const amount = Math.abs(delta.deltaCents) / 100;
@@ -526,6 +541,14 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
             });
           } catch {}
         }
+      } else if (suppressed && ratio > 0.25) {
+        const sign = delta.deltaCents >= 0 ? '+' : '−';
+        const amount = Math.abs(delta.deltaCents) / 100;
+        console.info(
+          `[useTripFinancialSnapshot] suppressed system-reconcile toast (reason=${suppressReason}) ${sign}$${amount.toFixed(0)} tripId=${tripId}`
+        );
+        // Still mark so a later identical-total real event doesn't double-fire
+        lastWarnedTotalRef.current = totalCents;
       }
     }
     prevTotalRef.current = totalCents;
@@ -552,6 +575,12 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       setData(prev => ({ ...prev, loading: false }));
     } finally {
       clearTimeout(safetyTimer);
+      // Always clear the suppress flag at end of fetchData so a leftover
+      // silent flag can't swallow a future legitimate user-driven change.
+      // (Listener re-arms the flag for the trailing 600ms refetch path.)
+      if (suppressNextToastRef.current.active) {
+        suppressNextToastRef.current = { active: false, reason: '' };
+      }
     }
   }, [tripId]);
 
@@ -571,6 +600,16 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     let pendingTimer: ReturnType<typeof setTimeout> | null = null;
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
+      // Silent system-driven event (PaymentsTab tab-mount, expire-stale,
+      // orphan-archive, sync-trip-cost-table backfill). Suppress the next
+      // computed-delta toast so the user doesn't see a phantom "Trip total
+      // changed by ±$X" when they took no action.
+      if (detail?.silent === true) {
+        suppressNextToastRef.current = {
+          active: true,
+          reason: typeof detail.reason === 'string' ? detail.reason : 'system',
+        };
+      }
       if (detail?.optimisticTotalCents != null) {
         setData(prev => ({ ...prev, tripTotalCents: detail.optimisticTotalCents }));
       }
@@ -582,12 +621,23 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
           paidCents: Math.max(0, prev.paidCents + detail.optimisticPaidDeltaCents),
         }));
       }
-      fetchData(); // Immediate refetch
+      const isSilent = detail?.silent === true;
+      const silentReason = isSilent
+        ? (typeof detail.reason === 'string' ? detail.reason : 'system')
+        : '';
+      fetchData(); // Immediate refetch (consumes suppress flag if silent)
       // Mirror PaymentsTab's fetchPayments(delayMs) pattern: re-read after
       // ~600 ms to catch rows that weren't read-visible on the first pass
       // (the original L'Arpège bug). Replaces any in-flight pending pass.
       if (pendingTimer) clearTimeout(pendingTimer);
-      pendingTimer = setTimeout(() => { fetchData(); }, 600);
+      pendingTimer = setTimeout(() => {
+        // Re-arm suppression for the trailing refetch so silent system events
+        // don't surface a toast on either pass.
+        if (isSilent) {
+          suppressNextToastRef.current = { active: true, reason: silentReason };
+        }
+        fetchData();
+      }, 600);
     };
     window.addEventListener('booking-changed', handler);
     return () => {

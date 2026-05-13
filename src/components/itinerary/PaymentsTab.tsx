@@ -235,8 +235,10 @@ export function PaymentsTab({
   // a Stripe session but no completion, so the UI never stays "Reconciling…".
   const fetchPayments = useCallback(async (delayMs = 0) => {
     if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+    let expiredCount = 0;
     try {
-      await supabase.rpc('expire_stale_trip_payments', { p_trip_id: tripId, p_max_age_minutes: 60 });
+      const { data: expData } = await supabase.rpc('expire_stale_trip_payments', { p_trip_id: tripId, p_max_age_minutes: 60 });
+      expiredCount = (expData as any)?.expired_count ?? 0;
     } catch {
       // Non-fatal — proceed to fetch
     }
@@ -246,11 +248,32 @@ export function PaymentsTab({
       setTotals(result.totals || { paid: 0, pending: 0, total: 0 });
     }
     setLoading(false);
+    // If expire-stale actually flipped rows, the snapshot's next refetch will
+    // see a real change. Tag a silent `booking-changed` so the snapshot hook
+    // suppresses the phantom "Trip total changed by ±$X" toast — the user
+    // didn't take an action, this is system reconciliation.
+    if (expiredCount > 0) {
+      try {
+        window.dispatchEvent(new CustomEvent('booking-changed', {
+          detail: { tripId, silent: true, reason: 'expire-stale' },
+        }));
+      } catch {}
+    }
   }, [tripId]);
 
   useEffect(() => {
+    // Initial mount: dispatch a silent priming event so any reconciliation
+    // chain triggered by tab-open (orphan archive, backfill, expire-stale)
+    // doesn't surface a phantom toast in the snapshot hook.
+    if (tripId) {
+      try {
+        window.dispatchEvent(new CustomEvent('booking-changed', {
+          detail: { tripId, silent: true, reason: 'payments-tab-mount', coalesceMs: 0 },
+        }));
+      } catch {}
+    }
     fetchPayments();
-  }, [fetchPayments]);
+  }, [fetchPayments, tripId]);
 
   // Always-on cleanup of legacy "payments_drift_*" localStorage keys. The
   // server-side fingerprint logic was removed; any leftover keys (or new ones
