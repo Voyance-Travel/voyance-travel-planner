@@ -548,12 +548,36 @@ function parseTime(timeStr: string): number {
  */
 const DINING_CAT_RE = /(dining|restaurant|food|cafe|breakfast|brunch|lunch|dinner|supper)/i;
 const DRINKS_ONLY_RE = /\b(nightcap|cocktail|aperitif|aperitivo|drinks?|bar|speakeasy|wine bar|pub)\b/i;
+
+// Non-meal categories/titles that must NEVER be classified as a meal even if
+// they sit inside a meal time-window. Generator routinely emits real
+// restaurants tagged 'cultural' / 'experience' / '' (Katsukura pattern), so
+// we accept restaurant signals from cuisine metadata or venue-suffix
+// keywords — but we have to exclude obvious sights first.
+const NON_MEAL_CAT_RE = /(transit|transport|transfer|flight|accommodation|hotel|check[\s-]?in|check[\s-]?out|return|shopping|museum|gallery|park|garden|wellness|spa|nightlife|entertainment|sightseeing|culture|tour)/i;
+const NON_MEAL_TITLE_RE = /\b(museum|park|garden|temple|shrine|gallery|palace|castle|cathedral|basilica|tour|market visit|walking tour|guided tour|monument|memorial|observatory|aquarium|zoo|theatre|theater|concert|show)\b/i;
+const VENUE_SUFFIX_RE = /\b(restaurant|trattoria|osteria|ristorante|bistro|brasserie|kaiseki|ramen|sushi|izakaya|honten|honke|tonkatsu|teppanyaki|yakitori|robatayaki|cafe|café|cantina|taqueria|cevicheria|asador|paladar|mes[oó]n|bouchon|maison|patisserie|p[âa]tisserie|boulangerie|konditorei|bakery|deli|gastropub|chophouse|steakhouse|pizzeria|enoteca|wine bar|brewpub|tavern|tapas)\b/i;
+
+function looksLikeMealVenue(a: any): boolean {
+  const cat = String(a?.category || a?.type || '').toLowerCase();
+  if (NON_MEAL_CAT_RE.test(cat)) return false;
+  const title = String(a?.title || a?.name || '').toLowerCase();
+  if (NON_MEAL_TITLE_RE.test(title)) return false;
+  const meta = a?.metadata || {};
+  if (a?.cuisine || a?.cuisineType || meta.cuisine || meta.cuisineType) return true;
+  if (meta.is_meal === true || meta.isMeal === true) return true;
+  if (VENUE_SUFFIX_RE.test(title)) return true;
+  return false;
+}
+
 export function classifyMealSlot(a: any): 'breakfast' | 'lunch' | 'dinner' | null {
   const cat = String(a?.category || a?.type || '').toLowerCase();
   const title = String(a?.title || a?.name || '').toLowerCase();
   const explicit = String(a?.mealSlot || a?.metadata?.mealSlot || '').toLowerCase();
 
-  const isDining = DINING_CAT_RE.test(cat) || DINING_CAT_RE.test(title) || !!explicit;
+  const isDiningCat = DINING_CAT_RE.test(cat) || DINING_CAT_RE.test(title);
+  const looksLike = !isDiningCat && !explicit && looksLikeMealVenue(a);
+  const isDining = isDiningCat || !!explicit || looksLike;
   if (!isDining) return null;
 
   // 1. Explicit metadata wins
