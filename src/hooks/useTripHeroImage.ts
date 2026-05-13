@@ -19,6 +19,7 @@ import {
 import { getHeroImageByName, getDestinationCanonicalImage } from '@/services/destinationImagesAPI';
 import { supabase } from '@/integrations/supabase/client';
 import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
+import { detectCrossCityMention } from '@/lib/crossCityFilter';
 
 /**
  * Shared predicate: a seeded hero URL we should treat as broken/unusable.
