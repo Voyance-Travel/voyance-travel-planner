@@ -1,69 +1,54 @@
-# Untimed Departure-Day Lunch Card
+## Problem
 
-## Symptom
-
-Recurring across Faro, Bruges, Milan, Mallorca, Hong Kong, Mexico City, San Juan: on the departure day, a lunch card (e.g. "La Casita Blanca") renders with **no timestamp**, sorted to the bottom of the day — **after** the airport-transfer card. Persists across refresh, so it's also persisting in `trips.itinerary_data`.
+Hero image renders correctly in-session (e.g., San Juan colonial photo) but reverts to a green gradient after refresh. Same pattern as Faro.
 
 ## Root cause
 
-Two structural holes that compound:
+`useTripHeroImage` (src/hooks/useTripHeroImage.ts) has a write-back effect that persists the resolved image URL to `trips.metadata.hero_image`. It is gated by:
 
-### 1. `time` field bypasses canonicalization
+```ts
+if (existing.hero_image) return;  // never overwrite
+```
 
-`fillMissingStartTimes` (`supabase/functions/_shared/timing-cascade.ts` line 122) treats a card as "already timed" when **any** of `startTime | start_time | time` is set, but it never copies `a.time` into `a.startTime`. Result: a card emitted by the LLM with only `time: "13:30"` slips through unchanged. Every downstream pass that reads `a.startTime` (and there are many) sees no time.
+When a trip was originally seeded with a known-broken value (typically an `images.unsplash.com` CDN URL — the hook's *display* path explicitly skips these as "broken silently," see lines 193–199), the persistence path still sees a truthy `existing.hero_image` and bails. So:
 
-### 2. `§15z` departure cleanup ignores `time` / `start_time`
+- **In-session**: display path ignores the bad seeded URL, resolves a fresh canonical/DB/API image, and renders it.
+- **Refresh**: seeded value is still the same broken Unsplash URL. Display path skips it again and re-resolves from scratch. If the API call is flaky (rate-limit, transient Google Places miss, network), the chain falls through to the gradient.
 
-`enforceDepartureDayLogistics` (`supabase/functions/generate-itinerary/pipeline/repair-day.ts`):
+The good URL we already had in memory was never written back, so we keep paying the resolution cost — and the failure cost — on every load.
 
-- Line 4065: `const s = parseTimeToMinutes(a.startTime || '') ?? -1;` — falls back to `-1` for any card missing `startTime`.
-- Line 4066: `if (s >= 0 && s >= cutoffMin)` — the cutoff drop is **skipped** when `s === -1`. The lunch card survives.
-- Line 4078 dining-near-transfer prune similarly requires both `s` and `e` ≥ 0.
+A secondary, related issue: the same skip happens if a previous resolution wrote back a URL that has since gone stale (signed Google Places URL expiring, etc.). There's no path to refresh it.
 
-The final sort at line 4093 then uses `?? 99999`, pushing the untimed lunch to the **bottom** of the day, behind the timed `Transfer to Airport` card. Exact symptom match.
+## Fix
 
-`assignFloatingMealTimes` (the obvious save-time safety net) does run in `normalizeDays`, but it also early-exits at line 198 when `a.time` is set. So a card with `time` only never gets `startTime` assigned by either normalizer.
+Update the write-back effect in `src/hooks/useTripHeroImage.ts` to overwrite when the existing stored value is unusable or different from the freshly-resolved URL:
 
-## Fix (single backend change set)
+1. Compute `existingHero = existing.hero_image` as a string.
+2. Treat as "needs replacement" when any of:
+   - `existingHero` is empty/non-string
+   - `existingHero` matches `images.unsplash.com` (the same broken-CDN check the display path uses)
+   - `existingHero !== imageUrl` AND the current `source` is `'canonical'`/`'db_curated'`/`'api'` (i.e., we have something better than what's stored)
+3. If none of those, keep current short-circuit (don't churn writes).
+4. Keep the existing guards: skip when `source === 'seeded'` or `'gradient'`, skip data: URLs, keep `persistedRef` so we write at most once per mount.
 
-### A. `_shared/timing-cascade.ts` — promote `time` → `startTime`
+Extract the Unsplash-broken check into a small shared helper at the top of the file (`isBrokenSeededUrl`) so display (line 194) and persist use the exact same predicate — prevents future drift.
 
-In `fillMissingStartTimes` (lines 116-145):
-- Add a leading promotion step. If `a.startTime` is empty AND (`a.start_time` OR `a.time`) is set, copy that value into `a.startTime` (and mirror into `a.start_time`/`a.time`). Do the same for `endTime` ↔ `end_time`. Telemetry: `[NORMALIZE_START_PROMOTE] day=N from=time|start_time`.
-- Then run the existing end−duration computation for cards that genuinely have no start.
+## Why this matches the Faro fix pattern
 
-In `assignFloatingMealTimes` (lines 192-198), the same promotion step before the "skip if already timed" check, so a timed-only-via-`time` card never reaches the floating-assignment branch with the wrong shape.
+Faro had the same symptom and was fixed by ensuring resolved images get persisted to permanent storage (mem reference: lovable-stack-overflow note about temporary URLs not being saved). This is the trip-metadata equivalent: the resolution succeeded but the write-back was silently suppressed by an over-eager "don't overwrite" guard.
 
-This closes the structural source for **every** downstream consumer that reads `a.startTime`, not just §15z.
+## Files
 
-### B. `pipeline/repair-day.ts` §15z — read all three time fields, then drop untimed dining
+- `src/hooks/useTripHeroImage.ts` — only file touched.
 
-In `enforceDepartureDayLogistics`:
-- Replace `parseTimeToMinutes(a.startTime || '')` at lines 4065 and 4077 with a small `pickStart(a)` / `pickEnd(a)` helper that reads `a.startTime || a.start_time || a.time` (and `endTime || end_time`). Keeps the existing prune semantics intact for any LLM card that emitted `time` only.
-- Add a new explicit branch before the cutoff check: if a non-locked, non-checkout, non-logistics row is `isDiningRow(a)` AND has **no parsable time at all**, drop it with `action: 'final_enforce_dropped_untimed_dining'` and a `[DEPARTURE_UNTIMED_DINING_PRUNED]` log line. (Locked / userAdded / extracted / pinned / `preserveAsManualPick` rows stay — same exemption set the existing prune respects.)
+## Validation
 
-### C. `action-save-itinerary.ts` — order guarantee
-
-`normalizeDays` already calls `fillMissingStartTimes` then `assignFloatingMealTimes`. With change (A), both will see the promoted `startTime`. No code reordering needed; verify by adding the promotion sentinel to the existing log line so we can confirm in production that the promotion fires on the next save of an affected trip.
-
-### D. Targeted self-heal sweep
-
-For trips already persisted with this bug, the next save (any source — chat action, manual edit, refresh-day) will run change (A) and write back the canonical `startTime`. No migration needed; the bug self-heals on first re-write because §15z and the sort then operate on a real time. Document this in the closing note instead of running a one-shot.
+- Refresh a trip whose `metadata.hero_image` is an `images.unsplash.com` URL → expect non-Unsplash URL written to metadata after first successful resolution; subsequent refreshes load instantly from the seeded slot (no API call, no gradient).
+- Refresh a trip with no `metadata.hero_image` → unchanged behavior (write on first resolution).
+- Refresh a trip already storing a good non-Unsplash URL → no churn write (idempotent).
 
 ## Out of scope
 
-- LLM prompt changes. We treat the `time`-only payload as legitimate input and canonicalize it.
-- The `last-day lunch assertion` block (`action-generate-trip-day.ts` lines 2008-2043) — `proposeGapFiller` already returns timed cards; not the leak path.
-- Frontend rendering — the UI is correctly sorting by time; an untimed card legitimately falls to the bottom. Fixing data fixes the display.
-
-## Verification
-
-1. **Unit test:** extend `supabase/functions/generate-itinerary/__tests__/normalize-start-time.test.ts` with two cases: (i) `{ time: '13:30' }` only → `fillMissingStartTimes` assigns `startTime: '13:30'`; (ii) lunch dining row with no time fields on a departure day with a 14:30 transfer → `enforceDepartureDayLogistics` drops it with `action: 'final_enforce_dropped_untimed_dining'`.
-2. **Sentinel grep:** after deploy, `[NORMALIZE_START_PROMOTE]` should fire on saves of legacy trips, and `[DEPARTURE_UNTIMED_DINING_PRUNED]` should appear when a fresh generation produces an untimed last-day lunch.
-3. **Trip re-save:** open the reported San Juan trip, trigger any save (chat or manual). The La Casita Blanca card should either anchor to ~13:00 (if it has lunch slot room before transfer) or be dropped (if it doesn't). Refresh confirms persistence.
-
-## Memory note (post-merge)
-
-Add a memory entry under `mem://constraints/itinerary/canonical-time-field-promotion`:
-- `time` and `start_time` are aliases of `startTime`. The promotion in `fillMissingStartTimes` is the single source of truth — never read `time` directly in cleanup code; always read `startTime` after normalization.
-- `enforceDepartureDayLogistics` drops dining rows with no parsable time on departure days. Sentinel `[DEPARTURE_UNTIMED_DINING_PRUNED]`.
+- No backend/edge changes.
+- No schema changes.
+- Not touching `DestinationHeroImage.tsx` or the `destinations.hero_image_url` write-back; those are a separate canonical layer working as intended.

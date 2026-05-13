@@ -19,6 +19,18 @@ import {
 import { getHeroImageByName, getDestinationCanonicalImage } from '@/services/destinationImagesAPI';
 import { supabase } from '@/integrations/supabase/client';
 
+/**
+ * Shared predicate: a seeded hero URL we should treat as broken/unusable.
+ * Used by both the display-time fallback chain and the persistence write-back
+ * so they can never disagree about what counts as "good enough to keep".
+ */
+function isBrokenSeededUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return true;
+  // Unsplash CDN URLs break silently (403/expired) — display path skips these.
+  if (/images\.unsplash\.com/.test(url)) return true;
+  return false;
+}
+
 interface UseTripHeroImageOptions {
   destination: string;
   seededHeroUrl?: string | null;
@@ -189,10 +201,10 @@ export function useTripHeroImage({
 
   // Determine current image URL based on fallback chain
   const getImageUrl = (): { url: string; source: UseTripHeroImageResult['source'] } => {
-    // 1. Seeded hero (if not failed AND not a known-broken Unsplash URL)
+    // 1. Seeded hero (if not failed AND not a known-broken URL)
     if (seededHeroUrl && !seededFailed) {
-      if (/images\.unsplash\.com/.test(seededHeroUrl)) {
-        // Unsplash CDN URLs break silently — treat seeded as failed
+      if (isBrokenSeededUrl(seededHeroUrl)) {
+        // Treat broken seeded URLs as failed; persistence path will overwrite.
       } else {
         return { url: seededHeroUrl, source: 'seeded' };
       }
@@ -251,8 +263,13 @@ export function useTripHeroImage({
           .single();
 
         const existing = (data?.metadata as Record<string, unknown>) || {};
-        // Don't overwrite if already set
-        if (existing.hero_image) return;
+        const existingHero = typeof existing.hero_image === 'string' ? existing.hero_image : '';
+
+        // Skip write only if stored value is good AND matches what we'd write.
+        // Otherwise overwrite — covers: empty, broken-CDN seeded URLs, and stale
+        // values that differ from a freshly-resolved canonical/db/api image.
+        const storedIsGood = existingHero && !isBrokenSeededUrl(existingHero);
+        if (storedIsGood && existingHero === imageUrl) return;
 
         await supabase
           .from('trips')
