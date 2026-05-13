@@ -2805,7 +2805,18 @@ async function _handleGenerateTripDayInner(
   const meaningfulThreshold = totalDays * MIN_MEANINGFUL_PER_DAY;
   const hasEnoughMeaningful = dayNumber < totalDays || meaningfulActivityCount >= meaningfulThreshold;
 
-  const isComplete = dayNumber >= totalDays && allDaysHaveActivities && dayCountMatches && noFailedDays && hasEnoughMeaningful;
+  // RECOVERY: a previously-failed day that succeeded on retry leaves a stale
+  // entry in metadata.failed_day_numbers, which would otherwise pin status at
+  // 'partial' forever (→ FE spinner never resolves). If every day now has
+  // activities and meaningful coverage is met, treat failed_day_numbers as
+  // recovered and let isComplete flip to ready.
+  const recoveredFromStaleFailures =
+    dayNumber >= totalDays && allDaysHaveActivities && dayCountMatches && hasEnoughMeaningful;
+  const effectiveNoFailedDays = noFailedDays || recoveredFromStaleFailures;
+  if (recoveredFromStaleFailures && !noFailedDays) {
+    console.log(`[generate-trip-day:final] Clearing stale failed_day_numbers=${JSON.stringify(failedDayNumbers)} — all days populated on retry`);
+  }
+  const isComplete = dayNumber >= totalDays && allDaysHaveActivities && dayCountMatches && effectiveNoFailedDays && hasEnoughMeaningful;
   const computedStatus = isComplete ? 'ready' : (dayNumber >= totalDays ? 'partial' : 'generating');
 
   if (dayNumber >= totalDays && !isComplete) {
