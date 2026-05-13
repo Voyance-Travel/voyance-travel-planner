@@ -141,7 +141,7 @@ export function useTripHeroImage({
       .then((url) => {
         if (cancelled) return;
         setDbCuratedFetched(true);
-        if (url) {
+        if (url && !isUntrustedHeroUrl(url)) {
           setDbCuratedUrl(url);
         }
       })
