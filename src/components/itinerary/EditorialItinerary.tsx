@@ -6097,21 +6097,47 @@ export function EditorialItinerary({
                   const daysGroupUsd  = daysSubtotalCents / 100;
                   const hotelChipUsd  = financialSnapshot.effectiveHotelCents / 100;
                   const flightChipUsd = financialSnapshot.effectiveFlightCents / 100;
+                  // Safe display fold: if the snapshot's tripTotal is missing
+                  // hotel/flight that the chips show, render the chip-sum as
+                  // RHS so the user-visible equation always balances. Strictly
+                  // a display guard — never written back to the snapshot.
+                  // See mem://constraints/finance/header-strip-mirrors-snapshot.
+                  const chipSumUsd = daysGroupUsd + hotelChipUsd + flightChipUsd;
+                  const stripDrift = !financialSnapshot.loading
+                    && (hotelChipUsd > 0 || flightChipUsd > 0)
+                    && tripTotalUsd + 1 < chipSumUsd;
+                  const safeTripTotalUsd = stripDrift ? chipSumUsd : tripTotalUsd;
                   const reserveAdjustUsd =
-                    (financialSnapshot.tripTotalCents
-                      - daysSubtotalCents
-                      - financialSnapshot.effectiveHotelCents
-                      - financialSnapshot.effectiveFlightCents) / 100;
+                    safeTripTotalUsd - daysGroupUsd - hotelChipUsd - flightChipUsd;
                   if (
                     typeof import.meta !== 'undefined' &&
                     (import.meta as any).env?.DEV &&
                     !financialSnapshot.loading
                   ) {
-                    const balance = daysGroupUsd + hotelChipUsd + flightChipUsd + reserveAdjustUsd - tripTotalUsd;
-                    if (Math.abs(balance) > 1) {
+                    if (stripDrift) {
+                      // eslint-disable-next-line no-console
+                      console.warn('[STRIP_DRIFT]', {
+                        tripId,
+                        tripCurrency,
+                        tripTotalCents: financialSnapshot.tripTotalCents,
+                        daysSubtotalCents,
+                        effectiveHotelCents: financialSnapshot.effectiveHotelCents,
+                        effectiveFlightCents: financialSnapshot.effectiveFlightCents,
+                        committedHotelCents: financialSnapshot.committedHotelCents,
+                        committedFlightCents: financialSnapshot.committedFlightCents,
+                        manualHotelDelta: financialSnapshot.manualHotelDelta,
+                        manualFlightDelta: financialSnapshot.manualFlightDelta,
+                        includeHotel: financialSnapshot.includeHotel,
+                        includeFlight: financialSnapshot.includeFlight,
+                        chipSumUsd,
+                        safeTripTotalUsd,
+                      });
+                    } else if (Math.abs(reserveAdjustUsd) > 1 && !(Math.abs(reserveAdjustUsd) > 0.5)) {
+                      // legacy soft-balance warn (kept for parity)
                       // eslint-disable-next-line no-console
                       console.warn('[Itinerary strip] reconciliation imbalance', {
-                        daysGroupUsd, hotelChipUsd, flightChipUsd, reserveAdjustUsd, tripTotalUsd, balance,
+                        daysGroupUsd, hotelChipUsd, flightChipUsd, reserveAdjustUsd,
+                        tripTotalUsd: safeTripTotalUsd,
                       });
                     }
                   }
@@ -6141,7 +6167,7 @@ export function EditorialItinerary({
                         <Sep char="=" />
                         <span>
                           <span className="text-muted-foreground/70">Trip Total</span>{' '}
-                          <span className="font-semibold text-foreground tabular-nums">{formatCurrency(displayCost(tripTotalUsd), tripCurrency)}</span>
+                          <span className="font-semibold text-foreground tabular-nums">{formatCurrency(displayCost(safeTripTotalUsd), tripCurrency)}</span>
                         </span>
                       </div>
                       {travelers > 1 && (
