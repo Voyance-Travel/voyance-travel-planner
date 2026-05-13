@@ -314,4 +314,36 @@ describe('resolveCanonicalCostRows', () => {
     // Days (10000) + manual hotel delta (167200) = 177200
     expect(r.effectiveTotalCents).toBe(177200);
   });
+
+  // Osaka regression: hotel sits on Day N (≥1), not Day 0, and there is no
+  // manual payment. The header-strip Hotel chip reads canonicalDay0HotelCents
+  // (NOT canonical.hotelCents) so a Day-N hotel — already counted inside the
+  // day badge via useTripDayBreakdown — is not duplicated as a top-level chip.
+  // See mem://constraints/finance/header-strip-mirrors-snapshot.
+  it('Day-N hotel (no Day-0 row, no manual): canonicalDay0HotelCents stays 0', () => {
+    const live = [
+      { id: 'h1', dayNumber: 1, name: 'Four Seasons Osaka', category: 'hotel',  jsonCost: 0 },
+      { id: 'd1', dayNumber: 1, name: 'Lunch',              category: 'dining', jsonCost: 0 },
+    ];
+    const costs = [
+      { activity_id: 'h1', day_number: 1, category: 'hotel',  cost_per_person_usd: 1034, num_travelers: 2 },
+      { activity_id: 'd1', day_number: 1, category: 'dining', cost_per_person_usd: 50,   num_travelers: 2 },
+    ];
+    const r = resolveCanonicalCostRows({
+      costs: costs as any,
+      liveActivities: live,
+      includeHotel: true,
+      includeFlight: false,
+      manualPayments: [],
+      travelers: 2,
+    });
+    expect(r.canonicalDay0HotelCents).toBe(0);
+    // canonical.hotelCents still aggregates ALL hotel rows (truth) — only the
+    // header strip narrows to Day-0 via canonicalDay0HotelCents.
+    expect(r.hotelCents).toBe(206800);
+    // Trip total counts the Day-N hotel exactly once (no double-fold).
+    expect(r.totalCents).toBe(216800);          // (1034 + 50) * 2 * 100
+    expect(r.effectiveTotalCents).toBe(216800); // delta is 0 (no manual)
+    expect(r.manualHotelDelta).toBe(0);
+  });
 });
