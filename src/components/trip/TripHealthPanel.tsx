@@ -204,10 +204,13 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
     // rendered display by ≥1 min. Breadcrumb for repros like Mexico City /
     // Montreal / Casablanca where stale-overlap warnings still surface.
     if (cascadePreview.size > 0 && typeof console !== 'undefined') {
-      for (const a of activities) {
-        if (!a?.id) continue;
-        const preview = cascadePreview.get(String(a.id));
-        if (!preview) continue;
+      activities.forEach((a: any, idx: number) => {
+        const id = a?.id;
+        const preview =
+          (id !== undefined && id !== null && id !== ''
+            ? cascadePreview.get(String(id))
+            : undefined) || cascadePreview.get(indexKey(idx));
+        if (!preview) return;
         const renderedStart = a?.displayStartTime || a?.startTime || a?.time;
         const ps = preview.startTime ? parseTime(preview.startTime) : null;
         const rs = renderedStart ? parseTime(renderedStart) : null;
@@ -215,14 +218,15 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           // eslint-disable-next-line no-console
           console.warn('[HEALTH_CASCADE_DRIFT]', {
             day: dayNum,
-            id: a.id,
+            id,
+            idx,
             title: a.name || a.title,
             renderedStart,
             previewStart: preview.startTime,
             deltaMin: ps - rs,
           });
         }
-      }
+      });
     }
 
     // Gate: skip timing checks if any non-transit activity is missing start/end.
