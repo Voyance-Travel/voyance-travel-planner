@@ -682,19 +682,39 @@ export function getDestinationImages(destination: string, count = 4): string[] {
 }
 
 /**
+ * Allowlist of destination keys whose hardcoded curated photo IDs in
+ * CURATED_DESTINATION_IMAGES have been *visually verified* to depict the
+ * city (not generic Alpine/beach/skyline stock).
+ *
+ * Default empty: the hardcoded map is treated as untrusted and the resolver
+ * skips straight past it to canonical DB image / curated_images table /
+ * Google Places (locality-scoped). Add a key only after eyeballing every
+ * URL in its array.
+ *
+ * Root cause this gates: comments like "// Montreal skyline" sat next to
+ * Unsplash photo IDs that actually showed an alpine lake with a wooden
+ * rowboat. The label was never ground-truthed against the image.
+ */
+const VERIFIED_CURATED = new Set<string>([
+  // intentionally empty — see comment above
+]);
+
+/**
  * Check if we have curated images for a destination
  */
 export function hasCuratedImages(destination: string): boolean {
   const normalized = destination.toLowerCase().trim();
   const cityOnly = normalized.split(',')[0].trim();
-  return !!(
-    CURATED_DESTINATION_IMAGES[normalized] ||
-    CURATED_DESTINATION_IMAGES[normalized.replace(/\s+/g, '-')] ||
-    CURATED_DESTINATION_IMAGES[normalized.replace(/-/g, ' ')] ||
-    CURATED_DESTINATION_IMAGES[cityOnly] ||
-    CURATED_DESTINATION_IMAGES[cityOnly.replace(/\s+/g, '-')] ||
-    CURATED_DESTINATION_IMAGES[cityOnly.replace(/-/g, ' ')]
-  );
+  const candidates = [
+    normalized,
+    normalized.replace(/\s+/g, '-'),
+    normalized.replace(/-/g, ' '),
+    cityOnly,
+    cityOnly.replace(/\s+/g, '-'),
+    cityOnly.replace(/-/g, ' '),
+  ];
+  // Must be in the verified allowlist AND present in the hardcoded map.
+  return candidates.some((k) => VERIFIED_CURATED.has(k) && !!CURATED_DESTINATION_IMAGES[k]);
 }
 
 /**
