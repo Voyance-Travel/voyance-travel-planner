@@ -188,9 +188,24 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
       }
     }
 
-    // Thin-day — skip days that legitimately have a tiny usable window
-    const SKIP_THIN = new Set(['late_arrival', 'early_departure', 'full_day_event', 'midday_departure']);
-    if (!SKIP_THIN.has(dayMode) && realActivities.length < 3) {
+    // Thin-day — skip days that legitimately have a tiny usable window.
+    // Also treat any last day whose own activities contain a flight or
+    // airport-transfer/check-out terminal card as a departure day, even if
+    // persisted dayMode and flight_selection are missing — which was the
+    // root cause of "Day N has only 1 activity (light schedule)" on
+    // trimmed departure days.
+    const SKIP_THIN = new Set(['late_arrival', 'early_departure', 'midday_departure', 'afternoon_departure', 'full_day_event']);
+    const isLastDay = dayIndex === totalDays - 1 && totalDays > 1;
+    const hasDepartureTerminal = isLastDay && activities.some((a: any) => {
+      const c = String(a?.category || a?.type || '').toUpperCase();
+      const t = String(a?.title || a?.name || '');
+      if (c === 'FLIGHT' || /\b(flight|departure)\b/i.test(t)) return true;
+      if (/TRANSPORT|TRANSIT|TRAVEL|LOGISTICS|TRANSFER/.test(c) &&
+          /\b(airport|terminal|gate|station)\b/i.test(t)) return true;
+      if (/check[\s-]?out/i.test(t) || /check[\s-]?out/i.test(c)) return true;
+      return false;
+    });
+    if (!SKIP_THIN.has(dayMode) && !hasDepartureTerminal && realActivities.length < 3) {
       issues.push({
         id: `thin-day-${dayNum}`,
         severity: realActivities.length === 1 ? 'error' : 'warning',
@@ -579,7 +594,13 @@ function looksLikeMealVenue(a: any): boolean {
 export function classifyMealSlot(a: any): 'breakfast' | 'lunch' | 'dinner' | null {
   const cat = String(a?.category || a?.type || '').toLowerCase();
   const title = String(a?.title || a?.name || '').toLowerCase();
-  const explicit = String(a?.mealSlot || a?.metadata?.mealSlot || '').toLowerCase();
+  // Accept all common shapes the generator and editor write meal-slot under.
+  const meta = a?.metadata || {};
+  const explicit = String(
+    a?.mealSlot ?? a?.meal_slot ?? a?.mealType ?? a?.meal_type ??
+    meta?.mealSlot ?? meta?.meal_slot ?? meta?.mealType ?? meta?.meal_type ??
+    a?.timeBlockType ?? meta?.timeBlockType ?? ''
+  ).toLowerCase();
 
   const isDiningCat = DINING_CAT_RE.test(cat) || DINING_CAT_RE.test(title);
   const looksLike = !isDiningCat && !explicit && looksLikeMealVenue(a);
@@ -599,8 +620,13 @@ export function classifyMealSlot(a: any): 'breakfast' | 'lunch' | 'dinner' | nul
   // 3. Drinks-only never counts as dinner
   if (DRINKS_ONLY_RE.test(title)) return null;
 
-  // 4. Start-time window
-  const start = parseTime(a?.startTime || '');
+  // 4. Start-time window — read from any visible time field, not just `startTime`.
+  // Meal cards rendered via display/legacy fields would otherwise be invisible
+  // to the classifier and produce phantom "missing breakfast/lunch/dinner".
+  const startStr =
+    a?.displayStartTime || a?.adjustedStartTime || meta?.displayStart ||
+    a?.startTime || a?.start_time || a?.time || a?.reservationTime || '';
+  const start = parseTime(String(startStr));
   if (start <= 0) return null;
   if (start >= 330 && start < 630) return 'breakfast';   // 05:30–10:29
   if (start >= 630 && start < 720) return 'breakfast';   // 10:30–11:59 (brunch)
