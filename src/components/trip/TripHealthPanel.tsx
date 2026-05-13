@@ -21,7 +21,9 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { inferDayModeFallback } from '@/lib/itinerary/inferDayMode';
 import { getDisplayStartTime, getDisplayEndTime } from '@/lib/itinerary/displayTime';
-import { buildCascadePreview } from '@/lib/itinerary/healthCascadePreview';
+import { buildCascadePreview, indexKey } from '@/lib/itinerary/healthCascadePreview';
+import { enforceTimingAndBuffers, parseTime as parseCascadeTime } from '@/utils/itinerary/timingCascade';
+import { isActivityLocked } from '@/lib/itinerary/persistDayContract';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -203,10 +205,13 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
     // rendered display by ≥1 min. Breadcrumb for repros like Mexico City /
     // Montreal / Casablanca where stale-overlap warnings still surface.
     if (cascadePreview.size > 0 && typeof console !== 'undefined') {
-      for (const a of activities) {
-        if (!a?.id) continue;
-        const preview = cascadePreview.get(String(a.id));
-        if (!preview) continue;
+      activities.forEach((a: any, idx: number) => {
+        const id = a?.id;
+        const preview =
+          (id !== undefined && id !== null && id !== ''
+            ? cascadePreview.get(String(id))
+            : undefined) || cascadePreview.get(indexKey(idx));
+        if (!preview) return;
         const renderedStart = a?.displayStartTime || a?.startTime || a?.time;
         const ps = preview.startTime ? parseTime(preview.startTime) : null;
         const rs = renderedStart ? parseTime(renderedStart) : null;
@@ -214,30 +219,31 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           // eslint-disable-next-line no-console
           console.warn('[HEALTH_CASCADE_DRIFT]', {
             day: dayNum,
-            id: a.id,
+            id,
+            idx,
             title: a.name || a.title,
             renderedStart,
             previewStart: preview.startTime,
             deltaMin: ps - rs,
           });
         }
-      }
+      });
     }
 
     // Gate: skip timing checks if any non-transit activity is missing start/end.
     // Prevents phantom overlap/buffer warnings from optimistic edits or partial hydration.
     const allTimed = realActivities.every((a: any) => {
       if (isTransitLike(a.category, a.name || a.title)) return true;
-      return !!getDisplayStartTime(a, cascadePreview) && !!getDisplayEndTime(a, cascadePreview);
+      const idx = activities.indexOf(a);
+      return !!getDisplayStartTime(a, cascadePreview, idx) && !!getDisplayEndTime(a, cascadePreview, idx);
     });
     if (!allTimed) return;
 
 
     // Buffer/conflict passes still source from `activities` (NOT realActivities)
     // so legitimate transit-overlap warnings ("Walk to X" runs into next stop)
-    // continue to fire. The wrap-past-midnight residue + hotel-return bookend
-    // rows are explicitly filtered out below — that was the root cause of the
-    // phantom overlap warnings, not the inclusion of transit cards.
+    // remain visible. We only suppress overlaps that the cascade would resolve
+    // (handled below via cascadePreview + per-pair deterministic re-check).
     const isHotelReturn = (a: any) => {
       const cat = String(a.category || a.type || '').toLowerCase();
       const title = String(a.name || a.title || '');
@@ -245,15 +251,19 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
       return /^(?:return to (?:the )?hotel|return to )/i.test(title);
     };
     const timed = activities
-      .filter((a: any) => (getDisplayStartTime(a, cascadePreview)) && (getDisplayEndTime(a, cascadePreview)))
-      .filter((a: any) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
+      .map((a: any, idx: number) => ({ a, idx }))
+      .filter(({ a, idx }) =>
+        (getDisplayStartTime(a, cascadePreview, idx)) && (getDisplayEndTime(a, cascadePreview, idx)))
+      .filter(({ a }) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
       // Drop hotel-return bookends — they're decorative and routinely wrap
       // past midnight; should never anchor a buffer/overlap warning.
-      .filter((a: any) => !isHotelReturn(a))
-      .map((a: any) => {
-        const startStr = getDisplayStartTime(a, cascadePreview);
-        const endStr = getDisplayEndTime(a, cascadePreview);
+      .filter(({ a }) => !isHotelReturn(a))
+      .map(({ a, idx }) => {
+        const startStr = getDisplayStartTime(a, cascadePreview, idx);
+        const endStr = getDisplayEndTime(a, cascadePreview, idx);
         return {
+          source: a,
+          sourceIdx: idx,
           name: a.name || a.title,
           category: a.category,
           start: parseTime(startStr),
@@ -269,12 +279,98 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
         !((a.end === 0 && a.start > 0) || (a.end > 0 && a.end < a.start)))
       .sort((a: { start: number }, b: { start: number }) => a.start - b.start);
 
+    // Round 3 — deterministic per-pair cascade re-check.
+    // Even when the cascadePreview map gives us post-cascade times, we run the
+    // cascade engine ONE more time directly on the day's activities and check
+    // whether the offending pair would still overlap. This survives:
+    //   (a) empty-map fallback when buildCascadePreview's try/catch swallowed
+    //       a throw inside enforceTimingAndBuffers,
+    //   (b) id-mismatch / id-less rows where the map lookup misses,
+    //   (c) displayTime fallback chain quirks.
+    // Returns true when the pair still overlaps after a deterministic cascade.
+    let cachedReCheck: { activities: any[]; result: any } | null = null;
+    const pairStillOverlapsAfterCascade = (
+      leftIdx: number,
+      rightIdx: number,
+      leftTitle: string,
+      rightTitle: string,
+      leftStart: number,
+      rightStart: number
+    ): boolean => {
+      try {
+        if (!cachedReCheck || cachedReCheck.activities !== activities) {
+          const lockedSet = new Set<string>();
+          const cloneInput = activities.map((a: any, idx: number) => {
+            const cid = (a?.id !== undefined && a?.id !== null && a?.id !== '')
+              ? String(a.id) : indexKey(idx);
+            if (isActivityLocked(a)) lockedSet.add(cid);
+            return {
+              ...a,
+              id: cid,
+              title: a?.title || a?.name,
+              startTime: a?.startTime ?? a?.start_time,
+              endTime: a?.endTime ?? a?.end_time,
+              __previewKey: indexKey(idx),
+            };
+          });
+          const result = enforceTimingAndBuffers(cloneInput as any, { lockedIds: lockedSet });
+          cachedReCheck = { activities, result };
+        }
+        const result = cachedReCheck.result;
+        // Locate post-cascade rows for the two source indices.
+        const leftKey = indexKey(leftIdx);
+        const rightKey = indexKey(rightIdx);
+        const findByPreviewKey = (k: string) =>
+          result.activities.find((x: any) => x?.__previewKey === k);
+        const left = findByPreviewKey(leftKey);
+        const right = findByPreviewKey(rightKey);
+        if (!left || !right) return true; // can't prove cascade resolves → keep warning
+        const lEnd = parseCascadeTime(left.endTime);
+        const rStart = parseCascadeTime(right.startTime);
+        if (lEnd === null || rStart === null) return true;
+        // Cascade resolved when right starts at-or-after left ends.
+        if (rStart >= lEnd) {
+          if (typeof console !== 'undefined') {
+            // eslint-disable-next-line no-console
+            console.warn('[HEALTH_CASCADE_PREVIEW_MISS]', {
+              day: dayNum,
+              leftTitle,
+              rightTitle,
+              rawLeftEnd: leftStart, // included for symmetry
+              rawRightStart: rightStart,
+              cascadedLeftEnd: left.endTime,
+              cascadedRightStart: right.startTime,
+              mapSize: cascadePreview.size,
+              reason: 'pair-resolved-by-deterministic-recheck',
+            });
+          }
+          return false;
+        }
+        return true;
+      } catch {
+        return true; // never suppress on cascade failure
+      }
+    };
+
     for (let i = 0; i < timed.length - 1; i++) {
       if (timed[i].end > timed[i + 1].start) {
         const overlap = timed[i].end - timed[i + 1].start;
         const transitInvolved =
           isTransitLike(timed[i].category, timed[i].name) ||
           isTransitLike(timed[i + 1].category, timed[i + 1].name);
+
+        // Deterministic per-pair re-check: suppress if cascade would resolve.
+        if (!pairStillOverlapsAfterCascade(
+          (timed[i] as any).sourceIdx,
+          (timed[i + 1] as any).sourceIdx,
+          timed[i].name,
+          timed[i + 1].name,
+          timed[i].start,
+          timed[i + 1].start
+        )) {
+          continue;
+        }
+
         issues.push({
           id: `conflict-day-${dayNum}-${i}`,
           severity: transitInvolved ? 'warning' : 'error',
@@ -381,10 +477,11 @@ export function detectGapsForDay(allActivities: any[], dayNumber: number): Healt
   const cascadePreview = buildCascadePreview(dayActivities);
 
   const sorted = dayActivities
-    .filter((a: any) => !!getDisplayStartTime(a, cascadePreview) && !isBookendOrTransit(a))
-    .map((a: any) => {
-      const startStr = getDisplayStartTime(a, cascadePreview) || '00:00';
-      const endStr = getDisplayEndTime(a, cascadePreview) || startStr;
+    .map((a: any, idx: number) => ({ a, idx }))
+    .filter(({ a, idx }) => !!getDisplayStartTime(a, cascadePreview, idx) && !isBookendOrTransit(a))
+    .map(({ a, idx }) => {
+      const startStr = getDisplayStartTime(a, cascadePreview, idx) || '00:00';
+      const endStr = getDisplayEndTime(a, cascadePreview, idx) || startStr;
       const startMins = parseTime(startStr);
       const endMins = parseTime(endStr);
       // Wrap predicate: end===0 with start>0 (e.g. 23:30→00:00 exact) is wrap

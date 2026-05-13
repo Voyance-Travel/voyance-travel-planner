@@ -133,5 +133,92 @@ describe('TripHealthPanel cascade preview', () => {
     const conflicts = issues.filter((i) => i.fixAction === 'fix_timing');
     expect(conflicts).toHaveLength(0);
   });
+
+  it('Casablanca Day 3: museum→lunch overlap is suppressed by cascade preview', () => {
+    // Reproduces Issue 4: Art Deco Heritage 11:09–12:39 + Lunch 12:30–13:30.
+    // Save-time cascade pushes lunch to 12:54 (15-min museum→dining buffer).
+    // Health engine must show 0 conflicts.
+    const day = baseDay(3, [
+      ...meals,
+      {
+        id: 'museum',
+        title: 'Art Deco Heritage at Musée Abderrahman Slaoui',
+        name: 'Art Deco Heritage at Musée Abderrahman Slaoui',
+        category: 'sightseeing',
+        startTime: '11:09',
+        endTime: '12:39',
+      },
+      {
+        id: 'lunch',
+        title: 'Lunch: Iloli',
+        name: 'Lunch: Iloli',
+        category: 'dining',
+        startTime: '12:30',
+        endTime: '13:30',
+      },
+    ]);
+
+    const issues = analyzeHealth([day]);
+    const conflicts = issues.filter((i) => i.fixAction === 'fix_timing');
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it('id-less activities still benefit from cascade-preview suppression', () => {
+    // Same museum→lunch overlap but lunch carries an empty id (simulates a
+    // partially-hydrated row whose `id` was lost). The Round 3 idx-keyed
+    // fallback in buildCascadePreview / displayTime must still suppress.
+    const day = baseDay(3, [
+      ...meals,
+      {
+        id: 'museum',
+        title: 'Art Deco Heritage',
+        name: 'Art Deco Heritage',
+        category: 'sightseeing',
+        startTime: '11:09',
+        endTime: '12:39',
+      },
+      {
+        id: '', // simulated id-less row
+        title: 'Lunch: Iloli',
+        name: 'Lunch: Iloli',
+        category: 'dining',
+        startTime: '12:30',
+        endTime: '13:30',
+      },
+    ]);
+
+    const issues = analyzeHealth([day]);
+    const conflicts = issues.filter((i) => i.fixAction === 'fix_timing');
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it('duplicate ids still get post-cascade resolution via idx fallback', () => {
+    // Two siblings with the same id — without the idx:N keying, one would
+    // overwrite the other in the cascade-preview map. The deterministic
+    // per-pair re-check in analyzeHealth provides the final safety net.
+    const day = baseDay(3, [
+      ...meals,
+      {
+        id: 'dupe',
+        title: 'Art Deco Heritage',
+        name: 'Art Deco Heritage',
+        category: 'sightseeing',
+        startTime: '11:09',
+        endTime: '12:39',
+      },
+      {
+        id: 'dupe',
+        title: 'Lunch: Iloli',
+        name: 'Lunch: Iloli',
+        category: 'dining',
+        startTime: '12:30',
+        endTime: '13:30',
+      },
+    ]);
+
+    const issues = analyzeHealth([day]);
+    const conflicts = issues.filter((i) => i.fixAction === 'fix_timing');
+    expect(conflicts).toHaveLength(0);
+  });
 });
 
