@@ -4072,8 +4072,10 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
     if (meta.preserveAsManualPick) {
       const s = parseTimeToMinutes(a?.startTime || a?.start_time || a?.time || '') ?? -1;
       // Drop exemption when sentinel has no placeable time OR sits at/after cutoff.
-      if (s < 0) return false;
-      if (s >= cutoffMin) return false;
+      if (s < 0 || s >= cutoffMin) {
+        console.log(`[DEPARTURE_MANUAL_PICK_PRUNED] day=${dayNumber} sentinel="${a?.title || a?.name || ''}" start=${s < 0 ? '<none>' : minutesToHHMM(s)} cutoff=${minutesToHHMM(cutoffMin)} — exemption dropped`);
+        return false;
+      }
       return true;
     }
     return false;
