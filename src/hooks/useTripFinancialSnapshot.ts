@@ -560,6 +560,12 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     const toBePaid = Math.max(0, data.tripTotalCents - data.paidCents);
     const budgetRemaining = data.budgetTotalCents - data.tripTotalCents;
     const paidPct = data.tripTotalCents > 0 ? (data.paidCents / data.tripTotalCents) * 100 : 0;
+    const effectiveHotelCents = data.includeHotel
+      ? Math.max(0, data.committedHotelCents + data.manualHotelDelta)
+      : 0;
+    const effectiveFlightCents = data.includeFlight
+      ? Math.max(0, data.committedFlightCents + data.manualFlightDelta)
+      : 0;
 
     return {
       tripTotalCents: data.tripTotalCents,
@@ -570,6 +576,14 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       plannedUnpaidCents: toBePaid,
       paidPercent: Math.min(paidPct, 100),
       miscReserveCents: data.miscReserveCents,
+      includeHotel: data.includeHotel,
+      includeFlight: data.includeFlight,
+      committedHotelCents: data.committedHotelCents,
+      committedFlightCents: data.committedFlightCents,
+      manualHotelDelta: data.manualHotelDelta,
+      manualFlightDelta: data.manualFlightDelta,
+      effectiveHotelCents,
+      effectiveFlightCents,
       loading: data.loading,
       lastDelta,
       refetch,
