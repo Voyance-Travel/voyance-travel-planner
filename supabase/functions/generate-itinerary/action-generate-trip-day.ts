@@ -20,6 +20,7 @@ import { applyAnchorsWin } from './anchor-guard.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
+import { stripBookendsForPrompt, isCrossDayPromptNoise } from '../_shared/strip-bookends-for-prompt.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
