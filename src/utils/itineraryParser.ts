@@ -822,6 +822,10 @@ export function parseItineraryDays(
         /TRANSPORT|TRANSIT|TRAVEL|LOGISTICS/.test(cat) &&
         /\b(airport|terminal|gate|station)\b/i.test(title)
       ) return true;
+      // Airport-bound transfer titles ("Transfer to KIX", "Taxi to Heathrow
+      // Terminal 5") count even when category is generic ('transport'). Mirrors
+      // DEPARTURE_TRANSFER_TITLE_RE in ensureHotelReturnBookend.
+      if (/^\s*(?:transfer|taxi|drive|ride|shuttle|car|uber|lyft)\s+to\b[^.]*\b(airport|terminal|gate|station)\b/i.test(title)) return true;
       return false;
     });
   let departureDayIdx = -1;
