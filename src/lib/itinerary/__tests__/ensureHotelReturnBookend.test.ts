@@ -289,4 +289,25 @@ describe('ensureHotelReturnBookend', () => {
     const out = ensureHotelReturnBookend(acts, { hotelName: 'Four Seasons Hotel Osaka', dayIndex: 2 });
     expect(out).toHaveLength(acts.length);
   });
+
+  it('Amsterdam Day 3: checkout present (no airport transfer in JSON) → no bookend injected', () => {
+    const acts = [
+      mk({ title: 'Breakfast: Museumplein Food Stalls', category: 'dining', startTime: '08:30', endTime: '09:15' }),
+      mk({ title: 'Anne Frank House Exploration', category: 'sightseeing', startTime: '10:30', endTime: '12:00' }),
+      mk({ title: 'Checkout from Amsterdam Marriott Hotel', category: 'accommodation', startTime: '11:00', endTime: '11:30' }),
+      mk({ title: 'Lunch: The SIdeview at Hotel V Nesplein', category: 'dining', endTime: '13:30' }),
+    ];
+    const out = ensureHotelReturnBookend(acts, { hotelName: 'Amsterdam Marriott Hotel', dayIndex: 2 });
+    expect(out).toBe(acts);
+  });
+
+  it('Osaka Day 3: checkout present (no airport transfer in JSON) → no bookend injected', () => {
+    const acts = [
+      mk({ title: 'Taxi to Osaka Central Public Hall', category: 'transport', startTime: '09:35', endTime: '09:52' }),
+      mk({ title: 'Explore Osaka Central Public Hall', category: 'sightseeing', startTime: '09:52', endTime: '11:07' }),
+      mk({ title: 'Checkout from Four Seasons Hotel Osaka', category: 'accommodation', startTime: '11:22', endTime: '11:52' }),
+    ];
+    const out = ensureHotelReturnBookend(acts, { hotelName: 'Four Seasons Hotel Osaka', dayIndex: 2 });
+    expect(out).toBe(acts);
+  });
 });
