@@ -26,6 +26,7 @@ import {
   getAirportTransferFare,
 } from './generation-utils.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
+import { stripBookendsForPrompt } from '../_shared/strip-bookends-for-prompt.ts';
 import {
   sanitizeDateString,
   sanitizeOptionFields,
@@ -1165,7 +1166,10 @@ export async function handleGenerateDay(
               date: d.date || '',
               title: d.title || d.theme || '',
               theme: d.theme,
-              activities: (d.activities || []).map((a: any) => ({
+              activities: stripBookendsForPrompt(d.activities, {
+                dayNumber: d.dayNumber,
+                site: 'previousDaysForPipeline',
+              }).map((a: any) => ({
                 id: a.id || '',
                 title: a.title || a.name || '',
                 startTime: a.startTime || a.start_time || '',

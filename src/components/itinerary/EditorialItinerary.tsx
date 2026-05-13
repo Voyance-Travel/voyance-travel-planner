@@ -14,6 +14,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { isWeakAddress } from '@/lib/address-quality';
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
+import { timeOfDayBand } from '@/lib/itinerary/timeOfDayBand';
 import { computeHeaderStripValues } from '@/lib/itinerary/headerStripValues';
 import { coerceDurationString } from '@/utils/plannerUtils';
 import { useLedgerCostOverrideMap, getLedgerOverride, warnOnceLedgerOverride } from '@/utils/ledgerCostOverride';
@@ -10749,11 +10750,13 @@ function DayCard({
                       )
                     : null;
 
-                  // Compute time-of-day label for section headers
+                  // Compute time-of-day label for section headers.
+                  // Uses shared `timeOfDayBand` so a 00:16 late-nightlife
+                  // bookend reads as "Late Night" (not "Morning") — see
+                  // mem://constraints/itinerary/late-nightlife-no-next-day-bleed.
                   const activityTime = activityToRender.startTime || activityToRender.time || '';
-                  const hour = Math.floor(parseTimeToMinutes(activityTime) / 60);
-                  const timeOfDay = isNaN(hour) || !activityTime ? '' : hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening';
-                  
+                  const timeOfDay = timeOfDayBand(activityTime);
+
                   // Determine previous activity's time-of-day for section header logic
                   const prevVisibleActivity = activityIndex > 0 ? (() => {
                     for (let i = activityIndex - 1; i >= 0; i--) {
@@ -10767,8 +10770,7 @@ function DayCard({
                     return null;
                   })() : null;
                   const prevTime = prevVisibleActivity ? (prevVisibleActivity.startTime || (prevVisibleActivity as any).time || '') : '';
-                  const prevHour = Math.floor(parseTimeToMinutes(prevTime) / 60);
-                  const prevTimeOfDay = isNaN(prevHour) || !prevTime ? '' : prevHour < 12 ? 'Morning' : prevHour < 17 ? 'Afternoon' : 'Evening';
+                  const prevTimeOfDay = timeOfDayBand(prevTime);
                   const showTimeOfDayHeader = timeOfDay && timeOfDay !== prevTimeOfDay;
 
                   // Compact inter-city transport card (unified for transition + departure)

@@ -20,6 +20,7 @@ import { applyAnchorsWin } from './anchor-guard.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
+import { stripBookendsForPrompt, isCrossDayPromptNoise } from '../_shared/strip-bookends-for-prompt.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -466,7 +467,13 @@ async function _handleGenerateTripDayInner(
   const previousActivities: string[] = [];
   for (const day of recentDays) {
     if (day?.activities) {
-      day.activities.forEach((act: any) => {
+      // Strip late-nightlife bookends + wrap-window cards before passing to
+      // next-day prompt — see mem://constraints/itinerary/late-nightlife-no-next-day-bleed.
+      const cleaned = stripBookendsForPrompt(day.activities, {
+        dayNumber: day.dayNumber,
+        site: 'previousActivities-titles',
+      });
+      cleaned.forEach((act: any) => {
         previousActivities.push(act.title || act.name || '');
       });
     }
@@ -1359,7 +1366,10 @@ async function _handleGenerateTripDayInner(
         requiredMeals: policy.requiredMeals || [],
         previousDays: existingDays.filter((d: any) => d.dayNumber !== dayNumber).map((d: any) => ({
           dayNumber: d.dayNumber || 0, date: d.date || '', title: d.title || '',
-          activities: (d.activities || []).map((a: any) => ({
+          activities: stripBookendsForPrompt(d.activities, {
+            dayNumber: d.dayNumber,
+            site: 'previousDays-validate',
+          }).map((a: any) => ({
             id: a.id || '', title: a.title || a.name || '',
             startTime: a.startTime || '', endTime: a.endTime || '',
             category: a.category || 'activity',
@@ -2168,7 +2178,13 @@ async function _handleGenerateTripDayInner(
         arrivalTime24: _isFirstDay ? savedArrTime24Hoisted : undefined,
         returnDepartureTime24: _isLastDay ? savedDepTime24Hoisted : undefined,
         requiredMeals: finalPolicy.requiredMeals || [],
-        previousDays: existingDays.filter((d: any) => d?.dayNumber !== dayNumber) as any,
+        previousDays: existingDays.filter((d: any) => d?.dayNumber !== dayNumber).map((d: any) => ({
+          ...d,
+          activities: stripBookendsForPrompt(d?.activities, {
+            dayNumber: d?.dayNumber,
+            site: 'previousDays-final-validate',
+          }),
+        })) as any,
         isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
         previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
       });

@@ -785,6 +785,22 @@ export function parseItineraryDays(
   // Step 4: Re-assign sequential dayNumbers and authoritative dates,
   //          and strip "ghost" activities (legacy pre-dawn hotel returns and
   //          "Spa Time — find a venue" wellness placeholders) from display.
+  //
+  //          Also drops a stale `late_nightlife_bookend` / `bookend-*` card
+  //          sitting at index 0 of Day N≥2 — that bookend belongs to Day N−1's
+  //          tail and only landed at the head here via a wrap-window persist
+  //          regression. Without this drop, the FE timeline reads it as the
+  //          day's morning anchor and cascades. See
+  //          mem://constraints/itinerary/late-nightlife-no-next-day-bleed.
+  const STALE_HEAD_BOOKEND_SOURCE_RE =
+    /^(bookend-readtime|bookend-overnight|bookend-validator|bookend-synthesized|late_nightlife_bookend)$/i;
+  const isStaleNextDayHeadBookend = (a: any): boolean => {
+    if (!a) return false;
+    const src = String(a.source || '').toLowerCase();
+    if (STALE_HEAD_BOOKEND_SOURCE_RE.test(src)) return true;
+    const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
+    return tags.some((t: string) => STALE_HEAD_BOOKEND_SOURCE_RE.test(t));
+  };
   const result = deduped.map((day, idx) => {
     const filteredActivities = (day.activities || []).filter((a) => {
       const ghost = isGhostActivity(a);
@@ -793,7 +809,18 @@ export function parseItineraryDays(
       }
       return !ghost;
     });
-    const dedupedActivities = dedupeHotelReturnBookends(filteredActivities, idx + 1);
+    let dedupedActivities = dedupeHotelReturnBookends(filteredActivities, idx + 1);
+    // Drop stale next-day head bookend on Day N≥2.
+    if (idx > 0 && dedupedActivities.length > 0 && isStaleNextDayHeadBookend(dedupedActivities[0])) {
+      const dropped = dedupedActivities[0] as any;
+      console.warn(
+        `[itineraryParser] Dropping stale head bookend "${dropped?.title || dropped?.name}" on day ${idx + 1} (source=${dropped?.source || 'inferred'}, start=${dropped?.startTime || dropped?.start_time || ''})`,
+      );
+      console.log(
+        `[BOOKEND_TRACE] day=${idx + 1} site=parse action=dropped source=${dropped?.source || 'inferred'} reason=stale_next_day_head title="${dropped?.title || ''}"`,
+      );
+      dedupedActivities = dedupedActivities.slice(1);
+    }
     return {
       ...day,
       dayNumber: idx + 1,
