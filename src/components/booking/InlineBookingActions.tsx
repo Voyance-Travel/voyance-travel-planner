@@ -11,10 +11,12 @@
  */
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { 
   ShoppingCart, Users, CreditCard, Ticket, XCircle, 
-  Timer, Check, AlertCircle, ExternalLink, Sparkles
+  Timer, Check, AlertCircle, ExternalLink, Sparkles, Loader2
 } from 'lucide-react';
+import { lookupActivityUrl } from '@/services/enrichmentService';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -239,7 +241,44 @@ export function InlineBookingActions({
 }: InlineBookingActionsProps) {
   const [showTravelerModal, setShowTravelerModal] = useState(false);
   const [showVoucherModal, setShowVoucherModal] = useState(false);
-  
+  const [isLookingUpUrl, setIsLookingUpUrl] = useState(false);
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+
+  /**
+   * Click handler for "Find official booking link":
+   * 1. Calls Perplexity-backed lookupActivityUrl (cached 90 days server-side).
+   * 2. On hit -> open in new tab and remember locally so subsequent clicks open instantly.
+   * 3. On miss -> toast + fall back to opening the concierge sheet (so the user is not stuck).
+   * 4. On error -> toast, button stays clickable.
+   */
+  const handleFindBookingLink = async () => {
+    // If we already resolved a URL once, just open it.
+    if (resolvedUrl) {
+      window.open(resolvedUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (isLookingUpUrl) return;
+
+    setIsLookingUpUrl(true);
+    try {
+      const result = await lookupActivityUrl(activity.title, destination, activity.category);
+      if (result.url) {
+        setResolvedUrl(result.url);
+        window.open(result.url, '_blank', 'noopener,noreferrer');
+      } else {
+        toast.message('No official booking page found', {
+          description: 'Opening the concierge so we can help you track one down.',
+        });
+        onAskConcierge?.();
+      }
+    } catch (err) {
+      console.error('[InlineBookingActions] booking-link lookup failed', err);
+      toast.error("Couldn't search for a booking link right now. Please try again.");
+    } finally {
+      setIsLookingUpUrl(false);
+    }
+  };
+
   const selectMutation = useSelectActivity();
   const deselectMutation = useDeselectActivity();
   
@@ -294,27 +333,44 @@ export function InlineBookingActions({
     const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${activity.title} ${destination} booking`)}`;
     return (
       <div className="inline-flex flex-wrap items-center gap-2">
+        {resolvedUrl ? (
+          <a
+            href={resolvedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
+          >
+            <ExternalLink className="h-3 w-3 flex-shrink-0" />
+            <span className="sm:hidden">Reserve</span>
+            <span className="hidden sm:inline">Reserve on {prettyHostname(resolvedUrl)}</span>
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={handleFindBookingLink}
+            disabled={isLookingUpUrl}
+            className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0 disabled:opacity-60"
+            title={`Premium experience (${formatPrice(price * 100, activity.currency || 'USD')}) — find the official booking page`}
+          >
+            {isLookingUpUrl ? (
+              <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin" />
+            ) : (
+              <ExternalLink className="h-3 w-3 flex-shrink-0" />
+            )}
+            <span className="sm:hidden">{isLookingUpUrl ? 'Finding…' : 'Find site'}</span>
+            <span className="hidden sm:inline">
+              {isLookingUpUrl ? 'Finding link…' : 'Find official booking page'}
+            </span>
+          </button>
+        )}
         <a
           href={searchUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
-          title={`Premium experience (${formatPrice(price * 100, activity.currency || 'USD')}) — confirm booking on the official site`}
+          className="hidden sm:inline text-[11px] text-muted-foreground hover:text-primary hover:underline"
         >
-          <ExternalLink className="h-3 w-3 flex-shrink-0" />
-          <span className="sm:hidden">Find site</span>
-          <span className="hidden sm:inline">Find on official site</span>
+          or search the web
         </a>
-        {onAskConcierge && (
-          <button
-            type="button"
-            onClick={onAskConcierge}
-            className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
-          >
-            <Sparkles className="h-3 w-3 flex-shrink-0" />
-            <span>Ask concierge</span>
-          </button>
-        )}
       </div>
     );
   };
@@ -550,39 +606,44 @@ export function InlineBookingActions({
         const gygUrl = `https://www.getyourguide.com/s/?q=${encodeURIComponent(`${activity.title} ${destination}`)}`;
         return (
           <div className="flex items-center gap-2 flex-wrap">
-            {onAskConcierge ? (
+            {resolvedUrl ? (
               <Button
                 size="sm"
                 variant="default"
-                onClick={onAskConcierge}
+                onClick={() => window.open(resolvedUrl, '_blank', 'noopener,noreferrer')}
                 className="gap-1 sm:gap-1.5 text-xs bg-primary px-2 sm:px-3 h-7 sm:h-8"
               >
-                <Sparkles className="h-3 w-3 flex-shrink-0" />
-                <span className="sm:hidden">Find link</span>
-                <span className="hidden sm:inline">Find official booking link</span>
+                <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                <span className="sm:hidden">Reserve</span>
+                <span className="hidden sm:inline">Reserve on {prettyHostname(resolvedUrl)}</span>
               </Button>
             ) : (
               <Button
                 size="sm"
-                variant="outline"
-                onClick={() => window.open(gygUrl, '_blank', 'noopener,noreferrer')}
-                className="gap-1 sm:gap-1.5 text-xs px-2 sm:px-3 h-7 sm:h-8"
+                variant="default"
+                onClick={handleFindBookingLink}
+                disabled={isLookingUpUrl}
+                className="gap-1 sm:gap-1.5 text-xs bg-primary px-2 sm:px-3 h-7 sm:h-8"
               >
-                <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                <span className="sm:hidden">Browse</span>
-                <span className="hidden sm:inline">Browse tours</span>
+                {isLookingUpUrl ? (
+                  <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3 w-3 flex-shrink-0" />
+                )}
+                <span className="sm:hidden">{isLookingUpUrl ? 'Finding…' : 'Find link'}</span>
+                <span className="hidden sm:inline">
+                  {isLookingUpUrl ? 'Finding link…' : 'Find official booking link'}
+                </span>
               </Button>
             )}
-            {onAskConcierge && (
-              <a
-                href={gygUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hidden sm:inline text-[11px] text-muted-foreground hover:text-primary hover:underline"
-              >
-                or browse tours
-              </a>
-            )}
+            <a
+              href={gygUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:inline text-[11px] text-muted-foreground hover:text-primary hover:underline"
+            >
+              or browse tours
+            </a>
           </div>
         );
       }
