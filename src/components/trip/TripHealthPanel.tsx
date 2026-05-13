@@ -191,7 +191,7 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
     // Prevents phantom overlap/buffer warnings from optimistic edits or partial hydration.
     const allTimed = realActivities.every((a: any) => {
       if (isTransitLike(a.category, a.name || a.title)) return true;
-      return !!a.startTime && !!a.endTime;
+      return !!getDisplayStartTime(a) && !!getDisplayEndTime(a);
     });
     if (!allTimed) return;
 
