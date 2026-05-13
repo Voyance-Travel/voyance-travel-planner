@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { inferDayModeFallback } from '@/lib/itinerary/inferDayMode';
+import { getDisplayStartTime, getDisplayEndTime } from '@/lib/itinerary/displayTime';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
