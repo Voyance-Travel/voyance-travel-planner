@@ -339,6 +339,65 @@ export async function getTrip(tripId: string): Promise<Trip | null> {
  * Update a trip
  */
 export async function updateTrip(tripId: string, updates: TripUpdateInput): Promise<Trip> {
+  // Hotel destination guard: if writing hotel_selection, sanitize any entry whose
+  // resolved address points at a different country/region than trip.destination.
+  // Mirrors the backend `hotelMatchesDestination` check in supabase/functions/hotels/index.ts.
+  // See mem://constraints/hotel/destination-resolution-guard.
+  if (updates.hotel_selection !== undefined && updates.hotel_selection !== null) {
+    try {
+      const { validateHotelMatchesDestination } = await import('@/utils/hotelDestinationGuard');
+      const { data: tripRow } = await supabase
+        .from('trips')
+        .select('destination')
+        .eq('id', tripId)
+        .maybeSingle();
+      const dest = (tripRow?.destination as string | undefined) || '';
+      if (dest) {
+        const sanitize = (h: Record<string, unknown>) => {
+          const guard = validateHotelMatchesDestination(
+            { name: h.name as string, address: h.address as string },
+            dest,
+          );
+          if (guard.ok) return h;
+          console.warn('[Trips] hotel destination mismatch — clearing stale enrichment:', {
+            tripId,
+            dest,
+            name: h.name,
+            address: h.address,
+            reason: guard.reason,
+          });
+          return {
+            ...h,
+            name: guard.cleanedName || h.name,
+            address: undefined,
+            placeId: undefined,
+            website: undefined,
+            googleMapsUrl: undefined,
+            images: undefined,
+            imageUrl: undefined,
+            isEnriched: false,
+            needsHotelPick: true,
+            destinationMismatchReason: guard.reason,
+          };
+        };
+        const sel = updates.hotel_selection as unknown;
+        if (Array.isArray(sel)) {
+          updates = {
+            ...updates,
+            hotel_selection: sel.map(item => sanitize(item as Record<string, unknown>)) as unknown as Json,
+          };
+        } else if (sel && typeof sel === 'object') {
+          updates = {
+            ...updates,
+            hotel_selection: sanitize(sel as Record<string, unknown>) as unknown as Json,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('[Trips] hotel destination guard error (continuing):', e);
+    }
+  }
+
   const { data, error } = await supabase
     .from('trips')
     .update(updates)
