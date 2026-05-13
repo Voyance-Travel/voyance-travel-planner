@@ -52,18 +52,25 @@ serve(async (req) => {
 
     console.log(`[lookup-restaurant-url] Looking up: "${restaurantName}" in ${destination}`);
 
-    const response = await fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'sonar',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a restaurant URL finder. Find the official website for restaurants.
+    // Bound Perplexity to 8s so we never starve the client deadline.
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(), 8000);
+
+    let response: Response;
+    try {
+      response = await fetch('https://api.perplexity.ai/chat/completions', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'sonar',
+          messages: [
+            {
+              role: 'system',
+              content: `You are a restaurant URL finder. Find the official website for restaurants.
 
 RULES:
 1. Search for the restaurant's official website, reservation page, or menu page
@@ -73,21 +80,37 @@ RULES:
 5. DO NOT return Yelp, TripAdvisor, Google Maps, Google search results, or generic directory URLs
 6. If you truly cannot find any official presence, respond with exactly: NOT_FOUND
 7. Your response must be ONLY the URL - no explanation, no markdown, no extra text`
-          },
-          {
-            role: 'user',
-            content: `Find the official website or booking page for "${restaurantName}" in ${destination}`
-          }
-        ],
-      }),
-    });
+            },
+            {
+              role: 'user',
+              content: `Find the official website or booking page for "${restaurantName}" in ${destination}`
+            }
+          ],
+        }),
+      });
+    } catch (fetchErr) {
+      const aborted = (fetchErr as { name?: string })?.name === 'AbortError';
+      console.warn(
+        `[lookup-restaurant-url] Perplexity ${aborted ? 'timeout (8s)' : 'fetch error'} for "${restaurantName}"`,
+      );
+      // Cache the miss so we don't re-pay on the next request for this name.
+      await setCache(cacheKey, 'restaurant_url', { url: null }, TTL.THIRTY_DAYS);
+      return new Response(
+        JSON.stringify({ success: true, url: null, fallback: true, reason: aborted ? 'timeout' : 'fetch_error' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } finally {
+      clearTimeout(abortTimer);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[lookup-restaurant-url] Perplexity API error:', response.status, errorText);
+      // Cache miss so we don't keep paying for the same upstream failure.
+      await setCache(cacheKey, 'restaurant_url', { url: null }, TTL.THIRTY_DAYS);
       return new Response(
-        JSON.stringify({ success: false, error: 'Search failed' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: true, url: null, fallback: true, reason: 'upstream_error' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

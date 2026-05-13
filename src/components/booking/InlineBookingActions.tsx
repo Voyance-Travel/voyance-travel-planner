@@ -409,13 +409,14 @@ export function InlineBookingActions({
   }
   
   if (linkType === 'find_restaurant') {
-    // Prefer venue name from location over generic activity title
-    const restaurantName = activity.location?.name || activity.title;
-    // Restaurant lookup using venue name from location or activity title
+    // Prefer venue name from location over generic activity title.
+    // Trim/normalize so referential churn from snapshot rebuilds doesn't
+    // restart the underlying lookup.
+    const restaurantName = (activity.location?.name || activity.title || '').trim();
     return (
-      <RestaurantLink 
-        restaurantName={restaurantName} 
-        destination={destination} 
+      <RestaurantLink
+        restaurantName={restaurantName}
+        destination={destination}
       />
     );
   }
