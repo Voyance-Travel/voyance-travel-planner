@@ -194,8 +194,9 @@ export function useDestinationImages(
 
         if (cancelled) return;
 
-        const heroUrl = images[0]?.url && (await isUrlLoadable(images[0].url))
-          ? images[0].url
+        const apiUrl = images[0]?.url;
+        const heroUrl = apiUrl && !isUntrustedHeroUrl(apiUrl) && (await isUrlLoadable(apiUrl))
+          ? apiUrl
           : generateGradientDataUrl(cleanDestination, 0);
 
         setHeroImage(heroUrl);
