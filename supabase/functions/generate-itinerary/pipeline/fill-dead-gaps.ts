@@ -201,12 +201,26 @@ async function fillDeadGapsForWindow(
  * Returns the (possibly mutated) activities array plus a list of inserts.
  * Always returns a fresh array so callers can drop it into their day object.
  *
+ * Morning (09:00–12:30) window — fills the late-morning hole between an
+ * early breakfast and lunch on non-arrival days. Per Density Protocol:
+ * "Morning gaps filled with 1 paid + 1 free."
+ */
+export async function fillMorningDeadGaps(
+  activities: any[],
+  opts: FillDeadGapsOptions,
+): Promise<FillDeadGapsResult> {
+  return fillDeadGapsForWindow(activities, opts, MORNING_WINDOW);
+}
+
+/**
  * Afternoon (12:00–19:00) window — preserves legacy signature & behaviour.
  */
 export async function fillAfternoonDeadGaps(
   activities: any[],
   opts: FillDeadGapsOptions,
 ): Promise<FillDeadGapsResult> {
+  return fillDeadGapsForWindow(activities, opts, AFTERNOON_WINDOW);
+}
   return fillDeadGapsForWindow(activities, opts, AFTERNOON_WINDOW);
 }
 
