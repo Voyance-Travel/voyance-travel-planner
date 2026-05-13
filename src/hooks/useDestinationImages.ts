@@ -14,6 +14,7 @@ import { getDestinationImages as getCuratedImages, hasCuratedImages } from '@/ut
 import { getDestinationImages as getAPIImages } from '@/services/destinationImagesAPI';
 import { supabase } from '@/integrations/supabase/client';
 import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
+import { detectCrossCityMention } from '@/lib/crossCityFilter';
 
 interface DestinationImagesResult {
   heroImage: string | null;
