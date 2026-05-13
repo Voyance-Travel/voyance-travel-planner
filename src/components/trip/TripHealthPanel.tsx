@@ -64,10 +64,11 @@ export interface TripHealthPanelProps {
 
 // ─── Health Analysis ────────────────────────────────────────────────────────
 
-export function analyzeHealth(days: any[]): HealthIssue[] {
+export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any }): HealthIssue[] {
   const issues: HealthIssue[] = [];
+  const totalDays = days.length;
 
-  days.forEach((day: any) => {
+  days.forEach((day: any, dayIndex: number) => {
     const activities = day.activities || [];
     const dayNum = day.dayNumber || day.day_number;
 
