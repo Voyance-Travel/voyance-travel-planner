@@ -44,7 +44,7 @@ describe('buildCascadePreview — Casablanca Day 1 stale-overlap', () => {
     expect(mins).toBeGreaterThanOrEqual(20 * 60 + 34);
   });
 
-  it('keeps a manuallyAdded dinner pinned (no false move)', () => {
+  it('keeps a user-pinned dinner pinned (no false move)', () => {
     const activities = [
       {
         id: 'wander-1',
@@ -59,7 +59,7 @@ describe('buildCascadePreview — Casablanca Day 1 stale-overlap', () => {
         category: 'dining',
         startTime: '19:00',
         endTime: '20:15',
-        manuallyAdded: true,
+        userAdded: true,
       },
     ];
 
