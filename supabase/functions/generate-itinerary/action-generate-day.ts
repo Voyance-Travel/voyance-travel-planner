@@ -26,6 +26,7 @@ import {
   getAirportTransferFare,
 } from './generation-utils.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
+import { stripBookendsForPrompt } from '../_shared/strip-bookends-for-prompt.ts';
 import {
   sanitizeDateString,
   sanitizeOptionFields,
