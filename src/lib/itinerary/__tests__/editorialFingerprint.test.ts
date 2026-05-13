@@ -14,7 +14,10 @@ function fingerprint(days: any[]): string {
   return JSON.stringify(days.map(d => ({
     n: d.dayNumber,
     d: d.date,
-    a: d.activities.map((a: any) => `${a.id}@${a.startTime || ''}-${a.endTime || ''}#${a.durationMinutes ?? ''}`),
+    a: d.activities.map((a: any) => {
+      const slot = a.mealSlot ?? a.meal_slot ?? a.metadata?.meal_slot ?? a.metadata?.mealSlot ?? '';
+      return `${a.id}@${a.startTime || a.time || ''}-${a.endTime || ''}#${a.durationMinutes ?? ''}|${(a.category || a.type || '').toLowerCase()}|${(a.title || a.name || '').toLowerCase()}|${slot}`;
+    }),
   })));
 }
 
