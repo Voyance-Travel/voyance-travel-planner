@@ -263,8 +263,13 @@ export function useTripHeroImage({
           .single();
 
         const existing = (data?.metadata as Record<string, unknown>) || {};
-        // Don't overwrite if already set
-        if (existing.hero_image) return;
+        const existingHero = typeof existing.hero_image === 'string' ? existing.hero_image : '';
+
+        // Skip write only if stored value is good AND matches what we'd write.
+        // Otherwise overwrite — covers: empty, broken-CDN seeded URLs, and stale
+        // values that differ from a freshly-resolved canonical/db/api image.
+        const storedIsGood = existingHero && !isBrokenSeededUrl(existingHero);
+        if (storedIsGood && existingHero === imageUrl) return;
 
         await supabase
           .from('trips')
