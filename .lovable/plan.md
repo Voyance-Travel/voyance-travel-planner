@@ -1,65 +1,55 @@
-## Root cause
+## What's broken
 
-The truncated card title — `Return to Four Seasons Hotel Osaka for Check` — is produced by a single buggy regex inside the read-time hotel-return bookend resolver:
+In `src/components/booking/InlineBookingActions.tsx` (priority 3 fallback, ~line 553), when an activity has **no Viator product, no website, and no booking URL**, we render a green primary button labeled **"Find official booking link"**. Its `onClick` simply opens the Activity Concierge sheet (`onAskConcierge`) with no seed message or instruction, so the AI replies "Sorry, can't process that request" — it has no idea why the sheet was opened.
 
-`src/lib/itinerary/ensureHotelReturnBookend.ts` line 106:
-```
-title.match(/^Return to\s+(.+?)(?:\s*[—-]|$)/i)
-```
+The same dead-end pattern exists in `renderHighCostGuidance` (~line 308) for the "Ask concierge" link next to "Find on official site" for high-cost activities without a URL.
 
-`(.+?)` is non-greedy and stops at the **first hyphen**. The Osaka trip contains an AI-generated transport card titled `Return to Four Seasons Hotel Osaka for Check-in` (the 17:20 arrival-day transfer the model mis-titled). When `extractHotelName` walks the activities, this regex captures `Four Seasons Hotel Osaka for Check` (everything up to the `-` in `Check-in`) and that becomes the hotel name used to build every subsequent synthetic bookend card.
+We already have the right plumbing for this exact job:
 
-That truncated hotel name then leaks into:
-- The synthetic read-time bookend rendered at the end of normal days
-- A bookend card the resolver still injects on the **departure day** at ~1:55 PM, because the chronologically-last activity (an airport transfer card whose title doesn't contain the word "airport"/"station"/"terminal"/"gate") slips past `isDepartureTerminal`, falling into the gray-zone branch (`lastEnd > 02:30 && lastEnd < 14:00`)
-- The DB itself — Osaka has 8+ persisted copies of `Return to Four Seasons Hotel Osaka for Check`, meaning the synthetic card is leaking out of the read-time path into a save somewhere (likely via an editor/normalize round-trip that doesn't strip `synthetic:true` rows)
+- `src/services/enrichmentService.ts → lookupActivityUrl()`
+- Edge function `supabase/functions/lookup-activity-url/index.ts` — Perplexity sonar lookup that returns the best official ticket/booking URL (or `null`), with 90-day cache.
+- `src/components/booking/ActivityLink.tsx` — already uses this pattern (click → spinner → open URL on success, hide on miss).
 
 ## Fix
 
-### 1. Stop the truncation (`src/lib/itinerary/ensureHotelReturnBookend.ts`)
+Reuse `lookupActivityUrl` directly from the button. Stop opening a blank concierge sheet.
 
-Rewrite `extractHotelName` so it never truncates on a hyphen and never picks up "for Check-in"/"for Check-out" suffixes the AI sometimes appends to a hotel name:
+### 1. `InlineBookingActions.tsx` — Priority 3 fallback (no URL, no Viator)
 
-- Replace the `^Return to\s+(.+?)(?:\s*[—-]|$)` regex with one that stops only at the **end of the title**, an em/en dash with surrounding spaces (` — ` / ` – `), or a comma — and then strips a trailing ` for Check-?in` / ` for Check-?out` / ` for Checkout` / ` for arrival` / ` for departure` clause.
-- Apply the same trailing-clause strip to the `^Checkout from …` branch.
-- Skip candidates whose category is `transport`/`flight` (the 17:20 row is `transport`, not accommodation) — only trust accommodation/STAY rows or rows whose title genuinely starts with `Return to`/`Checkout from` AND has a clean hotel-shaped tail.
-- Prefer `opts.hotelName` (already done) and skip extraction entirely when the trip metadata supplies the hotel.
+Replace the green "Find official booking link" button behavior with a click handler that:
 
-### 2. Strengthen departure-day suppression (same file)
+1. Sets a local `isLookingUp` state, button shows spinner + "Finding link…".
+2. Calls `lookupActivityUrl(activity.title, destination, activity.category)`.
+3. On success: `window.open(url, '_blank', 'noopener,noreferrer')` and remember the URL in local state so subsequent clicks open it directly.
+4. On miss (`url === null`): toast "No official booking page found" and **fall back** to opening the concierge sheet — but only after we've tried the deterministic lookup. Keep the GYG "or browse tours" secondary link as a manual escape hatch.
+5. On error: toast a friendly error, leave the button enabled.
 
-The Osaka departure day has `Transfer to Kansai International Airport (KIX)` (transport, contains "airport") — that *should* trigger the existing guard. But the 1:55 PM card shows the guard is being bypassed somewhere (likely the `Travel to <hotel>` card at 10:15–10:35 ends up as chronological last when the airport transfer time isn't parsed). Two changes:
+The concierge button remains available as the secondary affordance (the `Sparkles` icon next to lock/unlock). We are not removing it — we're just making the green primary CTA do what it claims.
 
-- Broaden `isDepartureTerminal` to also recognise titles starting with `Transfer to … Airport`/`Taxi to … Airport`/`Drive to … Airport` regardless of category casing.
-- Add a defensive check: if any card on the day is `category === 'flight'` AND its title starts with `Departure`, treat the whole day as a departure day even when `opts.isDepartureDay` is false (mirrors the existing `dayHasDepartureTerminal` helper but driven by category, not just title).
-- Log a `[BOOKEND_TRACE] reason=gray_zone_skipped_departure_heuristic` sentinel when the new guard fires so we can see it in production.
+### 2. `renderHighCostGuidance` — high-cost activity with no URL
 
-### 3. Mirror the regex hardening in the parser (`src/utils/itineraryParser.ts`)
+Same treatment for the "Ask concierge" link: change it to a "Find booking link" button that runs `lookupActivityUrl` first; only open the concierge as a fallback when Perplexity returns null.
 
-`dayHasDepartureTerminal` lives here too; same strengthening so the parser-level filter agrees with the resolver.
+### 3. Copy / labels
 
-### 4. Backend parity sweep (`supabase/functions/generate-itinerary/universal-quality-pass.ts` + save path)
+- Idle: "Find official booking link" (sm: "Find link") — unchanged.
+- Loading: "Finding link…" with `Loader2` spinner (match `ActivityLink.tsx` style).
+- After URL resolved: relabel to `Reserve on {host}` (mirrors Priority 1 official-site CTA) and switch icon to `ExternalLink`.
 
-`runStep8` already takes a clean `hotelName` from trip metadata, so the backend doesn't truncate. But add a defensive scrub at the persist boundary in `supabase/functions/generate-itinerary/action-save-itinerary.ts` (`normalizeDays`): drop any synthetic accommodation row whose title matches `for Check$` (no `-in`/`-out` suffix) — these are unambiguously the truncation bug's output and should never live in the DB. Log `[SCRUB_TRUNCATED_BOOKEND] day=N count=K` per occurrence.
+### 4. No backend changes
 
-### 5. One-shot DB cleanup migration
+`lookup-activity-url` already exists, is auth-gated, cost-tracked, and Perplexity-cached. No edge-function or schema work.
 
-A SQL migration that deletes `itinerary_activities` rows where `title LIKE '% for Check'` AND `category = 'accommodation'` (the unambiguous truncated-bookend signature). Restricted to `accommodation` so a real `Transfer to Hotel for Check-in` transport card is not touched.
+### 5. Tests
 
-### 6. Tests
+Add a small RTL test in `src/components/booking/__tests__/InlineBookingActions.findBooking.test.tsx`:
+- Mocks `lookupActivityUrl` to return a URL → click opens it via `window.open`.
+- Mocks it to return `null` → falls back to calling `onAskConcierge`.
+- Mocks it to throw → button stays clickable, toast fired.
 
-- `src/lib/itinerary/__tests__/ensureHotelReturnBookend.test.ts` — add cases:
-  - `Return to Four Seasons Hotel Osaka for Check-in` (transport row) MUST NOT be used as a hotel-name source; resolver must fall back to `opts.hotelName` or `Your Hotel`.
-  - Departure day with `Transfer to Kansai International Airport (KIX)` as last card never injects a bookend even when `opts.isDepartureDay` is false.
-  - When `opts.hotelName = 'Four Seasons Hotel Osaka'`, the injected bookend title is exactly `Return to Four Seasons Hotel Osaka` — no `for Check` suffix.
-- `src/utils/__tests__/itineraryParser.test.ts` (or nearest) — add a `dayHasDepartureTerminal` case for the airport-transfer pattern above.
+## Files touched
 
-## Validation
+- `src/components/booking/InlineBookingActions.tsx` (two button sites)
+- `src/components/booking/__tests__/InlineBookingActions.findBooking.test.tsx` (new)
 
-- `bunx vitest run src/lib/itinerary/__tests__/ensureHotelReturnBookend.test.ts src/utils/__tests__/itineraryParser*.test.ts`
-- Inspect the Osaka trip in the preview: departure day should no longer show the 1:55 PM card; non-departure days should show `Return to Four Seasons Hotel Osaka` (no `for Check`).
-- DB query after migration: `SELECT count(*) FROM itinerary_activities WHERE title LIKE '% for Check' AND category='accommodation'` returns 0.
-
-## Scope guardrails
-
-- Only changes the bookend resolver, parser helper, save-time scrub, and one cleanup migration. No changes to Health Engine, Payments, generation prompt, or unrelated cards.
-- Synthetic cards remain display-only; the new save-time scrub is a one-line defense, not a behavioural change.
+No DB migrations, no edge function changes, no schema work, no design system changes.
