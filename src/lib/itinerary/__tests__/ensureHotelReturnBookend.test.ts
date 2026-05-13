@@ -223,5 +223,19 @@ describe('ensureHotelReturnBookend', () => {
     expect(last.title).toBe('Return to Casablanca Marriott Hotel');
     expect(last.startTime >= '23:00' && last.startTime <= '23:30').toBe(true);
     expect(last.endTime <= '23:59').toBe(true);
+
+  it('Osaka Day 1: arrival flight + nightcap tail → still injects bookend (arrival ≠ departure terminal)', () => {
+    const acts = [
+      mk({ title: 'Arrival Flight', category: 'flight', startTime: '07:00', endTime: '09:00' }),
+      mk({ title: 'Transfer to Four Seasons Hotel Osaka', category: 'transport', startTime: '09:30', endTime: '10:15' }),
+      mk({ title: 'Lunch: Ajinoya Honten', category: 'dining', startTime: '12:30', endTime: '13:30' }),
+      mk({ title: 'Dinner: Hajime', category: 'dining', startTime: '19:00', endTime: '20:15' }),
+      mk({ title: 'Nightcap at Bar Barouche', category: 'activity', startTime: '23:29', endTime: '23:44' }),
+    ];
+    const out = ensureHotelReturnBookend(acts, { hotelName: 'Four Seasons Hotel Osaka', dayIndex: 0 });
+    expect(out).toHaveLength(acts.length + 1);
+    const last = out[out.length - 1] as any;
+    expect(last.title).toBe('Return to Four Seasons Hotel Osaka');
+    expect(last.source).toBe('bookend-readtime');
   });
 });
