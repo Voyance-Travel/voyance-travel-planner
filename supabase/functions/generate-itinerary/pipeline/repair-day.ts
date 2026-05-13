@@ -4057,31 +4057,55 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
     const title = String(a?.title || a?.name || '').toLowerCase();
     return /\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/.test(title);
   };
+  // Read all three time-field aliases — LLM payloads may emit `time` only,
+  // and `fillMissingStartTimes` may not have run yet on the path that reaches us.
+  const pickStart = (a: any): number => parseTimeToMinutes(a?.startTime || a?.start_time || a?.time || '') ?? -1;
+  const pickEnd = (a: any): number => parseTimeToMinutes(a?.endTime || a?.end_time || '') ?? -1;
+  const isExempt = (a: any): boolean => {
+    if (a?.userAdded || a?.userEdited || a?.isManual || a?.extracted || a?.pinned) return true;
+    const meta = a?.metadata || {};
+    if (meta.preserveAsManualPick) return true;
+    return false;
+  };
   const filtered: any[] = [];
   for (const a of activities) {
     if (a === checkout) { filtered.push(a); continue; }
     if (isLogisticsRow(a)) { filtered.push(a); continue; }
     if (isLockedRow(a, lockedIds)) { filtered.push(a); continue; }
-    const s = parseTimeToMinutes(a.startTime || '') ?? -1;
+    if (isExempt(a)) { filtered.push(a); continue; }
+    const s = pickStart(a);
+    // Untimed dining row on a departure day is a strict bug — sort can't place
+    // it, §15z can't reason about it, the user sees "floating lunch after the
+    // airport transfer". Drop it. (Locked / userAdded / preserveAsManualPick
+    // exemptions handled above.)
+    if (s < 0 && isDiningRow(a)) {
+      repairs.push({
+        code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+        action: 'final_enforce_dropped_untimed_dining',
+        before: `${a.title} @ <no-time>`,
+      } as any);
+      console.log(`[DEPARTURE_UNTIMED_DINING_PRUNED] day=${dayNumber} dropped "${a.title}" (no startTime/start_time/time)`);
+      continue;
+    }
     if (s >= 0 && s >= cutoffMin) {
       repairs.push({
         code: FAILURE_CODES.LOGISTICS_SEQUENCE,
         action: 'final_enforce_dropped_post_transfer',
-        before: `${a.title} @ ${a.startTime}`,
+        before: `${a.title} @ ${a.startTime || a.start_time || a.time}`,
       } as any);
-      console.log(`[Repair §15z] Dropped post-transfer "${a.title}" (start=${a.startTime}, cutoff=${minutesToHHMM(cutoffMin)})`);
+      console.log(`[Repair §15z] Dropped post-transfer "${a.title}" (start=${a.startTime || a.start_time || a.time}, cutoff=${minutesToHHMM(cutoffMin)})`);
       continue;
     }
     // Dining card that ends too close to the airport-bound window — drop it.
     if (transferStartMin !== null && isDiningRow(a)) {
-      const e = parseTimeToMinutes(a.endTime || '') ?? -1;
-      if (e >= 0 && transferStartMin - e < DINING_NEAR_TRANSFER_MIN && s < transferStartMin) {
+      const e = pickEnd(a);
+      if (e >= 0 && transferStartMin - e < DINING_NEAR_TRANSFER_MIN && s >= 0 && s < transferStartMin) {
         repairs.push({
           code: FAILURE_CODES.LOGISTICS_SEQUENCE,
           action: 'final_enforce_dropped_meal_near_transfer',
-          before: `${a.title} @ ${a.startTime}-${a.endTime}`,
+          before: `${a.title} @ ${a.startTime || a.start_time || a.time}-${a.endTime || a.end_time}`,
         } as any);
-        console.log(`[DEPARTURE_MEAL_PRUNED] day=${dayNumber} dropped "${a.title}" ${a.startTime}-${a.endTime} (transferStart=${minutesToHHMM(transferStartMin)}, gap=${transferStartMin - e}m < ${DINING_NEAR_TRANSFER_MIN}m)`);
+        console.log(`[DEPARTURE_MEAL_PRUNED] day=${dayNumber} dropped "${a.title}" ${a.startTime || a.start_time || a.time}-${a.endTime || a.end_time} (transferStart=${minutesToHHMM(transferStartMin)}, gap=${transferStartMin - e}m < ${DINING_NEAR_TRANSFER_MIN}m)`);
         continue;
       }
     }
@@ -4091,8 +4115,8 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
 
   // 4) Final chronological sort.
   activities.sort((a: any, b: any) => {
-    const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
-    const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+    const ta = parseTimeToMinutes(a.startTime || a.start_time || a.time || '') ?? 99999;
+    const tb = parseTimeToMinutes(b.startTime || b.start_time || b.time || '') ?? 99999;
     return ta - tb;
   });
 
