@@ -1276,33 +1276,71 @@ export default function TripDetail() {
           let perDayDriftSuspected = false;
           if (jsonDayCount > 0 && itineraryDaysDbCount === jsonDayCount && tripId) {
             try {
-              const { data: counts } = await supabase
+              const { data: rows } = await supabase
                 .from('itinerary_activities')
-                .select('itinerary_day_id')
+                .select('itinerary_day_id, category, title, name, start_time, end_time')
                 .eq('trip_id', tripId);
-              if (Array.isArray(counts)) {
-                const tableByDayId = new Map<string, number>();
-                for (const r of counts) {
-                  const id = (r as { itinerary_day_id?: string }).itinerary_day_id;
-                  if (id) tableByDayId.set(id, (tableByDayId.get(id) || 0) + 1);
+              if (Array.isArray(rows)) {
+                // Dedupe per-day rows by (start|end|category|title) so the
+                // probe doesn't fire on artificially-inflated tables (the
+                // Casablanca pattern had ~10x duplicate transport rows).
+                const dedupeKey = (r: any) =>
+                  `${r.start_time || ''}|${r.end_time || ''}|${(r.category || '').toLowerCase()}|${(r.title || r.name || '').toLowerCase().trim()}`;
+                const isMealRow = (r: any) => {
+                  const cat = (r.category || '').toLowerCase();
+                  if (/dining|restaurant|breakfast|brunch|lunch|dinner|cafe|food/.test(cat)) return true;
+                  const t = (r.title || r.name || '').toLowerCase();
+                  return /\b(breakfast|brunch|lunch|dinner|supper)\b/.test(t);
+                };
+                const tableByDayId = new Map<string, { count: number; meals: number }>();
+                const seenByDay = new Map<string, Set<string>>();
+                for (const r of rows as any[]) {
+                  const id = r.itinerary_day_id;
+                  if (!id) continue;
+                  let seen = seenByDay.get(id);
+                  if (!seen) { seen = new Set(); seenByDay.set(id, seen); }
+                  const k = dedupeKey(r);
+                  if (seen.has(k)) continue;
+                  seen.add(k);
+                  const cur = tableByDayId.get(id) || { count: 0, meals: 0 };
+                  cur.count += 1;
+                  if (isMealRow(r)) cur.meals += 1;
+                  tableByDayId.set(id, cur);
                 }
                 const { data: dayIdRows } = await supabase
                   .from('itinerary_days')
                   .select('id, day_number')
                   .eq('trip_id', tripId);
-                const tableByDayNumber = new Map<number, number>();
+                const tableByDayNumber = new Map<number, { count: number; meals: number }>();
                 for (const d of (dayIdRows || []) as Array<{ id: string; day_number: number }>) {
-                  tableByDayNumber.set(d.day_number, tableByDayId.get(d.id) || 0);
+                  tableByDayNumber.set(d.day_number, tableByDayId.get(d.id) || { count: 0, meals: 0 });
                 }
+                const isJsonMealActivity = (a: any) => {
+                  const cat = String(a?.category || '').toLowerCase();
+                  if (/dining|restaurant|breakfast|brunch|lunch|dinner|cafe|food/.test(cat)) return true;
+                  const t = String(a?.title || a?.name || '').toLowerCase();
+                  return /\b(breakfast|brunch|lunch|dinner|supper)\b/.test(t);
+                };
                 for (const d of (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>) {
                   const dn = d?.dayNumber;
                   if (!dn) continue;
-                  const jsonCount = Array.isArray(d.activities) ? d.activities.length : 0;
-                  const tableCount = tableByDayNumber.get(dn) || 0;
-                  // >40% gap mirrors persist-regression guard ratio
-                  if (tableCount >= 3 && jsonCount < tableCount * 0.6) {
+                  const acts = Array.isArray(d.activities) ? d.activities : [];
+                  const jsonCount = acts.length;
+                  const jsonMeals = acts.filter(isJsonMealActivity).length;
+                  const stats = tableByDayNumber.get(dn) || { count: 0, meals: 0 };
+                  // Trigger if EITHER the deduped activity count is 60% richer
+                  // OR the table has meal rows the JSON is missing entirely
+                  // (real Casablanca regression: JSON Day 2 = 4 activities w/
+                  // 0 meals, table = 6 activities including breakfast/lunch/
+                  // dinner — count ratio passes but meal coverage is lost).
+                  const countDrift = stats.count >= 3 && jsonCount < stats.count * 0.6;
+                  const mealDrift = stats.meals > 0 && jsonMeals < stats.meals;
+                  if (countDrift || mealDrift) {
                     console.warn('[HEALTH_JSON_SPARSE_RESYNC]', {
-                      tripId, day: dn, jsonCount, tableCount,
+                      tripId, day: dn,
+                      jsonCount, jsonMeals,
+                      tableCount: stats.count, tableMeals: stats.meals,
+                      reason: mealDrift ? (countDrift ? 'count+meals' : 'meals') : 'count',
                     });
                     perDayDriftSuspected = true;
                   }
