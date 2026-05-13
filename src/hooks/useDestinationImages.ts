@@ -13,6 +13,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { getDestinationImages as getCuratedImages, hasCuratedImages } from '@/utils/destinationImages';
 import { getDestinationImages as getAPIImages } from '@/services/destinationImagesAPI';
 import { supabase } from '@/integrations/supabase/client';
+import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
 
 interface DestinationImagesResult {
   heroImage: string | null;
