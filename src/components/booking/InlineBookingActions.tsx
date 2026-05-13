@@ -11,10 +11,12 @@
  */
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { 
   ShoppingCart, Users, CreditCard, Ticket, XCircle, 
-  Timer, Check, AlertCircle, ExternalLink, Sparkles
+  Timer, Check, AlertCircle, ExternalLink, Sparkles, Loader2
 } from 'lucide-react';
+import { lookupActivityUrl } from '@/services/enrichmentService';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
