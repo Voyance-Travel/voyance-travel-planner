@@ -118,7 +118,13 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
     // arrival/departure-band heuristic instead of silently defaulting to
     // all-three-meals (which produced "missing breakfast" on a 09:50 arrival
     // and "missing dinner" on a 16:00 departure).
-    const dayMode: string = day?.metadata?.quality?.dayMode || '';
+    // Read top-level dayMode first, then the cached gen-time policy. This
+    // mirrors what the backend actually enforced and avoids forcing every
+    // fresh trip through the inferDayModeFallback path.
+    const dayMode: string =
+      day?.metadata?.quality?.dayMode
+      || day?.metadata?.quality?.meal_policy_at_generation?.dayMode
+      || '';
     const persistedMeals = day?.metadata?.quality?.requiredMeals
       ?? day?.metadata?.mealPolicy?.requiredMeals
       ?? null;

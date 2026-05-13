@@ -1962,6 +1962,9 @@ async function _handleGenerateTripDayInner(
           // flight times. Mirrors action-generate-day.ts:336-346. Written unconditionally.
           dayResult.metadata = dayResult.metadata || {};
           dayResult.metadata.quality = dayResult.metadata.quality || {};
+          // Stamp top-level dayMode for the read-side health engine.
+          // See mem://constraints/itinerary/dayMode-quality-top-level
+          dayResult.metadata.quality.dayMode = _fmgPolicy.dayMode;
           dayResult.metadata.quality.meal_policy_at_generation = {
             dayMode: _fmgPolicy.dayMode,
             requiredMeals: _fmgPolicy.requiredMeals,
@@ -2532,6 +2535,9 @@ async function _handleGenerateTripDayInner(
     // exploration days carry the cache too.
     updatedDays[i].metadata = updatedDays[i].metadata || {};
     updatedDays[i].metadata.quality = updatedDays[i].metadata.quality || {};
+    // Stamp top-level dayMode for the read-side health engine.
+    // See mem://constraints/itinerary/dayMode-quality-top-level
+    updatedDays[i].metadata.quality.dayMode = policy.dayMode;
     updatedDays[i].metadata.quality.meal_policy_at_generation = {
       dayMode: policy.dayMode,
       requiredMeals: policy.requiredMeals,

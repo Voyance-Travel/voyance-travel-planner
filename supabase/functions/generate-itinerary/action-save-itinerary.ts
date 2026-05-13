@@ -437,7 +437,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       // against current flight times silently disagrees with what the AI was
       // instructed to produce when the user changes flights between gen and save.
       const cachedPolicy = (day as any)?.metadata?.quality?.meal_policy_at_generation;
-      const policy = (cachedPolicy && Array.isArray(cachedPolicy.requiredMeals))
+      let policy = (cachedPolicy && Array.isArray(cachedPolicy.requiredMeals))
         ? ({
             dayMode: cachedPolicy.dayMode,
             requiredMeals: cachedPolicy.requiredMeals as RequiredMeal[],
@@ -451,6 +451,49 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
             arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
             departureTime24: isLastDay ? savedDepartureTime24 : undefined,
           });
+
+      // Brunch-band downgrade: when no flight clock is known and the cached
+      // policy still demands breakfast, infer the actual arrival from the
+      // first non-logistics activity on Day 1. If that lands ≥ 09:30, drop
+      // breakfast — the brunch-band rule (Core memory) covers the AM meal
+      // via the lunch slot. Closes the recurring "Day 1 missing breakfast"
+      // false-positive on no-flight trips.
+      // See mem://constraints/itinerary/no-phantom-arrival-clock
+      if (
+        isFirstDay &&
+        !savedArrivalTime24 &&
+        Array.isArray(policy.requiredMeals) &&
+        policy.requiredMeals.includes('breakfast')
+      ) {
+        const { inferArrivalMinsFromSchedule } = await import('../_shared/infer-arrival-from-schedule.ts');
+        const inferredMin = inferArrivalMinsFromSchedule(day.activities);
+        if (inferredMin !== null && inferredMin >= 570) {
+          const downgraded = (policy.requiredMeals as RequiredMeal[]).filter(
+            (m) => m !== 'breakfast'
+          );
+          console.warn(
+            `[save-itinerary] BRUNCH_BAND_DOWNGRADE day=${dayNumber} inferredArrivalMin=${inferredMin} requiredMeals=[${policy.requiredMeals.join(',')}]→[${downgraded.join(',')}]`
+          );
+          policy = { ...policy, dayMode: 'morning_arrival', requiredMeals: downgraded };
+          // Persist the downgraded policy so subsequent saves don't re-derive.
+          (day as any).metadata = (day as any).metadata || {};
+          (day as any).metadata.quality = (day as any).metadata.quality || {};
+          (day as any).metadata.quality.meal_policy_at_generation = {
+            ...(cachedPolicy || {}),
+            dayMode: 'morning_arrival',
+            requiredMeals: downgraded,
+            brunch_band_downgrade_at: new Date().toISOString(),
+            inferred_arrival_min: inferredMin,
+          };
+        }
+      }
+
+      // Always stamp top-level dayMode so the read-side health engine reads
+      // it directly without falling through to nested-cache or inference.
+      // See mem://constraints/itinerary/dayMode-quality-top-level
+      (day as any).metadata = (day as any).metadata || {};
+      (day as any).metadata.quality = (day as any).metadata.quality || {};
+      (day as any).metadata.quality.dayMode = policy.dayMode;
 
       if (policy.requiredMeals.length === 0) {
         _harvestSave(day.activities);

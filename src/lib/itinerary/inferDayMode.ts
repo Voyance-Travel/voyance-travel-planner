@@ -41,15 +41,10 @@ function parseClockToMinutes(s: unknown): number | null {
   return null;
 }
 
+import { inferArrivalMinsFromSchedule } from './inferArrivalFromSchedule';
+
 function firstNonBookendStart(day: any): number | null {
-  const acts = Array.isArray(day?.activities) ? day.activities : [];
-  for (const a of acts) {
-    const cat = String(a?.category || a?.type || '').toLowerCase();
-    if (['check-in', 'check-out', 'hotel', 'accommodation', 'transit', 'transfer', 'logistics', 'commute', 'bookend', 'hotel_return'].includes(cat)) continue;
-    const m = parseClockToMinutes(a?.startTime || a?.time || a?.start_time);
-    if (m !== null && m > 0) return m;
-  }
-  return null;
+  return inferArrivalMinsFromSchedule(day?.activities);
 }
 
 export interface InferDayModeInput {
