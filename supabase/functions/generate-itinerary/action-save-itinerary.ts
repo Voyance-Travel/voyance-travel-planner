@@ -221,6 +221,18 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
         console.log(`[BOOKEND_TRACE] day=${dayNumber} site=save action=reordered source=${(head as any)?.source || 'inferred'} reason=legacy_head_bookend`);
       }
     }
+    // Pre-dawn cascade heal — shifts the leading [00:00, 05:00) block of
+    // non-bookend / non-locked / non-departure cards forward to start at
+    // 09:00 so the user never sees "Moco Museum 1:33 AM" on Day 2.
+    // See mem://constraints/itinerary/late-nightlife-no-next-day-bleed.
+    {
+      const { normalizePredawnCascade } = await import('../_shared/predawn-cascade-normalize.ts');
+      const predawn = normalizePredawnCascade(activities, idx, {
+        dayNumber,
+        site: 'save-itinerary',
+      });
+      if (predawn.changed) activities = predawn.activities;
+    }
     // Drop stale `late_nightlife_bookend` cards whose chronological-prior
     // non-bookend isn't actually nightlife (or whose start predates the
     // prior's end). The save-time `runStep8` retry below re-injects a
