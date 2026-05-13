@@ -1,73 +1,81 @@
-# Stabilize the restaurant link lookup
+# Fix: Hotel return missing when nightcap is added AFTER an existing bookend
 
-## What the user is seeing
+## Root cause (verified against Casablanca trip DB)
 
-Three dining cards (L'Entrecôte Day 2, Blend Gourmet Burger Day 3, Basmane Day 4) render with a stuck spinner reading "Loading… / Finding restaurant…" instead of resolving to either a "View Restaurant" link or no link at all. This is the small affordance under each dining card produced by `RestaurantLink` (in `InlineBookingActions` → `find_restaurant` branch), which calls the `lookup-restaurant-url` edge function (Perplexity sonar).
+Casablanca Day 2 ends:
+- `20:15–20:40` `accommodation` — **Return to Casablanca Marriott Hotel** (existing bookend)
+- `23:29–23:44` `dining` — **Nightcap at La Sqala** (added later, no following return card)
 
-## Root cause
+Two suppression sites prevent the late-nightlife bookend from appearing:
 
-The previous fix added a 5s client-side deadline so a hung invoke would resolve to `null` and the link would simply hide. That works in isolation, but the dining card is re-mounted frequently by upstream re-renders (cascade preview rebuilds, `TRIP_PERSISTED_EVENT` resync, financial snapshot updates). When the parent remounts before 5s elapses:
+1. **Read-time (`src/lib/itinerary/ensureHotelReturnBookend.ts:166`)** — the early
+   `activities.some(isHotelReturnBookendActivity)` short-circuit returns immediately
+   on the 20:15 STAY card and never reaches the wrap-aware "is the chronological
+   tail terminal?" check. Result: parser never appends a 23:54 → 02:55 late-nightlife
+   bookend even though `last` (the 23:29 nightcap) clearly qualifies. This is the
+   exact same logic flaw that produced the Mallorca and San Juan misses.
 
-- The cleanup fires (`cancelled = true`), the in-flight invoke is abandoned, and **nothing is written to `urlCache`**.
-- The next mount starts the spinner over and re-fires Perplexity from scratch.
-- For lesser-known names (Basmane, regional Blend Gourmet Burger) Perplexity often takes >5s, so we never persist a result.
-
-Net effect: a permanent "Finding restaurant…" UI for any name slow enough that no single mount survives long enough to cache it. Edge-function logs over the affected window show zero successful invocations of `lookup-restaurant-url` for the trip — confirming the request never completes from the user's vantage point.
-
-A secondary contributor: even when Perplexity does eventually respond, the server has no upper bound, so a 12s response wastes credits and still misses the client deadline.
+2. **Write-time (`runStep8` in `universal-quality-pass.ts`)** — `runStep8` *itself*
+   would handle this correctly (its wrap-unaware max picks 23:44 > 20:40), but it
+   only runs during full-day generation and the post-meal-guard retry. Chat-added
+   activities (`itineraryActionExecutor`) and ad-hoc edits that extend the day past
+   an existing bookend never re-trigger it, so the DB stays sparse and the read-time
+   net is the only thing left — and it's currently broken (#1).
 
 ## Fix
 
-Make the lookup survive remounts and fail closed silently.
+### 1. `src/lib/itinerary/ensureHotelReturnBookend.ts`
+Drop the eager `activities.some(isHotelReturnBookendActivity)` early-return. The
+existing post-selection `isTerminalAlready(last)` check (after the wrap-aware
+`lastIdx` walk) already handles the legitimate "day truly ends on a hotel return"
+case; the early `some()` only fires the false-positive when an earlier bookend is
+later trumped by a real activity (nightcap, late dinner, user-added).
 
-### 1. Module-scoped in-flight dedupe + survival (`src/components/booking/RestaurantLink.tsx`)
+Add a new `[BOOKEND_TRACE] reason=stale_earlier_bookend_superseded` log so we can
+see in production when a Day-N late activity overrides an earlier bookend.
 
-- Add `inflight: Map<string, Promise<string | null>>` next to `urlCache`.
-- `lookupUrl()` checks `inflight` first; if a promise exists for `cacheKey`, await it instead of starting a new invoke.
-- The promise itself (not the component) writes the final result to `urlCache`. So even if every subscriber unmounts, the result still lands in cache and the next mount short-circuits.
-- Cleanup only flips a local `cancelled` flag for `setState`; it never aborts the underlying fetch.
+### 2. Save/normalize-time net (`supabase/functions/generate-itinerary/action-save-itinerary.ts`)
+In the per-day `normalizeDays` loop (after timing cascade, before persist), run
+`runStep8` once when the chronologically-last non-locked card is **after** an
+existing bookend on the same day. This catches:
+- Chat-added late nightcaps
+- User-added late activities
+- Any post-generation mutation that extends the day
 
-### 2. Negative cache on deadline + sessionStorage persistence
+Sentinel: `[BOOKEND_VERIFY] day=N reason=late_addition_after_bookend appended=…`.
 
-- When the 5s deadline fires, immediately `urlCache.set(cacheKey, { url: null })` so subsequent mounts in this session don't re-fire the same lookup.
-- Mirror `urlCache` into `sessionStorage` (key `restaurantUrlCache:v1`) so a hard refresh inherits known-null entries instead of re-spinning.
+### 3. Persisted clean-up (one-shot, optional)
+Backfill is unnecessary — read-time fix #1 makes existing trips render correctly
+on next mount. Save-time fix #2 makes the next save persist the new bookend.
 
-### 3. Render no spinner after a short grace period
+### 4. Tests
+- `ensureHotelReturnBookend.test.ts` — new case: existing 20:15 STAY return + 23:29
+  nightcap (Casablanca shape). Assert a second `late_nightlife_bookend` card is
+  appended at 23:54-ish.
+- `late-nightlife-source-survival.test.ts` — extend with the
+  "earlier-bookend + later-nightcap" shape so the survival contract covers it.
+- New `action-save-itinerary` test for the normalize-time `runStep8` re-trigger.
 
-The spinner itself is the visible bug. Replace the always-on "Finding restaurant…" with:
+### 5. Memory
+Update `mem://constraints/itinerary/late-nightlife-hotel-return` and
+`mem://constraints/itinerary/read-time-hotel-return-bookend` with the
+"earlier-bookend-doesn't-suppress" rule, and add the recurring Casablanca/Mallorca/
+San Juan reproduction to the index Core line so this regression class stays loud.
 
-- 0–1200 ms: render `null` (no UI). Most cache hits and fast lookups resolve in this window.
-- After 1200 ms still loading: still render `null` (silent). The lookup keeps running in the background and updates `urlCache`; on the next render (or remount) the link appears if found.
+## Files to change
 
-This eliminates the stuck-spinner regression by construction. If Perplexity finds the URL we still get the link; if it doesn't, the card looks the same as one with no link (which is already the post-deadline state).
-
-### 4. Server-side hardening (`supabase/functions/lookup-restaurant-url/index.ts`)
-
-- Wrap the Perplexity `fetch` in an `AbortController` with an 8s timeout.
-- On abort or non-OK response, persist `setCache(cacheKey, 'restaurant_url', { url: null }, TTL.THIRTY_DAYS)` so we don't keep paying Perplexity for the same miss.
-- Keep the existing 30-day positive cache.
-
-### 5. One-line guard against name churn
-
-`InlineBookingActions` line 413 passes `activity.location?.name || activity.title`. Memoize the chosen name with `useMemo` so referential changes in the activity object don't churn the `RestaurantLink` `useEffect` deps. (Strings compare by value, but this also catches `undefined → ''` flips during snapshot rebuilds.)
-
-## Verification
-
-- Add `src/components/booking/__tests__/RestaurantLink.dedupe.test.tsx`:
-  - Mounting twice with the same name fires `supabase.functions.invoke` exactly once.
-  - Unmounting before resolution still writes `urlCache`; next mount reads from cache without invoking.
-  - Deadline timeout writes a null entry to cache; subsequent mount returns `null` synchronously.
-- Add `supabase/functions/lookup-restaurant-url/__tests__/index.test.ts` (or extend if present): a stalled Perplexity (mock `fetch` that never resolves) returns `{ success: true, url: null }` within 8.5s and the cache is populated.
-- Manually re-load the Casablanca trip and confirm none of the three dining cards show the spinner; either a link appears or the affordance is absent.
-
-## Files touched
-
-- `src/components/booking/RestaurantLink.tsx` — dedupe, sessionStorage cache, silent loading state.
-- `src/components/booking/InlineBookingActions.tsx` — `useMemo` on resolved restaurant name (one-liner).
-- `supabase/functions/lookup-restaurant-url/index.ts` — 8s `AbortController`, cache nulls on abort/error.
-- New tests as listed above.
-- Memory: append a one-liner under `mem://constraints/itinerary/...` (new file `restaurant-link-lookup-stability`) and reference from `mem://index.md`.
+- `src/lib/itinerary/ensureHotelReturnBookend.ts` (drop eager early-return)
+- `src/lib/itinerary/__tests__/ensureHotelReturnBookend.test.ts` (new case)
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (normalize-time runStep8 re-trigger)
+- `supabase/functions/generate-itinerary/__tests__/late-nightlife-source-survival.test.ts` (extend)
+- `supabase/functions/generate-itinerary/__tests__/hotel-return-bookend.test.ts` (new save-time case)
+- `mem://constraints/itinerary/late-nightlife-hotel-return`
+- `mem://constraints/itinerary/read-time-hotel-return-bookend`
+- `mem://index.md`
 
 ## Out of scope
 
-- The dining card's main copy ("Loading restaurant info…" headers, descriptions) — that's served by a different pipeline (`_shared/description-fill.ts`) and is unrelated to the `RestaurantLink` spinner. The user's "descriptions" wording refers to this small under-card affordance, confirmed by the exact strings cited.
+- No prompt changes (the model already correctly omits a second bookend when an
+  earlier one exists; we want the deterministic engine to append it post-hoc).
+- No removal of the now-stale earlier 20:15 return — that's a UI-visible mutation
+  better handled in a follow-up that also re-times it as a "freshen up" if needed.
