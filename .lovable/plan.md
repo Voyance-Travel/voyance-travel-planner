@@ -1,63 +1,50 @@
-# Health Engine — False-Positive Cleanup (Montreal Audit)
+# Health Engine — Analyze Post-Cascade Times
 
-## What's wrong
+## Why my last fix wasn't enough
 
-All four warnings on the Montreal trip are false positives from `analyzeHealth` / `detectGapsForDay` in `src/components/trip/TripHealthPanel.tsx`. The itinerary content is correct; the engine is judging it against the wrong reference.
+The previous patch added `getDisplayStartTime(a)` that prefers `displayStartTime || adjustedStartTime || metadata.displayStart` over `startTime`. **None of those fields exist on the activity record** — render reads `a.startTime || a.time` directly. So the helper falls through to `startTime`, the same value the analyzer already had. Net effect: no change for this class of warning.
 
-| # | Reported | Root cause |
-|---|---|---|
-| 1 | Day 1 missing breakfast | `dayMode` is unset / not `morning_arrival`, so `requiredMeals` falls through to default `[breakfast, lunch, dinner]`. Arrival 09:50 should yield `morning_arrival` (no breakfast required) per the Day-1 arrival-band rule. |
-| 2 | Day 1 Pointe-à-Callière 10:30–12:40 vs Schwartz's 12:30–13:30 | Schwartz's renders at **12:55** but `a.startTime` in `editorDays` still says **12:30**. Display layer shows a buffered time; analyzer reads raw source. They diverge. |
-| 3 | Day 2 same pattern (Joe Beef rendered 13:27, source 12:30) | Same root cause as #2. |
-| 4 | Day 3 missing dinner | Departure day with `afternoon_departure` mode should require breakfast only. Either `dayMode` is missing OR Maison Publique is an untimed floating card the engine shouldn't expect to satisfy a meal slot. |
+## Real architecture
+
+Per `mem://constraints/itinerary/db-is-source-of-truth`, the FE no longer mutates `days` on load. The buffered timing cascade (`enforceTimingAndBuffers` in `src/utils/itinerary/timingCascade.ts`) runs **only at save time** — server-side in `repair-day §16` + `action-save-itinerary STEP 2.9`. The FE keeps a fingerprint-guarded **dry-run** at `EditorialItinerary.tsx:2403` that imports the same cascade, runs it against `days`, logs `[ITIN_RESYNC_DRIFT]`, but throws the result away.
+
+That dry-run is exactly the post-adjustment view of the schedule that the user reads off the rendered cards (because the cards either already reflect a previously-saved cascade pass, or the user is looking at the schedule in the order/spacing the cascade *would* produce — same answer either way: the cascade is idempotent and the analyzer should see post-cascade times).
+
+The Mexico City symptom (memory: `mem://constraints/itinerary/fix-timing-cascade-parity`) is the same root: analyzer races the cascade.
 
 ## Fix
 
-### A. Honor arrival/departure dayMode reliably (issues #1, #4)
+**Single change**: have `analyzeHealth` run the same `enforceTimingAndBuffers` dry-run per day before reading times for the overlap/buffer pass. Conflicts the cascade resolves vanish from the panel; conflicts that survive (genuine, unresolvable) still surface.
 
-In `analyzeHealth` (TripHealthPanel.tsx ~L112–131), the meal-requirement fallback chain trusts `metadata.quality.dayMode` but silently defaults to all-three-meals when it's missing. For Day 1 and the last day, derive a fallback dayMode from trip-level signals when persisted metadata is absent:
+### Implementation
 
-- **First day**: read `trip.flight_selection.arrival_time` (or activities-array first non-bookend `startTime`) and apply the Core arrival-band rule:
-  - `< 09:30` → breakfast required
-  - `09:30–11:59` → brunch day, breakfast NOT required (lunch + dinner)
-  - `≥ 12:00` → lunch-first (lunch + dinner)
-- **Last day**: read `trip.flight_selection.departure_time` and:
-  - `≥ 18:00` → all three meals
-  - `15:00–17:59` → breakfast only (afternoon_departure)
-  - `12:00–14:59` → breakfast + lunch
-  - `< 12:00` → breakfast only (early_departure)
+1. **New helper `applyCascadeDryRun(activities, locked)`** in `src/lib/itinerary/healthCascadePreview.ts` — thin wrapper around `enforceTimingAndBuffers`. Returns a `Map<id, { startTime, endTime }>` so analyzer can look up post-cascade times by id without mutating the source. Pure, no I/O, no DB.
 
-Wire through a small helper `inferDayModeFallback(day, dayIndex, totalDays, tripMeta)` that's called only when `persistedMeals` and `dayMode` are both empty. This closes the silent default that produces "missing breakfast" on a 09:50 arrival and "missing dinner" on a 16:00 departure.
+2. **`analyzeHealth` (TripHealthPanel.tsx)** — at the top of each day's pass, build the cascade preview map. In the overlap loop (~L209) and buffer loop (~L240), substitute `getDisplayStartTime(a)` / `getDisplayEndTime(a)` for `cascadePreview.get(a.id)?.startTime ?? a.startTime` (same for end). Keep the existing `displayStartTime`-then-`startTime` fallback chain as a tertiary so future renderers can still stamp explicit values.
 
-### B. Stop reading stale source times for overlap analysis (issues #2, #3)
+3. **Update `getDisplayStartTime/End`** in `src/lib/itinerary/displayTime.ts` to accept an optional `cascadeMap` parameter: `getDisplayStartTime(a, cascadeMap?)` returns `cascadeMap?.get(a.id)?.startTime ?? a.startTime ?? a.time ?? a.start_time ?? ''`. Backward compatible.
 
-The cards render with a buffered/cascade-adjusted time but `analyzeHealth` reads `a.startTime` directly. Two parts:
+4. **`detectGapsForDay`** — same substitution. Gaps are computed from cascade-resolved end→start, so a 10-min "conflict" the cascade fixes by pushing the next card forward will not re-emerge as a phantom gap (cascade preserves total schedule density, only shifts).
 
-1. **Read the same time the card shows.** Add a single helper `getDisplayTime(a)` (in `src/lib/itinerary/displayTime.ts`) that mirrors the visual rendering: prefer `a.displayStartTime` / `a.adjustedStartTime` / `metadata.displayStart` if set by the renderer, otherwise fall back to `a.startTime`. Use it in `analyzeHealth` (L194–207) and `detectGapsForDay` (L325–326).
-2. **Apply a 1-minute tolerance** before flagging overlap: only fire `conflict-day-N` when `timed[i].end - timed[i+1].start >= 1`. The current strict `>` already does this for integer minutes, but combined with point 1 this prevents the engine from racing the renderer for warnings that immediately self-resolve on save (`enforceTimingAndBuffers` is the source of truth for actual timing).
+5. **Logging parity** — when a conflict is suppressed because the cascade resolved it, emit `console.debug('[health] suppressed via cascade preview', { dayNumber, before, after })` at most once per day per render. Behind `import.meta.env.DEV` so prod stays quiet.
 
-If the renderer doesn't currently stamp a `displayStartTime` on the activity object, expose it: when `EditorialItinerary` computes the card's printed time, attach it to the activity record passed to `editorDays` so health and rendering share one number.
+### Files
 
-### C. Skip untimed floating dining cards in meal-requirement check (issue #4)
+- `src/lib/itinerary/healthCascadePreview.ts` *(new)* — `buildCascadePreview(activities, lockedIds)` → `Map<id, { startTime, endTime }>`
+- `src/lib/itinerary/displayTime.ts` — extend `getDisplayStartTime/End` to read cascade map first
+- `src/components/trip/TripHealthPanel.tsx` — call `buildCascadePreview` per-day inside `analyzeHealth`, pass map to display-time helper at the two read sites; same in `detectGapsForDay`
+- `src/components/trip/__tests__/TripHealthPanel.cascadePreview.test.ts` *(new)* — Schwartz's-style fixture: source has overlap, expect zero overlap warnings after cascade preview; bike-tour fixture; non-cascadable conflict (two locked cards) still flagged
 
-In `analyzeHealth` L133–150, a missing meal is currently flagged purely from `requiredMeals - detectedMeals`. Add a guard: if a dining activity exists for the slot but has no `startTime`, count it as detected with severity downgraded — OR, on departure days specifically, skip dinner-required fallback once `flight_selection.departure_time < 18:00`. Section A already handles the latter; this adds belt-and-suspenders for orphaned untimed dining cards generally.
+### Acceptance
 
-## Files
-
-- `src/components/trip/TripHealthPanel.tsx` — wire `inferDayModeFallback`, swap `parseTime(a.startTime)` for `parseTime(getDisplayTime(a))` in both `analyzeHealth` overlap pass and `detectGapsForDay`
-- `src/lib/itinerary/inferDayMode.ts` *(new)* — arrival/departure-band → dayMode helper, pure, unit-tested
-- `src/lib/itinerary/displayTime.ts` *(new)* — single source for "what time does this card show?"
-- `src/components/itinerary/EditorialItinerary.tsx` — if buffered display time is computed inline, stamp it onto the activity passed to health (read-only; no setState, no DB write)
-- `src/components/trip/__tests__/TripHealthPanel.analyzeHealth.test.ts` — add cases: 09:50 arrival, 16:00 departure, buffered-display vs source-time
-- `mem://constraints/itinerary/health-gap-day-scoping` — append: "Health engine reads display times via `getDisplayTime` so it never races the renderer; first/last day mealMode falls back to flight time bands when metadata is absent"
+Repro the Montreal trip Day 1 / Day 2 in the test fixtures. Before the patch, `analyzeHealth` returns the two `fix_timing` warnings the user described. After the patch, those two warnings are suppressed. A third fixture with two `locked: true` cards that genuinely overlap still flags as error (cascade can't move locked rows).
 
 ## Out of scope
 
-- Changing `enforceTimingAndBuffers` or anything that mutates persisted timing
-- Reworking the overall health score formula or weights
-- Departure-day card pruning (handled by §15z `enforceDepartureDayLogistics` already)
-- Generator/repair-day prompt changes — these false positives are read-side only
+- Persisting the cascade result on load — explicitly forbidden by `mem://constraints/itinerary/db-is-source-of-truth-on-load`. Read-only preview only.
+- Changing `enforceTimingAndBuffers` itself — server is canonical
+- Card render swap — cards keep reading `startTime || time`. The user's stated grievance is the panel disagreeing with the cards; the cascade preview makes the panel match what the user reads.
 
 ## Risk
 
-Low. All changes are read-side analysis. The dayMode fallback only fires when persisted metadata is absent (today's silent path). The display-time helper only changes which timestamp the analyzer compares against — the source of truth for actual scheduling is untouched.
+Low. `enforceTimingAndBuffers` is pure, idempotent, already shipped. We only call it on a clone, only read from the result. The drift probe at L2403 already runs it on every render with no observed perf issue.
