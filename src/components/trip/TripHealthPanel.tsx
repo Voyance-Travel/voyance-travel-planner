@@ -769,11 +769,15 @@ export function TripHealthPanel({
     return stableIssues.filter((i) => liveIds.has(i.id));
   }, [stableIssues, rawHealthIssues]);
 
-  // Health score: start at 100, deduct for stable issues only
+  // Health score: start at 100, deduct for stable issues only.
+  // Soft "recovering" warnings (sparse-JSON heuristic) don't deduct — the
+  // sparse-JSON probe is rebuilding from canonical per-row data.
   const healthScore = useMemo(() => {
     let health = 100;
     healthIssues.forEach((issue) => {
       const isTiming = issue.fixAction === 'fix_timing';
+      const isRecovering = issue.id.startsWith('missing-meals-') && !issue.fixAction;
+      if (isRecovering) return;
       if (issue.severity === 'error') health -= isTiming ? 8 : 15;
       else health -= isTiming ? 3 : 5;
     });
