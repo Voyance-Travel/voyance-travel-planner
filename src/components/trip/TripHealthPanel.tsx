@@ -526,7 +526,7 @@ export function TripHealthPanel({
     }
 
     // Health analysis
-    const rawIssues = analyzeHealth(days);
+    const rawIssues = analyzeHealth(days, { tripFlightSelection });
     // Suppress local timing/buffer issues for any day where the latest server
     // re-check returned zero issues — otherwise the panel says "no issues" in
     // the badge while still showing the stale red line.
