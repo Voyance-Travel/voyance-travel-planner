@@ -10,8 +10,12 @@
  * `metadata.displayStart` for forward-compatibility if a future renderer
  * stamps a buffered display value onto the activity record.
  */
-export function getDisplayStartTime(a: any): string {
+type CascadePreviewMap = Map<string, { startTime?: string; endTime?: string }>;
+
+export function getDisplayStartTime(a: any, cascadeMap?: CascadePreviewMap): string {
+  const cascaded = cascadeMap && a?.id ? cascadeMap.get(String(a.id))?.startTime : undefined;
   return (
+    cascaded ||
     a?.displayStartTime ||
     a?.adjustedStartTime ||
     a?.metadata?.displayStart ||
@@ -22,8 +26,10 @@ export function getDisplayStartTime(a: any): string {
   );
 }
 
-export function getDisplayEndTime(a: any): string {
+export function getDisplayEndTime(a: any, cascadeMap?: CascadePreviewMap): string {
+  const cascaded = cascadeMap && a?.id ? cascadeMap.get(String(a.id))?.endTime : undefined;
   return (
+    cascaded ||
     a?.displayEndTime ||
     a?.adjustedEndTime ||
     a?.metadata?.displayEnd ||
