@@ -21,7 +21,8 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { inferDayModeFallback } from '@/lib/itinerary/inferDayMode';
 import { getDisplayStartTime, getDisplayEndTime } from '@/lib/itinerary/displayTime';
-import { buildCascadePreview } from '@/lib/itinerary/healthCascadePreview';
+import { buildCascadePreview, indexKey } from '@/lib/itinerary/healthCascadePreview';
+import { enforceTimingAndBuffers, parseTime as parseCascadeTime } from '@/utils/itinerary/timingCascade';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
