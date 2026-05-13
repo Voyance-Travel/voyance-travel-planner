@@ -11991,8 +11991,12 @@ function ActivityRow({
                     {/* Description — also rendered in the venue branch so dining cards
                         with a known restaurant still show their blurb. Mirrors the
                         no-venue branch (resolveActivityDisplayDescription handles
-                        existing description, whyThisFits, and dining fallback). */}
-                    {!compact && (() => {
+                        existing description, whyThisFits, and dining fallback).
+                        Dining cards bypass the `compact` gate — for restaurants the
+                        blurb (signature dish, what to order) is the whole point of
+                        the card and was the user-visible "no descriptions" symptom
+                        in compact / smart-finish / manual layouts. */}
+                    {(!compact || isDiningActivity) && (() => {
                       const d = resolveActivityDisplayDescription(
                         activity,
                         sanitizeActivityText(activity.description),
