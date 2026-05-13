@@ -29,7 +29,6 @@ vi.mock('@/integrations/supabase/client', () => {
   const makeChain = (table: string): any => {
     const settle = async () => {
       if (table === 'trips') return { data: trip, error: null };
-      if (table === 'trip_budget_settings') return { data: settings, error: null };
       return { data: [], error: null };
     };
     const chain: any = {};
