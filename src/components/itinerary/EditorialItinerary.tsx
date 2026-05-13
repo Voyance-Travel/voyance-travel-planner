@@ -6140,26 +6140,55 @@ export function EditorialItinerary({
                     visibly equals Trip Total. Renders whenever there's a trip
                     total OR a multi-traveler /pp ↔ group bridge to explain. */}
                 {financialSnapshot.tripTotalCents > 0 && (tripLevelCents > 0 || daysSubtotalCents > 0) && (() => {
-                  const daysGroupUsd = daysSubtotalCents / 100;
-                  const tripLevelUsd = tripLevelCents / 100;
-                  const reserveUsd = Math.max(0, tripLevelUsd - hotelCost - flightCost);
-                  const tripTotalUsd = financialSnapshot.tripTotalCents / 100;
+                  // Strip MUST mirror the canonical snapshot — never local
+                  // computeHotelCostUsd / leg sums. Otherwise toggles & manual
+                  // overrides desync and you get "$820 + $1,780 = $460".
+                  // See mem://constraints/finance/header-strip-mirrors-snapshot.
+                  const tripTotalUsd  = financialSnapshot.tripTotalCents / 100;
+                  const daysGroupUsd  = daysSubtotalCents / 100;
+                  const hotelChipUsd  = financialSnapshot.effectiveHotelCents / 100;
+                  const flightChipUsd = financialSnapshot.effectiveFlightCents / 100;
+                  const reserveAdjustUsd =
+                    (financialSnapshot.tripTotalCents
+                      - daysSubtotalCents
+                      - financialSnapshot.effectiveHotelCents
+                      - financialSnapshot.effectiveFlightCents) / 100;
+                  if (
+                    typeof import.meta !== 'undefined' &&
+                    (import.meta as any).env?.DEV &&
+                    !financialSnapshot.loading
+                  ) {
+                    const balance = daysGroupUsd + hotelChipUsd + flightChipUsd + reserveAdjustUsd - tripTotalUsd;
+                    if (Math.abs(balance) > 1) {
+                      // eslint-disable-next-line no-console
+                      console.warn('[Itinerary strip] reconciliation imbalance', {
+                        daysGroupUsd, hotelChipUsd, flightChipUsd, reserveAdjustUsd, tripTotalUsd, balance,
+                      });
+                    }
+                  }
                   const Sep = ({ char }: { char: string }) => (
                     <span className="text-muted-foreground/40">{char}</span>
                   );
-                  const Chip = ({ label, value }: { label: string; value: number }) => (
-                    <span>
-                      <span className="text-muted-foreground/70">{label}</span>{' '}
-                      <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(value), tripCurrency)}</span>
-                    </span>
-                  );
+                  const Chip = ({ label, value }: { label: string; value: number }) => {
+                    const isNeg = value < 0;
+                    const display = Math.abs(value);
+                    return (
+                      <span>
+                        <span className="text-muted-foreground/70">{label}</span>{' '}
+                        <span className="font-medium text-foreground tabular-nums">
+                          {isNeg ? '−' : ''}{formatCurrency(displayCost(display), tripCurrency)}
+                        </span>
+                      </span>
+                    );
+                  };
+                  const showReserve = Math.abs(reserveAdjustUsd) > 0.5;
                   return (
                     <>
                       <div className={cn("flex items-center gap-x-2 gap-y-1 mt-1.5 text-xs text-muted-foreground flex-wrap justify-center", isBudgetCalculating && "opacity-60")}>
                         <Chip label="Days (group)" value={daysGroupUsd} />
-                        {hotelCost > 0 && (<><Sep char="+" /><Chip label="Hotel" value={hotelCost} /></>)}
-                        {flightCost > 0 && (<><Sep char="+" /><Chip label="Flights" value={flightCost} /></>)}
-                        {reserveUsd > 0 && (<><Sep char="+" /><Chip label="Reserve & adjustments" value={reserveUsd} /></>)}
+                        {hotelChipUsd > 0 && (<><Sep char="+" /><Chip label="Hotel" value={hotelChipUsd} /></>)}
+                        {flightChipUsd > 0 && (<><Sep char="+" /><Chip label="Flights" value={flightChipUsd} /></>)}
+                        {showReserve && (<><Sep char={reserveAdjustUsd >= 0 ? '+' : '−'} /><Chip label="Reserve & adjustments" value={Math.abs(reserveAdjustUsd)} /></>)}
                         <Sep char="=" />
                         <span>
                           <span className="text-muted-foreground/70">Trip Total</span>{' '}
