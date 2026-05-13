@@ -33,9 +33,10 @@ const LOGISTICS_KEYWORDS = ['check-in', 'check in', 'checkin', 'check-out', 'che
 interface GapWindow {
   fromMins: number;
   toMins: number;
-  label: 'afternoon' | 'evening';
+  label: 'morning' | 'afternoon' | 'evening';
 }
 
+const MORNING_WINDOW: GapWindow = { fromMins: MORNING_START_MIN, toMins: MORNING_END_MIN, label: 'morning' };
 const AFTERNOON_WINDOW: GapWindow = { fromMins: AFTERNOON_START_MIN, toMins: AFTERNOON_END_MIN, label: 'afternoon' };
 const EVENING_WINDOW: GapWindow = { fromMins: EVENING_START_MIN, toMins: EVENING_END_MIN, label: 'evening' };
 
