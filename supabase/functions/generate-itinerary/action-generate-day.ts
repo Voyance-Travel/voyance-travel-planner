@@ -333,6 +333,10 @@ export async function handleGenerateDay(
     if (dayMealPolicy && generatedDay) {
       generatedDay.metadata = generatedDay.metadata || {};
       generatedDay.metadata.quality = generatedDay.metadata.quality || {};
+      // Stamp top-level dayMode so the read-side health engine doesn't have
+      // to fall through to nested-cache or schedule-inference fallbacks.
+      // See mem://constraints/itinerary/dayMode-quality-top-level
+      generatedDay.metadata.quality.dayMode = dayMealPolicy.dayMode;
       generatedDay.metadata.quality.meal_policy_at_generation = {
         dayMode: dayMealPolicy.dayMode,
         requiredMeals: dayMealPolicy.requiredMeals,
@@ -1222,7 +1226,7 @@ export async function handleGenerateDay(
           destination: resolvedDestination || destination || undefined,
           hasHotel: !!((flightContext as any).hotelName || paramHotelName || params.hotelOverride?.name),
           hotelName: (flightContext as any).hotelName || paramHotelName || params.hotelOverride?.name || undefined,
-          arrivalTime24: flightContext.arrivalTime24 || (isFirstDay ? '09:00' : undefined),
+          arrivalTime24: flightContext.arrivalTime24 || undefined,
           returnDepartureTime24: flightContext.returnDepartureTime24
             || (flightContext.returnDepartureTime ? normalizeTo24h(flightContext.returnDepartureTime) : undefined)
             || undefined,
