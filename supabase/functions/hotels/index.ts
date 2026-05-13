@@ -4,6 +4,48 @@ import { getCachedPlacesPhotoByResource } from "../_shared/photo-storage.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
 import { cachedGooglePlacesTextSearch as googlePlacesTextSearch } from "../_shared/google-api.ts";
 import { parseAuth } from "../_shared/require-auth.ts";
+import { detectCountryMismatch } from "../_shared/address-city-resolve.ts";
+import { detectCrossCityMention } from "../generate-itinerary/cross-city-filter.ts";
+
+/**
+ * Hotel destination guard.
+ * - stripForeignCityFromName: removes a sibling/foreign city token baked into a hotel name
+ *   (e.g. "The Ritz-Carlton, Laguna Niguel" + dest=San Juan → "The Ritz-Carlton").
+ * - hotelMatchesDestination: validates a Google Places candidate's formatted address
+ *   sits in the trip destination's country/city. Returns reason string on mismatch.
+ *
+ * See mem://constraints/hotel/destination-resolution-guard.
+ */
+export function stripForeignCityFromName(name: string, destination: string): string {
+  if (!name) return name;
+  const cleaned = name.replace(/[\u2014\u2013]/g, ',');
+  const parts = cleaned.split(',').map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2) return name;
+  const kept: string[] = [];
+  for (const part of parts) {
+    const ccMiss = detectCountryMismatch(part, destination);
+    const xCity = detectCrossCityMention(part, destination);
+    if (ccMiss || xCity) {
+      console.log(`[Hotels] stripForeignCityFromName dropping "${part}" (dest=${destination}, country=${ccMiss}, city=${xCity})`);
+      continue;
+    }
+    kept.push(part);
+  }
+  const result = kept.join(', ').trim();
+  return result || parts[0];
+}
+
+export function hotelMatchesDestination(
+  addr: string | null | undefined,
+  destination: string,
+): { ok: true } | { ok: false; reason: string } {
+  if (!addr) return { ok: true }; // can't judge — let through
+  const ccMiss = detectCountryMismatch(addr, destination);
+  if (ccMiss) return { ok: false, reason: `address in ${ccMiss}, expected ${destination}` };
+  const xCity = detectCrossCityMention(addr, destination);
+  if (xCity) return { ok: false, reason: `address mentions sibling city ${xCity}, expected ${destination}` };
+  return { ok: true };
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
