@@ -1,80 +1,92 @@
-## Hero Image — Cross-City Geo-Mismatch Guard (Morocco + reuse gates)
+## P3 — Day 1 "missing breakfast" false positive on no-flight arrival days
 
-### Root cause
+### Problem
 
-`Trips.destination = 'Casablanca'` has no seeded hero, no `destinations.hero_image_url`, no DB curated row. Live edge fetch (`destination-images`) returns:
+For Casablanca trip `fce9c4ba…` (no `flight_selection`), the health panel flags **Day 1 missing breakfast** even though the day's actual experience starts at the 11:05 luggage drop / 12:45 mosque tour. Confirmed via DB inspection:
 
+- `flight_selection IS NULL`
+- Day 1 first activities (in order): `Travel to … 10:20 (transport)`, `Luggage Drop 11:05 (accommodation)`, `Hassan II Mosque 12:45 (sightseeing)`, `Lunch at Rick's Café 14:46 (dining)`
+- Persisted `metadata.quality.meal_policy_at_generation = { dayMode: 'morning_arrival', arrivalTime24: '09:00', requiredMeals: ['breakfast','lunch','dinner'] }`
+- `metadata.quality.meal_audit.injected = ['breakfast']` — save-time guard already attempted (and failed) a breakfast injection on every save based on the same stale policy
+
+### Root causes (3 bugs compounding)
+
+1. **Phantom `arrivalTime24='09:00'` when `flight_selection` is null.** `deriveMealPolicy` is called with a default arrival clock derived from `trip.start_date` (or similar) instead of `undefined`. 09:00 is < 09:30 → required meals = `['breakfast','lunch','dinner']`. Brunch band is never reached because the schedule is never consulted.
+2. **`quality.dayMode` is never written to top-level.** All 4 writers stamp `quality.meal_policy_at_generation.dayMode`, none stamp `quality.dayMode`. The panel's first read (`day?.metadata?.quality?.dayMode`) is therefore always empty for fresh trips, forcing it through the fragile `inferDayModeFallback` path.
+3. **`firstNonBookendStart` skip-set is incomplete.** It skips `'transit'/'transfer'/'logistics'` but NOT `'transport'/'travel'/'airport_transfer'`, and has no title regex. A synthetic "Travel to Hotel 08:00" card silently becomes the inferred "arrival", regressing brunch-band days back into `morning_arrival_early` with full meals.
+
+### Fix
+
+All four layers, smallest-blast-radius first.
+
+**1. Shared helper `inferArrivalMinsFromSchedule(activities)` (new)**
+
+`src/lib/itinerary/inferArrivalFromSchedule.ts` + a mirror under `_shared/`. Returns the start time of the first activity whose category is NOT in `{check-in, check-out, hotel, accommodation, transit, transportation, transfer, transport, travel, logistics, commute, bookend, hotel_return, airport_transfer}` AND whose title does NOT match `^\s*(?:travel|transfer|drive|taxi|metro|train|bus|tram|ride|airport pickup|pickup|arrival|return) (?:to|from)\b`. Returns `null` when none found.
+
+**2. Panel — `src/lib/itinerary/inferDayMode.ts`**
+
+- Replace the inline `firstNonBookendStart` with `inferArrivalMinsFromSchedule`.
+- After the existing fallback chain, also consult `day?.metadata?.quality?.meal_policy_at_generation` for `dayMode` so the panel mirrors what the backend cached (already done inside the panel, but as a tertiary read between `quality.dayMode` and `inferDayModeFallback`).
+
+**3. Panel — `src/components/trip/TripHealthPanel.tsx` (lines 121–147)**
+
+Insert the cached-policy read between `quality.requiredMeals` and the dayMode mapping:
+
+```ts
+const cachedPolicyMode: string =
+  day?.metadata?.quality?.dayMode
+  || day?.metadata?.quality?.meal_policy_at_generation?.dayMode
+  || '';
 ```
-id: reuse-e4571ab4-…    place_id: ChIJz7FTJ4TSpw0ROXEneo0Yctg
-alt: "Ancienne Medina"  source: curated   destination: Casablanca
-```
 
-So the cache row is *labelled* Casablanca/Ancienne Medina, but its photo content is the recognizable blue alley of Chefchaouen (350 km north of Casablanca). Two compounding holes:
+Use `cachedPolicyMode` in place of `dayMode` for all the existing `if (cachedPolicyMode === …)` branches.
 
-1. **No Morocco entries in `COUNTRY_CITY_TOKENS`** (`src/lib/crossCityFilter.ts` + `supabase/functions/generate-itinerary/cross-city-filter.ts`). Even if alt_text *had* said "Chefchaouen", the cross-city detector wouldn't have fired — Morocco isn't covered.
-2. **No cross-city sanity gate on the image-resolution paths.** Three reuse paths in `supabase/functions/destination-images/index.ts` return rows by fuzzy alt_text/entity_key match without checking whether the matched venue actually belongs in the requested destination's city:
-   - TIER 1c — 6-month destination reuse (line ~1539)
-   - TIER 1.5 — cross-share lookup in `attractions`/`activities` tables (line ~1584)
-   - `tryUnsplashFallback` `Casablanca landmark` (Unsplash relevance returns Chefchaouen). This is already neutralised on the *display* side by `isUntrustedHeroUrl`, but the edge function still pays for the call and may write a bad row to disk that later gets reused via place_id by other code paths.
+**4. Backend — promote `quality.dayMode` to top-level on every write**
 
-Same bug class as the Montreal "alpine lake" hero — content-misidentified images survive because nothing validates content vs. destination after resolution.
+In all 4 sites that currently write `meal_policy_at_generation.dayMode`, ALSO set `metadata.quality.dayMode = policy.dayMode`:
 
-### Fix (4 layers)
+- `supabase/functions/generate-itinerary/action-generate-day.ts` (~line 336)
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (~lines 1965, 2535)
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (~line 442)
 
-**1. Country-token coverage — Morocco (and a few other recurring blanks)**
+This eliminates the dependence on the panel-side inference fallback for fresh trips.
 
-Add to both `COUNTRY_CITY_TOKENS` mirrors and their `inferCountry` switches:
-- morocco: Casablanca, Marrakech, Fez/Fes, Rabat, Tangier/Tanger, Chefchaouen, Essaouira, Agadir, Meknes
-- turkey: Istanbul, Ankara, Izmir, Antalya, Cappadocia
-- india: Delhi, Mumbai, Jaipur, Agra, Goa, Bengaluru, Kolkata, Chennai
-- thailand: Bangkok, Chiang Mai, Phuket, Krabi
-- vietnam: Hanoi, Ho Chi Minh / Saigon, Hoi An, Da Nang
-- brazil: Rio de Janeiro, São Paulo, Salvador, Brasília
-- argentina: Buenos Aires, Mendoza, Bariloche
-- mexico (for safety in `client mirror`): Mexico City/CDMX, Cancun, Tulum, Oaxaca, Guadalajara, Mérida
+**5. Backend — kill the phantom `arrivalTime24` default**
 
-Keep existing entries; this is purely additive.
+Audit the 4 write paths: when `flight_selection` is absent (or `savedArrivalTime24` is unresolved), pass `arrivalTime24: undefined` to `deriveMealPolicy` instead of a synthesized clock from `trip.start_date`. This makes `deriveMealPolicy` fall through to its no-clock branch (line 86) which currently returns full meals — for those trips, layer **6** kicks in.
 
-**2. Cross-city gate inside the edge resolver**
+**6. Brunch-band inference from schedule when no flight clock**
 
-In `supabase/functions/destination-images/index.ts`, when `entityType === 'destination'`:
+In `deriveMealPolicy` callers (backend) and `inferDayModeFallback` (panel), when `arrivalTime24` is missing, derive a synthetic arrivalMin from `inferArrivalMinsFromSchedule(day.activities)`. Then the standard band rules apply: ≥ 9:30 → no breakfast required. Closes the Casablanca case (first real activity = 11:05 → brunch band → `['lunch','dinner']`).
 
-- TIER 1c reuse loop: before returning a `reusable` row, run `detectCrossCityMention(reusable.alt_text + ' ' + reusable.entity_key, destination)`. If non-null → skip that row, continue scanning, and log `[Images] cross-city reuse blocked: alt="X" dest="Casablanca" → "Chefchaouen"`.
-- TIER 1.5 attractions/activities lookups: same guard on `name`.
-- `getGooglePlacesPhoto`: after the Places `searchText` resolves, check `result.formattedAddress || result.displayName` against the destination — drop and try the next candidate on mismatch.
-- `tryUnsplashFallback`: check `best.alt_description + ' ' + best.description` against destination; reject on cross-city mention so we don't burn an Unsplash request *and* a storage write on a wrong-content photo.
+**7. One-shot backfill migration**
 
-Import `detectCrossCityMention` from the existing shared `cross-city-filter.ts` (it already lives next door in `generate-itinerary/`); promote it to `_shared/` if cleaner.
+Reset `metadata.quality.meal_policy_at_generation.requiredMeals` and stamp top-level `metadata.quality.dayMode` for already-persisted trips on Day 1 / last day where `flight_selection IS NULL` and `arrivalTime24` was synthesized. Re-derive from the activity schedule using the new helper. Logs `[BACKFILL_DAYMODE]` per affected trip.
 
-**3. Read-time gate at every hero consumer**
+**8. Memory + tests**
 
-In `useTripHeroImage` (TIER 4 API branch), `useDestinationImages` (TIER 3 API branch), and `DestinationHeroImage` (TIER 3 API branch): after the API resolves, run `detectCrossCityMention(result.alt || '', destination)` and treat a hit as `apiFailed = true` so the chain falls through to gradient instead of rendering a wrong-city photo. Read-time defense in depth so a stale curated DB row doesn't slip through if the edge gate misses.
+- `mem://constraints/itinerary/dayMode-quality-top-level` — invariant: every persist MUST stamp `metadata.quality.dayMode` (not only the nested cache).
+- `mem://constraints/itinerary/no-phantom-arrival-clock` — when `flight_selection` is null, never synthesize `arrivalTime24` from `trip.start_date`.
+- Tests:
+  - `inferArrivalFromSchedule.test.ts` — transport-card precedence regression; "Travel to Hotel 08:00" must not become arrival when next card is 11:30.
+  - Extend `TripHealthPanel.cascadePreview.test.ts` with a no-flight Day 1 fixture matching the Casablanca activity ordering; assert no `missing-meals-1` issue.
 
-**4. One-shot cleanup**
+### Files touched
 
-Migration:
-- Blacklist the two Casablanca rows in `curated_images` keyed on the offending `place_id ChIJz7FTJ4TSpw0ROXEneo0Yctg` so the `reuse-` lookup stops returning them. (`is_blacklisted = true`, `quality_score = 0`.)
-- Sweep `curated_images` where `entity_type='destination'` and `detectCrossCityMention(alt_text, destination)` is non-null → blacklist. Implement as a SQL function or run from a one-shot Deno script invoking the helper, similar to the Montreal alpine-lake one-shot purge.
-- Clear `trips.metadata.hero_image` for any trip whose stored URL points at a now-blacklisted row, so the next render re-resolves cleanly.
+- `src/lib/itinerary/inferArrivalFromSchedule.ts` (new)
+- `src/lib/itinerary/inferDayMode.ts`
+- `src/components/trip/TripHealthPanel.tsx`
+- `supabase/functions/_shared/infer-arrival-from-schedule.ts` (new)
+- `supabase/functions/generate-itinerary/action-generate-day.ts`
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts`
+- `supabase/functions/generate-itinerary/meal-policy.ts` (no-flight fallback)
+- `supabase/migrations/<ts>_backfill_daymode_top_level.sql` (one-shot)
+- 2 new memory entries + index update
+- 2 test files (1 new, 1 extended)
 
-### Verification
+### Out of scope
 
-- New unit test in `src/lib/__tests__/crossCityFilter.morocco.test.ts`:
-  - `detectCrossCityMention('Chefchaouen blue alley', 'Casablanca')` returns `'Chefchaouen'`
-  - `detectCrossCityMention('Hassan II Mosque', 'Casablanca')` returns `null`
-  - `detectCrossCityMention('Marrakech medina', 'Fez')` returns `'Marrakech'`
-- Edge integration test (or curl after deploy) on `Casablanca` returns a `source: 'gradient'` or a Casablanca-only hit.
-- Smoke check on `Mexico City` / `Montreal` / `San Juan` to confirm no regression.
-
-### Files to edit
-
-- `src/lib/crossCityFilter.ts` (+ Morocco/Turkey/India/Thailand/Vietnam/Brazil/Argentina/Mexico tokens, expand `inferCountry`)
-- `supabase/functions/generate-itinerary/cross-city-filter.ts` (mirror)
-- `supabase/functions/destination-images/index.ts` (TIER 1c / 1.5 / Google Places / Unsplash gates)
-- `src/hooks/useTripHeroImage.ts` (read-time API gate)
-- `src/hooks/useDestinationImages.ts` (read-time API gate)
-- `src/components/common/DestinationHeroImage.tsx` (read-time API gate via `apiData.alt`)
-- `supabase/migrations/<ts>_blacklist_cross_city_destination_heroes.sql` (one-shot cleanup)
-- `src/lib/__tests__/crossCityFilter.morocco.test.ts` (new)
-- `mem://constraints/visual/hero-image-resolver-policy` (add cross-city gate clause)
-- `mem://index.md` (update the existing entry's one-liner)
+- Any change to dinner/lunch detection rules
+- Any change to the brunch-band thresholds (09:30 / 12:00) — already correct in Core memory
+- Any UI/visual change to the health panel
