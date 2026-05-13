@@ -98,7 +98,7 @@ export default function DestinationHeroImage({
   const writtenBackRef = useRef(false);
   useEffect(() => {
     if (writtenBackRef.current) return;
-    if (apiData?.url && !canonicalUrl) {
+    if (apiData?.url && !isUntrustedHeroUrl(apiData.url) && !canonicalUrl) {
       writtenBackRef.current = true;
       writeBackDestinationCanonicalImage(destinationName, apiData.url);
     }
@@ -106,8 +106,13 @@ export default function DestinationHeroImage({
 
   const fallback = useMemo(() => generateGradientDataUrl(destinationName), [destinationName]);
 
+  // Trusted-only sources at every tier; gradient is the always-safe terminal.
+  const trustedCanonical = canonicalUrl && !isUntrustedHeroUrl(canonicalUrl) ? canonicalUrl : null;
+  const trustedCurated = curatedSrc && !isUntrustedHeroUrl(curatedSrc) ? curatedSrc : null;
+  const trustedApi = apiData?.url && !isUntrustedHeroUrl(apiData.url) ? apiData.url : null;
+
   // Final image: canonical DB > curated [0] > API resolved > gradient
-  const src = canonicalUrl || curatedSrc || apiData?.url || fallback;
+  const src = trustedCanonical || trustedCurated || trustedApi || fallback;
 
   return (
     <div ref={containerRef} className={className} style={{ position: 'relative' }}>
