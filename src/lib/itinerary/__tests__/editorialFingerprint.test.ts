@@ -63,5 +63,40 @@ describe('EditorialItinerary initialDays fingerprint', () => {
       activities: [{ id: 'a1', startTime: '09:00', endTime: '09:45', durationMinutes: 45 }],
     }];
     expect(fingerprint(days)).toEqual(fingerprint(JSON.parse(JSON.stringify(days))));
+
+  it('changes when only category/title/mealSlot shift on the same id (health stale-state fix)', () => {
+    const before = [{
+      dayNumber: 1, date: '2026-08-01',
+      activities: [{ id: 'a1', startTime: '13:00', endTime: '14:00', category: 'cultural', title: 'Lunch stop' }],
+    }];
+    const afterCat = [{
+      dayNumber: 1, date: '2026-08-01',
+      activities: [{ id: 'a1', startTime: '13:00', endTime: '14:00', category: 'dining', title: 'Lunch stop' }],
+    }];
+    expect(fingerprint(before)).not.toEqual(fingerprint(afterCat));
+
+    const afterSlot = [{
+      dayNumber: 1, date: '2026-08-01',
+      activities: [{ id: 'a1', startTime: '13:00', endTime: '14:00', category: 'cultural', title: 'Lunch stop', mealSlot: 'lunch' }],
+    }];
+    expect(fingerprint(before)).not.toEqual(fingerprint(afterSlot));
+
+    const afterTitle = [{
+      dayNumber: 1, date: '2026-08-01',
+      activities: [{ id: 'a1', startTime: '13:00', endTime: '14:00', category: 'cultural', title: 'Dinner reservation' }],
+    }];
+    expect(fingerprint(before)).not.toEqual(fingerprint(afterTitle));
+  });
+
+  it('treats legacy `time` field as equivalent to startTime', () => {
+    const a = [{
+      dayNumber: 1, date: '2026-08-01',
+      activities: [{ id: 'a1', startTime: '13:00', endTime: '14:00', category: 'dining', title: 'Lunch' }],
+    }];
+    const b = [{
+      dayNumber: 1, date: '2026-08-01',
+      activities: [{ id: 'a1', time: '13:00', endTime: '14:00', category: 'dining', title: 'Lunch' }],
+    }];
+    expect(fingerprint(a)).toEqual(fingerprint(b));
   });
 });
