@@ -196,7 +196,12 @@ export function useDestinationImages(
         if (cancelled) return;
 
         const apiUrl = images[0]?.url;
-        const heroUrl = apiUrl && !isUntrustedHeroUrl(apiUrl) && (await isUrlLoadable(apiUrl))
+        const apiAlt = images[0]?.alt || '';
+        const xcity = apiAlt ? detectCrossCityMention(apiAlt, cleanDestination) : null;
+        if (xcity) {
+          console.warn(`[useDestinationImages] cross-city blocked dest="${cleanDestination}" alt="${apiAlt}" → "${xcity}"`);
+        }
+        const heroUrl = apiUrl && !isUntrustedHeroUrl(apiUrl) && !xcity && (await isUrlLoadable(apiUrl))
           ? apiUrl
           : generateGradientDataUrl(cleanDestination, 0);
 
