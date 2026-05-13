@@ -101,8 +101,24 @@ function isDepartureTerminal(a: any): boolean {
   if (ARRIVAL_TITLE_RE.test(title)) return false;
   if (cat === 'FLIGHT' || FLIGHT_TITLE_RE.test(title)) return true;
   if (TRANSPORT_CAT_RE.test(cat) && AIRPORT_RE.test(title)) return true;
+  // "Transfer to KIX", "Taxi to Heathrow Terminal 5" etc. — airport-bound
+  // transfer titles are unambiguous departure terminals even when the
+  // category is generic (e.g. 'transport'). Closes the Osaka regression
+  // where the gray-zone branch fabricated a 13:55 hotel-return after the
+  // departure-day airport drop-off.
+  if (DEPARTURE_TRANSFER_TITLE_RE.test(title)) return true;
   return false;
 }
+
+// Defense-in-depth: returns true when ANY card on the day signals a departure
+// terminal. Used by the resolver to short-circuit when the chronologically
+// last card isn't itself the airport transfer (e.g. a stale leisure card
+// shifted past it by a manual edit).
+function dayHasDepartureTerminal(activities: any[]): boolean {
+  if (!Array.isArray(activities)) return false;
+  return activities.some(isDepartureTerminal);
+}
+
 
 function cleanHotelName(raw: string): string {
   // Strip trailing "for Check-in"/"for Checkout"/etc. clauses then collapse
