@@ -1,75 +1,59 @@
-## Bug
+## Day 1 timing shift on reload — root cause
 
-Hard refresh on a successfully generated trip credited the user **+180** with no new generation. Repeats every reload (also +180, +180, +180 in the ledger over the last few hours).
+Two `useEffect` blocks in `src/components/itinerary/EditorialItinerary.tsx` mutate `days` and call `setHasChanges(true)` every time the trip is loaded:
 
-## Root cause
+1. **Auto-buffer cascade** (lines 2387-2450) — enforces a 15-min gap between non-transport, non-same-venue back-to-back activities and pushes the *next* card later. Skips locked rows. This is what produced the Luggage-Drop 09:50 → 11:05 (+75 min cascading) shift on Day 1.
+2. **Transit-cascade** (lines 2456-2489) — calls the shared `enforceTimingAndBuffers` on every load.
 
-`spend-credits` creates a `pending_credit_charges` row with `status='pending'`, deducts FIFO, finalizes the ledger, returns success — **but never flips the pending row to `completed`**. Only failure paths update the row (`failed`/`refunded`).
+Pre-save already runs `enforceTimingAndBuffers` in `action-save-itinerary.ts` STEP 2.9 (line 1079), so #2 is mostly idempotent. But #1's 15-min adjacency rule is **not** mirrored backend-side, so:
 
-On the next trip load, `useStalePendingChargeRefund` (TripDetail mount) finds the still-`pending` row older than 2 min, calls `spend-credits` with `action: 'REFUND'`, and silently restores the credits. Confirmed in DB: 4 successive `spend −180 / refund +180` pairs for trip `fea55309…` and siblings, all with `metadata.reason = "stale_pending_charge_auto_refund"` while `metadata.status = "committed"` on the original spend.
+- On save, server cascade leaves a 5-min adjacency alone → DB has 09:50.
+- On reload, FE auto-buffer effect fires, decides 09:50 violates the 15-min rule given the prior card's endTime, pushes it, and the shift cascades through the rest of the day.
+- `setHasChanges(true)` flips dirty state silently; user sees a different document than they saved.
 
-The proof-of-charge gate in `generate-itinerary/index.ts` already accepts both `pending` and `completed`, so the generator never had to bother promoting the row — that's the design hole.
+This is the same divergence pattern locked by `mem://constraints/itinerary/db-is-source-of-truth` ("Bali times shifted ~1.5h after refresh"). Closing it requires the same recipe: one canonical pre-save normalizer, no read-time mutations.
 
-## Fix (3 layers)
+## Fix (3 changes, all server + presentation, no business-logic shifts)
 
-### 1. Mark the charge `completed` when the spend itself returns success
-File: `supabase/functions/spend-credits/index.ts`
+### 1. Fold the FE 15-min adjacency rule into the shared backend cascade
 
-After the FIFO deduction succeeds and the claim row is finalized (right around the existing `status: 'committed'` ledger update, ~line 787), add:
+`supabase/functions/_shared/timing-cascade.ts` — extend `enforceTimingAndBuffers` (or add a sibling step it already runs at the end) with the exact rule from EditorialItinerary lines 2399-2438:
 
-```ts
-if (pendingChargeId) {
-  await supabaseAdmin.from('pending_credit_charges').update({
-    status: 'completed',
-    resolved_at: new Date().toISOString(),
-    resolution_note: 'Spend committed (FIFO + ledger finalized)',
-  }).eq('id', pendingChargeId);
-}
-```
+- For each adjacent pair `(a, b)` where neither is `transport`, neither shares `location.name`, and `b` is not locked: if `b.startTime < a.endTime + 15`, push `b` forward by the deficit and shift `b.endTime` by the same delta (skip if it would push past 23:30, matching FE).
+- Apply iteratively per day so the cascade reaches downstream cards (mirrors what the FE produces today).
+- Tag repairs with `reason: 'adjacency_buffer_15m'` so they show up in the existing repair-day / save-itinerary log lines.
 
-Move it inside the `housekeeping()` block (waitUntil-safe) so it doesn't block the response. This single change closes the leak for every caller.
+This guarantees: whatever the FE *would* do on load is already in the JSON the DB returns.
 
-### 2. Defensive guard in the client sweep
-File: `src/hooks/useStalePendingChargeRefund.ts`
+### 2. Remove the FE on-mount mutations
 
-Before refunding any stale charge, verify the matching ledger row's `metadata.status`. If a `credit_ledger` row exists for the same `pendingChargeId` with `transaction_type='spend'` and `metadata->>status = 'committed'`, **do not refund** — just mark the pending row `completed` (silent self-heal) and continue. This protects against any future ungated path (regenerate, smart-finish, hotel-search).
+`src/components/itinerary/EditorialItinerary.tsx`:
 
-Query:
-```ts
-supabase.from('credit_ledger')
-  .select('id, metadata')
-  .eq('user_id', user.id)
-  .filter('metadata->>pendingChargeId', 'eq', charge.id)
-  .eq('transaction_type', 'spend')
-  .maybeSingle();
-```
+- Delete (or convert to a no-op behind a `__DEV__` invariant) the `autoBufferAppliedRef` effect at lines 2393-2450.
+- Delete the `transitCascadeAppliedRef` effect at lines 2456-2489.
 
-If `metadata.status === 'committed'` → flip `pending_credit_charges.status` to `completed`, log `[StalePendingCharge] self-heal: spend already committed`, skip refund.
+Rationale: with the rule moved server-side, both effects become redundant; keeping them re-introduces drift the moment a future cascade rule lands in only one place. The user's saved state becomes the rendered state. Matches the DB-is-source-of-truth contract already enforced for everything else.
 
-### 3. One-shot backfill migration
-Sweep existing orphan `pending` rows that already have a committed spend ledger entry, so the next refresh doesn't fire one final refund:
+We keep the cascade utility import and the explicit handlers (`handleRefreshDay`, manual edits at 2682+) — those are user-initiated and correctly persist via `safeUpdateItineraryData`.
 
-```sql
-UPDATE pending_credit_charges p
-SET status = 'completed',
-    resolved_at = now(),
-    resolution_note = 'Backfill: spend already committed'
-WHERE p.status = 'pending'
-  AND EXISTS (
-    SELECT 1 FROM credit_ledger l
-    WHERE l.user_id = p.user_id
-      AND l.transaction_type = 'spend'
-      AND l.metadata->>'pendingChargeId' = p.id::text
-      AND l.metadata->>'status' = 'committed'
-  );
-```
+### 3. Add a one-shot reload drift telemetry
 
-## Memory
-
-Add `mem://constraints/credits/pending-charge-must-promote-on-success` to the index so future spend-paths know `pending_credit_charges` rows MUST be promoted to `completed` when the spend ledger commits, and the sweep MUST self-heal rather than blindly refund when a committed spend is found.
+In the same file, at the existing `[ITIN_RESYNC_DRIFT]` site (already wired per memory), extend the diff to log per-day startTime drift between session state and DB read post-`TRIP_PERSISTED_EVENT`. Observation only — no mutation. Lets us catch any remaining drift source without re-introducing the silent setState.
 
 ## Out of scope
 
-- Lowering the 2-min stale threshold (not the bug).
-- Removing the sweep (still useful for true network drops where the spend never returned).
-- Reconciling Mallorca/Faro historical refunds (already credited; do not claw back).
+- Changing the 15-min buffer value, the 23:30 cutoff, or transport/same-venue exemptions.
+- Touching `handleRefreshDay`, manual drag-edit cascade calls, or the chat assistant's cascade re-run.
+- Backfilling old trips — the next save naturally reconciles via the new pre-save step.
+
+## Memory
+
+Update `mem://constraints/itinerary/pre-save-timing-cascade` to note the 15-min adjacency rule is now part of the shared `enforceTimingAndBuffers` and that FE on-mount cascade effects are forbidden (must rely on pre-save). Add a one-line entry to `mem://index.md` Core if not already covered by the existing DB-is-source-of-truth bullet.
+
+## Files
+
+- `supabase/functions/_shared/timing-cascade.ts` — add adjacency rule + test
+- `supabase/functions/_shared/timing-cascade.test.ts` — adjacency idempotency case
+- `src/components/itinerary/EditorialItinerary.tsx` — remove two on-mount effects, optional drift log
+- `mem://constraints/itinerary/pre-save-timing-cascade` — update
+- `mem://index.md` — touch entry if needed
