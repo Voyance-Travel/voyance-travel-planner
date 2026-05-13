@@ -31,6 +31,7 @@ export function ItineraryGeneratorStreaming({
   preferences,
   autoStart = true,
 }: ItineraryGeneratorStreamingProps) {
+  const isMobile = useIsMobile();
   const {
     loading,
     progress,
@@ -47,7 +48,7 @@ export function ItineraryGeneratorStreaming({
     regenerate,
     cancel,
     clearError,
-  } = useLovableItinerary(tripId);
+  } = useLovableItinerary(tripId, { serverChainMode: isMobile });
 
   // Check for existing itinerary on mount, then auto-start if needed
   useEffect(() => {
