@@ -212,4 +212,55 @@ describe('resolveCanonicalCostRows', () => {
     expect(r.totalCents).toBe(10000);
     expect(r.effectiveTotalCents).toBe(10000 + 40000 + 24400);
   });
+
+  it('Casablanca: Day-0 hotel logistics row with synthetic activity_id is counted into effectiveTotalCents (includeHotel=true, no manual payment)', () => {
+    // Mirrors trip fce9c4ba-… exactly: hotel row has day_number=0,
+    // source='logistics-sync', synthetic activity_id NOT present in
+    // liveActivities, no trip_payments. Pre-fix the orphan branch silently
+    // dropped this row when it ever fell into the !isLogisticsRow path,
+    // producing "Total from itinerary $812" while the per-row Hotel chip
+    // showed $525.
+    const live = [
+      { id: 'a1', dayNumber: 1, name: 'Hassan II Mosque', category: 'activity', jsonCost: 0 },
+      { id: 'a2', dayNumber: 1, name: 'Lunch at La Sqala', category: 'dining',  jsonCost: 0 },
+    ];
+    const costs = [
+      { id: 'h',  activity_id: 'synthetic-hotel-id', day_number: 0, category: 'hotel',    cost_per_person_usd: 525, num_travelers: 1, source: 'logistics-sync' },
+      { id: 'a1', activity_id: 'a1',                  day_number: 1, category: 'activity', cost_per_person_usd: 120, num_travelers: 2, source: 'reference' },
+      { id: 'a2', activity_id: 'a2',                  day_number: 1, category: 'dining',   cost_per_person_usd: 10,  num_travelers: 2, source: 'reference' },
+    ];
+    const r = resolveCanonicalCostRows({
+      costs: costs as any,
+      liveActivities: live,
+      includeHotel: true,
+      includeFlight: false,
+      manualPayments: [],
+      travelers: 2,
+    });
+    // Hotel: $525, Activity: $120 × 2 = $240, Dining: $10 × 2 = $20 → $785 total.
+    expect(r.totalCents).toBe(78500);
+    expect(r.effectiveTotalCents).toBe(78500);
+    expect(r.hotelCents).toBe(52500);
+    expect(r.manualHotelDelta).toBe(0);
+  });
+
+  it('Casablanca: same fixture with includeHotel=false correctly excludes hotel from totalCents', () => {
+    const live = [
+      { id: 'a1', dayNumber: 1, name: 'Hassan II Mosque', category: 'activity', jsonCost: 0 },
+    ];
+    const costs = [
+      { id: 'h',  activity_id: 'synthetic-hotel-id', day_number: 0, category: 'hotel',    cost_per_person_usd: 525, num_travelers: 1, source: 'logistics-sync' },
+      { id: 'a1', activity_id: 'a1',                  day_number: 1, category: 'activity', cost_per_person_usd: 120, num_travelers: 2, source: 'reference' },
+    ];
+    const r = resolveCanonicalCostRows({
+      costs: costs as any,
+      liveActivities: live,
+      includeHotel: false,
+      includeFlight: false,
+      manualPayments: [],
+      travelers: 2,
+    });
+    expect(r.totalCents).toBe(24000); // activities only
+    expect(r.hotelCents).toBe(52500); // bookkeeping still tracked for reserve math
+  });
 });
