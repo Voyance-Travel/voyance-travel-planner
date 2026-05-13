@@ -1346,6 +1346,24 @@ export async function handleGenerateDay(
                 return parseInt(m[1]) * 60 + parseInt(m[2]) - (isTrain ? 120 : 180);
               })()
             : undefined;
+          const { fillMorningDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
+          const filledMorn = await fillMorningDeadGaps(normalizedActivities, {
+            destination: resolvedDestination || destination || '',
+            isFirstDay,
+            isLastDay,
+            isLastDayInCity: resolvedIsLastDayInCity,
+            archetype: undefined,
+            dietaryRestrictions: (preferences?.dietaryRestrictions as string[] | undefined) || [],
+            budgetTier: budgetTier || 'standard',
+            tripCurrency: 'USD',
+            lockedIds: lockedIdSet,
+            latestUsableMins: _gdLatestMins,
+          });
+          if (filledMorn.inserted.length > 0) {
+            console.log(`[pipeline] Day ${dayNumber}: auto-filled ${filledMorn.inserted.length} morning dead gap(s)`);
+            normalizedActivities = filledMorn.activities;
+            generatedDay.activities = normalizedActivities;
+          }
           const filled = await fillAfternoonDeadGaps(normalizedActivities, {
             destination: resolvedDestination || destination || '',
             isFirstDay,

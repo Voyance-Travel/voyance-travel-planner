@@ -13,6 +13,8 @@
 
 import { proposeGapFiller } from '../../_shared/fill-gap.ts';
 
+const MORNING_START_MIN = 9 * 60;
+const MORNING_END_MIN = 12 * 60 + 30;
 const AFTERNOON_START_MIN = 12 * 60;
 const AFTERNOON_END_MIN = 19 * 60;
 const EVENING_START_MIN = 18 * 60;
@@ -31,9 +33,10 @@ const LOGISTICS_KEYWORDS = ['check-in', 'check in', 'checkin', 'check-out', 'che
 interface GapWindow {
   fromMins: number;
   toMins: number;
-  label: 'afternoon' | 'evening';
+  label: 'morning' | 'afternoon' | 'evening';
 }
 
+const MORNING_WINDOW: GapWindow = { fromMins: MORNING_START_MIN, toMins: MORNING_END_MIN, label: 'morning' };
 const AFTERNOON_WINDOW: GapWindow = { fromMins: AFTERNOON_START_MIN, toMins: AFTERNOON_END_MIN, label: 'afternoon' };
 const EVENING_WINDOW: GapWindow = { fromMins: EVENING_START_MIN, toMins: EVENING_END_MIN, label: 'evening' };
 
@@ -198,12 +201,26 @@ async function fillDeadGapsForWindow(
  * Returns the (possibly mutated) activities array plus a list of inserts.
  * Always returns a fresh array so callers can drop it into their day object.
  *
+ * Morning (09:00–12:30) window — fills the late-morning hole between an
+ * early breakfast and lunch on non-arrival days. Per Density Protocol:
+ * "Morning gaps filled with 1 paid + 1 free."
+ */
+export async function fillMorningDeadGaps(
+  activities: any[],
+  opts: FillDeadGapsOptions,
+): Promise<FillDeadGapsResult> {
+  return fillDeadGapsForWindow(activities, opts, MORNING_WINDOW);
+}
+
+/**
  * Afternoon (12:00–19:00) window — preserves legacy signature & behaviour.
  */
 export async function fillAfternoonDeadGaps(
   activities: any[],
   opts: FillDeadGapsOptions,
 ): Promise<FillDeadGapsResult> {
+  return fillDeadGapsForWindow(activities, opts, AFTERNOON_WINDOW);
+}
   return fillDeadGapsForWindow(activities, opts, AFTERNOON_WINDOW);
 }
 
@@ -273,6 +290,22 @@ export function reportRemainingEveningDeadGap(
   const largest = reportRemainingDeadGapForWindow(activities, latestUsableMins, EVENING_WINDOW);
   if (largest >= MIN_GAP_MIN) {
     console.warn(`[QUALITY] Day ${dayNumber ?? '?'} has ${largest}m unplanned ${EVENING_WINDOW.fromMins / 60}:00-${EVENING_WINDOW.toMins / 60}:00`);
+  }
+  return largest;
+}
+
+/**
+ * Same for the morning (09:00–12:30) window.
+ * Optional `dayNumber` is only used for log context.
+ */
+export function reportRemainingMorningDeadGap(
+  activities: any[],
+  latestUsableMins?: number,
+  dayNumber?: number,
+): number {
+  const largest = reportRemainingDeadGapForWindow(activities, latestUsableMins, MORNING_WINDOW);
+  if (largest >= MIN_GAP_MIN) {
+    console.warn(`[QUALITY] Day ${dayNumber ?? '?'} has ${largest}m unplanned 9:00-12:30`);
   }
   return largest;
 }
