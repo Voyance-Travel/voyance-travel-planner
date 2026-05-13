@@ -491,7 +491,13 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
 
       // Defensive guard: warn on large unexpected jumps. Threshold = 25%.
       const ratio = prev > 0 ? Math.abs(delta.deltaCents) / prev : Infinity;
-      if (ratio > 0.25 && lastWarnedTotalRef.current !== totalCents) {
+      // Consume one-shot suppression flag from a silent system-driven event.
+      const suppressed = suppressNextToastRef.current.active;
+      const suppressReason = suppressNextToastRef.current.reason;
+      if (suppressed) {
+        suppressNextToastRef.current = { active: false, reason: '' };
+      }
+      if (ratio > 0.25 && lastWarnedTotalRef.current !== totalCents && !suppressed) {
         lastWarnedTotalRef.current = totalCents;
         const sign = delta.deltaCents >= 0 ? '+' : '−';
         const amount = Math.abs(delta.deltaCents) / 100;
