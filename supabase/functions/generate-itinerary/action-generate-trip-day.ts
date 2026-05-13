@@ -3330,6 +3330,28 @@ async function _handleGenerateTripDayInner(
       .filter((d: any) => !Array.isArray(d.activities) || d.activities.length === 0)
       .map((d: any) => d.dayNumber);
 
+    // Recompute persist_validation against the FINAL post-repair days so a
+    // ready trip never carries stale "missing meal" errors from intermediate
+    // saves. Without this, the UI surfaces phantom day-level errors that
+    // contradict the actual saved itinerary (e.g. Day 1/2/3 missing-meal
+    // warnings on a trip that actually has all 9 meal cards).
+    let finalPersistValidation: any = null;
+    try {
+      const { validateItineraryForPersist } = await import('../_shared/validate-itinerary-for-persist.ts');
+      const verdict = validateItineraryForPersist(
+        Array.isArray((partialItinerary as any)?.days) ? (partialItinerary as any).days : [],
+        { destination: destination ?? null },
+      );
+      finalPersistValidation = {
+        checked_at: new Date().toISOString(),
+        ok: verdict.ok,
+        errors: verdict.errors,
+        warnings: verdict.warnings,
+      };
+    } catch (e) {
+      console.warn('[generate-trip-day:final] persist validation refresh failed (non-blocking):', e);
+    }
+
     const { persistTripItinerary: __persistFinal } = await import('../_shared/persist-itinerary.ts');
     await __persistFinal(supabase, tripId, partialItinerary, {
       destination: destination ?? null,
@@ -3353,6 +3375,8 @@ async function _handleGenerateTripDayInner(
           empty_days_at_completion: emptyDaysList.length > 0 ? emptyDaysList : null,
           bare_itinerary_detected: !hasEnoughMeaningful || null,
           meaningful_activity_count: meaningfulActivityCount,
+          // Always overwrite stale persist_validation from intermediate saves.
+          ...(finalPersistValidation ? { persist_validation: finalPersistValidation } : {}),
           // FREEZE STAMP — first ready transition. See
           // mem://constraints/itinerary/frozen-after-ready.
           ...(finalStatus === 'ready'
