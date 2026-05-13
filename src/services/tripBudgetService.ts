@@ -652,7 +652,7 @@ export async function getBudgetSummary(tripId: string, totalDays?: number): Prom
   // Generation in progress? Used to label partial totals as estimates.
   const { data: tripRow } = await supabase
     .from('trips')
-    .select('itinerary_status, metadata')
+    .select('itinerary_status, metadata, updated_at')
     .eq('id', tripId)
     .maybeSingle();
   const status = (tripRow?.itinerary_status as string | undefined) ?? '';
@@ -660,8 +660,25 @@ export async function getBudgetSummary(tripId: string, totalDays?: number): Prom
   // 'partial' is terminal — no more writes are coming, so it must NOT keep the
   // "Calculating…" spinner alive (which also drives a 4s polling loop).
   // `frozenAt` is belt-and-suspenders: any status, once frozen, is done.
-  const isGenerating =
-    (status === 'queued' || status === 'generating') && !frozenAt;
+  const isLive = status === 'queued' || status === 'generating';
+  // Stale-generation gate: a trip whose chain orchestrator crashed before
+  // stamping `itinerary_frozen_at` would otherwise leave the "Calculating…"
+  // spinner spinning forever (and drive an endless 4s polling loop). The
+  // chain generator finishes well within 8 minutes for any trip, so once
+  // `updated_at` is older than 10 minutes we treat the trip as stalled and
+  // flip the spinner off — the user sees whatever was written so far.
+  const STALE_GENERATION_MS = 10 * 60 * 1000;
+  const updatedAtMs = tripRow?.updated_at
+    ? new Date(tripRow.updated_at as string).getTime()
+    : 0;
+  const ageMs = updatedAtMs > 0 ? Date.now() - updatedAtMs : 0;
+  const isStale = isLive && !frozenAt && ageMs >= STALE_GENERATION_MS;
+  if (isStale) {
+    console.warn(
+      `[getBudgetSummary] stale generation detected — flipping isGenerating off (tripId=${tripId} status=${status} ageMs=${ageMs})`,
+    );
+  }
+  const isGenerating = isLive && !frozenAt && !isStale;
 
   let committedHotel = 0;
   let committedFlight = 0;
