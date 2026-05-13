@@ -1936,7 +1936,27 @@ export default function TripDetail() {
           console.error('[TripDetail] Failed to force-save itinerary:', error);
         } else {
           console.log('[TripDetail] Itinerary force-saved successfully');
-          // (resync is dispatched automatically by safeUpdateItineraryData)
+          // Explicit canonical resync — `safeUpdateItineraryData` already
+          // dispatches TRIP_PERSISTED_EVENT, but the listener races against
+          // our local `setTrip(itineraryPayload)` above. Awaiting a direct
+          // re-read here guarantees the first frame the user sees is the
+          // backend-canonical version (post bookend-clamp, post checkout
+          // ordering, post hotel-return injection) — matching what a hard
+          // refresh would have shown.
+          try {
+            const fresh = await resyncItineraryFromDb(tripId);
+            if (fresh?.itineraryData) {
+              setTrip((prev) => prev ? {
+                ...prev,
+                itinerary_data: fresh.itineraryData as Trip['itinerary_data'],
+                itinerary_status: (fresh.itineraryStatus as Trip['itinerary_status']) ?? prev.itinerary_status,
+                ...(fresh.metadata ? { metadata: fresh.metadata as Trip['metadata'] } : {}),
+              } : prev);
+              console.log('[TripDetail] Post-generation canonical resync applied');
+            }
+          } catch (resyncErr) {
+            console.warn('[TripDetail] Post-generation resync failed (non-fatal):', resyncErr);
+          }
 
           // Invalidate entitlements so UI immediately reflects new unlocked_day_count
           queryClient.invalidateQueries({ queryKey: ['entitlements'] });

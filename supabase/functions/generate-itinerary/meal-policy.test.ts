@@ -75,15 +75,24 @@ Deno.test('meal policy: arrival before 10:30 keeps traditional breakfast', () =>
   assertEquals(policy.breakfastMode ?? 'breakfast', 'breakfast');
 });
 
-Deno.test('meal policy: arrival 10:30–12:00 requires brunch (not skipped)', () => {
-  for (const t of ['10:30', '10:45', '11:30', '11:59']) {
+Deno.test('meal policy: arrival 09:30–12:00 is brunch day (lunch+dinner required, breakfastMode=brunch)', () => {
+  for (const t of ['09:30', '10:15', '10:45', '11:30', '11:59']) {
     const policy = deriveMealPolicy({
       dayNumber: 1, totalDays: 4, isFirstDay: true, isLastDay: false,
       arrivalTime24: t,
     });
-    assertEquals(policy.requiredMeals, ['breakfast', 'lunch', 'dinner'], `arrival ${t}`);
+    // Brunch covers the AM meal — required meals are lunch + dinner only.
+    assertEquals(policy.requiredMeals, ['lunch', 'dinner'], `arrival ${t}`);
     assertEquals(policy.breakfastMode, 'brunch', `arrival ${t} should be brunch mode`);
   }
+});
+
+Deno.test('meal policy: arrival before 09:30 still requires breakfast', () => {
+  const policy = deriveMealPolicy({
+    dayNumber: 1, totalDays: 4, isFirstDay: true, isLastDay: false,
+    arrivalTime24: '09:00',
+  });
+  assertEquals(policy.requiredMeals, ['breakfast', 'lunch', 'dinner']);
 });
 
 Deno.test('meal policy: arrival 12:00+ stays lunch-first (no brunch)', () => {

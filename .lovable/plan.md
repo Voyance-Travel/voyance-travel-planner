@@ -1,142 +1,66 @@
-## Log report
+## Three small, scoped cleanups
 
-I checked the live backend logs and current saved trip data for the recent Mexico City generation (`07fc6366-8265-403a-9aa5-a9850d00a414`).
+The current run is the cleanest yet. We're not redoing the pipeline — just shaving three real-world rough edges.
 
-### What is confirmed fixed in code
+---
 
-The three prior timing patches are present in `supabase/functions/_shared/timing-cascade.ts`:
+### Issue 1 — Health checker falsely flags Day 1 "missing breakfast"
 
-- P0a clamp instead of delete: present.
-  - `Drop activities pushed past` = 0
-  - `Clamp activities pushed past` = 1
-  - `dropped_past_midnight` = 1, only the type remains
-  - `act.startTime = newStart` = 1
-- P0b cumulative shift cap: present.
-  - `MAX_CUMULATIVE_SHIFT` = 4
-  - `cumulativeShiftById` = 3
-  - `cumulative shift cap` = 1
-  - old `minutesToTime(s + delta)` = 0
-  - new `minutesToTime(s + applyDelta)` = 1
-- P0c floating-meal real-content guard: present.
-  - `FLOATING_MEAL_PROMOTE` = 1
-  - `Content preservation is non-negotiable` = 1
-  - `FLOATING_MEAL_DROP` = 1
+**What's happening**
+- Server `deriveMealPolicy` (`src/lib/itinerary/deriveMealPolicy.ts` L74–84) requires breakfast on a first day only when arrival < 10:30 AM. A 10:15 arrival (615 min) sits just under that and gets all three meals required.
+- The Health panel (`TripHealthPanel.tsx` L112–118) recomputes its own simplified `requiredMeals` map from `dayMode`, defaulting to all three meals when `dayMode='morning_arrival'`. This is the actual source of the warning.
 
-### What the logs show about descriptions
+**Fix (frontend only — Health panel)**
+- Read `requiredMeals` directly from `day.metadata.quality.requiredMeals` (or the persisted meal policy) when present, so the panel cannot drift from server policy.
+- Fallback map: also handle `morning_arrival` → infer from arrival time (or trust persisted value).
+- Bump the "needs breakfast" cutoff from arrival < 10:30 to arrival < 09:30 in `deriveMealPolicy.ts`. Late check-in / settle-in time means a 10:15 arrival realistically skips breakfast.
 
-The backend description filler did run and reported success:
+**Outcome**: The phantom "Day 1 missing breakfast" warning disappears for arrivals in the 09:30–12:00 band.
 
-- `[DESC_FILL] day=1 flagged=1 filled=1 skipped=0`
-- `[DESC_FILL_POST_GUARD] day=1 ... flagged=1 filled=1 skipped=0`
-- `[DESC_FILL] day=3 flagged=1 filled=1 skipped=0`
-- `[DESC_FILL_POST_GUARD] day=3 ... flagged=1 filled=1 skipped=0`
+---
 
-The current saved database data also has restaurant descriptions:
+### Issue 2 — Lunch scheduled between checkout and airport on the departure day
 
-- `trips.itinerary_data`: 9 dining cards, 0 blank dining descriptions.
-- `itinerary_days`: Day 1 / Day 2 / Day 3 each has 3 dining cards, 0 blank dining descriptions.
-- A recent-database scan found no recently updated trip with blank persisted dining descriptions.
+**What's happening**
+- `enforceDepartureDayLogistics` (§15z) already prunes non-logistics cards that start *after* the departure transfer.
+- A lunch card placed *between* a late checkout and the transfer is technically valid by timing but feels wrong — user is supposed to be heading to the airport, not eating.
 
-So the backend is currently saving descriptions, but the user can still see “no descriptions” because the UI hides restaurant blurbs in one branch.
+**Fix (backend repair pipeline)**
+- In `enforceDepartureDayLogistics` (run after §15z), add a "no meal in the airport-bound window" rule: if a `dining` card sits between the checkout time and `transferStart`, AND `transferStart − dining.endTime < 90 min`, drop the dining card. Locked / user / extracted rows exempt.
+- Tighten `meal-policy.ts` `midday_departure` and `afternoon_departure`: when `depMins − checkoutMins < 240` (less than ~4 hours of usable window before transfer), drop `lunch` from `requiredMeals`. Currently `midday_departure` (dep < 15:00) requires only `breakfast` — good — but `afternoon_departure` (dep < 18:00) requires `breakfast,lunch` and that's the case generating the offending lunch.
+- Sentinel `[DEPARTURE_MEAL_PRUNED]` for telemetry.
 
-### Root cause found for visible “no restaurant descriptions”
+**Outcome**: Departure days end with breakfast → checkout → transfer → flight, with no awkward sit-down meal in the middle.
 
-In `src/components/itinerary/EditorialItinerary.tsx`, restaurant cards that have a venue go through a “venue branch.” In that branch, description rendering is gated by `!compact`.
+---
 
-`compactCards` is enabled for manual mode or `smart_finish` trips:
+### Issue 3 — User has to hard-refresh to see the clean itinerary
 
-```tsx
-compactCards={isManualMode || creationSource === 'smart_finish'}
-```
+**What's happening**
+- Right after generation, the local UI shows a slightly stale picture (the "Return to Four Seasons before check-in" inversion). A hard refresh re-reads canonical DB data and the issue disappears.
+- Plumbing already exists: `dispatchTripPersisted` + `TRIP_PERSISTED_EVENT` + `resyncItineraryFromDb`. We're just not firing a guaranteed resync at the end of the generation chain.
 
-That means restaurant descriptions can exist in the saved JSON, but still not appear on the card in compact/smart-finish/manual layouts. This matches the user symptom: “restaurants still have no descriptions,” even though the persisted data has descriptions.
+**Fix (frontend, no business-logic change)**
+- In `TripDetail.tsx` (the place that owns trip session state and already listens for `TRIP_PERSISTED_EVENT`), add a one-shot post-generation resync: when `itinerary_status` transitions to `ready` (or `metadata.itinerary_frozen_at` is newly stamped), call `resyncItineraryFromDb(tripId)` and replace local state with the canonical DB version. This is the silent "auto hard-refresh" the user was doing manually.
+- Also fire `dispatchTripPersisted({ source: 'generation-complete' })` from the generation-complete handler in `voyanceFlowController.ts` / wherever the chain ends, so the existing listener picks it up without any new wiring.
 
-### What the logs show about refresh/day mutation
+**Outcome**: User never sees the pre-resync version. The first paint after generation matches what a hard refresh would have shown.
 
-There were three blocked mutation attempts shortly after generation:
+---
 
-- `00:46:27` attempted save: old `22 meaningful / 20 paid`, attempted `13 meaningful / 7 paid` — blocked.
-- `00:46:48` same downgrade attempt — blocked.
-- `00:46:58` same downgrade attempt — blocked.
+### Files I expect to touch
 
-This means a save path is still attempting to overwrite a healthy itinerary with a smaller/mutated one. The regression guard protected the database, but the attempted downgraded payload can still affect local UI state before resync.
+- `src/lib/itinerary/deriveMealPolicy.ts` — bump breakfast cutoff to 09:30
+- `src/components/trip/TripHealthPanel.tsx` — read persisted `requiredMeals`, drop the local default-to-three behavior
+- `supabase/functions/generate-itinerary/meal-policy.ts` — drop `lunch` from `afternoon_departure` when usable window < 4h
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (or wherever `enforceDepartureDayLogistics` lives) — prune dining within 90 min of transfer
+- `src/pages/TripDetail.tsx` — auto-resync on `ready` transition
+- `src/lib/voyanceFlowController.ts` (or generation-complete site) — dispatch `TRIP_PERSISTED_EVENT` on chain finish
+- New tests: meal-policy 10:15 arrival → no breakfast; afternoon_departure short-window → no lunch; departure-day prune drops lunch in airport-bound window
 
-Also, `metadata.persist_validation` is stale and wrong:
+### What I'm NOT changing
+- The generation prompt
+- The cost / budget pipeline
+- The hotel-return bookend logic (it's working — just needs the resync to surface it correctly)
 
-- It claims missing Day 1/2/3 meals.
-- Current saved itinerary has breakfast/lunch/dinner cards on those days.
-- The stale validation was checked at `00:46:57`, but the trip was later updated to `ready` at `00:47:48`.
-
-So generation reached ready, but the validation metadata was not refreshed/cleared against the final persisted itinerary. That can make the app look broken after refresh even when the current saved itinerary is healthier.
-
-### Additional issue found
-
-One saved dining card has an `endTime` but no `startTime`:
-
-- Day 1: `Lunch at El Turix`, `endTime=13:30`, `startTime` blank.
-
-The current floating meal assigner skips cards that have `endTime`, even if they have no `startTime` and no duration. That leaves a partially timed meal and can contribute to ordering/validation weirdness.
-
-## Fix plan
-
-### 1. Make restaurant descriptions visible in compact cards
-
-Update `EditorialItinerary.tsx` so dining/restaurant cards render their resolved description even when `compact=true`, specifically in the venue branch that currently uses `!compact`.
-
-Implementation intent:
-
-```tsx
-const shouldShowDescription = !compact || isDiningLikeActivity(activity);
-```
-
-Then render the existing `resolveActivityDisplayDescription(...)` result for dining cards in compact mode.
-
-This is the direct fix for “restaurants still have no descriptions” when the data is present but hidden.
-
-### 2. Stop stale validation metadata from surviving final generation
-
-Update the final generation persist path so when a trip transitions to `ready`, it either:
-
-- runs `validateItineraryForPersist` against the final `partialItinerary.days`, after meal fills/bookends/persist-net cleanup, and stamps fresh `metadata.persist_validation`, or
-- clears stale non-ok `persist_validation` if the final itinerary is ready and valid.
-
-The goal: a ready trip cannot carry old “missing meals” errors from a rejected/intermediate save.
-
-### 3. Ensure regression-blocked saves force a canonical resync
-
-Update the client save wrapper and any direct self-heal save calls so a `regressionBlocked` response immediately re-reads canonical DB itinerary data and does not leave the attempted downgraded payload in local state.
-
-Scope:
-
-- `src/services/safeUpdateItineraryData.ts`
-- direct `save-itinerary` invokes in `TripDetail.tsx` self-heal/version-restore/placeholder paths
-
-This keeps the UI from showing the attempted 13-activity mutated plan when the database preserved the healthier 22-activity plan.
-
-### 4. Add source labels to mutation attempts
-
-Pass a `saveReason` for user/editor saves too, not only `skipLedgerCheck` saves, so future rejected attempts show the real caller instead of generic `save-itinerary` / `unspecified`.
-
-This makes the next incident traceable in one log query.
-
-### 5. Fix endTime-only dining cards
-
-Update `assignFloatingMealTimes` so a meal with no `startTime`, no duration, but an `endTime` is not skipped. For dining cards, compute a sensible `startTime` from the meal slot or from `endTime - default meal duration`.
-
-This prevents cards like `Lunch at El Turix` from persisting with a blank start time.
-
-### 6. Add focused regression tests
-
-Add/extend tests for:
-
-- compact restaurant cards still render descriptions,
-- ready generation does not retain stale missing-meal validation metadata,
-- regression-blocked saves trigger canonical resync behavior,
-- endTime-only dining cards get a start time instead of floating/partially timed persistence.
-
-## Expected outcome
-
-- Restaurants with descriptions in saved data will show descriptions in the UI.
-- Refresh/self-heal paths should stop visibly mutating healthy days.
-- Stale validation warnings should no longer contradict the actual saved itinerary.
-- Future logs will identify which save path attempted any downgrade.
+Approve and I'll ship.
