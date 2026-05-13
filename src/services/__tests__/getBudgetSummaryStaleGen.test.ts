@@ -12,16 +12,17 @@ const trip = {
   itinerary_status: 'ready' as string,
   metadata: null as any,
   updated_at: new Date().toISOString(),
-};
-const settings = {
-  trip_id: 'trip-x',
+  // Settings live on the trips row too — getTripBudgetSettings selects them.
   budget_total_cents: 100_000,
   budget_currency: 'USD',
-  travelers: 2,
+  budget_input_mode: 'total',
   budget_include_hotel: true,
   budget_include_flight: true,
-  budget_input_mode: 'total',
-  warning_threshold: 'yellow',
+  budget_warnings_enabled: true,
+  budget_warning_threshold: 'yellow',
+  budget_allocations: null,
+  travelers: 2,
+  coach_protected_categories: null,
 };
 
 vi.mock('@/integrations/supabase/client', () => {
