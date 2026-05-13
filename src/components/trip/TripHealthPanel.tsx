@@ -298,17 +298,26 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
     ): boolean => {
       try {
         if (!cachedReCheck || cachedReCheck.activities !== activities) {
-          // Use the same locked-set logic as buildCascadePreview.
-          const cloneInput = activities.map((a: any, idx: number) => ({
-            ...a,
-            id: (a?.id !== undefined && a?.id !== null && a?.id !== '')
-              ? String(a.id) : indexKey(idx),
-            title: a?.title || a?.name,
-            startTime: a?.startTime ?? a?.start_time,
-            endTime: a?.endTime ?? a?.end_time,
-            __previewKey: indexKey(idx),
-          }));
-          const result = enforceTimingAndBuffers(cloneInput as any);
+          const lockedSet = new Set<string>();
+          const cloneInput = activities.map((a: any, idx: number) => {
+            const cid = (a?.id !== undefined && a?.id !== null && a?.id !== '')
+              ? String(a.id) : indexKey(idx);
+            // Mirror buildCascadePreview's lock detection so locked-vs-locked
+            // overlaps still surface (cascade can't resolve them).
+            // Use a dynamic require to avoid a circular import at module load.
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { isActivityLocked } = require('@/lib/itinerary/persistDayContract');
+            if (isActivityLocked(a)) lockedSet.add(cid);
+            return {
+              ...a,
+              id: cid,
+              title: a?.title || a?.name,
+              startTime: a?.startTime ?? a?.start_time,
+              endTime: a?.endTime ?? a?.end_time,
+              __previewKey: indexKey(idx),
+            };
+          });
+          const result = enforceTimingAndBuffers(cloneInput as any, { lockedIds: lockedSet });
           cachedReCheck = { activities, result };
         }
         const result = cachedReCheck.result;
