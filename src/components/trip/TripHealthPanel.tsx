@@ -199,6 +199,31 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
     // mem://constraints/itinerary/db-is-source-of-truth-on-load — read-only.
     const cascadePreview = buildCascadePreview(activities);
 
+    // Drift telemetry — silent until cascade-preview disagrees with the
+    // rendered display by ≥1 min. Breadcrumb for repros like Mexico City /
+    // Montreal / Casablanca where stale-overlap warnings still surface.
+    if (cascadePreview.size > 0 && typeof console !== 'undefined') {
+      for (const a of activities) {
+        if (!a?.id) continue;
+        const preview = cascadePreview.get(String(a.id));
+        if (!preview) continue;
+        const renderedStart = a?.displayStartTime || a?.startTime || a?.time;
+        const ps = preview.startTime ? parseTime(preview.startTime) : null;
+        const rs = renderedStart ? parseTime(renderedStart) : null;
+        if (ps !== null && rs !== null && Math.abs(ps - rs) >= 1) {
+          // eslint-disable-next-line no-console
+          console.warn('[HEALTH_CASCADE_DRIFT]', {
+            day: dayNum,
+            id: a.id,
+            title: a.name || a.title,
+            renderedStart,
+            previewStart: preview.startTime,
+            deltaMin: ps - rs,
+          });
+        }
+      }
+    }
+
     // Gate: skip timing checks if any non-transit activity is missing start/end.
     // Prevents phantom overlap/buffer warnings from optimistic edits or partial hydration.
     const allTimed = realActivities.every((a: any) => {
@@ -206,6 +231,7 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
       return !!getDisplayStartTime(a, cascadePreview) && !!getDisplayEndTime(a, cascadePreview);
     });
     if (!allTimed) return;
+
 
     // Buffer/conflict passes still source from `activities` (NOT realActivities)
     // so legitimate transit-overlap warnings ("Walk to X" runs into next stop)

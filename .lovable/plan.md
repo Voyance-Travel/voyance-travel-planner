@@ -1,92 +1,41 @@
-## P3 — Day 1 "missing breakfast" false positive on no-flight arrival days
+## Root cause (Casablanca Day 1 stale-overlap warning)
 
-### Problem
+The "Wander Place Mohammed V (18:44–20:29) overlaps Dinner: Le Jasmine (19:00–20:15) — 89 min conflict" warning is the same class we already partially fixed with `buildCascadePreview` ([Health Cascade Preview] memory). The preview is wired into `TripHealthPanel.analyzeHealth` and `detectGapsForDay`, yet it's still surfacing.
 
-For Casablanca trip `fce9c4ba…` (no `flight_selection`), the health panel flags **Day 1 missing breakfast** even though the day's actual experience starts at the 11:05 luggage drop / 12:45 mosque tour. Confirmed via DB inspection:
+Tracing `src/lib/itinerary/healthCascadePreview.ts` and `src/utils/itinerary/timingCascade.ts` against the symptom (UI shows Le Jasmine post-cascade at 8:44 PM but panel reads raw 19:00) the preview is failing to move Le Jasmine for one of three reasons we can prove from the code alone:
 
-- `flight_selection IS NULL`
-- Day 1 first activities (in order): `Travel to … 10:20 (transport)`, `Luggage Drop 11:05 (accommodation)`, `Hassan II Mosque 12:45 (sightseeing)`, `Lunch at Rick's Café 14:46 (dining)`
-- Persisted `metadata.quality.meal_policy_at_generation = { dayMode: 'morning_arrival', arrivalTime24: '09:00', requiredMeals: ['breakfast','lunch','dinner'] }`
-- `metadata.quality.meal_audit.injected = ['breakfast']` — save-time guard already attempted (and failed) a breakfast injection on every save based on the same stale policy
+1. **Lock detection is too narrow.** `buildCascadePreview` only marks rows locked when `a.locked || a.isLocked || a.lock_state === 'locked'`. The canonical `isActivityLocked` (`src/utils/persistDayContract.ts`) also honors `manuallyAdded`, `extracted`, `pinned`, `lockState ∈ {locked, user, manual}`. When Le Jasmine is "manually added" but not flagged on these surface fields, the renderer treats it as movable but the cascade may still skip it via a different structural classifier — guarantee parity by reusing the canonical helper.
+2. **Overlap + buffer branches require `currEnd !== null`.** Same-start branch (line 188) synthesizes `anchorEnd = currStart + durationMinutes`, but the overlap branch (206) and buffer branch (226) bail when `currEnd` is missing. Activities persisted with only `startTime + durationMinutes` (common on manually inserted "Wander…" cards) silently disable the push that should have moved Le Jasmine to ~20:34.
+3. **`isStructural`/`isEndOfDayBookend` only inspect `act.title`.** Records carrying `name` (no `title`) skip those classifiers — opposite direction to the bug, but it lets unrelated rows incorrectly anchor cascades and is worth fixing while we're here.
 
-### Root causes (3 bugs compounding)
+We also lack any signal when a preview disagrees with the rendered display, so reproducible cases like Mexico City / Montreal / Casablanca all bubble up the same way without a console breadcrumb.
 
-1. **Phantom `arrivalTime24='09:00'` when `flight_selection` is null.** `deriveMealPolicy` is called with a default arrival clock derived from `trip.start_date` (or similar) instead of `undefined`. 09:00 is < 09:30 → required meals = `['breakfast','lunch','dinner']`. Brunch band is never reached because the schedule is never consulted.
-2. **`quality.dayMode` is never written to top-level.** All 4 writers stamp `quality.meal_policy_at_generation.dayMode`, none stamp `quality.dayMode`. The panel's first read (`day?.metadata?.quality?.dayMode`) is therefore always empty for fresh trips, forcing it through the fragile `inferDayModeFallback` path.
-3. **`firstNonBookendStart` skip-set is incomplete.** It skips `'transit'/'transfer'/'logistics'` but NOT `'transport'/'travel'/'airport_transfer'`, and has no title regex. A synthetic "Travel to Hotel 08:00" card silently becomes the inferred "arrival", regressing brunch-band days back into `morning_arrival_early` with full meals.
+## Plan
 
-### Fix
+### 1. Cascade preview: parity with display + canonical lock set
+File: `src/lib/itinerary/healthCascadePreview.ts`
+- Replace inline lock predicate with `isActivityLocked` from `@/utils/persistDayContract` (covers `manuallyAdded`, `extracted`, `pinned`, `lockState`, `lock_state`, `locked`, `isLocked`).
+- Before cloning, synthesize `endTime` from `startTime + durationMinutes` when endTime is missing, so the cascade's overlap/buffer branches engage. (Only on the clone — never persist.)
+- Use `act.title || act.name` consistently when building the clone so the structural classifier in `enforceTimingAndBuffers` gets a usable title.
 
-All four layers, smallest-blast-radius first.
+### 2. Cascade engine: cover missing-endTime branches
+File: `src/utils/itinerary/timingCascade.ts`
+- In the overlap branch (~206) and buffer branch (~226), compute `effectiveCurrEnd = currEnd ?? (currStart + (durationMinutes || 30))` mirroring the same-start branch. No behavior change when endTime present; closes the silent skip when it's not.
+- `isStructural` / `isEndOfDayBookend`: read `act.title || act.name` (treat both as title-equivalent).
 
-**1. Shared helper `inferArrivalMinsFromSchedule(activities)` (new)**
+### 3. Drift telemetry — silent until a repro fires
+File: `src/components/trip/TripHealthPanel.tsx` (analyzeHealth pass)
+- After `buildCascadePreview`, walk the timed list once and `console.warn('[HEALTH_CASCADE_DRIFT]', {...})` for any activity whose `cascadePreview` start/end differs from `a.displayStartTime || a.startTime` by ≥1 min. Read-only; no state mutation. This is the breadcrumb we wished we had for Mexico City / Montreal.
 
-`src/lib/itinerary/inferArrivalFromSchedule.ts` + a mirror under `_shared/`. Returns the start time of the first activity whose category is NOT in `{check-in, check-out, hotel, accommodation, transit, transportation, transfer, transport, travel, logistics, commute, bookend, hotel_return, airport_transfer}` AND whose title does NOT match `^\s*(?:travel|transfer|drive|taxi|metro|train|bus|tram|ride|airport pickup|pickup|arrival|return) (?:to|from)\b`. Returns `null` when none found.
+### 4. Unit test (locks the fix in place)
+File: `src/lib/itinerary/__tests__/healthCascadePreview.test.ts` (new)
+- Reproduce Casablanca Day 1: Wander (`category:'exploration'`, 18:44, durationMinutes=105, no endTime), Le Jasmine (`category:'dining'`, 19:00–20:15). Assert cascade preview produces Le Jasmine startTime ≥ 20:34 and that `analyzeHealth` produces zero overlap warnings.
+- Add a `manuallyAdded:true` variant on Le Jasmine asserting the canonical lock helper keeps it pinned (no false move) and the panel suppresses the overlap (locked-vs-locked is the only legitimate case left).
 
-**2. Panel — `src/lib/itinerary/inferDayMode.ts`**
+### 5. Memory
+- Update [Health Cascade Preview] entry to record the additional invariants (synthesize endTime, canonical lock helper, drift telemetry). No new index entry needed.
 
-- Replace the inline `firstNonBookendStart` with `inferArrivalMinsFromSchedule`.
-- After the existing fallback chain, also consult `day?.metadata?.quality?.meal_policy_at_generation` for `dayMode` so the panel mirrors what the backend cached (already done inside the panel, but as a tertiary read between `quality.dayMode` and `inferDayModeFallback`).
+## Out of scope
 
-**3. Panel — `src/components/trip/TripHealthPanel.tsx` (lines 121–147)**
-
-Insert the cached-policy read between `quality.requiredMeals` and the dayMode mapping:
-
-```ts
-const cachedPolicyMode: string =
-  day?.metadata?.quality?.dayMode
-  || day?.metadata?.quality?.meal_policy_at_generation?.dayMode
-  || '';
-```
-
-Use `cachedPolicyMode` in place of `dayMode` for all the existing `if (cachedPolicyMode === …)` branches.
-
-**4. Backend — promote `quality.dayMode` to top-level on every write**
-
-In all 4 sites that currently write `meal_policy_at_generation.dayMode`, ALSO set `metadata.quality.dayMode = policy.dayMode`:
-
-- `supabase/functions/generate-itinerary/action-generate-day.ts` (~line 336)
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (~lines 1965, 2535)
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (~line 442)
-
-This eliminates the dependence on the panel-side inference fallback for fresh trips.
-
-**5. Backend — kill the phantom `arrivalTime24` default**
-
-Audit the 4 write paths: when `flight_selection` is absent (or `savedArrivalTime24` is unresolved), pass `arrivalTime24: undefined` to `deriveMealPolicy` instead of a synthesized clock from `trip.start_date`. This makes `deriveMealPolicy` fall through to its no-clock branch (line 86) which currently returns full meals — for those trips, layer **6** kicks in.
-
-**6. Brunch-band inference from schedule when no flight clock**
-
-In `deriveMealPolicy` callers (backend) and `inferDayModeFallback` (panel), when `arrivalTime24` is missing, derive a synthetic arrivalMin from `inferArrivalMinsFromSchedule(day.activities)`. Then the standard band rules apply: ≥ 9:30 → no breakfast required. Closes the Casablanca case (first real activity = 11:05 → brunch band → `['lunch','dinner']`).
-
-**7. One-shot backfill migration**
-
-Reset `metadata.quality.meal_policy_at_generation.requiredMeals` and stamp top-level `metadata.quality.dayMode` for already-persisted trips on Day 1 / last day where `flight_selection IS NULL` and `arrivalTime24` was synthesized. Re-derive from the activity schedule using the new helper. Logs `[BACKFILL_DAYMODE]` per affected trip.
-
-**8. Memory + tests**
-
-- `mem://constraints/itinerary/dayMode-quality-top-level` — invariant: every persist MUST stamp `metadata.quality.dayMode` (not only the nested cache).
-- `mem://constraints/itinerary/no-phantom-arrival-clock` — when `flight_selection` is null, never synthesize `arrivalTime24` from `trip.start_date`.
-- Tests:
-  - `inferArrivalFromSchedule.test.ts` — transport-card precedence regression; "Travel to Hotel 08:00" must not become arrival when next card is 11:30.
-  - Extend `TripHealthPanel.cascadePreview.test.ts` with a no-flight Day 1 fixture matching the Casablanca activity ordering; assert no `missing-meals-1` issue.
-
-### Files touched
-
-- `src/lib/itinerary/inferArrivalFromSchedule.ts` (new)
-- `src/lib/itinerary/inferDayMode.ts`
-- `src/components/trip/TripHealthPanel.tsx`
-- `supabase/functions/_shared/infer-arrival-from-schedule.ts` (new)
-- `supabase/functions/generate-itinerary/action-generate-day.ts`
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts`
-- `supabase/functions/generate-itinerary/meal-policy.ts` (no-flight fallback)
-- `supabase/migrations/<ts>_backfill_daymode_top_level.sql` (one-shot)
-- 2 new memory entries + index update
-- 2 test files (1 new, 1 extended)
-
-### Out of scope
-
-- Any change to dinner/lunch detection rules
-- Any change to the brunch-band thresholds (09:30 / 12:00) — already correct in Core memory
-- Any UI/visual change to the health panel
+- Backend cascade (`_shared/timing-cascade.ts`) is the save-time enforcer and is the contract this preview mirrors. It already runs on both branches in production paths via `enforceTimingAndBuffers`; no behavioral change there beyond the matching null-endTime guards if the same code path proves missing. (Will mirror only if grep confirms the same gap; otherwise leave untouched.)
+- No persistence of preview-shifted times (per [DB Is Source Of Truth On Load]).
