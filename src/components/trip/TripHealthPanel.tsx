@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { inferDayModeFallback } from '@/lib/itinerary/inferDayMode';
+import { getDisplayStartTime, getDisplayEndTime } from '@/lib/itinerary/displayTime';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -54,16 +56,19 @@ export interface TripHealthPanelProps {
   hotelBookedElsewhere?: boolean;
   refreshingDayNumber?: number | null;
   refreshResultsByDay?: Record<number, { errorCount: number; warningCount: number }>;
+  /** Optional flight selection for arrival/departure-band dayMode fallback */
+  tripFlightSelection?: any;
   className?: string;
   onAction?: (action: string, context?: { dayNumber?: number; field?: 'flights' | 'hotel' }) => void;
 }
 
 // ─── Health Analysis ────────────────────────────────────────────────────────
 
-export function analyzeHealth(days: any[]): HealthIssue[] {
+export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any }): HealthIssue[] {
   const issues: HealthIssue[] = [];
+  const totalDays = days.length;
 
-  days.forEach((day: any) => {
+  days.forEach((day: any, dayIndex: number) => {
     const activities = day.activities || [];
     const dayNum = day.dayNumber || day.day_number;
 
@@ -107,8 +112,11 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
 
     // ── HC.1: required-meal / thin-day / large-gap checks ──────────────────
     // PREFER the server's persisted meal policy so the panel can never drift
-    // from what the repair pipeline actually enforced. Falls back to a
-    // dayMode-derived inference only when the persisted list is absent.
+    // from what the repair pipeline actually enforced. When BOTH the
+    // persisted list and dayMode are absent, fall back to the
+    // arrival/departure-band heuristic instead of silently defaulting to
+    // all-three-meals (which produced "missing breakfast" on a 09:50 arrival
+    // and "missing dinner" on a 16:00 departure).
     const dayMode: string = day?.metadata?.quality?.dayMode || '';
     const persistedMeals = day?.metadata?.quality?.requiredMeals
       ?? day?.metadata?.mealPolicy?.requiredMeals
@@ -124,9 +132,16 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
       if (dayMode === 'midday_arrival') return ['lunch', 'dinner'];
       if (dayMode === 'midday_departure') return ['breakfast'];
       if (dayMode === 'afternoon_departure') return ['breakfast'];
-      // morning_arrival default: assume late-morning brunch covers AM meal —
-      // do NOT require breakfast on first days when dayMode is unknown.
       if (dayMode === 'morning_arrival') return ['lunch', 'dinner'];
+      // No persisted meals AND unknown dayMode — try arrival/departure
+      // flight-band fallback for first/last day; otherwise full day.
+      const inferred = inferDayModeFallback({
+        day,
+        dayIndex,
+        totalDays,
+        tripFlightSelection: opts?.tripFlightSelection,
+      });
+      if (inferred) return inferred.requiredMeals;
       return ['breakfast', 'lunch', 'dinner'];
     })();
 
@@ -176,7 +191,7 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
     // Prevents phantom overlap/buffer warnings from optimistic edits or partial hydration.
     const allTimed = realActivities.every((a: any) => {
       if (isTransitLike(a.category, a.name || a.title)) return true;
-      return !!a.startTime && !!a.endTime;
+      return !!getDisplayStartTime(a) && !!getDisplayEndTime(a);
     });
     if (!allTimed) return;
 
@@ -192,19 +207,23 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
       return /^(?:return to (?:the )?hotel|return to )/i.test(title);
     };
     const timed = activities
-      .filter((a: any) => a.startTime && a.endTime)
+      .filter((a: any) => (getDisplayStartTime(a)) && (getDisplayEndTime(a)))
       .filter((a: any) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
       // Drop hotel-return bookends — they're decorative and routinely wrap
       // past midnight; should never anchor a buffer/overlap warning.
       .filter((a: any) => !isHotelReturn(a))
-      .map((a: any) => ({
-        name: a.name || a.title,
-        category: a.category,
-        start: parseTime(a.startTime),
-        end: parseTime(a.endTime),
-        startStr: String(a.startTime),
-        endStr: String(a.endTime),
-      }))
+      .map((a: any) => {
+        const startStr = getDisplayStartTime(a);
+        const endStr = getDisplayEndTime(a);
+        return {
+          name: a.name || a.title,
+          category: a.category,
+          start: parseTime(startStr),
+          end: parseTime(endStr),
+          startStr: String(startStr),
+          endStr: String(endStr),
+        };
+      })
       .filter((a: { start: number; end: number }) => a.start > 0 || a.end > 0)
       // Drop wrap-past-midnight residue. Treat end===0 with start>0 as wrap
       // too (e.g. anything ending exactly at 00:00) — would otherwise false-negative.
@@ -320,10 +339,12 @@ export function detectGapsForDay(allActivities: any[], dayNumber: number): Healt
   if (dayActivities.length === 0) return issues;
 
   const sorted = dayActivities
-    .filter((a: any) => !!a.startTime && !isBookendOrTransit(a))
+    .filter((a: any) => !!getDisplayStartTime(a) && !isBookendOrTransit(a))
     .map((a: any) => {
-      const startMins = parseTime(a.startTime || '00:00');
-      const endMins = parseTime(a.endTime || a.startTime || '00:00');
+      const startStr = getDisplayStartTime(a) || '00:00';
+      const endStr = getDisplayEndTime(a) || startStr;
+      const startMins = parseTime(startStr);
+      const endMins = parseTime(endStr);
       // Wrap predicate: end===0 with start>0 (e.g. 23:30→00:00 exact) is wrap
       // too — without the end===0 branch, "Return to Hotel" landing exactly on
       // midnight false-negatives and pollutes the next day's gap analysis.
@@ -424,6 +445,7 @@ export function TripHealthPanel({
   hotelBookedElsewhere = false,
   refreshingDayNumber = null,
   refreshResultsByDay,
+  tripFlightSelection,
   className,
   onAction,
 }: TripHealthPanelProps) {
@@ -504,7 +526,7 @@ export function TripHealthPanel({
     }
 
     // Health analysis
-    const rawIssues = analyzeHealth(days);
+    const rawIssues = analyzeHealth(days, { tripFlightSelection });
     // Suppress local timing/buffer issues for any day where the latest server
     // re-check returned zero issues — otherwise the panel says "no issues" in
     // the badge while still showing the stale red line.
@@ -533,7 +555,7 @@ export function TripHealthPanel({
       completionPct: completion,
       daysPlanned: planned,
     };
-  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere, refreshResultsByDay]);
+  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere, refreshResultsByDay, tripFlightSelection]);
 
   // ── Stabilize warnings against transient/loading day data ────────────────
   // Errors commit immediately (user-actionable). Warnings only commit after

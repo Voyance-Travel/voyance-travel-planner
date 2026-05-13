@@ -1,64 +1,63 @@
-## Problem
+# Health Engine — False-Positive Cleanup (Montreal Audit)
 
-Trip detail hero for Montreal renders an alpine lake with a wooden rowboat. Root cause: `src/utils/destinationImages.ts` contains a hardcoded `'montreal'` array of three `images.unsplash.com/photo-…` IDs labelled "Old Port / skyline / Notre-Dame" — the labels were never verified against the actual photo content, and at least the [0] entry shows generic Alpine scenery. The resolver in `useTripHeroImage` ranks this hardcoded curated list above the Google-Places API result that's actually keyed on the destination, so the wrong photo wins on every visit and gets written back to `trips.metadata.hero_image` and to `destinations.hero_image_url` as the canonical.
+## What's wrong
 
-This pattern is not Montreal-specific. The hardcoded map in `destinationImages.ts` (~50 cities) is unverified labels on bare Unsplash photo IDs, and `images.unsplash.com` URLs are already flagged `isBrokenSeededUrl=true` for *seeded* values but trusted as *curated*. Same loop is shared by `useDestinationImages` and `DestinationHeroImage`.
+All four warnings on the Montreal trip are false positives from `analyzeHealth` / `detectGapsForDay` in `src/components/trip/TripHealthPanel.tsx`. The itinerary content is correct; the engine is judging it against the wrong reference.
+
+| # | Reported | Root cause |
+|---|---|---|
+| 1 | Day 1 missing breakfast | `dayMode` is unset / not `morning_arrival`, so `requiredMeals` falls through to default `[breakfast, lunch, dinner]`. Arrival 09:50 should yield `morning_arrival` (no breakfast required) per the Day-1 arrival-band rule. |
+| 2 | Day 1 Pointe-à-Callière 10:30–12:40 vs Schwartz's 12:30–13:30 | Schwartz's renders at **12:55** but `a.startTime` in `editorDays` still says **12:30**. Display layer shows a buffered time; analyzer reads raw source. They diverge. |
+| 3 | Day 2 same pattern (Joe Beef rendered 13:27, source 12:30) | Same root cause as #2. |
+| 4 | Day 3 missing dinner | Departure day with `afternoon_departure` mode should require breakfast only. Either `dayMode` is missing OR Maison Publique is an untimed floating card the engine shouldn't expect to satisfy a meal slot. |
 
 ## Fix
 
-### 1. Re-rank the resolver chain (city-locality Places photo wins)
+### A. Honor arrival/departure dayMode reliably (issues #1, #4)
 
-In `src/hooks/useTripHeroImage.ts` (and mirrored in `src/hooks/useDestinationImages.ts` + `src/components/common/DestinationHeroImage.tsx` for parity):
+In `analyzeHealth` (TripHealthPanel.tsx ~L112–131), the meal-requirement fallback chain trusts `metadata.quality.dayMode` but silently defaults to all-three-meals when it's missing. For Day 1 and the last day, derive a fallback dayMode from trip-level signals when persisted metadata is absent:
 
-New priority:
-1. Seeded `trip.metadata.hero_image` (if present and not `isBrokenSeededUrl`)
-2. **DB canonical** `destinations.hero_image_url` (single source of truth, admin-vetted or verified-API)
-3. **DB curated** `curated_images` table (admin-managed, voted)
-4. **API fetch** via `destination-images` edge function (Google Places, locality-scoped)
-5. Hardcoded `getCuratedImages(...)` from `destinationImages.ts` — demoted to **after API**, behind a `VERIFIED_CURATED` allowlist gate (empty by default)
-6. Gradient
+- **First day**: read `trip.flight_selection.arrival_time` (or activities-array first non-bookend `startTime`) and apply the Core arrival-band rule:
+  - `< 09:30` → breakfast required
+  - `09:30–11:59` → brunch day, breakfast NOT required (lunch + dinner)
+  - `≥ 12:00` → lunch-first (lunch + dinner)
+- **Last day**: read `trip.flight_selection.departure_time` and:
+  - `≥ 18:00` → all three meals
+  - `15:00–17:59` → breakfast only (afternoon_departure)
+  - `12:00–14:59` → breakfast + lunch
+  - `< 12:00` → breakfast only (early_departure)
 
-The hardcoded map stays in the file (no churn) but is only consulted when API also fails AND the destination key is in `VERIFIED_CURATED`. Net effect: unverified hardcoded photo IDs stop being served.
+Wire through a small helper `inferDayModeFallback(day, dayIndex, totalDays, tripMeta)` that's called only when `persistedMeals` and `dayMode` are both empty. This closes the silent default that produces "missing breakfast" on a 09:50 arrival and "missing dinner" on a 16:00 departure.
 
-### 2. Treat `images.unsplash.com` as broken everywhere
+### B. Stop reading stale source times for overlap analysis (issues #2, #3)
 
-Extend `isBrokenSeededUrl` (rename to `isUntrustedHeroUrl`, export from `src/lib/heroUrlPolicy.ts`) and apply it to:
-- Seeded metadata hero (already done)
-- `destinations.hero_image_url` reads (new)
-- `curated_images.image_url` reads (new)
-- API `getHeroImageByName` results (new — Places never returns unsplash but defensive)
+The cards render with a buffered/cascade-adjusted time but `analyzeHealth` reads `a.startTime` directly. Two parts:
 
-Any URL flagged untrusted is skipped at read-time and the chain moves on. The existing write-back already overwrites stored bad values with the freshly-resolved good one, so trips self-heal on next visit.
+1. **Read the same time the card shows.** Add a single helper `getDisplayTime(a)` (in `src/lib/itinerary/displayTime.ts`) that mirrors the visual rendering: prefer `a.displayStartTime` / `a.adjustedStartTime` / `metadata.displayStart` if set by the renderer, otherwise fall back to `a.startTime`. Use it in `analyzeHealth` (L194–207) and `detectGapsForDay` (L325–326).
+2. **Apply a 1-minute tolerance** before flagging overlap: only fire `conflict-day-N` when `timed[i].end - timed[i+1].start >= 1`. The current strict `>` already does this for integer minutes, but combined with point 1 this prevents the engine from racing the renderer for warnings that immediately self-resolve on save (`enforceTimingAndBuffers` is the source of truth for actual timing).
 
-### 3. One-shot DB purge
+If the renderer doesn't currently stamp a `displayStartTime` on the activity object, expose it: when `EditorialItinerary` computes the card's printed time, attach it to the activity record passed to `editorDays` so health and rendering share one number.
 
-Migration: `UPDATE destinations SET hero_image_url = NULL WHERE hero_image_url ILIKE '%images.unsplash.com%';` and matching purge for `curated_images` rows (mark `is_blacklisted=true` rather than delete, so admin history stays). This makes existing trips re-resolve through Places on next view instead of waiting for an in-the-wild error.
+### C. Skip untimed floating dining cards in meal-requirement check (issue #4)
 
-### 4. Montreal one-line fix (immediate visual)
-
-Remove the three Montreal entries from `CURATED_DESTINATION_IMAGES` (or leave them but they'll be gated off by step 1). Same for any other city where labels look like nature stock — but no manual audit; the policy in step 1 makes the audit unnecessary.
-
-### 5. Telemetry
-
-Add one `console.info('[hero-resolver] source=X destination=Y')` line at the point the resolved URL is selected, behind a build-time flag, so we can see in production logs which tier is winning for which city. No PII.
+In `analyzeHealth` L133–150, a missing meal is currently flagged purely from `requiredMeals - detectedMeals`. Add a guard: if a dining activity exists for the slot but has no `startTime`, count it as detected with severity downgraded — OR, on departure days specifically, skip dinner-required fallback once `flight_selection.departure_time < 18:00`. Section A already handles the latter; this adds belt-and-suspenders for orphaned untimed dining cards generally.
 
 ## Files
 
-- `src/hooks/useTripHeroImage.ts` — new chain order, untrusted-URL guard at every tier
-- `src/hooks/useDestinationImages.ts` — same chain order
-- `src/components/common/DestinationHeroImage.tsx` — same
-- `src/lib/heroUrlPolicy.ts` — new shared `isUntrustedHeroUrl`
-- `src/utils/destinationImages.ts` — add `VERIFIED_CURATED` set (empty)
-- `supabase/migrations/<ts>_purge_unsplash_hero_urls.sql` — null/blacklist `images.unsplash.com` rows
-- `mem://constraints/visual/hero-image-resolver-policy` — new constraint, plus one-line Core entry
+- `src/components/trip/TripHealthPanel.tsx` — wire `inferDayModeFallback`, swap `parseTime(a.startTime)` for `parseTime(getDisplayTime(a))` in both `analyzeHealth` overlap pass and `detectGapsForDay`
+- `src/lib/itinerary/inferDayMode.ts` *(new)* — arrival/departure-band → dayMode helper, pure, unit-tested
+- `src/lib/itinerary/displayTime.ts` *(new)* — single source for "what time does this card show?"
+- `src/components/itinerary/EditorialItinerary.tsx` — if buffered display time is computed inline, stamp it onto the activity passed to health (read-only; no setState, no DB write)
+- `src/components/trip/__tests__/TripHealthPanel.analyzeHealth.test.ts` — add cases: 09:50 arrival, 16:00 departure, buffered-display vs source-time
+- `mem://constraints/itinerary/health-gap-day-scoping` — append: "Health engine reads display times via `getDisplayTime` so it never races the renderer; first/last day mealMode falls back to flight time bands when metadata is absent"
 
 ## Out of scope
 
-- Re-curating per-destination photo lists by hand (the policy makes them unnecessary; admin can add to `curated_images` table when desired)
-- Hero images on the marketing home page (`CinematicHero`, `heroImages.ts`) — those are intentional editorial choices, not destination-keyed
-- Activity card images (`destination-images` for places, not localities) — different code path
-- Rotating/multiple-image experiences
+- Changing `enforceTimingAndBuffers` or anything that mutates persisted timing
+- Reworking the overall health score formula or weights
+- Departure-day card pruning (handled by §15z `enforceDepartureDayLogistics` already)
+- Generator/repair-day prompt changes — these false positives are read-side only
 
 ## Risk
 
-After purge, first visit to a trip whose hero was previously cached will hit Places once (one paid call). Acceptable — Places is already the resolver's [TIER 3] today and is wrapped by the central Google call tracker. Subsequent visits use the canonical write-back.
+Low. All changes are read-side analysis. The dayMode fallback only fires when persisted metadata is absent (today's silent path). The display-time helper only changes which timestamp the analyzer compares against — the source of truth for actual scheduling is untouched.
