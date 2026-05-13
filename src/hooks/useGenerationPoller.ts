@@ -289,6 +289,19 @@ export function useGenerationPoller({
               }
               isStalled = true;
             }
+          } else if (itineraryStatus === 'generating') {
+            // Method 1a: Heartbeat-less fallback — status says generating but no
+            // generation_started_at/heartbeat ever written. Likely a client-driven
+            // path (mobile useLovableItinerary loop) where the tab was suspended
+            // before any backend heartbeat. After 90s of no metadata, treat as
+            // stalled so auto-resume kicks the server-side chain.
+            const HEARTBEATLESS_STALL_MS = 90 * 1000;
+            const tripUpdatedAt = (data as any).updated_at as string | undefined;
+            const lastTouch = tripUpdatedAt ? new Date(tripUpdatedAt).getTime() : 0;
+            if (lastTouch && Date.now() - lastTouch > HEARTBEATLESS_STALL_MS) {
+              console.warn(`[useGenerationPoller] Heartbeat-less stall: status=generating, no generation_started_at, updated ${Math.round((Date.now()-lastTouch)/1000)}s ago`);
+              isStalled = true;
+            }
           }
         }
 
