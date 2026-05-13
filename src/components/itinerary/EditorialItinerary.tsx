@@ -3794,7 +3794,12 @@ export function EditorialItinerary({
   // canonical financial snapshot is still loading. Without the snapshot
   // gate, refresh would briefly render `$0` and then jump to the real
   // total — which read as "the price changed" to users.
-  const isBudgetCalculating = isBudgetGenerating || financialSnapshot.loading;
+  // Spinner only when we have NO total to render yet OR the AI is actively
+  // generating. Background refetches (booking-changed, backfill events) must
+  // never re-spin once we've already displayed a real number — that was the
+  // wedge users saw across Casablanca/Kyoto/Osaka/Amsterdam.
+  const isBudgetCalculating = isBudgetGenerating ||
+    (financialSnapshot.loading && financialSnapshot.tripTotalCents === 0);
 
   // ─── Reconciliation between per-day badges and the trip total ───
   // tripLevelCents = trip total − Σ day(d≥1) totals
