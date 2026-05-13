@@ -1,46 +1,79 @@
-## The bug
+# Fix: Floating untimed card on departure day (Katsukura pattern)
 
-Casablanca trip (`fce9c4ba-…`, 2 travelers, `budget_include_hotel=true`, currency USD, no `trip_payments`):
+## What's actually happening
 
-- `activity_costs` rows sum to **$1,337** total (Hotel $525 + activities $730 + dining $50 + transport $32).
-- "Total from itinerary" on the Budget tab shows **$812** = $1,337 − $525 (hotel missing).
-- `getBudgetSummary.committedHotelCents` correctly reports $525, so the per-row Hotel chip displays $525.
-- That asymmetry is the entire discrepancy the user is calling out: the per-row chips include the hotel, the `Total from itinerary` line does not.
+`enforceDepartureDayLogistics` (§15z) in `supabase/functions/generate-itinerary/pipeline/repair-day.ts` has two prune branches for departure-day cards:
 
-The number originates in `useTripFinancialSnapshot` → `resolveCanonicalCostRows({ includeHotel:true, … }).effectiveTotalCents`. By inspection the resolver should add the day-0 hotel logistics row to `totalCents` (the `isLogistics(row)` branch falls through to `shouldCountRow → true → totalCents += cents`), so something in that path is silently dropping the row in production. The likeliest leak — and the one the existing memory `Canonical Hotel/Flight Cents` warns about — is that the snapshot's first paint runs before `tripData` arrives, so `includeHotel` resolves to its default `true` for the resolver call but the row itself is excluded by an earlier orphan-id filter that uses a different signal. We need to instrument and isolate which branch is dropping the row.
+1. **Untimed drop** — fires only when `s < 0 && isDiningRow(a)`
+2. **Post-cutoff drop** — fires only when `s >= cutoffMin` (and `s = -1` on untimed rows, so this branch never catches them)
 
-The user's "$1,855" line-item sum can't be reconciled from the data alone (the visible Budget allocation rows show `used / allocated` pairs and the user is summing both columns in one or two of them); the actionable, verified bug is the **$525 hotel missing from `tripTotalCents`**, which is exactly the $1,043 vs. $812 mismatch pattern they describe.
+When the generator emits a real restaurant like *Katsukura Sanjo Honten* but mislabels its `category` as `cultural` / `experience` / empty (common path: venue-search recycle, fallback-DB hit, AI hallucination on category), `isDiningRow` returns `false`, the untimed branch skips it, and the post-cutoff branch can't see it because it has no time. The card lands at the bottom of the day's sort with no timestamp — the exact Day 3 / Katsukura symptom the user has hit on 10 cities.
 
-## Fix
+There's no good reason to keep ANY untimed non-logistics, non-locked, non-exempt card on a true departure day. Sort can't place it, §15z can't reason about it, the user always sees a floating card "after the airport transfer."
 
-Trace the leak with a one-paint diagnostic, then close it inside the canonical resolver so every consumer (snapshot, payable items, Budget tab total) agrees.
+## Scope
 
-### Steps
+Frontend/UI: none.
+Backend repair-pipeline only. Two files. Already-tested gates (locked / userAdded / userEdited / isManual / extracted / pinned / preserveAsManualPick) preserved.
 
-1. **`src/services/canonicalCostRows.ts` — diagnostic + fix**
-   - Add a one-shot dev-only `console.warn('[canonicalCostRows] hotel-row-dropped …')` inside the main loop when `cat === 'hotel'`, `includeHotel === true`, and the row is NOT pushed into `out` (covers every early `continue` branch: walking-leg, `cents <= 0`, orphan drop, etc.).
-   - Tighten the orphan-drop branch (lines 227–239) so it never fires for `isLogisticsRow === true` even when `row.activity_id` is set — a Day-0 hotel row whose synthetic `activity_id` doesn't match any live activity must still be counted because logistics rows by definition have no live-activity counterpart. Today the guard `if (!isLogisticsRow && row.activity_id && !lookup)` already protects this, but if the row's `day_number` ever coerces to non-zero (legacy data, or a future writer setting `day_number=1` for a Day-0 hotel), it falls into the orphan branch and disappears. Add a redundant `cat === 'hotel' || cat === 'flight' → never drop` guard.
+## Changes
 
-2. **`src/services/canonicalCostRows.ts` — JSON-rescue category mapping**
-   - The JSON-missing-row rescue (lines 288–314) only fires for live activities with `jsonCost > 0`. Confirm via the diagnostic that the hotel is not being silently double-counted there (`mapped` returns null for `hotel` because `normalizeCanonicalCategory` doesn't include hotel). No change unless the diagnostic fires.
+### 1. `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — §15z
 
-3. **`src/services/__tests__/canonicalCostRows.test.ts` — regression test**
-   - "Day-0 hotel row with synthetic `activity_id` not in liveActivities is counted into `effectiveTotalCents` when `includeHotel=true`" — fixture mirrors Casablanca's exact shape (hotel `day_number=0`, `source='logistics-sync'`, `activity_id` not in liveActivities, no `trip_payments`).
-   - Asserts `effectiveTotalCents === Day-0 hotel cents + Day-1+ activity cents` (i.e., the bug case from the user report).
+In the prune loop (around line 4070–4110), change the untimed-drop branch to fire on **any** non-logistics, non-locked, non-exempt card without a parsable time:
 
-4. **`src/components/planner/budget/BudgetTab.tsx` — defensive UI label**
-   - When `snapshot.tripTotalCents > 0` AND `(snapshot.includeHotel ? snapshot.committedHotelCents : 0) + (snapshot.includeFlight ? snapshot.committedFlightCents : 0) + sum(discretionary used) > snapshot.tripTotalCents + 100¢`, render a small "i" tooltip next to "Total from itinerary" reading: "Some line items above are not included in this total. [Investigating]." Cheap visual safety net; does not paper over the real fix.
+```ts
+// BEFORE
+if (s < 0 && isDiningRow(a)) {
+  repairs.push({ ..., action: 'final_enforce_dropped_untimed_dining', ... });
+  console.log(`[DEPARTURE_UNTIMED_DINING_PRUNED] ...`);
+  continue;
+}
 
-5. **`mem://constraints/finance/header-strip-mirrors-snapshot`**
-   - Append: "Day-0 hotel/flight logistics rows MUST never be dropped by the canonical resolver's orphan branch — even when their synthetic `activity_id` isn't present in `liveActivities`. The `isLogistics(row)` short-circuit + redundant `cat === 'hotel'/'flight' → never drop` guard close the Casablanca pattern (Hotel chip = $525, Trip Total = $812 missing the hotel)."
+// AFTER
+if (s < 0) {
+  // Untimed non-logistics card on a departure day is always wrong:
+  // sort can't place it, §15z can't reason about it, the user sees a
+  // floating card after the airport transfer. Drop regardless of
+  // (mislabeled) category. Locked / userAdded / preserveAsManualPick
+  // exemptions are already handled above.
+  const action = isDiningRow(a)
+    ? 'final_enforce_dropped_untimed_dining'
+    : 'final_enforce_dropped_untimed_activity';
+  const sentinel = isDiningRow(a)
+    ? 'DEPARTURE_UNTIMED_DINING_PRUNED'
+    : 'DEPARTURE_UNTIMED_ACTIVITY_PRUNED';
+  repairs.push({
+    code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+    action,
+    before: `${a.title} @ <no-time> cat=${a.category || a.type || 'n/a'}`,
+  } as any);
+  console.log(`[${sentinel}] day=${dayNumber} dropped "${a.title}" cat="${a.category || a.type || ''}" (no startTime/start_time/time)`);
+  continue;
+}
+```
 
-### Verification
+Two sentinels (one per branch) so telemetry can distinguish "miscategorised dining" from "actually-non-dining" leaks — both should trend to zero, but they tell us where to harden the generator next.
 
-- New regression test passes.
-- Casablanca trip (`fce9c4ba-…`) reads "Total from itinerary $1,337" (Hotel $525 + days $812).
-- The diagnostic warn does not fire on a clean trip.
+### 2. Test — `supabase/functions/generate-itinerary/__tests__/normalize-start-time.test.ts` (or new `departure-untimed-prune.test.ts`)
 
-### Out of scope
+Add two regression cases mirroring the Katsukura shape:
 
-- Multi-currency conversion. All rows on this trip are USD, so no FX is involved in the discrepancy.
-- The user's "$1,855 line-item sum" arithmetic. The verified, reproducible root cause is the $525 hotel missing from `tripTotalCents`; the discretionary `used / allocated` chips already match `getBudgetSummary` and don't need to change.
+- **Case A:** Last day with a `category: 'cultural'` row titled "Katsukura Sanjo Honten" and no `startTime` / `start_time` / `time` → asserts row is removed and a repair with `action: 'final_enforce_dropped_untimed_activity'` is emitted.
+- **Case B:** Same shape but `userAdded: true` → asserts row survives (universal-locking parity).
+
+### 3. Memory update
+
+Extend `mem://constraints/itinerary/canonical-time-field-promotion` with a one-liner noting §15z drops **any** untimed non-logistics non-locked non-exempt card on departure days, not just dining. Sentinels: `DEPARTURE_UNTIMED_DINING_PRUNED` (legacy, mislabeled) + `DEPARTURE_UNTIMED_ACTIVITY_PRUNED` (new).
+
+## What this does NOT change
+
+- The save-time net call site in `action-save-itinerary.ts` STEP 2.65 is unchanged — it already imports the same function, so the broadened prune flows through automatically.
+- `isLogisticsRow`, `isLockedRow`, `isExempt`, the post-cutoff branch, the meal-near-transfer branch, checkout/transfer retiming — all untouched.
+- Non-departure days, transition days, and `isHotelChange` days remain skipped (existing `(isLastDay || …) && !isHotelChange` gate).
+- No FE changes; no schema changes.
+
+## Verification
+
+- New test passes; existing departure-day tests (`departure-day-combined.test.ts`, `save-itinerary-departure-day.test.ts`, `normalize-start-time.test.ts`) still pass.
+- After deploy, grep edge logs for `[DEPARTURE_UNTIMED_ACTIVITY_PRUNED]` over a 24-hour window — frequency tells us how often the generator is mislabeling restaurants and points at the next root-cause fix upstream (category coercion in venue-search recycle).
