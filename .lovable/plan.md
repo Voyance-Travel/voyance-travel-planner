@@ -1,50 +1,96 @@
-# Health Engine — Analyze Post-Cascade Times
+# "Calculating…" Spinner Never Resolves
 
-## Why my last fix wasn't enough
+## Root cause
 
-The previous patch added `getDisplayStartTime(a)` that prefers `displayStartTime || adjustedStartTime || metadata.displayStart` over `startTime`. **None of those fields exist on the activity record** — render reads `a.startTime || a.time` directly. So the helper falls through to `startTime`, the same value the analyzer already had. Net effect: no change for this class of warning.
+The header spinner is driven by `isBudgetCalculating = isBudgetGenerating || financialSnapshot.loading` (`EditorialItinerary.tsx:3778`). `financialSnapshot.loading` flips false at the end of `fetchData`, so the live offender is `isBudgetGenerating`.
 
-## Real architecture
+`useTripBudget.isGenerating` reads `summary.isGenerating`, which `tripBudgetService.getBudgetSummary` derives as:
 
-Per `mem://constraints/itinerary/db-is-source-of-truth`, the FE no longer mutates `days` on load. The buffered timing cascade (`enforceTimingAndBuffers` in `src/utils/itinerary/timingCascade.ts`) runs **only at save time** — server-side in `repair-day §16` + `action-save-itinerary STEP 2.9`. The FE keeps a fingerprint-guarded **dry-run** at `EditorialItinerary.tsx:2403` that imports the same cascade, runs it against `days`, logs `[ITIN_RESYNC_DRIFT]`, but throws the result away.
+```
+['queued','generating','partial'].includes(trips.itinerary_status)
+```
 
-That dry-run is exactly the post-adjustment view of the schedule that the user reads off the rendered cards (because the cards either already reflect a previously-saved cascade pass, or the user is looking at the schedule in the order/spacing the cascade *would* produce — same answer either way: the cascade is idempotent and the analyzer should see post-cascade times).
+…and `useTripBudget` polls every 4 s while that flag is true (`refetchInterval`).
 
-The Mexico City symptom (memory: `mem://constraints/itinerary/fix-timing-cascade-parity`) is the same root: analyzer races the cascade.
+Verified in DB — all three reproed trips (Montreal `70f165a8…`, San Juan `fea55309…`, Mexico City `5f54686e…`) have:
 
-## Fix
+```
+itinerary_status = 'partial'
+metadata.itinerary_frozen_at IS NOT NULL
+3 / 3 days populated, every day ≥ 3 activities
+chain_error / generation_error: NULL
+```
 
-**Single change**: have `analyzeHealth` run the same `enforceTimingAndBuffers` dry-run per day before reading times for the overlap/buffer pass. Conflicts the cascade resolves vanish from the panel; conflicts that survive (genuine, unresolvable) still surface.
+The chain final-pass in `action-generate-trip-day.ts:2808` requires `noFailedDays` to flip status to `'ready'`. `noFailedDays` reads `metadata.failed_day_numbers` — and that array is **never cleared** when a previously failed day succeeds on retry. So a trip that fails day 2 once, retries it successfully, and then completes day 3 stays `'partial'` forever even though all days are real and complete. Status is also `'partial'` in plain "almost-but-not-quite-meaningful" cases (`hasEnoughMeaningful` false).
 
-### Implementation
+`'partial'` is a terminal state — no further writes are coming — but the FE treats it as "still generating", polls forever, and never lets the spinner resolve.
 
-1. **New helper `applyCascadeDryRun(activities, locked)`** in `src/lib/itinerary/healthCascadePreview.ts` — thin wrapper around `enforceTimingAndBuffers`. Returns a `Map<id, { startTime, endTime }>` so analyzer can look up post-cascade times by id without mutating the source. Pure, no I/O, no DB.
+## Fix — three layers
 
-2. **`analyzeHealth` (TripHealthPanel.tsx)** — at the top of each day's pass, build the cascade preview map. In the overlap loop (~L209) and buffer loop (~L240), substitute `getDisplayStartTime(a)` / `getDisplayEndTime(a)` for `cascadePreview.get(a.id)?.startTime ?? a.startTime` (same for end). Keep the existing `displayStartTime`-then-`startTime` fallback chain as a tertiary so future renderers can still stamp explicit values.
+### 1. FE: treat frozen + non-active statuses as done
 
-3. **Update `getDisplayStartTime/End`** in `src/lib/itinerary/displayTime.ts` to accept an optional `cascadeMap` parameter: `getDisplayStartTime(a, cascadeMap?)` returns `cascadeMap?.get(a.id)?.startTime ?? a.startTime ?? a.time ?? a.start_time ?? ''`. Backward compatible.
+**`src/services/tripBudgetService.ts`** (~L658) — also select `metadata` and exclude `partial` once the itinerary is frozen:
 
-4. **`detectGapsForDay`** — same substitution. Gaps are computed from cascade-resolved end→start, so a 10-min "conflict" the cascade fixes by pushing the next card forward will not re-emerge as a phantom gap (cascade preserves total schedule density, only shifts).
+```ts
+const { data: tripRow } = await supabase
+  .from('trips')
+  .select('itinerary_status, metadata')
+  .eq('id', tripId).maybeSingle();
 
-5. **Logging parity** — when a conflict is suppressed because the cascade resolved it, emit `console.debug('[health] suppressed via cascade preview', { dayNumber, before, after })` at most once per day per render. Behind `import.meta.env.DEV` so prod stays quiet.
+const status = (tripRow?.itinerary_status as string | undefined) ?? '';
+const frozenAt = (tripRow?.metadata as any)?.itinerary_frozen_at;
+// 'partial' is terminal — no more writes are coming. Only the truly-active
+// statuses keep the calculating spinner alive. `frozenAt` is belt-and-suspenders
+// for any future status added to the active set.
+const isGenerating =
+  (status === 'queued' || status === 'generating') && !frozenAt;
+```
 
-### Files
+This kills the permanent spinner on every existing stuck trip, stops the 4 s polling loop, and is forward-safe: any future generator path that legitimately needs more writes still flips status to `generating` first.
 
-- `src/lib/itinerary/healthCascadePreview.ts` *(new)* — `buildCascadePreview(activities, lockedIds)` → `Map<id, { startTime, endTime }>`
-- `src/lib/itinerary/displayTime.ts` — extend `getDisplayStartTime/End` to read cascade map first
-- `src/components/trip/TripHealthPanel.tsx` — call `buildCascadePreview` per-day inside `analyzeHealth`, pass map to display-time helper at the two read sites; same in `detectGapsForDay`
-- `src/components/trip/__tests__/TripHealthPanel.cascadePreview.test.ts` *(new)* — Schwartz's-style fixture: source has overlap, expect zero overlap warnings after cascade preview; bike-tour fixture; non-cascadable conflict (two locked cards) still flagged
+### 2. FE: snapshot resilience
 
-### Acceptance
+**`src/hooks/useTripFinancialSnapshot.ts`** `fetchData` has no try/catch. If a Supabase call ever throws (offline, auth blip, RLS denial), `loading` stays `true` forever and the header spinner sticks. Wrap the body in try/catch with `finally { setData(prev => ({ ...prev, loading: false })) }` so a transient failure surfaces as $0 + a console.warn, not a permanent spinner. Existing happy path and event listeners untouched.
 
-Repro the Montreal trip Day 1 / Day 2 in the test fixtures. Before the patch, `analyzeHealth` returns the two `fix_timing` warnings the user described. After the patch, those two warnings are suppressed. A third fixture with two `locked: true` cards that genuinely overlap still flags as error (cascade can't move locked rows).
+### 3. BE: close the chain leak + one-shot backfill
+
+**`supabase/functions/generate-itinerary/action-generate-trip-day.ts`** (final-pass, ~L2770–2810):
+
+- After computing `allDaysHaveActivities && dayCountMatches && hasEnoughMeaningful`, if those three are true, clear stale `failed_day_numbers` from the metadata write so a previously-failed-then-recovered day no longer pins the status to `partial`. Concretely: when persisting the final update (`extraUpdate.metadata`, ~L3379), set `failed_day_numbers: isComplete ? [] : (current ?? [])` and recompute `isComplete` after the clear (or just compute it ignoring `failed_day_numbers` when the recovery conditions are met).
+- Keep the `partial` status path for the genuinely-still-broken cases (empty days, bare itineraries) so we don't paper over real failures.
+
+**One-shot migration** — backfill the trips already stuck. Owner-safe, idempotent:
+
+```sql
+UPDATE public.trips
+SET itinerary_status = 'ready',
+    metadata = metadata - 'failed_day_numbers'
+WHERE itinerary_status = 'partial'
+  AND metadata ? 'itinerary_frozen_at'
+  AND itinerary_data ? 'days'
+  AND (
+    SELECT bool_and(jsonb_array_length(coalesce(d->'activities','[]'::jsonb)) >= 3)
+    FROM jsonb_array_elements(itinerary_data->'days') d
+  );
+```
+
+## Files
+
+- `src/services/tripBudgetService.ts` — ~L650-660
+- `src/hooks/useTripFinancialSnapshot.ts` — wrap `fetchData` body
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — final-pass status + `failed_day_numbers` clear
+- New migration: `*_unstick_partial_frozen_trips.sql`
+- Memory: new `mem://constraints/itinerary/calculating-spinner-resolves` entry; index update
+
+## Acceptance
+
+- All 3 stuck trips (Montreal/SJU/CDMX) load with `itinerary_status='ready'` after the migration; spinner resolves on first frame.
+- A future trip that has day 2 fail-then-succeed in the chain reaches `ready`, not `partial`.
+- A genuinely incomplete trip (one fully empty day) still shows `partial` and the spinner remains until the user regenerates that day — by design.
+- A transient Supabase fetch error in `useTripFinancialSnapshot` no longer wedges the spinner; total reads $0 with a console.warn until the next event-driven refetch.
 
 ## Out of scope
 
-- Persisting the cascade result on load — explicitly forbidden by `mem://constraints/itinerary/db-is-source-of-truth-on-load`. Read-only preview only.
-- Changing `enforceTimingAndBuffers` itself — server is canonical
-- Card render swap — cards keep reading `startTime || time`. The user's stated grievance is the panel disagreeing with the cards; the cascade preview makes the panel match what the user reads.
-
-## Risk
-
-Low. `enforceTimingAndBuffers` is pure, idempotent, already shipped. We only call it on a clone, only read from the result. The drift probe at L2403 already runs it on every render with no observed perf issue.
+- BudgetTab "Calculating…" pill (`BudgetTab.tsx:950`) — same `isGenerating` source, fixed by layer 1 automatically.
+- The misc-reserve / orphan-archival logic — unrelated.
+- TransitPreview's local "Calculating" — different code path (per-leg), not implicated.

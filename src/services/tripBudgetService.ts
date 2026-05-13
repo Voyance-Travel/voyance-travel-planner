@@ -652,12 +652,16 @@ export async function getBudgetSummary(tripId: string, totalDays?: number): Prom
   // Generation in progress? Used to label partial totals as estimates.
   const { data: tripRow } = await supabase
     .from('trips')
-    .select('itinerary_status')
+    .select('itinerary_status, metadata')
     .eq('id', tripId)
     .maybeSingle();
-  const isGenerating = ['queued', 'generating', 'partial'].includes(
-    (tripRow?.itinerary_status as string | undefined) ?? ''
-  );
+  const status = (tripRow?.itinerary_status as string | undefined) ?? '';
+  const frozenAt = (tripRow?.metadata as any)?.itinerary_frozen_at;
+  // 'partial' is terminal — no more writes are coming, so it must NOT keep the
+  // "Calculating…" spinner alive (which also drives a 4s polling loop).
+  // `frozenAt` is belt-and-suspenders: any status, once frozen, is done.
+  const isGenerating =
+    (status === 'queued' || status === 'generating') && !frozenAt;
 
   let committedHotel = 0;
   let committedFlight = 0;
