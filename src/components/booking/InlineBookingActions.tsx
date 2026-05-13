@@ -241,8 +241,44 @@ export function InlineBookingActions({
 }: InlineBookingActionsProps) {
   const [showTravelerModal, setShowTravelerModal] = useState(false);
   const [showVoucherModal, setShowVoucherModal] = useState(false);
-  
-  const selectMutation = useSelectActivity();
+  const [isLookingUpUrl, setIsLookingUpUrl] = useState(false);
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+
+  /**
+   * Click handler for "Find official booking link":
+   * 1. Calls Perplexity-backed lookupActivityUrl (cached 90 days server-side).
+   * 2. On hit -> open in new tab and remember locally so subsequent clicks open instantly.
+   * 3. On miss -> toast + fall back to opening the concierge sheet (so the user is not stuck).
+   * 4. On error -> toast, button stays clickable.
+   */
+  const handleFindBookingLink = async () => {
+    // If we already resolved a URL once, just open it.
+    if (resolvedUrl) {
+      window.open(resolvedUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (isLookingUpUrl) return;
+
+    setIsLookingUpUrl(true);
+    try {
+      const result = await lookupActivityUrl(activity.title, destination, activity.category);
+      if (result.url) {
+        setResolvedUrl(result.url);
+        window.open(result.url, '_blank', 'noopener,noreferrer');
+      } else {
+        toast.message('No official booking page found', {
+          description: 'Opening the concierge so we can help you track one down.',
+        });
+        onAskConcierge?.();
+      }
+    } catch (err) {
+      console.error('[InlineBookingActions] booking-link lookup failed', err);
+      toast.error("Couldn't search for a booking link right now. Please try again.");
+    } finally {
+      setIsLookingUpUrl(false);
+    }
+  };
+
   const deselectMutation = useDeselectActivity();
   
   const bookingState = activity.bookingState || 'not_selected';
