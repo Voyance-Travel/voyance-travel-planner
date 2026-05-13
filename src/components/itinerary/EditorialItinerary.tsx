@@ -2288,7 +2288,18 @@ export function EditorialItinerary({
   }, [initialDaysFingerprint]);
 
   // Notify parent of local days changes so sibling components (e.g. ItineraryAssistant) stay in sync
-  const daysFingerprint = useMemo(() => JSON.stringify(days.map(d => ({ n: d.dayNumber, a: d.activities.map(a => a.id) }))), [days]);
+  // Notify parent of local days changes so sibling components (e.g. ItineraryAssistant + TripHealthPanel) stay in sync.
+  // Fingerprint must include meal/timing/category fields so the health panel
+  // never scores a stale pre-render snapshot when activity ids stay stable but
+  // their meal-relevant fields change. See plan: trip-health stale-state fix.
+  const daysFingerprint = useMemo(() => JSON.stringify(days.map(d => ({
+    n: d.dayNumber,
+    a: d.activities.map(a => {
+      const r = a as any;
+      const slot = r.mealSlot ?? r.meal_slot ?? r.metadata?.meal_slot ?? r.metadata?.mealSlot ?? '';
+      return `${a.id}@${a.startTime || r.time || ''}-${a.endTime || ''}|${(r.category || r.type || '').toLowerCase()}|${(a.title || r.name || '').toLowerCase()}|${slot}`;
+    }),
+  }))), [days]);
   const prevDaysFingerprint = useRef(daysFingerprint);
   useEffect(() => {
     if (daysFingerprint !== prevDaysFingerprint.current) {
