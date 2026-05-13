@@ -3170,6 +3170,7 @@ export default function TripDetail() {
                             hotelBookedElsewhere={!!(trip?.metadata as any)?.hotelBookedElsewhere}
                             refreshingDayNumber={refreshingDayNumber}
                             refreshResultsByDay={refreshResultsByDay}
+                            tripFlightSelection={trip.flight_selection}
                             className=""
                             onAction={(action, ctx) => {
                               if (action === 'add_flights') {
