@@ -415,6 +415,36 @@ export function resolveCanonicalCostRows({
   effectiveTotalCents += manualOtherCents;
   effectiveTotalCents = Math.max(0, effectiveTotalCents);
 
+  // Canonical invariant: any hotel/flight visible to the chip MUST also be
+  // reflected in effectiveTotalCents. Catches resolver-side regressions
+  // (Casablanca / Tokyo "Days + Hotel = Days" pattern) at the source.
+  // See mem://constraints/finance/header-strip-mirrors-snapshot.
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV) {
+    const minHotel = includeHotel
+      ? Math.max(canonicalDay0HotelCents, manualHotelCents)
+      : 0;
+    const minFlight = includeFlight
+      ? Math.max(canonicalDay0FlightCents, manualFlightCents)
+      : 0;
+    if (effectiveTotalCents + 1 < minHotel + minFlight) {
+      // eslint-disable-next-line no-console
+      console.error('[CANONICAL_INVARIANT_VIOLATED]', {
+        effectiveTotalCents,
+        totalCents,
+        manualHotelCents,
+        manualFlightCents,
+        manualOtherCents,
+        canonicalDay0HotelCents,
+        canonicalDay0FlightCents,
+        manualHotelDelta,
+        manualFlightDelta,
+        includeHotel,
+        includeFlight,
+        minExpected: minHotel + minFlight,
+      });
+    }
+  }
+
   const pricedJsonRescueCents = out
     .filter((r) => r.rescueTag === 'json-missing-row')
     .reduce((s, r) => s + (r.cents || 0), 0);
