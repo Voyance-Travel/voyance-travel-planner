@@ -339,10 +339,12 @@ export function detectGapsForDay(allActivities: any[], dayNumber: number): Healt
   if (dayActivities.length === 0) return issues;
 
   const sorted = dayActivities
-    .filter((a: any) => !!a.startTime && !isBookendOrTransit(a))
+    .filter((a: any) => !!getDisplayStartTime(a) && !isBookendOrTransit(a))
     .map((a: any) => {
-      const startMins = parseTime(a.startTime || '00:00');
-      const endMins = parseTime(a.endTime || a.startTime || '00:00');
+      const startStr = getDisplayStartTime(a) || '00:00';
+      const endStr = getDisplayEndTime(a) || startStr;
+      const startMins = parseTime(startStr);
+      const endMins = parseTime(endStr);
       // Wrap predicate: end===0 with start>0 (e.g. 23:30→00:00 exact) is wrap
       // too — without the end===0 branch, "Return to Hotel" landing exactly on
       // midnight false-negatives and pollutes the next day's gap analysis.
