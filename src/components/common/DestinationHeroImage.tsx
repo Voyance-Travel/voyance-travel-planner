@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import { useHeroImage, getDestinationCanonicalImage, writeBackDestinationCanonicalImage } from '@/services/destinationImagesAPI';
 import { getDestinationImage, hasCuratedImages } from '@/utils/destinationImages';
+import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
 import { useQuery } from '@tanstack/react-query';
 
 interface DestinationHeroImageProps {
