@@ -216,6 +216,15 @@ export function ensureHotelReturnBookend<T extends any[]>(
     return activities;
   }
 
+  // Diagnostic: an earlier card on this day already qualifies as a hotel-return
+  // bookend, but the wrap-aware tail is something else (nightcap / late dinner /
+  // user-added). We're going to append a fresh bookend below — log so the
+  // recurrence pattern is visible in production.
+  if ((activities as any[]).some(isHotelReturnBookendActivity)) {
+    // eslint-disable-next-line no-console
+    console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=will_append source=stale_earlier_bookend_superseded lastTitle="${String((last as any)?.title || '')}" lastEnd=${fmt(lastEndMins)}`);
+  }
+
   const hotel =
     (opts.hotelName && opts.hotelName.trim()) ||
     extractHotelName(opts.allTripActivities ?? (activities as any[])) ||
