@@ -1523,6 +1523,23 @@ async function _handleGenerateTripDayInner(
               return parseInt(m[1]) * 60 + parseInt(m[2]) - (isTrain ? 120 : 180);
             })()
           : undefined;
+        const { fillMorningDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
+        const filledMorn = await fillMorningDeadGaps(dayResult.activities, {
+          destination: cityInfo?.cityName || destination,
+          isFirstDay,
+          isLastDay,
+          isLastDayInCity,
+          archetype: (tripMeta?.travel_dna_primary as string | undefined) || undefined,
+          dietaryRestrictions: (tripMeta?.dietary_restrictions as string[] | undefined) || [],
+          budgetTier: (tripMeta?.budget_tier as string | undefined) || 'standard',
+          tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
+          lockedIds: lockedIdSet,
+          latestUsableMins: _gapLatestMins,
+        });
+        if (filledMorn.inserted.length > 0) {
+          console.log(`[generate-trip-day] Auto-filled ${filledMorn.inserted.length} morning dead gap(s) on day ${dayNumber}`);
+          dayResult.activities = filledMorn.activities;
+        }
         const filled = await fillAfternoonDeadGaps(dayResult.activities, {
           destination: cityInfo?.cityName || destination,
           isFirstDay,
