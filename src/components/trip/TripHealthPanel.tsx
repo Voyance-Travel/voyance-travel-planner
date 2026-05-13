@@ -303,11 +303,6 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           const cloneInput = activities.map((a: any, idx: number) => {
             const cid = (a?.id !== undefined && a?.id !== null && a?.id !== '')
               ? String(a.id) : indexKey(idx);
-            // Mirror buildCascadePreview's lock detection so locked-vs-locked
-            // overlaps still surface (cascade can't resolve them).
-            // Use a dynamic require to avoid a circular import at module load.
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const { isActivityLocked } = require('@/lib/itinerary/persistDayContract');
             if (isActivityLocked(a)) lockedSet.add(cid);
             return {
               ...a,
