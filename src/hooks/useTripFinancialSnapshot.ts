@@ -375,7 +375,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
                   `[useTripFinancialSnapshot] orphan archive over-count ${count} > js=${orphanPaymentItemIds.size} — manual leak suspected (tripId=${tripId})`
                 );
               }
-              window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
+              window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId, silent: true, reason: 'orphan-archive' } }));
             }
           });
       }
