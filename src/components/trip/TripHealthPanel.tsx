@@ -56,6 +56,8 @@ export interface TripHealthPanelProps {
   hotelBookedElsewhere?: boolean;
   refreshingDayNumber?: number | null;
   refreshResultsByDay?: Record<number, { errorCount: number; warningCount: number }>;
+  /** Optional flight selection for arrival/departure-band dayMode fallback */
+  tripFlightSelection?: any;
   className?: string;
   onAction?: (action: string, context?: { dayNumber?: number; field?: 'flights' | 'hotel' }) => void;
 }
