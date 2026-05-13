@@ -107,6 +107,12 @@ function isDepartureTerminal(a: any): boolean {
   // where the gray-zone branch fabricated a 13:55 hotel-return after the
   // departure-day airport drop-off.
   if (DEPARTURE_TRANSFER_TITLE_RE.test(title)) return true;
+  // Hotel CHECKOUT is the unambiguous "we are leaving" anchor — even when the
+  // airport transfer / departure flight is missing from the persisted JSON
+  // (DB-vs-JSON divergence), a checkout card means the day MUST NOT receive
+  // a synthetic "Return to {hotel}" injection. Closes Amsterdam/Osaka Day-3
+  // 1:55 PM "wind down (overnight)" leak.
+  if (CHECKOUT_RE.test(title)) return true;
   return false;
 }
 

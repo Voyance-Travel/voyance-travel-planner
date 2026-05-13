@@ -1,42 +1,48 @@
-# Phantom "Trip total changed" toast on Payments tab open
+## Bug
 
-## Symptom
-Switching to the Payments tab fires a `Trip total changed by ±$X` toast (e.g. +$355, −$624) without any user action. Intermittent (Casablanca / Amsterdam yes; Kyoto / Osaka no) — fires only when system reconciliation actually moves the number on tab mount.
+On Day 3 (departure) Osaka and Amsterdam show a synthetic "Return to {hotel} to wind down (overnight)" card at ~1:55 PM, after the airport transfer.
 
 ## Root cause
 
-`useTripFinancialSnapshot` is shared by the itinerary header AND the Payments tab. When PaymentsTab mounts it runs three system-side reconciliations:
+The "wind down (overnight)" string is only emitted by the read-time bookend (`src/lib/itinerary/ensureHotelReturnBookend.ts`, gray-zone branch). It has two departure-day defenses, both of which fail in this case:
 
-1. `expire_stale_trip_payments` RPC (L239) — flips dead Stripe sessions to `failed`.
-2. `archive_orphan_trip_payments` — fires from inside the snapshot hook itself when JSON drops an activity that still has a `trip_payments` row (L342–371). The hook then dispatches its OWN `booking-changed` event to re-sync siblings.
-3. `sync-trip-cost-table` backfill — fires when activity_costs coverage <50% (L407–429). Same self-dispatch pattern.
+1. `opts.isDepartureDay` — set by `src/utils/itineraryParser.ts` (Step 4b) by scanning each day's activities for an airport / flight / "Transfer to … airport|terminal|gate|station" card.
+2. `(activities).some(isDepartureTerminal)` — same predicate, day-local.
 
-Each of these legitimately changes the trip total, and the snapshot hook's already-live instance (mounted by the itinerary header before the user reached Payments) re-runs `fetchData`, computes `prev → new` delta, sees a >25% jump, and fires `toast.warning("Trip total changed by …")`. The user never touched anything.
+Confirmed via DB: the canonical `itinerary_activities` table for both trips' Day 3 *does* contain `Travel to Airport` / `Transfer to Kansai International Airport (KIX)` / `Departure Flight`, **but the persisted `trips.itinerary_data.days[2].activities`** (the only thing the parser sees) does NOT — only `Breakfast`, `Anne Frank House`, `Checkout from … Marriott`, `Lunch …` (Amsterdam) and `Taxi to Osaka Central Public Hall`, `Explore Osaka Central Public Hall`, `Checkout from Four Seasons Hotel Osaka` (Osaka).
 
-The existing 4-second `STABILIZATION_MS` window only suppresses deltas right after mount — system-reconciliation toasts fire well after that window because the reconciliation is triggered by the user navigating to a tab, not by the hook's first read.
+So the JSON-side day looks like a normal middle day whose last timed activity ends ~11:30 or ~13:30 → falls into the gray-zone `> 02:30 AND < 14:00` branch → fabricates a 13:55 "wind down (overnight)" card.
 
-## Fix — tag system events as silent, suppress one toast
+(The underlying JSON-vs-table divergence is a separate, larger persistence issue. The fix below is scoped to making the bookend logic resilient to that divergence — it's the one piece the user actually sees.)
 
-### 1. `src/hooks/useTripFinancialSnapshot.ts`
-- Add `suppressNextToastRef = useRef(false)`.
-- When the hook itself dispatches `booking-changed` after orphan archive (L369) or backfill (L428), include `detail: { tripId, silent: true, reason: 'orphan-archive' | 'backfill' }`.
-- In the `booking-changed` listener (L572): if `detail.silent === true`, set `suppressNextToastRef.current = true` BEFORE calling `fetchData()` (covers both the immediate and 600ms trailing refetch).
-- In the toast block (L485–528): if `suppressNextToastRef.current`, log `[useTripFinancialSnapshot] suppressed system-reconcile toast (reason=…)`, clear the ref, and skip both `toast.info` and `toast.warning` paths. Still update `lastDelta` so the in-app delta badge can attribute the change.
+## Fix (read-time only, no DB writes)
 
-### 2. `src/components/itinerary/PaymentsTab.tsx`
-- After `expire_stale_trip_payments` (L239), if the RPC returns `expired_count > 0`, dispatch `window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId, silent: true, reason: 'expire-stale' } }))` so the snapshot's listener marks the next refetch silent.
-- The user-clicked "Reconcile previous payments" path (L1224) stays loud — it's user-initiated, so toast is appropriate (already a `toast.success` is shown there; suppressing the snapshot toast for that one is also correct → dispatch silent there too).
+Add a third departure-day signal: **a `Checkout from {hotel}` card on the day**. Checkout is the unambiguous "we are leaving" anchor — if it's present, the day must not get a `Return to {hotel}` injected, regardless of whether the airport transfer/flight survived into the JSON.
 
-### 3. Mount-time silence
-- `PaymentsTab` `fetchPayments` initial run (L252): set `silent: true` on the dispatched event so that any reconciliation triggered by tab-open never produces a phantom warning toast.
+### `src/lib/itinerary/ensureHotelReturnBookend.ts`
+- Extend `isDepartureTerminal(a)` to also return `true` when the card matches `CHECKOUT_RE` (the regex already exists in the file). This makes the existing day-local defense (line 205, `.some(isDepartureTerminal)`) catch the Amsterdam/Osaka case directly. New skip reason: `reason=day_contains_checkout`.
+- No change to `isTerminalAlready` — checkout already counts there, so the post-selection guard keeps working.
+
+### `src/utils/itineraryParser.ts` (Step 4b, `dayHasDepartureTerminal`)
+- Mirror the addition: a day whose activities include a `category === 'accommodation'` row whose title matches `^\s*check[-\s]?out\b` is a departure day.
+- Belt-and-braces fallback: if no day matched after the scan, set `departureDayIdx = result.length - 1` so the trip's final day is always treated as departure even when both the airport transfer AND the checkout were stripped from the JSON.
+
+### Tests
+- `src/lib/itinerary/__tests__/ensureHotelReturnBookend.test.ts`: add Amsterdam Day-3 case (Breakfast 08:30, Anne Frank 10:30–12:00, Checkout 11:00–11:30, Lunch ?–13:30) → expect input returned unchanged, sentinel `reason=day_contains_checkout` logged.
+- Add Osaka Day-3 case (Taxi 09:35, Explore 09:52–11:07, Checkout 11:22–11:52) → same.
+
+### Memory
+- Update `mem://constraints/itinerary/read-time-hotel-return-bookend` to note that **checkout presence is a departure-day signal** equivalent to flight/airport-transfer, and that the parser falls back to "last day = departure" when neither is detected.
 
 ## Out of scope
-- Don't change the >25% threshold or the existing user-driven toast behavior (e.g. Mark Paid, Add Booking still toast as before because those dispatch loud events).
-- Don't change the `lastDelta` state (the small in-card "Pricing updated" badge stays; only the modal toast is suppressed).
-- Tests: add one regression spec asserting that a `booking-changed` event with `detail.silent: true` does not call `toast.warning` even when the post-fetch delta exceeds 25%.
 
-## Files touched
-- `src/hooks/useTripFinancialSnapshot.ts`
-- `src/components/itinerary/PaymentsTab.tsx`
-- `src/hooks/__tests__/useTripFinancialSnapshot.silent.test.ts` (new)
-- `mem://constraints/finance/silent-system-reconcile-toast` (new memory entry capturing the silent-event contract)
+- Healing the JSON-vs-table divergence (why airport transfer + flight rows are absent from `trips.itinerary_data.days[2]` for these trips). That's the persistence-truth issue tracked separately under the resync memories — large blast radius, not what the user reported.
+- Backend `runStep8` (no evidence it's emitting; the offending string is read-time-only).
+- Any change to checkout/flight card writers.
+
+## Files
+
+- `src/lib/itinerary/ensureHotelReturnBookend.ts` — extend `isDepartureTerminal`.
+- `src/utils/itineraryParser.ts` — extend `dayHasDepartureTerminal`, add last-day fallback.
+- `src/lib/itinerary/__tests__/ensureHotelReturnBookend.test.ts` — Amsterdam + Osaka cases.
+- `mem://constraints/itinerary/read-time-hotel-return-bookend` — document checkout signal + last-day fallback.

@@ -853,6 +853,10 @@ export function parseItineraryDays(
       // Terminal 5") count even when category is generic ('transport'). Mirrors
       // DEPARTURE_TRANSFER_TITLE_RE in ensureHotelReturnBookend.
       if (/^\s*(?:transfer|taxi|drive|ride|shuttle|car|uber|lyft)\s+to\b[^.]*\b(airport|terminal|gate|station)\b/i.test(title)) return true;
+      // Hotel CHECKOUT is an unambiguous departure-day signal even when the
+      // airport transfer / flight rows have been stripped from the persisted
+      // JSON (DB-vs-JSON divergence). Closes Amsterdam/Osaka Day-3 leak.
+      if (/\b(?:check[-\s]?out|checkout)\b/i.test(title)) return true;
       return false;
     });
   let departureDayIdx = -1;
@@ -861,6 +865,14 @@ export function parseItineraryDays(
       departureDayIdx = i;
       break;
     }
+  }
+  // Belt-and-braces: every multi-day trip has a departure day. If neither an
+  // airport transfer / flight nor a checkout survived into the JSON, treat the
+  // last day as departure so we don't fabricate a "wind down (overnight)" card.
+  if (departureDayIdx === -1 && result.length > 1) {
+    departureDayIdx = result.length - 1;
+    // eslint-disable-next-line no-console
+    console.log(`[BOOKEND_TRACE] day=${departureDayIdx + 1} site=parse action=fallback reason=last_day_departure_default`);
   }
   for (let i = 0; i < result.length; i++) {
     const withBookend = ensureHotelReturnBookend(result[i].activities, {
