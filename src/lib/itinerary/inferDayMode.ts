@@ -139,7 +139,7 @@ export function inferDayModeFallback({
   const departureRaw =
     ret.departure_time ?? ret.departureTime ?? ret.departure ??
     fs.departure_time ?? fs.departureTime;
-  const departureMin = parseClockToMinutes(departureRaw);
+  const departureMin = parseClockToMinutes(departureRaw) ?? lastNonBookendEnd(day);
   if (departureMin === null) return null;
 
   if (departureMin >= 18 * 60) {
