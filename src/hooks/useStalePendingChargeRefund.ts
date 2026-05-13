@@ -74,6 +74,39 @@ export function useStalePendingChargeRefund(tripId: string | undefined) {
           }
 
           try {
+            // ── Self-heal guard ──
+            // If a credit_ledger spend row exists for this pendingChargeId
+            // with metadata.status === 'committed', the spend already
+            // succeeded — DO NOT refund. Just promote the orphan pending row
+            // to 'completed' so the next refresh stops triggering this path.
+            // This closes the recurring "+180 credits on every hard refresh"
+            // bug where spend-credits forgot to flip pending → completed.
+            const { data: spendRow } = await (supabase
+              .from('credit_ledger')
+              .select('id, metadata')
+              .eq('user_id', user.id)
+              .eq('transaction_type', 'spend')
+              .filter('metadata->>pendingChargeId', 'eq', charge.id)
+              .maybeSingle() as any);
+
+            const spendCommitted =
+              spendRow && (spendRow as any).metadata?.status === 'committed';
+
+            if (spendCommitted) {
+              console.log(
+                `[StalePendingCharge] self-heal: spend already committed for ${charge.id} — promoting to completed (no refund)`
+              );
+              await (supabase
+                .from('pending_credit_charges')
+                .update({
+                  status: 'completed',
+                  resolved_at: new Date().toISOString(),
+                  resolution_note: 'Self-heal: spend ledger committed; no refund issued',
+                } as any)
+                .eq('id', charge.id) as any);
+              continue;
+            }
+
             // Increment attempt counter before trying
             await (supabase
               .from('pending_credit_charges')

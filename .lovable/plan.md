@@ -1,101 +1,75 @@
-## Problem
+## Bug
 
-Header reconciliation strip on the Itinerary tab reads:
-
-```
-Days (group) $820  +  Hotel $1,780  =  Trip Total $460
-```
-
-…which obviously doesn't add up. Pre-refresh the Trip Total was $820, post-refresh it settles to $460. PaymentsTab already showed $460 before refresh because tab-switch fires a `booking-changed` event that re-runs the canonical snapshot.
+Hard refresh on a successfully generated trip credited the user **+180** with no new generation. Repeats every reload (also +180, +180, +180 in the ledger over the last few hours).
 
 ## Root cause
 
-Two distinct issues that combined produce the visible mismatch:
+`spend-credits` creates a `pending_credit_charges` row with `status='pending'`, deducts FIFO, finalizes the ledger, returns success — **but never flips the pending row to `completed`**. Only failure paths update the row (`failed`/`refunded`).
 
-### 1. Strip pulls hotel/flight chip values from local state, not from the snapshot
+On the next trip load, `useStalePendingChargeRefund` (TripDetail mount) finds the still-`pending` row older than 2 min, calls `spend-credits` with `action: 'REFUND'`, and silently restores the credits. Confirmed in DB: 4 successive `spend −180 / refund +180` pairs for trip `fea55309…` and siblings, all with `metadata.reason = "stale_pending_charge_auto_refund"` while `metadata.status = "committed"` on the original spend.
 
-`src/components/itinerary/EditorialItinerary.tsx` (lines 6142–6168) renders the chips like this:
+The proof-of-charge gate in `generate-itinerary/index.ts` already accepts both `pending` and `completed`, so the generator never had to bother promoting the row — that's the design hole.
 
-```ts
-const daysGroupUsd = daysSubtotalCents / 100;
-const tripLevelUsd = tripLevelCents / 100;          // = snapshot total − Σ day badges
-const reserveUsd = Math.max(0, tripLevelUsd - hotelCost - flightCost);
-…
-<Chip label="Hotel"   value={hotelCost} />          // ← from computeHotelCostUsd(...)
-<Chip label="Flights" value={flightCost} />         // ← from local sum of legs
-```
+## Fix (3 layers)
 
-`hotelCost` / `flightCost` are computed locally and have **nothing to do with the snapshot total**. When `trips.budget_include_hotel = false` (or the trip has a manual-hotel override that zeros out the canonical day-0 hotel row, etc.), the snapshot correctly excludes the hotel from `tripTotalCents`, but the strip still proudly stamps `+ Hotel $1,780`. Result: `820 + 1,780 = 460`, exactly the pattern reported.
+### 1. Mark the charge `completed` when the spend itself returns success
+File: `supabase/functions/spend-credits/index.ts`
 
-`tripLevelCents = max(0, tripTotal − daysSubtotal)` makes this worse: it can never go negative, so when `tripTotal < daysSubtotal` (which happens e.g. with manual overpayments / inactive toggles) it clamps to 0 and the equation is irrecoverable.
-
-### 2. Snapshot does not expose the toggle / committed hotel/flight values
-
-`useTripFinancialSnapshot` returns only `tripTotalCents` and a few aggregates. The resolver (`resolveCanonicalCostRows`) already computes `hotelCents`, `flightCents`, `canonicalDay0HotelCents`, `canonicalDay0FlightCents`, `manualHotelDelta`, `manualFlightDelta`, and the consumer reads `budget_include_hotel`/`budget_include_flight` — none of those flow out of the hook. So the strip has no way to display "what the snapshot actually counted".
-
-(The pre-refresh $820 vs post-refresh $460 is the same root cause: `tripLevelCents` swallowed an optimistic event in one render and resync corrected it. Fixing #1 + #2 makes both states consistent and self-explanatory.)
-
-## Fix
-
-### A. Expose snapshot internals (single file: `src/hooks/useTripFinancialSnapshot.ts`)
-
-Add to the returned `FinancialSnapshot`:
-
-- `includeHotel: boolean`
-- `includeFlight: boolean`
-- `committedHotelCents: number`        — `canonical.canonicalDay0HotelCents` (pre-toggle, pre-manual)
-- `committedFlightCents: number`       — `canonical.canonicalDay0FlightCents`
-- `manualHotelDelta: number`           — from resolver
-- `manualFlightDelta: number`          — from resolver
-- `effectiveHotelCents: number`        — `includeHotel ? committedHotelCents + manualHotelDelta : 0` (clamped ≥0)
-- `effectiveFlightCents: number`       — `includeFlight ? committedFlightCents + manualFlightDelta : 0` (clamped ≥0)
-
-These are *what the snapshot actually folded into `tripTotalCents`* for hotel/flight. The strip becomes a deterministic decomposition of the same number.
-
-### B. Rewrite the reconciliation strip (single file: `src/components/itinerary/EditorialItinerary.tsx`, lines ~6142–6176)
-
-Use snapshot values, not the local `hotelCost`/`flightCost`:
+After the FIFO deduction succeeds and the claim row is finalized (right around the existing `status: 'committed'` ledger update, ~line 787), add:
 
 ```ts
-const tripTotalUsd       = financialSnapshot.tripTotalCents / 100;
-const daysGroupUsd       = daysSubtotalCents / 100;
-const hotelChipUsd       = financialSnapshot.effectiveHotelCents / 100;
-const flightChipUsd      = financialSnapshot.effectiveFlightCents / 100;
-const reserveAdjustUsd   = (financialSnapshot.tripTotalCents
-                          - daysSubtotalCents
-                          - financialSnapshot.effectiveHotelCents
-                          - financialSnapshot.effectiveFlightCents) / 100;
+if (pendingChargeId) {
+  await supabaseAdmin.from('pending_credit_charges').update({
+    status: 'completed',
+    resolved_at: new Date().toISOString(),
+    resolution_note: 'Spend committed (FIFO + ledger finalized)',
+  }).eq('id', pendingChargeId);
+}
 ```
 
-Render rules:
-- `Days (group)` chip always shown.
-- `Hotel` chip only when `effectiveHotelCents > 0`.
-- `Flights` chip only when `effectiveFlightCents > 0`.
-- `Reserve & adjustments` chip when `Math.abs(reserveAdjustUsd) > 0.5` — and **allow negative** (rendered with a `−` prefix). Negative reserve means a manual override reduced the snapshot below the day-cards subtotal (the actual story when "$820 days, $460 total"); surfacing it as `Reserve & adjustments −$360` makes the math close.
-- Equation always balances: `daysGroup + hotel + flights + reserveAdjust ≡ tripTotal`. Add a dev-only `console.warn` when `Math.abs(...) > $1` so future regressions surface immediately.
+Move it inside the `housekeeping()` block (waitUntil-safe) so it doesn't block the response. This single change closes the leak for every caller.
 
-Keep `tripLevelCents` calc only if used elsewhere (search shows it's only used by this strip — can be removed).
+### 2. Defensive guard in the client sweep
+File: `src/hooks/useStalePendingChargeRefund.ts`
 
-### C. Memory entry
+Before refunding any stale charge, verify the matching ledger row's `metadata.status`. If a `credit_ledger` row exists for the same `pendingChargeId` with `transaction_type='spend'` and `metadata->>status = 'committed'`, **do not refund** — just mark the pending row `completed` (silent self-heal) and continue. This protects against any future ungated path (regenerate, smart-finish, hotel-search).
 
-Add a `mem://constraints/finance/header-strip-mirrors-snapshot` constraint so future edits to the strip don't reintroduce locally-computed chip values.
+Query:
+```ts
+supabase.from('credit_ledger')
+  .select('id, metadata')
+  .eq('user_id', user.id)
+  .filter('metadata->>pendingChargeId', 'eq', charge.id)
+  .eq('transaction_type', 'spend')
+  .maybeSingle();
+```
 
-## Files
+If `metadata.status === 'committed'` → flip `pending_credit_charges.status` to `completed`, log `[StalePendingCharge] self-heal: spend already committed`, skip refund.
 
-- `src/hooks/useTripFinancialSnapshot.ts` — add exposed fields.
-- `src/components/itinerary/EditorialItinerary.tsx` — rewrite chip block (~30 lines).
-- `mem://constraints/finance/header-strip-mirrors-snapshot` — new memory.
-- `mem://index.md` — add Core line.
+### 3. One-shot backfill migration
+Sweep existing orphan `pending` rows that already have a committed spend ledger entry, so the next refresh doesn't fire one final refund:
 
-## Validation
+```sql
+UPDATE pending_credit_charges p
+SET status = 'completed',
+    resolved_at = now(),
+    resolution_note = 'Backfill: spend already committed'
+WHERE p.status = 'pending'
+  AND EXISTS (
+    SELECT 1 FROM credit_ledger l
+    WHERE l.user_id = p.user_id
+      AND l.transaction_type = 'spend'
+      AND l.metadata->>'pendingChargeId' = p.id::text
+      AND l.metadata->>'status' = 'committed'
+  );
+```
 
-- Trip with `budget_include_hotel=false`, large hotel selection: strip omits Hotel chip; equation balances.
-- Trip with manual-hotel override that reduces snapshot total below day badges sum: strip shows `Reserve & adjustments −$X`; equation balances.
-- Trip with no hotel/flight at all: only `Days (group)` + `Trip Total` shown.
-- Refresh ↔ pre-refresh produce identical visible math (because both use the same snapshot fields).
+## Memory
+
+Add `mem://constraints/credits/pending-charge-must-promote-on-success` to the index so future spend-paths know `pending_credit_charges` rows MUST be promoted to `completed` when the spend ledger commits, and the sweep MUST self-heal rather than blindly refund when a committed spend is found.
 
 ## Out of scope
 
-- The `optimisticTotalCents` event mechanism — it's working as designed; the perceived "regression" was the strip lying after settle, not the snapshot itself.
-- PaymentsTab — already reads `financialSnapshot.tripTotalCents` directly; no change needed.
-- Backend / activity_costs / Edge functions — no touches.
+- Lowering the 2-min stale threshold (not the bug).
+- Removing the sweep (still useful for true network drops where the spend never returned).
+- Reconciling Mallorca/Faro historical refunds (already credited; do not claw back).
