@@ -240,4 +240,53 @@ describe('ensureHotelReturnBookend', () => {
     expect(last.title).toBe('Return to Four Seasons Hotel Osaka');
     expect(last.source).toBe('bookend-readtime');
   });
+
+  // Osaka regression: AI mis-titled the arrival transport leg "Return to Four
+  // Seasons Hotel Osaka for Check-in". Legacy non-greedy regex captured up to
+  // the first hyphen → synthetic bookend titled "...for Check".
+  it('Osaka: transport "Return to ... for Check-in" is NOT used as hotel-name source', () => {
+    const acts = [
+      mk({ title: 'Sightseeing', category: 'sightseeing', startTime: '14:00', endTime: '16:00' }),
+      mk({
+        title: 'Return to Four Seasons Hotel Osaka for Check-in',
+        category: 'transport',
+        startTime: '17:20',
+        endTime: '17:45',
+      }),
+    ];
+    const out = ensureHotelReturnBookend(acts, { allTripActivities: acts, dayIndex: 0 });
+    const last = out[out.length - 1] as any;
+    expect(last.title).not.toMatch(/for\s+Check\s*$/i);
+    expect(last.title).toBe('Return to Your Hotel');
+  });
+
+  it('Osaka: accom row with trailing "for Check-in" suffix is cleaned', () => {
+    const acts = [
+      mk({
+        title: 'Return to Four Seasons Hotel Osaka for Check-in',
+        category: 'accommodation',
+        startTime: '17:20',
+        endTime: '17:45',
+      }),
+      mk({ title: 'Dinner', category: 'dining', startTime: '19:00', endTime: '20:30' }),
+    ];
+    const out = ensureHotelReturnBookend(acts, { allTripActivities: acts, dayIndex: 0 });
+    const last = out[out.length - 1] as any;
+    expect(last.title).toBe('Return to Four Seasons Hotel Osaka');
+  });
+
+  it('Departure day with airport transfer (generic transport category) is skipped', () => {
+    const acts = [
+      mk({ title: 'Breakfast', category: 'dining', startTime: '08:30', endTime: '09:15' }),
+      mk({ title: 'Sightseeing', category: 'sightseeing', startTime: '10:00', endTime: '11:30' }),
+      mk({
+        title: 'Transfer to Kansai International Airport (KIX)',
+        category: 'transport',
+        startTime: '12:00',
+        endTime: '13:00',
+      }),
+    ];
+    const out = ensureHotelReturnBookend(acts, { hotelName: 'Four Seasons Hotel Osaka', dayIndex: 2 });
+    expect(out).toHaveLength(acts.length);
+  });
 });
