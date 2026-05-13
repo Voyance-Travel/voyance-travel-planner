@@ -196,8 +196,47 @@ export function assignFloatingMealTimes(
         || a.userAdded || a.userEdited || a.isManual
         || a.extracted || a.pinned) continue;
     if (a.startTime || a.start_time || a.time) continue;
-    if (a.endTime || a.end_time) continue;
-    if (Number.isFinite(Number(a.durationMinutes ?? a.duration_minutes))) continue;
+    // endTime-only meal cards (no startTime, no duration) used to be skipped
+    // here, leaving cards like "Lunch at El Turix" persisted with only an
+    // endTime. Backfill a sensible start by walking back from endTime using
+    // the canonical meal-slot duration so the card anchors visibly.
+    const endStr = a.endTime || a.end_time;
+    const durRaw = Number(a.durationMinutes ?? a.duration_minutes);
+    const hasDur = Number.isFinite(durRaw) && durRaw > 0;
+    if (endStr || hasDur) {
+      const kind = mealKindOf(a);
+      if (!kind) continue;
+      const slot = DEFAULT_SLOT[kind];
+      if (!slot) continue;
+      const { start: defaultStart, end: defaultEnd } = isLux ? slot.lux : slot;
+      const slotDur = parseTime(defaultEnd)! - parseTime(defaultStart)!;
+      const useDur = hasDur ? durRaw : slotDur;
+      let startStr: string;
+      let computedEnd: string | undefined;
+      if (endStr) {
+        const endMin = parseTime(endStr);
+        if (endMin === null) continue;
+        const startMin = Math.max(0, endMin - useDur);
+        startStr = minutesToTime(startMin);
+      } else {
+        // duration-only — pin to canonical slot start.
+        startStr = defaultStart;
+        const startMin = parseTime(startStr)!;
+        computedEnd = minutesToTime(startMin + useDur);
+      }
+      a.startTime = startStr;
+      a.start_time = startStr;
+      a.time = startStr;
+      if (computedEnd) {
+        a.endTime = computedEnd;
+        a.end_time = computedEnd;
+      }
+      // Mark slot taken so further floating duplicates of this meal drop.
+      if (slotTaken[kind] === false) slotTaken[kind] = true;
+      assigned++;
+      console.log(`[FLOATING_MEAL_BACKFILL_START] day=${day} kind=${kind} start=${startStr} title="${a.title || a.name || ''}" path=${path}`);
+      continue;
+    }
 
     const kind = mealKindOf(a);
     if (!kind) continue;
