@@ -195,6 +195,11 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
     const nextStart = parseTime(next.startTime);
     if (currStart === null || nextStart === null) continue;
 
+    // Synthesized end-of-current; mirrors same-start branch's anchorEnd
+    // fallback so overlap/buffer branches don't silently bail when a record
+    // carries only startTime + durationMinutes.
+    const currEffEnd = effectiveEnd(curr, currStart);
+
     if (currStart === nextStart && !isStructural(next, lockedIds)) {
       const anchorEnd = currEnd ?? (currStart + ((curr.durationMinutes as number) || 30));
       const target = anchorEnd + overlapBuffer;
@@ -214,10 +219,10 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
       continue;
     }
 
-    if (currEnd !== null && currEnd > nextStart && !isStructural(next, lockedIds)) {
+    if (currEffEnd !== null && currEffEnd > nextStart && !isStructural(next, lockedIds)) {
       // Transit cards: zero buffer is fine, but they must not start before currEnd.
       const buffer = isTransit(next) || isTransit(curr) ? 0 : overlapBuffer;
-      const target = currEnd + buffer;
+      const target = currEffEnd + buffer;
       const delta = target - nextStart;
       if (delta > 0) {
         const before = `${next.title} @ ${next.startTime}`;
@@ -228,15 +233,15 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
           activityTitle: next.title,
           before,
           after: `${next.title} @ ${next.startTime}`,
-          message: `"${curr.title}" ended at ${minutesToTime(currEnd)} but "${next.title}" started at ${minutesToTime(nextStart)} — pushed forward.`,
+          message: `"${curr.title}" ended at ${minutesToTime(currEffEnd)} but "${next.title}" started at ${minutesToTime(nextStart)} — pushed forward.`,
         });
       }
       continue;
     }
 
-    if (currEnd !== null && !isStructural(next, lockedIds)) {
+    if (currEffEnd !== null && !isStructural(next, lockedIds)) {
       const refreshedNextStart = parseTime(next.startTime)!;
-      const gap = refreshedNextStart - currEnd;
+      const gap = refreshedNextStart - currEffEnd;
       if (gap >= 0) {
         const transit = estimateTransit(curr, next);
         const minBuffer = getEffectiveMinBuffer(curr, next);
