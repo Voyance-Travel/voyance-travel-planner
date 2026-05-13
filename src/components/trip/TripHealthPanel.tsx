@@ -112,8 +112,11 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
 
     // ── HC.1: required-meal / thin-day / large-gap checks ──────────────────
     // PREFER the server's persisted meal policy so the panel can never drift
-    // from what the repair pipeline actually enforced. Falls back to a
-    // dayMode-derived inference only when the persisted list is absent.
+    // from what the repair pipeline actually enforced. When BOTH the
+    // persisted list and dayMode are absent, fall back to the
+    // arrival/departure-band heuristic instead of silently defaulting to
+    // all-three-meals (which produced "missing breakfast" on a 09:50 arrival
+    // and "missing dinner" on a 16:00 departure).
     const dayMode: string = day?.metadata?.quality?.dayMode || '';
     const persistedMeals = day?.metadata?.quality?.requiredMeals
       ?? day?.metadata?.mealPolicy?.requiredMeals
@@ -129,9 +132,16 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
       if (dayMode === 'midday_arrival') return ['lunch', 'dinner'];
       if (dayMode === 'midday_departure') return ['breakfast'];
       if (dayMode === 'afternoon_departure') return ['breakfast'];
-      // morning_arrival default: assume late-morning brunch covers AM meal —
-      // do NOT require breakfast on first days when dayMode is unknown.
       if (dayMode === 'morning_arrival') return ['lunch', 'dinner'];
+      // No persisted meals AND unknown dayMode — try arrival/departure
+      // flight-band fallback for first/last day; otherwise full day.
+      const inferred = inferDayModeFallback({
+        day,
+        dayIndex,
+        totalDays,
+        tripFlightSelection: opts?.tripFlightSelection,
+      });
+      if (inferred) return inferred.requiredMeals;
       return ['breakfast', 'lunch', 'dinner'];
     })();
 
