@@ -33,6 +33,19 @@ const FLIGHT_TITLE_RE = /\b(flight|departure)\b/i;
 // would otherwise mark the day as a departure day and suppress the end-of-day
 // hotel-return bookend (root cause of Osaka Day-1 nightcap with no return).
 const ARRIVAL_TITLE_RE = /\b(arrival|inbound|landing|land\s+at|arrive)\b/i;
+// Airport-bound transfer titles ("Transfer to KIX", "Taxi to JFK Terminal 4",
+// "Drive to Heathrow") are unambiguous departure terminals even when the
+// surrounding category is a generic 'transport' / 'TRAVEL'. Used as a
+// secondary signal to `AIRPORT_RE` so the gray-zone branch never fabricates
+// a 13:55 hotel-return after the airport drop-off.
+const DEPARTURE_TRANSFER_TITLE_RE =
+  /^\s*(?:transfer|taxi|drive|ride|shuttle|car|uber|lyft)\s+to\b[^.]*\b(airport|terminal|gate|station)\b/i;
+// Trailing "for Check-in"/"for Checkout"/"for Arrival" clauses the AI sometimes
+// glues onto otherwise-clean hotel names. Stripped after the main capture so
+// the resolved hotel name never carries a half-word ("for Check") into the
+// synthetic bookend title — root cause of the Osaka regression.
+const TRAILING_CHECK_CLAUSE_RE =
+  /\s+for\s+(?:check[-\s]?in|check[-\s]?out|checkin|checkout|arrival|departure)\b.*$/i;
 
 function parseTime(raw: unknown): number | null {
   if (typeof raw !== 'string' || !raw) return null;
@@ -88,25 +101,70 @@ function isDepartureTerminal(a: any): boolean {
   if (ARRIVAL_TITLE_RE.test(title)) return false;
   if (cat === 'FLIGHT' || FLIGHT_TITLE_RE.test(title)) return true;
   if (TRANSPORT_CAT_RE.test(cat) && AIRPORT_RE.test(title)) return true;
+  // "Transfer to KIX", "Taxi to Heathrow Terminal 5" etc. — airport-bound
+  // transfer titles are unambiguous departure terminals even when the
+  // category is generic (e.g. 'transport'). Closes the Osaka regression
+  // where the gray-zone branch fabricated a 13:55 hotel-return after the
+  // departure-day airport drop-off.
+  if (DEPARTURE_TRANSFER_TITLE_RE.test(title)) return true;
   return false;
+}
+
+// Defense-in-depth: returns true when ANY card on the day signals a departure
+// terminal. Used by the resolver to short-circuit when the chronologically
+// last card isn't itself the airport transfer (e.g. a stale leisure card
+// shifted past it by a manual edit).
+function dayHasDepartureTerminal(activities: any[]): boolean {
+  if (!Array.isArray(activities)) return false;
+  return activities.some(isDepartureTerminal);
+}
+
+
+function cleanHotelName(raw: string): string {
+  // Strip trailing "for Check-in"/"for Checkout"/etc. clauses then collapse
+  // whitespace + trim residual punctuation. Returns '' when nothing usable
+  // remains so callers fall back to 'Your Hotel'.
+  return String(raw || '')
+    .replace(TRAILING_CHECK_CLAUSE_RE, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s,;:.\-–—]+|[\s,;:.\-–—]+$/g, '')
+    .trim();
 }
 
 function extractHotelName(allActivities: any[]): string | undefined {
   // Walk every activity across every day looking for a generator-injected
   // accommodation card that names the hotel. "Return to {X}", "Checkout from
   // {X}", or a STAY/ACCOMMODATION card whose venue_name / title carries it.
+  //
+  // IMPORTANT: only trust accommodation/STAY rows for venue extraction. The
+  // AI sometimes mis-titles a transport leg "Return to {hotel} for Check-in"
+  // — using that as a name source caused the Osaka truncation bug where the
+  // bookend title became "Return to Four Seasons Hotel Osaka for Check"
+  // (the prior non-greedy regex stopped at the first hyphen).
   for (const a of allActivities) {
     if (!a) continue;
+    const cat = String(a.category || '').toUpperCase();
+    const isAccom = cat === 'STAY' || cat === 'ACCOMMODATION';
     const venue = String(a.venue_name || a.venueName || '').trim();
-    if (venue && venue.toLowerCase() !== 'your hotel') {
-      const cat = String(a.category || '').toUpperCase();
-      if (cat === 'STAY' || cat === 'ACCOMMODATION') return venue;
+    if (isAccom && venue && venue.toLowerCase() !== 'your hotel') {
+      const cleaned = cleanHotelName(venue);
+      if (cleaned) return cleaned;
     }
+    if (!isAccom) continue;
     const title = String(a.title || a.name || '');
-    let m = title.match(/^Return to\s+(.+?)(?:\s*[—-]|$)/i);
-    if (m && m[1] && m[1].toLowerCase() !== 'your hotel') return m[1].trim();
-    m = title.match(/^Checkout from\s+\(?(.+?)\)?$/i);
-    if (m && m[1]) return m[1].trim();
+    // Capture everything after "Return to " up to a true separator
+    // (em/en dash with surrounding spaces, comma, or end-of-string). Hyphens
+    // inside the hotel name are preserved.
+    let m = title.match(/^Return to\s+(.+?)(?:\s+[—–]\s+|,|$)/i);
+    if (m && m[1]) {
+      const cleaned = cleanHotelName(m[1]);
+      if (cleaned && cleaned.toLowerCase() !== 'your hotel') return cleaned;
+    }
+    m = title.match(/^Checkout from\s+\(?(.+?)\)?(?:\s+[—–]\s+|,|$)/i);
+    if (m && m[1]) {
+      const cleaned = cleanHotelName(m[1]);
+      if (cleaned) return cleaned;
+    }
   }
   return undefined;
 }

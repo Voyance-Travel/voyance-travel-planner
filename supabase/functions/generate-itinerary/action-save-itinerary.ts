@@ -229,6 +229,24 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
     stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
     clampAllBookends(activities, { dayNumber, label: 'SAVE' });
     activities = dedupeHotelReturnBookends(activities, dayNumber);
+    // Drop synthetic accommodation rows whose title was truncated by the
+    // legacy `extractHotelName` non-greedy regex ("...for Check" without -in
+    // /-out). These can never be legitimate hotel names; the only producer
+    // was the bug fixed in src/lib/itinerary/ensureHotelReturnBookend.ts.
+    {
+      const TRUNCATED_BOOKEND_TITLE_RE = /\bfor\s+Check\s*$/i;
+      const before = activities.length;
+      activities = activities.filter((a: any) => {
+        const cat = String(a?.category || '').toUpperCase();
+        if (cat !== 'ACCOMMODATION' && cat !== 'STAY') return true;
+        const title = String(a?.title || a?.name || '').trim();
+        return !TRUNCATED_BOOKEND_TITLE_RE.test(title);
+      });
+      const dropped = before - activities.length;
+      if (dropped > 0) {
+        console.log(`[SCRUB_TRUNCATED_BOOKEND] day=${dayNumber} count=${dropped} path=save-itinerary`);
+      }
+    }
     // Unified scrub boundary — single entry point.
     const daySchedule = buildDayScheduleSummary(activities);
     let dayOps: ScrubOps = { ...EMPTY_OPS } as ScrubOps;
