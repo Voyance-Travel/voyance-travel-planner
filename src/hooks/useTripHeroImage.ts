@@ -116,7 +116,7 @@ export function useTripHeroImage({
       .then((url) => {
         if (cancelled) return;
         setCanonicalFetched(true);
-        if (url) setCanonicalUrl(url);
+        if (url && !isUntrustedHeroUrl(url)) setCanonicalUrl(url);
       })
       .catch(() => {
         if (!cancelled) setCanonicalFetched(true);
