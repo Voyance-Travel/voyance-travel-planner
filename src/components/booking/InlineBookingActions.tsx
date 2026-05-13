@@ -589,39 +589,44 @@ export function InlineBookingActions({
         const gygUrl = `https://www.getyourguide.com/s/?q=${encodeURIComponent(`${activity.title} ${destination}`)}`;
         return (
           <div className="flex items-center gap-2 flex-wrap">
-            {onAskConcierge ? (
+            {resolvedUrl ? (
               <Button
                 size="sm"
                 variant="default"
-                onClick={onAskConcierge}
+                onClick={() => window.open(resolvedUrl, '_blank', 'noopener,noreferrer')}
                 className="gap-1 sm:gap-1.5 text-xs bg-primary px-2 sm:px-3 h-7 sm:h-8"
               >
-                <Sparkles className="h-3 w-3 flex-shrink-0" />
-                <span className="sm:hidden">Find link</span>
-                <span className="hidden sm:inline">Find official booking link</span>
+                <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                <span className="sm:hidden">Reserve</span>
+                <span className="hidden sm:inline">Reserve on {prettyHostname(resolvedUrl)}</span>
               </Button>
             ) : (
               <Button
                 size="sm"
-                variant="outline"
-                onClick={() => window.open(gygUrl, '_blank', 'noopener,noreferrer')}
-                className="gap-1 sm:gap-1.5 text-xs px-2 sm:px-3 h-7 sm:h-8"
+                variant="default"
+                onClick={handleFindBookingLink}
+                disabled={isLookingUpUrl}
+                className="gap-1 sm:gap-1.5 text-xs bg-primary px-2 sm:px-3 h-7 sm:h-8"
               >
-                <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                <span className="sm:hidden">Browse</span>
-                <span className="hidden sm:inline">Browse tours</span>
+                {isLookingUpUrl ? (
+                  <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3 w-3 flex-shrink-0" />
+                )}
+                <span className="sm:hidden">{isLookingUpUrl ? 'Finding…' : 'Find link'}</span>
+                <span className="hidden sm:inline">
+                  {isLookingUpUrl ? 'Finding link…' : 'Find official booking link'}
+                </span>
               </Button>
             )}
-            {onAskConcierge && (
-              <a
-                href={gygUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hidden sm:inline text-[11px] text-muted-foreground hover:text-primary hover:underline"
-              >
-                or browse tours
-              </a>
-            )}
+            <a
+              href={gygUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:inline text-[11px] text-muted-foreground hover:text-primary hover:underline"
+            >
+              or browse tours
+            </a>
           </div>
         );
       }
