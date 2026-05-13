@@ -322,12 +322,12 @@ export function useLovableItinerary(tripId: string | null, options: UseLovableIt
             days: convertedDays,
             currentDay: completed,
             totalDays: pTotal,
-            progress: pollRow.itinerary_status === 'ready' || pollRow.itinerary_status === 'generated' ? 100 : progress,
+            progress: ((pollRow.itinerary_status as string) === 'ready' || (pollRow.itinerary_status as string) === 'generated') ? 100 : progress,
             message: `Crafting Day ${Math.min(completed + 1, pTotal)} of ${pTotal}...`,
           }));
         }
 
-        if (pollRow.itinerary_status === 'ready' || pollRow.itinerary_status === 'generated') {
+        if (((pollRow.itinerary_status as string) === 'ready' || (pollRow.itinerary_status as string) === 'generated')) {
           const duration = Date.now() - startTime;
           if (isMounted.current) {
             setState(prev => ({
