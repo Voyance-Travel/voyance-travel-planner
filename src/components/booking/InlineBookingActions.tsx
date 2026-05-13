@@ -333,27 +333,44 @@ export function InlineBookingActions({
     const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${activity.title} ${destination} booking`)}`;
     return (
       <div className="inline-flex flex-wrap items-center gap-2">
+        {resolvedUrl ? (
+          <a
+            href={resolvedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
+          >
+            <ExternalLink className="h-3 w-3 flex-shrink-0" />
+            <span className="sm:hidden">Reserve</span>
+            <span className="hidden sm:inline">Reserve on {prettyHostname(resolvedUrl)}</span>
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={handleFindBookingLink}
+            disabled={isLookingUpUrl}
+            className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0 disabled:opacity-60"
+            title={`Premium experience (${formatPrice(price * 100, activity.currency || 'USD')}) — find the official booking page`}
+          >
+            {isLookingUpUrl ? (
+              <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin" />
+            ) : (
+              <ExternalLink className="h-3 w-3 flex-shrink-0" />
+            )}
+            <span className="sm:hidden">{isLookingUpUrl ? 'Finding…' : 'Find site'}</span>
+            <span className="hidden sm:inline">
+              {isLookingUpUrl ? 'Finding link…' : 'Find official booking page'}
+            </span>
+          </button>
+        )}
         <a
           href={searchUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
-          title={`Premium experience (${formatPrice(price * 100, activity.currency || 'USD')}) — confirm booking on the official site`}
+          className="hidden sm:inline text-[11px] text-muted-foreground hover:text-primary hover:underline"
         >
-          <ExternalLink className="h-3 w-3 flex-shrink-0" />
-          <span className="sm:hidden">Find site</span>
-          <span className="hidden sm:inline">Find on official site</span>
+          or search the web
         </a>
-        {onAskConcierge && (
-          <button
-            type="button"
-            onClick={onAskConcierge}
-            className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
-          >
-            <Sparkles className="h-3 w-3 flex-shrink-0" />
-            <span>Ask concierge</span>
-          </button>
-        )}
       </div>
     );
   };
