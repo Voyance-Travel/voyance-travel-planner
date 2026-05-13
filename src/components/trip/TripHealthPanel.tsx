@@ -445,6 +445,7 @@ export function TripHealthPanel({
   hotelBookedElsewhere = false,
   refreshingDayNumber = null,
   refreshResultsByDay,
+  tripFlightSelection,
   className,
   onAction,
 }: TripHealthPanelProps) {
