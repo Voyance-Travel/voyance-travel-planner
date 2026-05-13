@@ -1,23 +1,15 @@
-## Plan: P0b — Cap per-activity cumulative cascade shift at 120 min
+## P0c — Protect real-content meal cards in `assignFloatingMealTimes`
 
-### Scope
-Single-block change in `supabase/functions/_shared/timing-cascade.ts`, lines 346-356 (the `cascadeShift` helper inside `enforceTimingAndBuffers`).
+**File:** `supabase/functions/_shared/timing-cascade.ts` (lines 205–211)
 
-### Why
-A single bad upstream duration (e.g. Hong Kong Iron Fairies 9-hour cocktail card) currently shifts every later activity by the same delta. Even with P0a's clamp, this collapses dinner + 3 other cards onto 23:29. Cap each activity's cumulative shift at 120 min so one bad row can't destroy the day.
+**Change:** Replace the unconditional drop branch with a content-preservation guard. If the floating card carries a real venue (`location.name` ≠ "your hotel", `venue_name`, or `restaurant.name`) OR a description ≥30 chars, promote it (assign default meal slot times, keep slotTaken=true) instead of deleting. Only truly empty duplicates fall through to the existing `[FLOATING_MEAL_DROP]` log.
 
-### Change
-Replace the unbounded `cascadeShift` with a per-activity cumulative-shift tracker:
-- `MAX_CUMULATIVE_SHIFT = 120`
-- `cumulativeShiftById: Map<string, number>` accumulates how far each card has been moved
-- Per call, `applyDelta = min(delta, 120 − currentShift)`. If `0`, leave card in place and emit one `overlap_fix` repair note ("…reached the 120-min cumulative shift cap…").
+**Out of scope:** every other function, file, and block. P0a + P0b untouched.
 
-### Acceptance greps (after apply)
-1. `grep -n "MAX_CUMULATIVE_SHIFT" supabase/functions/_shared/timing-cascade.ts` → ≥3 hits
-2. `grep -n "cumulativeShiftById" supabase/functions/_shared/timing-cascade.ts` → ≥3 hits
-3. `grep -n "cumulative shift cap" supabase/functions/_shared/timing-cascade.ts` → 1 hit
-4. `grep -c "minutesToTime(s + delta)" supabase/functions/_shared/timing-cascade.ts` → 0
-5. `grep -c "minutesToTime(s + applyDelta)" supabase/functions/_shared/timing-cascade.ts` → 1
+**Acceptance greps (all must pass post-apply):**
+1. `FLOATING_MEAL_PROMOTE` → 1
+2. `hasRealVenue\|hasRealDescription` → ≥4
+3. `Content preservation is non-negotiable` → 1
+4. `FLOATING_MEAL_DROP` → 1
 
-### Out of scope
-Other functions, other files, other blocks. P0a remains untouched.
+Ready to implement on approval.
