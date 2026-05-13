@@ -201,10 +201,10 @@ export function useTripHeroImage({
 
   // Determine current image URL based on fallback chain
   const getImageUrl = (): { url: string; source: UseTripHeroImageResult['source'] } => {
-    // 1. Seeded hero (if not failed AND not a known-broken Unsplash URL)
+    // 1. Seeded hero (if not failed AND not a known-broken URL)
     if (seededHeroUrl && !seededFailed) {
-      if (/images\.unsplash\.com/.test(seededHeroUrl)) {
-        // Unsplash CDN URLs break silently — treat seeded as failed
+      if (isBrokenSeededUrl(seededHeroUrl)) {
+        // Treat broken seeded URLs as failed; persistence path will overwrite.
       } else {
         return { url: seededHeroUrl, source: 'seeded' };
       }
