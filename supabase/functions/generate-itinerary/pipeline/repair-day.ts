@@ -4078,13 +4078,27 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
     // it, §15z can't reason about it, the user sees "floating lunch after the
     // airport transfer". Drop it. (Locked / userAdded / preserveAsManualPick
     // exemptions handled above.)
-    if (s < 0 && isDiningRow(a)) {
+    if (s < 0) {
+      // Untimed non-logistics, non-locked, non-exempt card on a departure day
+      // is always wrong: sort can't place it, §15z can't reason about it, and
+      // the user sees a floating card after the airport transfer. Drop
+      // regardless of (mislabeled) category — generators routinely emit real
+      // restaurants like "Katsukura Sanjo Honten" tagged as `cultural` /
+      // `experience` / empty, which previously slipped past the dining-only
+      // gate. Locked / userAdded / preserveAsManualPick exemptions handled above.
+      const dining = isDiningRow(a);
+      const action = dining
+        ? 'final_enforce_dropped_untimed_dining'
+        : 'final_enforce_dropped_untimed_activity';
+      const sentinel = dining
+        ? 'DEPARTURE_UNTIMED_DINING_PRUNED'
+        : 'DEPARTURE_UNTIMED_ACTIVITY_PRUNED';
       repairs.push({
         code: FAILURE_CODES.LOGISTICS_SEQUENCE,
-        action: 'final_enforce_dropped_untimed_dining',
-        before: `${a.title} @ <no-time>`,
+        action,
+        before: `${a.title} @ <no-time> cat=${a.category || a.type || 'n/a'}`,
       } as any);
-      console.log(`[DEPARTURE_UNTIMED_DINING_PRUNED] day=${dayNumber} dropped "${a.title}" (no startTime/start_time/time)`);
+      console.log(`[${sentinel}] day=${dayNumber} dropped "${a.title}" cat="${a.category || a.type || ''}" (no startTime/start_time/time)`);
       continue;
     }
     if (s >= 0 && s >= cutoffMin) {
