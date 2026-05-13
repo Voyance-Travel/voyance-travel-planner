@@ -468,10 +468,11 @@ export function detectGapsForDay(allActivities: any[], dayNumber: number): Healt
   const cascadePreview = buildCascadePreview(dayActivities);
 
   const sorted = dayActivities
-    .filter((a: any) => !!getDisplayStartTime(a, cascadePreview) && !isBookendOrTransit(a))
-    .map((a: any) => {
-      const startStr = getDisplayStartTime(a, cascadePreview) || '00:00';
-      const endStr = getDisplayEndTime(a, cascadePreview) || startStr;
+    .map((a: any, idx: number) => ({ a, idx }))
+    .filter(({ a, idx }) => !!getDisplayStartTime(a, cascadePreview, idx) && !isBookendOrTransit(a))
+    .map(({ a, idx }) => {
+      const startStr = getDisplayStartTime(a, cascadePreview, idx) || '00:00';
+      const endStr = getDisplayEndTime(a, cascadePreview, idx) || startStr;
       const startMins = parseTime(startStr);
       const endMins = parseTime(endStr);
       // Wrap predicate: end===0 with start>0 (e.g. 23:30→00:00 exact) is wrap
