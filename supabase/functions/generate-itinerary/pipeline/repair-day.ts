@@ -4043,9 +4043,20 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
 
   // 3) Drop any non-logistics, non-locked card at/after the airport-transfer start.
   //    When no flight info, drop non-logistics cards starting after noon.
+  //    Also: drop dining cards that END within 90 min of the transfer start —
+  //    a sit-down meal that close to leaving for the airport is unrealistic
+  //    and contradicts the "head to the airport" framing the user expects on
+  //    departure days.
   const cutoffMin = transferStartMin !== null
     ? transferStartMin
     : (12 * 60); // no-flight: noon cutoff for any leisure
+  const DINING_NEAR_TRANSFER_MIN = 90;
+  const isDiningRow = (a: any): boolean => {
+    const cat = String(a?.category || a?.type || '').toLowerCase();
+    if (cat.includes('dining') || cat.includes('restaurant') || cat.includes('food')) return true;
+    const title = String(a?.title || a?.name || '').toLowerCase();
+    return /\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/.test(title);
+  };
   const filtered: any[] = [];
   for (const a of activities) {
     if (a === checkout) { filtered.push(a); continue; }
@@ -4060,6 +4071,19 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
       } as any);
       console.log(`[Repair §15z] Dropped post-transfer "${a.title}" (start=${a.startTime}, cutoff=${minutesToHHMM(cutoffMin)})`);
       continue;
+    }
+    // Dining card that ends too close to the airport-bound window — drop it.
+    if (transferStartMin !== null && isDiningRow(a)) {
+      const e = parseTimeToMinutes(a.endTime || '') ?? -1;
+      if (e >= 0 && transferStartMin - e < DINING_NEAR_TRANSFER_MIN && s < transferStartMin) {
+        repairs.push({
+          code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+          action: 'final_enforce_dropped_meal_near_transfer',
+          before: `${a.title} @ ${a.startTime}-${a.endTime}`,
+        } as any);
+        console.log(`[DEPARTURE_MEAL_PRUNED] day=${dayNumber} dropped "${a.title}" ${a.startTime}-${a.endTime} (transferStart=${minutesToHHMM(transferStartMin)}, gap=${transferStartMin - e}m < ${DINING_NEAR_TRANSFER_MIN}m)`);
+        continue;
+      }
     }
     filtered.push(a);
   }
