@@ -434,7 +434,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
             return;
           }
           console.info(`[useTripFinancialSnapshot] auto-backfilled activity_costs for trip ${tripId}`);
-          window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
+          window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId, silent: true, reason: 'backfill' } }));
         });
     }
 
