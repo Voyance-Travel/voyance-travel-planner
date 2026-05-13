@@ -341,12 +341,19 @@ export function resolveCanonicalCostRows({
     else if (t === 'flight' || t === 'flights') manualFlightCents += cents;
     else manualOtherCents += cents;
   }
-  const manualHotelDelta = canonicalDay0HotelCents > 0
+  // Override-aware fold: when a manual hotel/flight payment exists, treat it
+  // as the authoritative figure and replace the canonical Day-0 row (delta =
+  // manual − canonical). When NO manual row exists, the delta MUST be 0 — the
+  // canonical Day-0 row is already counted inside `totalCents`, and using
+  // `0 − canonical` would silently subtract the hotel/flight back out,
+  // breaking the header strip equation (Days + Hotel = Trip Total).
+  // See mem://constraints/finance/header-strip-mirrors-snapshot.
+  const manualHotelDelta = manualHotelCents > 0
     ? (manualHotelCents - canonicalDay0HotelCents)
-    : manualHotelCents;
-  const manualFlightDelta = canonicalDay0FlightCents > 0
+    : 0;
+  const manualFlightDelta = manualFlightCents > 0
     ? (manualFlightCents - canonicalDay0FlightCents)
-    : manualFlightCents;
+    : 0;
   let effectiveTotalCents = totalCents;
   if (includeHotel) effectiveTotalCents += manualHotelDelta;
   if (includeFlight) effectiveTotalCents += manualFlightDelta;
