@@ -42,6 +42,19 @@ export interface FinancialSnapshot {
   paidPercent: number;
   /** Unspent portion of the misc / spending-money reserve folded into the total. */
   miscReserveCents: number;
+  /** Toggle state from trips.budget_include_hotel/flight (mirrors what the snapshot honored). */
+  includeHotel: boolean;
+  includeFlight: boolean;
+  /** Day-0 canonical hotel/flight cents (pre-toggle, pre-manual). */
+  committedHotelCents: number;
+  committedFlightCents: number;
+  /** Manual hotel/flight delta from trip_payments (override-aware). */
+  manualHotelDelta: number;
+  manualFlightDelta: number;
+  /** Hotel/flight cents ACTUALLY folded into tripTotalCents (toggle + manual applied, clamped >=0).
+   *  Use these — not local computeHotelCostUsd / leg sums — when decomposing the trip total. */
+  effectiveHotelCents: number;
+  effectiveFlightCents: number;
   loading: boolean;
   lastDelta: FinancialDelta | null;
   refetch: () => void;
@@ -53,6 +66,12 @@ interface SnapshotData {
   paidCents: number;
   budgetTotalCents: number;
   miscReserveCents: number;
+  includeHotel: boolean;
+  includeFlight: boolean;
+  committedHotelCents: number;
+  committedFlightCents: number;
+  manualHotelDelta: number;
+  manualFlightDelta: number;
   loading: boolean;
 }
 
