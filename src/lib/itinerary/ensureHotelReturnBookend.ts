@@ -104,22 +104,51 @@ function isDepartureTerminal(a: any): boolean {
   return false;
 }
 
+function cleanHotelName(raw: string): string {
+  // Strip trailing "for Check-in"/"for Checkout"/etc. clauses then collapse
+  // whitespace + trim residual punctuation. Returns '' when nothing usable
+  // remains so callers fall back to 'Your Hotel'.
+  return String(raw || '')
+    .replace(TRAILING_CHECK_CLAUSE_RE, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s,;:.\-–—]+|[\s,;:.\-–—]+$/g, '')
+    .trim();
+}
+
 function extractHotelName(allActivities: any[]): string | undefined {
   // Walk every activity across every day looking for a generator-injected
   // accommodation card that names the hotel. "Return to {X}", "Checkout from
   // {X}", or a STAY/ACCOMMODATION card whose venue_name / title carries it.
+  //
+  // IMPORTANT: only trust accommodation/STAY rows for venue extraction. The
+  // AI sometimes mis-titles a transport leg "Return to {hotel} for Check-in"
+  // — using that as a name source caused the Osaka truncation bug where the
+  // bookend title became "Return to Four Seasons Hotel Osaka for Check"
+  // (the prior non-greedy regex stopped at the first hyphen).
   for (const a of allActivities) {
     if (!a) continue;
+    const cat = String(a.category || '').toUpperCase();
+    const isAccom = cat === 'STAY' || cat === 'ACCOMMODATION';
     const venue = String(a.venue_name || a.venueName || '').trim();
-    if (venue && venue.toLowerCase() !== 'your hotel') {
-      const cat = String(a.category || '').toUpperCase();
-      if (cat === 'STAY' || cat === 'ACCOMMODATION') return venue;
+    if (isAccom && venue && venue.toLowerCase() !== 'your hotel') {
+      const cleaned = cleanHotelName(venue);
+      if (cleaned) return cleaned;
     }
+    if (!isAccom) continue;
     const title = String(a.title || a.name || '');
-    let m = title.match(/^Return to\s+(.+?)(?:\s*[—-]|$)/i);
-    if (m && m[1] && m[1].toLowerCase() !== 'your hotel') return m[1].trim();
-    m = title.match(/^Checkout from\s+\(?(.+?)\)?$/i);
-    if (m && m[1]) return m[1].trim();
+    // Capture everything after "Return to " up to a true separator
+    // (em/en dash with surrounding spaces, comma, or end-of-string). Hyphens
+    // inside the hotel name are preserved.
+    let m = title.match(/^Return to\s+(.+?)(?:\s+[—–]\s+|,|$)/i);
+    if (m && m[1]) {
+      const cleaned = cleanHotelName(m[1]);
+      if (cleaned && cleaned.toLowerCase() !== 'your hotel') return cleaned;
+    }
+    m = title.match(/^Checkout from\s+\(?(.+?)\)?(?:\s+[—–]\s+|,|$)/i);
+    if (m && m[1]) {
+      const cleaned = cleanHotelName(m[1]);
+      if (cleaned) return cleaned;
+    }
   }
   return undefined;
 }
