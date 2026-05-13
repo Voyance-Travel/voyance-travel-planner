@@ -261,7 +261,10 @@ export function resolveCanonicalCostRows({
 
     // Walking legs are always free, regardless of stored category. Skip
     // entirely so the header total agrees with Payments.
-    if (lookup && isWalkingLeg({ title: lookup.name })) continue;
+    if (lookup && isWalkingLeg({ title: lookup.name })) {
+      if (isAccommodationOrFlight) hotelFlightDropDiagnostic(cat, row, 'walking-leg', includeHotel, includeFlight);
+      continue;
+    }
 
     let cents = rowCentsFor(row);
 
@@ -279,8 +282,14 @@ export function resolveCanonicalCostRows({
     else if (cat === 'flight') flightCents += cents;
     else if (cat === 'misc') loggedMiscCents += cents;
 
-    if (!shouldCountRow(row, includeHotel, includeFlight)) continue;
-    if (cents <= 0) continue;
+    if (!shouldCountRow(row, includeHotel, includeFlight)) {
+      if (isAccommodationOrFlight) hotelFlightDropDiagnostic(cat, row, 'toggle-off', includeHotel, includeFlight);
+      continue;
+    }
+    if (cents <= 0) {
+      if (isAccommodationOrFlight) hotelFlightDropDiagnostic(cat, row, 'zero-cents', includeHotel, includeFlight);
+      continue;
+    }
 
     totalCents += cents;
     out.push({
