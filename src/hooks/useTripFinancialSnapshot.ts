@@ -615,12 +615,23 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
           paidCents: Math.max(0, prev.paidCents + detail.optimisticPaidDeltaCents),
         }));
       }
-      fetchData(); // Immediate refetch
+      const isSilent = detail?.silent === true;
+      const silentReason = isSilent
+        ? (typeof detail.reason === 'string' ? detail.reason : 'system')
+        : '';
+      fetchData(); // Immediate refetch (consumes suppress flag if silent)
       // Mirror PaymentsTab's fetchPayments(delayMs) pattern: re-read after
       // ~600 ms to catch rows that weren't read-visible on the first pass
       // (the original L'Arpège bug). Replaces any in-flight pending pass.
       if (pendingTimer) clearTimeout(pendingTimer);
-      pendingTimer = setTimeout(() => { fetchData(); }, 600);
+      pendingTimer = setTimeout(() => {
+        // Re-arm suppression for the trailing refetch so silent system events
+        // don't surface a toast on either pass.
+        if (isSilent) {
+          suppressNextToastRef.current = { active: true, reason: silentReason };
+        }
+        fetchData();
+      }, 600);
     };
     window.addEventListener('booking-changed', handler);
     return () => {
