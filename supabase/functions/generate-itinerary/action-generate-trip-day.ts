@@ -3403,6 +3403,9 @@ async function _handleGenerateTripDayInner(
           empty_days_at_completion: emptyDaysList.length > 0 ? emptyDaysList : null,
           bare_itinerary_detected: !hasEnoughMeaningful || null,
           meaningful_activity_count: meaningfulActivityCount,
+          // Clear stale failed_day_numbers when recovery is complete so we
+          // don't pin status at 'partial' on the next chain pass.
+          failed_day_numbers: isComplete ? [] : (Array.isArray((meta as any)?.failed_day_numbers) ? (meta as any).failed_day_numbers : []),
           // Always overwrite stale persist_validation from intermediate saves.
           ...(finalPersistValidation ? { persist_validation: finalPersistValidation } : {}),
           // FREEZE STAMP — first ready transition. See
