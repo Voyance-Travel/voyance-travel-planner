@@ -221,8 +221,6 @@ export async function fillAfternoonDeadGaps(
 ): Promise<FillDeadGapsResult> {
   return fillDeadGapsForWindow(activities, opts, AFTERNOON_WINDOW);
 }
-  return fillDeadGapsForWindow(activities, opts, AFTERNOON_WINDOW);
-}
 
 /**
  * Bug 4: evening (18:00–22:00) window. Caller should pass

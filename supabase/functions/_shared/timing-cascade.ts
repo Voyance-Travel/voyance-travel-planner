@@ -119,6 +119,23 @@ export function fillMissingStartTimes(
     if (a.isLocked || a.locked || a.lock_state === 'locked'
         || a.userAdded || a.userEdited || a.isManual
         || a.extracted || a.pinned) continue;
+    // PROMOTE: `time` and `start_time` are aliases of `startTime`. If only an
+    // alias is set, copy it into the canonical `startTime` field so every
+    // downstream pass that reads `a.startTime` sees the time. Mirror endTime
+    // ↔ end_time. Closes the recurring "untimed departure-day lunch sorted
+    // after the airport transfer" leak (Faro/Bruges/Milan/Mallorca/HK/CDMX/SJU).
+    if (!a.startTime && (a.start_time || a.time)) {
+      const promoted = a.start_time || a.time;
+      a.startTime = promoted;
+      a.start_time = promoted;
+      a.time = promoted;
+      console.log(`[NORMALIZE_START_PROMOTE] day=${day} title="${a.title || a.name || ''}" from=${a.start_time === promoted && !a.time ? 'start_time' : 'time'} value=${promoted} path=${path}`);
+    }
+    if (!a.endTime && a.end_time) {
+      a.endTime = a.end_time;
+    } else if (!a.end_time && a.endTime) {
+      a.end_time = a.endTime;
+    }
     const start = a.startTime || a.start_time || a.time;
     if (start) continue; // already has a start; nothing to do
     const end = a.endTime || a.end_time;
@@ -195,6 +212,16 @@ export function assignFloatingMealTimes(
     if (a.isLocked || a.locked || a.lock_state === 'locked'
         || a.userAdded || a.userEdited || a.isManual
         || a.extracted || a.pinned) continue;
+    // PROMOTE alias time/start_time → startTime so a card timed only via
+    // `time` doesn't get treated as floating below.
+    if (!a.startTime && (a.start_time || a.time)) {
+      const promoted = a.start_time || a.time;
+      a.startTime = promoted;
+      a.start_time = promoted;
+      a.time = promoted;
+      console.log(`[NORMALIZE_START_PROMOTE] day=${day} title="${a.title || a.name || ''}" from=alias value=${promoted} path=${path}-floating`);
+    }
+    if (!a.endTime && a.end_time) a.endTime = a.end_time;
     if (a.startTime || a.start_time || a.time) continue;
     // endTime-only meal cards (no startTime, no duration) used to be skipped
     // here, leaving cards like "Lunch at El Turix" persisted with only an

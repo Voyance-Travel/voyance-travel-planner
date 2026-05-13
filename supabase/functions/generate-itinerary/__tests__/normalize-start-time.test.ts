@@ -60,3 +60,51 @@ Deno.test("fillMissingStartTimes: snake_case fallback fields", () => {
   assertEquals(res.filled, 1);
   assertEquals(acts[0].startTime, "13:30");
 });
+
+// PROMOTE: `time` and `start_time` are aliases of `startTime`. A card timed
+// only via `time` must land in `startTime` so §15z and the chronological
+// sort can reason about it. Closes the recurring untimed-departure-day-lunch
+// leak (Faro/Bruges/Milan/Mallorca/HK/CDMX/SJU).
+Deno.test("fillMissingStartTimes: promotes `time` alias to startTime", () => {
+  const acts: any[] = [
+    { id: "a", title: "Lunch at La Casita Blanca", time: "13:30", endTime: "14:45" },
+  ];
+  const res = fillMissingStartTimes(acts, { dayNumber: 3, path: "promote-test" });
+  assertEquals(res.filled, 0); // no end−duration compute, just promotion
+  assertEquals(acts[0].startTime, "13:30");
+  assertEquals(acts[0].start_time, "13:30");
+});
+
+Deno.test("fillMissingStartTimes: promotes `start_time` alias to startTime", () => {
+  const acts: any[] = [
+    { id: "a", title: "Lunch", start_time: "12:45", endTime: "14:00" },
+  ];
+  fillMissingStartTimes(acts);
+  assertEquals(acts[0].startTime, "12:45");
+});
+
+// §15z drops untimed dining rows on departure days. This test imports the
+// real enforceDepartureDayLogistics export.
+import { enforceDepartureDayLogistics } from "../pipeline/repair-day.ts";
+
+Deno.test("§15z: drops untimed dining row on departure day", () => {
+  const acts: any[] = [
+    { id: "checkout", title: "Hotel Checkout", category: "accommodation", startTime: "10:30", endTime: "11:00" },
+    { id: "lunch", title: "Lunch at La Casita Blanca", category: "dining" }, // no time at all
+    { id: "transfer", title: "Transfer to Airport", category: "transport", subcategory: "airport_transfer", startTime: "13:00", endTime: "13:45" },
+  ];
+  const res = enforceDepartureDayLogistics({
+    activities: acts,
+    dayNumber: 3,
+    isLastDay: true,
+    returnDepartureTime24: "16:00",
+    airportTransferMinutes: 45,
+    lockedIds: new Set<string>(),
+    hotelName: "Hotel",
+    hotelAddress: "",
+  } as any);
+  const titles = res.activities.map((a: any) => a.title);
+  assertEquals(titles.includes("Lunch at La Casita Blanca"), false, "untimed lunch should be dropped");
+  const dropped = res.repairs.find((r: any) => r.action === "final_enforce_dropped_untimed_dining");
+  assertEquals(!!dropped, true, "repair action should be recorded");
+});
