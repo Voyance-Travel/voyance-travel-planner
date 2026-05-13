@@ -112,6 +112,15 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   // The hash also lets a content change re-trigger if the user adds priced
   // items after the first attempt.
   const lastBackfillFingerprintRef = useRef<string | null>(null);
+  // One-shot suppress flag for the next computed delta toast. Set when a
+  // `booking-changed` event arrives with `detail.silent: true` (system-driven
+  // reconciliation: PaymentsTab tab-mount, expire-stale, orphan-archive,
+  // sync-trip-cost-table backfill). Prevents phantom "Trip total changed by
+  // ±$X" toasts when the user took no action.
+  const suppressNextToastRef = useRef<{ active: boolean; reason: string }>({
+    active: false,
+    reason: '',
+  });
 
   const fetchData = useCallback(async () => {
     if (!tripId) {
