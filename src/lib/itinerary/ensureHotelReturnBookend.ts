@@ -84,6 +84,8 @@ function isDepartureTerminal(a: any): boolean {
   if (!a) return false;
   const cat = String(a.category || '').toUpperCase();
   const title = String(a.title || a.name || '');
+  // Arrival flights / inbound transfers are NOT departure terminals.
+  if (ARRIVAL_TITLE_RE.test(title)) return false;
   if (cat === 'FLIGHT' || FLIGHT_TITLE_RE.test(title)) return true;
   if (TRANSPORT_CAT_RE.test(cat) && AIRPORT_RE.test(title)) return true;
   return false;
