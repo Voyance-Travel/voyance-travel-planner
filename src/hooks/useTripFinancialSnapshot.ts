@@ -114,7 +114,24 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   const lastBackfillFingerprintRef = useRef<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!tripId) return;
+    if (!tripId) {
+      // Don't strand `loading: true` if tripId is briefly null on mount —
+      // the next effect run with a real tripId will refetch and re-fill.
+      setData(prev => (prev.loading ? { ...prev, loading: false } : prev));
+      return;
+    }
+    // Absolute safety net: if no setData fires within 8s (network hang,
+    // promise that never resolves), force-clear the spinner so the UI can
+    // render whatever number we already have ($0 on a cold load).
+    const safetyTimer = setTimeout(() => {
+      setData(prev => {
+        if (!prev.loading) return prev;
+        console.warn(
+          `[useTripFinancialSnapshot] spinner safety timeout fired (tripId=${tripId})`
+        );
+        return { ...prev, loading: false };
+      });
+    }, 8_000);
     try {
     // 1. Fetch trip settings (budget + inclusion toggles) AND itinerary_data so
     // we can filter out orphaned activity_costs rows whose activity_id no
@@ -533,6 +550,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       // $0 + a console.warn so the next event-driven refetch can recover.
       console.warn('[useTripFinancialSnapshot] fetchData failed — clearing loading', err);
       setData(prev => ({ ...prev, loading: false }));
+    } finally {
+      clearTimeout(safetyTimer);
     }
   }, [tripId]);
 
