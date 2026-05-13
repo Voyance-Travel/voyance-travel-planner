@@ -14,6 +14,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { isWeakAddress } from '@/lib/address-quality';
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
+import { computeHeaderStripValues } from '@/lib/itinerary/headerStripValues';
 import { coerceDurationString } from '@/utils/plannerUtils';
 import { useLedgerCostOverrideMap, getLedgerOverride, warnOnceLedgerOverride } from '@/utils/ledgerCostOverride';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
@@ -6108,35 +6109,36 @@ export function EditorialItinerary({
                     total OR a multi-traveler /pp ↔ group bridge to explain. */}
                 {financialSnapshot.tripTotalCents > 0 && (tripLevelCents > 0 || daysSubtotalCents > 0) && (() => {
                   // Strip MUST mirror the canonical snapshot — never local
-                  // computeHotelCostUsd / leg sums. Otherwise toggles & manual
-                  // overrides desync and you get "$820 + $1,780 = $460".
+                  // computeHotelCostUsd / leg sums. The pure helper guarantees
+                  // the visible equation `Days + Hotel + Flight + Reserve = Trip Total`
+                  // balances by construction even when the snapshot fetch lags
+                  // behind useTripDayBreakdown (closes the symmetric drift bug
+                  // where Trip Total visually equalled Days while a hotel chip
+                  // showed a non-zero value — Casablanca/Kyoto/Osaka pattern).
                   // See mem://constraints/finance/header-strip-mirrors-snapshot.
                   const tripTotalUsd  = financialSnapshot.tripTotalCents / 100;
                   const daysGroupUsd  = daysSubtotalCents / 100;
                   const hotelChipUsd  = financialSnapshot.effectiveHotelCents / 100;
                   const flightChipUsd = financialSnapshot.effectiveFlightCents / 100;
-                  // Safe display fold: if the snapshot's tripTotal is missing
-                  // hotel/flight that the chips show, render the chip-sum as
-                  // RHS so the user-visible equation always balances. Strictly
-                  // a display guard — never written back to the snapshot.
-                  // See mem://constraints/finance/header-strip-mirrors-snapshot.
-                  const chipSumUsd = daysGroupUsd + hotelChipUsd + flightChipUsd;
-                  const stripDrift = !financialSnapshot.loading
-                    && (hotelChipUsd > 0 || flightChipUsd > 0)
-                    && tripTotalUsd + 1 < chipSumUsd;
-                  const safeTripTotalUsd = stripDrift ? chipSumUsd : tripTotalUsd;
-                  const reserveAdjustUsd =
-                    safeTripTotalUsd - daysGroupUsd - hotelChipUsd - flightChipUsd;
+                  const stripValues = computeHeaderStripValues({
+                    tripTotalUsd,
+                    daysGroupUsd,
+                    hotelChipUsd,
+                    flightChipUsd,
+                    loading: financialSnapshot.loading,
+                  });
+                  const { chipSumUsd, displayedTripTotalUsd, reserveAdjustUsd, showReserve, snapshotUnderChips, snapshotOverChips } = stripValues;
                   if (
                     typeof import.meta !== 'undefined' &&
                     (import.meta as any).env?.DEV &&
                     !financialSnapshot.loading
                   ) {
-                    if (stripDrift) {
+                    if (snapshotUnderChips || snapshotOverChips) {
                       // eslint-disable-next-line no-console
                       console.warn('[STRIP_DRIFT]', {
                         tripId,
                         tripCurrency,
+                        direction: snapshotUnderChips ? 'snapshot<chips' : 'snapshot>chips',
                         tripTotalCents: financialSnapshot.tripTotalCents,
                         daysSubtotalCents,
                         effectiveHotelCents: financialSnapshot.effectiveHotelCents,
@@ -6148,46 +6150,47 @@ export function EditorialItinerary({
                         includeHotel: financialSnapshot.includeHotel,
                         includeFlight: financialSnapshot.includeFlight,
                         chipSumUsd,
-                        safeTripTotalUsd,
-                      });
-                    } else if (Math.abs(reserveAdjustUsd) > 1 && !(Math.abs(reserveAdjustUsd) > 0.5)) {
-                      // legacy soft-balance warn (kept for parity)
-                      // eslint-disable-next-line no-console
-                      console.warn('[Itinerary strip] reconciliation imbalance', {
-                        daysGroupUsd, hotelChipUsd, flightChipUsd, reserveAdjustUsd,
-                        tripTotalUsd: safeTripTotalUsd,
+                        displayedTripTotalUsd,
                       });
                     }
                   }
                   const Sep = ({ char }: { char: string }) => (
                     <span className="text-muted-foreground/40">{char}</span>
                   );
-                  const Chip = ({ label, value }: { label: string; value: number }) => {
-                    const isNeg = value < 0;
-                    const display = Math.abs(value);
-                    return (
-                      <span>
-                        <span className="text-muted-foreground/70">{label}</span>{' '}
-                        <span className="font-medium text-foreground tabular-nums">
-                          {isNeg ? '−' : ''}{formatCurrency(displayCost(display), tripCurrency)}
-                        </span>
+                  const Chip = ({ label, value }: { label: string; value: number }) => (
+                    <span>
+                      <span className="text-muted-foreground/70">{label}</span>{' '}
+                      <span className="font-medium text-foreground tabular-nums">
+                        {formatCurrency(displayCost(Math.abs(value)), tripCurrency)}
                       </span>
-                    );
-                  };
-                  const showReserve = Math.abs(reserveAdjustUsd) > 0.5;
+                    </span>
+                  );
+                  // Show a quiet "Reconciling…" hint only when the two
+                  // independent fetches disagree by more than $1 AND we're past
+                  // the hook's 4 s stabilisation window. The equation already
+                  // balances visually — this just acknowledges the late
+                  // refetch so the user doesn't think the math is wrong.
+                  const showReconcilingHint =
+                    !financialSnapshot.loading &&
+                    (snapshotUnderChips || snapshotOverChips);
                   return (
                     <>
                       <div className={cn("flex items-center gap-x-2 gap-y-1 mt-1.5 text-xs text-muted-foreground flex-wrap justify-center", isBudgetCalculating && "opacity-60")}>
                         <Chip label="Days (group)" value={daysGroupUsd} />
                         {hotelChipUsd > 0 && (<><Sep char="+" /><Chip label="Hotel" value={hotelChipUsd} /></>)}
                         {flightChipUsd > 0 && (<><Sep char="+" /><Chip label="Flights" value={flightChipUsd} /></>)}
-                        {showReserve && (<><Sep char={reserveAdjustUsd >= 0 ? '+' : '−'} /><Chip label="Reserve & adjustments" value={Math.abs(reserveAdjustUsd)} /></>)}
+                        {showReserve && (<><Sep char="+" /><Chip label="Reserve & adjustments" value={reserveAdjustUsd} /></>)}
                         <Sep char="=" />
                         <span>
                           <span className="text-muted-foreground/70">Trip Total</span>{' '}
-                          <span className="font-semibold text-foreground tabular-nums">{formatCurrency(displayCost(safeTripTotalUsd), tripCurrency)}</span>
+                          <span className="font-semibold text-foreground tabular-nums">{formatCurrency(displayCost(displayedTripTotalUsd), tripCurrency)}</span>
                         </span>
                       </div>
+                      {showReconcilingHint && (
+                        <div className="text-[11px] text-muted-foreground/60 text-center mt-1" aria-live="polite">
+                          Reconciling…
+                        </div>
+                      )}
                       {travelers > 1 && (
                         <div className="text-[11px] text-muted-foreground/70 text-center mt-1">
                           Day badges show /pp · multiply by {travelers} for group cost
