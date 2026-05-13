@@ -126,6 +126,31 @@ function rowCentsFor(row: CanonicalCostInputRow): number {
   return Math.round(perPerson * travelers * 100);
 }
 
+/** Dev-only diagnostic: warn when a hotel/flight row is dropped from the
+ *  canonical resolver. Used to trace silent leaks where the per-row chip
+ *  shows a value but the trip total excludes it (Casablanca pattern). */
+function hotelFlightDropDiagnostic(
+  cat: string,
+  row: CanonicalCostInputRow,
+  reason: 'walking-leg' | 'toggle-off' | 'zero-cents' | 'orphan',
+  includeHotel: boolean,
+  includeFlight: boolean,
+): void {
+  if (typeof import.meta === 'undefined' || !(import.meta as any).env?.DEV) return;
+  const expected = (cat === 'hotel' && includeHotel)
+    || ((cat === 'flight' || cat === 'flights') && includeFlight);
+  if (!expected) return;
+  // eslint-disable-next-line no-console
+  console.warn(`[canonicalCostRows] ${cat}-row-dropped reason=${reason}`, {
+    id: row.id,
+    day_number: row.day_number,
+    activity_id: row.activity_id,
+    cost_per_person_usd: row.cost_per_person_usd,
+    num_travelers: row.num_travelers,
+    source: row.source,
+  });
+}
+
 export interface ResolveCanonicalArgs {
   costs: CanonicalCostInputRow[];
   liveActivities: CanonicalLiveActivity[];
