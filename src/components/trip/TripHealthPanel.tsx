@@ -23,6 +23,7 @@ import { inferDayModeFallback } from '@/lib/itinerary/inferDayMode';
 import { getDisplayStartTime, getDisplayEndTime } from '@/lib/itinerary/displayTime';
 import { buildCascadePreview, indexKey } from '@/lib/itinerary/healthCascadePreview';
 import { enforceTimingAndBuffers, parseTime as parseCascadeTime } from '@/utils/itinerary/timingCascade';
+import { isActivityLocked } from '@/lib/itinerary/persistDayContract';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
