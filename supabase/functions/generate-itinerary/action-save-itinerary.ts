@@ -433,24 +433,54 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
 
-      // RS.M.I3: prefer the meal policy cached at generation. Re-deriving here
-      // against current flight times silently disagrees with what the AI was
-      // instructed to produce when the user changes flights between gen and save.
+      // RS.M.I3: prefer the meal policy cached at generation… UNLESS the cache
+      // was derived without flight info that we now have. Casablanca Day 4 bug:
+      // cache said `midday_departure + [breakfast, lunch]` (built before flight
+      // time was known); meanwhile dep=15:05 → afternoon_departure → [breakfast]
+      // only. Trusting stale cache injects a floating "Lunch — find a spot"
+      // sentinel that §15z later strips at gen-time but not at save-time.
+      // See mem://constraints/itinerary/departure-day-save-time-enforcement
       const cachedPolicy = (day as any)?.metadata?.quality?.meal_policy_at_generation;
-      let policy = (cachedPolicy && Array.isArray(cachedPolicy.requiredMeals))
-        ? ({
+      const freshPolicy = deriveMealPolicy({
+        dayNumber,
+        totalDays,
+        isFirstDay,
+        isLastDay,
+        arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
+        departureTime24: isLastDay ? savedDepartureTime24 : undefined,
+      });
+      let policy: any;
+      if (cachedPolicy && Array.isArray(cachedPolicy.requiredMeals)) {
+        const cachedMeals = (cachedPolicy.requiredMeals as RequiredMeal[]).slice().sort().join(',');
+        const freshMeals = freshPolicy.requiredMeals.slice().sort().join(',');
+        const reconcilable =
+          (isLastDay && savedDepartureTime24 && cachedMeals !== freshMeals) ||
+          (isFirstDay && savedArrivalTime24 && cachedMeals !== freshMeals);
+        if (reconcilable) {
+          console.warn(
+            `[MEAL_POLICY_REDERIVE] day=${dayNumber} reason=stale_cache cached=[${cachedMeals}] fresh=[${freshMeals}] depTime=${savedDepartureTime24 || 'n/a'} arrTime=${savedArrivalTime24 || 'n/a'}`
+          );
+          policy = freshPolicy;
+          // Stamp the corrected policy so subsequent reads (and Step 2.6) see it.
+          (day as any).metadata = (day as any).metadata || {};
+          (day as any).metadata.quality = (day as any).metadata.quality || {};
+          (day as any).metadata.quality.meal_policy_at_generation = {
+            ...cachedPolicy,
+            dayMode: freshPolicy.dayMode,
+            requiredMeals: freshPolicy.requiredMeals,
+            rederived_at_save_at: new Date().toISOString(),
+            rederived_reason: 'flight_time_now_known',
+          };
+        } else {
+          policy = {
             dayMode: cachedPolicy.dayMode,
             requiredMeals: cachedPolicy.requiredMeals as RequiredMeal[],
             isFullExplorationDay: !!cachedPolicy.isFullExplorationDay,
-          } as any)
-        : deriveMealPolicy({
-            dayNumber,
-            totalDays,
-            isFirstDay,
-            isLastDay,
-            arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
-            departureTime24: isLastDay ? savedDepartureTime24 : undefined,
-          });
+          };
+        }
+      } else {
+        policy = freshPolicy;
+      }
 
       // Brunch-band downgrade: when no flight clock is known and the cached
       // policy still demands breakfast, infer the actual arrival from the
