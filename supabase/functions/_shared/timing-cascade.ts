@@ -449,23 +449,36 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
     }
   }
 
-  // Drop activities pushed past the cutoff (exempting end-of-day bookends).
-  const droppedIds: string[] = [];
-  activities = activities.filter((act) => {
+  // Clamp activities pushed past the cutoff back to 23:29 (was: drop). Content
+  // preservation is non-negotiable — users paid for these activities and meals
+  // and we never delete them on save/regen. UI can surface a warning that the
+  // day is overbooked, but cards stay visible.
+  const droppedIds: string[] = []; // intentionally empty — kept for return-shape compatibility
+  for (const act of activities) {
     const s = parseTime(act.startTime);
-    if (s !== null && s > cutoff && !lockedIds.has(act.id) && !isEndOfDayBookend(act)) {
-      droppedIds.push(act.id);
-      repairs.push({
-        type: 'dropped_past_midnight',
-        activityId: act.id,
-        activityTitle: act.title,
-        before: `${act.title} @ ${act.startTime}`,
-        message: `"${act.title}" pushed past ${minutesToTime(cutoff)} — dropped.`,
-      });
-      return false;
-    }
-    return true;
-  });
+    if (s === null) continue;
+    if (s <= cutoff) continue;
+    if (lockedIds.has(act.id)) continue;
+    if (isEndOfDayBookend(act)) continue;
+    const e = parseTime(act.endTime);
+    const originalDur = e !== null ? Math.max(15, e - s) : (Number(act.durationMinutes) || 30);
+    const clampedStart = cutoff - 1; // 23:29
+    const clampedEnd = Math.min(23 * 60 + 59, clampedStart + originalDur);
+    const newStart = minutesToTime(clampedStart);
+    const newEnd = minutesToTime(clampedEnd);
+    repairs.push({
+      type: 'overlap_fix',
+      activityId: act.id,
+      activityTitle: act.title,
+      before: `${act.title} @ ${act.startTime}`,
+      after: `${act.title} @ ${newStart}`,
+      message: `"${act.title}" was pushed past ${minutesToTime(cutoff)} — clamped to ${newStart} to avoid deletion. Day may be overbooked.`,
+    });
+    act.startTime = newStart;
+    (act as any).start_time = newStart;
+    act.endTime = newEnd;
+    (act as any).end_time = newEnd;
+  }
 
   // Bookend cards survived the cutoff — clamp their endTime ≤ 23:59 so they
   // never bleed into the next day.
