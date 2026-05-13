@@ -1,81 +1,94 @@
-# Fix: Hotel return missing when nightcap is added AFTER an existing bookend
+## Root cause
 
-## Root cause (verified against Casablanca trip DB)
+When the user clicks the **Payments** tab, `PaymentsTab` mounts a fresh `useTripFinancialSnapshot` instance. Its `fetchData()` runs orphan‑payment detection, finds at least one orphan, and fires the `archive_orphan_trip_payments` RPC. The RPC then dispatches a `booking-changed` event, which causes the **EditorialItinerary**'s long‑lived snapshot to refetch and observe a lower trip total — past the 4 s stabilization window — which triggers the "Trip total changed by −$624" toast.
 
-Casablanca Day 2 ends:
-- `20:15–20:40` `accommodation` — **Return to Casablanca Marriott Hotel** (existing bookend)
-- `23:29–23:44` `dining` — **Nightcap at La Sqala** (added later, no following return card)
+The −$624 delta is real money disappearing from the tally. The bug is in the RPC, not the toast.
 
-Two suppression sites prevent the late-nightlife bookend from appearing:
+### The bug
 
-1. **Read-time (`src/lib/itinerary/ensureHotelReturnBookend.ts:166`)** — the early
-   `activities.some(isHotelReturnBookendActivity)` short-circuit returns immediately
-   on the 20:15 STAY card and never reaches the wrap-aware "is the chronological
-   tail terminal?" check. Result: parser never appends a 23:54 → 02:55 late-nightlife
-   bookend even though `last` (the 23:29 nightcap) clearly qualifies. This is the
-   exact same logic flaw that produced the Mallorca and San Juan misses.
+`useTripFinancialSnapshot.ts` deliberately excludes `manual-*` rows from JS-side orphan detection (lines 238–239: `if (/^manual-/i.test(p.item_id)) continue;`). But the SQL function it calls does not honor that contract:
 
-2. **Write-time (`runStep8` in `universal-quality-pass.ts`)** — `runStep8` *itself*
-   would handle this correctly (its wrap-unaware max picks 23:44 > 20:40), but it
-   only runs during full-day generation and the post-meal-guard retry. Chat-added
-   activities (`itineraryActionExecutor`) and ad-hoc edits that extend the day past
-   an existing bookend never re-trigger it, so the DB stays sparse and the read-time
-   net is the only thing left — and it's currently broken (#1).
+```sql
+UPDATE public.trip_payments
+SET archived_at = now(),
+    archived_reason = 'orphan_reconcile'
+WHERE trip_id = p_trip_id
+  AND archived_at IS NULL
+  AND item_type NOT IN ('flight', 'hotel')
+  AND NOT (item_id = ANY(v_activity_ids));
+```
+
+`item_id = 'manual-<uuid>'` is by design never present in `itinerary_data.days[].activities[].id`, so every manual dining / transit / misc / "other" expense gets `archived_at = now(), archived_reason = 'orphan_reconcile'` the first time the JS finds *any* legitimate non-manual orphan and triggers the RPC.
+
+Once archived, the snapshot's `from('trip_payments').is('archived_at', null)` filter drops them, the manual hotel/flight/other fold inside `resolveCanonicalCostRows` shrinks, and `totalCents` drops by exactly the lost manual amount (the user's $624). The toast is the messenger.
 
 ## Fix
 
-### 1. `src/lib/itinerary/ensureHotelReturnBookend.ts`
-Drop the eager `activities.some(isHotelReturnBookendActivity)` early-return. The
-existing post-selection `isTerminalAlready(last)` check (after the wrap-aware
-`lastIdx` walk) already handles the legitimate "day truly ends on a hotel return"
-case; the early `some()` only fires the false-positive when an earlier bookend is
-later trumped by a real activity (nightcap, late dinner, user-added).
+### 1. SQL migration (`archive_orphan_trip_payments`)
 
-Add a new `[BOOKEND_TRACE] reason=stale_earlier_bookend_superseded` log so we can
-see in production when a Day-N late activity overrides an earlier bookend.
+Add the missing `manual-*` exclusion so the RPC honors the JS contract:
 
-### 2. Save/normalize-time net (`supabase/functions/generate-itinerary/action-save-itinerary.ts`)
-In the per-day `normalizeDays` loop (after timing cascade, before persist), run
-`runStep8` once when the chronologically-last non-locked card is **after** an
-existing bookend on the same day. This catches:
-- Chat-added late nightcaps
-- User-added late activities
-- Any post-generation mutation that extends the day
+```sql
+UPDATE public.trip_payments
+SET archived_at = now(),
+    archived_reason = 'orphan_reconcile'
+WHERE trip_id = p_trip_id
+  AND archived_at IS NULL
+  AND item_type NOT IN ('flight', 'hotel')
+  AND (item_id IS NULL OR lower(item_id) NOT LIKE 'manual-%')
+  AND NOT (item_id = ANY(v_activity_ids));
+```
 
-Sentinel: `[BOOKEND_VERIFY] day=N reason=late_addition_after_bookend appended=…`.
+### 2. One‑shot recovery in the same migration
 
-### 3. Persisted clean-up (one-shot, optional)
-Backfill is unnecessary — read-time fix #1 makes existing trips render correctly
-on next mount. Save-time fix #2 makes the next save persist the new bookend.
+Restore manual rows that the buggy RPC has already archived for any user, so the next snapshot recovers the missing $624 (and any equivalent manual loss on other trips):
 
-### 4. Tests
-- `ensureHotelReturnBookend.test.ts` — new case: existing 20:15 STAY return + 23:29
-  nightcap (Casablanca shape). Assert a second `late_nightlife_bookend` card is
-  appended at 23:54-ish.
-- `late-nightlife-source-survival.test.ts` — extend with the
-  "earlier-bookend + later-nightcap" shape so the survival contract covers it.
-- New `action-save-itinerary` test for the normalize-time `runStep8` re-trigger.
+```sql
+UPDATE public.trip_payments
+SET archived_at = NULL,
+    archived_reason = NULL
+WHERE archived_reason = 'orphan_reconcile'
+  AND lower(item_id) LIKE 'manual-%';
+```
+
+### 3. JS defense‑in‑depth (`useTripFinancialSnapshot.ts`)
+
+Belt‑and‑suspenders: when computing the orphan fingerprint, log a sentinel if the JS would have skipped a manual row but the RPC could have archived it pre‑fix. After the migration this is just observability; before/during rollout it confirms the SQL is doing the right thing.
+
+```ts
+// Sentinel — fires if archive_orphan_trip_payments ever returns a count
+// that exceeds the JS-detected orphan set (i.e. manual rows leaked through).
+if (count > orphanPaymentItemIds.size) {
+  console.warn(`[useTripFinancialSnapshot] orphan archive over-count ${count} > js=${orphanPaymentItemIds.size} — manual leak suspected`);
+}
+```
+
+### 4. Test
+
+Extend `src/services/__tests__/canonicalCostRows.test.ts` (or co-located resolver tests) with a case proving:
+- A `manual-hotel-…` row with `item_type: 'other'` and an unknown activity_id is **not** archived by orphan detection (i.e. its `amount_cents` survives in the manual fold across two consecutive snapshot fetches).
+
+A second test in a new `__tests__/archive-orphan-rpc.test.ts` (or a Supabase RPC integration test if one exists in the repo) asserting the SQL excludes `lower(item_id) LIKE 'manual-%'` is optional — covered by the SQL change itself.
 
 ### 5. Memory
-Update `mem://constraints/itinerary/late-nightlife-hotel-return` and
-`mem://constraints/itinerary/read-time-hotel-return-bookend` with the
-"earlier-bookend-doesn't-suppress" rule, and add the recurring Casablanca/Mallorca/
-San Juan reproduction to the index Core line so this regression class stays loud.
 
-## Files to change
+Add `mem://constraints/payments/manual-rows-orphan-immune`:
 
-- `src/lib/itinerary/ensureHotelReturnBookend.ts` (drop eager early-return)
-- `src/lib/itinerary/__tests__/ensureHotelReturnBookend.test.ts` (new case)
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (normalize-time runStep8 re-trigger)
-- `supabase/functions/generate-itinerary/__tests__/late-nightlife-source-survival.test.ts` (extend)
-- `supabase/functions/generate-itinerary/__tests__/hotel-return-bookend.test.ts` (new save-time case)
-- `mem://constraints/itinerary/late-nightlife-hotel-return`
-- `mem://constraints/itinerary/read-time-hotel-return-bookend`
-- `mem://index.md`
+> `archive_orphan_trip_payments` MUST exclude `lower(item_id) LIKE 'manual-%'` to mirror the JS-side orphan-detection skip in `useTripFinancialSnapshot.ts`. Manual hotel/flight/other rows have no `activity_id` in the itinerary by design; archiving them silently drops their contribution from the trip total and surfaces as a phantom "Trip total changed by −$X" toast on Payments tab mount. Sentinel: `[useTripFinancialSnapshot] orphan archive over-count`.
 
-## Out of scope
+Add a one-line entry to `mem://index.md` Memories pointing at the new constraint.
 
-- No prompt changes (the model already correctly omits a second bookend when an
-  earlier one exists; we want the deterministic engine to append it post-hoc).
-- No removal of the now-stale earlier 20:15 return — that's a UI-visible mutation
-  better handled in a follow-up that also re-times it as a "freshen up" if needed.
+## Files
+
+- `supabase/migrations/<ts>_archive_orphan_payments_skip_manual.sql` — new
+- `src/hooks/useTripFinancialSnapshot.ts` — sentinel log only
+- `src/services/__tests__/canonicalCostRows.test.ts` — add manual-row survival test
+- `mem://constraints/payments/manual-rows-orphan-immune` — new
+- `mem://index.md` — add reference
+
+## Verification
+
+After migration runs:
+1. Reload the trip that produced the toast → snapshot total restores by $624 (manual rows un-archived).
+2. Click Payments tab → no "Trip total changed" toast.
+3. Console shows zero `[useTripFinancialSnapshot] orphan archive over-count` warnings on subsequent reloads.

@@ -143,4 +143,34 @@ describe('resolveCanonicalCostRows', () => {
       expect(r.effectiveTotalCents).toBe(0);
     });
   });
+
+  // Regression: archive_orphan_trip_payments was archiving manual-* rows
+  // because their item_id never matches any itinerary activity_id. Manual
+  // rows are by design "orphan-immune" — their amounts must survive into
+  // effectiveTotalCents via the manual fold. If a future change deletes
+  // them via orphan archival, this test catches the silent $-loss that
+  // surfaces as the phantom "Trip total changed by -$X" toast on Payments
+  // tab mount. See mem://constraints/payments/manual-rows-orphan-immune.
+  it('manual-* trip_payments survive into effectiveTotalCents (manual fold)', () => {
+    const live = [
+      { id: 'live-1', dayNumber: 1, name: 'Real museum', category: 'activity', jsonCost: 0 },
+    ];
+    const costs = [
+      { activity_id: 'live-1', day_number: 1, category: 'activity', cost_per_person_usd: 50, num_travelers: 2 },
+    ];
+    const manualPayments = [
+      { item_id: 'manual-abc', item_type: 'hotel',  amount_cents: 40000, quantity: 1 },
+      { item_id: 'manual-def', item_type: 'other',  amount_cents: 24400, quantity: 1 },
+    ];
+    const r = resolveCanonicalCostRows({
+      costs: costs as any,
+      liveActivities: live,
+      includeHotel: true,
+      includeFlight: false,
+      manualPayments: manualPayments as any,
+    });
+    // Activity rows: $50 × 2 = $100. Manual hotel adds $400, manual other adds $244.
+    expect(r.totalCents).toBe(10000);
+    expect(r.effectiveTotalCents).toBe(10000 + 40000 + 24400);
+  });
 });
