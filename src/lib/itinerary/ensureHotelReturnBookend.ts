@@ -33,6 +33,19 @@ const FLIGHT_TITLE_RE = /\b(flight|departure)\b/i;
 // would otherwise mark the day as a departure day and suppress the end-of-day
 // hotel-return bookend (root cause of Osaka Day-1 nightcap with no return).
 const ARRIVAL_TITLE_RE = /\b(arrival|inbound|landing|land\s+at|arrive)\b/i;
+// Airport-bound transfer titles ("Transfer to KIX", "Taxi to JFK Terminal 4",
+// "Drive to Heathrow") are unambiguous departure terminals even when the
+// surrounding category is a generic 'transport' / 'TRAVEL'. Used as a
+// secondary signal to `AIRPORT_RE` so the gray-zone branch never fabricates
+// a 13:55 hotel-return after the airport drop-off.
+const DEPARTURE_TRANSFER_TITLE_RE =
+  /^\s*(?:transfer|taxi|drive|ride|shuttle|car|uber|lyft)\s+to\b[^.]*\b(airport|terminal|gate|station)\b/i;
+// Trailing "for Check-in"/"for Checkout"/"for Arrival" clauses the AI sometimes
+// glues onto otherwise-clean hotel names. Stripped after the main capture so
+// the resolved hotel name never carries a half-word ("for Check") into the
+// synthetic bookend title — root cause of the Osaka regression.
+const TRAILING_CHECK_CLAUSE_RE =
+  /\s+for\s+(?:check[-\s]?in|check[-\s]?out|checkin|checkout|arrival|departure)\b.*$/i;
 
 function parseTime(raw: unknown): number | null {
   if (typeof raw !== 'string' || !raw) return null;
