@@ -42,6 +42,19 @@ export interface FinancialSnapshot {
   paidPercent: number;
   /** Unspent portion of the misc / spending-money reserve folded into the total. */
   miscReserveCents: number;
+  /** Toggle state from trips.budget_include_hotel/flight (mirrors what the snapshot honored). */
+  includeHotel: boolean;
+  includeFlight: boolean;
+  /** Day-0 canonical hotel/flight cents (pre-toggle, pre-manual). */
+  committedHotelCents: number;
+  committedFlightCents: number;
+  /** Manual hotel/flight delta from trip_payments (override-aware). */
+  manualHotelDelta: number;
+  manualFlightDelta: number;
+  /** Hotel/flight cents ACTUALLY folded into tripTotalCents (toggle + manual applied, clamped >=0).
+   *  Use these — not local computeHotelCostUsd / leg sums — when decomposing the trip total. */
+  effectiveHotelCents: number;
+  effectiveFlightCents: number;
   loading: boolean;
   lastDelta: FinancialDelta | null;
   refetch: () => void;
@@ -53,6 +66,12 @@ interface SnapshotData {
   paidCents: number;
   budgetTotalCents: number;
   miscReserveCents: number;
+  includeHotel: boolean;
+  includeFlight: boolean;
+  committedHotelCents: number;
+  committedFlightCents: number;
+  manualHotelDelta: number;
+  manualFlightDelta: number;
   loading: boolean;
 }
 
@@ -62,6 +81,12 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     paidCents: 0,
     budgetTotalCents: 0,
     miscReserveCents: 0,
+    includeHotel: true,
+    includeFlight: false,
+    committedHotelCents: 0,
+    committedFlightCents: 0,
+    manualHotelDelta: 0,
+    manualFlightDelta: 0,
     loading: true,
   });
   const [lastDelta, setLastDelta] = useState<FinancialDelta | null>(null);
@@ -477,6 +502,12 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       paidCents: paidTotal,
       budgetTotalCents: tripData?.budget_total_cents || 0,
       miscReserveCents: miscReserveContributionCents,
+      includeHotel,
+      includeFlight,
+      committedHotelCents: canonicalHotelCents,
+      committedFlightCents: canonicalFlightCents,
+      manualHotelDelta: canonical.manualHotelDelta,
+      manualFlightDelta: canonical.manualFlightDelta,
       loading: false,
     });
   }, [tripId]);
@@ -529,6 +560,12 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     const toBePaid = Math.max(0, data.tripTotalCents - data.paidCents);
     const budgetRemaining = data.budgetTotalCents - data.tripTotalCents;
     const paidPct = data.tripTotalCents > 0 ? (data.paidCents / data.tripTotalCents) * 100 : 0;
+    const effectiveHotelCents = data.includeHotel
+      ? Math.max(0, data.committedHotelCents + data.manualHotelDelta)
+      : 0;
+    const effectiveFlightCents = data.includeFlight
+      ? Math.max(0, data.committedFlightCents + data.manualFlightDelta)
+      : 0;
 
     return {
       tripTotalCents: data.tripTotalCents,
@@ -539,6 +576,14 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       plannedUnpaidCents: toBePaid,
       paidPercent: Math.min(paidPct, 100),
       miscReserveCents: data.miscReserveCents,
+      includeHotel: data.includeHotel,
+      includeFlight: data.includeFlight,
+      committedHotelCents: data.committedHotelCents,
+      committedFlightCents: data.committedFlightCents,
+      manualHotelDelta: data.manualHotelDelta,
+      manualFlightDelta: data.manualFlightDelta,
+      effectiveHotelCents,
+      effectiveFlightCents,
       loading: data.loading,
       lastDelta,
       refetch,
