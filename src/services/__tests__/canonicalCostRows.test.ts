@@ -263,4 +263,55 @@ describe('resolveCanonicalCostRows', () => {
     expect(r.totalCents).toBe(24000); // activities only
     expect(r.hotelCents).toBe(52500); // bookkeeping still tracked for reserve math
   });
+
+  // Tokyo recurrence guard — Days + Hotel = Days symptom.
+  // See mem://constraints/finance/header-strip-mirrors-snapshot.
+  it('Day-0 hotel ¥167,200 + includeHotel=true folds into effectiveTotalCents', () => {
+    const live = [
+      { id: 'd1a', dayNumber: 1, name: 'Lunch', category: 'dining', jsonCost: 0 },
+    ];
+    const costs = [
+      { activity_id: 'd1a', day_number: 1, category: 'dining', cost_per_person_usd: 50, num_travelers: 2 },
+      // Day-0 hotel row — note: cost_per_person_usd here is the per-person USD value
+      { activity_id: null, day_number: 0, category: 'hotel', cost_per_person_usd: 836, num_travelers: 2 },
+    ];
+    const r = resolveCanonicalCostRows({
+      costs: costs as any,
+      liveActivities: live,
+      includeHotel: true,
+      includeFlight: false,
+      manualPayments: [],
+      travelers: 2,
+    });
+    expect(r.canonicalDay0HotelCents).toBe(167200);
+    expect(r.hotelCents).toBe(167200);
+    // Days (10000) + Hotel (167200) = 177200; manual delta is 0
+    expect(r.effectiveTotalCents).toBe(177200);
+    expect(r.manualHotelDelta).toBe(0);
+  });
+
+  it('manual hotel ¥167,200 with no Day-0 row folds into effectiveTotalCents', () => {
+    const live = [
+      { id: 'd1a', dayNumber: 1, name: 'Lunch', category: 'dining', jsonCost: 0 },
+    ];
+    const costs = [
+      { activity_id: 'd1a', day_number: 1, category: 'dining', cost_per_person_usd: 50, num_travelers: 2 },
+    ];
+    const manualPayments = [
+      { item_type: 'hotel', item_id: 'manual-hotel-1', amount_cents: 167200, quantity: 1 },
+    ];
+    const r = resolveCanonicalCostRows({
+      costs: costs as any,
+      liveActivities: live,
+      includeHotel: true,
+      includeFlight: false,
+      manualPayments: manualPayments as any,
+      travelers: 2,
+    });
+    expect(r.canonicalDay0HotelCents).toBe(0);
+    expect(r.manualHotelCents).toBe(167200);
+    expect(r.manualHotelDelta).toBe(167200);
+    // Days (10000) + manual hotel delta (167200) = 177200
+    expect(r.effectiveTotalCents).toBe(177200);
+  });
 });
