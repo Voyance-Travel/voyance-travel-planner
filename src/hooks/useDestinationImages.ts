@@ -13,6 +13,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { getDestinationImages as getCuratedImages, hasCuratedImages } from '@/utils/destinationImages';
 import { getDestinationImages as getAPIImages } from '@/services/destinationImagesAPI';
 import { supabase } from '@/integrations/supabase/client';
+import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
 
 interface DestinationImagesResult {
   heroImage: string | null;
@@ -126,7 +127,8 @@ async function getDbCuratedHeroUrl(destination: string): Promise<string | null> 
       .limit(1);
 
     if (error || !data || data.length === 0) return null;
-    return (data[0] as any).image_url || null;
+    const url = (data[0] as any).image_url || null;
+    return url && !isUntrustedHeroUrl(url) ? url : null;
   } catch {
     return null;
   }
@@ -165,6 +167,7 @@ export function useDestinationImages(
           const ordered = rotateDeterministic(curatedUrls, seed);
           
           for (const u of ordered) {
+            if (isUntrustedHeroUrl(u)) continue;
             if (await isUrlLoadable(u)) {
               if (!cancelled) setHeroImage(u);
               return;
@@ -191,8 +194,9 @@ export function useDestinationImages(
 
         if (cancelled) return;
 
-        const heroUrl = images[0]?.url && (await isUrlLoadable(images[0].url))
-          ? images[0].url
+        const apiUrl = images[0]?.url;
+        const heroUrl = apiUrl && !isUntrustedHeroUrl(apiUrl) && (await isUrlLoadable(apiUrl))
+          ? apiUrl
           : generateGradientDataUrl(cleanDestination, 0);
 
         setHeroImage(heroUrl);
