@@ -1,23 +1,47 @@
-Plan to fix the Trip Health false positives:
+## Problem
 
-1. Make Trip Health consume the same live itinerary content the page renders
-   - Update `EditorialItinerary`’s parent-sync fingerprint so `onDaysChange` fires when meal-relevant fields change, not only when activity IDs change.
-   - Include stable fields such as title/name, category/type, start/end/time aliases, duration, meal slot metadata, and day metadata in that fingerprint.
-   - This keeps `TripDetail.trip.itinerary_data.days` current, so the `TripHealthPanel` React node built in `TripDetail` stops scoring stale/pre-render days while the editor displays newer local days.
+The header strip renders `Days (group) X + Hotel Y = Trip Total Z` from three independent sources:
 
-2. Harden editor resync in the other direction
-   - Expand `initialDaysFingerprint` beyond ID + time so parent updates that preserve IDs but change category/title/meal metadata still reach the editor state.
-   - Keep the existing “don’t overwrite unsaved local changes” guard intact.
+- `daysGroupUsd` ← `useTripDayBreakdown` (own Supabase fetch over `activity_costs`)
+- `hotelChipUsd` / `flightChipUsd` ← `useTripFinancialSnapshot.effectiveHotelCents/effectiveFlightCents` (separate fetch)
+- `tripTotalUsd` ← `useTripFinancialSnapshot.tripTotalCents` (same snapshot fetch)
 
-3. Align health meal detection with visible meal cards
-   - Add a small shared fingerprint helper or local normalizer that reads the same legacy fields the health classifier already supports (`startTime`, `start_time`, `time`, `mealSlot`, `meal_slot`, `metadata.meal_slot`, etc.).
-   - Preserve the existing drinks-only/nightcap exclusion so nightcaps still do not satisfy dinner.
+Because the two hooks fetch independently and refetch on different cadences, the three numbers can transiently disagree. The current safety net (`stripDrift`) only fires when `chipSum > tripTotal + 1`. It does not protect the symmetric failure mode the user is reporting — `tripTotal == daysGroup` while `hotelChip > 0` — because that branch evaluates `false` and the chip-sum override is skipped, so the rendered equation reads `X + Y = X`. Confirmed across Casablanca, Kyoto, Osaka, Amsterdam (all with a Day-0 hotel row in `activity_costs` and `budget_include_hotel = true`).
 
-4. Lock it with regression tests
-   - Extend `editorialFingerprint.test.ts` to prove the fingerprint changes when only category/title/meal-slot fields change on the same activity IDs.
-   - Add/extend a `TripHealthPanel` false-positive test where all three visible meals exist and no `missing-meals` issue is emitted.
-   - Add/extend a departure-day test where a short day with checkout/airport-transfer remains free of “light schedule”/“no activities” warnings.
+This is a presentation bug. No backend math changes.
 
-5. Validate
-   - Run the focused Vitest files for `TripHealthPanel` and itinerary/editorial fingerprint behavior.
-   - Confirm the health score uses live day data and no longer craters to false 40/100 when meals are present.
+## Fix
+
+Make the equation balance every render, regardless of which hook is mid-fetch.
+
+### 1. `src/components/itinerary/EditorialItinerary.tsx` — header strip block (~lines 6109-6198)
+
+- Compute `chipSumUsd = daysGroupUsd + hotelChipUsd + flightChipUsd` first.
+- Replace the asymmetric `stripDrift` check with a symmetric one:
+  - `displayedTripTotalUsd = max(tripTotalUsd, chipSumUsd)` whenever a hotel or flight chip is visible AND either side has loaded. This is the value rendered as "Trip Total" on the right.
+  - The reserve/adjustment chip is then `displayedTripTotalUsd − daysGroup − hotel − flight` — by construction `≥ 0`, and when it's `> 0.5` we render it as "Reserve & adjustments" exactly as today.
+- Add a "Reconciling…" hint (small muted text, no spinner) when `tripTotalUsd` and `chipSumUsd` differ by more than `$1` AND neither hook is in `loading` — so users see the equation balance immediately while a brief explanation acknowledges the late refetch. Suppress the hint inside the existing 4 s stabilisation window already used by the snapshot hook.
+- Keep the existing dev-only `[STRIP_DRIFT]` warn but extend it to also fire on the symmetric case (`chipSumUsd + 1 < tripTotalUsd`) for telemetry.
+
+### 2. `src/components/itinerary/__tests__/EditorialItinerary.headerStrip.test.tsx` (new)
+
+Three deterministic cases driven directly against the strip's pure render helpers (extract the math into a small `computeHeaderStripValues` helper in the same file or a sibling module so it's testable without rendering the 12K-line component):
+
+- `tripTotal === daysGroup` and `hotel > 0` → displayed Trip Total equals `daysGroup + hotel`, no negative reserve.
+- `tripTotal > daysGroup + hotel` (Day-0 reserve genuinely present) → reserve chip surfaces the positive remainder, displayed Trip Total equals `tripTotal`.
+- `tripTotal < daysGroup + hotel` (existing drift case) → displayed Trip Total equals `chipSum`, behaviour preserved.
+
+### 3. `mem://constraints/finance/header-strip-mirrors-snapshot` — append note
+
+Document the new invariant: "The visible equation is always `Days + Hotel + Flight + Reserve ≡ Trip Total`, achieved by displaying `max(snapshotTotal, chipSum)` on the RHS and folding any positive remainder into Reserve. Snapshot total is still the source of truth for any other consumer (Budget tab, Payments tab); only this strip's RHS adjusts for visible balance."
+
+## Out of scope
+
+- Canonical resolver, `useTripFinancialSnapshot`, `useTripDayBreakdown`, and the `activity_costs` write paths are not touched.
+- Budget tab and Payments tab still read the unmodified `tripTotalCents` from the snapshot.
+- No SQL migration.
+
+## Risks
+
+- The "displayed total" can briefly exceed the canonical `tripTotalCents` by the hotel/flight delta when one fetch is stale. Acceptable: the chip values are themselves canonical (Day-0 rows / manual override aware), so the displayed RHS is always a real cost the user owes — never an inflated phantom. The next refetch (≤ ~600 ms via the `booking-changed` follow-up timer) reconciles silently.
+- Tests run against an extracted pure helper; no need to mount `EditorialItinerary` in jsdom.
