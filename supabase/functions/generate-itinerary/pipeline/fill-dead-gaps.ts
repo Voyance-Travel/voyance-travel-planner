@@ -13,6 +13,8 @@
 
 import { proposeGapFiller } from '../../_shared/fill-gap.ts';
 
+const MORNING_START_MIN = 9 * 60;
+const MORNING_END_MIN = 12 * 60 + 30;
 const AFTERNOON_START_MIN = 12 * 60;
 const AFTERNOON_END_MIN = 19 * 60;
 const EVENING_START_MIN = 18 * 60;
