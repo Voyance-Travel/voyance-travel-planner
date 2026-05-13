@@ -541,6 +541,14 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
             });
           } catch {}
         }
+      } else if (suppressed && ratio > 0.25) {
+        const sign = delta.deltaCents >= 0 ? '+' : '−';
+        const amount = Math.abs(delta.deltaCents) / 100;
+        console.info(
+          `[useTripFinancialSnapshot] suppressed system-reconcile toast (reason=${suppressReason}) ${sign}$${amount.toFixed(0)} tripId=${tripId}`
+        );
+        // Still mark so a later identical-total real event doesn't double-fire
+        lastWarnedTotalRef.current = totalCents;
       }
     }
     prevTotalRef.current = totalCents;
