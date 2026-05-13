@@ -99,11 +99,13 @@ export default function DestinationHeroImage({
   const writtenBackRef = useRef(false);
   useEffect(() => {
     if (writtenBackRef.current) return;
-    if (apiData?.url && !isUntrustedHeroUrl(apiData.url) && !canonicalUrl) {
+    const altForGuard = apiData?.alt || '';
+    const xcity = altForGuard ? detectCrossCityMention(altForGuard, destinationName) : null;
+    if (apiData?.url && !isUntrustedHeroUrl(apiData.url) && !xcity && !canonicalUrl) {
       writtenBackRef.current = true;
       writeBackDestinationCanonicalImage(destinationName, apiData.url);
     }
-  }, [apiData?.url, canonicalUrl, destinationName]);
+  }, [apiData?.url, apiData?.alt, canonicalUrl, destinationName]);
 
   const fallback = useMemo(() => generateGradientDataUrl(destinationName), [destinationName]);
 
