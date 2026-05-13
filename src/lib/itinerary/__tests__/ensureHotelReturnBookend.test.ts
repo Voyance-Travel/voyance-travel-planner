@@ -69,14 +69,17 @@ describe('ensureHotelReturnBookend', () => {
     expect(out).toBe(acts);
   });
 
-  it('idempotent — existing hotel return anywhere prevents read-time duplicate', () => {
+  it('existing earlier hotel return is SUPERSEDED by a later non-bookend tail (Casablanca pattern)', () => {
     const acts = [
       mk({ title: 'Return to The Notary', category: 'accommodation', startTime: '20:45', endTime: '21:10' }),
       mk({ title: 'Late notes at the lounge', category: 'activity', startTime: '21:20', endTime: '22:00' }),
     ];
     const out = ensureHotelReturnBookend(acts, { hotelName: 'The Notary', dayIndex: 0 });
-    expect(out).toBe(acts);
-    expect(out.filter((a: any) => /return to/i.test(String(a.title))).length).toBe(1);
+    // The earlier return must NOT short-circuit — the wrap-aware tail (lounge
+    // 22:00) is the chronological end of day, so a fresh bookend is appended.
+    expect(out.length).toBe(acts.length + 1);
+    expect(out.filter((a: any) => /return to/i.test(String(a.title))).length).toBe(2);
+    expect((out[out.length - 1] as any).source).toBe('bookend-readtime');
   });
 
   it('idempotent — already ends in checkout', () => {
