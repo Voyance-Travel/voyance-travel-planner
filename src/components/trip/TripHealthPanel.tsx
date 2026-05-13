@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { inferDayModeFallback } from '@/lib/itinerary/inferDayMode';
 import { getDisplayStartTime, getDisplayEndTime } from '@/lib/itinerary/displayTime';
+import { buildCascadePreview } from '@/lib/itinerary/healthCascadePreview';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -187,11 +188,16 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
     const isTransitLike = (cat?: string, title?: string) =>
       TRANSIT_CATS.includes((cat || '').toLowerCase()) || TRANSIT_TITLE_RE.test(title || '');
 
+    // Cascade preview — read post-cascade times so collisions the save-time
+    // scheduler will auto-resolve don't surface as user-facing warnings.
+    // mem://constraints/itinerary/db-is-source-of-truth-on-load — read-only.
+    const cascadePreview = buildCascadePreview(activities);
+
     // Gate: skip timing checks if any non-transit activity is missing start/end.
     // Prevents phantom overlap/buffer warnings from optimistic edits or partial hydration.
     const allTimed = realActivities.every((a: any) => {
       if (isTransitLike(a.category, a.name || a.title)) return true;
-      return !!getDisplayStartTime(a) && !!getDisplayEndTime(a);
+      return !!getDisplayStartTime(a, cascadePreview) && !!getDisplayEndTime(a, cascadePreview);
     });
     if (!allTimed) return;
 
@@ -207,14 +213,14 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
       return /^(?:return to (?:the )?hotel|return to )/i.test(title);
     };
     const timed = activities
-      .filter((a: any) => (getDisplayStartTime(a)) && (getDisplayEndTime(a)))
+      .filter((a: any) => (getDisplayStartTime(a, cascadePreview)) && (getDisplayEndTime(a, cascadePreview)))
       .filter((a: any) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
       // Drop hotel-return bookends — they're decorative and routinely wrap
       // past midnight; should never anchor a buffer/overlap warning.
       .filter((a: any) => !isHotelReturn(a))
       .map((a: any) => {
-        const startStr = getDisplayStartTime(a);
-        const endStr = getDisplayEndTime(a);
+        const startStr = getDisplayStartTime(a, cascadePreview);
+        const endStr = getDisplayEndTime(a, cascadePreview);
         return {
           name: a.name || a.title,
           category: a.category,
@@ -338,11 +344,15 @@ export function detectGapsForDay(allActivities: any[], dayNumber: number): Healt
   );
   if (dayActivities.length === 0) return issues;
 
+  // Cascade preview against the full activity list so adjustments propagate
+  // across the day before gap math runs against post-cascade times.
+  const cascadePreview = buildCascadePreview(dayActivities);
+
   const sorted = dayActivities
-    .filter((a: any) => !!getDisplayStartTime(a) && !isBookendOrTransit(a))
+    .filter((a: any) => !!getDisplayStartTime(a, cascadePreview) && !isBookendOrTransit(a))
     .map((a: any) => {
-      const startStr = getDisplayStartTime(a) || '00:00';
-      const endStr = getDisplayEndTime(a) || startStr;
+      const startStr = getDisplayStartTime(a, cascadePreview) || '00:00';
+      const endStr = getDisplayEndTime(a, cascadePreview) || startStr;
       const startMins = parseTime(startStr);
       const endMins = parseTime(endStr);
       // Wrap predicate: end===0 with start>0 (e.g. 23:30→00:00 exact) is wrap
