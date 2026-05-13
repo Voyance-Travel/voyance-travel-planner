@@ -170,7 +170,7 @@ export function useTripHeroImage({
       .then((result) => {
         if (cancelled) return;
         setApiFetched(true);
-        if (result?.url) {
+        if (result?.url && !isUntrustedHeroUrl(result.url)) {
           setApiImageUrl(result.url);
           if (result.source === 'unsplash' && result.photographer) {
             setApiAttribution({
