@@ -293,3 +293,19 @@ export function reportRemainingEveningDeadGap(
   }
   return largest;
 }
+
+/**
+ * Same for the morning (09:00–12:30) window.
+ * Optional `dayNumber` is only used for log context.
+ */
+export function reportRemainingMorningDeadGap(
+  activities: any[],
+  latestUsableMins?: number,
+  dayNumber?: number,
+): number {
+  const largest = reportRemainingDeadGapForWindow(activities, latestUsableMins, MORNING_WINDOW);
+  if (largest >= MIN_GAP_MIN) {
+    console.warn(`[QUALITY] Day ${dayNumber ?? '?'} has ${largest}m unplanned 9:00-12:30`);
+  }
+  return largest;
+}
