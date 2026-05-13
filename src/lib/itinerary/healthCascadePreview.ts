@@ -53,7 +53,11 @@ export function buildCascadePreview(
   // `enforceTimingAndBuffers` engage. Also surface `name` as `title` so
   // structural classification works on records that only carry `name`.
   const clone: CascadeActivity[] = activities.map((a) => {
-    const startTime = a?.startTime ?? a?.time ?? a?.start_time;
+    // Parser canonicalizes legacy `time` → `startTime`. Don't re-introduce
+    // `time` as a fallback here; an activity reaching this point without
+    // `startTime` is genuinely untimed and should remain so.
+    // mem://constraints/itinerary/time-field-canonicalization
+    const startTime = a?.startTime ?? a?.start_time;
     let endTime = a?.endTime ?? a?.end_time;
     if (!endTime && typeof startTime === 'string') {
       const startMins = parseTime(startTime);

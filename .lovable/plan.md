@@ -1,41 +1,49 @@
-## Root cause (Casablanca Day 1 stale-overlap warning)
+## Issue 3 Investigation — Day 2 stale-overlap warning
 
-The "Wander Place Mohammed V (18:44–20:29) overlaps Dinner: Le Jasmine (19:00–20:15) — 89 min conflict" warning is the same class we already partially fixed with `buildCascadePreview` ([Health Cascade Preview] memory). The preview is wired into `TripHealthPanel.analyzeHealth` and `detectGapsForDay`, yet it's still surfacing.
+### What the data says
 
-Tracing `src/lib/itinerary/healthCascadePreview.ts` and `src/utils/itinerary/timingCascade.ts` against the symptom (UI shows Le Jasmine post-cascade at 8:44 PM but panel reads raw 19:00) the preview is failing to move Le Jasmine for one of three reasons we can prove from the code alone:
+Casablanca trip `fce9c4ba-…0eda783`, Day 2:
 
-1. **Lock detection is too narrow.** `buildCascadePreview` only marks rows locked when `a.locked || a.isLocked || a.lock_state === 'locked'`. The canonical `isActivityLocked` (`src/utils/persistDayContract.ts`) also honors `manuallyAdded`, `extracted`, `pinned`, `lockState ∈ {locked, user, manual}`. When Le Jasmine is "manually added" but not flagged on these surface fields, the renderer treats it as movable but the cascade may still skip it via a different structural classifier — guarantee parity by reusing the canonical helper.
-2. **Overlap + buffer branches require `currEnd !== null`.** Same-start branch (line 188) synthesizes `anchorEnd = currStart + durationMinutes`, but the overlap branch (206) and buffer branch (226) bail when `currEnd` is missing. Activities persisted with only `startTime + durationMinutes` (common on manually inserted "Wander…" cards) silently disable the push that should have moved Le Jasmine to ~20:34.
-3. **`isStructural`/`isEndOfDayBookend` only inspect `act.title`.** Records carrying `name` (no `title`) skip those classifiers — opposite direction to the bug, but it lets unrelated rows incorrectly anchor cascades and is worth fixing while we're here.
+| Source | Lunch (Bleu/Brasserie) | Museum of Moroccan Judaism |
+|---|---|---|
+| Page render (normalized table) | 12:30–13:30 | **13:45–15:00** |
+| `itinerary_data` JSON (sparse, 4 of 17 cards) | not present | `startTime:"13:45"`, `endTime:"15:00"`, **`time:"12:31"` (stale)** |
 
-We also lack any signal when a preview disagrees with the rendered display, so reproducible cases like Mexico City / Montreal / Casablanca all bubble up the same way without a console breadcrumb.
+`parseEditorialDays` → `getDisplayStartTime` correctly prefers `startTime` over `time`, so the engine *should* report 13:45–15:00 for the Museum. The health panel only reads `editorDays = parseEditorialDays(trip.itinerary_data, …)` — never the normalized table. So if the warning still says `12:31–13:46`, exactly one of these is true:
 
-## Plan
+1. A code path along `editorDays → analyzeHealth` strips/loses `startTime` for some rows (then `time` becomes the fallback).
+2. The cascade-preview clone fails for this activity (no id, throws, or locked) and the synthesized `endTime = startTime + duration` lands at 13:46 by reading `time` instead of `startTime`.
+3. Two activity records collide on id, the merge drops the fresh one.
 
-### 1. Cascade preview: parity with display + canonical lock set
-File: `src/lib/itinerary/healthCascadePreview.ts`
-- Replace inline lock predicate with `isActivityLocked` from `@/utils/persistDayContract` (covers `manuallyAdded`, `extracted`, `pinned`, `lockState`, `lock_state`, `locked`, `isLocked`).
-- Before cloning, synthesize `endTime` from `startTime + durationMinutes` when endTime is missing, so the cascade's overlap/buffer branches engage. (Only on the clone — never persist.)
-- Use `act.title || act.name` consistently when building the clone so the structural classifier in `enforceTimingAndBuffers` gets a usable title.
+### Two related symptoms
 
-### 2. Cascade engine: cover missing-endTime branches
-File: `src/utils/itinerary/timingCascade.ts`
-- In the overlap branch (~206) and buffer branch (~226), compute `effectiveCurrEnd = currEnd ?? (currStart + (durationMinutes || 30))` mirroring the same-start branch. No behavior change when endTime present; closes the silent skip when it's not.
-- `isStructural` / `isEndOfDayBookend`: read `act.title || act.name` (treat both as title-equivalent).
+**A. Stale-time leak via `time` fallback** — the underlying JSON carries `startTime:"13:45"` *and* `time:"12:31"` together, and any reader that uses `time` first (or treats `startTime` as falsy) surfaces the wrong number. Today's `displayTime` chain is correct, but nothing else stops a future reader from regressing.
 
-### 3. Drift telemetry — silent until a repro fires
-File: `src/components/trip/TripHealthPanel.tsx` (analyzeHealth pass)
-- After `buildCascadePreview`, walk the timed list once and `console.warn('[HEALTH_CASCADE_DRIFT]', {...})` for any activity whose `cascadePreview` start/end differs from `a.displayStartTime || a.startTime` by ≥1 min. Read-only; no state mutation. This is the breadcrumb we wished we had for Mexico City / Montreal.
+**B. JSON ↔ normalized-table drift** — Day 2 has 17 cards in `itinerary_activities` but only 4 in `trips.itinerary_data`. The page renders the 17, the health panel sees the 4. This violates the **DB Is Source of Truth** memory and is the real reason the panel shows times the user can't see on screen.
 
-### 4. Unit test (locks the fix in place)
-File: `src/lib/itinerary/__tests__/healthCascadePreview.test.ts` (new)
-- Reproduce Casablanca Day 1: Wander (`category:'exploration'`, 18:44, durationMinutes=105, no endTime), Le Jasmine (`category:'dining'`, 19:00–20:15). Assert cascade preview produces Le Jasmine startTime ≥ 20:34 and that `analyzeHealth` produces zero overlap warnings.
-- Add a `manuallyAdded:true` variant on Le Jasmine asserting the canonical lock helper keeps it pinned (no false move) and the panel suppresses the overlap (locked-vs-locked is the only legitimate case left).
+### Plan
 
-### 5. Memory
-- Update [Health Cascade Preview] entry to record the additional invariants (synthesize endTime, canonical lock helper, drift telemetry). No new index entry needed.
+**1. Lock the time-field invariant at the parser boundary** — `src/utils/itineraryParser.ts`
+- In `parseActivity`, after extracting `startTime` and `time`, if both are present and disagree, **drop `time` entirely** so no downstream code can fall through to the stale value. Add a `console.warn('[TIME_FIELD_DRIFT]', { id, startTime, time })` breadcrumb so we see how often this happens in production.
+- Same treatment for `endTime` vs any legacy `end`-style fallback if present.
 
-## Out of scope
+**2. Defense in depth in `displayTime` + cascade preview**
+- `getDisplayStartTime` / `getDisplayEndTime`: keep `startTime` precedence but **stop reading `a?.time`** as a fallback when `a?.startTime` is a non-empty string of any value (today's chain already does this; add a clarifying comment + test).
+- `buildCascadePreview` clone: `const startTime = a?.startTime || a?.start_time;` (drop `?? a?.time`) — relying on parser normalization above. A record reaching this point without `startTime` is genuinely untimed, not a victim of legacy `time` shadowing.
 
-- Backend cascade (`_shared/timing-cascade.ts`) is the save-time enforcer and is the contract this preview mirrors. It already runs on both branches in production paths via `enforceTimingAndBuffers`; no behavioral change there beyond the matching null-endTime guards if the same code path proves missing. (Will mirror only if grep confirms the same gap; otherwise leave untouched.)
-- No persistence of preview-shifted times (per [DB Is Source Of Truth On Load]).
+**3. Stop reading sparse JSON when normalized data is richer** — `src/pages/TripDetail.tsx`
+- After `parseEditorialDays(trip.itinerary_data, …)`, compare per-day activity counts against the `itinerary_activities` rows already loaded for the same trip. If JSON day has materially fewer real cards than the table (>40% gap, mirroring the persist-regression guard ratio), call the existing `resyncItineraryFromDb(tripId)` once and re-parse. Health analysis runs against the rebuilt `editorDays`.
+- Telemetry: `console.warn('[HEALTH_JSON_SPARSE_RESYNC]', { tripId, day, jsonCount, tableCount })`.
+
+**4. Tests**
+- `src/utils/__tests__/itineraryParser.timeFieldDrift.test.ts` — JSON activity with `{startTime:"13:45", time:"12:31"}` parses with `time` dropped and `startTime` preserved.
+- Extend `src/components/trip/__tests__/TripHealthPanel.cascadePreview.test.ts` with a Casablanca-shaped fixture (Lunch 12:30–13:30 + Museum carrying both `startTime:"13:45"` and stale `time:"12:31"`); assert no overlap warning fires.
+
+**5. Memory**
+- New constraint `mem://constraints/itinerary/time-field-canonicalization`: parser is the single boundary that reconciles `startTime` vs legacy `time`; downstream readers never fall back to `time` when `startTime` exists.
+- Append a note to `mem://constraints/itinerary/health-cascade-preview` covering the sparse-JSON re-sync trigger.
+
+### Out of scope
+
+- Why the JSON drifted from the normalized table on this trip (separate write-path audit; will surface once the `[HEALTH_JSON_SPARSE_RESYNC]` telemetry runs in production).
+- Any change to the cascade engine itself — Issue 2's fixes already hold.

@@ -14,14 +14,19 @@ type CascadePreviewMap = Map<string, { startTime?: string; endTime?: string }>;
 
 export function getDisplayStartTime(a: any, cascadeMap?: CascadePreviewMap): string {
   const cascaded = cascadeMap && a?.id ? cascadeMap.get(String(a.id))?.startTime : undefined;
+  // `startTime` is canonical (parser canonicalizes legacy `time` to mirror it).
+  // Never fall back to `a?.time` when `startTime` exists — that would re-surface
+  // pre-cascade stale values. Only use `time`/`start_time` if startTime is
+  // entirely absent (unparsed or partial-hydration record).
+  // mem://constraints/itinerary/time-field-canonicalization
   return (
     cascaded ||
     a?.displayStartTime ||
     a?.adjustedStartTime ||
     a?.metadata?.displayStart ||
     a?.startTime ||
-    a?.time ||
     a?.start_time ||
+    a?.time ||
     ''
   );
 }

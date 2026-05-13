@@ -101,4 +101,37 @@ describe('TripHealthPanel cascade preview', () => {
     const conflicts = issues.filter((i) => i.fixAction === 'fix_timing');
     expect(conflicts.length).toBeGreaterThan(0);
   });
+
+  it('Casablanca: stale legacy `time` does not surface as overlap when startTime is canonical', () => {
+    // Lunch 12:30–13:30 + Museum carrying both startTime:13:45 (rendered)
+    // AND a stale time:12:31 (pre-cascade). The displayTime/cascade pipeline
+    // must read 13:45, not 12:31, so no overlap warning fires.
+    // mem://constraints/itinerary/time-field-canonicalization
+    const day = baseDay(2, [
+      ...meals,
+      {
+        id: 'lunch',
+        title: 'Lunch: La Brasserie',
+        name: 'Lunch: La Brasserie',
+        category: 'dining',
+        startTime: '12:30',
+        endTime: '13:30',
+        time: '12:30',
+      },
+      {
+        id: 'museum',
+        title: 'Museum of Moroccan Judaism',
+        name: 'Museum of Moroccan Judaism',
+        category: 'sightseeing',
+        startTime: '13:45',
+        endTime: '15:00',
+        time: '12:31', // stale legacy field — must not be read
+      },
+    ]);
+
+    const issues = analyzeHealth([day]);
+    const conflicts = issues.filter((i) => i.fixAction === 'fix_timing');
+    expect(conflicts).toHaveLength(0);
+  });
 });
+

@@ -468,9 +468,27 @@ function parseSingleActivity(
     description: extractString(activityData, ['description']),
     type: extractString(activityData, ['type']),
     category: extractString(activityData, ['category']),
-    startTime: extractString(activityData, ['startTime', 'start_time', 'time']),
-    endTime: extractString(activityData, ['endTime', 'end_time']),
-    time: extractString(activityData, ['time', 'startTime', 'start_time']),
+    // Time-field canonicalization: `startTime` is canonical. Legacy `time`
+    // is mirrored to match — never allowed to disagree downstream.
+    // mem://constraints/itinerary/time-field-canonicalization
+    ...(() => {
+      const startTime = extractString(activityData, ['startTime', 'start_time', 'time']);
+      const rawTime = extractString(activityData, ['time']);
+      if (rawTime && startTime && rawTime !== startTime && typeof console !== 'undefined') {
+        // eslint-disable-next-line no-console
+        console.warn('[TIME_FIELD_DRIFT]', {
+          id: (activityData as { id?: string })?.id,
+          startTime,
+          time: rawTime,
+        });
+      }
+      return {
+        startTime,
+        endTime: extractString(activityData, ['endTime', 'end_time']),
+        // Mirror startTime so legacy readers can't surface a stale value.
+        time: startTime || rawTime || '',
+      };
+    })(),
     duration: coerceDurationString(
       extractString(activityData, ['duration']),
       extractNumber(activityData, ['durationMinutes', 'duration_minutes'])

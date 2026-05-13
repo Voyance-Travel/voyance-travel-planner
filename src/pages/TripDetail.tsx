@@ -1266,12 +1266,59 @@ export default function TripDetail() {
           }
 
           // ── SELF-HEAL: Rebuild itinerary_data.days from itinerary_days table ──
-          // Only rebuild if the table has ACTUAL activity data (via itinerary_activities).
-          // Never overwrite populated JSON days with empty table-backed days.
-          if (jsonDayCount > 0 && itineraryDaysDbCount > jsonDayCount && tripId) {
-            console.warn(
-              `[TripDetail] Self-heal: itinerary_data.days (${jsonDayCount}) < itinerary_days table (${itineraryDaysDbCount}). Rebuilding from table.`
-            );
+          // Triggers on either:
+          //  (a) day-count drift (table has more days than JSON), OR
+          //  (b) per-day activity-count drift (any JSON day has materially
+          //      fewer cards than the corresponding table row — >40% gap).
+          // Never overwrites a populated JSON day with an empty table-backed day.
+          // mem://constraints/itinerary/health-cascade-preview (sparse-JSON resync trigger)
+          const dayCountDrift = jsonDayCount > 0 && itineraryDaysDbCount > jsonDayCount;
+          let perDayDriftSuspected = false;
+          if (jsonDayCount > 0 && itineraryDaysDbCount === jsonDayCount && tripId) {
+            try {
+              const { data: counts } = await supabase
+                .from('itinerary_activities')
+                .select('itinerary_day_id')
+                .eq('trip_id', tripId);
+              if (Array.isArray(counts)) {
+                const tableByDayId = new Map<string, number>();
+                for (const r of counts) {
+                  const id = (r as { itinerary_day_id?: string }).itinerary_day_id;
+                  if (id) tableByDayId.set(id, (tableByDayId.get(id) || 0) + 1);
+                }
+                const { data: dayIdRows } = await supabase
+                  .from('itinerary_days')
+                  .select('id, day_number')
+                  .eq('trip_id', tripId);
+                const tableByDayNumber = new Map<number, number>();
+                for (const d of (dayIdRows || []) as Array<{ id: string; day_number: number }>) {
+                  tableByDayNumber.set(d.day_number, tableByDayId.get(d.id) || 0);
+                }
+                for (const d of (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>) {
+                  const dn = d?.dayNumber;
+                  if (!dn) continue;
+                  const jsonCount = Array.isArray(d.activities) ? d.activities.length : 0;
+                  const tableCount = tableByDayNumber.get(dn) || 0;
+                  // >40% gap mirrors persist-regression guard ratio
+                  if (tableCount >= 3 && jsonCount < tableCount * 0.6) {
+                    console.warn('[HEALTH_JSON_SPARSE_RESYNC]', {
+                      tripId, day: dn, jsonCount, tableCount,
+                    });
+                    perDayDriftSuspected = true;
+                  }
+                }
+              }
+            } catch (probeErr) {
+              console.warn('[TripDetail] sparse-JSON probe failed:', probeErr);
+            }
+          }
+
+          if ((dayCountDrift || perDayDriftSuspected) && tripId) {
+            if (dayCountDrift) {
+              console.warn(
+                `[TripDetail] Self-heal: itinerary_data.days (${jsonDayCount}) < itinerary_days table (${itineraryDaysDbCount}). Rebuilding from table.`
+              );
+            }
             try {
               // Rebuild directly from itinerary_days — the table stores embedded activities
               {
@@ -1281,7 +1328,7 @@ export default function TripDetail() {
                   .eq('trip_id', tripId)
                   .order('day_number');
 
-                if (fullDayRows && fullDayRows.length > jsonDayCount) {
+                if (fullDayRows && fullDayRows.length >= jsonDayCount) {
                   const jsonDaysByNumber = new Map<number, any>();
                   for (const d of (itinData?.days || []) as any[]) {
                     if (d?.dayNumber) jsonDaysByNumber.set(d.dayNumber, d);
@@ -1291,14 +1338,19 @@ export default function TripDetail() {
                     const existingJsonDay = jsonDaysByNumber.get(row.day_number);
                     const jsonActivities = existingJsonDay?.activities;
                     const tableActivities = Array.isArray(row.activities) ? row.activities : [];
-                    
-                    const hasJsonActivities = Array.isArray(jsonActivities) && jsonActivities.length > 0;
-                    const hasTableActivities = tableActivities.length > 0;
-                    
-                    if (existingJsonDay && hasJsonActivities) {
+
+                    const jsonCount = Array.isArray(jsonActivities) ? jsonActivities.length : 0;
+                    const tableCount = tableActivities.length;
+
+                    // Prefer the richer source: if table has materially more
+                    // activities, swap JSON's sparse list for the table's.
+                    if (existingJsonDay && tableCount >= 3 && jsonCount < tableCount * 0.6) {
+                      return { ...existingJsonDay, activities: tableActivities };
+                    }
+                    if (existingJsonDay && jsonCount > 0) {
                       return existingJsonDay;
                     }
-                    if (existingJsonDay && !hasJsonActivities && hasTableActivities) {
+                    if (existingJsonDay && jsonCount === 0 && tableCount > 0) {
                       return { ...existingJsonDay, activities: tableActivities };
                     }
                     if (existingJsonDay) {
@@ -1319,7 +1371,7 @@ export default function TripDetail() {
                     days: rebuiltDays,
                   };
 
-                  console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount})`);
+                  console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount}); reason=${dayCountDrift ? 'day-count' : 'per-day-activity-count'}`);
                   await safeUpdateItineraryData(tripId, healedItinerary, {}, { skipLedgerCheck: true, reason: 'self-heal-rebuild-from-tables' });
 
                   const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
