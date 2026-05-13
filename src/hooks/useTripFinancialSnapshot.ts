@@ -265,8 +265,15 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       travelers: tripTravelers,
     });
     totalCents = canonical.effectiveTotalCents;
-    committedHotelCents = canonical.hotelCents;
-    committedFlightCents = canonical.flightCents;
+    // Header strip Hotel/Flight chips MUST surface ONLY Day-0 logistics rows
+    // (and manual overrides via manualHotelDelta). Day-N hotel/flight rows
+    // already live inside the per-day badges via useTripDayBreakdown — using
+    // canonical.hotelCents (sum of ALL rows) double-displays the Day-N hotel
+    // and breaks the strip equation in the Osaka pattern: Days ¥X + Hotel ¥Y
+    // = Trip Total ¥X (because the hotel is already inside ¥X).
+    // See mem://constraints/finance/header-strip-mirrors-snapshot.
+    committedHotelCents = canonical.canonicalDay0HotelCents;
+    committedFlightCents = canonical.canonicalDay0FlightCents;
     loggedMiscCents = canonical.loggedMiscCents;
     canonicalHotelCents = canonical.canonicalDay0HotelCents;
     canonicalFlightCents = canonical.canonicalDay0FlightCents;
