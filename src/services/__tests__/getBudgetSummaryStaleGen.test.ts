@@ -8,53 +8,42 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// In-memory fixture state driven per-test
 const trip = {
   itinerary_status: 'ready' as string,
   metadata: null as any,
   updated_at: new Date().toISOString(),
 };
 const settings = {
+  trip_id: 'trip-x',
   budget_total_cents: 100_000,
   budget_currency: 'USD',
   travelers: 2,
   budget_include_hotel: true,
   budget_include_flight: true,
+  budget_input_mode: 'total',
+  warning_threshold: 'yellow',
 };
 
 vi.mock('@/integrations/supabase/client', () => {
-  const builder = (table: string) => {
-    const chain: any = {
-      select: () => chain,
-      eq: () => chain,
-      maybeSingle: async () => {
-        if (table === 'trips') return { data: trip, error: null };
-        if (table === 'trip_budget_settings') return { data: settings, error: null };
-        return { data: null, error: null };
-      },
-      order: () => chain,
-      then: undefined,
+  const makeChain = (table: string): any => {
+    const settle = async () => {
+      if (table === 'trips') return { data: trip, error: null };
+      if (table === 'trip_budget_settings') return { data: settings, error: null };
+      return { data: [], error: null };
     };
-    // For activity_costs etc., make it resolve to empty arrays.
-    chain.select = () => ({
-      ...chain,
-      eq: () => ({
-        ...chain,
-        eq: () => Promise.resolve({ data: [], error: null }),
-        order: () => Promise.resolve({ data: [], error: null }),
-        maybeSingle: chain.maybeSingle,
-      }),
-      maybeSingle: chain.maybeSingle,
-    });
+    const chain: any = {};
+    chain.select = () => chain;
+    chain.eq = () => chain;
+    chain.order = () => chain;
+    chain.in = () => chain;
+    chain.gte = () => chain;
+    chain.lte = () => chain;
+    chain.maybeSingle = settle;
+    chain.single = settle;
+    chain.then = (resolve: any, reject: any) => settle().then(resolve, reject);
     return chain;
   };
-  return { supabase: { from: builder } };
-});
-
-// Settings loader uses its own helper; stub it to bypass.
-vi.mock('@/services/tripBudgetService', async (orig) => {
-  const mod: any = await orig();
-  return mod;
+  return { supabase: { from: (table: string) => makeChain(table) } };
 });
 
 import { getBudgetSummary } from '../tripBudgetService';
@@ -67,16 +56,12 @@ beforeEach(() => {
 
 describe('getBudgetSummary stale-generation gate', () => {
   it('isGenerating=true when status=generating, no frozen stamp, updated_at recent', async () => {
-    trip.itinerary_status = 'generating';
-    trip.metadata = null;
-    trip.updated_at = new Date(Date.now() - 30_000).toISOString(); // 30s ago
+    trip.updated_at = new Date(Date.now() - 30_000).toISOString();
     const summary = await getBudgetSummary('trip-1', 5);
     expect(summary?.isGenerating).toBe(true);
   });
 
   it('isGenerating=false when status=generating, no frozen stamp, updated_at > 10 min ago (stale)', async () => {
-    trip.itinerary_status = 'generating';
-    trip.metadata = null;
     trip.updated_at = new Date(Date.now() - 11 * 60_000).toISOString();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const summary = await getBudgetSummary('trip-2', 5);
@@ -88,17 +73,13 @@ describe('getBudgetSummary stale-generation gate', () => {
   });
 
   it('isGenerating=false when status=generating + frozen_at set', async () => {
-    trip.itinerary_status = 'generating';
     trip.metadata = { itinerary_frozen_at: new Date().toISOString() };
-    trip.updated_at = new Date().toISOString();
     const summary = await getBudgetSummary('trip-3', 5);
     expect(summary?.isGenerating).toBe(false);
   });
 
   it('isGenerating=false when status=ready', async () => {
     trip.itinerary_status = 'ready';
-    trip.metadata = null;
-    trip.updated_at = new Date().toISOString();
     const summary = await getBudgetSummary('trip-4', 5);
     expect(summary?.isGenerating).toBe(false);
   });
