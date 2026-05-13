@@ -110,7 +110,12 @@ export default function DestinationHeroImage({
   // Trusted-only sources at every tier; gradient is the always-safe terminal.
   const trustedCanonical = canonicalUrl && !isUntrustedHeroUrl(canonicalUrl) ? canonicalUrl : null;
   const trustedCurated = curatedSrc && !isUntrustedHeroUrl(curatedSrc) ? curatedSrc : null;
-  const trustedApi = apiData?.url && !isUntrustedHeroUrl(apiData.url) ? apiData.url : null;
+  const apiAlt = apiData?.alt || '';
+  const apiCrossCity = apiAlt ? detectCrossCityMention(apiAlt, destinationName) : null;
+  if (apiCrossCity) {
+    console.warn(`[DestinationHeroImage] cross-city blocked dest="${destinationName}" alt="${apiAlt}" → "${apiCrossCity}"`);
+  }
+  const trustedApi = apiData?.url && !isUntrustedHeroUrl(apiData.url) && !apiCrossCity ? apiData.url : null;
 
   // Final image: canonical DB > curated [0] > API resolved > gradient
   const src = trustedCanonical || trustedCurated || trustedApi || fallback;
