@@ -63,6 +63,7 @@ describe('EditorialItinerary initialDays fingerprint', () => {
       activities: [{ id: 'a1', startTime: '09:00', endTime: '09:45', durationMinutes: 45 }],
     }];
     expect(fingerprint(days)).toEqual(fingerprint(JSON.parse(JSON.stringify(days))));
+  });
 
   it('changes when only category/title/mealSlot shift on the same id (health stale-state fix)', () => {
     const before = [{
