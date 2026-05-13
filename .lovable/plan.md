@@ -1,64 +1,66 @@
 ## The bug
 
-The Itinerary header reconciliation strip shows:
+Budget tab "Trip Expenses" card shows a persistent **Calculating…** pill (and `animate-pulse` on the price). The recent fix to `getBudgetSummary.isGenerating` (mem: *Calculating Spinner Resolves*) excluded `status='partial'` and any frozen status, but it does **not** handle a trip that was abandoned mid-generation: `itinerary_status='generating'` + `metadata.itinerary_frozen_at` never stamped.
 
-```
-Days MAD 14,288 + Hotel MAD 5,224 = Trip Total MAD 14,288
-```
+Three such ghost trips currently live in the DB (Venice, May 7, ~6 days ago, 0 cost rows). If a user opens one — or a fresh trip whose generation crashed before the chain orchestrator stamped `itinerary_frozen_at` — the Budget tab spinner is permanent because:
 
-The Trip Total is missing the hotel — the equation is internally inconsistent.
+- `getBudgetSummary` returns `isGenerating: true` forever (the only false branches are non-`generating`/`queued` statuses or a frozen stamp).
+- React-Query keeps polling every 4 s, but `getBudgetSummary` keeps returning `true`, so the spinner never resolves.
 
-## Root cause
-
-`resolveCanonicalCostRows` (`src/services/canonicalCostRows.ts:344-349`) computes the manual-payment fold for hotel/flight as:
-
-```ts
-const manualHotelDelta = canonicalDay0HotelCents > 0
-  ? (manualHotelCents - canonicalDay0HotelCents)   // override branch
-  : manualHotelCents;
-```
-
-The override branch fires whenever a Day-0 hotel row exists in `activity_costs`, **even when there is no manual hotel `trip_payments` row** (`manualHotelCents === 0`). In that common case:
-
-- `totalCents` already includes the hotel row (e.g. +MAD 5,224 → 19,512)
-- `manualHotelDelta = 0 − 5,224 = −5,224`
-- `effectiveTotalCents = 19,512 + (−5,224) = 14,288` (hotel silently subtracted back out)
-
-Meanwhile `effectiveHotelCents` (snapshot line 580) is computed as `committedHotelCents + manualHotelDelta = 5,224 + (−5,224) = 0`, so the Hotel chip should disappear — except `committedHotelCents` is sourced from `canonical.hotelCents` (the pre-toggle bookkeeping at canonicalCostRows.ts:257), which is the raw 5,224. So one branch sees the hotel and the other doesn't, producing the visibly wrong equation.
-
-The bug applies symmetrically to flights.
-
-A regression test exists for the "manual override" branch (`canonicalCostRows.test.ts:92`) but **none for the much more common "Day-0 hotel row, no manual payment" case** — which is why this slipped in.
+`useTripFinancialSnapshot.loading` already self-heals via try/catch, so the **Itinerary header** Calculating pill resolves after the first read; the **Budget tab** uses `summary.isGenerating` which has no such escape hatch — that's why the bug is now Budget-tab-specific.
 
 ## Fix
 
-Treat the override branch as opt-in: only fold when a manual row actually exists. Otherwise the canonical Day-0 row already counts inside `totalCents` and the delta is zero.
-
-```ts
-const manualHotelDelta  = manualHotelCents  > 0 ? (manualHotelCents  - canonicalDay0HotelCents)  : 0;
-const manualFlightDelta = manualFlightCents > 0 ? (manualFlightCents - canonicalDay0FlightCents) : 0;
-```
-
-Also tighten `useTripFinancialSnapshot` `effectiveHotelCents` / `effectiveFlightCents` (lines 580–585) so the chip mirrors the same rule — when there's no manual row, the chip equals `committedHotelCents` (already included in `tripTotalCents`), not `committed + negative_delta`.
+Add a stale-generation gate to `getBudgetSummary.isGenerating` so an abandoned `generating` status flips false after a sane idle window, even without `itinerary_frozen_at`. Mirror the same idea in the JSON activity_costs read so a partially-written trip (cost rows present, no frozen stamp) doesn't keep claiming "still generating".
 
 ### Steps
 
-1. **`src/services/canonicalCostRows.ts`** — guard both `manualHotelDelta` and `manualFlightDelta` on `manual*Cents > 0`. Update the doc comment on line 74 to say "delta is 0 when no manual row exists".
-2. **`src/hooks/useTripFinancialSnapshot.ts`** — no logic change needed once the resolver is fixed (the hook already uses `committedHotelCents + manualHotelDelta`, which becomes `committed + 0` correctly). Add a dev-only `[Snapshot] hotel/flight effective vs total mismatch` warn when `effectiveHotelCents > 0 && manualHotelCents === 0 && committedHotelCents > 0` and the value is not already in `tripTotalCents` (sanity belt).
-3. **`src/services/__tests__/canonicalCostRows.test.ts`** — add the missing regression test:
-   - "Day-0 hotel row + NO manual hotel payment → delta=0, effectiveTotalCents includes hotel" (the bug case).
-   - Same for flight.
-   - Existing "manual hotel OVERRIDES" test stays green.
-4. **Memory** — extend `mem://constraints/finance/header-strip-mirrors-snapshot` with: "manual*Delta MUST be 0 when no manual row exists, even if a canonical Day-0 row is present. Override math only fires when manual* > 0."
+1. **`src/services/tripBudgetService.ts` — tighten the gate** (lines 658–664)
+   Read `updated_at` alongside `itinerary_status` / `metadata`. Compute:
+   ```ts
+   const isLive = status === 'queued' || status === 'generating';
+   const ageMs  = Date.now() - new Date(tripRow.updated_at).getTime();
+   // Reasonable upper bound: chain generator finishes within 8 min for any trip.
+   // After 10 min of no `updated_at` movement we treat the trip as stalled and
+   // stop showing "Calculating…" (the spinner is misleading at that point).
+   const STALE_GENERATION_MS = 10 * 60 * 1000;
+   const isGenerating = isLive && !frozenAt && ageMs < STALE_GENERATION_MS;
+   if (isLive && !frozenAt && ageMs >= STALE_GENERATION_MS) {
+     console.warn(`[getBudgetSummary] stale generation detected — flipping isGenerating off (tripId=${tripId} status=${status} ageMs=${ageMs})`);
+   }
+   ```
+   This also kills the 4 s polling loop the moment we judge the trip stalled.
+
+2. **`src/services/tripBudgetService.ts` — heal cost rows** (no row migration needed; the gate is read-side only). The 3 stale Venice trips have 0 cost rows so they show $0 anyway — once the spinner resolves the user sees a sensible empty Budget tab and can retry generation.
+
+3. **`src/hooks/useTripFinancialSnapshot.ts`** — no change required. Its `loading` flag already self-heals via try/catch and the `isBudgetGenerating || snapshot.loading` gate on the Itinerary header was previously fixed. We add no new behavior here; the bug is summary-side only.
+
+4. **Backfill (optional, single SQL migration)** — flip the 3 abandoned Venice trips so they appear correctly in trip lists:
+   ```sql
+   UPDATE trips
+   SET    itinerary_status = 'failed',
+          metadata          = COALESCE(metadata,'{}'::jsonb) || jsonb_build_object('failure_reason','stale_generation_cleanup_2026_05_13')
+   WHERE  itinerary_status  = 'generating'
+     AND  updated_at         < now() - interval '1 day'
+     AND  (metadata->>'itinerary_frozen_at') IS NULL;
+   ```
+   This is a one-shot consistency cleanup, not required for the spinner fix.
+
+5. **Test (`src/services/__tests__/tripBudgetService.test.ts` — add or extend)**
+   - "isGenerating=true when status=generating, no frozen stamp, updated_at recent"
+   - "isGenerating=false when status=generating, no frozen stamp, updated_at > 10 min ago" ← the bug case
+   - "isGenerating=false when status=generating + frozen_at set" (existing)
+   - "isGenerating=false when status=ready" (existing)
+
+6. **Memory** — extend `mem://constraints/itinerary/calculating-spinner-resolves` with: "Stale-generation gate: `getBudgetSummary` flips isGenerating false when `now − trips.updated_at > 10 min`, even if status is still `generating`. Closes ghost-trip Calculating pill on Budget tab when chain orchestrator crashed before `itinerary_frozen_at` stamp."
 
 ### Verification
 
-- Unit tests pass (existing override + new no-manual case).
-- Header strip on a trip with a Day-0 hotel row but no manual hotel payment: `Days + Hotel = Trip Total` balances exactly, Reserve chip stays hidden.
-- Header strip on a trip with a manual hotel payment overriding canonical: behavior unchanged (existing test still green).
-- No DB migration required.
+- Open one of the 3 May-7 Venice trips → Calculating pill no longer renders, Budget tab shows $0 with "Estimated total for N travelers" copy.
+- A genuinely live generation (status=generating, updated within last few minutes) still shows Calculating.
+- Unit tests pass.
 
 ### Out of scope
 
-- The `archive_orphan_trip_payments` / manual-row immunity work shipped earlier today is unrelated and stays.
-- Payments tab totals already use `effectiveTotalCents`, so they self-correct with the resolver fix.
+- Auto-restarting stalled generations. That's a separate "stuck trip recovery" UX (existing `incomplete-generation-recovery` feature) — this plan only fixes the misleading spinner.
+- Itinerary header Calculating pill (already fixed by the snapshot-loading try/catch + `partial`/frozen exclusion).
