@@ -150,7 +150,19 @@ function isTransientAiFailure(message: string) {
 // HOOK
 // ============================================================================
 
-export function useLovableItinerary(tripId: string | null) {
+export interface UseLovableItineraryOptions {
+  /**
+   * When true, generateItinerary() launches the server-side day-chain
+   * (`action: 'generate-trip'`) and polls trips.metadata for progress instead
+   * of running the per-day client loop. Required for mobile because iOS
+   * Safari suspends backgrounded tabs and silently kills the loop, leaving
+   * trips stuck at itinerary_status='not_started' / ~18% forever.
+   */
+  serverChainMode?: boolean;
+}
+
+export function useLovableItinerary(tripId: string | null, options: UseLovableItineraryOptions = {}) {
+  const { serverChainMode = false } = options;
   const [state, setState] = useState<LovableItineraryState>({
     loading: false,
     progress: 0,
