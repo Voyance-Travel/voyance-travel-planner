@@ -2805,7 +2805,18 @@ async function _handleGenerateTripDayInner(
   const meaningfulThreshold = totalDays * MIN_MEANINGFUL_PER_DAY;
   const hasEnoughMeaningful = dayNumber < totalDays || meaningfulActivityCount >= meaningfulThreshold;
 
-  const isComplete = dayNumber >= totalDays && allDaysHaveActivities && dayCountMatches && noFailedDays && hasEnoughMeaningful;
+  // RECOVERY: a previously-failed day that succeeded on retry leaves a stale
+  // entry in metadata.failed_day_numbers, which would otherwise pin status at
+  // 'partial' forever (→ FE spinner never resolves). If every day now has
+  // activities and meaningful coverage is met, treat failed_day_numbers as
+  // recovered and let isComplete flip to ready.
+  const recoveredFromStaleFailures =
+    dayNumber >= totalDays && allDaysHaveActivities && dayCountMatches && hasEnoughMeaningful;
+  const effectiveNoFailedDays = noFailedDays || recoveredFromStaleFailures;
+  if (recoveredFromStaleFailures && !noFailedDays) {
+    console.log(`[generate-trip-day:final] Clearing stale failed_day_numbers=${JSON.stringify(failedDayNumbers)} — all days populated on retry`);
+  }
+  const isComplete = dayNumber >= totalDays && allDaysHaveActivities && dayCountMatches && effectiveNoFailedDays && hasEnoughMeaningful;
   const computedStatus = isComplete ? 'ready' : (dayNumber >= totalDays ? 'partial' : 'generating');
 
   if (dayNumber >= totalDays && !isComplete) {
@@ -3392,6 +3403,9 @@ async function _handleGenerateTripDayInner(
           empty_days_at_completion: emptyDaysList.length > 0 ? emptyDaysList : null,
           bare_itinerary_detected: !hasEnoughMeaningful || null,
           meaningful_activity_count: meaningfulActivityCount,
+          // Clear stale failed_day_numbers when recovery is complete so we
+          // don't pin status at 'partial' on the next chain pass.
+          failed_day_numbers: isComplete ? [] : (Array.isArray((meta as any)?.failed_day_numbers) ? (meta as any).failed_day_numbers : []),
           // Always overwrite stale persist_validation from intermediate saves.
           ...(finalPersistValidation ? { persist_validation: finalPersistValidation } : {}),
           // FREEZE STAMP — first ready transition. See
