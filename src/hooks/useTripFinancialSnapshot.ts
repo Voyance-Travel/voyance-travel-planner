@@ -575,6 +575,12 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       setData(prev => ({ ...prev, loading: false }));
     } finally {
       clearTimeout(safetyTimer);
+      // Always clear the suppress flag at end of fetchData so a leftover
+      // silent flag can't swallow a future legitimate user-driven change.
+      // (Listener re-arms the flag for the trailing 600ms refetch path.)
+      if (suppressNextToastRef.current.active) {
+        suppressNextToastRef.current = { active: false, reason: '' };
+      }
     }
   }, [tripId]);
 
