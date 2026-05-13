@@ -502,6 +502,12 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       paidCents: paidTotal,
       budgetTotalCents: tripData?.budget_total_cents || 0,
       miscReserveCents: miscReserveContributionCents,
+      includeHotel,
+      includeFlight,
+      committedHotelCents: canonicalHotelCents,
+      committedFlightCents: canonicalFlightCents,
+      manualHotelDelta: canonical.manualHotelDelta,
+      manualFlightDelta: canonical.manualFlightDelta,
       loading: false,
     });
   }, [tripId]);
