@@ -28,6 +28,11 @@ const BOOKEND_SOURCE_RE = /^(bookend-readtime|bookend-overnight|bookend-validato
 const AIRPORT_RE = /\b(airport|station|terminal|gate)\b/i;
 const TRANSPORT_CAT_RE = /TRANSPORT|TRANSIT|TRAVEL|LOGISTICS|FLIGHT/;
 const FLIGHT_TITLE_RE = /\b(flight|departure)\b/i;
+// Arrival-style flight/transfer titles must NOT be treated as departure
+// terminals — Day 1 has an "Arrival Flight" + "Transfer to {hotel}" pair that
+// would otherwise mark the day as a departure day and suppress the end-of-day
+// hotel-return bookend (root cause of Osaka Day-1 nightcap with no return).
+const ARRIVAL_TITLE_RE = /\b(arrival|inbound|landing|land\s+at|arrive)\b/i;
 
 function parseTime(raw: unknown): number | null {
   if (typeof raw !== 'string' || !raw) return null;
