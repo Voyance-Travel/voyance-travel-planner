@@ -15,6 +15,7 @@ import { formatWeatherCondition } from '@/utils/textFormatting';
 import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 import { useLovableItinerary } from '@/hooks/useLovableItinerary';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -236,7 +237,7 @@ export default function ItineraryPreview({
     regenerate,
     cancel,
     clearError,
-  } = useLovableItinerary(tripId || null);
+  } = useLovableItinerary(tripId || null, { serverChainMode: useIsMobile() });
 
   // Check for existing itinerary on mount, then auto-start if we have context
   useEffect(() => {

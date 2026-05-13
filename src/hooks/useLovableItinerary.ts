@@ -150,7 +150,19 @@ function isTransientAiFailure(message: string) {
 // HOOK
 // ============================================================================
 
-export function useLovableItinerary(tripId: string | null) {
+export interface UseLovableItineraryOptions {
+  /**
+   * When true, generateItinerary() launches the server-side day-chain
+   * (`action: 'generate-trip'`) and polls trips.metadata for progress instead
+   * of running the per-day client loop. Required for mobile because iOS
+   * Safari suspends backgrounded tabs and silently kills the loop, leaving
+   * trips stuck at itinerary_status='not_started' / ~18% forever.
+   */
+  serverChainMode?: boolean;
+}
+
+export function useLovableItinerary(tripId: string | null, options: UseLovableItineraryOptions = {}) {
+  const { serverChainMode = false } = options;
   const [state, setState] = useState<LovableItineraryState>({
     loading: false,
     progress: 0,
@@ -216,9 +228,149 @@ export function useLovableItinerary(tripId: string | null) {
     }
   }, [tripId]);
 
+  // Server-chain mode: kick off `action: 'generate-trip'` and poll metadata.
+  // Used on mobile where the per-day client loop dies when the tab is
+  // suspended. Updates the same state shape consumers already render.
+  const generateViaServerChain = useCallback(async (): Promise<void> => {
+    if (!tripId) return;
+    const startTime = Date.now();
+    abortController.current = new AbortController();
+
+    setState(prev => ({
+      ...prev,
+      loading: true,
+      progress: 0,
+      error: null,
+      currentStep: 'preparing',
+      message: 'Preparing your trip details...',
+      generationStartTime: startTime,
+      days: [],
+    }));
+
+    try {
+      // Fetch trip details to build the generate-trip body
+      const { data: tripRow, error: tripErr } = await supabase
+        .from('trips')
+        .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id, itinerary_status, itinerary_data, metadata')
+        .eq('id', tripId)
+        .single();
+      if (tripErr || !tripRow) {
+        throw new Error(tripErr?.message || 'Failed to load trip');
+      }
+
+      const totalDays = calculateDaysBetween(tripRow.start_date as string, tripRow.end_date as string);
+      const meta = (tripRow.metadata as Record<string, unknown>) || {};
+      const alreadyGenerating = tripRow.itinerary_status === 'generating';
+      const heartbeat = meta.generation_heartbeat ? new Date(meta.generation_heartbeat as string).getTime() : 0;
+      const heartbeatFresh = heartbeat && Date.now() - heartbeat < 5 * 60 * 1000;
+
+      // Don't double-launch — if status is already 'generating' with a fresh
+      // heartbeat, the chain is already running, just poll.
+      if (!(alreadyGenerating && heartbeatFresh)) {
+        setState(prev => ({ ...prev, currentStep: 'generating', message: `Planning ${totalDays} days in ${tripRow.destination}...`, totalDays, progress: 5 }));
+        const { error: invokeErr } = await supabase.functions.invoke('generate-itinerary', {
+          body: {
+            action: 'generate-trip',
+            tripId,
+            userId: tripRow.user_id,
+            destination: tripRow.destination,
+            destinationCountry: tripRow.destination_country || '',
+            startDate: tripRow.start_date,
+            endDate: tripRow.end_date,
+            travelers: tripRow.travelers || 1,
+            tripType: tripRow.trip_type || 'vacation',
+            budgetTier: tripRow.budget_tier || 'moderate',
+            isMultiCity: !!tripRow.is_multi_city,
+            creditsCharged: 0,
+          },
+        });
+        if (invokeErr) throw new Error(invokeErr.message || 'Failed to launch generation');
+      }
+
+      // Poll trips + itinerary_days until ready/failed. Loop survives tab
+      // suspensions because the chain runs server-side.
+      const POLL_INTERVAL_MS = 2500;
+      const MAX_POLL_MS = 30 * 60 * 1000; // 30 min absolute cap
+      const pollStart = Date.now();
+
+      while (isMounted.current && !abortController.current?.signal.aborted) {
+        if (Date.now() - pollStart > MAX_POLL_MS) {
+          throw new Error('Generation timed out (>30 min). Please try again.');
+        }
+
+        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+        if (!isMounted.current) return;
+
+        const { data: pollRow } = await supabase
+          .from('trips')
+          .select('itinerary_status, itinerary_data, metadata')
+          .eq('id', tripId)
+          .single();
+        if (!pollRow) continue;
+
+        const pMeta = (pollRow.metadata as Record<string, unknown>) || {};
+        const pData = (pollRow.itinerary_data as { days?: BackendDay[] } | null) || null;
+        const pDays = pData?.days || [];
+        const completed = (pMeta.generation_completed_days as number) || pDays.length;
+        const pTotal = (pMeta.generation_total_days as number) || totalDays;
+        const progress = pTotal > 0 ? Math.max(5, Math.min(95, Math.round((completed / pTotal) * 90) + 5)) : 5;
+        const convertedDays = pDays.map(convertBackendDay);
+
+        if (isMounted.current) {
+          setState(prev => ({
+            ...prev,
+            days: convertedDays,
+            currentDay: completed,
+            totalDays: pTotal,
+            progress: ((pollRow.itinerary_status as string) === 'ready' || (pollRow.itinerary_status as string) === 'generated') ? 100 : progress,
+            message: `Crafting Day ${Math.min(completed + 1, pTotal)} of ${pTotal}...`,
+          }));
+        }
+
+        if (((pollRow.itinerary_status as string) === 'ready' || (pollRow.itinerary_status as string) === 'generated')) {
+          const duration = Date.now() - startTime;
+          if (isMounted.current) {
+            setState(prev => ({
+              ...prev,
+              loading: false,
+              currentStep: 'complete',
+              progress: 100,
+              message: 'Your itinerary is ready!',
+              generationDuration: duration,
+            }));
+          }
+          return;
+        }
+
+        if (pollRow.itinerary_status === 'failed') {
+          const errMsg = (pMeta.generation_error as string) || (pMeta.chain_error as string) || 'Generation failed';
+          throw new Error(errMsg);
+        }
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error('[useLovableItinerary] Server-chain generation failed:', error);
+      if (isMounted.current) {
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          currentStep: 'error',
+          error,
+          message: error.message,
+        }));
+      }
+    }
+  }, [tripId]);
+
   // Generate itinerary day by day using Lovable AI
   const generateItinerary = useCallback(async (preferences?: GenerationPreferences & { maxDays?: number }) => {
     if (!tripId) return;
+
+    // Mobile / server-chain mode: defer to the server-side day-chain.
+    if (serverChainMode) {
+      await generateViaServerChain();
+      return;
+    }
 
     const startTime = Date.now();
     abortController.current = new AbortController();

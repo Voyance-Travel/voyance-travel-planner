@@ -1,54 +1,69 @@
-## Day-2 Pre-Dawn Cascade — Defense Layer
+## What's actually happening
 
-The midnight-orphan prevention work (`stripBookendsForPrompt`, parser stale-head drop, `dayChronoKey` wrap-aware sort, `Late Night` band) cures the *bookend* leak path and reorders display, but it does **not** cure the visible symptom for either of these two cases:
+Two generation paths exist in the codebase:
 
-1. **Fresh generations**: the LLM, even with a clean prompt, can independently emit pre-dawn timestamps for a real activity (`Moco Museum 01:33`, `Walk through Jordaan 03:26`). Nothing currently rejects/normalizes that on the way in.
-2. **Legacy persisted trips** (Amsterdam, etc.): the bad timestamps are already on disk. `dayChronoKey` only re-sorts them to the day's tail under a "Late Night" header — the user still sees "Moco Museum · 1:33 AM" on Day 2.
+1. **Client-driven loop** — `useLovableItinerary` and `useItineraryGeneration.generateItineraryProgressive` run a `for (dayNum = 1..N)` loop **in the browser tab**, calling `action: 'generate-day'` once per day. Each day takes 30–90s.
+2. **Server-driven chain** — `action: 'generate-trip'` returns immediately, then self-chains day-by-day on the edge runtime, writing heartbeats and `generation_started_at` to `trips.metadata`. `useGenerationPoller` is already built for this and even has auto-resume on stall.
 
-This plan adds a single normalization layer that catches both.
+Mobile uses path #1. iOS Safari (and to a lesser degree Chrome on Android) aggressively suspends background JavaScript and cancels long fetches when:
+- Screen locks
+- User switches apps
+- Tab loses focus for ~30s
+- Phone runs low on memory
 
-### Approach
+When that happens mid–day-1 fetch (~20% on a 5-day trip), the loop dies silently. Because path #1 never flips `itinerary_status` to `generating` server-side and never writes a heartbeat, the server has no idea generation was running. On reload the poller's stall-detection skips the trip (no `generation_started_at` → no stall reference), `useLovableItinerary` checks for partial days, finds none, and restarts the loop from day 1 — Safari suspends it again. Infinite loop.
 
-Add `normalizeDay2PredawnCascade(day, dayIndex)` (`supabase/functions/_shared/predawn-cascade-normalize.ts` + frontend mirror at `src/lib/itinerary/normalizePredawnCascade.ts`).
+Verified for the reported user (Clinton Brooks, Madrid trip `358cc606`):
+- `itinerary_status = 'not_started'`, 0 saved days
+- 0 `generation_logs` rows
+- 0 invocations of `generate-itinerary` for that tripId in edge logs
+- 0 `pending_credit_charges` rows
+- Trip created via chat_planner at 14:59 UTC and never touched the backend generator
 
-For Day N ≥ 2, identify the **leading pre-dawn block** = consecutive non-bookend, non-locked, non-departure-logistics activities whose `startTime` is in `[00:00, 05:00)` AND whose `source` is **not** in the bookend allowlist (`bookend-readtime` / `bookend-overnight` / `bookend-validator` / `bookend-synthesized` / `late_nightlife_bookend`).
+## Fix
 
-If the block exists and has ≥ 1 card:
-- Compute `shiftMin = 9*60 − firstStartMin` (round so the first card lands at 09:00).
-- Apply the same shift to every card in the block, preserving relative spacing.
-- For the LAST card of the block: if its end overlaps the next non-shifted card's start, leave the cascade rule (`enforceTimingAndBuffers`) to settle the seam — no special-casing here.
-- Stamp `metadata.normalized_predawn_cascade = { dayNumber, count, shiftMin }` on the day for telemetry.
-- Sentinel: `[PREDAWN_CASCADE_NORMALIZE] day=N count=K shiftMin=±M`.
+### 1. Switch mobile generation to the server-driven chain
 
-Locked / `manual` / `extracted` / `pinned` / `user_added` / `bookend-*` source / departure-logistics rows are **always exempt** (mirrors universal locking + bookend allowlist).
+In `src/components/planner/steps/ItineraryPreview.tsx` and `src/components/planner/ItineraryGeneratorStreaming.tsx` (the two screens that consume `useLovableItinerary`), gate behavior on `useIsMobile()`:
 
-### Wire-in points
+- **Mobile**: invoke `action: 'generate-trip'` once, then mount `useGenerationPoller({ tripId, enabled: true })` to drive the progress UI from `trips.metadata.generation_completed_days` / `generation_total_days` and `itinerary_days` row count. The browser tab can be killed and reopened freely — the chain keeps running on the edge runtime.
+- **Desktop**: keep `useLovableItinerary` as-is (per-day fetch is fine when the tab stays alive and gives faster perceived feedback).
 
-1. **Save-time, fresh-write net** — call inside `action-save-itinerary` `normalizeDays` step, immediately before `enforceTimingAndBuffers`. Catches any LLM output that slipped past prompt prevention.
-2. **Generate-time, per-day repair** — call at end of `repairDay` in `repair-day.ts`, after `§16` cascade. Belt-and-braces.
-3. **Read-time, legacy heal** — call inside `parseItineraryDays` Step 4 (after the existing stale-head bookend drop). Returns the normalized day for display **and** triggers a one-shot `safeUpdateItineraryData('self-heal-predawn-cascade')` from `TripDetail` when any day reports `normalized.count > 0`, so legacy persisted trips heal on first load (mirrors the existing sparse-JSON resync trigger).
+The poller already handles ready/failed/stalled transitions, dedupes failures, and auto-resumes up to 3 times — no new orchestration needed.
 
-### Out of scope (explicit)
+### 2. Self-heal stuck `not_started` chat-planner trips
 
-- No prompt changes.
-- No change to `stripBookendsForPrompt`, parser stale-head drop, `dayChronoKey`, or the `Late Night` band — they stay.
-- No touching of `late_nightlife_bookend` source rows (those are legitimate 00:16 / 00:55 hotel-returns and are explicitly allowlisted).
-- No backfill migration — heal happens lazily on first load via the parse-time path.
+Extend the existing stuck-leg self-heal in `src/pages/TripDetail.tsx` (around L897). New trigger: trip has `itinerary_status = 'not_started'`, `metadata.source = 'chat_planner'` (or `?generate=true` was set in the URL within the session), no `itinerary_data.days`, no `pending_credit_charges` row, and `created_at` older than 60s. Kick off `action: 'generate-trip'` server-side and switch the UI to the poller. This rescues users like Clinton who land back on the trip page after the mobile loop died.
 
-### Files
+### 3. Heartbeat-less stall detection in the poller
 
-- new: `supabase/functions/_shared/predawn-cascade-normalize.ts`
-- new: `src/lib/itinerary/normalizePredawnCascade.ts`
-- edit: `supabase/functions/generate-itinerary/action-save-itinerary.ts` (call in `normalizeDays`)
-- edit: `supabase/functions/_shared/repair-day.ts` (call after §16)
-- edit: `src/utils/itineraryParser.ts` (call inside Step 4 map; expose `__predawnNormalizedDays` count on the parser result)
-- edit: `src/pages/TripDetail.tsx` (one-shot self-heal trigger when count > 0)
+`useGenerationPoller` currently only flags a stall when `generation_heartbeat` or `generation_started_at` exists. Add a fallback: if `itinerary_status` is `generating` AND `metadata.generation_started_at` is missing for >90s, treat as stalled and trigger the same auto-resume path. Belt-and-braces for trips where the backend chain was launched but the metadata write race-lost.
 
-### Tests
+### 4. One-shot rescue for the reported user's trip
 
-- new: `src/lib/itinerary/__tests__/normalizePredawnCascade.test.ts` — Amsterdam Day 2 fixture (Moco 01:33 + walks 03:26 / 06:31) → first card at 09:00, ~94-min relative spacing preserved; locked rows untouched; `late_nightlife_bookend` 00:55 untouched; departure-day untouched.
-- new: parity test in `supabase/functions/generate-itinerary/__tests__/predawn-cascade-normalize.test.ts` — same fixture.
+Server-side, run a one-time `generate-trip` invocation for trip `358cc606-c1af-4e0a-af54-9289fe787bbf` so Clinton's Madrid trip generates without him having to retry. Done via a small admin script (no DB migration needed) — `supabase.functions.invoke('generate-itinerary', { body: { action: 'generate-trip', tripId, ... } })`.
 
-### Memory
+## Files
 
-Update `mem://constraints/itinerary/late-nightlife-no-next-day-bleed` with the 5th defense layer and add a Core line summarizing the heal contract.
+**Edit**
+- `src/components/planner/steps/ItineraryPreview.tsx` — branch on mobile to use server chain + poller
+- `src/components/planner/ItineraryGeneratorStreaming.tsx` — same branch
+- `src/pages/TripDetail.tsx` — extend stuck-leg self-heal to cover `not_started` chat-planner trips
+- `src/hooks/useGenerationPoller.ts` — heartbeat-less stall fallback (90s)
+
+**No changes**
+- Backend `action: 'generate-trip'` chain — already correct (waitUntil-style self-chain, returns 200 immediately, refunds credits on failure)
+- `useGenerationPoller` auto-resume logic — already correct, just adding one more stall trigger
+- Database schema — no migration needed
+- Mobile detection — `useIsMobile()` already exists
+
+## Out of scope
+
+- Removing the client-driven `useLovableItinerary` loop entirely on desktop (separate cleanup; current behavior fine when tab stays focused)
+- Backend changes to the day-chain itself
+- Any UI redesign of the loading screen (existing `PersonalizedLoadingProgress` works with poller progress)
+- Web push / service-worker keepalive (would help PWA path but adds complexity; server-chain fix already removes the dependency on the tab staying alive)
+
+## Memory
+
+Add `mem://constraints/itinerary/mobile-uses-server-chain` and a Core line: "Mobile (`useIsMobile()`) generation MUST go through `action: 'generate-trip'` + `useGenerationPoller`, never the client-driven per-day loop. iOS Safari suspends the tab and silently kills the loop, leaving trips stuck at `not_started`/~18%."

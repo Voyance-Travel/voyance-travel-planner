@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLovableItinerary, GenerationPreferences, GenerationStep } from '@/hooks/useLovableItinerary';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 import type { DayItinerary } from '@/types/itinerary';
@@ -30,6 +31,7 @@ export function ItineraryGeneratorStreaming({
   preferences,
   autoStart = true,
 }: ItineraryGeneratorStreamingProps) {
+  const isMobile = useIsMobile();
   const {
     loading,
     progress,
@@ -46,7 +48,7 @@ export function ItineraryGeneratorStreaming({
     regenerate,
     cancel,
     clearError,
-  } = useLovableItinerary(tripId);
+  } = useLovableItinerary(tripId, { serverChainMode: isMobile });
 
   // Check for existing itinerary on mount, then auto-start if needed
   useEffect(() => {
