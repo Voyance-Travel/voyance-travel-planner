@@ -778,7 +778,38 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         }
         if (!policy.requiredMeals?.length) continue;
         const detected = detectMealSlots(day.activities);
-        const stillMissing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
+        let stillMissing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
+        // Departure-day guard: don't inject a meal sentinel whose hard-coded
+        // slot lands inside the airport-transfer window — §15z would still
+        // strip it (preserveAsManualPick exemption is dropped post-cutoff)
+        // and the user would briefly see a "floating dining card" between
+        // STEP 2.6 injection and STEP 2.65 cleanup. Pre-filtering keeps the
+        // invariant honest while preventing the impossible-meal case.
+        // See mem://constraints/itinerary/departure-day-save-time-enforcement
+        if (isLastDay && savedDepartureTime24 && stillMissing.length > 0) {
+          const depMin = parseTimeToMinutes(savedDepartureTime24);
+          if (depMin !== null && depMin > 0) {
+            // Mirror §15z: 180m flight buffer (we don't have transport mode here,
+            // but flight is the conservative default for an airport departure).
+            const FLIGHT_BUFFER_MIN_LOCAL = 180;
+            const PRE_BUFFER = 60;
+            const transferCutoffMin = depMin - FLIGHT_BUFFER_MIN_LOCAL;
+            const before = stillMissing.slice();
+            stillMissing = stillMissing.filter((m: RequiredMeal) => {
+              const slotStart = parseTimeToMinutes(SLOT_TIMES[m].start) ?? 0;
+              const fits = slotStart + PRE_BUFFER <= transferCutoffMin;
+              if (!fits) {
+                console.warn(`[MEAL_PERSIST_SKIP_DEPARTURE] day=${dayNumber} meal=${m} slot=${SLOT_TIMES[m].start} cutoff=${minutesToHHMM(transferCutoffMin)} dep=${savedDepartureTime24} — skipping injection (would land in transfer window)`);
+              }
+              return fits;
+            });
+            if (stillMissing.length !== before.length) {
+              (day as any).metadata = (day as any).metadata || {};
+              (day as any).metadata.quality = (day as any).metadata.quality || {};
+              (day as any).metadata.quality.meal_persist_skipped_departure = before.filter((m: RequiredMeal) => !stillMissing.includes(m));
+            }
+          }
+        }
         if (stillMissing.length === 0) continue;
         console.warn(`[MEAL_PERSIST_FAIL] day=${dayNumber} missing=[${stillMissing.join(',')}] dest="${destForInvariant}" — injecting preserveAsManualPick sentinels`);
         for (const meal of stillMissing) {
