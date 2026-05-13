@@ -1165,19 +1165,24 @@ export async function handleGenerateDay(
               date: d.date || '',
               title: d.title || d.theme || '',
               theme: d.theme,
-              activities: (d.activities || []).map((a: any) => ({
-                id: a.id || '',
-                title: a.title || a.name || '',
-                startTime: a.startTime || a.start_time || '',
-                endTime: a.endTime || a.end_time || '',
-                category: a.category || 'activity',
-                location: a.location || { name: '', address: '' },
-                cost: a.cost || a.estimatedCost || { amount: 0, currency: 'USD' },
-                description: a.description || '',
-                tags: a.tags || [],
-                bookingRequired: a.bookingRequired || false,
-                transportation: a.transportation || { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
-              })),
+              activities: (await import('../_shared/strip-bookends-for-prompt.ts'))
+                .stripBookendsForPrompt(d.activities, {
+                  dayNumber: d.dayNumber,
+                  site: 'previousDaysForPipeline',
+                })
+                .map((a: any) => ({
+                  id: a.id || '',
+                  title: a.title || a.name || '',
+                  startTime: a.startTime || a.start_time || '',
+                  endTime: a.endTime || a.end_time || '',
+                  category: a.category || 'activity',
+                  location: a.location || { name: '', address: '' },
+                  cost: a.cost || a.estimatedCost || { amount: 0, currency: 'USD' },
+                  description: a.description || '',
+                  tags: a.tags || [],
+                  bookingRequired: a.bookingRequired || false,
+                  transportation: a.transportation || { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+                })),
             }));
         }
 
