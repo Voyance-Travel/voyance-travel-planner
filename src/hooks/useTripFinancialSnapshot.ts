@@ -115,7 +115,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
 
   const fetchData = useCallback(async () => {
     if (!tripId) return;
-    
+    try {
     // 1. Fetch trip settings (budget + inclusion toggles) AND itinerary_data so
     // we can filter out orphaned activity_costs rows whose activity_id no
     // longer exists in the live itinerary. Without this, the snapshot total
