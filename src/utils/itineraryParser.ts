@@ -815,6 +815,8 @@ export function parseItineraryDays(
     (acts || []).some((a) => {
       const cat = String(a?.category || '').toUpperCase();
       const title = String(a?.title || a?.name || '');
+      // Arrival flights / inbound transfers are NOT departure terminals.
+      if (/\b(arrival|inbound|landing|land\s+at|arrive)\b/i.test(title)) return false;
       if (cat === 'FLIGHT' || /\b(flight|departure)\b/i.test(title)) return true;
       if (
         /TRANSPORT|TRANSIT|TRAVEL|LOGISTICS/.test(cat) &&
