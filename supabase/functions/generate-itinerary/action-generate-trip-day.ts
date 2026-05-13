@@ -1366,7 +1366,10 @@ async function _handleGenerateTripDayInner(
         requiredMeals: policy.requiredMeals || [],
         previousDays: existingDays.filter((d: any) => d.dayNumber !== dayNumber).map((d: any) => ({
           dayNumber: d.dayNumber || 0, date: d.date || '', title: d.title || '',
-          activities: (d.activities || []).map((a: any) => ({
+          activities: stripBookendsForPrompt(d.activities, {
+            dayNumber: d.dayNumber,
+            site: 'previousDays-validate',
+          }).map((a: any) => ({
             id: a.id || '', title: a.title || a.name || '',
             startTime: a.startTime || '', endTime: a.endTime || '',
             category: a.category || 'activity',
