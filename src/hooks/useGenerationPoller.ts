@@ -104,7 +104,7 @@ export function useGenerationPoller({
       const [tripResult, daysResult] = await Promise.all([
         supabase
           .from('trips')
-          .select('itinerary_status, itinerary_data, metadata, start_date, end_date')
+          .select('itinerary_status, itinerary_data, metadata, start_date, end_date, updated_at')
           .eq('id', tripId)
           .single(),
         supabase
