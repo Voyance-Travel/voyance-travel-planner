@@ -2178,7 +2178,13 @@ async function _handleGenerateTripDayInner(
         arrivalTime24: _isFirstDay ? savedArrTime24Hoisted : undefined,
         returnDepartureTime24: _isLastDay ? savedDepTime24Hoisted : undefined,
         requiredMeals: finalPolicy.requiredMeals || [],
-        previousDays: existingDays.filter((d: any) => d?.dayNumber !== dayNumber) as any,
+        previousDays: existingDays.filter((d: any) => d?.dayNumber !== dayNumber).map((d: any) => ({
+          ...d,
+          activities: stripBookendsForPrompt(d?.activities, {
+            dayNumber: d?.dayNumber,
+            site: 'previousDays-final-validate',
+          }),
+        })) as any,
         isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
         previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
       });
