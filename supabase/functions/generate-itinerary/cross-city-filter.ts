@@ -152,6 +152,30 @@ function inferCountry(destination: string): string | null {
   if (/\bjapan\b/.test(d) ||
       /\b(tokyo|kyoto|osaka|hiroshima|sapporo)\b/.test(d))
     return 'japan';
+  if (/\bmorocco\b/.test(d) ||
+      /\b(casablanca|marrakech|marrakesh|fez|fes|fès|rabat|tangier|tanger|chefchaouen|essaouira|agadir|meknes|meknès)\b/.test(d))
+    return 'morocco';
+  if (/\b(turkey|türkiye)\b/.test(d) ||
+      /\b(istanbul|ankara|izmir|antalya|cappadocia)\b/.test(d))
+    return 'turkey';
+  if (/\bindia\b/.test(d) ||
+      /\b(delhi|mumbai|bombay|jaipur|agra|goa|bengaluru|bangalore|kolkata|calcutta|chennai|madras)\b/.test(d))
+    return 'india';
+  if (/\bthailand\b/.test(d) ||
+      /\b(bangkok|chiang mai|phuket|krabi)\b/.test(d))
+    return 'thailand';
+  if (/\bvietnam\b/.test(d) ||
+      /\b(hanoi|ho chi minh|saigon|hoi an|da nang|danang)\b/.test(d))
+    return 'vietnam';
+  if (/\bbrazil\b/.test(d) ||
+      /\b(rio de janeiro|são paulo|sao paulo|salvador|brasília|brasilia)\b/.test(d))
+    return 'brazil';
+  if (/\bargentina\b/.test(d) ||
+      /\b(buenos aires|mendoza|bariloche)\b/.test(d))
+    return 'argentina';
+  if (/\bmexico\b/.test(d) ||
+      /\b(mexico city|cdmx|ciudad de méxico|ciudad de mexico|cancun|tulum|oaxaca|guadalajara|mérida|merida)\b/.test(d))
+    return 'mexico';
   return null;
 }
 
