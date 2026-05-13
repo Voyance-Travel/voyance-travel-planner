@@ -212,6 +212,16 @@ export function assignFloatingMealTimes(
     if (a.isLocked || a.locked || a.lock_state === 'locked'
         || a.userAdded || a.userEdited || a.isManual
         || a.extracted || a.pinned) continue;
+    // PROMOTE alias time/start_time → startTime so a card timed only via
+    // `time` doesn't get treated as floating below.
+    if (!a.startTime && (a.start_time || a.time)) {
+      const promoted = a.start_time || a.time;
+      a.startTime = promoted;
+      a.start_time = promoted;
+      a.time = promoted;
+      console.log(`[NORMALIZE_START_PROMOTE] day=${day} title="${a.title || a.name || ''}" from=alias value=${promoted} path=${path}-floating`);
+    }
+    if (!a.endTime && a.end_time) a.endTime = a.end_time;
     if (a.startTime || a.start_time || a.time) continue;
     // endTime-only meal cards (no startTime, no duration) used to be skipped
     // here, leaving cards like "Lunch at El Turix" persisted with only an
