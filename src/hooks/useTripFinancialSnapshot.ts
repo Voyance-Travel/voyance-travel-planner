@@ -594,6 +594,16 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     let pendingTimer: ReturnType<typeof setTimeout> | null = null;
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
+      // Silent system-driven event (PaymentsTab tab-mount, expire-stale,
+      // orphan-archive, sync-trip-cost-table backfill). Suppress the next
+      // computed-delta toast so the user doesn't see a phantom "Trip total
+      // changed by ±$X" when they took no action.
+      if (detail?.silent === true) {
+        suppressNextToastRef.current = {
+          active: true,
+          reason: typeof detail.reason === 'string' ? detail.reason : 'system',
+        };
+      }
       if (detail?.optimisticTotalCents != null) {
         setData(prev => ({ ...prev, tripTotalCents: detail.optimisticTotalCents }));
       }
