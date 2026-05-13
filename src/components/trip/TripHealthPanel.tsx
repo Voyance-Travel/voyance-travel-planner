@@ -131,15 +131,10 @@ export function analyzeHealth(days: any[]): HealthIssue[] {
     })();
 
     if (requiredMeals.length > 0) {
-      const DINING_CATS = ['dining', 'restaurant', 'food'];
       const detectedMeals = new Set<string>();
       for (const a of realActivities) {
-        const cat = (a.category || a.type || '').toLowerCase();
-        const title = (a.title || a.name || '').toLowerCase();
-        if (!DINING_CATS.some((c) => cat.includes(c))) continue;
-        if (title.includes('breakfast') || title.includes('brunch')) detectedMeals.add('breakfast');
-        else if (title.includes('lunch')) detectedMeals.add('lunch');
-        else if (title.includes('dinner') || title.includes('supper')) detectedMeals.add('dinner');
+        const slot = classifyMealSlot(a);
+        if (slot) detectedMeals.add(slot);
       }
       const missingMeals = requiredMeals.filter((m) => !detectedMeals.has(m));
       if (missingMeals.length > 0) {
