@@ -2384,109 +2384,58 @@ export function EditorialItinerary({
     onRefreshResultsChange(counts);
   }, [refreshResults, onRefreshResultsChange]);
 
-  // ── Auto-buffer cascade (all days) ─────────────────────────────────
-  // The "X activities have no travel buffer — Refresh Day to fix timing"
-  // banner is the worst possible UX: the system already knows the fix
-  // (push the next activity forward by 15 min), so just do it silently
-  // and never surface the banner unless a locked anchor blocks the cascade.
-  // Originally Day-1-only; now runs across the whole trip.
-  const autoBufferAppliedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!days || days.length === 0) return;
-    const fp = days.map(d => (d.activities || []).map(a => `${a.id}@${a.startTime || (a as any).time || ''}`).join('|')).join('||');
-    if (autoBufferAppliedRef.current === fp) return;
-
-    const REQ_BUFFER = 15;
-    const isHHMM = (s?: string) => !!s && /^\d{1,2}:\d{2}$/.test(s);
-
-    let anyMutation = false;
-    const nextDays = days.map((day) => {
-      if (!day || !day.activities || day.activities.length < 2) return day;
-      const dayActs = [...day.activities];
-      let mutated = false;
-      for (let i = 0; i < dayActs.length - 1; i++) {
-        const a = dayActs[i] as any;
-        const b = dayActs[i + 1] as any;
-        if (b.locked || b.isLocked) continue;
-        const aEnd = a.endTime;
-        const bStart = b.startTime || b.time;
-        const bEnd = b.endTime;
-        if (!isHHMM(aEnd) || !isHHMM(bStart)) continue;
-        const catA = (a.category || '').toLowerCase();
-        const catB = (b.category || '').toLowerCase();
-        if (catA === 'transport' || catB === 'transport') continue;
-        if (a.location?.name && b.location?.name && a.location.name === b.location.name) continue;
-
-        const aEndMin = timeToMinutes(aEnd);
-        const bStartMin = timeToMinutes(bStart);
-        const minStart = aEndMin + REQ_BUFFER;
-        if (bStartMin >= minStart) continue;
-
-        const shift = minStart - bStartMin;
-        const newStartMin = bStartMin + shift;
-        let newEndMin: number | null = null;
-        if (isHHMM(bEnd)) {
-          newEndMin = timeToMinutes(bEnd) + shift;
-          if (newEndMin > 23 * 60 + 30) continue;
-        }
-        dayActs[i + 1] = {
-          ...b,
-          startTime: minutesToTime(newStartMin),
-          time: minutesToTime(newStartMin),
-          ...(newEndMin !== null ? { endTime: minutesToTime(newEndMin) } : {}),
-        };
-        mutated = true;
-      }
-      if (!mutated) return day;
-      anyMutation = true;
-      return { ...day, activities: dayActs };
-    });
-
-    if (anyMutation) {
-      setDays(nextDays);
-      setHasChanges(true);
-    }
-    autoBufferAppliedRef.current = fp;
-  }, [days, setDays]);
-
-  // Transit-overlap auto-repair — runs the shared timing-cascade so transit
-  // cards (e.g. "Transfer to Marriott", "Walk to Lunch") never sit inside the
-  // previous activity. Complements auto-buffer above which deliberately skips
-  // transport categories. Idempotent via fingerprint.
-  const transitCascadeAppliedRef = useRef<string | null>(null);
+  // ── On-load timing-drift telemetry (observation only) ──────────────
+  // Previously, two on-mount useEffects (auto-buffer + transit-cascade)
+  // mutated `days` and called setHasChanges(true) on every reload. That
+  // produced silent divergence between the saved DB document and the
+  // rendered state (Bali / Day-1 luggage-drop 09:50 → 11:05 pattern).
+  // Per mem://constraints/itinerary/db-is-source-of-truth, the loaded
+  // itinerary MUST equal the saved itinerary. The shared
+  // `enforceTimingAndBuffers` runs pre-save (action-save-itinerary
+  // STEP 2.9 + repair-day §16), so any cascade fixup is already baked
+  // into the JSON the DB returns. User-initiated paths (handleRefreshDay,
+  // manual edits, drag-reorder) still run the cascade explicitly via
+  // safeUpdateItineraryData — those are correct and remain untouched.
+  //
+  // We keep a fingerprint-guarded dry-run that LOGS any drift the
+  // cascade would still produce, so future regressions are visible
+  // without re-introducing the silent setState.
+  const driftProbeRef = useRef<string | null>(null);
   useEffect(() => {
     if (!days || days.length === 0) return;
     const fp = days.map(d => (d.activities || []).map(a => `${a.id}@${a.startTime || (a as any).time || ''}|${a.endTime || ''}`).join('|')).join('||');
-    if (transitCascadeAppliedRef.current === fp) return;
+    if (driftProbeRef.current === fp) return;
+    driftProbeRef.current = fp;
 
     let cancelled = false;
     (async () => {
-      const mod = await import('@/utils/itinerary/timingCascade');
-      if (cancelled) return;
-      let totalRepairs = 0;
-      let anyMutation = false;
-      const nextDays = days.map((day) => {
-        if (!day || !day.activities || day.activities.length < 2) return day;
-        const lockedIds = new Set<string>(
-          (day.activities as any[])
-            .filter((a) => a?.locked === true || a?.isLocked === true || (a as any)?.lock_state === 'locked')
-            .map((a) => String(a.id))
-        );
-        const result = mod.enforceTimingAndBuffers(day.activities as any[], { lockedIds });
-        if (result.repairs.length === 0) return day;
-        totalRepairs += result.repairs.length;
-        anyMutation = true;
-        return { ...day, activities: result.activities as any };
-      });
-      if (anyMutation) {
-        console.log(`[transit-cascade] auto-repaired ${totalRepairs} timing conflict(s) on load`);
-        setDays(nextDays);
-        setHasChanges(true);
+      try {
+        const mod = await import('@/utils/itinerary/timingCascade');
+        if (cancelled) return;
+        const drifted: Array<{ day: number; repairs: number }> = [];
+        for (const day of days) {
+          if (!day || !day.activities || day.activities.length < 2) continue;
+          const lockedIds = new Set<string>(
+            (day.activities as any[])
+              .filter((a) => a?.locked === true || a?.isLocked === true || (a as any)?.lock_state === 'locked')
+              .map((a) => String(a.id))
+          );
+          // Clone so the dry-run never mutates session state.
+          const clone = (day.activities as any[]).map((a) => ({ ...a, location: a.location ? { ...a.location } : a.location }));
+          const result = mod.enforceTimingAndBuffers(clone, { lockedIds });
+          if (result.repairs.length > 0) {
+            drifted.push({ day: (day as any).dayNumber ?? 0, repairs: result.repairs.length });
+          }
+        }
+        if (drifted.length > 0) {
+          console.warn('[ITIN_RESYNC_DRIFT] cascade would still mutate on load (no setState):', drifted);
+        }
+      } catch {
+        // never break render on telemetry failure
       }
-      transitCascadeAppliedRef.current = fp;
     })();
     return () => { cancelled = true; };
-  }, [days, setDays]);
+  }, [days]);
 
   
   const handleRefreshDay = useCallback(async (dayIndex: number) => {
