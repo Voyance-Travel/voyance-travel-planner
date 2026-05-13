@@ -4,6 +4,48 @@ import { getCachedPlacesPhotoByResource } from "../_shared/photo-storage.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
 import { cachedGooglePlacesTextSearch as googlePlacesTextSearch } from "../_shared/google-api.ts";
 import { parseAuth } from "../_shared/require-auth.ts";
+import { detectCountryMismatch } from "../_shared/address-city-resolve.ts";
+import { detectCrossCityMention } from "../generate-itinerary/cross-city-filter.ts";
+
+/**
+ * Hotel destination guard.
+ * - stripForeignCityFromName: removes a sibling/foreign city token baked into a hotel name
+ *   (e.g. "The Ritz-Carlton, Laguna Niguel" + dest=San Juan → "The Ritz-Carlton").
+ * - hotelMatchesDestination: validates a Google Places candidate's formatted address
+ *   sits in the trip destination's country/city. Returns reason string on mismatch.
+ *
+ * See mem://constraints/hotel/destination-resolution-guard.
+ */
+export function stripForeignCityFromName(name: string, destination: string): string {
+  if (!name) return name;
+  const cleaned = name.replace(/[\u2014\u2013]/g, ',');
+  const parts = cleaned.split(',').map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2) return name;
+  const kept: string[] = [];
+  for (const part of parts) {
+    const ccMiss = detectCountryMismatch(part, destination);
+    const xCity = detectCrossCityMention(part, destination);
+    if (ccMiss || xCity) {
+      console.log(`[Hotels] stripForeignCityFromName dropping "${part}" (dest=${destination}, country=${ccMiss}, city=${xCity})`);
+      continue;
+    }
+    kept.push(part);
+  }
+  const result = kept.join(', ').trim();
+  return result || parts[0];
+}
+
+export function hotelMatchesDestination(
+  addr: string | null | undefined,
+  destination: string,
+): { ok: true } | { ok: false; reason: string } {
+  if (!addr) return { ok: true }; // can't judge — let through
+  const ccMiss = detectCountryMismatch(addr, destination);
+  if (ccMiss) return { ok: false, reason: `address in ${ccMiss}, expected ${destination}` };
+  const xCity = detectCrossCityMention(addr, destination);
+  if (xCity) return { ok: false, reason: `address mentions sibling city ${xCity}, expected ${destination}` };
+  return { ok: true };
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -688,14 +730,17 @@ async function enrichHotelByName(
   }
 
   try {
-    const textQuery = `${hotelName} ${destination}`;
-    console.log('[Hotels] Enriching hotel:', textQuery);
+    // Strip foreign-city tokens from the input name so dest dominates the query
+    // (e.g. "The Ritz-Carlton, Laguna Niguel" + dest=San Juan → "The Ritz-Carlton San Juan")
+    const safeName = stripForeignCityFromName(hotelName, destination);
+    const textQuery = `${safeName} ${destination}`;
+    console.log('[Hotels] Enriching hotel:', textQuery, safeName !== hotelName ? `(stripped from "${hotelName}")` : '');
 
     const enrichResult = await googlePlacesTextSearch(
       {
         textQuery,
         includedType: 'lodging',
-        maxResultCount: 1,
+        maxResultCount: 3, // fetch a few so we can pick a destination-matching candidate
         languageCode: 'en',
         fieldMask:
           'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos',
@@ -708,11 +753,25 @@ async function enrichHotelByName(
       return { success: false, message: 'API error' };
     }
 
-    const place = enrichResult.data?.places?.[0];
+    const candidates: any[] = enrichResult.data?.places || [];
+    // Pick the first candidate whose address sits in the destination's country/city
+    let place: any = null;
+    let lastReject: { addr: string; reason: string } | null = null;
+    for (const c of candidates) {
+      const match = hotelMatchesDestination(c.formattedAddress, destination);
+      if (match.ok) { place = c; break; }
+      lastReject = { addr: c.formattedAddress || '(no address)', reason: match.reason };
+      console.warn(`[Hotels] Rejecting candidate: ${c.displayName?.text} — ${match.reason}`);
+    }
 
     if (!place) {
-      console.log('[Hotels] No place found for:', hotelName);
-      return { success: false, message: 'Hotel not found' };
+      console.log('[Hotels] No destination-matching candidate for:', hotelName, lastReject);
+      return {
+        success: false,
+        message: 'Hotel not found in destination',
+        reason: 'destination_mismatch',
+        rejectedAddress: lastReject?.addr,
+      };
     }
 
     // Download photos to Supabase Storage to avoid repeated Google API calls

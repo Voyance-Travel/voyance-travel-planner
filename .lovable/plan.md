@@ -1,66 +1,80 @@
-## Three small, scoped cleanups
+## Diagnosis
 
-The current run is the cleanest yet. We're not redoing the pipeline — just shaving three real-world rough edges.
+The trip's `hotel_selection` is literally storing the wrong property:
 
----
+```
+name:    "The Ritz-Carlton, Laguna Niguel"
+address: "One Ritz Carlton Dr, Dana Point, CA 92629, USA"
+placeId: "ChIJ16OptRTw3IAR17XzKe_9RMI"   ← Laguna Niguel CA
+trip.destination: "San Juan"
+```
 
-### Issue 1 — Health checker falsely flags Day 1 "missing breakfast"
+Every itinerary card that mentions the hotel (check-in, freshen-up, return, checkout, payments) renders this address verbatim. It survives refresh because the bad data is on `trips.hotel_selection`, not in `itinerary_data`.
 
-**What's happening**
-- Server `deriveMealPolicy` (`src/lib/itinerary/deriveMealPolicy.ts` L74–84) requires breakfast on a first day only when arrival < 10:30 AM. A 10:15 arrival (615 min) sits just under that and gets all three meals required.
-- The Health panel (`TripHealthPanel.tsx` L112–118) recomputes its own simplified `requiredMeals` map from `dayMode`, defaulting to all three meals when `dayMode='morning_arrival'`. This is the actual source of the warning.
+Two upstream paths produce this:
 
-**Fix (frontend only — Health panel)**
-- Read `requiredMeals` directly from `day.metadata.quality.requiredMeals` (or the persisted meal policy) when present, so the panel cannot drift from server policy.
-- Fallback map: also handle `morning_arrival` → infer from arrival time (or trust persisted value).
-- Bump the "needs breakfast" cutoff from arrival < 10:30 to arrival < 09:30 in `deriveMealPolicy.ts`. Late check-in / settle-in time means a 10:15 arrival realistically skips breakfast.
+1. **`enrichHotelByName(name, destination)`** in `supabase/functions/hotels/index.ts:679` queries Google Places with `${hotelName} ${destination}`. When the name already contains a foreign city ("…, Laguna Niguel"), that token dominates the search and Google returns the California property. There is no country/destination sanity check on the result before we store `placeId` / `address`.
+2. **`normalizeLegacyHotelSelection`** stamps `id: 'migrated-…'` and accepts whatever `name` + `address` was passed in. No validation that the address belongs to the trip destination.
 
-**Outcome**: The phantom "Day 1 missing breakfast" warning disappears for arrivals in the 09:30–12:00 band.
+Result: brand resolution is correct, geographic resolution is broken, and there is no guard that catches the mismatch.
 
----
+## Fix Plan
 
-### Issue 2 — Lunch scheduled between checkout and airport on the departure day
+Three layers of defense plus a one-shot data correction. Mirrors the existing "Cross-City Fallback Integrity" / `detectCountryMismatch` pattern used elsewhere in the pipeline.
 
-**What's happening**
-- `enforceDepartureDayLogistics` (§15z) already prunes non-logistics cards that start *after* the departure transfer.
-- A lunch card placed *between* a late checkout and the transfer is technically valid by timing but feels wrong — user is supposed to be heading to the airport, not eating.
+### 1. Scope hotel enrichment to the destination (backend)
 
-**Fix (backend repair pipeline)**
-- In `enforceDepartureDayLogistics` (run after §15z), add a "no meal in the airport-bound window" rule: if a `dining` card sits between the checkout time and `transferStart`, AND `transferStart − dining.endTime < 90 min`, drop the dining card. Locked / user / extracted rows exempt.
-- Tighten `meal-policy.ts` `midday_departure` and `afternoon_departure`: when `depMins − checkoutMins < 240` (less than ~4 hours of usable window before transfer), drop `lunch` from `requiredMeals`. Currently `midday_departure` (dep < 15:00) requires only `breakfast` — good — but `afternoon_departure` (dep < 18:00) requires `breakfast,lunch` and that's the case generating the offending lunch.
-- Sentinel `[DEPARTURE_MEAL_PRUNED]` for telemetry.
+`supabase/functions/hotels/index.ts` — `enrichHotelByName`:
 
-**Outcome**: Departure days end with breakfast → checkout → transfer → flight, with no awkward sit-down meal in the middle.
+- Pre-strip foreign-city tokens from the input `hotelName` before querying. Use shared `detectCountryMismatch(name, destination)` + a sibling-city scan (re-use `crossCityFilter`/`address-city-resolve`) to detect when the name itself names another locale; if found, query with `${brandStem} ${destination}` instead of `${nameAsIs} ${destination}` (e.g. "Ritz-Carlton San Juan" not "Ritz-Carlton Laguna Niguel San Juan").
+- After Google returns a result, **validate** `place.formattedAddress` against the trip destination using `detectCountryMismatch` and an in-country city check. If the result is in the wrong country/city, return `{ success: false, reason: 'destination_mismatch', candidate: {...} }` instead of writing it.
+- Same guard in `autoEnrichHotels` (the bulk path used by `searchHotels`).
 
----
+### 2. Validate at write time (frontend)
 
-### Issue 3 — User has to hard-refresh to see the clean itinerary
+New helper `src/utils/hotelDestinationGuard.ts`:
 
-**What's happening**
-- Right after generation, the local UI shows a slightly stale picture (the "Return to Four Seasons before check-in" inversion). A hard refresh re-reads canonical DB data and the issue disappears.
-- Plumbing already exists: `dispatchTripPersisted` + `TRIP_PERSISTED_EVENT` + `resyncItineraryFromDb`. We're just not firing a guaranteed resync at the end of the generation chain.
+- `validateHotelMatchesDestination(hotel, destination): { ok, reason }` — runs `detectCountryMismatch` on `address` AND a name-token check (rejects names like "X, Laguna Niguel" when destination is San Juan).
 
-**Fix (frontend, no business-logic change)**
-- In `TripDetail.tsx` (the place that owns trip session state and already listens for `TRIP_PERSISTED_EVENT`), add a one-shot post-generation resync: when `itinerary_status` transitions to `ready` (or `metadata.itinerary_frozen_at` is newly stamped), call `resyncItineraryFromDb(tripId)` and replace local state with the canonical DB version. This is the silent "auto hard-refresh" the user was doing manually.
-- Also fire `dispatchTripPersisted({ source: 'generation-complete' })` from the generation-complete handler in `voyanceFlowController.ts` / wherever the chain ends, so the existing listener picks it up without any new wiring.
+Wire into the three writers:
+- `src/services/supabase/trips.ts` (any `hotel_selection` insert/update).
+- `src/contexts/TripPlannerContext.tsx` save path (line ~288).
+- `src/components/trip/TripConfirmationBanner.tsx` confirm path (line ~126).
 
-**Outcome**: User never sees the pre-resync version. The first paint after generation matches what a hard refresh would have shown.
+If validation fails: drop `address` / `placeId` / `website` / `images` (keep brand name + dates), trigger re-enrichment scoped to destination, and surface a toast explaining the mismatch so the user can pick the right property.
 
----
+### 3. Self-heal already-bad trips
 
-### Files I expect to touch
+One-shot edge function `repair-hotel-destination` (or a small admin script) that, for trips where `hotel_selection.address` fails `detectCountryMismatch(addr, destination)`:
+- Strip stale address/placeId/website/images/googleMapsUrl from `hotel_selection`.
+- Call the patched `enrichHotelByName(brandStem, destination)`; if it returns a destination-matching result, write it back; otherwise leave only the brand name + dates flagged `needsHotelPick`.
+- Then call `patchItineraryWithMultipleHotels` (already exists in `src/services/hotelItineraryPatch.ts`) so every accommodation card (check-in, luggage drop, freshen-up, return, checkout) re-renders with the corrected address.
 
-- `src/lib/itinerary/deriveMealPolicy.ts` — bump breakfast cutoff to 09:30
-- `src/components/trip/TripHealthPanel.tsx` — read persisted `requiredMeals`, drop the local default-to-three behavior
-- `supabase/functions/generate-itinerary/meal-policy.ts` — drop `lunch` from `afternoon_departure` when usable window < 4h
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (or wherever `enforceDepartureDayLogistics` lives) — prune dining within 90 min of transfer
-- `src/pages/TripDetail.tsx` — auto-resync on `ready` transition
-- `src/lib/voyanceFlowController.ts` (or generation-complete site) — dispatch `TRIP_PERSISTED_EVENT` on chain finish
-- New tests: meal-policy 10:15 arrival → no breakfast; afternoon_departure short-window → no lunch; departure-day prune drops lunch in airport-bound window
+Run this once for trip `fea55309-9708-448e-b105-19b712d533ca` immediately to clear the user's current symptom.
 
-### What I'm NOT changing
-- The generation prompt
-- The cost / budget pipeline
-- The hotel-return bookend logic (it's working — just needs the resync to surface it correctly)
+### 4. Tests
 
-Approve and I'll ship.
+- `supabase/functions/hotels/__tests__/enrich-destination-guard.test.ts`: "Ritz-Carlton, Laguna Niguel" + dest "San Juan" → either re-queried as "Ritz-Carlton San Juan" or rejected with `destination_mismatch`.
+- `src/utils/__tests__/hotelDestinationGuard.test.ts`: country mismatch + sibling-city mismatch + happy-path cases.
+
+### Out of scope
+
+- Itinerary generation prompt (the data flowing in is wrong; fixing the source fixes every card).
+- Hotel UI/search affordances beyond the validation toast.
+- Cost reconciliation (totalPrice stays as user entered).
+
+### Memory
+
+Add `mem://constraints/hotel/destination-resolution-guard` capturing the rule: "Hotel enrichment + write paths MUST verify the resolved address sits in the trip destination's country/city; mismatches are rejected, not stored." Index entry under Core.
+
+Files to touch:
+- `supabase/functions/hotels/index.ts`
+- `supabase/functions/_shared/address-city-resolve.ts` (export sibling-city helper if not already)
+- `src/utils/hotelDestinationGuard.ts` (new)
+- `src/utils/hotelValidation.ts` (call guard in normalize)
+- `src/services/supabase/trips.ts`
+- `src/contexts/TripPlannerContext.tsx`
+- `src/components/trip/TripConfirmationBanner.tsx`
+- `supabase/functions/repair-hotel-destination/index.ts` (new, one-shot)
+- Tests above
+- `mem://index.md` + new constraint file
