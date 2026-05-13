@@ -1657,17 +1657,18 @@ async function fetchImageTiered(
       if (xcity) {
         console.log(`[Images] cross-city Unsplash blocked: alt="${altText}" dest="${destination}" → "${xcity}"`);
       } else {
-      const persistentUnsplash = await ensurePersistentStorageUrl(
-        unsplashImage,
-        entityType,
-        venueName,
-        destination
-      );
-      await cacheImage(supabase, entityType, cleanName, destination, persistentUnsplash, 0.85);
-      if (cleanName !== venueName) {
-        await cacheImage(supabase, entityType, venueName, destination, persistentUnsplash, 0.85);
+        const persistentUnsplash = await ensurePersistentStorageUrl(
+          unsplashImage,
+          entityType,
+          venueName,
+          destination
+        );
+        await cacheImage(supabase, entityType, cleanName, destination, persistentUnsplash, 0.85);
+        if (cleanName !== venueName) {
+          await cacheImage(supabase, entityType, venueName, destination, persistentUnsplash, 0.85);
+        }
+        return persistentUnsplash;
       }
-      return persistentUnsplash;
     }
   }
 
