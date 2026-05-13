@@ -42,7 +42,7 @@ export interface CascadeRepair {
 export interface CascadeOptions {
   /** Activities that may not be moved or dropped. */
   lockedIds?: Set<string>;
-  /** Clamp activities pushed past this minute-of-day. Defaults to 23:30. */
+  /** Cutoff minute-of-day used when clamping late activities. Defaults to 23:30. */
   cutoffMinutes?: number;
   /** Buffer added when resolving overlap/same-start (in minutes). Default 5. */
   overlapBufferMinutes?: number;
