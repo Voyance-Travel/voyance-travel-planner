@@ -995,6 +995,98 @@ export default function TripDetail() {
     })();
   }, [trip?.id, trip?.journey_id, trip?.itinerary_status, trip?.metadata, queryClient]);
 
+  // ── Stuck "not_started" chat-planner self-heal ──
+  // Mobile generation runs the day-by-day loop in the browser tab. iOS Safari
+  // suspends backgrounded tabs and silently kills the loop, so trips end up
+  // stuck at itinerary_status='not_started' with 0 days even though the user
+  // committed to generate (must-do/per-day already saved by the chat planner).
+  // When the user reopens the trip page we kick off the server-side chain.
+  const notStartedHealAttempted = useRef(false);
+  useEffect(() => {
+    if (!trip?.id || notStartedHealAttempted.current) return;
+    if (trip.journey_id) return; // journey legs use the dedicated stuck-leg heal above
+    if (trip.itinerary_status !== 'not_started') return;
+
+    const meta = (trip.metadata as Record<string, unknown>) || {};
+    const source = (meta.source as string | undefined) || '';
+    const mustDo = (meta.mustDoActivities as unknown[] | undefined) || [];
+    const perDay = (meta.perDayActivities as unknown[] | undefined) || [];
+
+    // Only heal trips the user clearly committed to generate
+    const isGenerationCommitted =
+      source === 'chat_planner' ||
+      (Array.isArray(mustDo) && mustDo.length > 0) ||
+      (Array.isArray(perDay) && perDay.length > 0);
+    if (!isGenerationCommitted) return;
+
+    // Recently created (≤ 24h) and not brand-new (>60s old, give the original
+    // request a chance to land before we second-guess it)
+    const createdAt = trip.created_at ? new Date(trip.created_at as string).getTime() : 0;
+    const ageMs = createdAt ? Date.now() - createdAt : 0;
+    if (!createdAt || ageMs < 60_000 || ageMs > 24 * 60 * 60 * 1000) return;
+
+    // No itinerary data already
+    if (hasItineraryData(trip)) return;
+
+    notStartedHealAttempted.current = true;
+    console.log(`[TripDetail] Stuck not_started chat-planner trip ${trip.id} (age=${Math.round(ageMs/1000)}s) — invoking server-side generate-trip chain`);
+
+    (async () => {
+      try {
+        const { data: fullTrip } = await supabase
+          .from('trips')
+          .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id')
+          .eq('id', trip.id)
+          .single();
+        if (!fullTrip) return;
+
+        // Mark generating before invoking so the poller engages immediately
+        await supabase.from('trips').update({
+          itinerary_status: 'generating',
+          metadata: {
+            ...(meta as Record<string, unknown>),
+            generation_started_at: new Date().toISOString(),
+            generation_heartbeat: new Date().toISOString(),
+            generation_total_days: 0, // backend will normalize
+            self_heal_reason: 'not_started_chat_planner',
+            self_heal_at: new Date().toISOString(),
+          },
+        }).eq('id', trip.id);
+
+        const { error: invokeErr } = await supabase.functions.invoke('generate-itinerary', {
+          body: {
+            action: 'generate-trip',
+            tripId: trip.id,
+            userId: fullTrip.user_id,
+            destination: fullTrip.destination,
+            destinationCountry: fullTrip.destination_country || '',
+            startDate: fullTrip.start_date,
+            endDate: fullTrip.end_date,
+            travelers: fullTrip.travelers || 1,
+            tripType: fullTrip.trip_type || 'vacation',
+            budgetTier: fullTrip.budget_tier || 'moderate',
+            isMultiCity: fullTrip.is_multi_city || false,
+            creditsCharged: 0, // chat planner already handled charging
+          },
+        });
+
+        if (invokeErr) {
+          console.error('[TripDetail] not_started self-heal invoke failed:', invokeErr);
+          notStartedHealAttempted.current = false;
+          return;
+        }
+
+        console.log(`[TripDetail] not_started self-heal triggered for ${trip.id}`);
+        queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+        handleShowGenerator(true);
+      } catch (err) {
+        console.error('[TripDetail] not_started self-heal error:', err);
+        notStartedHealAttempted.current = false;
+      }
+    })();
+  }, [trip?.id, trip?.journey_id, trip?.itinerary_status, trip?.metadata, trip?.created_at, queryClient]);
+
+
   // Auto-trigger generation only when ?generate=true is present
   useEffect(() => {
     if (
