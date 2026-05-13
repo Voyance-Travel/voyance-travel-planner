@@ -18,17 +18,16 @@ import {
 } from '@/utils/destinationImages';
 import { getHeroImageByName, getDestinationCanonicalImage } from '@/services/destinationImagesAPI';
 import { supabase } from '@/integrations/supabase/client';
+import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
 
 /**
  * Shared predicate: a seeded hero URL we should treat as broken/unusable.
- * Used by both the display-time fallback chain and the persistence write-back
- * so they can never disagree about what counts as "good enough to keep".
+ * Delegates to the project-wide isUntrustedHeroUrl policy so the display
+ * path and the persistence write-back can never disagree about what counts
+ * as "good enough to keep".
  */
 function isBrokenSeededUrl(url: string): boolean {
-  if (!url || typeof url !== 'string') return true;
-  // Unsplash CDN URLs break silently (403/expired) — display path skips these.
-  if (/images\.unsplash\.com/.test(url)) return true;
-  return false;
+  return isUntrustedHeroUrl(url);
 }
 
 interface UseTripHeroImageOptions {
