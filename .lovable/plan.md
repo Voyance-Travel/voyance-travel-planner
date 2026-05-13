@@ -1,48 +1,66 @@
 ## Bug
 
-On Day 3 (departure) Osaka and Amsterdam show a synthetic "Return to {hotel} to wind down (overnight)" card at ~1:55 PM, after the airport transfer.
+Inside the **Budget by Category** card on the Budget tab, the footer line `Total from itinerary` (BudgetTab.tsx L1206–1212) sits visually at the bottom of the **Discretionary** subsection and reads as "sum of discretionary" — even though the value is `snapshot.tripTotalCents`, which already folds in hotel + flight per the user's `budget_include_hotel` / `budget_include_flight` toggles.
 
-## Root cause
+The numbers are correct; the label and placement are misleading.
 
-The "wind down (overnight)" string is only emitted by the read-time bookend (`src/lib/itinerary/ensureHotelReturnBookend.ts`, gray-zone branch). It has two departure-day defenses, both of which fail in this case:
+## Confirmed mechanics
 
-1. `opts.isDepartureDay` — set by `src/utils/itineraryParser.ts` (Step 4b) by scanning each day's activities for an airport / flight / "Transfer to … airport|terminal|gate|station" card.
-2. `(activities).some(isDepartureTerminal)` — same predicate, day-local.
+- `snapshot.tripTotalCents` (resolveCanonicalCostRows → effectiveTotalCents) **already includes** hotel and flight whenever the corresponding toggle is on (`budget_include_hotel` defaults true; `budget_include_flight` defaults false). Memory: `mem://constraints/payments/single-resolver-manual-fold`, `mem://technical/finance/budget-visibility-policy`.
+- The same `snapshot.tripTotalCents` also drives the **Trip Expenses** big-number card (L928–999). So the lower line is partially redundant — its only purpose is footer validation under the category breakdown.
+- The category breakdown itself splits into **Fixed Costs** (hotel/flight, when included) and **Discretionary** (food/activities/transit/misc). The "Total from itinerary" sits after the Discretionary list with only a thin `border-t` separator, which is what makes it read as a discretionary subtotal.
 
-Confirmed via DB: the canonical `itinerary_activities` table for both trips' Day 3 *does* contain `Travel to Airport` / `Transfer to Kansai International Airport (KIX)` / `Departure Flight`, **but the persisted `trips.itinerary_data.days[2].activities`** (the only thing the parser sees) does NOT — only `Breakfast`, `Anne Frank House`, `Checkout from … Marriott`, `Lunch …` (Amsterdam) and `Taxi to Osaka Central Public Hall`, `Explore Osaka Central Public Hall`, `Checkout from Four Seasons Hotel Osaka` (Osaka).
+## Fix (UI / labeling only — no math, no resolver changes)
 
-So the JSON-side day looks like a normal middle day whose last timed activity ends ~11:30 or ~13:30 → falls into the gray-zone `> 02:30 AND < 14:00` branch → fabricates a 13:55 "wind down (overnight)" card.
+Scope: `src/components/planner/budget/BudgetTab.tsx` only. No backend, no hooks, no `useTripFinancialSnapshot`.
 
-(The underlying JSON-vs-table divergence is a separate, larger persistence issue. The fix below is scoped to making the bookend logic resilient to that divergence — it's the one piece the user actually sees.)
+### 1. Rename and re-scope the footer line
 
-## Fix (read-time only, no DB writes)
+Replace the static label `"Total from itinerary"` with a label that names what's actually summed:
 
-Add a third departure-day signal: **a `Checkout from {hotel}` card on the day**. Checkout is the unambiguous "we are leaving" anchor — if it's present, the day must not get a `Return to {hotel}` injected, regardless of whether the airport transfer/flight survived into the JSON.
+- Default copy: `"Trip total"` (bolder weight) with secondary caption listing the contributors based on toggle state, e.g.:
+  - hotel ON + flight OFF → `"Hotel + dining + activities + transit"`
+  - hotel ON + flight ON → `"Hotel + flight + dining + activities + transit"`
+  - hotel OFF + flight OFF → `"Dining + activities + transit only · hotel & flight excluded"` (muted amber)
+  - hotel OFF + flight ON → `"Flight + dining + activities + transit · hotel excluded"`
 
-### `src/lib/itinerary/ensureHotelReturnBookend.ts`
-- Extend `isDepartureTerminal(a)` to also return `true` when the card matches `CHECKOUT_RE` (the regex already exists in the file). This makes the existing day-local defense (line 205, `.some(isDepartureTerminal)`) catch the Amsterdam/Osaka case directly. New skip reason: `reason=day_contains_checkout`.
-- No change to `isTerminalAlready` — checkout already counts there, so the post-selection guard keeps working.
+The exclusion variants get a tiny inline `Info` icon → tooltip explaining the toggle is the lever (matches the existing toggle UI further down the page) so users know how to flip back.
 
-### `src/utils/itineraryParser.ts` (Step 4b, `dayHasDepartureTerminal`)
-- Mirror the addition: a day whose activities include a `category === 'accommodation'` row whose title matches `^\s*check[-\s]?out\b` is a departure day.
-- Belt-and-braces fallback: if no day matched after the scan, set `departureDayIdx = result.length - 1` so the trip's final day is always treated as departure even when both the airport transfer AND the checkout were stripped from the JSON.
+### 2. Make the footer visually separate from Discretionary
 
-### Tests
-- `src/lib/itinerary/__tests__/ensureHotelReturnBookend.test.ts`: add Amsterdam Day-3 case (Breakfast 08:30, Anne Frank 10:30–12:00, Checkout 11:00–11:30, Lunch ?–13:30) → expect input returned unchanged, sentinel `reason=day_contains_checkout` logged.
-- Add Osaka Day-3 case (Taxi 09:35, Explore 09:52–11:07, Checkout 11:22–11:52) → same.
+Increase visual separation so the line reads as a card footer, not a list item:
+- Bump `pt-3 border-t border-border` → `pt-4 mt-2 border-t-2 border-border`
+- Add a leading `<TrendingUp />` icon (matching Trip Expenses card) so it visually echoes the top KPI rather than blending into the list rows.
+- Right-align as a two-row stack: bold value on top, faint contributor caption below.
 
-### Memory
-- Update `mem://constraints/itinerary/read-time-hotel-return-bookend` to note that **checkout presence is a departure-day signal** equivalent to flight/airport-transfer, and that the parser falls back to "last day = departure" when neither is detected.
+### 3. Drop the `> 0` gate that hides the footer on empty itineraries
+
+Currently `snapshot.tripTotalCents > 0` hides the line entirely. Keep the gate but show a single muted "—" placeholder when the snapshot is loading so the footer position doesn't jump after data arrives. (Don't render anything when there's truly no itinerary, matching the existing `hasNoMeaningfulActivities` empty-state above.)
+
+### 4. (Optional within same edit) Tiny in-place breakdown
+
+Add a one-line decomposition right under the bold total, reusing values already in `allocations`:
+
+```
+$1,840  Trip total
+        Hotel $720 · Activities $1,120
+```
+
+This leaves zero ambiguity about scope. Fixed-cost rows are pulled from `allocations.filter(a => a.kind === 'fixed')` (already computed); discretionary subtotal = `tripTotalCents − sum(fixed)`. Skip rendering when only one category is present so we don't repeat the headline number.
 
 ## Out of scope
 
-- Healing the JSON-vs-table divergence (why airport transfer + flight rows are absent from `trips.itinerary_data.days[2]` for these trips). That's the persistence-truth issue tracked separately under the resync memories — large blast radius, not what the user reported.
-- Backend `runStep8` (no evidence it's emitting; the offending string is read-time-only).
-- Any change to checkout/flight card writers.
+- Resolver/snapshot math (already correct).
+- Trip Expenses big-number card at the top (already labeled clearly).
+- Toggle behavior (`Include Hotel in Budget`, `Include Flights in Budget`) — works correctly.
+- Payments tab and any cost-table/ledger work.
 
 ## Files
 
-- `src/lib/itinerary/ensureHotelReturnBookend.ts` — extend `isDepartureTerminal`.
-- `src/utils/itineraryParser.ts` — extend `dayHasDepartureTerminal`, add last-day fallback.
-- `src/lib/itinerary/__tests__/ensureHotelReturnBookend.test.ts` — Amsterdam + Osaka cases.
-- `mem://constraints/itinerary/read-time-hotel-return-bookend` — document checkout signal + last-day fallback.
+- `src/components/planner/budget/BudgetTab.tsx` — only file touched. Edits localized to L1206–1212 plus a small helper for the contributor caption near the top of the component.
+
+## Verification
+
+- Manual preview check on a trip with hotel toggle ON and OFF; confirm the caption flips and the math equals the headline `Trip Expenses` figure in both states.
+- Eyeball with both 1-traveler and N-traveler trips (no per-person change here, but confirm layout doesn't wrap awkwardly).
+- No tests required (pure presentation change, deterministic from existing snapshot fields).
