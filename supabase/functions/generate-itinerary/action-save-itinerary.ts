@@ -433,24 +433,54 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
 
-      // RS.M.I3: prefer the meal policy cached at generation. Re-deriving here
-      // against current flight times silently disagrees with what the AI was
-      // instructed to produce when the user changes flights between gen and save.
+      // RS.M.I3: prefer the meal policy cached at generation… UNLESS the cache
+      // was derived without flight info that we now have. Casablanca Day 4 bug:
+      // cache said `midday_departure + [breakfast, lunch]` (built before flight
+      // time was known); meanwhile dep=15:05 → afternoon_departure → [breakfast]
+      // only. Trusting stale cache injects a floating "Lunch — find a spot"
+      // sentinel that §15z later strips at gen-time but not at save-time.
+      // See mem://constraints/itinerary/departure-day-save-time-enforcement
       const cachedPolicy = (day as any)?.metadata?.quality?.meal_policy_at_generation;
-      let policy = (cachedPolicy && Array.isArray(cachedPolicy.requiredMeals))
-        ? ({
+      const freshPolicy = deriveMealPolicy({
+        dayNumber,
+        totalDays,
+        isFirstDay,
+        isLastDay,
+        arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
+        departureTime24: isLastDay ? savedDepartureTime24 : undefined,
+      });
+      let policy: any;
+      if (cachedPolicy && Array.isArray(cachedPolicy.requiredMeals)) {
+        const cachedMeals = (cachedPolicy.requiredMeals as RequiredMeal[]).slice().sort().join(',');
+        const freshMeals = freshPolicy.requiredMeals.slice().sort().join(',');
+        const reconcilable =
+          (isLastDay && savedDepartureTime24 && cachedMeals !== freshMeals) ||
+          (isFirstDay && savedArrivalTime24 && cachedMeals !== freshMeals);
+        if (reconcilable) {
+          console.warn(
+            `[MEAL_POLICY_REDERIVE] day=${dayNumber} reason=stale_cache cached=[${cachedMeals}] fresh=[${freshMeals}] depTime=${savedDepartureTime24 || 'n/a'} arrTime=${savedArrivalTime24 || 'n/a'}`
+          );
+          policy = freshPolicy;
+          // Stamp the corrected policy so subsequent reads (and Step 2.6) see it.
+          (day as any).metadata = (day as any).metadata || {};
+          (day as any).metadata.quality = (day as any).metadata.quality || {};
+          (day as any).metadata.quality.meal_policy_at_generation = {
+            ...cachedPolicy,
+            dayMode: freshPolicy.dayMode,
+            requiredMeals: freshPolicy.requiredMeals,
+            rederived_at_save_at: new Date().toISOString(),
+            rederived_reason: 'flight_time_now_known',
+          };
+        } else {
+          policy = {
             dayMode: cachedPolicy.dayMode,
             requiredMeals: cachedPolicy.requiredMeals as RequiredMeal[],
             isFullExplorationDay: !!cachedPolicy.isFullExplorationDay,
-          } as any)
-        : deriveMealPolicy({
-            dayNumber,
-            totalDays,
-            isFirstDay,
-            isLastDay,
-            arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
-            departureTime24: isLastDay ? savedDepartureTime24 : undefined,
-          });
+          };
+        }
+      } else {
+        policy = freshPolicy;
+      }
 
       // Brunch-band downgrade: when no flight clock is known and the cached
       // policy still demands breakfast, infer the actual arrival from the
@@ -706,14 +736,28 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         const dayNumber = day.dayNumber || (i + 1);
         const isFirstDay = dayNumber === 1;
         const isLastDay = dayNumber === totalDays;
+        // Match STEP 2's stale-cache reconciliation: if cached policy was
+        // built without flight info we now have, trust freshly derived policy.
+        // See mem://constraints/itinerary/departure-day-save-time-enforcement
         const cachedPolicy = (day as any)?.metadata?.quality?.meal_policy_at_generation;
-        const policy = (cachedPolicy && Array.isArray(cachedPolicy.requiredMeals))
-          ? ({ requiredMeals: cachedPolicy.requiredMeals as RequiredMeal[] } as any)
-          : deriveMealPolicy({
-              dayNumber, totalDays, isFirstDay, isLastDay,
-              arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
-              departureTime24: isLastDay ? savedDepartureTime24 : undefined,
-            });
+        const freshPolicy = deriveMealPolicy({
+          dayNumber, totalDays, isFirstDay, isLastDay,
+          arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
+          departureTime24: isLastDay ? savedDepartureTime24 : undefined,
+        });
+        let policy: any;
+        if (cachedPolicy && Array.isArray(cachedPolicy.requiredMeals)) {
+          const cachedMeals = (cachedPolicy.requiredMeals as RequiredMeal[]).slice().sort().join(',');
+          const freshMeals = freshPolicy.requiredMeals.slice().sort().join(',');
+          const reconcilable =
+            (isLastDay && savedDepartureTime24 && cachedMeals !== freshMeals) ||
+            (isFirstDay && savedArrivalTime24 && cachedMeals !== freshMeals);
+          policy = reconcilable
+            ? freshPolicy
+            : { requiredMeals: cachedPolicy.requiredMeals as RequiredMeal[] };
+        } else {
+          policy = freshPolicy;
+        }
         if (!policy.requiredMeals?.length) continue;
         const detected = detectMealSlots(day.activities);
         const stillMissing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
@@ -745,6 +789,66 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           - parseTimeToMinutes(b.startTime || b.start_time || b.time));
       }
       (itinerary as any).days = itineraryDays;
+    }
+  }
+
+  // ── STEP 2.65: DEPARTURE-DAY LOGISTICS NET (§15z save-time) ──────
+  // Catch-all safety net mirroring repair-day's §15z. Closes the recurring
+  // "floating dining card on departure day" bug where any upstream code path
+  // (meal-guard, manual edit, undo/redo, chat-action, optimistic patch) added
+  // an untimed or post-cutoff dining/leisure card. §15z drops them, retimes
+  // checkout/transfer to flight-aware caps. Idempotent — only runs on last day.
+  // See mem://constraints/itinerary/departure-day-save-time-enforcement
+  if (totalDays > 0 && itineraryDays.length > 0) {
+    try {
+      const { enforceDepartureDayLogistics } = await import('./pipeline/repair-day.ts');
+      const tripMetaForNet = ((trip as any)?.metadata || {}) as Record<string, any>;
+      const hotelNameNet: string =
+        tripMetaForNet?.selected_hotel?.name ||
+        tripMetaForNet?.hotel?.name ||
+        tripMetaForNet?.accommodation?.name ||
+        'your hotel';
+      const hotelAddressNet: string =
+        tripMetaForNet?.selected_hotel?.address ||
+        tripMetaForNet?.hotel?.address ||
+        tripMetaForNet?.accommodation?.address ||
+        '';
+      const lastIdx = itineraryDays.length - 1;
+      const lastDay = itineraryDays[lastIdx];
+      if (lastDay?.activities && Array.isArray(lastDay.activities)) {
+        const lockedIds = new Set<string>(
+          (lastDay.activities as any[])
+            .filter((a) => a?.locked === true || a?.isLocked === true || a?.is_locked === true || a?.lock_state === 'locked')
+            .map((a) => String(a.id))
+            .filter(Boolean)
+        );
+        const beforeLen = lastDay.activities.length;
+        const enforcement = enforceDepartureDayLogistics({
+          activities: lastDay.activities as any[],
+          dayNumber: lastDay.dayNumber || (lastIdx + 1),
+          hotelName: hotelNameNet,
+          hotelAddress: hotelAddressNet,
+          returnDepartureTime24: savedDepartureTime24,
+          isLastDay: true,
+          lockedIds,
+        } as any);
+        if (Array.isArray(enforcement?.activities)) {
+          lastDay.activities = enforcement.activities;
+        }
+        const droppedCount = beforeLen - (lastDay.activities?.length || 0);
+        const repairs = enforcement?.repairs || [];
+        if (repairs.length > 0 || droppedCount !== 0) {
+          (lastDay as any).metadata = (lastDay as any).metadata || {};
+          (lastDay as any).metadata.quality = (lastDay as any).metadata.quality || {};
+          (lastDay as any).metadata.quality.save_time_departure_repairs = repairs;
+          console.log(
+            `[SAVE_DEPARTURE_NET] day=${lastDay.dayNumber || (lastIdx + 1)} dropped=${Math.max(0, droppedCount)} repairs=${repairs.length} depTime=${savedDepartureTime24 || 'n/a'}`
+          );
+        }
+        (itinerary as any).days = itineraryDays;
+      }
+    } catch (netErr) {
+      console.warn('[save-itinerary] STEP 2.65 departure-day net failed (non-blocking):', netErr);
     }
   }
 
