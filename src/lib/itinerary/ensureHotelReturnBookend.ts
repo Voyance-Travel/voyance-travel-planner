@@ -142,11 +142,19 @@ export function ensureHotelReturnBookend<T extends any[]>(
     console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=n/a reason=day_contains_departure_terminal`);
     return activities;
   }
-  if ((activities as any[]).some(isHotelReturnBookendActivity)) {
-    // eslint-disable-next-line no-console
-    console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=inferred reason=existing_return_bookend`);
-    return activities;
-  }
+  // NOTE: deliberately do NOT early-skip when the day already contains a
+  // hotel-return card. A user-added late nightcap (or any post-generation
+  // mutation that extends the day past an existing 20:15 "Return to Hotel")
+  // must still trigger a fresh late-nightlife bookend. The wrap-aware
+  // `lastIdx` walk + post-selection `isTerminalAlready(last)` check below
+  // is the correct place to short-circuit — when the *chronologically*
+  // last card is itself the hotel return, that branch returns. When a
+  // nightcap end-time outranks the earlier return, we fall through and
+  // append a second `late_nightlife_bookend` card. Closes recurring
+  // "Day N nightcap with no following return" pattern (Casablanca /
+  // Mallorca / San Juan).
+  // [BOOKEND_TRACE] reason=stale_earlier_bookend_superseded is logged below
+  // when this case fires.
 
   // Identify the chronologically last activity by max end_time (fallback
   // start_time). Don't trust array order — the editor injects synthetic
