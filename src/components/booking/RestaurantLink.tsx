@@ -1,12 +1,21 @@
 /**
  * RestaurantLink Component
- * 
+ *
  * Uses AI-powered search (Perplexity) to find the official restaurant website URL.
  * If no direct URL is found, no link is shown (we don't want to redirect to search engines).
+ *
+ * Stability contract:
+ *   - Lookups are deduped at module scope so re-mounts share one in-flight promise.
+ *   - The promise (not the component) writes to `urlCache`, so unmounting before
+ *     resolution still persists the result for the next mount.
+ *   - Negative cache mirrored into sessionStorage so a hard refresh inherits known nulls.
+ *   - The visible spinner is suppressed; we render `null` while loading and let the
+ *     link fade in when (and if) Perplexity resolves. This eliminates the
+ *     "stuck Finding restaurant…" regression by construction.
  */
 
-import { useState, useEffect } from 'react';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface RestaurantLinkProps {
@@ -15,9 +24,49 @@ interface RestaurantLinkProps {
   className?: string;
 }
 
-// Cache for looked up URLs to avoid repeated API calls
-const urlCache = new Map<string, { url: string | null; timestamp: number }>();
 const CACHE_TTL_MS = 1000 * 60 * 60; // 1 hour
+const STORAGE_KEY = 'restaurantUrlCache:v1';
+
+type CacheEntry = { url: string | null; timestamp: number };
+
+// Hydrate session-persisted cache once per page load.
+const urlCache = new Map<string, CacheEntry>();
+const inflight = new Map<string, Promise<string | null>>();
+
+(function hydrateFromSession() {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, CacheEntry>;
+    const now = Date.now();
+    for (const [k, v] of Object.entries(parsed)) {
+      if (v && typeof v.timestamp === 'number' && now - v.timestamp < CACHE_TTL_MS) {
+        urlCache.set(k, v);
+      }
+    }
+  } catch {
+    /* ignore corrupt cache */
+  }
+})();
+
+function persistCache() {
+  if (typeof window === 'undefined') return;
+  try {
+    const obj: Record<string, CacheEntry> = {};
+    urlCache.forEach((v, k) => {
+      obj[k] = v;
+    });
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+  } catch {
+    /* quota / disabled storage — best effort */
+  }
+}
+
+function setCacheEntry(key: string, url: string | null) {
+  urlCache.set(key, { url, timestamp: Date.now() });
+  persistCache();
+}
 
 function getCacheKey(name: string, destination: string): string {
   return `${(name || '').toLowerCase().trim()}|${(destination || '').toLowerCase().trim()}`;
@@ -30,100 +79,89 @@ function cleanRestaurantName(name: string): string {
     .trim();
 }
 
+/**
+ * Module-scoped lookup. Survives component unmount: even if every subscriber
+ * cancels, the promise still writes the result to urlCache so the next mount
+ * sees a hit.
+ */
+function lookupUrlOnce(restaurantName: string, destination: string): Promise<string | null> {
+  const cacheKey = getCacheKey(restaurantName, destination);
+
+  const cached = urlCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return Promise.resolve(cached.url);
+  }
+
+  const existing = inflight.get(cacheKey);
+  if (existing) return existing;
+
+  const promise = (async (): Promise<string | null> => {
+    const cleanName = cleanRestaurantName(restaurantName);
+    if (!cleanName) {
+      setCacheEntry(cacheKey, null);
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('lookup-restaurant-url', {
+        body: { restaurantName: cleanName, destination },
+      });
+      if (error || !data?.success || !data?.url) {
+        setCacheEntry(cacheKey, null);
+        return null;
+      }
+      setCacheEntry(cacheKey, data.url);
+      return data.url as string;
+    } catch (err) {
+      console.warn('[RestaurantLink] lookup failed:', err);
+      setCacheEntry(cacheKey, null);
+      return null;
+    } finally {
+      inflight.delete(cacheKey);
+    }
+  })();
+
+  inflight.set(cacheKey, promise);
+  return promise;
+}
+
 export function RestaurantLink({ restaurantName, destination, className }: RestaurantLinkProps) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Initialize from cache synchronously so cached hits never flash empty.
+  const initialKey = getCacheKey(restaurantName, destination);
+  const initialCached = urlCache.get(initialKey);
+  const initialUrl =
+    initialCached && Date.now() - initialCached.timestamp < CACHE_TTL_MS ? initialCached.url : null;
+
+  const [url, setUrl] = useState<string | null>(initialUrl);
 
   useEffect(() => {
     let cancelled = false;
-    let settled = false;
+    const cacheKey = getCacheKey(restaurantName, destination);
 
-    // Reset state on each prop change so a new lookup starts cleanly.
-    setIsLoading(true);
-    setUrl(null);
-
-    // Deadline fallback FIRST: established before any async work so a hung
-    // invoke (cold start, OOM, network drop) can never strand the spinner.
-    const timeoutId = window.setTimeout(() => {
-      if (cancelled || settled) return;
-      settled = true;
-      // Production-safe: always log so we can distinguish "edge fn hung" from
-      // "component remounted" in user-reported stuck-spinner cases.
-      console.info('[RestaurantLink] lookup deadline hit (5s)', { restaurantName, destination });
-      setUrl(null);
-      setIsLoading(false);
-    }, 5000);
-
-    async function lookupUrl() {
-      const cacheKey = getCacheKey(restaurantName, destination);
-
-      const finish = (nextUrl: string | null) => {
-        if (cancelled || settled) return;
-        settled = true;
-        window.clearTimeout(timeoutId);
-        setUrl(nextUrl);
-        setIsLoading(false);
+    // Read cache synchronously on each prop change.
+    const cached = urlCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      setUrl(cached.url);
+      return () => {
+        cancelled = true;
       };
-
-      // Check cache first
-      const cached = urlCache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-        finish(cached.url);
-        return;
-      }
-
-      try {
-        const cleanName = cleanRestaurantName(restaurantName);
-
-        // If cleaning stripped everything, skip the lookup
-        if (!cleanName) {
-          urlCache.set(cacheKey, { url: null, timestamp: Date.now() });
-          finish(null);
-          return;
-        }
-
-        const { data, error } = await supabase.functions.invoke('lookup-restaurant-url', {
-          body: { restaurantName: cleanName, destination }
-        });
-
-        if (cancelled || settled) return;
-
-        if (error || !data?.success || !data?.url) {
-          urlCache.set(cacheKey, { url: null, timestamp: Date.now() });
-          finish(null);
-        } else {
-          urlCache.set(cacheKey, { url: data.url, timestamp: Date.now() });
-          finish(data.url);
-        }
-      } catch (err) {
-        console.error('[RestaurantLink] Error looking up URL:', err);
-        finish(null);
-      }
     }
 
-    lookupUrl();
+    // Otherwise render nothing while the background lookup runs.
+    setUrl(null);
+
+    lookupUrlOnce(restaurantName, destination).then((resolved) => {
+      if (cancelled) return;
+      setUrl(resolved);
+    });
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timeoutId);
     };
   }, [restaurantName, destination]);
 
-  if (isLoading) {
-    return (
-      <span className={`inline-flex items-center gap-1 sm:gap-1.5 text-xs text-muted-foreground ${className || ''}`}>
-        <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
-        <span className="sm:hidden">Loading...</span>
-        <span className="hidden sm:inline">Finding restaurant...</span>
-      </span>
-    );
-  }
-
-  // Don't show any link if we couldn't find the official URL
-  // No more Google/Yelp fallback - either direct link or nothing
-  if (!url) {
-    return null;
-  }
+  // No spinner: silent until we either have a link or know we don't.
+  if (!url) return null;
 
   return (
     <a
@@ -138,3 +176,11 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
     </a>
   );
 }
+
+// Test-only helpers
+export const __testing = {
+  urlCache,
+  inflight,
+  lookupUrlOnce,
+  getCacheKey,
+};
