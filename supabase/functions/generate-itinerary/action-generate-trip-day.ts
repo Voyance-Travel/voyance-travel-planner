@@ -467,7 +467,13 @@ async function _handleGenerateTripDayInner(
   const previousActivities: string[] = [];
   for (const day of recentDays) {
     if (day?.activities) {
-      day.activities.forEach((act: any) => {
+      // Strip late-nightlife bookends + wrap-window cards before passing to
+      // next-day prompt — see mem://constraints/itinerary/late-nightlife-no-next-day-bleed.
+      const cleaned = stripBookendsForPrompt(day.activities, {
+        dayNumber: day.dayNumber,
+        site: 'previousActivities-titles',
+      });
+      cleaned.forEach((act: any) => {
         previousActivities.push(act.title || act.name || '');
       });
     }
