@@ -6069,7 +6069,7 @@ export function EditorialItinerary({
                         isBudgetCalculating && "opacity-70 animate-pulse"
                       )}
                     >
-                      {formatCurrency(displayCost(totalCost), tripCurrency)}
+                      {formatCurrency(displayCost(financialSnapshot.loading ? 0 : headerStripValues.displayedTripTotalUsd), tripCurrency)}
                     </span>
                     {isBudgetCalculating && (
                       <span
@@ -6149,13 +6149,10 @@ export function EditorialItinerary({
                   const daysGroupUsd  = daysSubtotalCents / 100;
                   const hotelChipUsd  = financialSnapshot.effectiveHotelCents / 100;
                   const flightChipUsd = financialSnapshot.effectiveFlightCents / 100;
-                  const stripValues = computeHeaderStripValues({
-                    tripTotalUsd,
-                    daysGroupUsd,
-                    hotelChipUsd,
-                    flightChipUsd,
-                    loading: financialSnapshot.loading,
-                  });
+                  // Reuse the SAME precomputed strip values as the headline
+                  // above so the equation-row Trip Total can never diverge
+                  // from the big top-line Trip Total.
+                  const stripValues = headerStripValues;
                   const { chipSumUsd, displayedTripTotalUsd, reserveAdjustUsd, showReserve, snapshotUnderChips, snapshotOverChips } = stripValues;
                   if (
                     typeof import.meta !== 'undefined' &&
