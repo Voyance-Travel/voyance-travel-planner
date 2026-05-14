@@ -9,6 +9,7 @@ import { getAppUrl } from '@/utils/getAppUrl';
 
 import { usePayableItems, type PayableItem } from '@/hooks/usePayableItems';
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
+import { useDisplayedTripTotal } from '@/hooks/useDisplayedTripTotal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { JourneySpendingSummary } from './JourneySpendingSummary';
 import { FirstUseHint } from './FirstUseHint';
@@ -385,6 +386,11 @@ export function PaymentsTab({
 
   // ─── Canonical total from DB ledger (single source of truth, matches header + budget) ───
   const financialSnapshot = useTripFinancialSnapshot(tripId);
+  // Same displayed-total math the itinerary header uses, so PaymentsTab's
+  // headline `Trip Total` is byte-identical to the header's. Closes the
+  // Copenhagen $1,124 vs $1,048 gap (header clamped UP to chipSum, Payments
+  // read raw snapshot). See mem://constraints/finance/displayed-trip-total-single-source.
+  const displayedTotal = useDisplayedTripTotal(tripId);
   // Manually-added expenses live only in trip_payments (not in activity_costs),
   // so the DB snapshot misses them. Sum them so we can fold them on top — BUT
   // when a manual hotel/flight exists, treat it as an OVERRIDE of the canonical
@@ -404,9 +410,14 @@ export function PaymentsTab({
 
   // Manual payments are now folded into useTripFinancialSnapshot directly
   // (override-aware for hotel/flight, additive for others). No local delta needed.
-  const baseTotal = financialSnapshot.loading
+  // baseTotal mirrors the itinerary header (`displayedTotalCents`) — same
+  // hook, same math, same number. Falls back to payable items only while the
+  // displayed total is still loading and we have no snapshot yet.
+  const baseTotal = displayedTotal.loading
     ? payableTotalCents
-    : (financialSnapshot.tripTotalCents > 0 ? financialSnapshot.tripTotalCents : payableTotalCents);
+    : (displayedTotal.displayedTotalCents > 0
+        ? displayedTotal.displayedTotalCents
+        : payableTotalCents);
   const estimatedTotal = Math.max(0, baseTotal);
   // "Paid so far" must follow the same orphan-aware logic as the snapshot —
   // otherwise stale paid trip_payments rows from a regenerated trip inflate
@@ -1183,12 +1194,33 @@ export function PaymentsTab({
           <div className="text-right">
             <p className="text-2xl font-semibold text-primary">{formatCurrency(estimatedTotal)}</p>
             <p className="text-xs text-muted-foreground">Trip Total</p>
-            {!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && (
-              <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
-                <CheckCircle2 className="h-3 w-3 text-green-600" />
-                Matches itinerary
-              </p>
-            )}
+            {(() => {
+              // Real equality check: only claim "Matches itinerary" when our
+              // displayed Trip Total actually equals the header's displayed
+              // Trip Total (within $1) AND the header didn't have to clamp
+              // to a chip sum the snapshot couldn't account for. Otherwise
+              // surface "Reconciling…" so the green ribbon never lies.
+              if (displayedTotal.loading || financialSnapshot.loading) return null;
+              if (displayedTotal.displayedTotalCents <= 0) return null;
+              const matchesHeader =
+                Math.abs(estimatedTotal - displayedTotal.displayedTotalCents) <= 100 &&
+                !displayedTotal.snapshotUnderChips &&
+                !displayedTotal.snapshotOverChips;
+              if (matchesHeader) {
+                return (
+                  <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
+                    <CheckCircle2 className="h-3 w-3 text-green-600" />
+                    Matches itinerary
+                  </p>
+                );
+              }
+              return (
+                <p className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1 justify-end">
+                  <AlertCircle className="h-3 w-3" />
+                  Reconciling…
+                </p>
+              );
+            })()}
           </div>
         </div>
         
