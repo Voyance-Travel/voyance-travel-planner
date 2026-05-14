@@ -15,6 +15,7 @@ import { isGhostActivity } from '@/lib/itinerary/hideGhostActivities';
 import { ensureHotelReturnBookend, isHotelReturnBookendActivity } from '@/lib/itinerary/ensureHotelReturnBookend';
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 import { normalizePredawnCascade } from '@/lib/itinerary/normalizePredawnCascade';
+import { assertNoCrossDayBleed } from '@/lib/itinerary/crossDayBleedGuard';
 import { pruneDepartureUntimed } from '@/lib/itinerary/pruneDepartureUntimed';
 
 // Strip non-Latin scripts from AI text artifacts before rendering
@@ -804,7 +805,7 @@ export function parseItineraryDays(
     return tags.some((t: string) => STALE_HEAD_BOOKEND_SOURCE_RE.test(t));
   };
   let predawnNormalizedTotal = 0;
-  const result = deduped.map((day, idx) => {
+  let result = deduped.map((day, idx) => {
     const filteredActivities = (day.activities || []).filter((a) => {
       const ghost = isGhostActivity(a);
       if (ghost) {
@@ -876,6 +877,19 @@ export function parseItineraryDays(
       activities: dedupedActivities,
     };
   });
+
+  // Step 4a: Cross-day bleed guard — read-time mirror of the persist-boundary
+  // chokepoint. Self-heals legacy persisted trips by moving an untagged
+  // pre-dawn head row on Day N+1 back to Day N's tail when Day N ended late
+  // (≥22:00). See mem://constraints/itinerary/day1-past-midnight-no-day2-cascade.
+  try {
+    const guarded = assertNoCrossDayBleed(result, { site: 'parser-step4a' });
+    if (guarded.changed) {
+      result = guarded.days as typeof result;
+    }
+  } catch (e) {
+    console.warn('[itineraryParser] cross-day bleed guard failed (non-blocking):', e);
+  }
 
   // Step 4b: Read-time hotel-return safety net. Mirrors runStep8 at display
   // time so legacy trips and gray-zone end times still show a "Return to

@@ -1,82 +1,84 @@
-## Goal
+# Day-1-Past-Midnight Cascade: Lock the Risk Closed
 
-Make the Payments tab "Trip Total" and the itinerary header "Trip Total" mathematically identical at all times, and turn the "Matches itinerary" badge into a verified equality check (not a cosmetic ribbon).
+## Background
 
-## Root Causes
+The existing chain already has 4 defense layers for the Amsterdam 1:33 / 3:26 / 6:31 AM symptom:
 
-Two independent bugs combine into the symptoms reported.
+1. `stripBookendsForPrompt` — strips bookend rows AND any [00:00, 06:00) activity from cross-day prompt context (covers untagged "Return to Hotel" too).
+2. Parser Step 4 stale-head drop — drops a `late_nightlife_bookend` / `bookend-*` sitting at index 0 of Day N≥2 (and Day 1 when followed by real later activity).
+3. `normalizePredawnCascade` — shifts the leading [00:00, 05:00) block on ANY day forward to 09:00, preserving spacing.
+4. `dayChronoKey` wrap-aware sort — keeps a 00:25 nightcap bookend at the chronological tail of its own day.
 
-**Bug 1 — Header silently clamps up; Payments doesn't (the $76 Copenhagen gap).**
-`src/lib/itinerary/headerStripValues.ts` computes:
+Copenhagen Day 1 (12:25 AM end → clean Day 2) confirms the chain works. Amsterdam was the worst-case legacy. The user's concern is that the risk is still latent — no single layer asserts the invariant.
 
-```text
-displayedTripTotalUsd = max(snapshot.tripTotalCents, daysGroup + hotelChip + flightChip)
-```
+## What's missing
 
-The itinerary header renders `headerStripValues.displayedTripTotalUsd` (EditorialItinerary.tsx L6131). PaymentsTab renders `financialSnapshot.tripTotalCents` raw (PaymentsTab.tsx L1184). Whenever the per-day breakdown sum exceeds the canonical snapshot — a common transient when `useTripDayBreakdown` and `useTripFinancialSnapshot` finish at different times, or when a Day-N row is double-counted vs the resolver — the header inflates and Payments does not. Copenhagen $1,124 vs $1,048 = exactly that 76¢-on-the-chip-side delta.
+There is **no single chokepoint** that asserts the invariant after persist. If any new code path (manual edit, AI rewrite tool, future regenerate variant, version-restore) writes an activity with `dayNumber = N+1` and `startTime ∈ [00:00, 06:00)` while Day N has a late nightlife / late dinner tail, nothing today either:
 
-**Bug 2 — Snapshot doesn't refetch on itinerary persist (the Dublin "$998 stale" read).**
-Every successful itinerary persist dispatches `TRIP_PERSISTED_EVENT` (Core memory: "DB Is Source of Truth"). `useTripFinancialSnapshot` only listens for `booking-changed`. After a regenerate / regression-block / reload self-heal lands on the database, `EditorialItinerary` re-reads `trips.itinerary_data` and re-renders, but the snapshot powering Payments never refetches, so Payments keeps showing the previous session's number.
+- moves it back to Day N's tail (where it belongs), OR
+- emits a single canonical telemetry signal that something silently leaked.
 
-**Badge is non-diagnostic.**
-`{!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && "Matches itinerary"}` (PaymentsTab.tsx L1186-L1191) only checks "snapshot loaded with a positive value" — it never compares Payments' displayed total to the header's displayed total. So the badge fires even when the two diverge.
+Every existing layer is either prompt-time, parse-time, or per-day-cascade. A persist-boundary cross-day invariant check is the missing piece.
 
-## Fix
+## Plan
 
-### 1. One displayed-total resolver, two consumers
+### 1. New shared util: `assertNoCrossDayBleed`
 
-Promote `computeHeaderStripValues` into the canonical "what the user sees as Trip Total" math, then have both surfaces read it:
+`supabase/functions/_shared/cross-day-bleed-guard.ts` (new, ~80 lines)
 
-- Add a thin hook `useDisplayedTripTotal(tripId)` in `src/hooks/` that internally uses `useTripFinancialSnapshot` + `useTripDayBreakdown` and returns `{ displayedTotalCents, snapshotTotalCents, chipSumCents, snapshotUnderChips, snapshotOverChips, loading }`.
-- `EditorialItinerary.tsx` keeps consuming `headerStripValues.displayedTripTotalUsd` (no behavioral change) but routes through the new hook so the value is computed once.
-- `PaymentsTab.tsx` `baseTotal` switches from `financialSnapshot.tripTotalCents` to `displayedTotalCents`. This closes the $76 gap for Copenhagen by definition: same number, same rounding, same source.
+Per persisted day pair `(N, N+1)`:
 
-### 2. Snapshot listens to `TRIP_PERSISTED_EVENT`
+- If Day N's last non-locked activity ends ≥ 22:00 (late-nightlife signal), AND Day N+1's first non-locked activity starts in [00:00, 06:00) AND is **not** a `late_nightlife_bookend`/`bookend-*` source row, then:
+  - Move that head row back to the tail of Day N (re-stamp `dayNumber = N`, leave time unchanged).
+  - Log `[DAY1_BLEED_GUARD] day=N+1 site=<caller> action=moved_to_prev_day_tail title="…" start=HH:MM` and stamp `metadata.quality.cross_day_bleed_repairs += 1`.
+- Bookend-source rows at Day N+1 head are already handled by parser Step 4 stale-head drop — this guard does **not** duplicate that; it specifically catches **untagged real activities** that escape every upstream filter.
 
-In `useTripFinancialSnapshot.ts`, add a second `window.addEventListener(TRIP_PERSISTED_EVENT, handler)` next to the existing `booking-changed` handler (L642). Reuse the same coalesced refetch path (leading + trailing 600 ms) and the silent-suppress flag so the auto-refetch doesn't spawn a phantom delta toast.
+Locked / `manual` / `extracted` / `pinned` / `user_added` / departure-logistics rows are exempt (re-uses existing `isLockedLike` / `isDepartureLogistics` helpers from `predawn-cascade-normalize.ts`).
 
-This closes the Dublin stale read: after the regression-block heal lands and `safeUpdateItineraryData` fires `TRIP_PERSISTED_EVENT`, every mounted snapshot — Payments, Budget, header — refetches in lock-step.
+### 2. Wire into persist boundary
 
-### 3. Make the "Matches itinerary" badge mean something
+`supabase/functions/generate-itinerary/action-save-itinerary.ts` `normalizeDays` — call `assertNoCrossDayBleed(days, { site: 'save-itinerary' })` AFTER `normalizePredawnCascade` and BEFORE the final activity_costs write. Guard runs once per save; any move re-runs `enforceTimingAndBuffers` on both affected days.
 
-Replace the current condition with an actual equality check inside PaymentsTab (L1186-L1191):
+`supabase/functions/_shared/persist-itinerary.ts` — add the same call at the single write chokepoint so chat-tool / regenerate / chain-final paths inherit the guard.
 
-```text
-const headerMatches =
-  !displayedLoading
-  && Math.abs(estimatedTotal - displayedTotalCents) <= 100   // ≤ $1
-  && !snapshotUnderChips                                      // header had to clamp up
-  && !snapshotOverChips;                                      // unattributed snapshot cost
+### 3. Frontend read-time mirror (defense in depth)
 
-if (headerMatches) → green check + "Matches itinerary"
-else if (snapshotUnderChips || snapshotOverChips) → amber dot + "Reconciling…"
-else → render nothing (no green badge during loading or transient drift)
-```
+`src/utils/itineraryParser.ts` Step 4 — after the existing stale-head drop + `normalizePredawnCascade`, run a FE-side `assertNoCrossDayBleed` (port the util to `src/lib/itinerary/`) so legacy persisted trips (Amsterdam-class data already on disk) self-heal at next render. Logs `[DAY1_BLEED_GUARD]` to console for telemetry.
 
-The same drift telemetry already in PaymentsTab (`[PaymentsTab] divergence`, L509) stays as the developer signal — this change is user-facing only.
+### 4. Regression tests
 
-### 4. Suppress the post-snapshot-event delta toast
+- `supabase/functions/_shared/__tests__/cross-day-bleed-guard.test.ts`
+  - Day 1 ends with nightcap 22:00–23:30 + `late_nightlife_bookend` 23:50–00:25 → no move (bookend correctly on Day 1).
+  - Day 1 ends 22:00, Day 2 head is `Moco Museum @ 01:33` (untagged real activity) → moved to Day 1 tail.
+  - Day 2 head is `late_nightlife_bookend @ 00:25` → not moved (parser drops it separately).
+  - Day 2 head is locked manual entry @ 02:00 → not moved.
+  - Day 2 head at 09:00 → no-op.
+- `supabase/functions/generate-itinerary/__tests__/late-nightlife-source-survival.test.ts` — extend with one Amsterdam-class fixture asserting the persist boundary leaves Day 1 with the bookend AND Day 2 starting ≥ 09:00.
 
-The new `TRIP_PERSISTED_EVENT` listener must mark `suppressNextToastRef = { active: true, reason: 'trip-persisted' }` before refetch — a snapshot diff caused by the persist isn't an actionable user-driven price change.
+### 5. Memory + index update
 
-## Acceptance
-
-- Open Copenhagen trip — Payments "Trip Total" === itinerary header "Trip Total" to the cent. Same after toggling Hotel/Flight.
-- Open Dublin trip, force a regenerate or regression-block, then read both surfaces without a hard refresh — both update in the same render frame; Payments never strands the prior value.
-- "Matches itinerary" badge only appears when the two displayed numbers actually match within $1 AND no clamping happened. During reconciliation it shows an amber "Reconciling…" hint instead of a misleading green checkmark.
-- Existing `[PaymentsTab] divergence` and `[useTripFinancialSnapshot] …` console signals continue to fire on real upstream contract bugs.
+New entry `mem://constraints/itinerary/day1-past-midnight-no-day2-cascade` documenting the 5-layer chain (4 existing + new persist-boundary guard) and the `[DAY1_BLEED_GUARD]` sentinel. Reference from `mem://index.md` Memories list.
 
 ## Out of scope
 
-- Fixing why `useTripDayBreakdown` ever sums higher than the canonical resolver (separate Day-N hotel double-count bug — telemetry stays as `snapshotUnderChips`).
-- Hero image, health engine, regression guard work shipped earlier in the loop.
-- Touching the resolver math in `resolveCanonicalCostRows` — both surfaces will simply agree on whatever it produces.
+- Changing the late-nightlife bookend allowance (00:00–02:30) — that's the documented Florence/Barcelona Day-2 fix and stays.
+- Touching `normalizePredawnCascade` shift target (still 09:00).
+- Hero/health/payments work shipped earlier in this loop.
+
+## Acceptance
+
+- Synthetic Amsterdam fixture (Day 1 nightcap 22:00, Day 2 LLM-emitted museum @ 01:33) round-trips through `action-save-itinerary` and emerges with the museum re-bucketed onto Day 1's tail; Day 2 starts ≥ 09:00.
+- Backfill scan on existing trips logs `[DAY1_BLEED_GUARD]` exactly once per affected day; no false positives on Copenhagen-class clean Day 2 trips.
+- All existing late-nightlife / predawn / wrap-sort tests continue to pass.
 
 ## Files
 
-- `src/hooks/useDisplayedTripTotal.ts` (new, ~40 lines)
-- `src/hooks/useTripFinancialSnapshot.ts` (add `TRIP_PERSISTED_EVENT` listener)
-- `src/components/itinerary/PaymentsTab.tsx` (swap `baseTotal` source, rewrite badge)
-- `src/components/itinerary/EditorialItinerary.tsx` (route header through new hook)
-- `mem://constraints/finance/displayed-trip-total-single-source` (new memory entry)
+- `supabase/functions/_shared/cross-day-bleed-guard.ts` (new)
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (1 call site)
+- `supabase/functions/_shared/persist-itinerary.ts` (1 call site)
+- `src/lib/itinerary/crossDayBleedGuard.ts` (new, FE port)
+- `src/utils/itineraryParser.ts` (1 call site in Step 4)
+- `supabase/functions/_shared/__tests__/cross-day-bleed-guard.test.ts` (new)
+- `supabase/functions/generate-itinerary/__tests__/late-nightlife-source-survival.test.ts` (extend)
+- `mem://constraints/itinerary/day1-past-midnight-no-day2-cascade` (new)
 - `mem://index.md` (reference)

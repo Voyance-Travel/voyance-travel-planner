@@ -390,6 +390,22 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   let itineraryDays: any[] = Array.isArray((itinerary as any)?.days) ? (itinerary as any).days : [];
   if (itineraryDays.length > 0) {
     itineraryDays = normalizeDays(itineraryDays, tripStartDate, (currentTrip as any)?.destination || (trip as any)?.destination);
+    // Cross-day bleed guard — moves an untagged pre-dawn head row on Day N+1
+    // back to Day N's tail when Day N ended late (≥22:00). Closes the residual
+    // "Day 1 nightcap → Day 2 starts at 1:33 AM" risk that all four upstream
+    // layers (stripBookendsForPrompt, parser stale-head drop, predawn cascade,
+    // chronoKey wrap sort) miss when the LLM emits an untagged real activity.
+    // See mem://constraints/itinerary/day1-past-midnight-no-day2-cascade.
+    {
+      const { assertNoCrossDayBleed } = await import('../_shared/cross-day-bleed-guard.ts');
+      const guarded = assertNoCrossDayBleed(itineraryDays, { site: 'save-itinerary' });
+      if (guarded.changed) {
+        itineraryDays = guarded.days;
+        // Re-run per-day normalize on the two affected day arrays so chronoKey
+        // sort and timing cascade settle the new tail.
+        itineraryDays = normalizeDays(itineraryDays, tripStartDate, (currentTrip as any)?.destination || (trip as any)?.destination);
+      }
+    }
     // Preserve server-repaired Michelin/ticketed/reference floors that the
     // client copy may have re-serialized from a stale render snapshot.
     const { days: preservedDays, preserved } = preserveLedgerCosts(existingJsonDays as any[], itineraryDays);
