@@ -204,10 +204,35 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
     });
     
     if (activityRows.length > 0) {
+      // Replace-mode for this day: delete any existing rows tied to this
+      // itinerary_day_id whose id is NOT in the incoming set, so stale
+      // floating cards (e.g. a prior sync's untimed "Lunch: …") cannot
+      // survive a re-sync. Locked rows are still respected because
+      // incoming rows preserve `is_locked`.
+      const incomingIds = new Set(activityRows.map((r: any) => String(r.id)));
+      const { data: existingRows } = await supabase
+        .from('itinerary_activities')
+        .select('id')
+        .eq('itinerary_day_id', dayRow.id);
+      const staleIds = (existingRows || [])
+        .map((r: any) => String(r.id))
+        .filter((id: string) => !incomingIds.has(id));
+      if (staleIds.length > 0) {
+        const { error: delErr } = await supabase
+          .from('itinerary_activities')
+          .delete()
+          .in('id', staleIds);
+        if (delErr) {
+          console.warn(`[sync-itinerary-tables] Stale-row cleanup failed for day ${dayNumber}:`, delErr);
+        } else {
+          console.log(`[sync-itinerary-tables] Day ${dayNumber}: cleared ${staleIds.length} stale activity row(s) before sync`);
+        }
+      }
+
       const { error: actError } = await supabase
         .from('itinerary_activities')
         .upsert(activityRows, { onConflict: 'id' });
-      
+
       if (actError) {
         console.error(`[sync-itinerary-tables] Failed to insert activities for day ${dayNumber}:`, actError);
       } else {
