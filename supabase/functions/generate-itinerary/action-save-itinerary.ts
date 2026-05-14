@@ -1397,6 +1397,8 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     destination: (currentTrip as any)?.destination ?? null,
     extraUpdate,
     label: 'save-itinerary',
+    allowFrozenWrite,
+    saveReason,
   });
 
   if (error) {
