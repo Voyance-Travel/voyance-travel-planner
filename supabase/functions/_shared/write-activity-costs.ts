@@ -21,10 +21,18 @@ export interface WriteCostsContext {
   budgetTier?: string | null;
   /** When set, day totals exceeding budgetCap*1.2 are scaled to budgetCap*1.1. */
   actualDailyBudgetPerPerson?: number | null;
+  /**
+   * INSERT-only mode for frozen trips. When true, we only INSERT rows for
+   * activity_ids that have no existing snapshot row — never delete, never
+   * update existing rows. Existing prices stay exactly as the user first saw
+   * them. See mem://constraints/itinerary/frozen-after-ready.
+   */
+  insertOnly?: boolean;
 }
 
 export interface WriteCostsResult {
   inserted: number;
+  skippedExisting?: number;
   skippedReason?: string;
 }
 
