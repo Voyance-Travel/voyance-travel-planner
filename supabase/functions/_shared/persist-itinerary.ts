@@ -110,6 +110,42 @@ export async function persistTripItinerary(
   const label = options.label || 'persist-itinerary';
   const days = Array.isArray(itinerary?.days) ? itinerary.days : [];
 
+  // ── FROZEN GATE (single backend chokepoint) ─────────────────────
+  // Once the trip is frozen, page-load / background / refresh-time writers
+  // MUST NOT touch `itinerary_data`. We still apply `extraUpdate` so callers
+  // like cost-repair can stamp `last_cost_repair_at` without re-shaping the
+  // plan. See mem://constraints/itinerary/frozen-after-ready.
+  try {
+    const { isTripFrozen, assertWriteAllowed } = await import('./frozen-guard.ts');
+    const status = await isTripFrozen(supabase, tripId);
+    const verdict = assertWriteAllowed({
+      frozen: status.frozen,
+      allowFrozenWrite: options.allowFrozenWrite,
+      saveReason: options.saveReason,
+      label,
+    });
+    if (verdict.blocked) {
+      console.log(
+        `[${label}] [FROZEN_BLOCKED] tripId=${tripId} reason=${verdict.reason} status=${status.status} frozenAt=${status.frozenAt || 'n/a'}`,
+      );
+      const extra = options.extraUpdate || {};
+      const updatePayload: Record<string, any> = { ...extra };
+      delete updatePayload.itinerary_data;
+      // Apply non-itinerary metadata/status writes only, if any remain.
+      if (Object.keys(updatePayload).length > 0) {
+        const { error } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
+        if (error) {
+          console.warn(`[${label}] [FROZEN_BLOCKED] extraUpdate write failed:`, error);
+          return { error, frozenBlocked: true };
+        }
+      }
+      return { error: null, frozenBlocked: true };
+    }
+  } catch (e) {
+    console.warn(`[${label}] frozen-guard probe failed (non-blocking, allowing write):`, e);
+  }
+
+
   // 1. Strip prompt artifacts from titles (mutates in place).
   try {
     const stripped = stripPromptArtifactsInTitles(days);
