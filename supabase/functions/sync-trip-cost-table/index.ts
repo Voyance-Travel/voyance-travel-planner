@@ -4,6 +4,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { writeActivityCostsFromItinerary } from "../_shared/write-activity-costs.ts";
+import { isTripFrozen } from "../_shared/frozen-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
