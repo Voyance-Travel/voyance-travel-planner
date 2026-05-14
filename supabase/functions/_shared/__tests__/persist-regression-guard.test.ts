@@ -172,5 +172,54 @@ Deno.test('rejected_attempts ring buffer caps at 3 entries', async () => {
   // Newest entry is at the tail
   assertEquals(rejected[2].label, 'test-ring');
   // Oldest dropped
-  assertEquals(rejected[0].at, 't2');
+    assertEquals(rejected[0].at, 't2');
+});
+
+Deno.test('identity-swap: same-size new days but ALL different content is BLOCKED', async () => {
+  const oldDays = [
+    { dayNumber: 1, activities: [act('Bunsen Lunch'), act('National Museum'), act('Chapter One Dinner'), act('Sophie Rooftop Bar')] },
+    { dayNumber: 2, activities: [act('Hardy Bistro Breakfast'), act('Liberties Heritage'), act('Variety Jones Dinner'), act('Bike Tour')] },
+    { dayNumber: 3, activities: [act('Brother Hubbard Breakfast'), act('Chester Beatty Library'), act('Departure Flight'), act('Checkout')] },
+  ];
+  // Wholesale Dublin-style swap: same counts, ~zero overlap.
+  const newDays = [
+    { dayNumber: 1, activities: [act('Fallon Byrne Lunch'), act('Seaweed Wellness'), act('Forest Marcy Dinner'), act('Pier Health Club')] },
+    { dayNumber: 2, activities: [act('Brother Hubbard North'), act('Book of Kells'), act('Liath Dinner'), act('East Pier Stroll')] },
+    { dayNumber: 3, activities: [act('Two Pups Coffee'), act('Francis Street Antique'), act('Dash Burger'), act('Departure Flight')] },
+  ];
+  const { sb, captured } = makeFakeSb(oldDays);
+  const { regressionBlocked } = await persistTripItinerary(
+    sb as any,
+    't1',
+    { days: newDays },
+    { label: 'test-identity-swap' },
+  );
+  assertEquals(regressionBlocked, true);
+  assertEquals('itinerary_data' in captured.updatePayload, false);
+  const rejected = captured.updatePayload.metadata?.rejected_attempts;
+  assertEquals(Array.isArray(rejected), true);
+  assertEquals(rejected[rejected.length - 1].reason, 'regression_blocked');
+});
+
+Deno.test('identity-swap: single-day chat regenerate (1 of 3 days flipped) is ALLOWED', async () => {
+  const oldDays = [
+    { dayNumber: 1, activities: [act('A1'), act('A2'), act('A3'), act('A4')] },
+    { dayNumber: 2, activities: [act('B1'), act('B2'), act('B3'), act('B4')] },
+    { dayNumber: 3, activities: [act('C1'), act('C2'), act('C3'), act('C4')] },
+  ];
+  // Day 2 fully regenerated; days 1 and 3 unchanged.
+  const newDays = [
+    { dayNumber: 1, activities: [act('A1'), act('A2'), act('A3'), act('A4')] },
+    { dayNumber: 2, activities: [act('Z1'), act('Z2'), act('Z3'), act('Z4')] },
+    { dayNumber: 3, activities: [act('C1'), act('C2'), act('C3'), act('C4')] },
+  ];
+  const { sb, captured } = makeFakeSb(oldDays);
+  const { regressionBlocked } = await persistTripItinerary(
+    sb as any,
+    't1',
+    { days: newDays },
+    { label: 'test-single-day-regen' },
+  );
+  assertEquals(regressionBlocked, false);
+  assertEquals(captured.updatePayload.itinerary_data.days.length, 3);
 });

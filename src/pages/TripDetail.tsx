@@ -532,6 +532,8 @@ export default function TripDetail() {
           creditsCharged: 0, // Already charged, no new charge
           requestedDays: totalDays,
           resumeFromDay,
+          // Explicit user click → allowed to overwrite a frozen trip.
+          allowOverwriteFrozen: true,
         },
       });
 
@@ -1644,13 +1646,16 @@ export default function TripDetail() {
                   days: rebuiltDays,
                 };
 
-                // When recovery actually upgraded a day from per-row data, use
-                // a non-`self-heal-` reason + allowFrozenWrite so both the
-                // client gate and the server FROZEN gate let the write through.
-                // See mem://constraints/itinerary/frozen-after-ready (recovery
-                // is not a self-heal effect — it's restoring lost canonical
-                // truth from another canonical store).
-                const reason = recoveryUsed ? 'recovery-rebuild-sparse-json' : 'self-heal-rebuild-from-tables';
+                // The page-load sparse rebuild MUST NOT bypass the FROZEN gate.
+                // Doing so was the root cause of the Dublin "entire days replaced
+                // on reload" pattern — the rebuild persisted a different version
+                // over the user's finalized itinerary. Now we always pass the
+                // self-heal reason; safeUpdateItineraryData + the backend FROZEN
+                // gate will silently no-op for ready/generated trips. Local
+                // session state is still updated so the user sees the recovered
+                // content for this session, but the persisted DB row is left
+                // alone until the user makes an explicit edit.
+                const reason = recoveryUsed ? 'self-heal-recovery-rebuild-sparse-json' : 'self-heal-rebuild-from-tables';
                 console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount}); recoveryUsed=${recoveryUsed}, reason=${reason}`);
                 await safeUpdateItineraryData(
                   tripId,
@@ -1659,7 +1664,6 @@ export default function TripDetail() {
                   {
                     skipLedgerCheck: true,
                     reason,
-                    ...(recoveryUsed ? { allowFrozenWrite: true, allowReduction: true } : {}),
                   },
                 );
 
@@ -3076,10 +3080,10 @@ export default function TripDetail() {
                     <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
                   </div>
                   <div className="text-center space-y-3 max-w-md">
-                    <h3 className="text-xl font-serif font-semibold">Reconnecting...</h3>
+                    <h3 className="text-xl font-serif font-semibold">Generation paused</h3>
                     <p className="text-muted-foreground">
                       Generation paused at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
-                      Attempting to resume automatically.
+                      Click below to resume — your existing days are preserved.
                     </p>
                     {generationPoller.totalDays > 0 && (
                       <div className="w-64 mx-auto">
