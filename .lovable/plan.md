@@ -1,59 +1,29 @@
-## What this issue actually is
+## Fix: Run `pruneOrphanLateNightlifeBookend` before the cascade loop
 
-A real restaurant card (e.g., "Katsukura Sanjo Honten") with **no `startTime`/`start_time`/`time`** at all is being persisted into `trips.itinerary_data` for the departure day. Because it has no time, `dayChronoKey` sort treats it as `-1` and parks it after every timed card — including the airport transfer — so the user sees a "floating Lunch" after they've already left for the airport.
+### Problem
+On Day 2 render, a stale "00:30 Return to Hotel" bookend (orphaned from a Day 1 nightcap) sorts to the head. `enforceTimingAndBuffers`'s cascade then anchors Day 2 chronology to 00:30 and pushes every real activity into 1–7 AM (Budapest: Parliament 1:47 AM, lunch 4:47 AM, dinner 11:02 AM).
 
-This isn't new. We've patched it many times (memory entries: *Validation Gate Logistics-Sequence Drop*, *Canonical Time Field Promotion*, *Departure-Day Final Enforcement §15z*, *Departure-Day Hotel-Return Strip*). The server pruner in `repair-day.ts §15z` is correct today — it drops untimed non-logistics non-locked cards on departure days regardless of category. The reason it still reproduces 14/14 is **not** a bug in §15z. It's that:
+### Fix
+Single-line insertion in `supabase/functions/_shared/timing-cascade.ts`. Add a Pre-walk #3 call to the already-existing `pruneOrphanLateNightlifeBookend` (defined at line 637) immediately after Pre-walk #2 (line 431), so orphan bookends are removed *before* the cascade loop sees them.
 
-1. **§15z doesn't run on every persist path.** It runs in `repair-day` (full repair), `action-save-itinerary` (STEP 2.65), the chain finalizer (`[CHAIN_DEPARTURE_NET]`), and `action-sync-tables` (`[SYNC_DEPARTURE_NET]`). Anything that writes `trips.itinerary_data` outside those four paths — chat-action executor sub-paths, optimistic patches, undo/redo, manual reorder — can land an untimed dining row that survives.
-2. **There is no read-time guard.** `itineraryParser.ts` Step 4b-pre only strips *hotel-return* cards on departure day. It does NOT strip generic untimed non-logistics cards. So even when §15z dropped the row server-side on a future write, an already-persisted legacy trip surfaces it on every page load — which is why the user sees it on existing reloaded trips.
+### Change
+After line 431 (`assignFloatingMealTimes(...)`), insert:
 
-The user confirmed: time slot is **fully blank**, repros on **both fresh and reloaded**, wants a **targeted patch + universal read-time strip**.
+```ts
+// Pre-walk #3: remove orphan late-nightlife hotel-return bookends BEFORE the
+// cascade loop sees them. Otherwise a stale 00:30 "Return to Hotel" card
+// anchors Day 2's chronology and the cascade pushes every real activity into
+// 1-7 AM (Budapest Day 2: Parliament @ 1:47 AM, lunch @ 4:47 AM).
+pruneOrphanLateNightlifeBookend(input as any[], { path: 'enforceTimingAndBuffers' } as any);
+```
 
-## Fix
+### Out of scope
+- No changes to the cascade loop, cutoff filter, `pruneOrphanLateNightlifeBookend` itself, or any other function/file.
 
-Two layers, mirroring the pattern we already use for the hotel-return strip.
+### Acceptance
+1. `grep -n "pruneOrphanLateNightlifeBookend(input" supabase/functions/_shared/timing-cascade.ts` → 1 hit
+2. `grep -c "pruneOrphanLateNightlifeBookend" supabase/functions/_shared/timing-cascade.ts` → ≥3
+3. `grep -n "Pre-walk #3" supabase/functions/_shared/timing-cascade.ts` → 1 hit
 
-### Layer 1 — Persist-boundary safety net (catches future writes)
-
-`safeUpdateItineraryData` is the single client write chokepoint. Add a deterministic, side-effect-free pre-write pass that, for the last day of every trip, drops any non-logistics, non-locked, non-userAdded/extracted/pinned card whose `startTime|start_time|time` is missing or unparseable. Reuses the same exemption rules as §15z (no scope creep — locked rows, user-added rows, `preserveAsManualPick` *with a valid time before cutoff*, and logistics rows are always kept).
-
-Sentinel: `[PERSIST_DEPARTURE_UNTIMED_PRUNED] day=N count=K titles=…`.
-
-This closes the chat-action / optimistic-patch / undo-redo gap without auditing every caller.
-
-### Layer 2 — Read-time strip in the parser (catches legacy persisted rows)
-
-In `src/utils/itineraryParser.ts` Step 4b-pre, after the existing departure-day hotel-return strip, run a second pass on the same `departureDayIdx` that drops untimed non-logistics, non-locked, non-userAdded cards. Same exemption shape as §15z. Pure UI strip, never written to DB.
-
-Sentinel: `[itineraryParser] departure-day untimed strip day=N count=K`.
-
-This is what makes the bug "never reproduce again" on already-persisted bad trips, including the 14/14 repros the user is looking at right now.
-
-### Layer 3 — One-shot backfill
-
-Run a SQL one-shot over `trips` where `metadata.itinerary_status ∈ ('ready','generated')` and the last day's JSON contains an untimed non-logistics row, dispatch through the standard `enforceDepartureDayLogistics` migration path so the on-disk JSON is clean for the affected trips. Same ring-buffer + persist-regression-guard rules apply.
-
-### Tests
-
-- `supabase/functions/_shared/__tests__/departure-day-combined.test.ts` — extend with a "real restaurant, category=cultural, no startTime, departure day" case.
-- New `src/utils/__tests__/itineraryParser.departureDayUntimedStrip.test.ts` — fixture with a Day-N untimed dining row + airport transfer; assert the row is filtered out and a `[BOOKEND_TRACE]`-style log fires.
-- New `src/lib/__tests__/safeUpdateItineraryData.departureUntimedPrune.test.ts` — assert the persist-boundary pass drops the row before write and preserves locked/userAdded rows.
-
-### Memory
-
-Update `mem://constraints/itinerary/canonical-time-field-promotion` (or create `mem://constraints/itinerary/departure-day-untimed-defense`) to record both new layers + the sentinels, and update the Core line in `mem://index.md`.
-
-## Files to change
-
-- `supabase/functions/_shared/predawn-cascade-normalize.ts` — extract a small `pickStartMin` helper if not already shared (or reuse).
-- `src/lib/itinerary/safeUpdateItineraryData.ts` — add Layer 1 pass.
-- `src/utils/itineraryParser.ts` — add Layer 2 pass next to existing Step 4b-pre.
-- `mem://index.md` + new/updated constraint memory.
-- New tests above; extend existing departure-day combined test.
-- Backfill migration via `supabase--migration` (Layer 3) — runs the same enforcer SQL-side, gated by the persist-regression rules already in place.
-
-## Out of scope
-
-- No change to `enforceDepartureDayLogistics` itself (already correct).
-- No change to chat executor / optimistic patch internals — Layer 1 is the chokepoint, by design.
-- No telemetry-watching cleanup of the upstream `[DEPARTURE_UNTIMED_ACTIVITY_PRUNED]` mislabeled-category source. That's a separate generator-quality task; the fix above makes it harmless.
+### Manual test
+Generate a trip with Day 1 nightcap ending past midnight. Day 2 must not show the 00:30 "Return to Hotel" card at the top, and subsequent activities must keep 7–9 AM start times.
