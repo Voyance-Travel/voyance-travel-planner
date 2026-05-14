@@ -213,6 +213,8 @@ export async function persistTripItinerary(
       // replacement and rejected. Only fires when the on-disk version
       // was healthy and the caller has not opted into regression.
       let identitySwap = false;
+      let flippedDays = 0;
+      let eligibleOldDays = 0;
       const identityDetail: Array<{ day: number | string; overlap: number; oldCount: number; newCount: number }> = [];
       if (wasHealthy) {
         const norm = (s: any) => String(s || '')
@@ -242,6 +244,7 @@ export async function persistTripItinerary(
           if (!oldDay || typeof oldDay.dayNumber !== 'number') continue;
           const oldTitles = titlesOf(oldDay.activities || []);
           if (oldTitles.size < 3) continue;
+          eligibleOldDays++;
           const newDay = newByNum.get(oldDay.dayNumber);
           const newTitles = titlesOf(newDay?.activities || []);
           if (newTitles.size === 0) continue;
@@ -249,8 +252,13 @@ export async function persistTripItinerary(
           for (const t of newTitles) if (oldTitles.has(t)) inter++;
           const overlap = inter / Math.max(oldTitles.size, newTitles.size);
           identityDetail.push({ day: oldDay.dayNumber, overlap: Math.round(overlap * 100) / 100, oldCount: oldTitles.size, newCount: newTitles.size });
-          if (overlap < 0.3) identitySwap = true;
+          if (overlap < 0.3) flippedDays++;
         }
+        // Trip-wide swap signal: ≥2 days flipped AND ≥60% of eligible old
+        // days flipped. Single-day chat regenerate / per-day chain writes
+        // never trip this. Wholesale Dublin-style replacement (3/3 days
+        // flipped) does.
+        identitySwap = flippedDays >= 2 && eligibleOldDays > 0 && (flippedDays / eligibleOldDays) >= 0.6;
       }
 
       if ((isRegression || identitySwap) && !options.allowRegression) {
