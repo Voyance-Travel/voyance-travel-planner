@@ -1,84 +1,88 @@
-# Day-1-Past-Midnight Cascade: Lock the Risk Closed
+## Goal
 
-## Background
+Once an itinerary reaches `ready`/`generated` and stamps `metadata.itinerary_frozen_at`, the persisted bytes must not change again unless the user explicitly edits, regenerates, or unlocks. Today the frontend `safeUpdateItineraryData` enforces this, but several backend paths still write through and silently re-shape the trip on refresh:
 
-The existing chain already has 4 defense layers for the Amsterdam 1:33 / 3:26 / 6:31 AM symptom:
+- `action-repair-costs` writes JSONB via `persistTripItinerary` with `skipContract:true` — no FROZEN check.
+- `action-save-itinerary`'s FROZEN gate only blocks `saveReason` starting with `self-heal-`. Anything else (chat retries, optimistic, undo, executor save without that prefix) passes.
+- `sync-trip-cost-table` and the snapshot's auto-backfill rewrite `activity_costs` rows on every load → totals shift even when JSON is untouched.
+- `TripDetail.tsx` page-load `repairTripCosts` invoke fires for any legacy trip without an `activity_costs` row, and never checks `itinerary_frozen_at`.
+- No durable snapshot exists, so we can't recover the exact "shown" version if anything still leaks through.
 
-1. `stripBookendsForPrompt` — strips bookend rows AND any [00:00, 06:00) activity from cross-day prompt context (covers untagged "Return to Hotel" too).
-2. Parser Step 4 stale-head drop — drops a `late_nightlife_bookend` / `bookend-*` sitting at index 0 of Day N≥2 (and Day 1 when followed by real later activity).
-3. `normalizePredawnCascade` — shifts the leading [00:00, 05:00) block on ANY day forward to 09:00, preserving spacing.
-4. `dayChronoKey` wrap-aware sort — keeps a 00:25 nightcap bookend at the chronological tail of its own day.
-
-Copenhagen Day 1 (12:25 AM end → clean Day 2) confirms the chain works. Amsterdam was the worst-case legacy. The user's concern is that the risk is still latent — no single layer asserts the invariant.
-
-## What's missing
-
-There is **no single chokepoint** that asserts the invariant after persist. If any new code path (manual edit, AI rewrite tool, future regenerate variant, version-restore) writes an activity with `dayNumber = N+1` and `startTime ∈ [00:00, 06:00)` while Day N has a late nightlife / late dinner tail, nothing today either:
-
-- moves it back to Day N's tail (where it belongs), OR
-- emits a single canonical telemetry signal that something silently leaked.
-
-Every existing layer is either prompt-time, parse-time, or per-day-cascade. A persist-boundary cross-day invariant check is the missing piece.
+This plan adds a single backend chokepoint, snapshots the presented version, and converts every refresh-time mutator into a strict no-op on frozen trips.
 
 ## Plan
 
-### 1. New shared util: `assertNoCrossDayBleed`
+### 1. Single backend FROZEN chokepoint
 
-`supabase/functions/_shared/cross-day-bleed-guard.ts` (new, ~80 lines)
+Create `supabase/functions/_shared/frozen-guard.ts`:
+- `isTripFrozen(supabase, tripId)` → `{ frozen, frozenAt, status }`
+- `assertWriteAllowed({ frozen, allowFrozenWrite, saveReason, label })` returns a structured `{ ok: false, blocked: true, reason }` for blocked writes.
 
-Per persisted day pair `(N, N+1)`:
+Wire it inside `persistTripItinerary` (`supabase/functions/_shared/persist-itinerary.ts`):
+- New option `allowFrozenWrite?: boolean` (default `false`).
+- If trip is frozen and `allowFrozenWrite !== true`: skip the `itinerary_data` mutation, still apply non-itinerary `extraUpdate` keys (status flags, metadata stamps) so callers like cost-repair can record `last_cost_repair_at` without touching JSONB.
+- Log `[FROZEN_BLOCKED] label=<x> tripId=<y>` and return `{ frozenBlocked: true, error: null }`.
 
-- If Day N's last non-locked activity ends ≥ 22:00 (late-nightlife signal), AND Day N+1's first non-locked activity starts in [00:00, 06:00) AND is **not** a `late_nightlife_bookend`/`bookend-*` source row, then:
-  - Move that head row back to the tail of Day N (re-stamp `dayNumber = N`, leave time unchanged).
-  - Log `[DAY1_BLEED_GUARD] day=N+1 site=<caller> action=moved_to_prev_day_tail title="…" start=HH:MM` and stamp `metadata.quality.cross_day_bleed_repairs += 1`.
-- Bookend-source rows at Day N+1 head are already handled by parser Step 4 stale-head drop — this guard does **not** duplicate that; it specifically catches **untagged real activities** that escape every upstream filter.
+### 2. Whitelist legitimate user writes in `action-save-itinerary`
 
-Locked / `manual` / `extracted` / `pinned` / `user_added` / departure-logistics rows are exempt (re-uses existing `isLockedLike` / `isDepartureLogistics` helpers from `predawn-cascade-normalize.ts`).
+Replace the current `saveReason.startsWith('self-heal-')` gate with a whitelist:
 
-### 2. Wire into persist boundary
+- Permit only when one of:
+  - `params.allowFrozenWrite === true`
+  - `saveReason` matches `/^(user-|chat-|lock-|unlock-|regenerate-|undo-|redo-|smart-finish-|fill-gap-|swap-|optimistic-|edit-|delete-|add-|drag-|reorder-)/`
+- All other reasons (including default/undefined) silently no-op with `{ skipped: true, reason: 'frozen' }` once frozen.
+- Update internal callers to set the right `saveReason` (chat executor, optimistic update, EditorialItinerary save handlers).
 
-`supabase/functions/generate-itinerary/action-save-itinerary.ts` `normalizeDays` — call `assertNoCrossDayBleed(days, { site: 'save-itinerary' })` AFTER `normalizePredawnCascade` and BEFORE the final activity_costs write. Guard runs once per save; any move re-runs `enforceTimingAndBuffers` on both affected days.
+### 3. `action-repair-costs` honors frozen
 
-`supabase/functions/_shared/persist-itinerary.ts` — add the same call at the single write chokepoint so chat-tool / regenerate / chain-final paths inherit the guard.
+Inside `action-repair-costs.ts`:
+- Compute `isFrozen` once at entry.
+- Always allowed: insert missing `activity_costs` rows (snapshot table only) — read-only of `itinerary_data`.
+- If frozen, skip the JSONB writeback block (lines 683–725) entirely; log `[FROZEN_BLOCKED] label=repair-costs-jsonb`.
+- Still stamp `last_cost_repair_at` so we don't re-enter the auto-repair loop.
 
-### 3. Frontend read-time mirror (defense in depth)
+### 4. Skip TripDetail page-load auto-repair on frozen trips
 
-`src/utils/itineraryParser.ts` Step 4 — after the existing stale-head drop + `normalizePredawnCascade`, run a FE-side `assertNoCrossDayBleed` (port the util to `src/lib/itinerary/`) so legacy persisted trips (Amsterdam-class data already on disk) self-heal at next render. Logs `[DAY1_BLEED_GUARD]` to console for telemetry.
+`src/pages/TripDetail.tsx` (lines ~1997–2022): before invoking `repairTripCosts`, read `trip.metadata?.itinerary_frozen_at` (already in memory via the loaded `trip`). If frozen and `activity_costs` rows already exist for ≥80% of priced JSON activities, skip the invoke entirely. If frozen but rows are missing, call only an INSERT-only path (see step 5) — never the price-mutating repair.
 
-### 4. Regression tests
+### 5. `sync-trip-cost-table` becomes append-only when frozen
 
-- `supabase/functions/_shared/__tests__/cross-day-bleed-guard.test.ts`
-  - Day 1 ends with nightcap 22:00–23:30 + `late_nightlife_bookend` 23:50–00:25 → no move (bookend correctly on Day 1).
-  - Day 1 ends 22:00, Day 2 head is `Moco Museum @ 01:33` (untagged real activity) → moved to Day 1 tail.
-  - Day 2 head is `late_nightlife_bookend @ 00:25` → not moved (parser drops it separately).
-  - Day 2 head is locked manual entry @ 02:00 → not moved.
-  - Day 2 head at 09:00 → no-op.
-- `supabase/functions/generate-itinerary/__tests__/late-nightlife-source-survival.test.ts` — extend with one Amsterdam-class fixture asserting the persist boundary leaves Day 1 with the bookend AND Day 2 starting ≥ 09:00.
+In `supabase/functions/sync-trip-cost-table/index.ts`:
+- Use `isTripFrozen`; if frozen, switch to INSERT-only mode for missing `activity_id`s — no `UPDATE`/`UPSERT` of existing rows, no price recomputation for already-present rows.
+- Telemetry: `[SYNC_FROZEN_INSERT_ONLY] inserted=N skipped_existing=M`.
 
-### 5. Memory + index update
+### 6. Snapshot the presented itinerary
 
-New entry `mem://constraints/itinerary/day1-past-midnight-no-day2-cascade` documenting the 5-layer chain (4 existing + new persist-boundary guard) and the `[DAY1_BLEED_GUARD]` sentinel. Reference from `mem://index.md` Memories list.
+When the freeze stamp first fires (Stage 6 in `generation-core.ts` and the chain finalization in `action-generate-trip-day.ts`), additionally persist `metadata.frozen_snapshot = { savedAt, days: deepCopy(itinerary_data.days), version: 1 }`.
+
+On read in `TripDetail.tsx`:
+- If `metadata.frozen_snapshot.days` exists and `metadata.itinerary_frozen_at` is set, and the live `itinerary_data.days` materially diverges (>20% activity ID change OR >15% trip-total cost change), restore the snapshot in-memory for display AND fire a single canonical write back through `safeUpdateItineraryData(..., { allowFrozenWrite: true, reason: 'restore-frozen-snapshot' })` — telemetry `[FROZEN_SNAPSHOT_RESTORED]`.
+- This is the "destroy the other one behind the scenes" guarantee the user asked for: any rogue mutation that slipped past gates 1–5 is overwritten back to the version the user first saw.
+
+### 7. Telemetry & verification
+
+- New sentinels: `[FROZEN_BLOCKED]`, `[FROZEN_SNAPSHOT_WRITTEN]`, `[FROZEN_SNAPSHOT_RESTORED]`, `[SYNC_FROZEN_INSERT_ONLY]`.
+- Backfill one-shot migration: for any existing trip with `itinerary_frozen_at` but no `metadata.frozen_snapshot`, copy current `itinerary_data` into the snapshot slot.
+
+### 8. Tests
+
+- `supabase/functions/_shared/__tests__/frozen-guard.test.ts` — gate matrix (frozen × allowFrozenWrite × saveReason).
+- `__tests__/persist-itinerary.frozen.test.ts` — verify `persistTripItinerary` no-ops JSONB, still applies `extraUpdate.last_cost_repair_at`.
+- `__tests__/action-save-itinerary.frozen-whitelist.test.ts` — whitelisted vs unwhitelisted saveReasons.
+- `src/pages/__tests__/TripDetail.frozen-snapshot.test.tsx` — snapshot restore on divergence, no infinite loop.
+
+### 9. Memory
+
+Update `mem://constraints/itinerary/frozen-after-ready` to document the chokepoint, the whitelist, the snapshot, and the append-only sync rule. Update `mem://index.md` Core entry "Frozen After Ready" with the new guarantees.
 
 ## Out of scope
 
-- Changing the late-nightlife bookend allowance (00:00–02:30) — that's the documented Florence/Barcelona Day-2 fix and stays.
-- Touching `normalizePredawnCascade` shift target (still 09:00).
-- Hero/health/payments work shipped earlier in this loop.
+- Read-time cosmetic mutators (`itineraryParser` dedupe, `ensureHotelReturnBookend`, `normalizePredawnCascade`) — they don't write to DB; they only normalize display and many tests depend on them.
+- New regeneration UX (the "Regenerate" button still uses `allowFrozenWrite:true` and is unchanged).
+- `useTripFinancialSnapshot` reader logic — once writes are locked, totals stop drifting; no FE math changes needed.
 
-## Acceptance
+## Files (technical)
 
-- Synthetic Amsterdam fixture (Day 1 nightcap 22:00, Day 2 LLM-emitted museum @ 01:33) round-trips through `action-save-itinerary` and emerges with the museum re-bucketed onto Day 1's tail; Day 2 starts ≥ 09:00.
-- Backfill scan on existing trips logs `[DAY1_BLEED_GUARD]` exactly once per affected day; no false positives on Copenhagen-class clean Day 2 trips.
-- All existing late-nightlife / predawn / wrap-sort tests continue to pass.
-
-## Files
-
-- `supabase/functions/_shared/cross-day-bleed-guard.ts` (new)
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (1 call site)
-- `supabase/functions/_shared/persist-itinerary.ts` (1 call site)
-- `src/lib/itinerary/crossDayBleedGuard.ts` (new, FE port)
-- `src/utils/itineraryParser.ts` (1 call site in Step 4)
-- `supabase/functions/_shared/__tests__/cross-day-bleed-guard.test.ts` (new)
-- `supabase/functions/generate-itinerary/__tests__/late-nightlife-source-survival.test.ts` (extend)
-- `mem://constraints/itinerary/day1-past-midnight-no-day2-cascade` (new)
-- `mem://index.md` (reference)
+- New: `supabase/functions/_shared/frozen-guard.ts`, `supabase/functions/_shared/__tests__/frozen-guard.test.ts`, `supabase/functions/_shared/__tests__/persist-itinerary.frozen.test.ts`, `supabase/functions/generate-itinerary/__tests__/action-save-itinerary.frozen-whitelist.test.ts`, `src/pages/__tests__/TripDetail.frozen-snapshot.test.tsx`, `mem://constraints/itinerary/frozen-after-ready` (update).
+- Edit: `supabase/functions/_shared/persist-itinerary.ts`, `supabase/functions/generate-itinerary/action-save-itinerary.ts`, `supabase/functions/generate-itinerary/action-repair-costs.ts`, `supabase/functions/generate-itinerary/generation-core.ts`, `supabase/functions/generate-itinerary/action-generate-trip-day.ts`, `supabase/functions/sync-trip-cost-table/index.ts`, `src/pages/TripDetail.tsx`, `src/services/itineraryActionExecutor.ts` (saveReason whitelist tags), `src/services/itineraryOptimisticUpdate.ts` (saveReason tag), `src/components/itinerary/EditorialItinerary.tsx` (saveReason tags on chat/edit invokes), `mem://index.md`.
+- Migration: one-shot backfill of `metadata.frozen_snapshot` for already-frozen trips.
