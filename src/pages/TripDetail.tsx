@@ -1890,14 +1890,8 @@ export default function TripDetail() {
             } catch { expectedTotal = 0; }
           }
           if (expectedTotal > 0 && actualDays === 0) {
-            if (!autoResumeAttemptedRef.current) {
-              autoResumeAttemptedRef.current = true;
-              console.warn('[TripDetail] Self-heal: trip failed with 0 days. Auto-resuming once.');
-              setTimeout(() => { handleResumeGeneration(); }, 1500);
-            } else {
-              console.warn('[TripDetail] Self-heal: trip still failed after auto-resume. Showing stalled UI.');
-              setGenerationStalled(true);
-            }
+            console.warn('[TripDetail] Self-heal: trip failed with 0 days. NOT auto-resuming — user must click Regenerate.');
+            setGenerationStalled(true);
           }
         }
 
