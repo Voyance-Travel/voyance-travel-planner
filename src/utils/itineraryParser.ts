@@ -812,16 +812,49 @@ export function parseItineraryDays(
       return !ghost;
     });
     let dedupedActivities = dedupeHotelReturnBookends(filteredActivities, idx + 1);
-    // Drop stale next-day head bookend on Day N≥2.
-    if (idx > 0 && dedupedActivities.length > 0 && isStaleNextDayHeadBookend(dedupedActivities[0])) {
-      const dropped = dedupedActivities[0] as any;
-      console.warn(
-        `[itineraryParser] Dropping stale head bookend "${dropped?.title || dropped?.name}" on day ${idx + 1} (source=${dropped?.source || 'inferred'}, start=${dropped?.startTime || dropped?.start_time || ''})`,
-      );
-      console.log(
-        `[BOOKEND_TRACE] day=${idx + 1} site=parse action=dropped source=${dropped?.source || 'inferred'} reason=stale_next_day_head title="${dropped?.title || ''}"`,
-      );
-      dedupedActivities = dedupedActivities.slice(1);
+    // Drop stale head bookend on ANY day (Day 1 included) when the bookend
+    // sits at index 0 with a pre-dawn start AND there are real later
+    // activities. This catches Sapporo's "orphan at top of Day 1" pattern
+    // and the Day N≥2 next-day-bleed equally. Locked / user / manual /
+    // extracted / pinned rows stay exempt (isStaleNextDayHeadBookend keys
+    // off bookend source/tag/id, which excludes those).
+    if (dedupedActivities.length > 0 && isStaleNextDayHeadBookend(dedupedActivities[0])) {
+      const head = dedupedActivities[0] as any;
+      const headStartRaw = head?.startTime || head?.start_time || head?.time || '';
+      const headStartMatch = String(headStartRaw).match(/(\d{1,2}):(\d{2})/);
+      let headStartMin: number | null = null;
+      if (headStartMatch) {
+        let h = parseInt(headStartMatch[1], 10);
+        const mm = parseInt(headStartMatch[2], 10);
+        if (/pm/i.test(String(headStartRaw)) && h < 12) h += 12;
+        if (/am/i.test(String(headStartRaw)) && h === 12) h = 0;
+        if (!Number.isNaN(h) && !Number.isNaN(mm)) headStartMin = h * 60 + mm;
+      }
+      const isPreDawn = headStartMin !== null && headStartMin >= 0 && headStartMin < 6 * 60;
+      const hasRealLaterActivity = dedupedActivities.slice(1).some((a: any) => {
+        const raw = a?.startTime || a?.start_time || a?.time || '';
+        const m = String(raw).match(/(\d{1,2}):(\d{2})/);
+        if (!m) return false;
+        let h = parseInt(m[1], 10);
+        const mm = parseInt(m[2], 10);
+        if (/pm/i.test(String(raw)) && h < 12) h += 12;
+        if (/am/i.test(String(raw)) && h === 12) h = 0;
+        const min = h * 60 + mm;
+        return min >= 6 * 60 && min <= 23 * 60 + 59;
+      });
+      // Day N≥2: drop unconditionally (legacy — bookend belongs to N−1's tail).
+      // Day 1: drop only when head sits in pre-dawn AND real later activity exists.
+      const shouldDrop = idx > 0 || (isPreDawn && hasRealLaterActivity);
+      if (shouldDrop) {
+        const reason = idx > 0 ? 'stale_next_day_head' : 'stale_predawn_head_any_day';
+        console.warn(
+          `[itineraryParser] Dropping stale head bookend "${head?.title || head?.name}" on day ${idx + 1} (source=${head?.source || 'inferred'}, start=${headStartRaw}, reason=${reason})`,
+        );
+        console.log(
+          `[BOOKEND_TRACE] day=${idx + 1} site=parse action=dropped source=${head?.source || 'inferred'} reason=${reason} title="${head?.title || ''}"`,
+        );
+        dedupedActivities = dedupedActivities.slice(1);
+      }
     }
     // Pre-dawn cascade heal: shift the leading [00:00, 05:00) block of
     // non-bookend / non-locked / non-departure cards forward so the day

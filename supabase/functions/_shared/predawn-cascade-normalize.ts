@@ -161,48 +161,44 @@ export function normalizePredawnCascade<TAct extends Record<string, any> = any>(
   ctx: { dayNumber?: number | string; site?: string } = {},
 ): PredawnNormalizeResult<TAct> {
   const list = Array.isArray(activities) ? [...activities] : [];
-  if (dayIndex <= 0 || list.length === 0) {
+  if (list.length === 0) {
     return { activities: list, count: 0, shiftMin: 0, changed: false };
   }
 
-  // Identify leading pre-dawn block: consecutive non-exempt cards in window.
-  let blockEndExclusive = 0;
+  // Walk the leading pre-dawn window. Bookend-source rows still break the
+  // walk (parser strips those separately and we never shift the bookend
+  // itself). Locked / booked / departure-logistics rows are SKIPPED but
+  // don't end the walk — that way a single locked museum at 00:30 can't
+  // strand the rest of the morning at 03:26 / 06:31. Day 1 is now in
+  // scope (no `dayIndex <= 0` early-return) since upstream gen cascades
+  // can produce the same bleed on Day 1 too.
+  const shiftIdx: number[] = [];
+  let firstShiftStart: number | null = null;
   for (let i = 0; i < list.length; i++) {
     const a = list[i];
-    if (isBookendSourceLike(a) || isLockedLike(a) || isDepartureLogistics(a)) {
-      // Exempt rows do not extend the block but also do not break the leading
-      // contiguous test if they appear AFTER pre-dawn cards. The leading-block
-      // contract is: starts at index 0 and runs through consecutive in-window
-      // non-exempt cards. An exempt card at index 0 means no block at all.
-      if (i === 0) break;
-      break;
-    }
+    if (isBookendSourceLike(a)) break;
     if (!isInPredawnWindow(a)) break;
-    blockEndExclusive = i + 1;
+    if (isLockedLike(a) || isDepartureLogistics(a)) continue;
+    shiftIdx.push(i);
+    if (firstShiftStart === null) firstShiftStart = pickStartMin(a);
   }
 
-  if (blockEndExclusive === 0) {
+  if (shiftIdx.length === 0 || firstShiftStart === null) {
     return { activities: list, count: 0, shiftMin: 0, changed: false };
   }
 
-  const firstStart = pickStartMin(list[0]);
-  if (firstStart === null) {
-    return { activities: list, count: 0, shiftMin: 0, changed: false };
-  }
-  const shiftMin = TARGET_FIRST_START_MIN - firstStart;
+  const shiftMin = TARGET_FIRST_START_MIN - firstShiftStart;
   if (shiftMin === 0) {
     return { activities: list, count: 0, shiftMin: 0, changed: false };
   }
 
-  const next: TAct[] = list.map((a, i) => {
-    if (i < blockEndExclusive) return shiftActivityTimes(a, shiftMin);
-    return a;
-  });
+  const shiftSet = new Set(shiftIdx);
+  const next: TAct[] = list.map((a, i) => (shiftSet.has(i) ? shiftActivityTimes(a, shiftMin) : a));
 
   // eslint-disable-next-line no-console
   console.log(
-    `[PREDAWN_CASCADE_NORMALIZE] day=${ctx.dayNumber ?? dayIndex + 1} site=${ctx.site || 'unknown'} count=${blockEndExclusive} shiftMin=${shiftMin >= 0 ? '+' : ''}${shiftMin}`,
+    `[PREDAWN_CASCADE_NORMALIZE] day=${ctx.dayNumber ?? dayIndex + 1} site=${ctx.site || 'unknown'} count=${shiftIdx.length} shiftMin=${shiftMin >= 0 ? '+' : ''}${shiftMin}`,
   );
 
-  return { activities: next, count: blockEndExclusive, shiftMin, changed: true };
+  return { activities: next, count: shiftIdx.length, shiftMin, changed: true };
 }
