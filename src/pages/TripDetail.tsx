@@ -532,6 +532,8 @@ export default function TripDetail() {
           creditsCharged: 0, // Already charged, no new charge
           requestedDays: totalDays,
           resumeFromDay,
+          // Explicit user click → allowed to overwrite a frozen trip.
+          allowOverwriteFrozen: true,
         },
       });
 
