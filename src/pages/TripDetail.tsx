@@ -302,7 +302,12 @@ export default function TripDetail() {
   const stalledTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [resumingGeneration, setResumingGeneration] = useState(false);
   const resumeInFlightRef = useRef(false);
-  const autoResumeAttemptedRef = useRef(false);
+  // Note: auto-resume on page load was deliberately removed (Dublin 2026-05-14
+  // bug — silent regen overwrote the user's existing itinerary with different
+  // LLM output). The "Frozen After Ready" gate in safeUpdateItineraryData +
+  // action-save-itinerary is the canonical refresh-protection now. Do NOT
+  // re-introduce an autoResumeAttemptedRef + handleResumeGeneration() call
+  // site here — users must opt in via the Regenerate button.
   const emptyDayHealAttemptedRef = useRef(false);
   const onReadyCalledRef = useRef(false);
   const [incompleteDays, setIncompleteDays] = useState<number[]>([]);
@@ -1989,7 +1994,6 @@ export default function TripDetail() {
     fetchTripData();
     return () => {
       if (tripId) clearCachedVersion(tripId);
-      autoResumeAttemptedRef.current = false;
       emptyDayHealAttemptedRef.current = false;
     };
   }, [tripId, handleResumeGeneration]);
