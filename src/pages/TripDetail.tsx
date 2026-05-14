@@ -1672,17 +1672,12 @@ export default function TripDetail() {
           }
 
           if (expectedTotal > 0 && actualDays > 0 && actualDays < expectedTotal) {
-            console.warn(`[TripDetail] Self-heal: trip marked ready but only ${actualDays}/${expectedTotal} days. Triggering resume.`);
-            // Auto-retry once before showing stalled UI to the user
-            if (!autoResumeAttemptedRef.current) {
-              autoResumeAttemptedRef.current = true;
-              console.log('[TripDetail] Auto-resuming incomplete generation (first attempt)');
-              setTimeout(() => {
-                handleResumeGeneration();
-              }, 1500);
-            } else {
-              setGenerationStalled(true);
-            }
+            console.warn(`[TripDetail] Self-heal: trip marked ready but only ${actualDays}/${expectedTotal} days. NOT auto-resuming — user must click Regenerate. Setting stalled UI.`);
+            // Do NOT auto-fire generate-trip on page load. The LLM produces different
+            // content each call and a silent regen overwrites the user's existing
+            // itinerary with entirely different restaurants/activities/themes (Dublin
+            // bug, 2026-05-14). The user must explicitly opt in.
+            setGenerationStalled(true);
           }
 
           // ── SELF-HEAL: Detect days that are unplanned ("empty" or missing entirely) ──
