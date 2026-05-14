@@ -1194,12 +1194,33 @@ export function PaymentsTab({
           <div className="text-right">
             <p className="text-2xl font-semibold text-primary">{formatCurrency(estimatedTotal)}</p>
             <p className="text-xs text-muted-foreground">Trip Total</p>
-            {!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && (
-              <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
-                <CheckCircle2 className="h-3 w-3 text-green-600" />
-                Matches itinerary
-              </p>
-            )}
+            {(() => {
+              // Real equality check: only claim "Matches itinerary" when our
+              // displayed Trip Total actually equals the header's displayed
+              // Trip Total (within $1) AND the header didn't have to clamp
+              // to a chip sum the snapshot couldn't account for. Otherwise
+              // surface "Reconciling…" so the green ribbon never lies.
+              if (displayedTotal.loading || financialSnapshot.loading) return null;
+              if (displayedTotal.displayedTotalCents <= 0) return null;
+              const matchesHeader =
+                Math.abs(estimatedTotal - displayedTotal.displayedTotalCents) <= 100 &&
+                !displayedTotal.snapshotUnderChips &&
+                !displayedTotal.snapshotOverChips;
+              if (matchesHeader) {
+                return (
+                  <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
+                    <CheckCircle2 className="h-3 w-3 text-green-600" />
+                    Matches itinerary
+                  </p>
+                );
+              }
+              return (
+                <p className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1 justify-end">
+                  <AlertCircle className="h-3 w-3" />
+                  Reconciling…
+                </p>
+              );
+            })()}
           </div>
         </div>
         
