@@ -704,7 +704,12 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
       correctedById.set(r.activity_id, { perPersonUsd: pp, reason: r.source });
     }
   }
-  if (correctedById.size > 0) {
+  if (correctedById.size > 0 && isFrozenTrip) {
+    console.log(
+      `[repair-trip-costs] [FROZEN_BLOCKED] label=repair-costs-jsonb skipping ${correctedById.size} JSONB writebacks (snapshot rows still updated)`,
+    );
+  }
+  if (correctedById.size > 0 && !isFrozenTrip) {
     const patchedDays = days.map((day: any) => ({
       ...day,
       activities: (day.activities || []).map((a: any) => {
