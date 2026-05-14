@@ -429,6 +429,11 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
   // Pre-walk #2: assign canonical times to dining cards with no time/end/duration
   // ("floating Day 3 dinner card") so they anchor visibly or drop as dupes.
   assignFloatingMealTimes(input as any[], { path: 'enforceTimingAndBuffers' });
+  // Pre-walk #3: remove orphan late-nightlife hotel-return bookends BEFORE the
+  // cascade loop sees them. Otherwise a stale 00:30 "Return to Hotel" card
+  // anchors Day 2's chronology and the cascade pushes every real activity into
+  // 1-7 AM (Budapest Day 2: Parliament @ 1:47 AM, lunch @ 4:47 AM).
+  pruneOrphanLateNightlifeBookend(input as any[], { path: 'enforceTimingAndBuffers' } as any);
 
   // Sort chronologically; activities without a startTime go to the end.
   // Wrap-aware so a 00:55 late-nightlife hotel-return bookend sorts AFTER a
