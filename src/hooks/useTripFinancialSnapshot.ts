@@ -641,11 +641,26 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       }, 600);
     };
     window.addEventListener('booking-changed', handler);
+    // Snapshot must also refetch when the itinerary itself is persisted —
+    // otherwise PaymentsTab/Budget read stale numbers after a regenerate /
+    // regression-block heal lands on the DB (the Dublin "$998 stale" pattern).
+    // Treat as a silent system event so the auto-refetch never spawns a
+    // phantom "Trip total changed by ±$X" toast.
+    const persistedHandler = () => {
+      suppressNextToastRef.current = { active: true, reason: 'trip-persisted' };
+      window.dispatchEvent(
+        new CustomEvent('booking-changed', {
+          detail: { tripId, silent: true, reason: 'trip-persisted' },
+        }),
+      );
+    };
+    window.addEventListener(TRIP_PERSISTED_EVENT, persistedHandler);
     return () => {
       window.removeEventListener('booking-changed', handler);
+      window.removeEventListener(TRIP_PERSISTED_EVENT, persistedHandler);
       if (pendingTimer) clearTimeout(pendingTimer);
     };
-  }, [fetchData]);
+  }, [fetchData, tripId]);
 
   const refetch = useCallback(() => fetchData(), [fetchData]);
   const acknowledgeDelta = useCallback(() => setLastDelta(null), []);
