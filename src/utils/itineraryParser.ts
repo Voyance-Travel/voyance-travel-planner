@@ -805,7 +805,7 @@ export function parseItineraryDays(
     return tags.some((t: string) => STALE_HEAD_BOOKEND_SOURCE_RE.test(t));
   };
   let predawnNormalizedTotal = 0;
-  const result = deduped.map((day, idx) => {
+  let result = deduped.map((day, idx) => {
     const filteredActivities = (day.activities || []).filter((a) => {
       const ghost = isGhostActivity(a);
       if (ghost) {
