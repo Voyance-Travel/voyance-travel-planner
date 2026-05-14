@@ -3080,10 +3080,10 @@ export default function TripDetail() {
                     <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
                   </div>
                   <div className="text-center space-y-3 max-w-md">
-                    <h3 className="text-xl font-serif font-semibold">Reconnecting...</h3>
+                    <h3 className="text-xl font-serif font-semibold">Generation paused</h3>
                     <p className="text-muted-foreground">
                       Generation paused at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
-                      Attempting to resume automatically.
+                      Click below to resume — your existing days are preserved.
                     </p>
                     {generationPoller.totalDays > 0 && (
                       <div className="w-64 mx-auto">
