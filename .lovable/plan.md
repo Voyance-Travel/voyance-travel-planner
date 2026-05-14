@@ -1,69 +1,41 @@
-## What's actually happening
+Root cause found: the card is not primarily created by the renderer. It is created late in generation by the final meal guard, then a later validation gate turns it into the exact floating shape.
 
-Two generation paths exist in the codebase:
+Concrete failure chain:
 
-1. **Client-driven loop** — `useLovableItinerary` and `useItineraryGeneration.generateItineraryProgressive` run a `for (dayNum = 1..N)` loop **in the browser tab**, calling `action: 'generate-day'` once per day. Each day takes 30–90s.
-2. **Server-driven chain** — `action: 'generate-trip'` returns immediately, then self-chains day-by-day on the edge runtime, writing heartbeats and `generation_started_at` to `trips.metadata`. `useGenerationPoller` is already built for this and even has auto-resume on stall.
+1. On departure days without usable return flight time, meal policy becomes `midday_departure` and requires lunch.
+2. `enforceRequiredMealsFinalGuard` injects a real lunch card, usually with `startTime: "12:30"` and `endTime: "13:30"`.
+3. That lunch is after checkout.
+4. `validateDay.checkDepartureChronology` flags it as critical `LOGISTICS_SEQUENCE` with `field: "startTime"`.
+5. `applyValidationGate` has no explicit handler for `LOGISTICS_SEQUENCE`, so its default critical handler blanks the field instead of dropping the activity:
+   - before: `Lunch: Sobanomi Yoshimura`, `startTime: "12:30"`
+   - after: `Lunch: Sobanomi Yoshimura`, `startTime: ""`, `endTime: "13:30"`
+6. The chain-generation path persists directly through `persistTripItinerary`; it does not go through `action-save-itinerary` Step 2.65, so the later departure-day cleanup never runs.
+7. `action-sync-tables` mirrors the bad JSON into `itinerary_activities`, preserving `start_time = ''`.
 
-Mobile uses path #1. iOS Safari (and to a lesser degree Chrome on Android) aggressively suspends background JavaScript and cancels long fetches when:
-- Screen locks
-- User switches apps
-- Tab loses focus for ~30s
-- Phone runs low on memory
+I confirmed this in live data. Example: trip `e9ce51de-0815-41d8-a81b-e95bf241041c` has departure-day lunch `Lunch: Sobanomi Yoshimura` with blank `startTime`, after checkout. Its metadata shows it was injected by `generate-trip-day:final-per-day`, then final validation forced persist.
 
-When that happens mid–day-1 fetch (~20% on a 5-day trip), the loop dies silently. Because path #1 never flips `itinerary_status` to `generating` server-side and never writes a heartbeat, the server has no idea generation was running. On reload the poller's stall-detection skips the trip (no `generation_started_at` → no stall reference), `useLovableItinerary` checks for partial days, finds none, and restarts the loop from day 1 — Safari suspends it again. Infinite loop.
+Plan to truly fix it:
 
-Verified for the reported user (Clinton Brooks, Madrid trip `358cc606`):
-- `itinerary_status = 'not_started'`, 0 saved days
-- 0 `generation_logs` rows
-- 0 invocations of `generate-itinerary` for that tripId in edge logs
-- 0 `pending_credit_charges` rows
-- Trip created via chat_planner at 14:59 UTC and never touched the backend generator
+1. Fix the validator/gate behavior
+   - Add an explicit `LOGISTICS_SEQUENCE` critical handler in `validation-gate.ts`.
+   - For post-checkout non-logistics activities, drop the activity instead of blanking `startTime`.
+   - This prevents the gate from manufacturing floating cards.
 
-## Fix
+2. Add a last-mile departure net to the chain-generation persist path
+   - Run `enforceDepartureDayLogistics` after all late mutators in `action-generate-trip-day.ts`, immediately before final `persistTripItinerary` and table sync.
+   - This covers anything injected after repair-day: meal guard, gap fill, final validation gate, cross-day dedup, or any future late pass.
 
-### 1. Switch mobile generation to the server-driven chain
+3. Harden table sync
+   - In `action-sync-tables.ts`, before writing normalized rows, prune departure-day untimed/post-checkout non-logistics cards using the same departure-day rule.
+   - Also replace old rows for a day before inserting synced activities, so stale floating rows cannot survive from a previous bad sync.
 
-In `src/components/planner/steps/ItineraryPreview.tsx` and `src/components/planner/ItineraryGeneratorStreaming.tsx` (the two screens that consume `useLovableItinerary`), gate behavior on `useIsMobile()`:
+4. Add regression tests for the real bug shape
+   - Test: final meal guard injects lunch after checkout; final validation gate must not blank `startTime` and persist it.
+   - Test: direct table sync never writes untimed dining on the last day.
+   - Test: chain finalization emits no departure-day dining cards with empty `startTime/start_time/time`.
 
-- **Mobile**: invoke `action: 'generate-trip'` once, then mount `useGenerationPoller({ tripId, enabled: true })` to drive the progress UI from `trips.metadata.generation_completed_days` / `generation_total_days` and `itinerary_days` row count. The browser tab can be killed and reopened freely — the chain keeps running on the edge runtime.
-- **Desktop**: keep `useLovableItinerary` as-is (per-day fetch is fine when the tab stays alive and gives faster perceived feedback).
+5. Backfill existing affected trips
+   - One-time cleanup: remove non-locked departure-day dining/leisure cards with no start time from both `trips.itinerary_data` and `itinerary_activities`.
+   - Validate with the query I used: zero last-day dining cards where `startTime/start_time/time` are empty.
 
-The poller already handles ready/failed/stalled transitions, dedupes failures, and auto-resumes up to 3 times — no new orchestration needed.
-
-### 2. Self-heal stuck `not_started` chat-planner trips
-
-Extend the existing stuck-leg self-heal in `src/pages/TripDetail.tsx` (around L897). New trigger: trip has `itinerary_status = 'not_started'`, `metadata.source = 'chat_planner'` (or `?generate=true` was set in the URL within the session), no `itinerary_data.days`, no `pending_credit_charges` row, and `created_at` older than 60s. Kick off `action: 'generate-trip'` server-side and switch the UI to the poller. This rescues users like Clinton who land back on the trip page after the mobile loop died.
-
-### 3. Heartbeat-less stall detection in the poller
-
-`useGenerationPoller` currently only flags a stall when `generation_heartbeat` or `generation_started_at` exists. Add a fallback: if `itinerary_status` is `generating` AND `metadata.generation_started_at` is missing for >90s, treat as stalled and trigger the same auto-resume path. Belt-and-braces for trips where the backend chain was launched but the metadata write race-lost.
-
-### 4. One-shot rescue for the reported user's trip
-
-Server-side, run a one-time `generate-trip` invocation for trip `358cc606-c1af-4e0a-af54-9289fe787bbf` so Clinton's Madrid trip generates without him having to retry. Done via a small admin script (no DB migration needed) — `supabase.functions.invoke('generate-itinerary', { body: { action: 'generate-trip', tripId, ... } })`.
-
-## Files
-
-**Edit**
-- `src/components/planner/steps/ItineraryPreview.tsx` — branch on mobile to use server chain + poller
-- `src/components/planner/ItineraryGeneratorStreaming.tsx` — same branch
-- `src/pages/TripDetail.tsx` — extend stuck-leg self-heal to cover `not_started` chat-planner trips
-- `src/hooks/useGenerationPoller.ts` — heartbeat-less stall fallback (90s)
-
-**No changes**
-- Backend `action: 'generate-trip'` chain — already correct (waitUntil-style self-chain, returns 200 immediately, refunds credits on failure)
-- `useGenerationPoller` auto-resume logic — already correct, just adding one more stall trigger
-- Database schema — no migration needed
-- Mobile detection — `useIsMobile()` already exists
-
-## Out of scope
-
-- Removing the client-driven `useLovableItinerary` loop entirely on desktop (separate cleanup; current behavior fine when tab stays focused)
-- Backend changes to the day-chain itself
-- Any UI redesign of the loading screen (existing `PersonalizedLoadingProgress` works with poller progress)
-- Web push / service-worker keepalive (would help PWA path but adds complexity; server-chain fix already removes the dependency on the tab staying alive)
-
-## Memory
-
-Add `mem://constraints/itinerary/mobile-uses-server-chain` and a Core line: "Mobile (`useIsMobile()`) generation MUST go through `action: 'generate-trip'` + `useGenerationPoller`, never the client-driven per-day loop. iOS Safari suspends the tab and silently kills the loop, leaving trips stuck at `not_started`/~18%."
+This is the root fix: stop blanking the time field, and add the final departure net at the actual direct persist path that currently bypasses the save-time cleanup.
