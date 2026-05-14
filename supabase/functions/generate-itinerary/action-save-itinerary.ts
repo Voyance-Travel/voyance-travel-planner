@@ -334,22 +334,29 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     return errorJson("Access denied. You don't have permission to modify this trip.", 403);
   }
 
-  // ── FROZEN GATE (mirror of safeUpdateItineraryData) ──
-  // Block any save whose `saveReason` starts with `self-heal-` once the trip
-  // has reached ready/generated. Catches direct edge-fn invokes that bypass
-  // the client wrapper. See mem://constraints/itinerary/frozen-after-ready.
+  // ── FROZEN GATE (whitelist of user-initiated reasons) ──
+  // Once the trip is frozen, only writes that are explicitly user-initiated
+  // pass through. The frontend `safeUpdateItineraryData` already gates
+  // page-load / hydration / self-heal paths, but direct edge-fn invokes (chat
+  // executor with stale tag, optimistic resync from another tab, server-side
+  // chains) have to be blocked here too. The whitelist is shared with the
+  // backend persist boundary in `_shared/frozen-guard.ts`.
+  // See mem://constraints/itinerary/frozen-after-ready.
+  const allowFrozenWrite = params.allowFrozenWrite === true;
   {
+    const { isUserSaveReason } = await import('../_shared/frozen-guard.ts');
     const meta = (trip.metadata as Record<string, any>) || {};
     const frozenAt = meta?.itinerary_frozen_at;
     const status = String(trip.itinerary_status || '');
-    const isFrozen = frozenAt || status === 'ready' || status === 'generated';
-    if (isFrozen && saveReason.startsWith('self-heal-')) {
+    const isFrozen = !!frozenAt || status === 'ready' || status === 'generated';
+    if (isFrozen && !allowFrozenWrite && !isUserSaveReason(saveReason)) {
       console.log(
-        `[save-itinerary] FROZEN gate: skipping self-heal write tripId=${tripId} reason=${saveReason} status=${status} frozenAt=${frozenAt || 'n/a'}`,
+        `[save-itinerary] [FROZEN_BLOCKED] tripId=${tripId} reason=${saveReason} status=${status} frozenAt=${frozenAt || 'n/a'}`,
       );
       return okJson({ success: true, skipped: true, reason: 'frozen' });
     }
   }
+
 
   const tripStartDate: string | null = trip.start_date || null;
 
