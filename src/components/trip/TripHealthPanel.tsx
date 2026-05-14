@@ -773,7 +773,12 @@ export function TripHealthPanel({
     }
 
     // Health analysis
-    const rawIssues = analyzeHealth(days, { tripFlightSelection });
+    const rawIssuesAll = analyzeHealth(days, { tripFlightSelection });
+    // Dedupe by id — guards against an upstream double-emit bumping the
+    // visible count (Budapest "2 issues → 3 issues" flicker).
+    const rawIssues = Array.from(
+      new Map(rawIssuesAll.map((i) => [i.id, i])).values()
+    );
     // Suppress local timing/buffer issues for any day where the latest server
     // re-check returned zero issues — otherwise the panel says "no issues" in
     // the badge while still showing the stale red line.
