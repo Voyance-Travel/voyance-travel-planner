@@ -108,4 +108,55 @@ describe('parseItineraryDays — departure-day hotel-return strip', () => {
     // Day 1 (non-departure) keeps its hotel-return.
     expect(out[0].activities.find((a: any) => a.id === 'a2')).toBeDefined();
   });
+
+  // Closes Sapporo "orphan-at-top of Day 1" pattern.
+  it('drops a stale pre-dawn bookend at index 0 of Day 1 when real later activities exist', () => {
+    const raw = {
+      days: [
+        {
+          dayNumber: 1,
+          activities: [
+            { id: 'a1', title: 'Return to Park Hyatt Sapporo', category: 'accommodation', startTime: '00:30', endTime: '01:00', source: 'bookend-readtime' },
+            { id: 'a2', title: 'Breakfast', category: 'dining', startTime: '08:30', endTime: '09:30' },
+            { id: 'a3', title: 'Sightseeing', category: 'cultural', startTime: '10:00', endTime: '12:00' },
+          ],
+        },
+        {
+          dayNumber: 2,
+          activities: [
+            { id: 'b1', title: 'Checkout', category: 'accommodation', startTime: '11:00', endTime: '11:30' },
+            { id: 'b2', title: 'Transfer to Airport', category: 'transport', startTime: '12:00', endTime: '13:00' },
+          ],
+        },
+      ],
+    };
+    const out = parseItineraryDays(raw, tripStart, '2026-06-02');
+    expect(out[0].activities.find((a: any) => a.id === 'a1')).toBeUndefined();
+    expect(out[0].activities.find((a: any) => a.id === 'a2')).toBeDefined();
+    expect(out[0].activities.find((a: any) => a.id === 'a3')).toBeDefined();
+  });
+
+  it('does NOT strip a Day 1 evening hotel-return that legitimately closes the day', () => {
+    const raw = {
+      days: [
+        {
+          dayNumber: 1,
+          activities: [
+            { id: 'a1', title: 'Dinner', category: 'dining', startTime: '19:00', endTime: '20:30' },
+            { id: 'a2', title: 'Return to Park Hyatt', category: 'accommodation', startTime: '21:00', endTime: '21:30', source: 'bookend-readtime' },
+          ],
+        },
+        {
+          dayNumber: 2,
+          activities: [
+            { id: 'b1', title: 'Checkout', category: 'accommodation', startTime: '11:00', endTime: '11:30' },
+            { id: 'b2', title: 'Transfer to Airport', category: 'transport', startTime: '12:00', endTime: '13:00' },
+          ],
+        },
+      ],
+    };
+    const out = parseItineraryDays(raw, tripStart, '2026-06-02');
+    // Evening bookend is at tail (not index 0) so the new rule doesn't fire.
+    expect(out[0].activities.find((a: any) => a.id === 'a2')).toBeDefined();
+  });
 });
