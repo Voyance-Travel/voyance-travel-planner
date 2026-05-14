@@ -297,6 +297,39 @@ export async function writeActivityCostsFromItinerary(
   // itinerary days. Day-0 logistics (hotel/flight) rows live in activity_costs
   // too but are written by separate logistics-sync paths; preserve them by
   // restricting the delete to day_number > 0.
+  //
+  // FROZEN trips switch to INSERT-only: never delete, never update existing
+  // snapshot rows — append rows only for activity_ids that have no row yet.
+  if (context.insertOnly) {
+    const ids = costRows.map((r) => r.activity_id).filter(Boolean) as string[];
+    if (ids.length === 0) return { inserted: 0, skippedReason: 'no-rows' };
+    const { data: existingRows } = await supabase
+      .from('activity_costs')
+      .select('activity_id')
+      .eq('trip_id', tripId)
+      .in('activity_id', ids);
+    const existingSet = new Set<string>(
+      (existingRows || []).map((r: any) => String(r.activity_id)),
+    );
+    const toInsert = costRows.filter((r) => !existingSet.has(String(r.activity_id)));
+    const skippedExisting = costRows.length - toInsert.length;
+    if (toInsert.length === 0) {
+      console.log(
+        `[writeActivityCostsFromItinerary] [SYNC_FROZEN_INSERT_ONLY] inserted=0 skipped_existing=${skippedExisting} trip=${tripId}`,
+      );
+      return { inserted: 0, skippedExisting, skippedReason: 'all-existing' };
+    }
+    const { error: insErr } = await supabase.from('activity_costs').insert(toInsert);
+    if (insErr) {
+      console.warn('[writeActivityCostsFromItinerary] insert-only error:', insErr.message);
+      return { inserted: 0, skippedExisting, skippedReason: `insert-error:${insErr.message}` };
+    }
+    console.log(
+      `[writeActivityCostsFromItinerary] [SYNC_FROZEN_INSERT_ONLY] inserted=${toInsert.length} skipped_existing=${skippedExisting} trip=${tripId}`,
+    );
+    return { inserted: toInsert.length, skippedExisting };
+  }
+
   await supabase.from('activity_costs').delete().eq('trip_id', tripId).gt('day_number', 0);
   const { error: costErr } = await supabase.from('activity_costs').insert(costRows);
   if (costErr) {
