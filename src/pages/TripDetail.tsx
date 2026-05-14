@@ -1373,18 +1373,38 @@ export default function TripDetail() {
                 .select('itinerary_day_id, category, title, name, start_time, end_time')
                 .eq('trip_id', tripId);
               if (Array.isArray(rows)) {
-                // Dedupe per-day rows by (start|end|category|title) so the
-                // probe doesn't fire on artificially-inflated tables (the
-                // Casablanca pattern had ~10x duplicate transport rows).
-                const dedupeKey = (r: any) =>
-                  `${r.start_time || ''}|${r.end_time || ''}|${(r.category || '').toLowerCase()}|${(r.title || r.name || '').toLowerCase().trim()}`;
-                const isMealRow = (r: any) => {
+                // Dedupe per-day rows by category+title for "ritual" rows
+                // (Return to Hotel, Travel/Walk to <hotel>, Check-in,
+                // Freshen Up). These commonly accumulate identical rows
+                // with different timestamps across regenerations — every
+                // distinct timestamp would otherwise survive and inflate
+                // the per-day count, masking duplicates as legit "richer"
+                // content. Non-ritual rows still key on time so two real
+                // distinct activities at different times survive.
+                const RITUAL_RE = /^(return to|travel to|walk to|taxi to|metro to|bus to|train to|drive to|check[- ]?in|check[- ]?out|luggage drop|freshen up|head to)\b/i;
+                const isRitual = (r: any) => RITUAL_RE.test((r.title || r.name || '').trim());
+                const dedupeKey = (r: any) => {
                   const cat = (r.category || '').toLowerCase();
-                  if (/dining|restaurant|breakfast|brunch|lunch|dinner|cafe|food/.test(cat)) return true;
-                  const t = (r.title || r.name || '').toLowerCase();
-                  return /\b(breakfast|brunch|lunch|dinner|supper)\b/.test(t);
+                  const title = (r.title || r.name || '').toLowerCase().trim();
+                  if (isRitual(r)) return `ritual|${cat}|${title}`;
+                  return `${r.start_time || ''}|${r.end_time || ''}|${cat}|${title}`;
                 };
-                const tableByDayId = new Map<string, { count: number; meals: number }>();
+                const MEAL_SLOT_RE = /\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/i;
+                const classifyMealSlot = (r: any): string | null => {
+                  const t = (r.title || r.name || '').toLowerCase();
+                  const m = MEAL_SLOT_RE.exec(t);
+                  if (m) return m[1].toLowerCase();
+                  const cat = (r.category || '').toLowerCase();
+                  if (!/dining|restaurant|cafe|food/.test(cat)) return null;
+                  // Time-based fallback for cards labeled only "dining"
+                  const hh = parseInt(String(r.start_time || '').slice(0, 2), 10);
+                  if (!Number.isFinite(hh)) return 'dining';
+                  if (hh < 11) return 'breakfast';
+                  if (hh < 15) return 'lunch';
+                  return 'dinner';
+                };
+                const isMealRow = (r: any) => classifyMealSlot(r) !== null;
+                const tableByDayId = new Map<string, { count: number; mealSlots: Set<string> }>();
                 const seenByDay = new Map<string, Set<string>>();
                 for (const r of rows as any[]) {
                   const id = r.itinerary_day_id;
@@ -1394,45 +1414,62 @@ export default function TripDetail() {
                   const k = dedupeKey(r);
                   if (seen.has(k)) continue;
                   seen.add(k);
-                  const cur = tableByDayId.get(id) || { count: 0, meals: 0 };
+                  const cur = tableByDayId.get(id) || { count: 0, mealSlots: new Set<string>() };
                   cur.count += 1;
-                  if (isMealRow(r)) cur.meals += 1;
+                  const slot = classifyMealSlot(r);
+                  if (slot) cur.mealSlots.add(slot);
                   tableByDayId.set(id, cur);
                 }
                 const { data: dayIdRows } = await supabase
                   .from('itinerary_days')
                   .select('id, day_number')
                   .eq('trip_id', tripId);
-                const tableByDayNumber = new Map<number, { count: number; meals: number }>();
+                const tableByDayNumber = new Map<number, { count: number; mealSlots: Set<string> }>();
                 for (const d of (dayIdRows || []) as Array<{ id: string; day_number: number }>) {
-                  tableByDayNumber.set(d.day_number, tableByDayId.get(d.id) || { count: 0, meals: 0 });
+                  tableByDayNumber.set(d.day_number, tableByDayId.get(d.id) || { count: 0, mealSlots: new Set<string>() });
                 }
-                const isJsonMealActivity = (a: any) => {
-                  const cat = String(a?.category || '').toLowerCase();
-                  if (/dining|restaurant|breakfast|brunch|lunch|dinner|cafe|food/.test(cat)) return true;
+                const classifyJsonMealSlot = (a: any): string | null => {
                   const t = String(a?.title || a?.name || '').toLowerCase();
-                  return /\b(breakfast|brunch|lunch|dinner|supper)\b/.test(t);
+                  const m = MEAL_SLOT_RE.exec(t);
+                  if (m) return m[1].toLowerCase();
+                  const cat = String(a?.category || '').toLowerCase();
+                  if (!/dining|restaurant|cafe|food/.test(cat)) return null;
+                  const hh = parseInt(String(a?.startTime || a?.start_time || '').slice(0, 2), 10);
+                  if (!Number.isFinite(hh)) return 'dining';
+                  if (hh < 11) return 'breakfast';
+                  if (hh < 15) return 'lunch';
+                  return 'dinner';
                 };
                 for (const d of (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>) {
                   const dn = d?.dayNumber;
                   if (!dn) continue;
                   const acts = Array.isArray(d.activities) ? d.activities : [];
                   const jsonCount = acts.length;
-                  const jsonMeals = acts.filter(isJsonMealActivity).length;
-                  const stats = tableByDayNumber.get(dn) || { count: 0, meals: 0 };
-                  // Trigger if EITHER the deduped activity count is 60% richer
-                  // OR the table has meal rows the JSON is missing entirely
-                  // (real Casablanca regression: JSON Day 2 = 4 activities w/
-                  // 0 meals, table = 6 activities including breakfast/lunch/
-                  // dinner — count ratio passes but meal coverage is lost).
+                  const jsonSlots = new Set<string>();
+                  for (const a of acts as any[]) {
+                    const s = classifyJsonMealSlot(a);
+                    if (s) jsonSlots.add(s);
+                  }
+                  const stats = tableByDayNumber.get(dn) || { count: 0, mealSlots: new Set<string>() };
                   const countDrift = stats.count >= 3 && jsonCount < stats.count * 0.6;
-                  const mealDrift = stats.meals > 0 && jsonMeals < stats.meals;
+                  // Slot-aware: only fire when the table has a meal SLOT
+                  // (breakfast/lunch/dinner) the JSON is entirely missing.
+                  // Two lunches at different times = NOT drift; one lunch
+                  // missing entirely = drift.
+                  const missingSlots: string[] = [];
+                  for (const slot of stats.mealSlots) {
+                    if (!jsonSlots.has(slot)) missingSlots.push(slot);
+                  }
+                  const mealDrift = missingSlots.length > 0;
                   if (countDrift || mealDrift) {
                     console.warn('[HEALTH_JSON_SPARSE_RESYNC]', {
                       tripId, day: dn,
-                      jsonCount, jsonMeals,
-                      tableCount: stats.count, tableMeals: stats.meals,
-                      reason: mealDrift ? (countDrift ? 'count+meals' : 'meals') : 'count',
+                      jsonCount,
+                      jsonSlots: Array.from(jsonSlots),
+                      tableCount: stats.count,
+                      tableSlots: Array.from(stats.mealSlots),
+                      missingSlots,
+                      reason: mealDrift ? (countDrift ? 'count+slots' : 'missing_slots') : 'count',
                     });
                     perDayDriftSuspected = true;
                   }
@@ -1485,11 +1522,22 @@ export default function TripDetail() {
                   arr.push(r);
                   rowsByDayId.set(did, arr);
                 }
+                // Ritual rows (Return to Hotel, Travel/Walk/Taxi to <hotel>,
+                // Check-in, Freshen Up) frequently accumulate identical
+                // copies with different timestamps across regenerations.
+                // Collapse those by (category, title) ignoring time so the
+                // rebuilt JSON doesn't carry 5–10 "Return to Your Hotel"
+                // bookends. Real distinct activities still key on time.
+                const REBUILD_RITUAL_RE = /^(return to|travel to|walk to|taxi to|metro to|bus to|train to|drive to|check[- ]?in|check[- ]?out|luggage drop|freshen up|head to)\b/i;
                 const dedupeRows = (rows: any[]): any[] => {
                   const seen = new Set<string>();
                   const out: any[] = [];
                   for (const r of rows) {
-                    const k = `${r.start_time || ''}|${r.end_time || ''}|${(r.category || '').toLowerCase()}|${(r.title || r.name || '').toLowerCase().trim()}`;
+                    const cat = (r.category || '').toLowerCase();
+                    const title = (r.title || r.name || '').toLowerCase().trim();
+                    const k = REBUILD_RITUAL_RE.test(title)
+                      ? `ritual|${cat}|${title}`
+                      : `${r.start_time || ''}|${r.end_time || ''}|${cat}|${title}`;
                     if (seen.has(k)) continue;
                     seen.add(k);
                     out.push(r);

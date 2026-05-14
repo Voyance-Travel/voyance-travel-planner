@@ -1,73 +1,66 @@
-## Plan: Drop timeless dining cards on departure days
+## What's actually happening
 
-### Confirmed root cause
-`supabase/functions/_shared/post-checkout-prune.ts:143` — the loop in `pruneNonLogisticsAfterAirportTransfer` does `if (s === null) continue;`, so any activity without a parseable `startTime` is silently skipped (kept). A dining card with `startTime: undefined` therefore survives every save-time pass; on render it sorts last via `dayChronoKey` and lands visually below the airport-transfer card.
+Trip `667e1456` (Budapest, status=`partial`) has:
 
-### Patch (single file, single function)
+| Source | Day 1 | Day 2 | Day 3 |
+|---|---|---|---|
+| `itinerary_data.days` (JSON, canonical) | 13 acts | 9 acts | 2 acts |
+| `itinerary_activities` table | ~46 rows | ~30 rows | ? |
 
-**File:** `supabase/functions/_shared/post-checkout-prune.ts`
+The table is massively bloated with leftovers from prior generation passes:
+- Day 1 has the same "Travel to Marriott" / "Return to Your Hotel" rows duplicated 5–10×
+- Day 1 has TWO lunches (Mazel Tov 12:30 + Kőleves 14:27) and TWO check-ins to the same hotel
+- Day 2 has TWO breakfasts (Gerbeaud 09:10 + Börze 08:30) and TWO dinners
+- Day 3 JSON has only 2 cards (almost certainly stale from a `partial` status)
 
-1. Add a `DINING_CAT_RE` + `DINING_TITLE_RE` near the existing helpers (lines ~96–115):
-   ```ts
-   const DINING_CAT_RE = /\b(dining|food|restaurant|breakfast|brunch|lunch|dinner|cafe)\b/i;
-   const DINING_TITLE_RE = /^(breakfast|brunch|lunch|dinner)\b/i;
-   function isDiningCard(a: any): boolean {
-     const cat = String(a?.category ?? a?.type ?? '');
-     const title = String(a?.title ?? a?.name ?? '');
-     return DINING_CAT_RE.test(cat) || DINING_TITLE_RE.test(title.trim());
-   }
-   ```
+On first paint, `TripDetail` runs the **sparse-JSON resync probe** (line 1369) and rebuilds `itinerary_data.days` from `itinerary_activities` — Day 3 trivially trips the 60% count gate, Days 1–2 trip the `mealDrift` gate (table has more meal rows than JSON). Recovery picks the per-row source, persists with `allowFrozenWrite + allowReduction`, and you see meals + orphans + departure-day artifacts that aren't in the canonical JSON.
 
-2. Extend `pruneNonLogisticsAfterAirportTransfer` signature to accept an optional `dayNumber` for the sentinel log (callers can omit; default `0`):
-   ```ts
-   export function pruneNonLogisticsAfterAirportTransfer(
-     activities: any[],
-     dayNumber: number = 0,
-   ): PostCheckoutPruneResult { ... }
-   ```
+On reload, the canonical JSON (now overwritten by the rebuild) should be sticky — but the rebuild source itself is the dirty `itinerary_activities` table, so each rebuild re-shuffles which dup wins. The "lost" meals on reload are the duplicate meals (Mazel Tov vs Kőleves, Gerbeaud vs Börze) that the per-row dedupe key never collapsed because their `start_time` differs.
 
-3. Replace the loop body (line 143) so timeless dining cards on a day with an airport-transfer are removed instead of skipped:
-   ```ts
-   const s = parseHHMMToMin(a?.startTime || '');
-   if (s === null) {
-     // Timeless card — only prune if it's dining (no parseable startTime).
-     // A meal with null startTime on a departure day always lands after
-     // the transfer at render time via dayChronoKey, regardless of source.
-     if (isDiningCard(a)) {
-       console.log(
-         `[POST_AIRPORT_PRUNE] day=${dayNumber} dropped timeless dining card "${a?.title || a?.name || '(unnamed)'}" (no parseable startTime)`,
-       );
-       toRemove.push(a);
-     }
-     continue;
-   }
-   const isPostMidnightWrap = s < 5 * 60 && transferStart > 12 * 60;
-   if (s >= transferStart || isPostMidnightWrap) toRemove.push(a);
-   ```
+So the bug isn't "rendering state lost on reload" — it's "the resync path keeps grafting stale duplicates on top of canonical JSON and the result is non-deterministic across loads."
 
-4. Update the single live caller at `action-save-itinerary.ts:273` to pass the day number it already has in scope (one-line change). Existing call:
-   ```ts
-   const transferPruneResult = pruneNonLogisticsAfterAirportTransfer(activities);
-   ```
-   becomes:
-   ```ts
-   const transferPruneResult = pruneNonLogisticsAfterAirportTransfer(activities, dayNumber);
-   ```
-   (verify the local var name is `dayNumber` / `dayNum` / `i+1` and pass whichever exists; fall back to omitting the arg if no day number is in scope — log will just say `day=0`).
+## Why the existing dedupe doesn't catch it
 
-### Why this is safe
+`dedupeKey = start_time|end_time|category|lower(title)` only collapses **exact** duplicates. It cannot:
+- Collapse two lunches with different times on the same day → both survive → mealDrift fires forever
+- Collapse "Travel to Budapest Marriott Hotel" 09:05 vs 11:10 (those are real distinct legs but pre-fix-timing artifacts)
+- Recognize that Day 3 JSON having 2 cards is the **canonical truth** for a `partial` trip, not a bug to heal
 
-- **Locked rows** still skipped — the `isLocked` guard at line 139 runs before the new branch.
-- **Departure-logistics rows** still skipped — `DEPARTURE_ROLES.has(classify(a))` at line 140.
-- **Checkout** still skipped — line 141.
-- Non-dining timeless cards (e.g. a manually-added activity without a time) remain unaffected — only dining-classified rows are removed when timeless.
-- All 4 existing tests in `post-transfer-prune.test.ts` give every fixture a real `startTime`, so they continue to pass; new behavior is additive.
+## Plan
 
-### Acceptance grep verification (after apply)
+### 1. Stop healing partial / generating trips from the table
 
-1. `grep -n "POST_AIRPORT_PRUNE.*timeless dining" supabase/functions/_shared/post-checkout-prune.ts` → 1 hit.
-2. `grep -n "no parseable startTime" supabase/functions/_shared/post-checkout-prune.ts` → 1 hit (in log + comment).
-3. Re-read function body: `if (s === null) { if (isDiningCard(a)) toRemove.push(a); continue; }` confirms timeless dining is removed when an airport-transfer card is present (the early return at line 129 still gates the whole pass).
+In `src/pages/TripDetail.tsx` around line 1367, gate the entire sparse-JSON probe + rebuild on `itinerary_status === 'ready' || 'generated'`. For `partial`, `generating`, `pending`, `failed` the table is stale-write territory; the JSON is what the user just edited / what the generator will replace. Today the gate fires even on `partial` (this trip's status), surfacing pre-repair garbage.
 
-### Optional follow-up (only if QA still reproduces)
-Add the upstream `[NORMALIZE_DAYS_DINING_AUDIT]` log at the top of `normalizeDays` in `action-save-itinerary.ts` — but ship the prune-side fix first; per the user's note, that's plan B.
+### 2. Strengthen the meal-drift detector
+
+When deciding per-day mealDrift (line 1429), require **slot-aware** comparison:
+- Bucket meal rows by slot (breakfast / brunch / lunch / dinner) using title regex + time window
+- Trigger only when the JSON is missing a *slot* the table has, not when the table has **more** meals than JSON in the same slot (two lunches = two duplicates, not "one missing")
+- This stops the rebuild from re-injecting Mazel Tov when JSON kept Kőleves (and vice-versa)
+
+### 3. Make rebuild deterministic across loads
+
+In the rebuild path (line 1488 `dedupeRows`), upgrade the dedupe key for transit/return rows to ignore `start_time` when title + category + venue match (i.e. collapse 7 "Return to Your Hotel" with 7 different times into 1). Today every distinct timestamp survives, which is why "orphan cards" appear on first load and vanish on reload after one rebuild has overwritten JSON.
+
+### 4. One-shot table cleanup for this trip (and any like it)
+
+Run a scoped DELETE migration:
+- Within `(trip_id, itinerary_day_id)`, for rows with identical `(category, lower(title))`, keep `MIN(sort_order)` and delete the rest
+- Specifically targets the 5–10× "Return to Hotel" / "Travel to Marriott" pollution
+- Preview rows first; do not touch user-locked rows (`is_locked = true`)
+
+### 5. Tell the user what to expect
+
+After ship: a single reload will rebuild Day 3 from the (now-deduped) table once, then JSON is canonical and stable. Day 1/2 will keep whichever lunch/breakfast was in the JSON; the duplicate "ghost" meal won't reappear.
+
+## Files touched
+
+- `src/pages/TripDetail.tsx` — gate sparse probe on status; slot-aware meal-drift; stronger transit/return dedupe key
+- New migration `supabase/migrations/<ts>_dedupe_itinerary_activities.sql` — one-shot cleanup keyed on `(trip_id, itinerary_day_id, category, lower(title))` excluding `is_locked`
+- No edge-function changes; no schema changes
+
+## Out of scope
+
+- Refactoring how generation writes to `itinerary_activities` (the table-write path is correct; the pollution is historical)
+- The Days/Hotel/Trip-Total header math from the previous turn — independent issue
