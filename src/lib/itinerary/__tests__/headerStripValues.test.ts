@@ -68,6 +68,8 @@ describe('computeHeaderStripValues', () => {
     // displayed = max(1337.3, 1337) = 1337.3; reserve = 0.3 → suppressed
     expect(v.displayedTripTotalUsd).toBeCloseTo(1337.3, 5);
     expect(v.showReserve).toBe(false);
+  });
+
 
   // Regression: the headline `Trip Total` and the equation-row `Trip Total`
   // MUST both render `displayedTripTotalUsd`. When the snapshot lags the
