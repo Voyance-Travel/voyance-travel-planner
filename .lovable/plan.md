@@ -1,68 +1,73 @@
-## No-Op as written — but a real (smaller) fix is available
+## Plan: Drop timeless dining cards on departure days
 
-### Finding 1 — request shape doesn't match current code
-The fix instructions assume two `<TripHealthPanel days={editorDays}` JSX call sites at lines 3129 and 3417. Neither exists.
+### Confirmed root cause
+`supabase/functions/_shared/post-checkout-prune.ts:143` — the loop in `pruneNonLogisticsAfterAirportTransfer` does `if (s === null) continue;`, so any activity without a parseable `startTime` is silently skipped (kept). A dining card with `startTime: undefined` therefore survives every save-time pass; on render it sorts last via `dayChronoKey` and lands visually below the airport-transfer card.
 
-The actual current state of `src/pages/TripDetail.tsx`:
+### Patch (single file, single function)
 
-- **One** `<TripHealthPanel>` call site, at line 3667.
-- It is rendered inside a render-prop callback supplied to `EditorialItinerary`:
-  ```tsx
-  renderTripHealthPanel={(activeDays) => (
-    <TripHealthPanel
-      days={activeDays}
-      ...
-    />
-  )}
-  ```
-- `editorDays` is **never** passed directly to `TripHealthPanel`. The panel always receives `activeDays`, which is the days view EditorialItinerary is currently displaying (so the panel already sees post-edit shape, not the original `editorDays` reference).
-- A `useMemo` named `healthCheckDays` against `editorDays` would therefore wire to nothing.
+**File:** `supabase/functions/_shared/post-checkout-prune.ts`
 
-### Finding 2 — `recomputeDayModes` is already wired, just for persistence
-Lines 184–200 already run `recomputeDayModes(days, flightSel)` once per trip on mount and **persist** the corrected dayModes back to `itinerary_data` (gated by `metadata.dayMode_backfilled_at` so it's idempotent).
+1. Add a `DINING_CAT_RE` + `DINING_TITLE_RE` near the existing helpers (lines ~96–115):
+   ```ts
+   const DINING_CAT_RE = /\b(dining|food|restaurant|breakfast|brunch|lunch|dinner|cafe)\b/i;
+   const DINING_TITLE_RE = /^(breakfast|brunch|lunch|dinner)\b/i;
+   function isDiningCard(a: any): boolean {
+     const cat = String(a?.category ?? a?.type ?? '');
+     const title = String(a?.title ?? a?.name ?? '');
+     return DINING_CAT_RE.test(cat) || DINING_TITLE_RE.test(title.trim());
+   }
+   ```
 
-So the cached `dayMode` IS being healed on load. What's missing is recomputation on **subsequent** flight edits within the same session — the backfill flag suppresses re-runs.
+2. Extend `pruneNonLogisticsAfterAirportTransfer` signature to accept an optional `dayNumber` for the sentinel log (callers can omit; default `0`):
+   ```ts
+   export function pruneNonLogisticsAfterAirportTransfer(
+     activities: any[],
+     dayNumber: number = 0,
+   ): PostCheckoutPruneResult { ... }
+   ```
 
-### Finding 3 — the real, minimal fix
-If the symptoms (Day 1 missing-breakfast on 10:15 arrival, departure-day "light activity", 77↔74 flicker) are still reproducing, the leak is that `activeDays` passed to the panel still carries stale `metadata.quality.dayMode` between (a) the one-shot backfill and (b) the next save. Two surgical options:
+3. Replace the loop body (line 143) so timeless dining cards on a day with an airport-transfer are removed instead of skipped:
+   ```ts
+   const s = parseHHMMToMin(a?.startTime || '');
+   if (s === null) {
+     // Timeless card — only prune if it's dining (no parseable startTime).
+     // A meal with null startTime on a departure day always lands after
+     // the transfer at render time via dayChronoKey, regardless of source.
+     if (isDiningCard(a)) {
+       console.log(
+         `[POST_AIRPORT_PRUNE] day=${dayNumber} dropped timeless dining card "${a?.title || a?.name || '(unnamed)'}" (no parseable startTime)`,
+       );
+       toRemove.push(a);
+     }
+     continue;
+   }
+   const isPostMidnightWrap = s < 5 * 60 && transferStart > 12 * 60;
+   if (s >= transferStart || isPostMidnightWrap) toRemove.push(a);
+   ```
 
-**Option A (preferred — matches request intent, scoped to one site):**
-Wrap `activeDays` inside the existing render prop with a fresh `recomputeDayModes`-derived view, so the panel always reads a current `dayMode`:
+4. Update the single live caller at `action-save-itinerary.ts:273` to pass the day number it already has in scope (one-line change). Existing call:
+   ```ts
+   const transferPruneResult = pruneNonLogisticsAfterAirportTransfer(activities);
+   ```
+   becomes:
+   ```ts
+   const transferPruneResult = pruneNonLogisticsAfterAirportTransfer(activities, dayNumber);
+   ```
+   (verify the local var name is `dayNumber` / `dayNum` / `i+1` and pass whichever exists; fall back to omitting the arg if no day number is in scope — log will just say `day=0`).
 
-```tsx
-// At top of file (sync import — recomputeDayModes has no async deps):
-import { recomputeDayModes } from '@/lib/itinerary/recomputeDayModes';
+### Why this is safe
 
-// Inside renderTripHealthPanel callback (line 3666):
-renderTripHealthPanel={(activeDays) => {
-  let healthDays = activeDays;
-  try {
-    const result = recomputeDayModes(activeDays, (trip as any)?.flight_selection);
-    healthDays = result?.updatedDays ?? activeDays;
-  } catch (e) {
-    console.warn('[TripDetail] health-panel dayMode recompute failed:', e);
-  }
-  return (
-    <TripHealthPanel
-      days={healthDays}
-      ...all existing props unchanged...
-    />
-  );
-}}
-```
+- **Locked rows** still skipped — the `isLocked` guard at line 139 runs before the new branch.
+- **Departure-logistics rows** still skipped — `DEPARTURE_ROLES.has(classify(a))` at line 140.
+- **Checkout** still skipped — line 141.
+- Non-dining timeless cards (e.g. a manually-added activity without a time) remain unaffected — only dining-classified rows are removed when timeless.
+- All 4 existing tests in `post-transfer-prune.test.ts` give every fixture a real `startTime`, so they continue to pass; new behavior is additive.
 
-This is a **read-only derivation** — does not persist, does not setState, runs each render of the panel section. `recomputeDayModes` is pure and cheap (only touches Day 1 + last day metadata when stale).
+### Acceptance grep verification (after apply)
 
-**Option B (broader — drop the one-shot guard):**
-Remove the `dayMode_backfilled_at` early-return at lines 179–182 so the backfill effect re-runs whenever `trip.flight_selection` changes. Higher blast radius (extra writes, ledger-check considerations per memory `[LedgerCheck Mutation-Only]`), so I'd skip unless Option A doesn't move the needle.
+1. `grep -n "POST_AIRPORT_PRUNE.*timeless dining" supabase/functions/_shared/post-checkout-prune.ts` → 1 hit.
+2. `grep -n "no parseable startTime" supabase/functions/_shared/post-checkout-prune.ts` → 1 hit (in log + comment).
+3. Re-read function body: `if (s === null) { if (isDiningCard(a)) toRemove.push(a); continue; }` confirms timeless dining is removed when an airport-transfer card is present (the early return at line 129 still gates the whole pass).
 
-### Acceptance grep adaptation
-The original greps don't fit this codebase. If you approve Option A, the verifying greps become:
-
-1. `grep -nE "<TripHealthPanel\b" src/pages/TripDetail.tsx` → 1 hit (unchanged — there's only one).
-2. `grep -n "recomputeDayModes" src/pages/TripDetail.tsx` → ≥3 hits (top-level import + existing line 187 in backfill effect + new call inside render prop).
-3. `grep -n "days={healthDays}" src/pages/TripDetail.tsx` → 1 hit at the panel.
-4. `grep -n "days={activeDays}" src/pages/TripDetail.tsx` → 0 hits inside the `<TripHealthPanel>` element.
-
-### Action
-Awaiting approval. Reply with **"Option A"** to apply the read-only render-prop wrap, **"Option B"** for the backfill-guard removal, or **"close as no-op"** if the symptoms aren't actually reproducing post-load.
+### Optional follow-up (only if QA still reproduces)
+Add the upstream `[NORMALIZE_DAYS_DINING_AUDIT]` log at the top of `normalizeDays` in `action-save-itinerary.ts` — but ship the prune-side fix first; per the user's note, that's plan B.
