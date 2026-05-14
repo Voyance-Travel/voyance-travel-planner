@@ -89,6 +89,46 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
     const activities = (d.activities || []) as any[];
     stripPreDawnHotelReturns(activities, { dayNumber, label: 'SYNC' });
 
+    // Departure-day net — drop floating/post-cutoff non-logistics cards before
+    // they get mirrored into itinerary_activities. Closes the recurring
+    // "Lunch: <restaurant>" untimed row in the normalized table that the
+    // frontend rebuild reads back when JSON drifts (Kyoto/Bali/HK/Bruges
+    // pattern). Idempotent — only mutates the last day.
+    if (dayNumber === totalDaysSync) {
+      try {
+        const { enforceDepartureDayLogistics: _enforceDepDaySync } =
+          await import('./pipeline/repair-day.ts');
+        const _lockedIds = new Set<string>(
+          activities
+            .filter((a) => a?.locked === true || a?.isLocked === true || a?.is_locked === true || a?.lock_state === 'locked')
+            .map((a) => String(a.id))
+            .filter(Boolean),
+        );
+        const _beforeLen = activities.length;
+        const _enf = _enforceDepDaySync({
+          activities,
+          dayNumber,
+          hotelName: 'your hotel',
+          hotelAddress: '',
+          returnDepartureTime24: _savedDepartureTime24,
+          isLastDay: true,
+          lockedIds: _lockedIds,
+        } as any);
+        if (Array.isArray(_enf?.activities)) {
+          activities.length = 0;
+          activities.push(...(_enf.activities as any[]));
+        }
+        if (_beforeLen !== activities.length) {
+          console.log(
+            `[SYNC_DEPARTURE_NET] day=${dayNumber} dropped=${_beforeLen - activities.length} depTime=${_savedDepartureTime24 || 'n/a'}`,
+          );
+        }
+      } catch (netErr) {
+        console.warn('[sync-itinerary-tables] departure-day net failed (non-blocking):', netErr);
+      }
+    }
+
+
     
     const { data: dayRow, error: dayError } = await supabase
       .from('itinerary_days')
