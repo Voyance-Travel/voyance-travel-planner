@@ -386,13 +386,17 @@ export async function getDestinationCanonicalImage(destinationName: string): Pro
     const cityOnly = destinationName.split(',')[0].trim();
     const { data, error } = await supabase
       .from('destinations')
-      .select('hero_image_url')
+      .select('hero_image_url, stock_image_url')
       .ilike('city', cityOnly)
-      .not('hero_image_url', 'is', null)
+      .or('hero_image_url.not.is.null,stock_image_url.not.is.null')
       .limit(1);
 
     if (error || !data || data.length === 0) return null;
-    return (data[0] as any).hero_image_url || null;
+    const row = data[0] as any;
+    // Prefer admin-curated hero, fall back to seeded stock image. Both go
+    // through the runtime trust policy in useTripHeroImage so any legacy
+    // Unsplash host gets rejected upstream.
+    return row.hero_image_url || row.stock_image_url || null;
   } catch {
     return null;
   }
