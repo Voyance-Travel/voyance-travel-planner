@@ -1999,9 +1999,22 @@ export default function TripDetail() {
   useEffect(() => {
     if (!trip || loading || costRepairAttempted.current || !tripId) return;
     if (!hasItineraryData(trip)) return;
-    
+
+    // FROZEN gate: once a trip is ready, NEVER fire repairTripCosts on
+    // page-load — the JSONB writeback path silently re-shapes prices on
+    // every refresh. Backend repair-costs has its own frozen gate too,
+    // but skipping here saves the round-trip and the toast noise.
+    // See mem://constraints/itinerary/frozen-after-ready.
+    const meta = (trip.metadata as Record<string, any> | null) || {};
+    const status = String((trip as any).itinerary_status || '');
+    const isFrozen = !!meta?.itinerary_frozen_at || status === 'ready' || status === 'generated';
+    if (isFrozen) {
+      costRepairAttempted.current = true;
+      return;
+    }
+
     costRepairAttempted.current = true;
-    
+
     // Check if activity_costs rows exist; if not, silently repair
     (async () => {
       try {

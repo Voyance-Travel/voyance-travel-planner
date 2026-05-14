@@ -71,6 +71,19 @@ export interface PersistItineraryOptions {
    * See mem://constraints/itinerary/no-regression-overwrite.
    */
   allowRegression?: boolean;
+  /**
+   * Opt out of the FROZEN gate. Default false. Page-load / hydration /
+   * background self-heal paths MUST NEVER set this — they are exactly the
+   * leak paths that silently re-shape ready trips on refresh. User-initiated
+   * mutations (chat actions, regen, lock toggle, drag/reorder, undo/redo,
+   * smart-finish, …) opt in here OR carry a whitelisted `saveReason` (see
+   * `frozen-guard.ts::USER_SAVE_REASON_PREFIXES`).
+   * See mem://constraints/itinerary/frozen-after-ready.
+   */
+  allowFrozenWrite?: boolean;
+  /** Free-form save reason — also consulted by the FROZEN gate whitelist
+   *  (`frozen-guard.ts::isUserSaveReason`). */
+  saveReason?: string;
 }
 
 export interface PersistResult {
@@ -79,6 +92,9 @@ export interface PersistResult {
    *  against the on-disk version; the on-disk `itinerary_data` was kept
    *  intact, only `extraUpdate` (status, metadata) was applied. */
   regressionBlocked?: boolean;
+  /** True when the FROZEN gate blocked the JSONB write (extraUpdate metadata
+   *  / status flags still applied). */
+  frozenBlocked?: boolean;
 }
 
 /** Capped-size ring buffer of rejected attempts written under
@@ -93,6 +109,42 @@ export async function persistTripItinerary(
 ): Promise<PersistResult> {
   const label = options.label || 'persist-itinerary';
   const days = Array.isArray(itinerary?.days) ? itinerary.days : [];
+
+  // ── FROZEN GATE (single backend chokepoint) ─────────────────────
+  // Once the trip is frozen, page-load / background / refresh-time writers
+  // MUST NOT touch `itinerary_data`. We still apply `extraUpdate` so callers
+  // like cost-repair can stamp `last_cost_repair_at` without re-shaping the
+  // plan. See mem://constraints/itinerary/frozen-after-ready.
+  try {
+    const { isTripFrozen, assertWriteAllowed } = await import('./frozen-guard.ts');
+    const status = await isTripFrozen(supabase, tripId);
+    const verdict = assertWriteAllowed({
+      frozen: status.frozen,
+      allowFrozenWrite: options.allowFrozenWrite,
+      saveReason: options.saveReason,
+      label,
+    });
+    if (verdict.blocked) {
+      console.log(
+        `[${label}] [FROZEN_BLOCKED] tripId=${tripId} reason=${verdict.reason} status=${status.status} frozenAt=${status.frozenAt || 'n/a'}`,
+      );
+      const extra = options.extraUpdate || {};
+      const updatePayload: Record<string, any> = { ...extra };
+      delete updatePayload.itinerary_data;
+      // Apply non-itinerary metadata/status writes only, if any remain.
+      if (Object.keys(updatePayload).length > 0) {
+        const { error } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
+        if (error) {
+          console.warn(`[${label}] [FROZEN_BLOCKED] extraUpdate write failed:`, error);
+          return { error, frozenBlocked: true };
+        }
+      }
+      return { error: null, frozenBlocked: true };
+    }
+  } catch (e) {
+    console.warn(`[${label}] frozen-guard probe failed (non-blocking, allowing write):`, e);
+  }
+
 
   // 1. Strip prompt artifacts from titles (mutates in place).
   try {

@@ -28,6 +28,22 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
 
   console.log(`[repair-trip-costs] Starting repair for trip ${tripId}, user ${userId}`);
 
+  // Probe frozen status once. When frozen, we still INSERT missing
+  // activity_costs rows (snapshot table is read-derived, never re-shapes the
+  // plan) and stamp `last_cost_repair_at`, but we MUST NOT JSONB-writeback
+  // floor corrections — that's exactly the path that silently raised prices
+  // ($26/pp → $206/pp Quadri-style) on every page reload of a ready trip.
+  // See mem://constraints/itinerary/frozen-after-ready.
+  const { isTripFrozen } = await import('../_shared/frozen-guard.ts');
+  const frozenStatus = await isTripFrozen(supabase, tripId);
+  const isFrozenTrip = frozenStatus.frozen;
+  if (isFrozenTrip) {
+    console.log(
+      `[repair-trip-costs] [FROZEN_BLOCKED] tripId=${tripId} JSONB writeback will be skipped (status=${frozenStatus.status} frozenAt=${frozenStatus.frozenAt || 'n/a'})`,
+    );
+  }
+
+
   const { data: tripData, error: tripErr } = await supabase
     .from("trips")
     .select("id, destination, travelers, itinerary_data, budget_total_cents, budget_allocations, flight_selection, hotel_selection")
@@ -688,7 +704,12 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
       correctedById.set(r.activity_id, { perPersonUsd: pp, reason: r.source });
     }
   }
-  if (correctedById.size > 0) {
+  if (correctedById.size > 0 && isFrozenTrip) {
+    console.log(
+      `[repair-trip-costs] [FROZEN_BLOCKED] label=repair-costs-jsonb skipping ${correctedById.size} JSONB writebacks (snapshot rows still updated)`,
+    );
+  }
+  if (correctedById.size > 0 && !isFrozenTrip) {
     const patchedDays = days.map((day: any) => ({
       ...day,
       activities: (day.activities || []).map((a: any) => {

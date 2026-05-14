@@ -4,6 +4,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { writeActivityCostsFromItinerary } from "../_shared/write-activity-costs.ts";
+import { isTripFrozen } from "../_shared/frozen-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -67,10 +68,15 @@ Deno.serve(async (req) => {
     }
 
     const days = (trip as any)?.itinerary_data?.days || [];
+    // Frozen trips: never re-shape the snapshot. Switch to INSERT-only so
+    // existing prices the user first saw stay byte-stable.
+    // See mem://constraints/itinerary/frozen-after-ready.
+    const frozenStatus = await isTripFrozen(supabase, tripId);
     const result = await writeActivityCostsFromItinerary(supabase, tripId, days, {
       destination: String(body?.destination || trip.destination || ""),
       travelers: Number(body?.travelers || trip.travelers) || 1,
       budgetTier: body?.budgetTier || (trip as any).budget_tier || null,
+      insertOnly: frozenStatus.frozen,
     });
 
     return new Response(JSON.stringify({ ok: true, ...result }), {
