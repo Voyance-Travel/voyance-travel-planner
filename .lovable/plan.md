@@ -1,42 +1,68 @@
-## No-Op: `isLastDay` guard already present around save-time `runStep8`
+## No-Op as written — but a real (smaller) fix is available
 
-### Finding
-The user's request assumes `runStep8(acts, dayNumber - 1, savedHotelName)` is called unconditionally at line 504 of `supabase/functions/generate-itinerary/action-save-itinerary.ts`. That is not the current state of the file.
+### Finding 1 — request shape doesn't match current code
+The fix instructions assume two `<TripHealthPanel days={editorDays}` JSX call sites at lines 3129 and 3417. Neither exists.
 
-The actual save-time call site is at **line 677**, and it is already wrapped in the exact guard the request is asking me to add:
+The actual current state of `src/pages/TripDetail.tsx`:
 
-```ts
-// Line 668
-if (!isLastDay && Array.isArray(itineraryDays[i].activities) && itineraryDays[i].activities.length > 0) {
-  const acts = itineraryDays[i].activities;
-  // ...comments about idempotency...
+- **One** `<TripHealthPanel>` call site, at line 3667.
+- It is rendered inside a render-prop callback supplied to `EditorialItinerary`:
+  ```tsx
+  renderTripHealthPanel={(activeDays) => (
+    <TripHealthPanel
+      days={activeDays}
+      ...
+    />
+  )}
+  ```
+- `editorDays` is **never** passed directly to `TripHealthPanel`. The panel always receives `activeDays`, which is the days view EditorialItinerary is currently displaying (so the panel already sees post-edit shape, not the original `editorDays` reference).
+- A `useMemo` named `healthCheckDays` against `editorDays` would therefore wire to nothing.
+
+### Finding 2 — `recomputeDayModes` is already wired, just for persistence
+Lines 184–200 already run `recomputeDayModes(days, flightSel)` once per trip on mount and **persist** the corrected dayModes back to `itinerary_data` (gated by `metadata.dayMode_backfilled_at` so it's idempotent).
+
+So the cached `dayMode` IS being healed on load. What's missing is recomputation on **subsequent** flight edits within the same session — the backfill flag suppresses re-runs.
+
+### Finding 3 — the real, minimal fix
+If the symptoms (Day 1 missing-breakfast on 10:15 arrival, departure-day "light activity", 77↔74 flicker) are still reproducing, the leak is that `activeDays` passed to the panel still carries stale `metadata.quality.dayMode` between (a) the one-shot backfill and (b) the next save. Two surgical options:
+
+**Option A (preferred — matches request intent, scoped to one site):**
+Wrap `activeDays` inside the existing render prop with a fresh `recomputeDayModes`-derived view, so the panel always reads a current `dayMode`:
+
+```tsx
+// At top of file (sync import — recomputeDayModes has no async deps):
+import { recomputeDayModes } from '@/lib/itinerary/recomputeDayModes';
+
+// Inside renderTripHealthPanel callback (line 3666):
+renderTripHealthPanel={(activeDays) => {
+  let healthDays = activeDays;
   try {
-    const { runStep8 } = await import('./universal-quality-pass.ts');   // line 675
-    const _beforeLen = acts.length;
-    runStep8(acts, dayNumber - 1, savedHotelName);                      // line 677
-    // ...
+    const result = recomputeDayModes(activeDays, (trip as any)?.flight_selection);
+    healthDays = result?.updatedDays ?? activeDays;
+  } catch (e) {
+    console.warn('[TripDetail] health-panel dayMode recompute failed:', e);
   }
-}
+  return (
+    <TripHealthPanel
+      days={healthDays}
+      ...all existing props unchanged...
+    />
+  );
+}}
 ```
 
-`isLastDay` is bound at line 660 from the day-loop and is `true` exactly when `dayNumber === totalDays`, which is functionally equivalent to the requested `if (dayNumber < totalDays)` check. The comment at line 667 even spells out: *"Skip departure day; idempotent via runStep8's own guard."*
+This is a **read-only derivation** — does not persist, does not setState, runs each render of the panel section. `recomputeDayModes` is pure and cheap (only touches Day 1 + last day metadata when stale).
 
-The only other reference to `runStep8` in this file is line 238 (a comment about it). There is no second, unguarded call site.
+**Option B (broader — drop the one-shot guard):**
+Remove the `dayMode_backfilled_at` early-return at lines 179–182 so the backfill effect re-runs whenever `trip.flight_selection` changes. Higher blast radius (extra writes, ledger-check considerations per memory `[LedgerCheck Mutation-Only]`), so I'd skip unless Option A doesn't move the needle.
 
-### Conclusion
-No code change to make. Applying the requested edit would either:
-- Fail (the literal "around 502-504" lines don't contain `runStep8`), or
-- If forced near line 677, double-wrap an existing guard with a redundant condition and add a misleading comment claiming we just added the guard.
+### Acceptance grep adaptation
+The original greps don't fit this codebase. If you approve Option A, the verifying greps become:
 
-### What I recommend instead
-If departure-day "wind down (overnight)" cards are still reproducing on Osaka / Amsterdam / Sapporo / Budapest, the leak is **not** at this save-time call. Likely candidates worth investigating before patching:
-
-1. **`pruneOrphanLateNightlifeBookend`** at line 240 (just-shipped) — confirm it actually drops the stale 00:30 bookend on departure day, not just on Day 2 reload.
-2. **`stripPreDawnHotelReturns`** + the `late_nightlife_bookend` source allowlist — a departure-day bookend tagged with that source would be exempt.
-3. **`ensureHotelReturnBookend`** read-time injector (`src/lib/itinerary/`) — check that all 5 departure signals (flight / airport-transfer / transfer-to-airport / hotel-checkout / last-day-fallback) actually fire for the affected trips. Per-memory `[Departure-Day Hotel-Return Strip]`: parser Step 4b-pre + EditorialItinerary `__syntheticDeparture` + `__syntheticFinalDeparture` are the three layers that should kill it on display — verify their detector matches the persisted card shape.
-4. **`generation-core.ts` Stage 6 / `action-generate-trip-day` chain final** — these also call `runStep8`; if either is missing the `isLastDay` guard, that's the real source for fresh-generated trips.
+1. `grep -nE "<TripHealthPanel\b" src/pages/TripDetail.tsx` → 1 hit (unchanged — there's only one).
+2. `grep -n "recomputeDayModes" src/pages/TripDetail.tsx` → ≥3 hits (top-level import + existing line 187 in backfill effect + new call inside render prop).
+3. `grep -n "days={healthDays}" src/pages/TripDetail.tsx` → 1 hit at the panel.
+4. `grep -n "days={activeDays}" src/pages/TripDetail.tsx` → 0 hits inside the `<TripHealthPanel>` element.
 
 ### Action
-Awaiting your direction. Either:
-- (a) Confirm "no change, the guard is already there" and we close this ticket; or
-- (b) Point me at the actual reproducing trip ID / day so I can trace which of (1)–(4) is the real culprit.
+Awaiting approval. Reply with **"Option A"** to apply the read-only render-prop wrap, **"Option B"** for the backfill-guard removal, or **"close as no-op"** if the symptoms aren't actually reproducing post-load.

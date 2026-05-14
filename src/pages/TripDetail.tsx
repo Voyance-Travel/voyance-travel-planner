@@ -39,6 +39,7 @@ import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
 import TravelIntelCard from '@/components/itinerary/TravelIntelCard';
 import { TripHealthPanel } from '@/components/trip/TripHealthPanel';
+import { recomputeDayModes } from '@/lib/itinerary/recomputeDayModes';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { computeUnlockedDayCount } from '@/lib/voyanceFlowController';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
@@ -3663,9 +3664,17 @@ export default function TripDetail() {
                     ) : null
                   }
                   cityCount={tripCities.length > 1 ? tripCities.length : 1}
-                  renderTripHealthPanel={(activeDays) => (
+                  renderTripHealthPanel={(activeDays) => {
+                    let healthDays = activeDays;
+                    try {
+                      const result = recomputeDayModes(activeDays as any, (trip as any)?.flight_selection);
+                      healthDays = (result?.updatedDays as typeof activeDays) ?? activeDays;
+                    } catch (e) {
+                      console.warn('[TripDetail] health-panel dayMode recompute failed:', e);
+                    }
+                    return (
                     <TripHealthPanel
-                      days={activeDays}
+                      days={healthDays}
                       totalDaysExpected={(() => { const m = (trip?.metadata as Record<string, unknown>) || {}; const gen = (m.generation_total_days as number) || 0; return gen > 0 ? Math.max(gen, activeDays.length) : activeDays.length; })()}
                       hasFlights={!!trip.flight_selection}
                       hasHotel={
@@ -3716,7 +3725,8 @@ export default function TripDetail() {
                         }
                       }}
                     />
-                  )}
+                    );
+                  }}
                   onDaysChange={(updatedDays) => {
                     // Keep trip state in sync so ItineraryAssistant always sees current days
                     setTrip(prev => prev ? {
