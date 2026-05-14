@@ -38,7 +38,6 @@ import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
 import TravelIntelCard from '@/components/itinerary/TravelIntelCard';
-import { MobileTripOverview } from '@/components/trip/MobileTripOverview';
 import { TripHealthPanel } from '@/components/trip/TripHealthPanel';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { computeUnlockedDayCount } from '@/lib/voyanceFlowController';
