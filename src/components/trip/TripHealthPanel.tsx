@@ -813,11 +813,10 @@ export function TripHealthPanel({
   // Errors commit immediately (user-actionable). Warnings only commit after
   // the same set of issue IDs has been observed for 600ms — eliminates
   // phantom "1 issue" badges from optimistic edits and partial hydration.
-  const [stableIssues, setStableIssues] = useState<HealthIssue[]>(() =>
-    rawHealthIssues.filter((i) => i.severity === 'error'),
-  );
+  const [stableIssues, setStableIssues] = useState<HealthIssue[]>(() => rawHealthIssues);
   const soakTimerRef = useRef<number | null>(null);
   const lastSignatureRef = useRef<string>('');
+  const initialCommitRef = useRef<boolean>(true);
 
   useEffect(() => {
     const errors = rawHealthIssues.filter((i) => i.severity === 'error');
@@ -830,6 +829,17 @@ export function TripHealthPanel({
     if (soakTimerRef.current) {
       window.clearTimeout(soakTimerRef.current);
       soakTimerRef.current = null;
+    }
+
+    // First-paint free pass: commit errors AND warnings synchronously so the
+    // initial score doesn't visibly drop 600ms later (Budapest "77 → 74"
+    // flicker). The soak only kicks in for SUBSEQUENT signature changes,
+    // which is the original purpose (suppress phantom warnings from
+    // optimistic edits + partial hydration mid-session).
+    if (initialCommitRef.current) {
+      initialCommitRef.current = false;
+      setStableIssues([...errors, ...warnings]);
+      return;
     }
 
     // Commit errors immediately, drop stale warnings while soak is pending
