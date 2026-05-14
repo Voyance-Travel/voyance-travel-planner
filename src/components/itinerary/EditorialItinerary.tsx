@@ -3820,6 +3820,29 @@ export function EditorialItinerary({
     financialSnapshot.tripTotalCents - daysSubtotalCents,
   );
 
+  // ─── Single header-strip computation ───
+  // Both the large top-line `Trip Total` and the equation-row `Trip Total`
+  // MUST read from the same helper so they can never disagree (root cause of
+  // the recurring `Days + Hotel = Trip Total` math-wrong header on
+  // Casablanca/Kyoto/Osaka/Amsterdam/Sapporo). The helper guarantees
+  // `displayed = max(snapshot, days + hotel + flight)` whenever a hotel/flight
+  // chip is visible, so the headline always includes the hotel even when the
+  // snapshot fetch is mid-flight or under-counts.
+  // See mem://constraints/finance/header-strip-mirrors-snapshot.
+  const headerStripValues = useMemo(() => computeHeaderStripValues({
+    tripTotalUsd:  financialSnapshot.tripTotalCents / 100,
+    daysGroupUsd:  daysSubtotalCents / 100,
+    hotelChipUsd:  financialSnapshot.effectiveHotelCents / 100,
+    flightChipUsd: financialSnapshot.effectiveFlightCents / 100,
+    loading:       financialSnapshot.loading,
+  }), [
+    financialSnapshot.tripTotalCents,
+    financialSnapshot.effectiveHotelCents,
+    financialSnapshot.effectiveFlightCents,
+    financialSnapshot.loading,
+    daysSubtotalCents,
+  ]);
+
   // Dev guard: warn when day totals exceed trip total (indicates the snapshot
   // dropped rows the day breakdown still counts — e.g. orphan filter mismatch).
   useEffect(() => {

@@ -1,41 +1,44 @@
-Root cause found: the card is not primarily created by the renderer. It is created late in generation by the final meal guard, then a later validation gate turns it into the exact floating shape.
+## Root cause
 
-Concrete failure chain:
+The underlying `activity_costs` rows for the reported trips already include Day-0 hotel costs correctly:
 
-1. On departure days without usable return flight time, meal policy becomes `midday_departure` and requires lunch.
-2. `enforceRequiredMealsFinalGuard` injects a real lunch card, usually with `startTime: "12:30"` and `endTime: "13:30"`.
-3. That lunch is after checkout.
-4. `validateDay.checkDepartureChronology` flags it as critical `LOGISTICS_SEQUENCE` with `field: "startTime"`.
-5. `applyValidationGate` has no explicit handler for `LOGISTICS_SEQUENCE`, so its default critical handler blanks the field instead of dropping the activity:
-   - before: `Lunch: Sobanomi Yoshimura`, `startTime: "12:30"`
-   - after: `Lunch: Sobanomi Yoshimura`, `startTime: ""`, `endTime: "13:30"`
-6. The chain-generation path persists directly through `persistTripItinerary`; it does not go through `action-save-itinerary` Step 2.65, so the later departure-day cleanup never runs.
-7. `action-sync-tables` mirrors the bad JSON into `itinerary_activities`, preserving `start_time = ''`.
+```text
+Casablanca: Days $812 + Hotel $525 = $1,337
+Kyoto:      Days $524 + Hotel $1,100 = $1,624
+Osaka:      Days $652 + Hotel $1,360 = $2,012
+Amsterdam:  Days $804 + Hotel $290 = $1,094
+Sapporo:    Days $876 + Hotel $500 = $1,376
+```
 
-I confirmed this in live data. Example: trip `e9ce51de-0815-41d8-a81b-e95bf241041c` has departure-day lunch `Lunch: Sobanomi Yoshimura` with blank `startTime`, after checkout. Its metadata shows it was injected by `generate-trip-day:final-per-day`, then final validation forced persist.
+The remaining bug is in the frontend header: the detailed equation row has a defensive balancing helper, but the big top-line `Trip Total` number still renders from `financialSnapshot.tripTotalCents` directly. So in the stale/undercounted state the small equation can imply `Days + Hotel`, while the main header still shows the days-only snapshot.
 
-Plan to truly fix it:
+## Fix plan
 
-1. Fix the validator/gate behavior
-   - Add an explicit `LOGISTICS_SEQUENCE` critical handler in `validation-gate.ts`.
-   - For post-checkout non-logistics activities, drop the activity instead of blanking `startTime`.
-   - This prevents the gate from manufacturing floating cards.
+1. **Make the header use one computed value**
+   - Compute the header strip values once in `EditorialItinerary` near the existing financial snapshot/day subtotal logic.
+   - Use `displayedTripTotalUsd` from that helper for both:
+     - the large top-line `Trip Total`
+     - the right-hand `Trip Total` in the equation row
+   - Keep the financial snapshot as the source of truth underneath; this is a display reconciliation for visible math only.
 
-2. Add a last-mile departure net to the chain-generation persist path
-   - Run `enforceDepartureDayLogistics` after all late mutators in `action-generate-trip-day.ts`, immediately before final `persistTripItinerary` and table sync.
-   - This covers anything injected after repair-day: meal guard, gap fill, final validation gate, cross-day dedup, or any future late pass.
+2. **Remove duplicate inline equation math**
+   - Stop recomputing `computeHeaderStripValues` inside the JSX block.
+   - Reuse the single computed object so the headline and equation cannot diverge again.
 
-3. Harden table sync
-   - In `action-sync-tables.ts`, before writing normalized rows, prune departure-day untimed/post-checkout non-logistics cards using the same departure-day rule.
-   - Also replace old rows for a day before inserting synced activities, so stale floating rows cannot survive from a previous bad sync.
+3. **Tighten the helper contract**
+   - Add/adjust unit coverage for the exact failure mode: `financialSnapshot.tripTotal = days`, `hotelChip > 0`, and both header displays must equal `days + hotel`.
+   - Preserve the existing behavior for reserve/adjustments and no-hotel trips.
 
-4. Add regression tests for the real bug shape
-   - Test: final meal guard injects lunch after checkout; final validation gate must not blank `startTime` and persist it.
-   - Test: direct table sync never writes untimed dining on the last day.
-   - Test: chain finalization emits no departure-day dining cards with empty `startTime/start_time/time`.
+4. **Add a regression guard in the component path**
+   - Add a focused test or lightweight extraction so the UI-level derivation proves the large header and equation RHS use the same value.
+   - This prevents future edits from “fixing” the equation strip while leaving the top-line total wrong.
 
-5. Backfill existing affected trips
-   - One-time cleanup: remove non-locked departure-day dining/leisure cards with no start time from both `trips.itinerary_data` and `itinerary_activities`.
-   - Validate with the query I used: zero last-day dining cards where `startTime/start_time/time` are empty.
+## Expected result
 
-This is the root fix: stop blanking the time field, and add the final departure net at the actual direct persist path that currently bypasses the save-time cleanup.
+For every city, when the header shows:
+
+```text
+Days + Hotel = Trip Total
+```
+
+the large `Trip Total` number and the equation `Trip Total` number will both include the hotel and show the same total.
