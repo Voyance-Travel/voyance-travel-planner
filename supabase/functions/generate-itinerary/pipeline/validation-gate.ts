@@ -158,6 +158,23 @@ export function applyValidationGate(
         }
         break;
       }
+      case FAILURE_CODES.LOGISTICS_SEQUENCE: {
+        // Departure-day post-checkout / post-airport-transfer leisure card.
+        // The default-handler used to blank `startTime`, which manufactured the
+        // recurring "Lunch: <Real Restaurant>" floating card after the airport
+        // transfer (Kyoto/Bali/HK/Bruges/Mexico City/Montreal pattern).
+        // Drop the activity instead — universal locking is honored upstream
+        // (locked/user/manual rows never reach this critical branch).
+        if (!droppedIdx.has(idx)) {
+          droppedIdx.add(idx);
+          counters.droppedActivities++;
+          counters.forcedDowngrades++;
+          console.log(
+            `[VALIDATION_GATE] LOGISTICS_SEQUENCE day=${ctx.dayNumber} dropped "${(act?.title || act?.name || '').toString().slice(0, 80)}" (post-checkout/post-transfer)`,
+          );
+        }
+        break;
+      }
       case FAILURE_CODES.SUSPICIOUS_DUPLICATE_PRICE: {
         // Final safety net mirroring repair-day §10d. The LLM duplicated a
         // price token across adjacent same-category cards; blank cost on the

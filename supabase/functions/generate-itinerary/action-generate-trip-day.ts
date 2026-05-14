@@ -3373,6 +3373,53 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // ── DEPARTURE-DAY LOGISTICS NET (chain-finalization) ─────────────
+  // Chain persist bypasses action-save-itinerary STEP 2.65, so the §15z
+  // safety net never ran on the chain path. This was the root persistence
+  // hole behind the recurring "floating Lunch after airport transfer" bug
+  // (Kyoto/Bali/HK/Bruges/CDMX/Montreal). Mirrors STEP 2.65 — runs on the
+  // last day only, idempotent.
+  if (dayNumber >= totalDays && Array.isArray(partialItinerary?.days) && partialItinerary.days.length > 0) {
+    try {
+      const { enforceDepartureDayLogistics: _enforceDepDayChain } = await import('./pipeline/repair-day.ts');
+      const _lastIdx = partialItinerary.days.length - 1;
+      const _lastDay: any = partialItinerary.days[_lastIdx];
+      if (_lastDay?.activities && Array.isArray(_lastDay.activities)) {
+        const _lockedIds = new Set<string>(
+          (_lastDay.activities as any[])
+            .filter((a) => a?.locked === true || a?.isLocked === true || a?.is_locked === true || a?.lock_state === 'locked')
+            .map((a) => String(a.id))
+            .filter(Boolean),
+        );
+        const _beforeLen = _lastDay.activities.length;
+        const _enf = _enforceDepDayChain({
+          activities: _lastDay.activities as any[],
+          dayNumber: _lastDay.dayNumber || (_lastIdx + 1),
+          hotelName: tripHotelName || cityInfo?.hotelName || 'your hotel',
+          hotelAddress: '',
+          returnDepartureTime24: savedDepTime24Hoisted,
+          isLastDay: true,
+          lockedIds: _lockedIds,
+        } as any);
+        if (Array.isArray(_enf?.activities)) {
+          _lastDay.activities = _enf.activities;
+        }
+        const _dropped = _beforeLen - (_lastDay.activities?.length || 0);
+        const _repairs = _enf?.repairs || [];
+        if (_dropped !== 0 || _repairs.length > 0) {
+          _lastDay.metadata = _lastDay.metadata || {};
+          _lastDay.metadata.quality = _lastDay.metadata.quality || {};
+          _lastDay.metadata.quality.chain_departure_net_repairs = _repairs;
+          console.log(
+            `[CHAIN_DEPARTURE_NET] day=${_lastDay.dayNumber || (_lastIdx + 1)} dropped=${Math.max(0, _dropped)} repairs=${_repairs.length} depTime=${savedDepTime24Hoisted || 'n/a'}`,
+          );
+        }
+      }
+    } catch (netErr) {
+      console.warn('[generate-trip-day] chain-finalization departure net failed (non-blocking):', netErr);
+    }
+  }
+
   if (dayNumber >= totalDays) {
     // All days complete — but only mark ready if all days have real activities
     const finalStatus = isComplete ? 'ready' : 'partial';

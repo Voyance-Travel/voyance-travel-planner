@@ -17,7 +17,7 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
   // Verify ownership and get start_date for date derivation
   const { data: trip } = await supabase
     .from('trips')
-    .select('user_id, itinerary_data, start_date')
+    .select('user_id, itinerary_data, start_date, flight_selection')
     .eq('id', tripId)
     .single();
   
@@ -46,6 +46,18 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
   if (days.length === 0) {
     return okJson({ success: true, synced: 0, message: "No days to sync" });
   }
+
+  // Resolve last-day departure time for the chain departure-day net.
+  const _flightSel = (trip.flight_selection as Record<string, any>) || null;
+  const _savedDepartureTime24: string | undefined =
+    _flightSel?.returnDepartureTime24 || _flightSel?.returnDepartureTime
+    || _flightSel?.return?.departureTime || _flightSel?.return?.departure?.time
+    || (Array.isArray(_flightSel?.legs) && _flightSel.legs.length > 0
+        ? _flightSel.legs[_flightSel.legs.length - 1]?.departure?.time
+        : undefined)
+    || undefined;
+
+  const totalDaysSync = days.length;
 
   let syncedActivities = 0;
   
@@ -76,6 +88,46 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
     
     const activities = (d.activities || []) as any[];
     stripPreDawnHotelReturns(activities, { dayNumber, label: 'SYNC' });
+
+    // Departure-day net — drop floating/post-cutoff non-logistics cards before
+    // they get mirrored into itinerary_activities. Closes the recurring
+    // "Lunch: <restaurant>" untimed row in the normalized table that the
+    // frontend rebuild reads back when JSON drifts (Kyoto/Bali/HK/Bruges
+    // pattern). Idempotent — only mutates the last day.
+    if (dayNumber === totalDaysSync) {
+      try {
+        const { enforceDepartureDayLogistics: _enforceDepDaySync } =
+          await import('./pipeline/repair-day.ts');
+        const _lockedIds = new Set<string>(
+          activities
+            .filter((a) => a?.locked === true || a?.isLocked === true || a?.is_locked === true || a?.lock_state === 'locked')
+            .map((a) => String(a.id))
+            .filter(Boolean),
+        );
+        const _beforeLen = activities.length;
+        const _enf = _enforceDepDaySync({
+          activities,
+          dayNumber,
+          hotelName: 'your hotel',
+          hotelAddress: '',
+          returnDepartureTime24: _savedDepartureTime24,
+          isLastDay: true,
+          lockedIds: _lockedIds,
+        } as any);
+        if (Array.isArray(_enf?.activities)) {
+          activities.length = 0;
+          activities.push(...(_enf.activities as any[]));
+        }
+        if (_beforeLen !== activities.length) {
+          console.log(
+            `[SYNC_DEPARTURE_NET] day=${dayNumber} dropped=${_beforeLen - activities.length} depTime=${_savedDepartureTime24 || 'n/a'}`,
+          );
+        }
+      } catch (netErr) {
+        console.warn('[sync-itinerary-tables] departure-day net failed (non-blocking):', netErr);
+      }
+    }
+
 
     
     const { data: dayRow, error: dayError } = await supabase
@@ -152,10 +204,35 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
     });
     
     if (activityRows.length > 0) {
+      // Replace-mode for this day: delete any existing rows tied to this
+      // itinerary_day_id whose id is NOT in the incoming set, so stale
+      // floating cards (e.g. a prior sync's untimed "Lunch: …") cannot
+      // survive a re-sync. Locked rows are still respected because
+      // incoming rows preserve `is_locked`.
+      const incomingIds = new Set(activityRows.map((r: any) => String(r.id)));
+      const { data: existingRows } = await supabase
+        .from('itinerary_activities')
+        .select('id')
+        .eq('itinerary_day_id', dayRow.id);
+      const staleIds = (existingRows || [])
+        .map((r: any) => String(r.id))
+        .filter((id: string) => !incomingIds.has(id));
+      if (staleIds.length > 0) {
+        const { error: delErr } = await supabase
+          .from('itinerary_activities')
+          .delete()
+          .in('id', staleIds);
+        if (delErr) {
+          console.warn(`[sync-itinerary-tables] Stale-row cleanup failed for day ${dayNumber}:`, delErr);
+        } else {
+          console.log(`[sync-itinerary-tables] Day ${dayNumber}: cleared ${staleIds.length} stale activity row(s) before sync`);
+        }
+      }
+
       const { error: actError } = await supabase
         .from('itinerary_activities')
         .upsert(activityRows, { onConflict: 'id' });
-      
+
       if (actError) {
         console.error(`[sync-itinerary-tables] Failed to insert activities for day ${dayNumber}:`, actError);
       } else {
