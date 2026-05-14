@@ -129,6 +129,33 @@ export async function persistTripItinerary(
     console.warn(`[${label}] duration normalization failed (non-blocking):`, e);
   }
 
+  // 3a. Cross-day bleed guard — single chokepoint that moves an untagged
+  // pre-dawn head row on Day N+1 back to Day N's tail when Day N ended late
+  // (≥22:00). Closes the residual "Day 1 nightcap → Day 2 starts at 01:33"
+  // risk untouched by parser stale-head drop / predawn cascade / chronoKey
+  // sort (those four layers cover bookend-tagged rows; this catches untagged
+  // real LLM-emitted activities).
+  // See mem://constraints/itinerary/day1-past-midnight-no-day2-cascade.
+  try {
+    const { assertNoCrossDayBleed } = await import('./cross-day-bleed-guard.ts');
+    const guarded = assertNoCrossDayBleed(days, { site: label });
+    if (guarded.changed) {
+      // Mutate in place so downstream steps (bookend verification, dining
+      // descriptions, regression guard) see the corrected day assignment.
+      for (let i = 0; i < days.length; i++) {
+        days[i] = guarded.days[i];
+      }
+      if (itinerary && typeof itinerary === 'object') {
+        (itinerary as any).days = days;
+      }
+      console.log(
+        `[${label}] [DAY1_BLEED_GUARD] moved=${guarded.movedCount} pairs across ${days.length} days`,
+      );
+    }
+  } catch (e) {
+    console.warn(`[${label}] cross-day bleed guard failed (non-blocking):`, e);
+  }
+
   // 3b. Dining description deterministic safety net — guarantees no dining
   // card persists with an empty `description`. Runs at the single boundary
   // so every write path (final-save, save-itinerary, repair-costs, lock
