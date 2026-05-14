@@ -1,6 +1,10 @@
 import { supabase } from '@/integrations/supabase/client';
 import { preserveLedgerCosts } from '@/utils/preserveLedgerCosts';
 import { itineraryFingerprint } from '@/lib/itinerary/itineraryFingerprint';
+import {
+  pruneDepartureUntimed,
+  detectDepartureDayIdx,
+} from '@/lib/itinerary/pruneDepartureUntimed';
 
 /**
  * Direct trips.itinerary_data writes from React state can silently downgrade
@@ -162,7 +166,34 @@ export async function safeUpdateItineraryData(
     }
 
     const preservedDays = preserveLedgerCosts(prevDays, nextDays);
-    const merged = { ...nextItinerary, days: preservedDays };
+
+    // ── DEPARTURE-DAY UNTIMED PRUNE (Layer 1) ──
+    // Single client write chokepoint. Drop any non-logistics, non-locked,
+    // non-userAdded card on the trip's departure day whose startTime is
+    // missing/unparseable. Mirrors §15z so chat-action / optimistic /
+    // undo-redo paths can't land a "floating Lunch after airport transfer".
+    // See mem://constraints/itinerary/departure-day-untimed-defense.
+    let prunedDays = preservedDays;
+    try {
+      const depIdx = detectDepartureDayIdx(preservedDays);
+      if (depIdx >= 0 && preservedDays[depIdx]) {
+        const { activities: keptActs, droppedTitles } = pruneDepartureUntimed(
+          preservedDays[depIdx].activities || [],
+        );
+        if (droppedTitles.length > 0) {
+          console.warn(
+            `[PERSIST_DEPARTURE_UNTIMED_PRUNED] day=${depIdx + 1} count=${droppedTitles.length} titles=${droppedTitles.join(' | ')} (reason=${options.reason || 'unspecified'}, tripId=${tripId})`,
+          );
+          prunedDays = preservedDays.map((d, i) =>
+            i === depIdx ? { ...d, activities: keptActs } : d,
+          );
+        }
+      }
+    } catch (pruneErr) {
+      console.warn('[PERSIST_DEPARTURE_UNTIMED_PRUNED] prune step failed (continuing):', pruneErr);
+    }
+
+    const merged = { ...nextItinerary, days: prunedDays };
 
     const { data, error } = await supabase.functions.invoke('generate-itinerary', {
       body: {

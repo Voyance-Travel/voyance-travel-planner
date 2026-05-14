@@ -15,6 +15,7 @@ import { isGhostActivity } from '@/lib/itinerary/hideGhostActivities';
 import { ensureHotelReturnBookend, isHotelReturnBookendActivity } from '@/lib/itinerary/ensureHotelReturnBookend';
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 import { normalizePredawnCascade } from '@/lib/itinerary/normalizePredawnCascade';
+import { pruneDepartureUntimed } from '@/lib/itinerary/pruneDepartureUntimed';
 
 // Strip non-Latin scripts from AI text artifacts before rendering
 const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0600-\u06FF\u0400-\u04FF\u0E00-\u0E7F]+/g;
@@ -971,6 +972,26 @@ export function parseItineraryDays(
       console.warn(`[itineraryParser] Stripped ${before - filtered.length} departure-day hotel-return card(s) on day ${departureDayIdx + 1}: ${dropped.join(' | ')}`);
       console.log(`[BOOKEND_TRACE] day=${departureDayIdx + 1} site=parse action=stripped_departure_day count=${before - filtered.length}`);
       result[departureDayIdx] = { ...result[departureDayIdx], activities: filtered };
+    }
+
+    // Step 4b-pre-2: STRIP untimed non-logistics, non-locked, non-userAdded
+    // cards from the departure day. A real restaurant with no startTime
+    // sorts after every timed card via dayChronoKey and surfaces as a
+    // "floating Lunch" after the airport transfer. Mirrors server §15z.
+    // Pure UI strip — never written to DB.
+    // See mem://constraints/itinerary/departure-day-untimed-defense.
+    try {
+      const currentActs = result[departureDayIdx].activities || [];
+      const { activities: keptActs, droppedTitles } = pruneDepartureUntimed(currentActs);
+      if (droppedTitles.length > 0) {
+        console.warn(
+          `[itineraryParser] departure-day untimed strip day=${departureDayIdx + 1} count=${droppedTitles.length} titles=${droppedTitles.join(' | ')}`,
+        );
+        console.log(`[BOOKEND_TRACE] day=${departureDayIdx + 1} site=parse action=stripped_departure_untimed count=${droppedTitles.length}`);
+        result[departureDayIdx] = { ...result[departureDayIdx], activities: keptActs };
+      }
+    } catch (pruneErr) {
+      console.warn('[itineraryParser] departure-day untimed strip failed (continuing):', pruneErr);
     }
   }
 
