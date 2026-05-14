@@ -386,6 +386,11 @@ export function PaymentsTab({
 
   // ─── Canonical total from DB ledger (single source of truth, matches header + budget) ───
   const financialSnapshot = useTripFinancialSnapshot(tripId);
+  // Same displayed-total math the itinerary header uses, so PaymentsTab's
+  // headline `Trip Total` is byte-identical to the header's. Closes the
+  // Copenhagen $1,124 vs $1,048 gap (header clamped UP to chipSum, Payments
+  // read raw snapshot). See mem://constraints/finance/displayed-trip-total-single-source.
+  const displayedTotal = useDisplayedTripTotal(tripId);
   // Manually-added expenses live only in trip_payments (not in activity_costs),
   // so the DB snapshot misses them. Sum them so we can fold them on top — BUT
   // when a manual hotel/flight exists, treat it as an OVERRIDE of the canonical
@@ -405,9 +410,14 @@ export function PaymentsTab({
 
   // Manual payments are now folded into useTripFinancialSnapshot directly
   // (override-aware for hotel/flight, additive for others). No local delta needed.
-  const baseTotal = financialSnapshot.loading
+  // baseTotal mirrors the itinerary header (`displayedTotalCents`) — same
+  // hook, same math, same number. Falls back to payable items only while the
+  // displayed total is still loading and we have no snapshot yet.
+  const baseTotal = displayedTotal.loading
     ? payableTotalCents
-    : (financialSnapshot.tripTotalCents > 0 ? financialSnapshot.tripTotalCents : payableTotalCents);
+    : (displayedTotal.displayedTotalCents > 0
+        ? displayedTotal.displayedTotalCents
+        : payableTotalCents);
   const estimatedTotal = Math.max(0, baseTotal);
   // "Paid so far" must follow the same orphan-aware logic as the snapshot —
   // otherwise stale paid trip_payments rows from a regenerated trip inflate
