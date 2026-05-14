@@ -114,8 +114,17 @@ function isAirportTransferCard(a: any): boolean {
   return classify(a) === 'airport-transport';
 }
 
+const DINING_CAT_RE = /\b(dining|food|restaurant|breakfast|brunch|lunch|dinner|cafe)\b/i;
+const DINING_TITLE_RE = /^(breakfast|brunch|lunch|dinner)\b/i;
+function isDiningCard(a: any): boolean {
+  const cat = String(a?.category ?? a?.type ?? '');
+  const title = String(a?.title ?? a?.name ?? '').trim();
+  return DINING_CAT_RE.test(cat) || DINING_TITLE_RE.test(title);
+}
+
 export function pruneNonLogisticsAfterAirportTransfer(
   activities: any[],
+  dayNumber: number = 0,
 ): PostCheckoutPruneResult {
   if (!Array.isArray(activities) || activities.length < 2) {
     return { prunedCount: 0, prunedTitles: [] };
