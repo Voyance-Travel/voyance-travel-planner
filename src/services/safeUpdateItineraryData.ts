@@ -1,6 +1,10 @@
 import { supabase } from '@/integrations/supabase/client';
 import { preserveLedgerCosts } from '@/utils/preserveLedgerCosts';
 import { itineraryFingerprint } from '@/lib/itinerary/itineraryFingerprint';
+import {
+  pruneDepartureUntimed,
+  detectDepartureDayIdx,
+} from '@/lib/itinerary/pruneDepartureUntimed';
 
 /**
  * Direct trips.itinerary_data writes from React state can silently downgrade
