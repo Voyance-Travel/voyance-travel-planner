@@ -1,22 +1,3 @@
-# Extract Auto-Resume Logic into useAutoResume Hook
-
-## Goal
-Move the auto-resume decision logic from TripDetail.tsx into a standalone, testable hook at `src/hooks/useAutoResume.ts`.
-
-## Adjustments from original request
-
-After reading the current codebase:
-
-- **Import path fix**: `parseLocalDate` lives in `src/utils/dateUtils.ts`, not `@/lib/itinerary/parseLocalDate`. The plan uses the correct path: `@/utils/dateUtils`.
-- **Line-number mismatch**: The provided TripDetail.tsx line numbers (1335-1345, 1558-1564) reference self-heal logic and `rowToActivity`, not the auto-resume call sites. The actual auto-resume logic will be extracted from wherever `autoResumeAttemptedRef` and `handleResumeGeneration` are gated together in TripDetail.tsx.
-
-## Implementation
-
-### New file: `src/hooks/useAutoResume.ts`
-
-Create the hook with the verbatim structure provided, using the corrected import path:
-
-```ts
 import { useEffect, useRef, useState } from 'react';
 import { differenceInDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
@@ -40,6 +21,7 @@ export function useAutoResume(args: UseAutoResumeArgs): { isStalled: boolean } {
   useEffect(() => {
     if (!args.tripId || !args.trip) return;
 
+    // Compute expectedTotal from canonical dates first, fall back to metadata.
     let expectedTotal = 0;
     if (args.startDate && args.endDate) {
       try {
@@ -56,6 +38,9 @@ export function useAutoResume(args: UseAutoResumeArgs): { isStalled: boolean } {
 
     if (expectedTotal <= 0) return;
 
+    // DISABLED auto-fire: regenerating on page load silently overwrites existing
+    // content with different LLM output (Dublin 2026-05-14 bug). User must
+    // explicitly click Regenerate.
     if (args.itineraryStatus === 'ready' && actualDays > 0 && actualDays < expectedTotal) {
       console.warn(`[useAutoResume] Trip marked ready but ${actualDays}/${expectedTotal} days. NOT auto-resuming.`);
       setIsStalled(true);
@@ -68,8 +53,11 @@ export function useAutoResume(args: UseAutoResumeArgs): { isStalled: boolean } {
     }
 
     setIsStalled(false);
-    void attemptedRef;
-    void args.handleResumeGeneration;
+    
+    if (!attemptedRef.current && args.itineraryStatus === 'pending' && actualDays < expectedTotal) {
+      attemptedRef.current = true;
+      args.handleResumeGeneration();
+    }
   }, [
     args.tripId,
     args.trip,
@@ -79,17 +67,8 @@ export function useAutoResume(args: UseAutoResumeArgs): { isStalled: boolean } {
     args.endDate,
     args.metadataExpectedDays,
     args.itineraryDataDays,
+    args.handleResumeGeneration
   ]);
 
   return { isStalled };
 }
-```
-
-## Scope
-- **File creation only** — no changes to TripDetail.tsx in this step.
-- Follow-up prompt will wire the hook into TripDetail.tsx and delete dead code.
-
-## Acceptance
-1. `src/hooks/useAutoResume.ts` exists.
-2. Contains exactly two `NOT auto-resuming` console.warn strings.
-3. Contains exactly one `DISABLED auto-fire` comment.
