@@ -204,12 +204,65 @@ export async function persistTripItinerary(
         wasHealthy &&
         (newSummary.meaningfulCount < minMeaningful ||
           newSummary.paidMeaningfulCount < minPaid);
-      if (isRegression && !options.allowRegression) {
+
+      // Identity-swap guard — block writes that keep similar counts but
+      // replace the actual venues/themes wholesale (Dublin pattern: same
+      // ~10 cards but different restaurants/activities/themes per day).
+      // Per-day overlap is computed on a normalized title set; <30%
+      // overlap on a previously-populated day is treated as an identity
+      // replacement and rejected. Only fires when the on-disk version
+      // was healthy and the caller has not opted into regression.
+      let identitySwap = false;
+      const identityDetail: Array<{ day: number | string; overlap: number; oldCount: number; newCount: number }> = [];
+      if (wasHealthy) {
+        const norm = (s: any) => String(s || '')
+          .toLowerCase()
+          .replace(/\(.*?\)/g, ' ')
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+        const titlesOf = (acts: any[]): Set<string> => {
+          const out = new Set<string>();
+          for (const a of acts || []) {
+            const t = norm(a?.title || a?.name);
+            if (!t) continue;
+            // Ignore generic logistics/bookend rows — they're noise here.
+            if (/^(return to|travel to|walk to|taxi to|metro to|bus to|train to|drive to|check in|check out|checkin|checkout|luggage drop|freshen up|head to|departure flight|arrival flight|transfer to)\b/.test(t)) continue;
+            out.add(t);
+          }
+          return out;
+        };
+        const newByNum = new Map<number, any>();
+        for (const d of (Array.isArray(days) ? days : []) as any[]) {
+          if (d && typeof d.dayNumber === 'number') newByNum.set(d.dayNumber, d);
+        }
+        const oldDaysArr = Array.isArray((existing as any)?.itinerary_data?.days)
+          ? ((existing as any).itinerary_data.days as any[])
+          : [];
+        for (const oldDay of oldDaysArr) {
+          if (!oldDay || typeof oldDay.dayNumber !== 'number') continue;
+          const oldTitles = titlesOf(oldDay.activities || []);
+          if (oldTitles.size < 3) continue;
+          const newDay = newByNum.get(oldDay.dayNumber);
+          const newTitles = titlesOf(newDay?.activities || []);
+          if (newTitles.size === 0) continue;
+          let inter = 0;
+          for (const t of newTitles) if (oldTitles.has(t)) inter++;
+          const overlap = inter / Math.max(oldTitles.size, newTitles.size);
+          identityDetail.push({ day: oldDay.dayNumber, overlap: Math.round(overlap * 100) / 100, oldCount: oldTitles.size, newCount: newTitles.size });
+          if (overlap < 0.3) identitySwap = true;
+        }
+      }
+
+      if ((isRegression || identitySwap) && !options.allowRegression) {
         regressionBlocked = true;
+        const reasonTag = isRegression && identitySwap
+          ? 'regression+identity_swap'
+          : (identitySwap ? 'identity_replacement_blocked' : 'regression_blocked');
         console.warn(
-          `[${label}] [PERSIST_REGRESSION_BLOCKED] keeping previous days — ` +
+          `[${label}] [PERSIST_REGRESSION_BLOCKED] reason=${reasonTag} keeping previous days — ` +
             `was meaningful=${oldSummary.meaningfulCount} paid=${oldSummary.paidMeaningfulCount}, ` +
-            `now meaningful=${newSummary.meaningfulCount} paid=${newSummary.paidMeaningfulCount}`,
+            `now meaningful=${newSummary.meaningfulCount} paid=${newSummary.paidMeaningfulCount}` +
+            (identitySwap ? ` overlap=${JSON.stringify(identityDetail)}` : ''),
         );
       }
     }
