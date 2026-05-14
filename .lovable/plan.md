@@ -1,48 +1,90 @@
-## Root cause
+# Health engine: timestamps, false positives, flicker
 
-Both Copenhagen and Dublin trips have `trips.metadata.hero_image = null`. The hero resolver chain in `useTripHeroImage` then calls `getDestinationCanonicalImage`, which only reads `destinations.hero_image_url` — and that column is **null for 2,219 of 2,246 destinations** (only 1 destination has it set).
+The engine produces three classes of complaints:
 
-The chain therefore skips canonical → skips hardcoded curated (allowlist intentionally empty) → skips DB curated_images (no rows for these cities) → falls through to the `destination-images` edge function, which is returning a heavyweight base64 AI-generated image (`ai-amalienborg-palace-…`) that frequently fails to render in time, so the user sees the deterministic gradient fallback (purple for Copenhagen, blue for Dublin — both seeded from the destination string).
+1. **Stale timestamps in warning text** — Copenhagen dinner card renders 20:50–22:50, the warning quotes 21:50–23:50. Different times, same card.
+2. **Cross-day venue leakage** — Budapest Day 1 surfaces venues that belong to another day.
+3. **Score flicker on page load** — Budapest 77 → 74, "2 issues" → "3 issues" within the same render.
 
-Meanwhile `destinations.stock_image_url` IS populated for both cities and points at the internal `site-images` bucket (HTTP 200, real JPEG). It's been sitting there unused.
+All three live entirely in `src/components/trip/TripHealthPanel.tsx` + tiny support file `src/lib/itinerary/healthCascadePreview.ts`. No backend, no schema, no save-path changes.
 
-## Fix
+---
 
-### 1. Resolver: consult `stock_image_url` as a canonical fallback
+## 1. Warning text must mirror the rendered card
 
-Update `getDestinationCanonicalImage` (`src/services/destinationImagesAPI.ts`) to select both `hero_image_url` and `stock_image_url`, return the first that passes `isUntrustedHeroUrl`. Single query, no extra round-trip.
+### What's happening today
+
+`analyzeHealth` builds `timed[]` using `getDisplayStartTime(a, cascadePreview, idx)`. That helper returns the **post-cascade** preview time when the dry-run cascade reshuffled the day. The warning template then echoes those preview times:
+
+```
+"Dinner at Høst" (21:50–23:50) runs into "Nightcap …" (…). Auto-resolves on save.
+```
+
+But the user's card still shows the **pre-cascade** time (20:50–22:50) because nothing has been saved yet. Two different times for the same card → user thinks the engine is hallucinating.
+
+### Fix
+
+Build two parallel views inside the per-pair loop:
+
+- `cascadeStart/End` — used for overlap detection + suppression (unchanged)
+- `displayStart/End` — read directly from the activity record (`displayStartTime || startTime || start_time || time`) bypassing the cascade map; used **only** in the user-facing message
+
+Then the warning echoes the same times the card shows, while the suppression branch still trusts the cascade.
+
+### Bonus rule
+
+If `cascadeStart/End` differs from `displayStart/End` by ≥1 minute on either side AND the cascade-recheck says the conflict is **resolved**, drop the warning entirely — it's purely an artifact of the dry-run cascade reshuffling. The "Auto-resolves on save." suffix becomes unreachable in normal use.
+
+---
+
+## 2. Day-boundary guard on the conflict pass
+
+`detectGapsForDay` already filters strictly on `dayNumber` (good). The conflict pass at line 287 currently does:
 
 ```ts
-.select('hero_image_url, stock_image_url')
+.filter(({ a }) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
 ```
 
-Order: `hero_image_url` first (admin-curated), `stock_image_url` second (seeded). Both go through the existing trust policy gate in `useTripHeroImage`.
+The `?? dayNum` fallback admits **any** row sitting in `day.activities` whose `dayNumber` field is missing — even if the row is a stray from another day's parse leak. That is the Budapest #1 leak path.
 
-### 2. One-shot backfill migration
+### Fix
 
-Promote `stock_image_url` → `hero_image_url` for the 2,219 affected rows so future reads short-circuit on the first column and other consumers (admin tools, future per-destination pages) also benefit:
+Tighten to:
 
-```sql
-UPDATE destinations
-SET hero_image_url = stock_image_url
-WHERE hero_image_url IS NULL
-  AND stock_image_url LIKE '%/storage/v1/object/public/site-images/%';
+```ts
+.filter(({ a }) => {
+  const tagged = a.dayNumber ?? a.day_number;
+  if (tagged !== undefined && tagged !== null) return tagged === dayNum;
+  return true; // truly untagged → keep, parser invariant says it belongs here
+})
 ```
 
-Trusted-host filter mirrors the runtime policy so we don't promote any legacy Unsplash URLs.
+PLUS add a dev-only `console.warn('[HEALTH_CROSS_DAY_LEAK]', …)` whenever an activity tagged with another day was filtered out — gives us telemetry to trace the parser leak without blocking the user.
 
-### 3. Memory entry
+---
 
-Add `mem://constraints/visual/destination-canonical-stock-fallback` capturing: canonical resolver MUST consult `stock_image_url` when `hero_image_url` is null; backfill keeps both columns in sync; never resurrect Unsplash hosts via this path.
+## 3. Stop the 77 → 74 flicker on first paint
 
-## Out of scope (intentionally not changing)
+Today `stableIssues` initialises with **errors only**, then the 600 ms soak commits warnings — score drops on second tick.
 
-- The `destination-images` edge function's AI-generation behavior — leave it as the last-resort tier; once tiers 1–4 have real coverage it will be cold-pathed.
-- `VERIFIED_CURATED` allowlist — staying empty per existing memory.
-- The reload-overwrite work from prior turns (Dublin v1 restore still pending separate confirmation) — independent issue.
+### Fix
+
+Treat the very first commit as a free pass: when `lastSignatureRef.current === ''` (initial mount) commit errors **and** warnings synchronously. The soak only kicks in for *subsequent* signature changes. That preserves the original purpose (suppress phantom warnings from optimistic edits + partial hydration mid-session) while removing the visible "score recalculating" jump on page load.
+
+Also add a small pre-commit dedupe: `Array.from(new Map(rawHealthIssues.map(i => [i.id, i])).values())` so an upstream double-emit can't bump the count from 2 → 3 by itself.
+
+---
 
 ## Acceptance
 
-- Copenhagen trip `61102b44-…` and Dublin trip `f13e2300-…` render the seeded `site-images` JPEG on next visit (no purple/blue gradient).
-- `SELECT count(*) FROM destinations WHERE hero_image_url IS NULL` drops from 2,245 → ~27.
-- No code path persists an `images.unsplash.com` URL into `hero_image_url` (write-back guard in `writeBackDestinationCanonicalImage` already enforces this).
+- Open Copenhagen trip with the dinner/transit conflict. The warning's quoted times match exactly what the card shows. If the cascade resolves the conflict, no warning appears at all.
+- Open Budapest #1. No conflict warning quotes a venue that doesn't appear on that day. If a leak still exists, `[HEALTH_CROSS_DAY_LEAK]` logs to console for repro.
+- Hard-refresh either trip. Score and issue count are stable from first paint — no jump from 77 → 74 (or similar) within the same load.
+- Existing `[HEALTH_CASCADE_DRIFT]` / `[HEALTH_CASCADE_PREVIEW_MISS]` telemetry still fires on real disagreements.
+
+## Out of scope
+
+- The save-time cascade itself (`enforceTimingAndBuffers`) — already correct, ships 82 fixes per Copenhagen save.
+- The parser leak that puts cross-day venues into `day.activities` — telemetry-only here; parser fix tracked separately if `[HEALTH_CROSS_DAY_LEAK]` fires in production.
+- The Dublin v1 restoration (separate confirmation still pending).
+- Hero image work (already shipped).

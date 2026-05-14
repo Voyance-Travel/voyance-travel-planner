@@ -284,22 +284,49 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
       .map((a: any, idx: number) => ({ a, idx }))
       .filter(({ a, idx }) =>
         (getDisplayStartTime(a, cascadePreview, idx)) && (getDisplayEndTime(a, cascadePreview, idx)))
-      .filter(({ a }) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
+      // Day-boundary guard: keep rows whose dayNumber matches; allow truly
+      // untagged rows; drop rows tagged for a different day (parser leak path
+      // — Budapest #1 surfaced "venues that weren't even on that day"). Log
+      // any drop so we can trace the upstream parser leak.
+      .filter(({ a }) => {
+        const tagged = a?.dayNumber ?? a?.day_number;
+        if (tagged === undefined || tagged === null) return true;
+        if (tagged === dayNum) return true;
+        if (typeof console !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.warn('[HEALTH_CROSS_DAY_LEAK]', {
+            day: dayNum,
+            taggedDay: tagged,
+            title: a?.name || a?.title,
+          });
+        }
+        return false;
+      })
       // Drop hotel-return bookends — they're decorative and routinely wrap
       // past midnight; should never anchor a buffer/overlap warning.
       .filter(({ a }) => !isHotelReturn(a))
       .map(({ a, idx }) => {
-        const startStr = getDisplayStartTime(a, cascadePreview, idx);
-        const endStr = getDisplayEndTime(a, cascadePreview, idx);
+        // Cascade-preview times power overlap detection + suppression. The
+        // user-facing warning text echoes the SAME times rendered on the
+        // card (no cascade map) so the message never disagrees with what
+        // the user sees. Closes Copenhagen "card 20:50 / warning 21:50"
+        // pattern — root cause: dry-run cascade reshuffled times the user
+        // hadn't saved yet.
+        const cascadedStart = getDisplayStartTime(a, cascadePreview, idx);
+        const cascadedEnd = getDisplayEndTime(a, cascadePreview, idx);
+        const renderedStart = getDisplayStartTime(a, undefined, idx);
+        const renderedEnd = getDisplayEndTime(a, undefined, idx);
         return {
           source: a,
           sourceIdx: idx,
           name: a.name || a.title,
           category: a.category,
-          start: parseTime(startStr),
-          end: parseTime(endStr),
-          startStr: String(startStr),
-          endStr: String(endStr),
+          start: parseTime(cascadedStart),
+          end: parseTime(cascadedEnd),
+          startStr: String(renderedStart || cascadedStart),
+          endStr: String(renderedEnd || cascadedEnd),
+          cascadedStartStr: String(cascadedStart),
+          cascadedEndStr: String(cascadedEnd),
         };
       })
       .filter((a: { start: number; end: number }) => a.start > 0 || a.end > 0)
