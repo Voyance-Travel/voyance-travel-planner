@@ -1,90 +1,82 @@
-# Health engine: timestamps, false positives, flicker
+## Goal
 
-The engine produces three classes of complaints:
+Make the Payments tab "Trip Total" and the itinerary header "Trip Total" mathematically identical at all times, and turn the "Matches itinerary" badge into a verified equality check (not a cosmetic ribbon).
 
-1. **Stale timestamps in warning text** — Copenhagen dinner card renders 20:50–22:50, the warning quotes 21:50–23:50. Different times, same card.
-2. **Cross-day venue leakage** — Budapest Day 1 surfaces venues that belong to another day.
-3. **Score flicker on page load** — Budapest 77 → 74, "2 issues" → "3 issues" within the same render.
+## Root Causes
 
-All three live entirely in `src/components/trip/TripHealthPanel.tsx` + tiny support file `src/lib/itinerary/healthCascadePreview.ts`. No backend, no schema, no save-path changes.
+Two independent bugs combine into the symptoms reported.
 
----
+**Bug 1 — Header silently clamps up; Payments doesn't (the $76 Copenhagen gap).**
+`src/lib/itinerary/headerStripValues.ts` computes:
 
-## 1. Warning text must mirror the rendered card
-
-### What's happening today
-
-`analyzeHealth` builds `timed[]` using `getDisplayStartTime(a, cascadePreview, idx)`. That helper returns the **post-cascade** preview time when the dry-run cascade reshuffled the day. The warning template then echoes those preview times:
-
-```
-"Dinner at Høst" (21:50–23:50) runs into "Nightcap …" (…). Auto-resolves on save.
+```text
+displayedTripTotalUsd = max(snapshot.tripTotalCents, daysGroup + hotelChip + flightChip)
 ```
 
-But the user's card still shows the **pre-cascade** time (20:50–22:50) because nothing has been saved yet. Two different times for the same card → user thinks the engine is hallucinating.
+The itinerary header renders `headerStripValues.displayedTripTotalUsd` (EditorialItinerary.tsx L6131). PaymentsTab renders `financialSnapshot.tripTotalCents` raw (PaymentsTab.tsx L1184). Whenever the per-day breakdown sum exceeds the canonical snapshot — a common transient when `useTripDayBreakdown` and `useTripFinancialSnapshot` finish at different times, or when a Day-N row is double-counted vs the resolver — the header inflates and Payments does not. Copenhagen $1,124 vs $1,048 = exactly that 76¢-on-the-chip-side delta.
 
-### Fix
+**Bug 2 — Snapshot doesn't refetch on itinerary persist (the Dublin "$998 stale" read).**
+Every successful itinerary persist dispatches `TRIP_PERSISTED_EVENT` (Core memory: "DB Is Source of Truth"). `useTripFinancialSnapshot` only listens for `booking-changed`. After a regenerate / regression-block / reload self-heal lands on the database, `EditorialItinerary` re-reads `trips.itinerary_data` and re-renders, but the snapshot powering Payments never refetches, so Payments keeps showing the previous session's number.
 
-Build two parallel views inside the per-pair loop:
+**Badge is non-diagnostic.**
+`{!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && "Matches itinerary"}` (PaymentsTab.tsx L1186-L1191) only checks "snapshot loaded with a positive value" — it never compares Payments' displayed total to the header's displayed total. So the badge fires even when the two diverge.
 
-- `cascadeStart/End` — used for overlap detection + suppression (unchanged)
-- `displayStart/End` — read directly from the activity record (`displayStartTime || startTime || start_time || time`) bypassing the cascade map; used **only** in the user-facing message
+## Fix
 
-Then the warning echoes the same times the card shows, while the suppression branch still trusts the cascade.
+### 1. One displayed-total resolver, two consumers
 
-### Bonus rule
+Promote `computeHeaderStripValues` into the canonical "what the user sees as Trip Total" math, then have both surfaces read it:
 
-If `cascadeStart/End` differs from `displayStart/End` by ≥1 minute on either side AND the cascade-recheck says the conflict is **resolved**, drop the warning entirely — it's purely an artifact of the dry-run cascade reshuffling. The "Auto-resolves on save." suffix becomes unreachable in normal use.
+- Add a thin hook `useDisplayedTripTotal(tripId)` in `src/hooks/` that internally uses `useTripFinancialSnapshot` + `useTripDayBreakdown` and returns `{ displayedTotalCents, snapshotTotalCents, chipSumCents, snapshotUnderChips, snapshotOverChips, loading }`.
+- `EditorialItinerary.tsx` keeps consuming `headerStripValues.displayedTripTotalUsd` (no behavioral change) but routes through the new hook so the value is computed once.
+- `PaymentsTab.tsx` `baseTotal` switches from `financialSnapshot.tripTotalCents` to `displayedTotalCents`. This closes the $76 gap for Copenhagen by definition: same number, same rounding, same source.
 
----
+### 2. Snapshot listens to `TRIP_PERSISTED_EVENT`
 
-## 2. Day-boundary guard on the conflict pass
+In `useTripFinancialSnapshot.ts`, add a second `window.addEventListener(TRIP_PERSISTED_EVENT, handler)` next to the existing `booking-changed` handler (L642). Reuse the same coalesced refetch path (leading + trailing 600 ms) and the silent-suppress flag so the auto-refetch doesn't spawn a phantom delta toast.
 
-`detectGapsForDay` already filters strictly on `dayNumber` (good). The conflict pass at line 287 currently does:
+This closes the Dublin stale read: after the regression-block heal lands and `safeUpdateItineraryData` fires `TRIP_PERSISTED_EVENT`, every mounted snapshot — Payments, Budget, header — refetches in lock-step.
 
-```ts
-.filter(({ a }) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
+### 3. Make the "Matches itinerary" badge mean something
+
+Replace the current condition with an actual equality check inside PaymentsTab (L1186-L1191):
+
+```text
+const headerMatches =
+  !displayedLoading
+  && Math.abs(estimatedTotal - displayedTotalCents) <= 100   // ≤ $1
+  && !snapshotUnderChips                                      // header had to clamp up
+  && !snapshotOverChips;                                      // unattributed snapshot cost
+
+if (headerMatches) → green check + "Matches itinerary"
+else if (snapshotUnderChips || snapshotOverChips) → amber dot + "Reconciling…"
+else → render nothing (no green badge during loading or transient drift)
 ```
 
-The `?? dayNum` fallback admits **any** row sitting in `day.activities` whose `dayNumber` field is missing — even if the row is a stray from another day's parse leak. That is the Budapest #1 leak path.
+The same drift telemetry already in PaymentsTab (`[PaymentsTab] divergence`, L509) stays as the developer signal — this change is user-facing only.
 
-### Fix
+### 4. Suppress the post-snapshot-event delta toast
 
-Tighten to:
-
-```ts
-.filter(({ a }) => {
-  const tagged = a.dayNumber ?? a.day_number;
-  if (tagged !== undefined && tagged !== null) return tagged === dayNum;
-  return true; // truly untagged → keep, parser invariant says it belongs here
-})
-```
-
-PLUS add a dev-only `console.warn('[HEALTH_CROSS_DAY_LEAK]', …)` whenever an activity tagged with another day was filtered out — gives us telemetry to trace the parser leak without blocking the user.
-
----
-
-## 3. Stop the 77 → 74 flicker on first paint
-
-Today `stableIssues` initialises with **errors only**, then the 600 ms soak commits warnings — score drops on second tick.
-
-### Fix
-
-Treat the very first commit as a free pass: when `lastSignatureRef.current === ''` (initial mount) commit errors **and** warnings synchronously. The soak only kicks in for *subsequent* signature changes. That preserves the original purpose (suppress phantom warnings from optimistic edits + partial hydration mid-session) while removing the visible "score recalculating" jump on page load.
-
-Also add a small pre-commit dedupe: `Array.from(new Map(rawHealthIssues.map(i => [i.id, i])).values())` so an upstream double-emit can't bump the count from 2 → 3 by itself.
-
----
+The new `TRIP_PERSISTED_EVENT` listener must mark `suppressNextToastRef = { active: true, reason: 'trip-persisted' }` before refetch — a snapshot diff caused by the persist isn't an actionable user-driven price change.
 
 ## Acceptance
 
-- Open Copenhagen trip with the dinner/transit conflict. The warning's quoted times match exactly what the card shows. If the cascade resolves the conflict, no warning appears at all.
-- Open Budapest #1. No conflict warning quotes a venue that doesn't appear on that day. If a leak still exists, `[HEALTH_CROSS_DAY_LEAK]` logs to console for repro.
-- Hard-refresh either trip. Score and issue count are stable from first paint — no jump from 77 → 74 (or similar) within the same load.
-- Existing `[HEALTH_CASCADE_DRIFT]` / `[HEALTH_CASCADE_PREVIEW_MISS]` telemetry still fires on real disagreements.
+- Open Copenhagen trip — Payments "Trip Total" === itinerary header "Trip Total" to the cent. Same after toggling Hotel/Flight.
+- Open Dublin trip, force a regenerate or regression-block, then read both surfaces without a hard refresh — both update in the same render frame; Payments never strands the prior value.
+- "Matches itinerary" badge only appears when the two displayed numbers actually match within $1 AND no clamping happened. During reconciliation it shows an amber "Reconciling…" hint instead of a misleading green checkmark.
+- Existing `[PaymentsTab] divergence` and `[useTripFinancialSnapshot] …` console signals continue to fire on real upstream contract bugs.
 
 ## Out of scope
 
-- The save-time cascade itself (`enforceTimingAndBuffers`) — already correct, ships 82 fixes per Copenhagen save.
-- The parser leak that puts cross-day venues into `day.activities` — telemetry-only here; parser fix tracked separately if `[HEALTH_CROSS_DAY_LEAK]` fires in production.
-- The Dublin v1 restoration (separate confirmation still pending).
-- Hero image work (already shipped).
+- Fixing why `useTripDayBreakdown` ever sums higher than the canonical resolver (separate Day-N hotel double-count bug — telemetry stays as `snapshotUnderChips`).
+- Hero image, health engine, regression guard work shipped earlier in the loop.
+- Touching the resolver math in `resolveCanonicalCostRows` — both surfaces will simply agree on whatever it produces.
+
+## Files
+
+- `src/hooks/useDisplayedTripTotal.ts` (new, ~40 lines)
+- `src/hooks/useTripFinancialSnapshot.ts` (add `TRIP_PERSISTED_EVENT` listener)
+- `src/components/itinerary/PaymentsTab.tsx` (swap `baseTotal` source, rewrite badge)
+- `src/components/itinerary/EditorialItinerary.tsx` (route header through new hook)
+- `mem://constraints/finance/displayed-trip-total-single-source` (new memory entry)
+- `mem://index.md` (reference)
