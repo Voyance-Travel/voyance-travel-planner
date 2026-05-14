@@ -383,6 +383,25 @@ function withUtm(url: string): string {
   return url.includes("?") ? `${url}&${UNSPLASH_UTM}` : `${url}?${UNSPLASH_UTM}`;
 }
 
+/**
+ * People/business content terms that disqualify a destination hero.
+ * Catches the recurring "two businessmen shaking hands" Unsplash leak
+ * for cities that don't have a dominant landmark match.
+ */
+const HERO_PEOPLE_CONTENT_RE =
+  /\b(business(?:man|woman|men|women|people)?|suit|handshake|meeting|office|conference|boardroom|portrait|headshot|model|crowd|group of people|man|woman|person|people|wedding|bride|groom)\b/i;
+
+function isPeopleContentResult(r: any): boolean {
+  const fields: string[] = [
+    typeof r?.alt_description === 'string' ? r.alt_description : '',
+    typeof r?.description === 'string' ? r.description : '',
+    Array.isArray(r?.tags)
+      ? r.tags.map((t: any) => (typeof t?.title === 'string' ? t.title : '')).join(' ')
+      : '',
+  ];
+  return fields.some((f) => f && HERO_PEOPLE_CONTENT_RE.test(f));
+}
+
 async function tryUnsplashFallback(destination: string): Promise<DestinationImage | null> {
   const accessKey = Deno.env.get("UNSPLASH_ACCESS_KEY");
   if (!accessKey) return null;
@@ -410,7 +429,20 @@ async function tryUnsplashFallback(destination: string): Promise<DestinationImag
       return null;
     }
 
-    const best = qualityResults.sort((a: any, b: any) => (b.likes ?? 0) - (a.likes ?? 0))[0];
+    // Content guard — drop any result whose alt/description/tags read
+    // like a stock people/business shot. This is the primary fix for
+    // the "Budapest = two businessmen shaking hands" regression.
+    const safeResults = qualityResults.filter((r: any) => !isPeopleContentResult(r));
+    const dropped = qualityResults.length - safeResults.length;
+    if (dropped > 0) {
+      console.log(`[unsplash] content-guard dropped ${dropped}/${qualityResults.length} people/business results for "${destination}"`);
+    }
+    if (safeResults.length === 0) {
+      console.log(`[unsplash] all quality results blocked by content-guard for "${destination}" — returning null`);
+      return null;
+    }
+
+    const best = safeResults.sort((a: any, b: any) => (b.likes ?? 0) - (a.likes ?? 0))[0];
     const photographerName = best?.user?.name || "Unsplash";
     const photographerUrl = best?.user?.links?.html
       ? withUtm(best.user.links.html)

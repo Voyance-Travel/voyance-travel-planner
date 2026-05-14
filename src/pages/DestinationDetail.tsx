@@ -40,6 +40,7 @@ import { useIsSaved, useToggleSaveDestination } from '@/hooks/useSaveDestination
 import { toast } from 'sonner';
 import { formatEnumDisplay } from '@/utils/textFormatting';
 import { handleImageError } from '@/utils/imageFallback';
+import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
 import { useCachedDestinationImage } from '@/hooks/useCachedImage';
 import { useDestinationEnrichment } from '@/hooks/useDestinationEnrichment';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -149,8 +150,8 @@ export default function DestinationDetail() {
       description: dbDestination.description || '',
       timezone: dbDestination.timezone || '',
       currency: dbDestination.currency_code || '',
-      imageUrl: dbDestination.stock_image_url || '',
-      images: dbDestination.stock_image_url ? [dbDestination.stock_image_url] : [],
+      imageUrl: dbDestination.stock_image_url && !isUntrustedHeroUrl(dbDestination.stock_image_url) ? dbDestination.stock_image_url : '',
+      images: dbDestination.stock_image_url && !isUntrustedHeroUrl(dbDestination.stock_image_url) ? [dbDestination.stock_image_url] : [],
       climate: climateText || undefined,
       bestMonths,
       gettingAround: (dbDestination as any).getting_around || undefined,

@@ -7,6 +7,23 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Mirrors src/lib/heroUrlPolicy.ts — flag legacy Unsplash CDN seeds and
+// people/business stock-photo slugs (Budapest "two businessmen" regression).
+const HERO_PEOPLE_SLUG_RE =
+  /\b(businessman|businesswoman|business[-_]?(?:meeting|people|men|women)|handshake|board[-_]?meeting|office[-_]?meeting|conference[-_]?room|portrait|headshot|model[-_]?(?:photo|shoot)|crowd[-_]?of[-_]?people|group[-_]?of[-_]?people)\b/i;
+function isUntrustedHeroUrl(url?: string | null): boolean {
+  if (!url || typeof url !== 'string') return true;
+  const t = url.trim();
+  if (!t) return true;
+  if (/images\.unsplash\.com/i.test(t)) return true;
+  if (/source\.unsplash\.com/i.test(t)) return true;
+  if (HERO_PEOPLE_SLUG_RE.test(t)) return true;
+  return false;
+}
+function safeStockImage(url?: string | null): string | null {
+  return url && !isUntrustedHeroUrl(url) ? url : null;
+}
+
 // ─── SAFETY: Countries with active conflict, sanctions, or severe travel restrictions ───
 // Review quarterly. Covers US State Dept "Do Not Travel" + major sanction targets.
 const UNSAFE_DESTINATIONS: Record<string, string> = {
@@ -256,7 +273,7 @@ serve(async (req) => {
       bestTime: d.best_time_to_visit,
       costTier: d.cost_tier,
       knownFor: d.known_for,
-      image: d.stock_image_url,
+      image: safeStockImage(d.stock_image_url),
     }));
 
     // Call Lovable AI to suggest 3 destinations
@@ -426,7 +443,7 @@ Return EXACTLY 3 destinations as JSON. Pick different destinations than the prev
       );
       return {
         ...s,
-        image: destData?.stock_image_url || `https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80`,
+        image: safeStockImage(destData?.stock_image_url) || null,
         region: destData?.region || null,
       };
     });
