@@ -516,8 +516,10 @@ export interface EditorialItineraryProps {
   dateEditorCities?: Array<{ id: string; city_name: string; nights?: number }>;
   /** Travel intel cards passed from TripDetail */
   travelIntelCards?: React.ReactNode;
-  /** Trip health/completion panel passed from TripDetail */
-  tripHealthPanel?: React.ReactNode;
+  /** Trip health/completion panel factory. Receives final rendered days, not parent raw days. */
+  renderTripHealthPanel?: (days: EditorialDay[]) => React.ReactNode;
+  /** Number of trip cities for the mobile overview summary. */
+  cityCount?: number;
   /** Parent dispatches a request (with nonce) to refresh a specific day */
   refreshDayRequest?: { dayNumber: number; nonce: number } | null;
   /** Parent dispatches a deterministic timing-fix request for a day */
