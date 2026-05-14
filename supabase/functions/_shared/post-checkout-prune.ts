@@ -149,7 +149,20 @@ export function pruneNonLogisticsAfterAirportTransfer(
     if (DEPARTURE_ROLES.has(classify(a))) continue;
     if (isCheckoutRow(a)) continue;
     const s = parseHHMMToMin(a?.startTime || '');
-    if (s === null) continue;
+    if (s === null) {
+      // Timeless card on a day that has an airport-transfer card — drop it
+      // if it's dining. A meal with no parseable startTime always lands
+      // visually after the transfer at render time via dayChronoKey,
+      // regardless of upstream source (meal-guard residue, LLM hallucination,
+      // normalizeDays missing the anchor).
+      if (isDiningCard(a)) {
+        console.log(
+          `[POST_AIRPORT_PRUNE] day=${dayNumber} dropped timeless dining card "${a?.title || a?.name || '(unnamed)'}" (no parseable startTime)`,
+        );
+        toRemove.push(a);
+      }
+      continue;
+    }
     // Wrap-past-midnight: a 00:10 dinner after a 13:00 transfer is "after".
     const isPostMidnightWrap = s < 5 * 60 && transferStart > 12 * 60;
     if (s >= transferStart || isPostMidnightWrap) toRemove.push(a);
