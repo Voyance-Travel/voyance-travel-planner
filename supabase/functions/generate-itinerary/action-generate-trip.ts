@@ -58,6 +58,48 @@ export async function handleGenerateTrip(
     );
   }
 
+  // ── FROZEN TRIP GUARD ──
+  // Refuse to overwrite a trip whose itinerary has already been finalized
+  // (status ready/generated OR metadata.itinerary_frozen_at stamped, AND has
+  // any saved days). Without this, any stale tab/poller/retry can silently
+  // launch a second full generation that replaces the user's existing
+  // restaurants/activities/themes wholesale (Dublin pattern, 2026-05-14).
+  // Explicit user-initiated regeneration must opt in via
+  // `allowOverwriteFrozen: true`.
+  try {
+    const { data: frozenCheck } = await supabase
+      .from('trips')
+      .select('itinerary_status, itinerary_data, metadata')
+      .eq('id', tripId)
+      .maybeSingle();
+    const fStatus = String(frozenCheck?.itinerary_status || '');
+    const fMeta = (frozenCheck?.metadata as Record<string, any>) || {};
+    const fFrozenAt = fMeta?.itinerary_frozen_at;
+    const fDays = Array.isArray((frozenCheck?.itinerary_data as any)?.days)
+      ? (frozenCheck?.itinerary_data as any).days
+      : [];
+    const hasSavedContent = fDays.some(
+      (d: any) => Array.isArray(d?.activities) && d.activities.length > 0,
+    );
+    const isFrozen = (fFrozenAt || fStatus === 'ready' || fStatus === 'generated') && hasSavedContent;
+    if (isFrozen && params.allowOverwriteFrozen !== true) {
+      console.warn(
+        `[generate-trip] FROZEN guard: blocking overwrite of finalized trip ${tripId} (status=${fStatus}, frozenAt=${fFrozenAt || 'n/a'}, days=${fDays.length}). Pass allowOverwriteFrozen:true to override.`,
+      );
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'already_finalized',
+          message: 'Trip already finalized; overwrite blocked.',
+          blocked: 'frozen',
+        }),
+        { headers: jsonHeaders },
+      );
+    }
+  } catch (frozenErr) {
+    console.warn('[generate-trip] Frozen-guard probe failed (continuing):', frozenErr);
+  }
+
   // ── PERFORMANCE TIMER ──
   // Clean up stale in_progress log rows before creating a new one
   try {
