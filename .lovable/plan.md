@@ -1,67 +1,59 @@
-## Problem
+## What this issue actually is
 
-Budapest is rendering a generic stock photo of two businessmen shaking hands as its hero — zero connection to the city, country, or even travel. This is the worst hero regression seen in QA.
+A real restaurant card (e.g., "Katsukura Sanjo Honten") with **no `startTime`/`start_time`/`time`** at all is being persisted into `trips.itinerary_data` for the departure day. Because it has no time, `dayChronoKey` sort treats it as `-1` and parks it after every timed card — including the airport transfer — so the user sees a "floating Lunch" after they've already left for the airport.
 
-## Root-cause investigation (what I found)
+This isn't new. We've patched it many times (memory entries: *Validation Gate Logistics-Sequence Drop*, *Canonical Time Field Promotion*, *Departure-Day Final Enforcement §15z*, *Departure-Day Hotel-Return Strip*). The server pruner in `repair-day.ts §15z` is correct today — it drops untimed non-logistics non-locked cards on departure days regardless of category. The reason it still reproduces 14/14 is **not** a bug in §15z. It's that:
 
-Tracing every Budapest hero code path:
+1. **§15z doesn't run on every persist path.** It runs in `repair-day` (full repair), `action-save-itinerary` (STEP 2.65), the chain finalizer (`[CHAIN_DEPARTURE_NET]`), and `action-sync-tables` (`[SYNC_DEPARTURE_NET]`). Anything that writes `trips.itinerary_data` outside those four paths — chat-action executor sub-paths, optimistic patches, undo/redo, manual reorder — can land an untimed dining row that survives.
+2. **There is no read-time guard.** `itineraryParser.ts` Step 4b-pre only strips *hotel-return* cards on departure day. It does NOT strip generic untimed non-logistics cards. So even when §15z dropped the row server-side on a future write, an already-persisted legacy trip surfaces it on every page load — which is why the user sees it on existing reloaded trips.
 
-1. `trips.metadata.hero_image` for the Budapest trip (`4749ca8d…`) is **empty**.
-2. `destinations.hero_image_url` for Budapest is **NULL**.
-3. `destinations.stock_image_url` = `…/site-images/photo-budapest` — returns **HTTP 400** (object missing). Still consumed directly by `DestinationDetail.tsx` and `suggest-mystery-trips`.
-4. `curated_images` has **zero rows** with `entity_type='destination'` for Budapest.
-5. `CURATED_DESTINATION_IMAGES['budapest']` exists but is gated behind the empty `VERIFIED_CURATED` allowlist — `hasCuratedImages()` returns false.
-6. `CURATED_ONLY_DESTINATIONS` contains `'budapest'`, so the API service short-circuits to `[]` — the gradient should win.
+The user confirmed: time slot is **fully blank**, repros on **both fresh and reloaded**, wants a **targeted patch + universal read-time strip**.
 
-But `useTripHeroImage` lives next to `useDestinationImages`, `DestinationHeroImage`, `useHeroImage`, and a Cloud edge fn (`destination-images`) with an Unsplash fallback (`tryUnsplashFallback`) that queries `"${destination} landmark"`. Unsplash's relevance ranking will happily return a "business meeting in Budapest"-style photo when no landmark match is dominant. The curated-only guard prevents the call **only when the caller flows through `getDestinationImages`**; activity/hotel callers, the trip-card path, and any non-destination context that re-uses Budapest as a query string (hotel name, conference venue, etc.) bypass it. Cached results then poison `curated_images` for unrelated `entity_key`s and can leak into a hero render via stale lookup.
+## Fix
 
-The trust policy (`isUntrustedHeroUrl`) blocks `images.unsplash.com`/`source.unsplash.com` URLs at every read, but Unsplash now serves through `*.unsplash.com` raw URLs that don't always match the regex once the edge fn rewrites them. And nothing filters the **content** of an Unsplash result — just the host.
+Two layers, mirroring the pattern we already use for the hotel-return strip.
 
-## Plan
+### Layer 1 — Persist-boundary safety net (catches future writes)
 
-Three layers of defense + a ground-truth seed for Budapest. UI/data only — no backend orchestration changes.
+`safeUpdateItineraryData` is the single client write chokepoint. Add a deterministic, side-effect-free pre-write pass that, for the last day of every trip, drops any non-logistics, non-locked, non-userAdded/extracted/pinned card whose `startTime|start_time|time` is missing or unparseable. Reuses the same exemption rules as §15z (no scope creep — locked rows, user-added rows, `preserveAsManualPick` *with a valid time before cutoff*, and logistics rows are always kept).
 
-### 1. Ground-truth Budapest immediately
+Sentinel: `[PERSIST_DEPARTURE_UNTIMED_PRUNED] day=N count=K titles=…`.
 
-Insert a verified `curated_images` row for Budapest pointing at a stable Parliament/Chain Bridge image from our `destination-images` storage bucket (already has `chijpapurhdcqucrbg-p-7giitq.jpg` — Hungarian Parliament Building from Google Places cache):
+This closes the chat-action / optimistic-patch / undo-redo gap without auditing every caller.
 
-- `entity_type='destination'`, `entity_key='budapest'`, `destination='Budapest'`, `source='admin'`, `quality_score=1.0`, `vote_score=100`, `is_blacklisted=false`, `expires_at=NULL`.
-- Tier-1 DB cache hit will short-circuit every downstream resolver (`useTripHeroImage`, `useDestinationImages`, `DestinationHeroImage`, `useHeroImage`).
+### Layer 2 — Read-time strip in the parser (catches legacy persisted rows)
 
-Also clear the broken `destinations.stock_image_url` for Budapest (currently 400s) and set `destinations.hero_image_url` to the same admin-curated URL so `getDestinationCanonicalImage` returns it directly.
+In `src/utils/itineraryParser.ts` Step 4b-pre, after the existing departure-day hotel-return strip, run a second pass on the same `departureDayIdx` that drops untimed non-logistics, non-locked, non-userAdded cards. Same exemption shape as §15z. Pure UI strip, never written to DB.
 
-### 2. People/business content guard on Unsplash hero fallback
+Sentinel: `[itineraryParser] departure-day untimed strip day=N count=K`.
 
-In `supabase/functions/destination-images/index.ts::tryUnsplashFallback`, reject any candidate whose `alt_description`, `description`, or `tags[].title` contains banned terms when used as a **destination hero**:
+This is what makes the bug "never reproduce again" on already-persisted bad trips, including the 14/14 repros the user is looking at right now.
 
-`/\b(business|businessman|businesswoman|suit|handshake|meeting|office|conference|portrait|model|people|person|man|woman|crowd|group)\b/i`
+### Layer 3 — One-shot backfill
 
-Apply only when `imageType === 'hero'` and the request is destination-scoped (not activity/hotel). If all 5 candidates fail the guard, return null and let the deterministic gradient win.
+Run a SQL one-shot over `trips` where `metadata.itinerary_status ∈ ('ready','generated')` and the last day's JSON contains an untimed non-logistics row, dispatch through the standard `enforceDepartureDayLogistics` migration path so the on-disk JSON is clean for the affected trips. Same ring-buffer + persist-regression-guard rules apply.
 
-### 3. Tighten `isUntrustedHeroUrl` + extend to `stock_image_url`
+### Tests
 
-- Broaden `isUntrustedHeroUrl` to also flag any URL whose path slug matches the people-content regex above (defense-in-depth against an Unsplash result that already escaped layer 2 and got cached).
-- Add `isUntrustedHeroUrl` checks to the two surviving `stock_image_url` consumers (`DestinationDetail.tsx`, `suggest-mystery-trips/index.ts`) so a broken or future-bad value falls to the gradient instead of rendering blind.
+- `supabase/functions/_shared/__tests__/departure-day-combined.test.ts` — extend with a "real restaurant, category=cultural, no startTime, departure day" case.
+- New `src/utils/__tests__/itineraryParser.departureDayUntimedStrip.test.ts` — fixture with a Day-N untimed dining row + airport transfer; assert the row is filtered out and a `[BOOKEND_TRACE]`-style log fires.
+- New `src/lib/__tests__/safeUpdateItineraryData.departureUntimedPrune.test.ts` — assert the persist-boundary pass drops the row before write and preserves locked/userAdded rows.
 
-### 4. Save a memory entry
+### Memory
 
-`mem://constraints/visual/destination-hero-content-guard` documenting: (a) every destination hero MUST come from an admin-curated `curated_images` row when one exists, (b) Unsplash fallback content guard is mandatory and lives in `tryUnsplashFallback`, (c) `stock_image_url` consumers MUST run the trust policy.
+Update `mem://constraints/itinerary/canonical-time-field-promotion` (or create `mem://constraints/itinerary/departure-day-untimed-defense`) to record both new layers + the sentinels, and update the Core line in `mem://index.md`.
 
-## Files
+## Files to change
 
-- `supabase/migrations/<ts>_seed_budapest_hero.sql` — insert curated_images row, clear stock_image_url, set hero_image_url
-- `supabase/functions/destination-images/index.ts` — content guard in `tryUnsplashFallback`
-- `src/lib/heroUrlPolicy.ts` — extend `isUntrustedHeroUrl` with people-content slug regex
-- `src/pages/DestinationDetail.tsx` — gate `stock_image_url` through `isUntrustedHeroUrl`
-- `supabase/functions/suggest-mystery-trips/index.ts` — same gate
-- `mem://constraints/visual/destination-hero-content-guard` + `mem://index.md` (Core entry)
+- `supabase/functions/_shared/predawn-cascade-normalize.ts` — extract a small `pickStartMin` helper if not already shared (or reuse).
+- `src/lib/itinerary/safeUpdateItineraryData.ts` — add Layer 1 pass.
+- `src/utils/itineraryParser.ts` — add Layer 2 pass next to existing Step 4b-pre.
+- `mem://index.md` + new/updated constraint memory.
+- New tests above; extend existing departure-day combined test.
+- Backfill migration via `supabase--migration` (Layer 3) — runs the same enforcer SQL-side, gated by the persist-regression rules already in place.
 
 ## Out of scope
 
-- Re-curating other destinations en masse (only Budapest is the reported P1 — same pattern can be ground-truthed per-city as it surfaces).
-- Touching itinerary content, generation, payments, health engine.
-- Removing the hardcoded `CURATED_DESTINATION_IMAGES` map (still gated by empty allowlist; not the source of this bug).
-
-## Confidence note
-
-I could not reproduce the exact "two businessmen" image from the Budapest data on disk (every traced path lands on gradient), so the leak is most likely the unguarded Unsplash fallback or a stale `curated_images` row keyed under a different entity_key being matched by a fuzzy lookup elsewhere. The plan above closes both possibilities and ground-truths Budapest so the symptom cannot recur regardless of which path leaked.
+- No change to `enforceDepartureDayLogistics` itself (already correct).
+- No change to chat executor / optimistic patch internals — Layer 1 is the chokepoint, by design.
+- No telemetry-watching cleanup of the upstream `[DEPARTURE_UNTIMED_ACTIVITY_PRUNED]` mislabeled-category source. That's a separate generator-quality task; the fix above makes it harmless.
