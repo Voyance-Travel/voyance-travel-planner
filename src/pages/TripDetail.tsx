@@ -3725,7 +3725,8 @@ export default function TripDetail() {
                         }
                       }}
                     />
-                  )}
+                    );
+                  }}
                   onDaysChange={(updatedDays) => {
                     // Keep trip state in sync so ItineraryAssistant always sees current days
                     setTrip(prev => prev ? {
