@@ -1373,17 +1373,37 @@ export default function TripDetail() {
                 .select('itinerary_day_id, category, title, name, start_time, end_time')
                 .eq('trip_id', tripId);
               if (Array.isArray(rows)) {
-                // Dedupe per-day rows by (start|end|category|title) so the
-                // probe doesn't fire on artificially-inflated tables (the
-                // Casablanca pattern had ~10x duplicate transport rows).
-                const dedupeKey = (r: any) =>
-                  `${r.start_time || ''}|${r.end_time || ''}|${(r.category || '').toLowerCase()}|${(r.title || r.name || '').toLowerCase().trim()}`;
-                const isMealRow = (r: any) => {
+                // Dedupe per-day rows by category+title for "ritual" rows
+                // (Return to Hotel, Travel/Walk to <hotel>, Check-in,
+                // Freshen Up). These commonly accumulate identical rows
+                // with different timestamps across regenerations — every
+                // distinct timestamp would otherwise survive and inflate
+                // the per-day count, masking duplicates as legit "richer"
+                // content. Non-ritual rows still key on time so two real
+                // distinct activities at different times survive.
+                const RITUAL_RE = /^(return to|travel to|walk to|taxi to|metro to|bus to|train to|drive to|check[- ]?in|check[- ]?out|luggage drop|freshen up|head to)\b/i;
+                const isRitual = (r: any) => RITUAL_RE.test((r.title || r.name || '').trim());
+                const dedupeKey = (r: any) => {
                   const cat = (r.category || '').toLowerCase();
-                  if (/dining|restaurant|breakfast|brunch|lunch|dinner|cafe|food/.test(cat)) return true;
-                  const t = (r.title || r.name || '').toLowerCase();
-                  return /\b(breakfast|brunch|lunch|dinner|supper)\b/.test(t);
+                  const title = (r.title || r.name || '').toLowerCase().trim();
+                  if (isRitual(r)) return `ritual|${cat}|${title}`;
+                  return `${r.start_time || ''}|${r.end_time || ''}|${cat}|${title}`;
                 };
+                const MEAL_SLOT_RE = /\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/i;
+                const classifyMealSlot = (r: any): string | null => {
+                  const t = (r.title || r.name || '').toLowerCase();
+                  const m = MEAL_SLOT_RE.exec(t);
+                  if (m) return m[1].toLowerCase();
+                  const cat = (r.category || '').toLowerCase();
+                  if (!/dining|restaurant|cafe|food/.test(cat)) return null;
+                  // Time-based fallback for cards labeled only "dining"
+                  const hh = parseInt(String(r.start_time || '').slice(0, 2), 10);
+                  if (!Number.isFinite(hh)) return 'dining';
+                  if (hh < 11) return 'breakfast';
+                  if (hh < 15) return 'lunch';
+                  return 'dinner';
+                };
+                const isMealRow = (r: any) => classifyMealSlot(r) !== null;
                 const tableByDayId = new Map<string, { count: number; meals: number }>();
                 const seenByDay = new Map<string, Set<string>>();
                 for (const r of rows as any[]) {
