@@ -3662,10 +3662,11 @@ export default function TripDetail() {
                       </ErrorBoundary>
                     ) : null
                   }
-                  tripHealthPanel={
+                  cityCount={tripCities.length > 1 ? tripCities.length : 1}
+                  renderTripHealthPanel={(activeDays) => (
                     <TripHealthPanel
-                      days={editorDays}
-                      totalDaysExpected={(() => { const m = (trip?.metadata as Record<string, unknown>) || {}; const gen = (m.generation_total_days as number) || 0; return gen > 0 ? Math.max(gen, editorDays.length) : editorDays.length; })()}
+                      days={activeDays}
+                      totalDaysExpected={(() => { const m = (trip?.metadata as Record<string, unknown>) || {}; const gen = (m.generation_total_days as number) || 0; return gen > 0 ? Math.max(gen, activeDays.length) : activeDays.length; })()}
                       hasFlights={!!trip.flight_selection}
                       hasHotel={
                         !!trip.hotel_selection || 
@@ -3675,13 +3676,13 @@ export default function TripDetail() {
                           return !!hotel?.name;
                         })) ||
                         !!((trip?.metadata as any)?.accommodationNotes?.length) ||
-                        editorDays.some((d: any) => d.activities?.some((a: any) =>
+                        activeDays.some((d: any) => d.activities?.some((a: any) =>
                           a.category === 'hotel' || a.category === 'accommodation' ||
                           /check.?in/i.test(a.title || a.name || '')
                         ))
                       }
                       isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
-                      hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
+                      hasInterCityTransport={activeDays.some((d: any) => d.isTransitionDay)}
                       flightsBookedElsewhere={!!(trip?.metadata as any)?.flightsBookedElsewhere}
                       hotelBookedElsewhere={!!(trip?.metadata as any)?.hotelBookedElsewhere}
                       refreshingDayNumber={refreshingDayNumber}
@@ -3715,7 +3716,7 @@ export default function TripDetail() {
                         }
                       }}
                     />
-                  }
+                  )}
                   onDaysChange={(updatedDays) => {
                     // Keep trip state in sync so ItineraryAssistant always sees current days
                     setTrip(prev => prev ? {
