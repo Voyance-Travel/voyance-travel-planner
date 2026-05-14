@@ -138,40 +138,42 @@ export function normalizePredawnCascade<TAct extends Record<string, any> = any>(
   ctx: { dayNumber?: number | string; site?: string } = {},
 ): PredawnNormalizeResult<TAct> {
   const list = Array.isArray(activities) ? [...activities] : [];
-  if (dayIndex <= 0 || list.length === 0) {
+  if (list.length === 0) {
     return { activities: list, count: 0, shiftMin: 0, changed: false };
   }
 
-  let blockEndExclusive = 0;
+  // Walk the leading pre-dawn block. Bookend-source rows still break (the
+  // parser strips those separately and we don't shift the bookend itself).
+  // Locked/booked and departure-logistics rows are SKIPPED but don't end
+  // the walk — that way a single locked museum at 00:30 doesn't strand
+  // the rest of the morning at 03:26 / 06:31.
+  const shiftIdx: number[] = [];
+  let firstShiftStart: number | null = null;
   for (let i = 0; i < list.length; i++) {
     const a = list[i];
-    if (isBookendSourceLike(a) || isLockedLike(a) || isDepartureLogistics(a)) break;
+    if (isBookendSourceLike(a)) break;
     if (!isInPredawnWindow(a)) break;
-    blockEndExclusive = i + 1;
+    if (isLockedLike(a) || isDepartureLogistics(a)) continue;
+    shiftIdx.push(i);
+    if (firstShiftStart === null) firstShiftStart = pickStartMin(a);
   }
 
-  if (blockEndExclusive === 0) {
+  if (shiftIdx.length === 0 || firstShiftStart === null) {
     return { activities: list, count: 0, shiftMin: 0, changed: false };
   }
 
-  const firstStart = pickStartMin(list[0]);
-  if (firstStart === null) {
-    return { activities: list, count: 0, shiftMin: 0, changed: false };
-  }
-  const shiftMin = TARGET_FIRST_START_MIN - firstStart;
+  const shiftMin = TARGET_FIRST_START_MIN - firstShiftStart;
   if (shiftMin === 0) {
     return { activities: list, count: 0, shiftMin: 0, changed: false };
   }
 
-  const next: TAct[] = list.map((a, i) => {
-    if (i < blockEndExclusive) return shiftActivityTimes(a, shiftMin);
-    return a;
-  });
+  const shiftSet = new Set(shiftIdx);
+  const next: TAct[] = list.map((a, i) => (shiftSet.has(i) ? shiftActivityTimes(a, shiftMin) : a));
 
   // eslint-disable-next-line no-console
   console.log(
-    `[PREDAWN_CASCADE_NORMALIZE] day=${ctx.dayNumber ?? dayIndex + 1} site=${ctx.site || 'unknown'} count=${blockEndExclusive} shiftMin=${shiftMin >= 0 ? '+' : ''}${shiftMin}`,
+    `[PREDAWN_CASCADE_NORMALIZE] day=${ctx.dayNumber ?? dayIndex + 1} site=${ctx.site || 'unknown'} count=${shiftIdx.length} shiftMin=${shiftMin >= 0 ? '+' : ''}${shiftMin}`,
   );
 
-  return { activities: next, count: blockEndExclusive, shiftMin, changed: true };
+  return { activities: next, count: shiftIdx.length, shiftMin, changed: true };
 }
