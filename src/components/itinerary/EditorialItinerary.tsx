@@ -157,6 +157,7 @@ import { VoyancePickCallout } from './VoyancePickCallout';
 import { GuideBookmarkButton } from '@/components/guides/GuideBookmarkButton';
 import { TransitBadge } from './TransitBadge';
 import { TripDateEditor as TripDateEditorInline } from '@/components/trip/TripDateEditor';
+import { MobileTripOverview } from '@/components/trip/MobileTripOverview';
 import { TransitGapIndicator, computeGapMinutes, computeDeadGaps, formatDeadGap } from './TransitGapIndicator';
 import { DayRouteMap } from './DayRouteMap';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
