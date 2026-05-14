@@ -443,7 +443,7 @@ Return EXACTLY 3 destinations as JSON. Pick different destinations than the prev
       );
       return {
         ...s,
-        image: destData?.stock_image_url || `https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80`,
+        image: safeStockImage(destData?.stock_image_url) || null,
         region: destData?.region || null,
       };
     });
