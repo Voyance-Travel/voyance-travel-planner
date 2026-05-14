@@ -17,7 +17,7 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
   // Verify ownership and get start_date for date derivation
   const { data: trip } = await supabase
     .from('trips')
-    .select('user_id, itinerary_data, start_date')
+    .select('user_id, itinerary_data, start_date, flight_selection')
     .eq('id', tripId)
     .single();
   
@@ -46,6 +46,18 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
   if (days.length === 0) {
     return okJson({ success: true, synced: 0, message: "No days to sync" });
   }
+
+  // Resolve last-day departure time for the chain departure-day net.
+  const _flightSel = (trip.flight_selection as Record<string, any>) || null;
+  const _savedDepartureTime24: string | undefined =
+    _flightSel?.returnDepartureTime24 || _flightSel?.returnDepartureTime
+    || _flightSel?.return?.departureTime || _flightSel?.return?.departure?.time
+    || (Array.isArray(_flightSel?.legs) && _flightSel.legs.length > 0
+        ? _flightSel.legs[_flightSel.legs.length - 1]?.departure?.time
+        : undefined)
+    || undefined;
+
+  const totalDaysSync = days.length;
 
   let syncedActivities = 0;
   
