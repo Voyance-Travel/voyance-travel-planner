@@ -1404,7 +1404,7 @@ export default function TripDetail() {
                   return 'dinner';
                 };
                 const isMealRow = (r: any) => classifyMealSlot(r) !== null;
-                const tableByDayId = new Map<string, { count: number; meals: number }>();
+                const tableByDayId = new Map<string, { count: number; mealSlots: Set<string> }>();
                 const seenByDay = new Map<string, Set<string>>();
                 for (const r of rows as any[]) {
                   const id = r.itinerary_day_id;
@@ -1414,45 +1414,62 @@ export default function TripDetail() {
                   const k = dedupeKey(r);
                   if (seen.has(k)) continue;
                   seen.add(k);
-                  const cur = tableByDayId.get(id) || { count: 0, meals: 0 };
+                  const cur = tableByDayId.get(id) || { count: 0, mealSlots: new Set<string>() };
                   cur.count += 1;
-                  if (isMealRow(r)) cur.meals += 1;
+                  const slot = classifyMealSlot(r);
+                  if (slot) cur.mealSlots.add(slot);
                   tableByDayId.set(id, cur);
                 }
                 const { data: dayIdRows } = await supabase
                   .from('itinerary_days')
                   .select('id, day_number')
                   .eq('trip_id', tripId);
-                const tableByDayNumber = new Map<number, { count: number; meals: number }>();
+                const tableByDayNumber = new Map<number, { count: number; mealSlots: Set<string> }>();
                 for (const d of (dayIdRows || []) as Array<{ id: string; day_number: number }>) {
-                  tableByDayNumber.set(d.day_number, tableByDayId.get(d.id) || { count: 0, meals: 0 });
+                  tableByDayNumber.set(d.day_number, tableByDayId.get(d.id) || { count: 0, mealSlots: new Set<string>() });
                 }
-                const isJsonMealActivity = (a: any) => {
-                  const cat = String(a?.category || '').toLowerCase();
-                  if (/dining|restaurant|breakfast|brunch|lunch|dinner|cafe|food/.test(cat)) return true;
+                const classifyJsonMealSlot = (a: any): string | null => {
                   const t = String(a?.title || a?.name || '').toLowerCase();
-                  return /\b(breakfast|brunch|lunch|dinner|supper)\b/.test(t);
+                  const m = MEAL_SLOT_RE.exec(t);
+                  if (m) return m[1].toLowerCase();
+                  const cat = String(a?.category || '').toLowerCase();
+                  if (!/dining|restaurant|cafe|food/.test(cat)) return null;
+                  const hh = parseInt(String(a?.startTime || a?.start_time || '').slice(0, 2), 10);
+                  if (!Number.isFinite(hh)) return 'dining';
+                  if (hh < 11) return 'breakfast';
+                  if (hh < 15) return 'lunch';
+                  return 'dinner';
                 };
                 for (const d of (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>) {
                   const dn = d?.dayNumber;
                   if (!dn) continue;
                   const acts = Array.isArray(d.activities) ? d.activities : [];
                   const jsonCount = acts.length;
-                  const jsonMeals = acts.filter(isJsonMealActivity).length;
-                  const stats = tableByDayNumber.get(dn) || { count: 0, meals: 0 };
-                  // Trigger if EITHER the deduped activity count is 60% richer
-                  // OR the table has meal rows the JSON is missing entirely
-                  // (real Casablanca regression: JSON Day 2 = 4 activities w/
-                  // 0 meals, table = 6 activities including breakfast/lunch/
-                  // dinner — count ratio passes but meal coverage is lost).
+                  const jsonSlots = new Set<string>();
+                  for (const a of acts as any[]) {
+                    const s = classifyJsonMealSlot(a);
+                    if (s) jsonSlots.add(s);
+                  }
+                  const stats = tableByDayNumber.get(dn) || { count: 0, mealSlots: new Set<string>() };
                   const countDrift = stats.count >= 3 && jsonCount < stats.count * 0.6;
-                  const mealDrift = stats.meals > 0 && jsonMeals < stats.meals;
+                  // Slot-aware: only fire when the table has a meal SLOT
+                  // (breakfast/lunch/dinner) the JSON is entirely missing.
+                  // Two lunches at different times = NOT drift; one lunch
+                  // missing entirely = drift.
+                  const missingSlots: string[] = [];
+                  for (const slot of stats.mealSlots) {
+                    if (!jsonSlots.has(slot)) missingSlots.push(slot);
+                  }
+                  const mealDrift = missingSlots.length > 0;
                   if (countDrift || mealDrift) {
                     console.warn('[HEALTH_JSON_SPARSE_RESYNC]', {
                       tripId, day: dn,
-                      jsonCount, jsonMeals,
-                      tableCount: stats.count, tableMeals: stats.meals,
-                      reason: mealDrift ? (countDrift ? 'count+meals' : 'meals') : 'count',
+                      jsonCount,
+                      jsonSlots: Array.from(jsonSlots),
+                      tableCount: stats.count,
+                      tableSlots: Array.from(stats.mealSlots),
+                      missingSlots,
+                      reason: mealDrift ? (countDrift ? 'count+slots' : 'missing_slots') : 'count',
                     });
                     perDayDriftSuspected = true;
                   }
