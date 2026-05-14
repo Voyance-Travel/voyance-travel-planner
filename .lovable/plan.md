@@ -1,44 +1,48 @@
-**Short answer:** No — it fixes one trigger, but not the whole failure class.
+## Root cause
 
-**What I verified**
-- The old page-load `handleResumeGeneration()` auto-fire is gone: no `setTimeout(() => handleResumeGeneration...)` remains.
-- The two suspected blocks now log `NOT auto-resuming`, so that specific reload-time regeneration path is addressed.
-- The Dublin trip already shows the damage in the database: version history has the original Day 1/2/3 content as version 1, while the current saved itinerary is the later replacement version.
-- The backend regression guard blocked later smaller overwrite attempts, but it did not block the wholesale replacement because the replacement still looked “complete enough” by count/paid-count.
+Both Copenhagen and Dublin trips have `trips.metadata.hero_image = null`. The hero resolver chain in `useTripHeroImage` then calls `getDestinationCanonicalImage`, which only reads `destinations.hero_image_url` — and that column is **null for 2,219 of 2,246 destinations** (only 1 destination has it set).
 
-**Plan to actually fix the Dublin class of bug**
+The chain therefore skips canonical → skips hardcoded curated (allowlist intentionally empty) → skips DB curated_images (no rows for these cities) → falls through to the `destination-images` edge function, which is returning a heavyweight base64 AI-generated image (`ai-amalienborg-palace-…`) that frequently fails to render in time, so the user sees the deterministic gradient fallback (purple for Copenhagen, blue for Dublin — both seeded from the destination string).
 
-1. **Add a backend frozen-trip generation guard**
-   - In the `generate-trip` path, refuse to generate over a trip that has `metadata.itinerary_frozen_at` or status `ready/generated` plus non-empty itinerary days.
-   - Only allow overwrite when the request is explicitly user-initiated regeneration with a clear allow flag.
-   - This prevents any remaining frontend, poller, retry, or stale tab from silently launching a second full generation over a completed trip.
+Meanwhile `destinations.stock_image_url` IS populated for both cities and points at the internal `site-images` bucket (HTTP 200, real JPEG). It's been sitting there unused.
 
-2. **Stop page-load sparse rebuild from bypassing the frozen gate**
-   - The `recovery-rebuild-sparse-json` path currently passes `allowFrozenWrite: true` and `allowReduction: true` from `TripDetail.tsx`.
-   - Change it so frozen/ready trips do not persist rebuilt JSON on load.
-   - If table/JSON drift is detected, show a recovery banner or read-only resync from canonical DB state, but do not write automatically.
+## Fix
 
-3. **Strengthen the persist guard from “no shrink” to “no identity swap”**
-   - Extend `persistTripItinerary` to compare old vs incoming activity identity overlap per day.
-   - Block writes where a healthy existing itinerary is replaced by a materially different set of restaurants/activities/themes, even if the new version has similar activity counts.
-   - Log this as an `identity_replacement_blocked` rejected attempt and skip normalized table/cost sync for the rejected payload.
+### 1. Resolver: consult `stock_image_url` as a canonical fallback
 
-4. **Remove misleading stalled copy**
-   - The stalled UI currently says “Attempting to resume automatically” even though auto-resume should no longer happen.
-   - Change it to say the trip is paused/stalled and requires the user to click `Retry manually`.
+Update `getDestinationCanonicalImage` (`src/services/destinationImagesAPI.ts`) to select both `hero_image_url` and `stock_image_url`, return the first that passes `isUntrustedHeroUrl`. Single query, no extra round-trip.
 
-5. **Add regression tests around this exact failure mode**
-   - Test that ready/frozen trips cannot be overwritten by `generate-trip` unless explicitly user-regenerated.
-   - Test that a same-size but different-content itinerary is blocked by the identity guard.
-   - Test that page-load sparse rebuild does not write when frozen.
+```ts
+.select('hero_image_url, stock_image_url')
+```
 
-6. **Repair the affected Dublin trip after the guard lands**
-   - Restore version 1 from `itinerary_versions` for trip `f13e2300-2049-4ce2-9bb8-c773dd15a2e7`, preserving the fixed departure-day cleanup where applicable.
-   - Re-sync costs from the restored itinerary so itinerary header and Payments tab agree.
+Order: `hero_image_url` first (admin-curated), `stock_image_url` second (seeded). Both go through the existing trust policy gate in `useTripHeroImage`.
 
-**Acceptance checks**
-- Hard refresh Dublin: no `generate-itinerary` `generate-trip` call fires.
-- The itinerary content remains stable across reloads.
-- Same-size different-content save attempts are blocked and recorded under rejected attempts.
-- Stalled UI no longer claims automatic resume.
-- Payments total reflects the canonical itinerary after restoration.
+### 2. One-shot backfill migration
+
+Promote `stock_image_url` → `hero_image_url` for the 2,219 affected rows so future reads short-circuit on the first column and other consumers (admin tools, future per-destination pages) also benefit:
+
+```sql
+UPDATE destinations
+SET hero_image_url = stock_image_url
+WHERE hero_image_url IS NULL
+  AND stock_image_url LIKE '%/storage/v1/object/public/site-images/%';
+```
+
+Trusted-host filter mirrors the runtime policy so we don't promote any legacy Unsplash URLs.
+
+### 3. Memory entry
+
+Add `mem://constraints/visual/destination-canonical-stock-fallback` capturing: canonical resolver MUST consult `stock_image_url` when `hero_image_url` is null; backfill keeps both columns in sync; never resurrect Unsplash hosts via this path.
+
+## Out of scope (intentionally not changing)
+
+- The `destination-images` edge function's AI-generation behavior — leave it as the last-resort tier; once tiers 1–4 have real coverage it will be cold-pathed.
+- `VERIFIED_CURATED` allowlist — staying empty per existing memory.
+- The reload-overwrite work from prior turns (Dublin v1 restore still pending separate confirmation) — independent issue.
+
+## Acceptance
+
+- Copenhagen trip `61102b44-…` and Dublin trip `f13e2300-…` render the seeded `site-images` JPEG on next visit (no purple/blue gradient).
+- `SELECT count(*) FROM destinations WHERE hero_image_url IS NULL` drops from 2,245 → ~27.
+- No code path persists an `images.unsplash.com` URL into `hero_image_url` (write-back guard in `writeBackDestinationCanonicalImage` already enforces this).
