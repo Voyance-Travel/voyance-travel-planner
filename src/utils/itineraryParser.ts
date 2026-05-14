@@ -882,11 +882,10 @@ export function parseItineraryDays(
   // chokepoint. Self-heals legacy persisted trips by moving an untagged
   // pre-dawn head row on Day N+1 back to Day N's tail when Day N ended late
   // (≥22:00). See mem://constraints/itinerary/day1-past-midnight-no-day2-cascade.
-  let crossDayResult = result;
   try {
     const guarded = assertNoCrossDayBleed(result, { site: 'parser-step4a' });
     if (guarded.changed) {
-      crossDayResult = guarded.days as typeof result;
+      result = guarded.days as typeof result;
     }
   } catch (e) {
     console.warn('[itineraryParser] cross-day bleed guard failed (non-blocking):', e);
