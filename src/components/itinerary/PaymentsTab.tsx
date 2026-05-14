@@ -9,6 +9,7 @@ import { getAppUrl } from '@/utils/getAppUrl';
 
 import { usePayableItems, type PayableItem } from '@/hooks/usePayableItems';
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
+import { useDisplayedTripTotal } from '@/hooks/useDisplayedTripTotal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { JourneySpendingSummary } from './JourneySpendingSummary';
 import { FirstUseHint } from './FirstUseHint';
