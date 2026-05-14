@@ -273,7 +273,7 @@ serve(async (req) => {
       bestTime: d.best_time_to_visit,
       costTier: d.cost_tier,
       knownFor: d.known_for,
-      image: d.stock_image_url,
+      image: safeStockImage(d.stock_image_url),
     }));
 
     // Call Lovable AI to suggest 3 destinations
