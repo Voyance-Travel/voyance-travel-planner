@@ -1,44 +1,24 @@
-## Root cause
+## Plan
 
-The underlying `activity_costs` rows for the reported trips already include Day-0 hotel costs correctly:
+Fix the post-airport hotel-return regression by adding a focused departure-day scrub instead of relying only on prevention.
 
-```text
-Casablanca: Days $812 + Hotel $525 = $1,337
-Kyoto:      Days $524 + Hotel $1,100 = $1,624
-Osaka:      Days $652 + Hotel $1,360 = $2,012
-Amsterdam:  Days $804 + Hotel $290 = $1,094
-Sapporo:    Days $876 + Hotel $500 = $1,376
-```
+1. **Add a shared frontend detector**
+   - Identify generated hotel-return/bookend cards by `source`, `tags`, read-time id prefix, accommodation category + return/wind-down title, and the exact “wind down (overnight)” description shape.
+   - Identify departure terminals using the existing flight / airport / terminal / station / checkout signals.
 
-The remaining bug is in the frontend header: the detailed equation row has a defensive balancing helper, but the big top-line `Trip Total` number still renders from `financialSnapshot.tripTotalCents` directly. So in the stale/undercounted state the small equation can imply `Days + Hotel`, while the main header still shows the days-only snapshot.
+2. **Strip impossible departure-day hotel returns at parse time**
+   - In `parseItineraryDays`, after departure-day detection and before returning parsed days, remove non-locked hotel-return/bookend cards from the detected departure day.
+   - This directly covers the observed Osaka / Amsterdam / Sapporo shape: a `bookend-overnight` “Return to hotel” at ~13:55 after an airport transfer.
+   - Keep locked/user/manual/extracted/pinned hotel rows untouched.
 
-## Fix plan
+3. **Harden editor-side synthetic departure filters**
+   - In `EditorialItinerary`, replace the current narrow read-time-bookend checks with the same detector so generic accommodation “Return to hotel / wind down at hotel” rows are removed when a final departure card is inserted.
+   - This handles cases where the card did not carry the expected `bookend-*` source/tag metadata.
 
-1. **Make the header use one computed value**
-   - Compute the header strip values once in `EditorialItinerary` near the existing financial snapshot/day subtotal logic.
-   - Use `displayedTripTotalUsd` from that helper for both:
-     - the large top-line `Trip Total`
-     - the right-hand `Trip Total` in the equation row
-   - Keep the financial snapshot as the source of truth underneath; this is a display reconciliation for visible math only.
+4. **Add regression coverage**
+   - Add/extend frontend tests for `parseItineraryDays` or `ensureHotelReturnBookend` showing a final day with checkout + airport transfer + ~13:55 “Return to Hotel … wind down (overnight)” returns without that card.
+   - Include a non-departure control so legitimate end-of-day hotel returns still appear on normal days.
 
-2. **Remove duplicate inline equation math**
-   - Stop recomputing `computeHeaderStripValues` inside the JSX block.
-   - Reuse the single computed object so the headline and equation cannot diverge again.
-
-3. **Tighten the helper contract**
-   - Add/adjust unit coverage for the exact failure mode: `financialSnapshot.tripTotal = days`, `hotelChip > 0`, and both header displays must equal `days + hotel`.
-   - Preserve the existing behavior for reserve/adjustments and no-hotel trips.
-
-4. **Add a regression guard in the component path**
-   - Add a focused test or lightweight extraction so the UI-level derivation proves the large header and equation RHS use the same value.
-   - This prevents future edits from “fixing” the equation strip while leaving the top-line total wrong.
-
-## Expected result
-
-For every city, when the header shows:
-
-```text
-Days + Hotel = Trip Total
-```
-
-the large `Trip Total` number and the equation `Trip Total` number will both include the hotel and show the same total.
+5. **Validate only the targeted path**
+   - Run the focused test file(s) for the parser/bookend logic.
+   - No database migration is needed; this is a frontend display/scrub fix.

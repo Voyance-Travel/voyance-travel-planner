@@ -1861,6 +1861,22 @@ export function EditorialItinerary({
             aTags.includes('bookend-readtime') || aTags.includes('bookend-overnight');
           if (isReadTimeBookend) return false;
 
+          // Drop ANY "Return to / head back to / wind down at" hotel row on
+          // departure day, regardless of source/tag metadata. The traveler
+          // is leaving the city — these never belong here.
+          const titleStr = String(act.title || (act as any).name || '');
+          const descStr = String((act as any).description || '');
+          const isProtectedRow = (act as any).isLocked === true || (act as any).is_locked === true ||
+            (act as any).locked === true ||
+            ['user', 'manual', 'extracted', 'pinned'].includes(String((act as any).source || '').toLowerCase());
+          if (!isProtectedRow) {
+            const RETURN_VERB = /\b(?:return\s+to|back\s+(?:to|at)|head\s+back\s+to|wind\s+down\s+at|retire\s+to|end\s+of\s+day\s+at)\b/i;
+            const HOTEL_NOUN = /\b(?:hotel|hostel|inn|resort|lodge|ryokan|riad|marriott|hilton|hyatt|ritz|four\s*seasons|st\.?\s*regis|peninsula|aman|belmond|cipriani|gritti|kempinski|rosewood|mandarin|raffles|bvlgari|bulgari|conrad|edition|sofitel|fairmont|shangri|intercontinental|westin|sheraton|nobu|your\s+hotel)\b/i;
+            if (RETURN_VERB.test(titleStr) && (HOTEL_NOUN.test(titleStr) || /wind\s+down\s+\(overnight\)/i.test(descStr))) {
+              return false;
+            }
+          }
+
           // Keep all synthetic cards (transport, hotel, etc.)
           if ((act as any).__syntheticTravel || (act as any).__syntheticDeparture ||
               (act as any).__interCityTransport || (act as any).__hotelCheckout ||
@@ -2107,6 +2123,21 @@ export function EditorialItinerary({
               aSource === 'bookend-readtime' || aSource === 'bookend-overnight' ||
               aTags.includes('bookend-readtime') || aTags.includes('bookend-overnight');
             if (isReadTimeBookend) return false;
+
+            // Drop ANY persisted "Return to / wind down at" hotel row on
+            // departure day, even when bookend metadata is missing.
+            const titleStr2 = String(act.title || (act as any).name || '');
+            const descStr2 = String((act as any).description || '');
+            const isProtectedRow2 = (act as any).isLocked === true || (act as any).is_locked === true ||
+              (act as any).locked === true ||
+              ['user', 'manual', 'extracted', 'pinned'].includes(String((act as any).source || '').toLowerCase());
+            if (!isProtectedRow2) {
+              const RETURN_VERB2 = /\b(?:return\s+to|back\s+(?:to|at)|head\s+back\s+to|wind\s+down\s+at|retire\s+to|end\s+of\s+day\s+at)\b/i;
+              const HOTEL_NOUN2 = /\b(?:hotel|hostel|inn|resort|lodge|ryokan|riad|marriott|hilton|hyatt|ritz|four\s*seasons|st\.?\s*regis|peninsula|aman|belmond|cipriani|gritti|kempinski|rosewood|mandarin|raffles|bvlgari|bulgari|conrad|edition|sofitel|fairmont|shangri|intercontinental|westin|sheraton|nobu|your\s+hotel)\b/i;
+              if (RETURN_VERB2.test(titleStr2) && (HOTEL_NOUN2.test(titleStr2) || /wind\s+down\s+\(overnight\)/i.test(descStr2))) {
+                return false;
+              }
+            }
 
             if ((act as any).__syntheticFinalDeparture || (act as any).__syntheticTravel ||
                 (act as any).__syntheticDeparture || (act as any).__interCityTransport ||
