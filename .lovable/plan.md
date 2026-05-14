@@ -1,24 +1,38 @@
-## Plan
+## Plan: make Trip Health reflect the active itinerary, not stale/raw data
 
-Fix the post-airport hotel-return regression by adding a focused departure-day scrub instead of relying only on prevention.
+### Root cause to fix
+The rendered itinerary and the health panel are not using the same final day array.
 
-1. **Add a shared frontend detector**
-   - Identify generated hotel-return/bookend cards by `source`, `tags`, read-time id prefix, accommodation category + return/wind-down title, and the exact “wind down (overnight)” description shape.
-   - Identify departure terminals using the existing flight / airport / terminal / station / checkout signals.
+- `TripDetail` passes `editorDays` from `parseEditorialDays(...)` into `TripHealthPanel`.
+- `EditorialItinerary` then transforms those days again for display: it injects/removes synthetic departure cards, strips departure-day hotel returns, trims post-departure activities, relabels hotel logistics, and applies local timing/display changes.
+- Because `tripHealthPanel` is rendered as a child prop that was created in `TripDetail`, it scores the parent’s pre-display `editorDays`, not the active `days` array inside `EditorialItinerary` that the user is actually seeing.
+- That explains all three symptoms: missing meals from stale/sparse day objects, overlap warnings from raw timestamps that no longer match the visible schedule, and departure-day light-schedule warnings that ignore display-side departure/trim logic.
 
-2. **Strip impossible departure-day hotel returns at parse time**
-   - In `parseItineraryDays`, after departure-day detection and before returning parsed days, remove non-locked hotel-return/bookend cards from the detected departure day.
-   - This directly covers the observed Osaka / Amsterdam / Sapporo shape: a `bookend-overnight` “Return to hotel” at ~13:55 after an airport transfer.
-   - Keep locked/user/manual/extracted/pinned hotel rows untouched.
+### Implementation
+1. **Move health input to the rendered itinerary state**
+   - Replace the current `tripHealthPanel` React-node prop pattern with a render callback or equivalent prop that receives `EditorialItinerary`’s final `days` array.
+   - Render `TripHealthPanel` inside `EditorialItinerary` using that final `days` array.
+   - Keep both mobile and desktop versions using the same active-day source.
 
-3. **Harden editor-side synthetic departure filters**
-   - In `EditorialItinerary`, replace the current narrow read-time-bookend checks with the same detector so generic accommodation “Return to hotel / wind down at hotel” rows are removed when a final departure card is inserted.
-   - This handles cases where the card did not carry the expected `bookend-*` source/tag metadata.
+2. **Stop local health warnings from inventing policy on partial/stale data**
+   - Treat missing-meal checks as advisory only when persisted policy is missing or when the day is first/last with ambiguous travel context.
+   - If the currently rendered day visibly has breakfast/lunch/dinner, no missing-meal warning should fire even if metadata is stale.
+   - Keep the backend meal guard as the source of truth for real enforcement.
 
-4. **Add regression coverage**
-   - Add/extend frontend tests for `parseItineraryDays` or `ensureHotelReturnBookend` showing a final day with checkout + airport transfer + ~13:55 “Return to Hotel … wind down (overnight)” returns without that card.
-   - Include a non-departure control so legitimate end-of-day hotel returns still appear on normal days.
+3. **Make timing warnings match rendered times or disappear**
+   - Ensure the health engine compares the same visible start/end fields used by itinerary cards.
+   - If a timing conflict is resolvable by the cascade preview, suppress it completely instead of showing “Auto-resolves on save.”
+   - If timing data is incomplete or ambiguous, skip the warning rather than lowering the score.
 
-5. **Validate only the targeted path**
-   - Run the focused test file(s) for the parser/bookend logic.
-   - No database migration is needed; this is a frontend display/scrub fix.
+4. **Silence departure-day noise**
+   - Departure days with checkout/airport-transfer/final-departure cards should not get “light schedule” warnings.
+   - Last-day schedules should be scored leniently unless there is a real visible conflict.
+
+5. **Add regression coverage**
+   - Add tests for the Sapporo-style case: rendered schedule has a clean 15-minute gap but raw/pre-display data would have produced a conflict.
+   - Add tests that final departure days with breakfast + airport transfer do not get light-schedule or missing-meal warnings.
+   - Add a test proving the health panel receives transformed/rendered days, not the stale parent `editorDays`.
+
+6. **Fallback if still noisy**
+   - If a health issue cannot be proven against the active rendered itinerary, do not display it.
+   - Completion/checklist can remain, but noisy health deductions should be suppressed rather than continuing to waste user attention.
