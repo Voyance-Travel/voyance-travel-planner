@@ -284,22 +284,49 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
       .map((a: any, idx: number) => ({ a, idx }))
       .filter(({ a, idx }) =>
         (getDisplayStartTime(a, cascadePreview, idx)) && (getDisplayEndTime(a, cascadePreview, idx)))
-      .filter(({ a }) => (a.dayNumber ?? a.day_number ?? dayNum) === dayNum)
+      // Day-boundary guard: keep rows whose dayNumber matches; allow truly
+      // untagged rows; drop rows tagged for a different day (parser leak path
+      // — Budapest #1 surfaced "venues that weren't even on that day"). Log
+      // any drop so we can trace the upstream parser leak.
+      .filter(({ a }) => {
+        const tagged = a?.dayNumber ?? a?.day_number;
+        if (tagged === undefined || tagged === null) return true;
+        if (tagged === dayNum) return true;
+        if (typeof console !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.warn('[HEALTH_CROSS_DAY_LEAK]', {
+            day: dayNum,
+            taggedDay: tagged,
+            title: a?.name || a?.title,
+          });
+        }
+        return false;
+      })
       // Drop hotel-return bookends — they're decorative and routinely wrap
       // past midnight; should never anchor a buffer/overlap warning.
       .filter(({ a }) => !isHotelReturn(a))
       .map(({ a, idx }) => {
-        const startStr = getDisplayStartTime(a, cascadePreview, idx);
-        const endStr = getDisplayEndTime(a, cascadePreview, idx);
+        // Cascade-preview times power overlap detection + suppression. The
+        // user-facing warning text echoes the SAME times rendered on the
+        // card (no cascade map) so the message never disagrees with what
+        // the user sees. Closes Copenhagen "card 20:50 / warning 21:50"
+        // pattern — root cause: dry-run cascade reshuffled times the user
+        // hadn't saved yet.
+        const cascadedStart = getDisplayStartTime(a, cascadePreview, idx);
+        const cascadedEnd = getDisplayEndTime(a, cascadePreview, idx);
+        const renderedStart = getDisplayStartTime(a, undefined, idx);
+        const renderedEnd = getDisplayEndTime(a, undefined, idx);
         return {
           source: a,
           sourceIdx: idx,
           name: a.name || a.title,
           category: a.category,
-          start: parseTime(startStr),
-          end: parseTime(endStr),
-          startStr: String(startStr),
-          endStr: String(endStr),
+          start: parseTime(cascadedStart),
+          end: parseTime(cascadedEnd),
+          startStr: String(renderedStart || cascadedStart),
+          endStr: String(renderedEnd || cascadedEnd),
+          cascadedStartStr: String(cascadedStart),
+          cascadedEndStr: String(cascadedEnd),
         };
       })
       .filter((a: { start: number; end: number }) => a.start > 0 || a.end > 0)
@@ -383,8 +410,20 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
     };
 
     for (let i = 0; i < timed.length - 1; i++) {
-      if (timed[i].end > timed[i + 1].start) {
-        const overlap = timed[i].end - timed[i + 1].start;
+      // Primary overlap signal: rendered times the user actually sees.
+      // Without this, a dry-run cascade that shifts a card forward could
+      // synthesize an overlap on times that DON'T actually conflict on
+      // screen (Copenhagen pattern).
+      const renderedLeftEnd = parseTime(timed[i].endStr);
+      const renderedRightStart = parseTime(timed[i + 1].startStr);
+      const renderedOverlaps = renderedLeftEnd > renderedRightStart;
+      const cascadeOverlaps = timed[i].end > timed[i + 1].start;
+      if (!renderedOverlaps && !cascadeOverlaps) continue;
+      if (renderedOverlaps || cascadeOverlaps) {
+        const overlap = Math.max(
+          renderedLeftEnd - renderedRightStart,
+          timed[i].end - timed[i + 1].start,
+        );
         const transitInvolved =
           isTransitLike(timed[i].category, timed[i].name) ||
           isTransitLike(timed[i + 1].category, timed[i + 1].name);
@@ -401,11 +440,15 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           continue;
         }
 
+        // Bonus suppression: rendered times don't overlap, only cascade does
+        // — that's a dry-run artifact the user can't see; never warn.
+        if (!renderedOverlaps && cascadeOverlaps) continue;
+
         issues.push({
           id: `conflict-day-${dayNum}-${i}`,
           severity: transitInvolved ? 'warning' : 'error',
           message: transitInvolved
-            ? `Day ${dayNum}: Tight transition — "${timed[i].name}" (${timed[i].startStr}–${timed[i].endStr}) runs into "${timed[i + 1].name}" (${timed[i + 1].startStr}–${timed[i + 1].endStr}). Auto-resolves on save.`
+            ? `Day ${dayNum}: Tight transition — "${timed[i].name}" (${timed[i].startStr}–${timed[i].endStr}) runs into "${timed[i + 1].name}" (${timed[i + 1].startStr}–${timed[i + 1].endStr}).`
             : `Day ${dayNum}: "${timed[i].name}" (${timed[i].startStr}–${timed[i].endStr}) overlaps with "${timed[i + 1].name}" (${timed[i + 1].startStr}–${timed[i + 1].endStr}) — ${overlap} min conflict`,
           fixLabel: 'Fix timing',
           fixAction: 'fix_timing',
@@ -730,7 +773,12 @@ export function TripHealthPanel({
     }
 
     // Health analysis
-    const rawIssues = analyzeHealth(days, { tripFlightSelection });
+    const rawIssuesAll = analyzeHealth(days, { tripFlightSelection });
+    // Dedupe by id — guards against an upstream double-emit bumping the
+    // visible count (Budapest "2 issues → 3 issues" flicker).
+    const rawIssues = Array.from(
+      new Map(rawIssuesAll.map((i) => [i.id, i])).values()
+    );
     // Suppress local timing/buffer issues for any day where the latest server
     // re-check returned zero issues — otherwise the panel says "no issues" in
     // the badge while still showing the stale red line.
@@ -765,11 +813,10 @@ export function TripHealthPanel({
   // Errors commit immediately (user-actionable). Warnings only commit after
   // the same set of issue IDs has been observed for 600ms — eliminates
   // phantom "1 issue" badges from optimistic edits and partial hydration.
-  const [stableIssues, setStableIssues] = useState<HealthIssue[]>(() =>
-    rawHealthIssues.filter((i) => i.severity === 'error'),
-  );
+  const [stableIssues, setStableIssues] = useState<HealthIssue[]>(() => rawHealthIssues);
   const soakTimerRef = useRef<number | null>(null);
   const lastSignatureRef = useRef<string>('');
+  const initialCommitRef = useRef<boolean>(true);
 
   useEffect(() => {
     const errors = rawHealthIssues.filter((i) => i.severity === 'error');
@@ -782,6 +829,17 @@ export function TripHealthPanel({
     if (soakTimerRef.current) {
       window.clearTimeout(soakTimerRef.current);
       soakTimerRef.current = null;
+    }
+
+    // First-paint free pass: commit errors AND warnings synchronously so the
+    // initial score doesn't visibly drop 600ms later (Budapest "77 → 74"
+    // flicker). The soak only kicks in for SUBSEQUENT signature changes,
+    // which is the original purpose (suppress phantom warnings from
+    // optimistic edits + partial hydration mid-session).
+    if (initialCommitRef.current) {
+      initialCommitRef.current = false;
+      setStableIssues([...errors, ...warnings]);
+      return;
     }
 
     // Commit errors immediately, drop stale warnings while soak is pending
