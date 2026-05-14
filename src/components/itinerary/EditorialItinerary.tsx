@@ -2192,6 +2192,11 @@ export function EditorialItinerary({
     });
   }, [rawDays, flightSelection]);
 
+  const activeTripHealthPanel = useMemo(
+    () => renderTripHealthPanel?.(days) ?? null,
+    [renderTripHealthPanel, days],
+  );
+
   // Compute expected total days from start/end dates so we can show placeholders during generation
   const expectedTotalDays = useMemo(() => {
     if (!startDate || !endDate) return days.length;
@@ -6090,7 +6095,26 @@ export function EditorialItinerary({
               />
             )}
 
-             {/* ── Unified Trip Command Center — hidden in clean preview ── */}
+              {!isCleanPreview && (activeTripHealthPanel || travelIntelCards) && (
+                <div className="sm:hidden">
+                  <MobileTripOverview
+                    tripHealthPanel={activeTripHealthPanel}
+                    travelIntelCards={travelIntelCards}
+                    daysPlanned={days.filter((d: any) => {
+                      const acts = d.activities || [];
+                      return acts.some((a: any) => {
+                        const cat = (a.category || a.type || '').toLowerCase();
+                        return !['check-in', 'check-out', 'hotel', 'accommodation'].includes(cat);
+                      });
+                    }).length}
+                    totalDays={days.length}
+                    cityCount={cityCount}
+                    tripId={tripId}
+                  />
+                </div>
+              )}
+
+              {/* ── Unified Trip Command Center — hidden in clean preview ── */}
              {!isCleanPreview && <div data-tour="value-header" className="rounded-xl border border-border bg-card overflow-hidden">
 
               {/* ROW 1: Trip Total + Currency Toggle + Meta */}
@@ -6574,7 +6598,7 @@ export function EditorialItinerary({
               )}
 
               {/* ROW 4: Trip Completion (collapsible) */}
-              {tripHealthPanel && (
+              {activeTripHealthPanel && (
                 <Collapsible>
                   <CollapsibleTrigger className="w-full px-4 sm:px-6 py-3 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors border-b border-border/50">
                     <div className="flex items-center gap-2">
@@ -6585,7 +6609,7 @@ export function EditorialItinerary({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="p-3 sm:p-4">
-                      {tripHealthPanel}
+                      {activeTripHealthPanel}
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
