@@ -888,6 +888,59 @@ export function parseItineraryDays(
     // eslint-disable-next-line no-console
     console.log(`[BOOKEND_TRACE] day=${departureDayIdx + 1} site=parse action=fallback reason=last_day_departure_default`);
   }
+  // Step 4b-pre: STRIP any persisted hotel-return / "wind down at hotel"
+  // cards from the detected departure day. The traveler is leaving the city —
+  // a "Return to {hotel}" / "Head back to … wind down (overnight)" row after
+  // the airport transfer (or anywhere on departure day) is always wrong.
+  // ensureHotelReturnBookend prevents NEW injections on departure days but
+  // cannot remove rows already persisted to DB by earlier broken passes.
+  // This is the closure for the recurring Osaka / Amsterdam / Sapporo leak.
+  // Locked / user / manual / extracted / pinned rows are NEVER stripped.
+  if (departureDayIdx >= 0 && result[departureDayIdx]) {
+    const dayActs = result[departureDayIdx].activities || [];
+    const isProtected = (a: any): boolean => {
+      if (!a) return false;
+      if (a.is_locked === true || a.isLocked === true || a.locked === true) return true;
+      if (a.lock_state === 'locked') return true;
+      const src = String(a.source || '').toLowerCase();
+      return ['user', 'manual', 'extracted', 'pinned'].includes(src);
+    };
+    const RETURN_VERB_RE =
+      /\b(?:return\s+to|back\s+(?:to|at)|head\s+back\s+to|wind\s+down\s+at|retire\s+to|end\s+of\s+day\s+at)\b/i;
+    const HOTEL_NOUN_RE =
+      /\b(?:hotel|hostel|inn|resort|lodge|ryokan|riad|marriott|hilton|hyatt|ritz|four\s*seasons|st\.?\s*regis|peninsula|aman|belmond|cipriani|gritti|danieli|kempinski|rosewood|mandarin|raffles|bvlgari|bulgari|conrad|edition|sofitel|fairmont|shangri|intercontinental|westin|sheraton|nobu|your\s+hotel)\b/i;
+    const WIND_DOWN_OVERNIGHT_RE = /wind\s+down\s+\(overnight\)/i;
+    const isStrippableHotelReturn = (a: any): boolean => {
+      if (!a || isProtected(a)) return false;
+      const src = String(a.source || '').toLowerCase();
+      const tags: string[] = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
+      // Synthetic bookend rows always strippable on departure day.
+      if (/^(bookend-readtime|bookend-overnight|bookend-validator|bookend-synthesized|late_nightlife_bookend)$/i.test(src)) return true;
+      if (tags.some((t) => /^(bookend-readtime|bookend-overnight|bookend-validator|bookend-synthesized|late_nightlife_bookend)$/i.test(t))) return true;
+      if (typeof a.id === 'string' && /^bookend-readtime-/.test(a.id)) return true;
+      const title = String(a.title || a.name || '');
+      const cat = String(a.category || '').toUpperCase();
+      const desc = String(a.description || '');
+      // Real "Return to {hotel}" accommodation row.
+      if ((cat === 'STAY' || cat === 'ACCOMMODATION') && RETURN_VERB_RE.test(title) && !/check[-\s]?out/i.test(title)) {
+        return true;
+      }
+      // Title carries the verb + a hotel noun/brand (catches mis-categorized rows).
+      if (RETURN_VERB_RE.test(title) && HOTEL_NOUN_RE.test(title)) return true;
+      // The exact "wind down (overnight)" description shape from bookend-overnight.
+      if (WIND_DOWN_OVERNIGHT_RE.test(desc)) return true;
+      return false;
+    };
+    const before = dayActs.length;
+    const filtered = dayActs.filter((a) => !isStrippableHotelReturn(a));
+    if (filtered.length !== before) {
+      const dropped = dayActs.filter(isStrippableHotelReturn).map((a: any) => a?.title || a?.name || '(unnamed)');
+      console.warn(`[itineraryParser] Stripped ${before - filtered.length} departure-day hotel-return card(s) on day ${departureDayIdx + 1}: ${dropped.join(' | ')}`);
+      console.log(`[BOOKEND_TRACE] day=${departureDayIdx + 1} site=parse action=stripped_departure_day count=${before - filtered.length}`);
+      result[departureDayIdx] = { ...result[departureDayIdx], activities: filtered };
+    }
+  }
+
   for (let i = 0; i < result.length; i++) {
     const withBookend = ensureHotelReturnBookend(result[i].activities, {
       isDepartureDay: i === departureDayIdx,
