@@ -68,5 +68,32 @@ describe('computeHeaderStripValues', () => {
     // displayed = max(1337.3, 1337) = 1337.3; reserve = 0.3 → suppressed
     expect(v.displayedTripTotalUsd).toBeCloseTo(1337.3, 5);
     expect(v.showReserve).toBe(false);
+
+  // Regression: the headline `Trip Total` and the equation-row `Trip Total`
+  // MUST both render `displayedTripTotalUsd`. When the snapshot lags the
+  // chip sum, the headline must NOT keep showing the days-only snapshot
+  // (Casablanca/Kyoto/Osaka/Amsterdam/Sapporo: "Days $812 + Hotel $525 =
+  // Trip Total $812"). Both consumers reading the same field is what
+  // guarantees the equation and the headline can never disagree.
+  it('headline + equation-row Trip Total share displayedTripTotalUsd for every reported city', () => {
+    const cases = [
+      { name: 'Casablanca', tripTotalUsd: 812,  daysGroupUsd: 812, hotelChipUsd: 525  },
+      { name: 'Kyoto',      tripTotalUsd: 524,  daysGroupUsd: 524, hotelChipUsd: 1100 },
+      { name: 'Osaka',      tripTotalUsd: 652,  daysGroupUsd: 652, hotelChipUsd: 1360 },
+      { name: 'Amsterdam',  tripTotalUsd: 804,  daysGroupUsd: 804, hotelChipUsd: 290  },
+      { name: 'Sapporo',    tripTotalUsd: 876,  daysGroupUsd: 876, hotelChipUsd: 500  },
+    ];
+    for (const c of cases) {
+      const v = computeHeaderStripValues({
+        tripTotalUsd: c.tripTotalUsd,
+        daysGroupUsd: c.daysGroupUsd,
+        hotelChipUsd: c.hotelChipUsd,
+        flightChipUsd: 0,
+      });
+      const expected = c.daysGroupUsd + c.hotelChipUsd;
+      expect(v.displayedTripTotalUsd, `${c.name} displayedTripTotalUsd`).toBe(expected);
+      expect(v.reserveAdjustUsd, `${c.name} reserveAdjustUsd`).toBe(0);
+    }
   });
 });
+
