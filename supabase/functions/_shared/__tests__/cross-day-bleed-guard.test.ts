@@ -59,8 +59,8 @@ Deno.test('cross-day bleed guard: untagged Moco Museum @ 01:33 moves to Day 1 ta
   assertEquals(out.changed, true);
   assertEquals(out.movedCount, 2);
   assertEquals(out.days[0].activities.length, 4);
-  assertEquals(out.days[0].activities[2].id, 'museum');
-  assertEquals(out.days[0].activities[2].dayNumber, 1);
+  assertEquals((out.days[0].activities[2] as any).id, 'museum');
+  assertEquals((out.days[0].activities[2] as any).dayNumber, 1);
   assertEquals(out.days[0].activities[3].id, 'walk');
   assertEquals(out.days[1].activities.length, 1);
   assertEquals(out.days[1].activities[0].id, 'morning');
