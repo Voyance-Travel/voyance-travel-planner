@@ -270,7 +270,7 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
       console.log(`[DINING_DESC_BACKFILL] day=${dayNumber} dest="${destination || 'unknown'}" fallback=${diningBackfill.fallback} whyThisFits=${diningBackfill.whyThisFits} scanned=${diningBackfill.scanned} path=save-itinerary`);
     }
     const pruneResult = pruneNonLogisticsAfterCheckout(activities);
-    const transferPruneResult = pruneNonLogisticsAfterAirportTransfer(activities);
+    const transferPruneResult = pruneNonLogisticsAfterAirportTransfer(activities, dayNumber);
     // Freshen-up position invariant — drops post-dinner / clamps overlap
     {
       const lockedIds = new Set<string>(
