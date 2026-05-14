@@ -15,8 +15,11 @@
  * Transparency:
  *   - lastDelta:           { previousTotalCents, deltaCents, at } when total changes
  *                          between fetches. Lets UI show "Total updated: +$84".
- *   - Logs a console.warn + toast when a single refresh jumps the total by >25%
- *     (catches silent rewrite regressions in repair/sync pipelines).
+ *   - Logs a console.warn on >25% jumps; only fires a toast when the change can
+ *     be itemized via cost_change_log AND was not a system-reconcile (silent
+ *     booking-changed event). The unattributed "Trip total changed by ±$X"
+ *     toast was removed — it produced phantom pops on tab switch with no
+ *     actionable info; the console.warn remains as the diagnostic signal.
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
