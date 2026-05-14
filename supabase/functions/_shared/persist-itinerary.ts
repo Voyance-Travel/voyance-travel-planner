@@ -71,6 +71,19 @@ export interface PersistItineraryOptions {
    * See mem://constraints/itinerary/no-regression-overwrite.
    */
   allowRegression?: boolean;
+  /**
+   * Opt out of the FROZEN gate. Default false. Page-load / hydration /
+   * background self-heal paths MUST NEVER set this — they are exactly the
+   * leak paths that silently re-shape ready trips on refresh. User-initiated
+   * mutations (chat actions, regen, lock toggle, drag/reorder, undo/redo,
+   * smart-finish, …) opt in here OR carry a whitelisted `saveReason` (see
+   * `frozen-guard.ts::USER_SAVE_REASON_PREFIXES`).
+   * See mem://constraints/itinerary/frozen-after-ready.
+   */
+  allowFrozenWrite?: boolean;
+  /** Free-form save reason — also consulted by the FROZEN gate whitelist
+   *  (`frozen-guard.ts::isUserSaveReason`). */
+  saveReason?: string;
 }
 
 export interface PersistResult {
@@ -79,6 +92,9 @@ export interface PersistResult {
    *  against the on-disk version; the on-disk `itinerary_data` was kept
    *  intact, only `extraUpdate` (status, metadata) was applied. */
   regressionBlocked?: boolean;
+  /** True when the FROZEN gate blocked the JSONB write (extraUpdate metadata
+   *  / status flags still applied). */
+  frozenBlocked?: boolean;
 }
 
 /** Capped-size ring buffer of rejected attempts written under
