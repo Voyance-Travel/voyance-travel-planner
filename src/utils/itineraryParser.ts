@@ -15,6 +15,7 @@ import { isGhostActivity } from '@/lib/itinerary/hideGhostActivities';
 import { ensureHotelReturnBookend, isHotelReturnBookendActivity } from '@/lib/itinerary/ensureHotelReturnBookend';
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 import { normalizePredawnCascade } from '@/lib/itinerary/normalizePredawnCascade';
+import { pruneDepartureUntimed } from '@/lib/itinerary/pruneDepartureUntimed';
 
 // Strip non-Latin scripts from AI text artifacts before rendering
 const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0600-\u06FF\u0400-\u04FF\u0E00-\u0E7F]+/g;
