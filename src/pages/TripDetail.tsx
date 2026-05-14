@@ -1522,11 +1522,22 @@ export default function TripDetail() {
                   arr.push(r);
                   rowsByDayId.set(did, arr);
                 }
+                // Ritual rows (Return to Hotel, Travel/Walk/Taxi to <hotel>,
+                // Check-in, Freshen Up) frequently accumulate identical
+                // copies with different timestamps across regenerations.
+                // Collapse those by (category, title) ignoring time so the
+                // rebuilt JSON doesn't carry 5–10 "Return to Your Hotel"
+                // bookends. Real distinct activities still key on time.
+                const REBUILD_RITUAL_RE = /^(return to|travel to|walk to|taxi to|metro to|bus to|train to|drive to|check[- ]?in|check[- ]?out|luggage drop|freshen up|head to)\b/i;
                 const dedupeRows = (rows: any[]): any[] => {
                   const seen = new Set<string>();
                   const out: any[] = [];
                   for (const r of rows) {
-                    const k = `${r.start_time || ''}|${r.end_time || ''}|${(r.category || '').toLowerCase()}|${(r.title || r.name || '').toLowerCase().trim()}`;
+                    const cat = (r.category || '').toLowerCase();
+                    const title = (r.title || r.name || '').toLowerCase().trim();
+                    const k = REBUILD_RITUAL_RE.test(title)
+                      ? `ritual|${cat}|${title}`
+                      : `${r.start_time || ''}|${r.end_time || ''}|${cat}|${title}`;
                     if (seen.has(k)) continue;
                     seen.add(k);
                     out.push(r);
