@@ -410,8 +410,20 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
     };
 
     for (let i = 0; i < timed.length - 1; i++) {
-      if (timed[i].end > timed[i + 1].start) {
-        const overlap = timed[i].end - timed[i + 1].start;
+      // Primary overlap signal: rendered times the user actually sees.
+      // Without this, a dry-run cascade that shifts a card forward could
+      // synthesize an overlap on times that DON'T actually conflict on
+      // screen (Copenhagen pattern).
+      const renderedLeftEnd = parseTime(timed[i].endStr);
+      const renderedRightStart = parseTime(timed[i + 1].startStr);
+      const renderedOverlaps = renderedLeftEnd > renderedRightStart;
+      const cascadeOverlaps = timed[i].end > timed[i + 1].start;
+      if (!renderedOverlaps && !cascadeOverlaps) continue;
+      if (renderedOverlaps || cascadeOverlaps) {
+        const overlap = Math.max(
+          renderedLeftEnd - renderedRightStart,
+          timed[i].end - timed[i + 1].start,
+        );
         const transitInvolved =
           isTransitLike(timed[i].category, timed[i].name) ||
           isTransitLike(timed[i + 1].category, timed[i + 1].name);
@@ -428,11 +440,15 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           continue;
         }
 
+        // Bonus suppression: rendered times don't overlap, only cascade does
+        // — that's a dry-run artifact the user can't see; never warn.
+        if (!renderedOverlaps && cascadeOverlaps) continue;
+
         issues.push({
           id: `conflict-day-${dayNum}-${i}`,
           severity: transitInvolved ? 'warning' : 'error',
           message: transitInvolved
-            ? `Day ${dayNum}: Tight transition — "${timed[i].name}" (${timed[i].startStr}–${timed[i].endStr}) runs into "${timed[i + 1].name}" (${timed[i + 1].startStr}–${timed[i + 1].endStr}). Auto-resolves on save.`
+            ? `Day ${dayNum}: Tight transition — "${timed[i].name}" (${timed[i].startStr}–${timed[i].endStr}) runs into "${timed[i + 1].name}" (${timed[i + 1].startStr}–${timed[i + 1].endStr}).`
             : `Day ${dayNum}: "${timed[i].name}" (${timed[i].startStr}–${timed[i].endStr}) overlaps with "${timed[i + 1].name}" (${timed[i + 1].startStr}–${timed[i + 1].endStr}) — ${overlap} min conflict`,
           fixLabel: 'Fix timing',
           fixAction: 'fix_timing',
