@@ -12,11 +12,24 @@
  * and the CDN itself returns 403/expired silently. Treat the entire host
  * as untrusted for hero usage.
  */
+/**
+ * People/business content slugs banned from destination heroes.
+ * Defense-in-depth — primary guard is in tryUnsplashFallback's
+ * alt/description/tag check, but if a poisoned URL slipped past
+ * (cached row, write-back, etc.) the slug typically still names the
+ * subject. Keeping it slug-scoped avoids false positives on legit
+ * landmarks ("london-suit-shop" is rare; "two-businessmen-handshake"
+ * is the real failure mode).
+ */
+const PEOPLE_CONTENT_SLUG_RE =
+  /\b(businessman|businesswoman|business[-_]?(?:meeting|people|men|women)|handshake|board[-_]?meeting|office[-_]?meeting|conference[-_]?room|portrait|headshot|model[-_]?(?:photo|shoot)|crowd[-_]?of[-_]?people|group[-_]?of[-_]?people)\b/i;
+
 export function isUntrustedHeroUrl(url: string | null | undefined): boolean {
   if (!url || typeof url !== 'string') return true;
   const trimmed = url.trim();
   if (!trimmed) return true;
   if (/images\.unsplash\.com/i.test(trimmed)) return true;
   if (/source\.unsplash\.com/i.test(trimmed)) return true;
+  if (PEOPLE_CONTENT_SLUG_RE.test(trimmed)) return true;
   return false;
 }
