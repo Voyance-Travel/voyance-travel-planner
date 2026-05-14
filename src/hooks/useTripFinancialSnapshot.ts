@@ -15,8 +15,11 @@
  * Transparency:
  *   - lastDelta:           { previousTotalCents, deltaCents, at } when total changes
  *                          between fetches. Lets UI show "Total updated: +$84".
- *   - Logs a console.warn + toast when a single refresh jumps the total by >25%
- *     (catches silent rewrite regressions in repair/sync pipelines).
+ *   - Logs a console.warn on >25% jumps; only fires a toast when the change can
+ *     be itemized via cost_change_log AND was not a system-reconcile (silent
+ *     booking-changed event). The unattributed "Trip total changed by ±$X"
+ *     toast was removed — it produced phantom pops on tab switch with no
+ *     actionable info; the console.warn remains as the diagnostic signal.
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -497,48 +500,45 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       if (suppressed) {
         suppressNextToastRef.current = { active: false, reason: '' };
       }
-      if (ratio > 0.25 && lastWarnedTotalRef.current !== totalCents && !suppressed) {
+      if (ratio > 0.25 && lastWarnedTotalRef.current !== totalCents) {
         lastWarnedTotalRef.current = totalCents;
         const sign = delta.deltaCents >= 0 ? '+' : '−';
         const amount = Math.abs(delta.deltaCents) / 100;
 
-        // Try to attribute the jump to a recent cost-repair pass first.
-        // If we find logged changes, replace the generic "Trip total changed"
-        // toast with an itemized one so users know exactly what moved.
-        let attributed = false;
-        try {
-          const { getRecentCostChanges } = await import('@/services/activityCostService');
-          const changes = await getRecentCostChanges(tripId, 8_000);
-          if (changes.length > 0) {
-            attributed = true;
-            const top = changes.slice(0, 2).map(c => {
-              const d = (c.new_cents - c.previous_cents) / 100;
-              const s = d >= 0 ? '+' : '−';
-              return `${c.activity_title || 'Activity'} ${s}$${Math.abs(d).toFixed(0)}`;
-            }).join(', ');
-            const more = changes.length > 2 ? ` and ${changes.length - 2} more` : '';
-            console.warn(
-              `[useTripFinancialSnapshot] Total ${sign}$${amount.toFixed(0)} attributed to repair: ${top}${more}`
-            );
-            try {
-              toast.info(`Pricing updated: ${sign}$${amount.toFixed(0)}`, {
-                description: `${top}${more}`,
-                duration: 7000,
-              });
-            } catch {}
-          }
-        } catch {}
+        // Always log the diagnostic. The user-visible toast is gated below.
+        console.warn(
+          `[useTripFinancialSnapshot] Trip total jumped ${sign}$${amount.toFixed(0)} ` +
+          `(${(ratio * 100).toFixed(0)}%). prev=${prev} new=${totalCents} tripId=${tripId} suppressed=${suppressed}${suppressed ? ` reason=${suppressReason}` : ''}`
+        );
 
-        if (!attributed) {
-          console.warn(
-            `[useTripFinancialSnapshot] Trip total jumped ${sign}$${amount.toFixed(0)} ` +
-            `(${(ratio * 100).toFixed(0)}%). prev=${prev} new=${totalCents} tripId=${tripId}`
-          );
+        // Try to attribute the jump to a recent cost-repair pass. Only an
+        // ATTRIBUTED change ever surfaces a toast — and only when this fetch
+        // was not a system-reconcile (silent booking-changed). The previous
+        // unattributed "Trip total changed by ±$X" toast was removed because
+        // it fired phantom pops on tab switch with no actionable info; the
+        // race between per-instance suppress flags and parallel async RPCs
+        // (orphan-archive, sync-trip-cost-table) made it unreliable to gate.
+        if (!suppressed) {
           try {
-            toast.warning(`Trip total changed by ${sign}$${amount.toFixed(0)}`, {
-              description: 'Tap to see what changed',
-              duration: 7000,
-            });
+            const { getRecentCostChanges } = await import('@/services/activityCostService');
+            const changes = await getRecentCostChanges(tripId, 8_000);
+            if (changes.length > 0) {
+              const top = changes.slice(0, 2).map(c => {
+                const d = (c.new_cents - c.previous_cents) / 100;
+                const s = d >= 0 ? '+' : '−';
+                return `${c.activity_title || 'Activity'} ${s}$${Math.abs(d).toFixed(0)}`;
+              }).join(', ');
+              const more = changes.length > 2 ? ` and ${changes.length - 2} more` : '';
+              console.warn(
+                `[useTripFinancialSnapshot] Total ${sign}$${amount.toFixed(0)} attributed to repair: ${top}${more}`
+              );
+              try {
+                toast.info(`Pricing updated: ${sign}$${amount.toFixed(0)}`, {
+                  description: `${top}${more}`,
+                  duration: 7000,
+                });
+              } catch {}
+            }
           } catch {}
         }
       } else if (suppressed && ratio > 0.25) {
