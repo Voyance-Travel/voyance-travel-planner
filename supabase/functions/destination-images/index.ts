@@ -5,7 +5,7 @@ import { trackCost, type CostTracker } from "../_shared/cost-tracker.ts";
 import { checkVenueCache, cacheVenueResult } from "../_shared/venue-cache.ts";
 import { googlePlacesTextSearch } from "../_shared/google-api.ts";
 import { isGoogleBillableUrl } from "../_shared/is-google-billable.ts";
-import { detectCrossCityMention } from "../generate-itinerary/cross-city-filter.ts";
+import { detectCrossCityMention } from "../_shared/cross-city-filter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -277,9 +277,19 @@ const BAD_KEYWORDS = [
   'gas station', 'petrol', 'atm', 'bank branch'
 ];
 
+/**
+ * Accent-fold and lowercase a string so `Hércules` matches `Hercules`,
+ * `São Paulo` matches `Sao Paulo`, etc. Without this fold the token
+ * scorer rejects every Google Places result whose display name lacks
+ * the exact accented form of the POI we queried (root cause of the
+ * Monaco "Hércules Port" → AI-fallback regression).
+ */
+function accentFold(s: string): string {
+  return s.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+}
+
 function tokenize(s: string): string[] {
-  return s
-    .toLowerCase()
+  return accentFold(s)
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
@@ -576,7 +586,21 @@ async function getGooglePlacesPhoto(
         }
 
         // Calculate match score
-        const score = calculateMatchScore(venueTokens, displayName);
+        let score = calculateMatchScore(venueTokens, displayName);
+
+        // Destination-tier hero credit: a place whose name OR address contains
+        // the destination name is by definition the right city, even if the
+        // POI tokens miss (e.g. queried "Hércules Port", Google returned
+        // "Prince's Palace of Monaco"). Lifts the score above MIN_MATCH_SCORE
+        // so we don't AI-fallback when Google has the perfect photo. Only
+        // applies to destination heroes — venue searches still need name match.
+        if (entityType === 'destination' && score < 0.6) {
+          const destFolded = accentFold(destination);
+          const haystack = accentFold(`${displayName} ${address}`);
+          if (destFolded && haystack.includes(destFolded)) {
+            score = Math.max(score, 0.65);
+          }
+        }
 
         if (score < MIN_MATCH_SCORE) {
           console.log(`[Images] Rejecting (low score ${score.toFixed(2)}):`, displayName);
@@ -1281,7 +1305,23 @@ async function getDestinationName(supabase: any, destinationId: string): Promise
   }
 }
 
-// Get a random iconic POI from destination for better hero images
+// Landmark-tier keywords that mark a POI as "iconic enough to be the city's
+// hero photo". Without this preference, alphabetical sort picks obscure POIs
+// (Monaco's `Hércules Port` ahead of `Monte Carlo Casino` / `Prince's Palace`),
+// the Google Places match-score tanks, and the pipeline AI-fallbacks to a
+// generic Gemini image. Order matters only as a tie-break.
+const LANDMARK_POI_KEYWORDS = [
+  'palace', 'cathedral', 'basilica', 'temple', 'shrine', 'mosque',
+  'castle', 'fortress', 'citadel', 'tower', 'bridge', 'gate',
+  'casino', 'opera', 'theater', 'theatre', 'museum', 'gallery',
+  'square', 'plaza', 'piazza', 'park', 'garden', 'bay', 'harbour', 'harbor',
+  'beach', 'lake', 'falls', 'cliff', 'island', 'old town', 'old city',
+  'monument', 'memorial', 'statue', 'fountain', 'arch',
+];
+
+// Get an iconic POI from destination for better hero images.
+// Ranks landmark-keyword POIs first (still deterministic — falls back to
+// alphabetical inside each tier so cache keys stay stable across regenerations).
 async function getDestinationPOI(supabase: any, destinationName: string): Promise<string | null> {
   try {
     const { data } = await supabase
@@ -1291,15 +1331,32 @@ async function getDestinationPOI(supabase: any, destinationName: string): Promis
       .single();
 
     const pois = data?.points_of_interest;
-    if (Array.isArray(pois) && pois.length > 0) {
-      // Deterministic: always pick the first POI so every regeneration of the
-      // same destination resolves to the same hero cache key (huge cost saver).
-      const sorted = [...pois].sort((a: any, b: any) => String(a).localeCompare(String(b)));
-      const chosen = sorted[0];
-      console.log(`[Images] Found ${pois.length} POIs for ${destinationName}, using canonical: ${chosen}`);
-      return chosen;
-    }
-    return null;
+    if (!Array.isArray(pois) || pois.length === 0) return null;
+
+    const stringPois = pois.map((p: any) => String(p)).filter(Boolean);
+    const folded = (s: string) => s.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+    const tier = (poi: string): number => {
+      const f = folded(poi);
+      // Tier 0: contains a landmark keyword (Monte Carlo Casino, Prince's Palace…)
+      if (LANDMARK_POI_KEYWORDS.some((kw) => f.includes(kw))) return 0;
+      // Tier 1: multi-word proper-noun POI (likely real place name)
+      if (poi.trim().split(/\s+/).length >= 2) return 1;
+      // Tier 2: single-word/obscure (Hércules, Jetée…)
+      return 2;
+    };
+
+    const sorted = [...stringPois].sort((a, b) => {
+      const ta = tier(a);
+      const tb = tier(b);
+      if (ta !== tb) return ta - tb;
+      // Within a tier, alphabetical (stable + deterministic for cache keys)
+      return a.localeCompare(b);
+    });
+
+    const chosen = sorted[0];
+    console.log(`[Images] Found ${pois.length} POIs for ${destinationName}, using canonical: ${chosen} (tier=${tier(chosen)})`);
+    return chosen;
   } catch (e) {
     console.log(`[Images] Could not get POIs for ${destinationName}:`, e);
     return null;
@@ -1727,6 +1784,30 @@ async function fetchImageTiered(
     );
     if (googleImage) {
       candidates.push(googleImage);
+    } else if (
+      entityType === 'destination' &&
+      destination &&
+      cleanName.toLowerCase() !== destination.toLowerCase()
+    ) {
+      // Destination-hero safety net: if the POI-driven Google Places search
+      // returned nothing (e.g. obscure/accented POI like "Hércules Port" matched
+      // zero candidates), retry once with the bare destination name before
+      // letting the pipeline AI-fallback to a Gemini-generated placeholder.
+      // This is the difference between a real Monaco photo and a generic
+      // base64 cloud image.
+      console.log(`[Images] POI-driven Google Places miss — retrying with bare destination: "${destination}"`);
+      const fallbackImage = await getGooglePlacesPhoto(
+        'destination',
+        destination,
+        destination,
+        googleApiKey,
+        'sightseeing',
+        costTracker,
+      );
+      if (fallbackImage) {
+        console.log(`[Images] ✅ Bare-destination retry succeeded for "${destination}"`);
+        candidates.push(fallbackImage);
+      }
     }
   }
 
