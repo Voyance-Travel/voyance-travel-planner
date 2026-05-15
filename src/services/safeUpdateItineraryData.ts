@@ -213,16 +213,34 @@ export async function safeUpdateItineraryData(
         const ctx = (error as any).context;
         const body = typeof ctx.json === 'function' ? await ctx.json() : null;
         if (body?.code === 'NEEDS_REGENERATION') {
-          try {
-            window.dispatchEvent(new CustomEvent('itinerary-persist-issues', {
-              detail: { tripId, ...body },
-            }));
-          } catch { /* non-fatal */ }
+          // Suppress persist-issues toasts for self-heal / hydration writes.
+          // Page-load reconciliation MUST NOT surface "Day N needs
+          // regeneration" alarms — the backend validator runs against a
+          // transient snapshot while dining enrichment / cascade is still
+          // settling. The health engine reads the live render state and is
+          // the source of truth users see. See
+          // mem://constraints/itinerary/persist-issues-toast-user-only.
+          const reasonStr = String(options.reason || '');
+          const isSelfHeal = reasonStr.startsWith('self-heal-') || options.skipLedgerCheck === true;
+          if (!isSelfHeal) {
+            try {
+              window.dispatchEvent(new CustomEvent('itinerary-persist-issues', {
+                detail: { tripId, source: reasonStr || 'user', ...body },
+              }));
+            } catch { /* non-fatal */ }
+          } else {
+            console.warn(
+              `[safeUpdateItineraryData] persist gate flagged issues (suppressed: self-heal reason="${reasonStr}"):`,
+              body,
+            );
+          }
           try {
             const { dispatchTripPersisted } = await import('@/lib/itinerary/resyncItineraryFromDb');
             dispatchTripPersisted({ tripId, prevDays: nextDays, source: 'persist-gate-flagged' });
           } catch { /* non-fatal */ }
-          console.warn('[safeUpdateItineraryData] persist gate flagged issues:', body);
+          if (!isSelfHeal) {
+            console.warn('[safeUpdateItineraryData] persist gate flagged issues:', body);
+          }
           return { error: null, persistVerdict: body } as any;
         }
       } catch (parseErr) {
