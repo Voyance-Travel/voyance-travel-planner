@@ -129,7 +129,7 @@ export function useTripHeroImage({
   const hasCurated = hasCuratedImages(destination);
 
   const [storageFailed, setStorageFailed] = useState(false);
-  const storageUrl = useMemoLikeStorage(destination);
+  const storageUrl = useMemo(() => lookupStorageHero(destination), [destination]);
 
   // Fetch canonical destination hero image (shared across all views)
   useEffect(() => {
