@@ -1218,6 +1218,7 @@ export function TripHealthPanel({
         )}
       </AnimatePresence>
     </div>
+    </TooltipProvider>
   );
 }
 
