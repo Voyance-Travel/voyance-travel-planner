@@ -88,6 +88,8 @@ interface SnapshotData {
   committedFlightCents: number;
   manualHotelDelta: number;
   manualFlightDelta: number;
+  buckets: BucketCents;
+  residualFoldedCents: number;
   loading: boolean;
 }
 
