@@ -71,9 +71,18 @@ export function scrubActivity(act: any, ctx: ScrubContext = {}): ScrubOps {
   const ops: ScrubOps = {
     titleLeak: 0, bodyLeak: 0, fragment: 0, mealSuffix: 0,
     crossCity: 0, countryMismatch: 0, mealLabel: 0, downgraded: 0,
-    phantomRef: 0,
+    phantomRef: 0, degenerate: 0,
   };
   if (!act || typeof act !== 'object') return ops;
+
+  // L1 — degenerate body fields ("The.", "A.", sub-15-char stubs).
+  // Blank instead of preserving — empty is recoverable, fragment isn't.
+  for (const k of DEGENERATE_BODY_FIELDS) {
+    if (k in act && isDegenerateDescription((act as any)[k])) {
+      (act as any)[k] = '';
+      ops.degenerate++;
+    }
+  }
 
   // L2 — pure scrubs
   if (scrubTitleLeaks(act).changed) ops.titleLeak++;
