@@ -9,7 +9,7 @@
  * 5. Gradient fallback (deterministic, always works)
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   getDestinationImage, 
   getDestinationImages as getCuratedImages,
