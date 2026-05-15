@@ -75,3 +75,23 @@ export function getDisplayEndTime(
     ''
   );
 }
+
+/**
+ * Rendered-time helpers — the times the activity card actually paints on
+ * screen. Mirrors `EditorialItinerary.tsx` card render (uses `startTime ||
+ * time` for start, raw `endTime` for end). The health engine uses these for
+ * its user-facing warning text AND for the "is the user seeing this overlap
+ * right now?" decision so we never suppress a visible conflict via dry-run
+ * cascade. Never reads forward-compat display fields and never synthesizes
+ * an end from `durationMinutes` — those would diverge from what the card
+ * shows.
+ *
+ * See mem://constraints/itinerary/health-warning-rendered-times.
+ */
+export function getRenderedStartTime(a: any): string {
+  return a?.startTime || a?.start_time || a?.time || '';
+}
+
+export function getRenderedEndTime(a: any): string {
+  return a?.endTime || a?.end_time || '';
+}
