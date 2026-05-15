@@ -330,78 +330,31 @@ export function useGenerationPoller({
       }
 
       if (isStalled) {
-        // Log stall event to client_errors for server-side correlation
+        // Log stall event to client_errors for server-side correlation.
+        // NOTE: This hook MUST NOT auto-invoke `generate-itinerary` from a
+        // stall. Background auto-resume re-runs the LLM and silently
+        // overwrites the user's existing itinerary with different content
+        // (Dublin 2026-05-14 regression). Stall detection is observation
+        // only — the user must opt in via the visible Regenerate button
+        // (TripDetail.handleResumeGeneration). See
+        // mem://constraints/itinerary/no-auto-resume-on-load.
         try {
           supabase.from('client_errors').insert([{
             session_id: sessionStorage.getItem('voy_session_id') || 'unknown',
             error_message: `generation_stalled: day ${completedDays}/${totalDays}`,
             page_path: window.location.pathname,
             component_name: 'useGenerationPoller',
-            metadata: { tripId, completedDays, totalDays, autoResumeAttempt: autoResumeCountRef.current },
+            metadata: { tripId, completedDays, totalDays },
           } as any]).then();
         } catch {}
 
-        // Auto-resume: try up to MAX_AUTO_RESUME_ATTEMPTS before showing stalled UI
-        if (autoResumeCountRef.current < MAX_AUTO_RESUME_ATTEMPTS && !resumeInFlight) {
-          autoResumeCountRef.current += 1;
-          console.log(`[useGenerationPoller] Stall detected. Auto-resume attempt ${autoResumeCountRef.current}/${MAX_AUTO_RESUME_ATTEMPTS} from day ${completedDays + 1}...`);
-
-          try {
-            // Fetch trip data to get required fields for resume
-            const { data: tripData } = await supabase
-              .from('trips')
-              .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city')
-              .eq('id', tripId)
-              .single();
-
-            if (!tripData) {
-              console.error('[useGenerationPoller] Cannot auto-resume: trip not found');
-              throw new Error('Trip not found');
-            }
-
-            // Compute canonical total for requestedDays to prevent backend re-inflation
-            let resumeTotalDays = totalDays;
-            if (tripData.start_date && tripData.end_date) {
-              const rs = new Date(tripData.start_date as string);
-              const re = new Date(tripData.end_date as string);
-              resumeTotalDays = Math.ceil((re.getTime() - rs.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-            }
-
-            const { error: resumeError } = await supabase.functions.invoke('generate-itinerary', {
-              body: {
-                action: 'generate-trip',
-                tripId,
-                destination: tripData.destination,
-                destinationCountry: tripData.destination_country,
-                startDate: tripData.start_date,
-                endDate: tripData.end_date,
-                travelers: tripData.travelers || 1,
-                tripType: tripData.trip_type,
-                budgetTier: tripData.budget_tier,
-                isMultiCity: !!tripData.is_multi_city,
-                creditsCharged: 0,
-                requestedDays: resumeTotalDays,
-                resumeFromDay: completedDays + 1,
-                isResume: true,
-              },
-            });
-
-            if (resumeError) {
-              console.error('[useGenerationPoller] Auto-resume failed:', resumeError);
-              throw resumeError;
-            }
-
-            console.log('[useGenerationPoller] Auto-resume triggered successfully');
-            // Stay in polling state — the resumed generation will update status
-            setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
-            return;
-          } catch {
-            // Auto-resume failed — fall through to stalled
-            console.warn('[useGenerationPoller] Auto-resume failed, showing stalled state');
-          }
+        // Suppress the stalled UI when a manual resume is already in flight
+        // so the spinner doesn't flicker between "stalled" and "polling".
+        if (resumeInFlight) {
+          setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
+          return;
         }
 
-        // Auto-resume was already attempted or failed
         setState({ status: 'stalled', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
         if (!stalledFiredRef.current) {
           stalledFiredRef.current = true;
