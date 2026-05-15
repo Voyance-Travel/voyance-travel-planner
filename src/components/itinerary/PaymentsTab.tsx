@@ -40,6 +40,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -145,6 +146,13 @@ export function PaymentsTab({
     (usdCents: number) => formatMoneyFromUsdCents(usdCents, tripCurrency),
     [tripCurrency],
   );
+  // Belt-and-braces: surface tripCurrency drift in dev so any future
+  // showLocalCurrency-toggle desync between header and PaymentsTab is visible.
+  useEffect(() => {
+    if (typeof console !== 'undefined') {
+      console.debug('[PaymentsTab] tripCurrency=', tripCurrency);
+    }
+  }, [tripCurrency]);
   const queryClient = useQueryClient();
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
@@ -457,39 +465,39 @@ export function PaymentsTab({
 
   // Manual payments are now folded into useTripFinancialSnapshot directly
   // (override-aware for hotel/flight, additive for others). No local delta needed.
-  // baseTotal mirrors the itinerary header (`displayedTotalCents`) — same
-  // hook, same math, same number. Falls back to payable items only while the
-  // displayed total is still loading and we have no snapshot yet.
-  const baseTotal = displayedTotal.loading
-    ? payableTotalCents
-    : (displayedTotal.displayedTotalCents > 0
-        ? displayedTotal.displayedTotalCents
-        : payableTotalCents);
-  const estimatedTotal = Math.max(0, baseTotal);
+  //
+  // SINGLE SOURCE OF TRUTH: PaymentsTab Trip Total MUST equal the header's
+  // `displayedTotal.displayedTotalCents` exactly. Never fall back to
+  // `payableTotalCents` — it resolves on a different code path and excludes
+  // the misc/spending-money reserve, which silently caused the recurring
+  // "Header €915 vs Payments $1,120" three-way drift. While the displayed
+  // total is loading or zero, render a Skeleton instead of a divergent number.
+  // See mem://constraints/finance/displayed-trip-total-single-source.
+  const headerTotalReady =
+    !displayedTotal.loading && displayedTotal.displayedTotalCents > 0;
+  const estimatedTotal = headerTotalReady ? displayedTotal.displayedTotalCents : 0;
   // "Paid so far" must follow the same orphan-aware logic as the snapshot —
   // otherwise stale paid trip_payments rows from a regenerated trip inflate
   // the headline and trigger a phantom "Overpaid" warning. Snapshot already
   // filters orphans synchronously; trust it once it's loaded.
   const paidAmount = financialSnapshot.loading ? totals.paid : financialSnapshot.paidCents;
-  const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
+  const unpaidAmount = headerTotalReady ? Math.max(0, estimatedTotal - paidAmount) : 0;
   // Surface overpayment as an explicit anomaly instead of silently clamping
   // "Remaining to pay" at $0 (e.g. orphaned payments left over from a prior
   // itinerary version still count toward `paidAmount`).
-  const overpaidAmount = Math.max(0, paidAmount - estimatedTotal);
+  const overpaidAmount = headerTotalReady ? Math.max(0, paidAmount - estimatedTotal) : 0;
   const isOverpaid = overpaidAmount > 0 && estimatedTotal > 0;
   const progressPercent = estimatedTotal > 0 ? (paidAmount / estimatedTotal) * 100 : 0;
 
   // Travel Essentials = flights + hotels only. The misc/spending-money reserve
-  // is surfaced as its own bucket below so users can see exactly where the
-  // headline total comes from.
-  // Reserve gating: only fold once the snapshot has FULLY loaded — using
-  // `tripTotalCents > 0` as a readiness proxy fails for hotel-only / empty
-  // trips (snapshot total = 0 with a non-zero reserve mid-fetch flips the
-  // bucket→header relationship and latches a phantom drift badge).
+  // is surfaced as its own bucket below (Misc) so users can see exactly where
+  // the headline total comes from. Reserve gating: only fold once the snapshot
+  // has FULLY loaded — using `tripTotalCents > 0` as a readiness proxy fails
+  // for hotel-only / empty trips.
   const reserveCents = !financialSnapshot.loading
     ? (financialSnapshot.miscReserveCents || 0)
     : 0;
-  const essentialItemsWithReserve = essentialItems;
+  // (essentials = flights + hotels, sourced directly from usePayableItems above)
 
   // ─── Split EVERY non-essential payable item by its Budget by Category bucket
   //     so the Payments tab matches the Budget tab one-to-one. We key off
@@ -540,7 +548,7 @@ export function PaymentsTab({
   // same `resolveCanonicalCostRows` resolver — any divergence is a contract
   // bug to surface in dev, never a user-facing badge to apologize for.
   const bucketSumCents =
-    essentialItemsWithReserve.reduce((s, i) => s + i.amountCents, 0) +
+    essentialItems.reduce((s, i) => s + i.amountCents, 0) +
     foodItems.reduce((s, i) => s + i.amountCents, 0) +
     activitiesOnlyItems.reduce((s, i) => s + i.amountCents, 0) +
     transitItems.reduce((s, i) => s + i.amountCents, 0) +
@@ -557,8 +565,10 @@ export function PaymentsTab({
     const payableDrift = Math.abs(payableTotalCents - financialSnapshot.tripTotalCents);
     const paidDrift = Math.abs((totals.paid || 0) - financialSnapshot.paidCents);
     let path: 'A' | 'B' | 'C' | 'none' = 'none';
+    // Bucket sum MUST equal headline within $1 — reserve lives inside miscItems
+    // and is folded into displayedTotalCents via computeHeaderStripValues.
     if (payableDrift > 200) path = 'A';
-    else if (bucketDrift > 200) path = 'B';
+    else if (bucketDrift > 100) path = 'B';
     else if (paidDrift > 200) path = 'C';
     if (path !== 'none') {
       const fingerprint = `${tripId}|${path}|${estimatedTotal}|${bucketSumCents}|${paidAmount}`;
@@ -567,11 +577,13 @@ export function PaymentsTab({
         console.warn('[PaymentsTab] divergence', {
           path,
           snapshotTotal: financialSnapshot.tripTotalCents,
+          displayedTotalCents: displayedTotal.displayedTotalCents,
           bucketSum: bucketSumCents,
           payableTotal: payableTotalCents,
           tripPaymentsPaidSum: totals.paid,
           snapshotPaidCents: financialSnapshot.paidCents,
           reserveCents,
+          tripCurrency,
           tripId,
         });
       }
@@ -1232,14 +1244,20 @@ export function PaymentsTab({
           <div>
             <h3 className="text-lg font-semibold">Trip Expenses</h3>
             <p className="text-sm text-muted-foreground">
-              {budgetLimitCents && budgetLimitCents > 0 
-                ? `${Math.round((estimatedTotal / budgetLimitCents) * 100)}% of budget`
-                : `${Math.round(progressPercent)}% paid`
+              {!headerTotalReady
+                ? 'Calculating…'
+                : budgetLimitCents && budgetLimitCents > 0
+                  ? `${Math.round((estimatedTotal / budgetLimitCents) * 100)}% of budget`
+                  : `${Math.round(progressPercent)}% paid`
               }
             </p>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-semibold text-primary">{displayMoney(estimatedTotal)}</p>
+            {headerTotalReady ? (
+              <p className="text-2xl font-semibold text-primary">{displayMoney(estimatedTotal)}</p>
+            ) : (
+              <Skeleton className="h-7 w-24 ml-auto" />
+            )}
             <p className="text-xs text-muted-foreground">Trip Total</p>
             {(() => {
               // Real equality check: only claim "Matches itinerary" when our
@@ -1368,7 +1386,7 @@ export function PaymentsTab({
 
         <TabsContent value="expenses" className="mt-4 space-y-4">
           {/* Essentials Category */}
-          {essentialItemsWithReserve.length > 0 && (
+          {essentialItems.length > 0 && (
             <Card className="overflow-hidden">
               <button
                 onClick={() => setExpandedCategory(expandedCategory === 'essentials' ? null : 'essentials')}
@@ -1388,12 +1406,12 @@ export function PaymentsTab({
                     <p className="font-medium">
                       {displayMoney(
                         financialSnapshot.loading
-                          ? essentialItemsWithReserve.reduce((sum, i) => sum + i.amountCents, 0)
-                          : (financialSnapshot.buckets?.essentials ?? essentialItemsWithReserve.reduce((sum, i) => sum + i.amountCents, 0))
+                          ? essentialItems.reduce((sum, i) => sum + i.amountCents, 0)
+                          : (financialSnapshot.buckets?.essentials ?? essentialItems.reduce((sum, i) => sum + i.amountCents, 0))
                       )}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {essentialItemsWithReserve.filter(i => i.payment?.status === 'paid').length}/{essentialItemsWithReserve.length} paid
+                      {essentialItems.filter(i => i.payment?.status === 'paid').length}/{essentialItems.length} paid
                     </p>
                   </div>
                   <ChevronDown className={cn(
@@ -1411,7 +1429,7 @@ export function PaymentsTab({
                     className="overflow-hidden"
                   >
                     <CardContent className="pt-0 pb-4">
-                      {essentialItemsWithReserve.map(renderPayableItem)}
+                      {essentialItems.map(renderPayableItem)}
                     </CardContent>
                   </motion.div>
                 )}
@@ -1441,7 +1459,12 @@ export function PaymentsTab({
                   </div>
                   <div className="text-left">
                     <h4 className="font-medium">{label}</h4>
-                    <p className="text-xs text-muted-foreground">{items.length} bookable item{items.length === 1 ? '' : 's'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {items.length} bookable item{items.length === 1 ? '' : 's'}
+                      {key === 'misc' && reserveCents > 0 && (
+                        <> · includes {displayMoney(reserveCents)} spending-money reserve</>
+                      )}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
