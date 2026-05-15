@@ -33,6 +33,7 @@ export interface ScrubOps {
   mealLabel: number;
   downgraded: number;
   phantomRef: number;
+  degenerate: number;
 }
 
 export const EMPTY_OPS: ScrubOps = Object.freeze({
@@ -45,6 +46,7 @@ export const EMPTY_OPS: ScrubOps = Object.freeze({
   mealLabel: 0,
   downgraded: 0,
   phantomRef: 0,
+  degenerate: 0,
 }) as ScrubOps;
 
 export interface ScrubContext {
