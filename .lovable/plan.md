@@ -1,59 +1,63 @@
+# Fix: "Needs Regeneration" False Alarm on Page Load (Paris)
 
-# Fix: Reload Loses Dining / Replaces Itinerary With Lower-Quality Save
+## Root cause
 
-## Root cause (confirmed)
+On page load, `TripDetail` fires several self-heal `safeUpdateItineraryData` calls (`self-heal-predawn-cascade`, `self-heal-rebuild-from-tables`, `self-heal-local-sync`, `self-heal-empty-day-placeholder`, etc.). These hit `action-save-itinerary`, which runs `validateItineraryForPersist`. When the persisted JSON snapshot is mid-reconciliation (e.g. dining cards not yet enriched in JSON, or `meal_policy_at_generation` cached for a different policy than `detectMealSlots` now sees), the validator emits `MISSING_REQUIRED_MEAL` and the backend returns HTTP 422 with `code: 'NEEDS_REGENERATION'`.
 
-Two bugs compound on reload:
+`safeUpdateItineraryData` then dispatches `itinerary-persist-issues` for every 422, regardless of whether the save was user-initiated or a silent self-heal. `PersistIssuesListener` turns each into a "Day N needs regeneration — regenerate this day to fix" toast. Meanwhile `TripHealthPanel` reads the live render state and correctly reports 100/0 — the two systems disagree because the validator runs on a transient persisted snapshot, the health engine on the rendered view.
 
-1. **Premature freeze.** `generation-core.ts` Stage 6 stamps `metadata.itinerary_frozen_at` and flips `itinerary_status='ready'` *before* Phase 4 writes `activity_costs` and before downstream dining-enrichment / description-fill / hotel-return passes finish persisting. Once frozen, `safeUpdateItineraryData` silently no-ops self-heal writes (per the Frozen-After-Ready rule), so any later enrichment that *would* have repaired the on-disk JSON is dropped.
+This is the same desync class as the reload-loses-dining bug, surfaced as a misleading toast instead of silent content loss.
 
-2. **Optimistic "Saved" UX.** The header strip + indicator flip to a saved/ready state as soon as `itinerary_status='ready'`, even while the day-chain is still emitting later days or the per-day persist is mid-flight. A hard refresh in that window pulls a partial `itinerary_data` from DB and renders it — exactly the "skeleton without dinners" the user reported.
+## What changes
 
-The health engine and "Reconciling…" badge are already telling us this; we just don't gate the user from leaving on it.
+### 1. `src/services/safeUpdateItineraryData.ts` — suppress on self-heal
 
-## Fix (3 changes, all server- and frontend-presentation-only)
+In the 422 / `NEEDS_REGENERATION` branch (around lines 211–227):
 
-### 1. Move `itinerary_frozen_at` to *after* full enrichment
+- If `options.reason` starts with `self-heal-`, OR `options.skipLedgerCheck === true`, **do not** dispatch `itinerary-persist-issues`. Log a `[safeUpdateItineraryData] persist gate flagged issues (suppressed: self-heal)` warn instead.
+- Still trigger the canonical `dispatchTripPersisted` resync (so the view heals from DB) and still return `{ error: null, persistVerdict: body }`.
+- For non-self-heal saves, dispatch as today, but include `source: options.reason ?? 'user'` in the event detail so the listener can apply additional filtering.
 
-In `generation-core.ts` Stage 6:
-- Persist days + status `ready` **without** the freeze stamp.
-- Run Phase 4 (`writeActivityCostsFromItinerary`), the dining-description net (`fillMissingDescriptions` / `ensureDayDiningDescriptions`), and the bookend verification pass.
-- **Then** issue a second small `trips.update({ metadata: { itinerary_frozen_at: now } })` only if all post-passes succeeded and `meaningfulCount` matches expectations.
+Rationale: every page-load save uses a `self-heal-*` reason. User-initiated mutations (chat actions, manual edits, drag/drop, regenerate-day button) do not. Suppressing self-heal removes the entire class of false alarms in one chokepoint.
 
-In `action-generate-trip.ts` (per-day chain):
-- Stamp freeze only on the final-leg completion handler, after the same enrichment net runs — never on intermediate day saves.
+### 2. `src/components/itinerary/PersistIssuesListener.tsx` — load-complete gate + source filter
 
-This keeps the Frozen-After-Ready guarantee intact for *real* completions and stops it from locking partial states.
+- Read an in-memory `Set<tripId>` `loadedTrips` populated when `TripDetail` dispatches a `voyance:trip-loaded` event (added in step 3). Until the trip is in the set, buffer incoming `itinerary-persist-issues` events (cap: latest 5 per trip).
+- On flip to loaded, drop any buffered events whose `detail.source` starts with `self-heal-` or is `'integrity-blocked-resync'`. Keep user-initiated ones.
+- For events that arrive **after** load, also drop self-heal sources as a belt-and-braces (already filtered upstream in step 1 — this is defense in depth).
+- Keep the existing 5-second dedupe window.
 
-### 2. Add a `fully_persisted` boolean the UI can trust
+### 3. `src/pages/TripDetail.tsx` — emit `voyance:trip-loaded`
 
-- Add `metadata.fully_persisted = true` alongside `itinerary_frozen_at` in the post-enrichment update.
-- `useGenerationPoller` + `TripDetail` consider the trip "saved" only when `itinerary_status ∈ {ready, generated} && metadata.fully_persisted === true && metadata.itinerary_frozen_at` is set.
-- `SaveStatusIndicator` / header strip: while `ready` but not `fully_persisted`, render the existing `Reconciling…` chip instead of "Saved".
+Once both conditions hold:
+- The trip's canonical `itinerary_data` has been read (existing `parsedDays` is non-empty), AND
+- The first post-mount `TRIP_PERSISTED_EVENT` from a self-heal cycle has settled (or 1.5s after first render if no self-heal fires)
 
-### 3. Block destructive reload during the gap
+…dispatch `window.dispatchEvent(new CustomEvent('voyance:trip-loaded', { detail: { tripId } }))` exactly once per mount. Use a `useRef` flag.
 
-In `TripDetail.tsx`:
-- When generation is in-flight OR `itinerary_status='ready'` but `!fully_persisted`, install a `beforeunload` handler that returns a confirmation string ("Your itinerary is still saving. Refreshing now may lose dining and enriched content.").
-- Remove the handler as soon as `fully_persisted` flips true (and on unmount).
-- This is the short-term safety net; once #1 + #2 ship cleanly, the window where the prompt fires shrinks to seconds.
+This is the "load-complete gate" the user asked for. It mirrors how the health engine waits for the live render state.
 
-## Out of scope / explicitly NOT changing
+### 4. Test
 
-- No changes to the auto-resume allow-list, persist-regression guard, or DB-Is-Source-of-Truth contract — those are working as designed and are what *partially* protect users today.
-- No changes to dining/description generation logic itself; only *when* we declare success.
-- No new tables, no schema changes.
+Add `src/components/itinerary/__tests__/PersistIssuesListener.suppress.test.ts`:
+- Dispatching `itinerary-persist-issues` with `source: 'self-heal-predawn-cascade'` produces no toast.
+- Dispatching with `source: 'user'` produces a toast.
+- Events fired before `voyance:trip-loaded` are buffered; self-heal ones are dropped on flip, user ones surface.
+
+## Out of scope
+
+- No changes to the backend validator or `validateItineraryForPersist` — the validator is correct, it just shouldn't be user-visible during silent reconciliation.
+- No changes to the health engine, generation pipeline, or freeze/`fully_persisted` work from the previous task.
+- Real "needs regeneration" surfaces (when a user actually edits or regenerates a day and it fails) continue to fire as today.
 
 ## Files touched
 
-- `supabase/functions/generate-itinerary/generation-core.ts` (Stage 6 split: ready-without-freeze → enrichment → freeze + `fully_persisted`)
-- `supabase/functions/generate-itinerary/action-generate-trip.ts` (final-leg freeze only)
-- `src/hooks/useGenerationPoller.ts` (poll until `fully_persisted`)
-- `src/pages/TripDetail.tsx` (`beforeunload` guard; surface `fully_persisted` to children)
-- `src/components/trip/EditorialItinerary.tsx` (header chip: Reconciling vs Saved)
-- New unit test asserting Stage 6 does not stamp `itinerary_frozen_at` before enrichment passes complete.
+- `src/services/safeUpdateItineraryData.ts` (1 branch + event detail field)
+- `src/components/itinerary/PersistIssuesListener.tsx` (buffer + filter)
+- `src/pages/TripDetail.tsx` (one `useEffect` to emit `voyance:trip-loaded`)
+- `src/components/itinerary/__tests__/PersistIssuesListener.suppress.test.ts` (new)
 
-## Memory updates
+## Memory
 
-- Update `mem://constraints/itinerary/frozen-after-ready` to add: "freeze stamp MUST follow Phase 4 + dining-description + bookend passes; pair with `fully_persisted=true`."
-- New `mem://constraints/itinerary/saved-badge-honesty` documenting the UI contract and the `beforeunload` guard.
+Add `mem://constraints/itinerary/persist-issues-toast-user-only`:
+> `itinerary-persist-issues` toasts must only fire on user-initiated saves AND only after `voyance:trip-loaded`. Self-heal reasons (`self-heal-*`, `integrity-blocked-resync`) suppressed at `safeUpdateItineraryData` chokepoint + filtered again in `PersistIssuesListener`. Closes Paris page-load "3 days need regeneration" false alarm.
