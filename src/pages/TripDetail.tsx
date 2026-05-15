@@ -778,13 +778,36 @@ export default function TripDetail() {
       try {
         const { data: fullTrip } = await supabase
           .from('trips')
-          .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id')
+          .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id, itinerary_data, itinerary_status')
           .eq('id', trip.id)
           .single();
 
         if (!fullTrip) {
           console.error('[TripDetail] Could not fetch full trip data for queued leg');
           queuedLegInvokedRef.current = false;
+          return;
+        }
+
+        // Defense-in-depth: never invoke generation against a leg that
+        // already has saved activities (JSON or normalized rows). Silent
+        // overwrite of an existing itinerary is the regression we are
+        // guarding against. See mem://constraints/itinerary/no-auto-resume-on-load.
+        const itinDays = ((fullTrip.itinerary_data as { days?: any[] } | null)?.days) || [];
+        const hasJsonActivities = Array.isArray(itinDays)
+          && itinDays.some((d: any) => Array.isArray(d?.activities) && d.activities.length > 0);
+        const { count: existingDayRows } = await supabase
+          .from('itinerary_days')
+          .select('id', { count: 'exact', head: true })
+          .eq('trip_id', trip.id);
+        if (hasJsonActivities || (existingDayRows ?? 0) > 0) {
+          console.warn(`[TripDetail] Queued-leg trigger SKIPPED for ${trip.id} — saved activities already exist (json=${hasJsonActivities}, dayRows=${existingDayRows ?? 0}). Refreshing local state instead.`);
+          const { data: refreshedTrip } = await supabase
+            .from('trips')
+            .select('*')
+            .eq('id', trip.id)
+            .single();
+          if (refreshedTrip && !cancelled) setTrip(refreshedTrip as Trip);
+          queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
           return;
         }
 
