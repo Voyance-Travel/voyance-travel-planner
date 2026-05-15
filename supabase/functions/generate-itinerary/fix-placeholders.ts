@@ -913,6 +913,9 @@ export function nuclearPlaceholderSweep(
 ): number {
   const destinationCity = (city || '').toLowerCase().split(',')[0].trim();
   const usedNames = new Set<string>();
+  // Seed with existing real dining venues — closes recycle path where
+  // a late nuclear replacement picks the same venue another meal already used.
+  seedUsedNamesFromExistingDining(activities, usedNames);
   let replaced = 0;
 
   for (const activity of activities) {
