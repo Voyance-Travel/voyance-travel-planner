@@ -778,13 +778,36 @@ export default function TripDetail() {
       try {
         const { data: fullTrip } = await supabase
           .from('trips')
-          .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id')
+          .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id, itinerary_data, itinerary_status')
           .eq('id', trip.id)
           .single();
 
         if (!fullTrip) {
           console.error('[TripDetail] Could not fetch full trip data for queued leg');
           queuedLegInvokedRef.current = false;
+          return;
+        }
+
+        // Defense-in-depth: never invoke generation against a leg that
+        // already has saved activities (JSON or normalized rows). Silent
+        // overwrite of an existing itinerary is the regression we are
+        // guarding against. See mem://constraints/itinerary/no-auto-resume-on-load.
+        const itinDays = ((fullTrip.itinerary_data as { days?: any[] } | null)?.days) || [];
+        const hasJsonActivities = Array.isArray(itinDays)
+          && itinDays.some((d: any) => Array.isArray(d?.activities) && d.activities.length > 0);
+        const { count: existingDayRows } = await supabase
+          .from('itinerary_days')
+          .select('id', { count: 'exact', head: true })
+          .eq('trip_id', trip.id);
+        if (hasJsonActivities || (existingDayRows ?? 0) > 0) {
+          console.warn(`[TripDetail] Queued-leg trigger SKIPPED for ${trip.id} — saved activities already exist (json=${hasJsonActivities}, dayRows=${existingDayRows ?? 0}). Refreshing local state instead.`);
+          const { data: refreshedTrip } = await supabase
+            .from('trips')
+            .select('*')
+            .eq('id', trip.id)
+            .single();
+          if (refreshedTrip && !cancelled) setTrip(refreshedTrip as Trip);
+          queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
           return;
         }
 
@@ -959,6 +982,21 @@ export default function TripDetail() {
         return; // Has progress, not stuck
       }
 
+      // Defense-in-depth: even with 0 itinerary_days rows, if the
+      // embedded JSON has real activities, do NOT regenerate — that
+      // would silently overwrite visible content. Correct status
+      // instead. See mem://constraints/itinerary/no-auto-resume-on-load.
+      if (hasItineraryData(trip)) {
+        console.warn(`[TripDetail] Stuck-heal SKIPPED for ${trip.id} — itinerary_data has real activities; correcting status to 'ready'.`);
+        stuckHealAttempted.current = true;
+        await supabase.from('trips').update({
+          itinerary_status: 'ready',
+          updated_at: new Date().toISOString(),
+        }).eq('id', trip.id);
+        queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+        return;
+      }
+
       stuckHealAttempted.current = true;
       console.log(`[TripDetail] Detected stuck journey leg ${trip.id} — attempting self-heal`);
 
@@ -1036,10 +1074,24 @@ export default function TripDetail() {
     if (hasItineraryData(trip)) return;
 
     notStartedHealAttempted.current = true;
-    console.log(`[TripDetail] Stuck not_started chat-planner trip ${trip.id} (age=${Math.round(ageMs/1000)}s) — invoking server-side generate-trip chain`);
+    console.log(`[TripDetail] Stuck not_started chat-planner trip ${trip.id} (age=${Math.round(ageMs/1000)}s) — checking normalized rows before invoking server-side generate-trip chain`);
 
     (async () => {
       try {
+        // Defense-in-depth: even if itinerary_data JSON is empty, the
+        // normalized itinerary_days table may already hold real
+        // generated content. Never invoke generation when those rows
+        // exist. See mem://constraints/itinerary/no-auto-resume-on-load.
+        const { count: existingDayRows } = await supabase
+          .from('itinerary_days')
+          .select('id', { count: 'exact', head: true })
+          .eq('trip_id', trip.id);
+        if ((existingDayRows ?? 0) > 0) {
+          console.warn(`[TripDetail] not_started self-heal SKIPPED for ${trip.id} — itinerary_days has ${existingDayRows} rows; refreshing instead.`);
+          queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+          return;
+        }
+
         const { data: fullTrip } = await supabase
           .from('trips')
           .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id')
