@@ -907,8 +907,9 @@ export function TripHealthPanel({
   // truth: collapsed and expanded views always read the same derived set.
   const healthIssues = useMemo(() => {
     const liveIds = new Set(rawHealthIssues.map((i) => i.id));
-    return stableIssues.filter((i) => liveIds.has(i.id));
-  }, [stableIssues, rawHealthIssues]);
+    const intersected = stableIssues.filter((i) => liveIds.has(i.id));
+    return guardrailHealthIssues(intersected, days);
+  }, [stableIssues, rawHealthIssues, days]);
 
   // Health score: start at 100, deduct for stable issues only.
   // Soft "recovering" warnings (sparse-JSON heuristic) don't deduct — the
