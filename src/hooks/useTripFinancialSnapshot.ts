@@ -665,7 +665,17 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     lastWarnedTotalRef.current = null;
     mountedAtRef.current = Date.now();
     setLastDelta(null);
+    if (deltaTimerRef.current) {
+      clearTimeout(deltaTimerRef.current);
+      deltaTimerRef.current = null;
+    }
     fetchData();
+    return () => {
+      if (deltaTimerRef.current) {
+        clearTimeout(deltaTimerRef.current);
+        deltaTimerRef.current = null;
+      }
+    };
   }, [fetchData]);
 
   // Re-fetch when bookings change (hotel/flight added)
