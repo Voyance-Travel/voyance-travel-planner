@@ -490,7 +490,7 @@ export function PaymentsTab({
   const reserveCents = !financialSnapshot.loading
     ? (financialSnapshot.miscReserveCents || 0)
     : 0;
-  const essentialItemsWithReserve = essentialItems;
+  const essentialItems = essentialItems;
 
   // ─── Split EVERY non-essential payable item by its Budget by Category bucket
   //     so the Payments tab matches the Budget tab one-to-one. We key off
@@ -541,7 +541,7 @@ export function PaymentsTab({
   // same `resolveCanonicalCostRows` resolver — any divergence is a contract
   // bug to surface in dev, never a user-facing badge to apologize for.
   const bucketSumCents =
-    essentialItemsWithReserve.reduce((s, i) => s + i.amountCents, 0) +
+    essentialItems.reduce((s, i) => s + i.amountCents, 0) +
     foodItems.reduce((s, i) => s + i.amountCents, 0) +
     activitiesOnlyItems.reduce((s, i) => s + i.amountCents, 0) +
     transitItems.reduce((s, i) => s + i.amountCents, 0) +
@@ -1369,7 +1369,7 @@ export function PaymentsTab({
 
         <TabsContent value="expenses" className="mt-4 space-y-4">
           {/* Essentials Category */}
-          {essentialItemsWithReserve.length > 0 && (
+          {essentialItems.length > 0 && (
             <Card className="overflow-hidden">
               <button
                 onClick={() => setExpandedCategory(expandedCategory === 'essentials' ? null : 'essentials')}
@@ -1389,12 +1389,12 @@ export function PaymentsTab({
                     <p className="font-medium">
                       {displayMoney(
                         financialSnapshot.loading
-                          ? essentialItemsWithReserve.reduce((sum, i) => sum + i.amountCents, 0)
-                          : (financialSnapshot.buckets?.essentials ?? essentialItemsWithReserve.reduce((sum, i) => sum + i.amountCents, 0))
+                          ? essentialItems.reduce((sum, i) => sum + i.amountCents, 0)
+                          : (financialSnapshot.buckets?.essentials ?? essentialItems.reduce((sum, i) => sum + i.amountCents, 0))
                       )}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {essentialItemsWithReserve.filter(i => i.payment?.status === 'paid').length}/{essentialItemsWithReserve.length} paid
+                      {essentialItems.filter(i => i.payment?.status === 'paid').length}/{essentialItems.length} paid
                     </p>
                   </div>
                   <ChevronDown className={cn(
@@ -1412,7 +1412,7 @@ export function PaymentsTab({
                     className="overflow-hidden"
                   >
                     <CardContent className="pt-0 pb-4">
-                      {essentialItemsWithReserve.map(renderPayableItem)}
+                      {essentialItems.map(renderPayableItem)}
                     </CardContent>
                   </motion.div>
                 )}
