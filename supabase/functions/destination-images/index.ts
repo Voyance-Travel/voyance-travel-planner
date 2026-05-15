@@ -586,7 +586,21 @@ async function getGooglePlacesPhoto(
         }
 
         // Calculate match score
-        const score = calculateMatchScore(venueTokens, displayName);
+        let score = calculateMatchScore(venueTokens, displayName);
+
+        // Destination-tier hero credit: a place whose name OR address contains
+        // the destination name is by definition the right city, even if the
+        // POI tokens miss (e.g. queried "Hércules Port", Google returned
+        // "Prince's Palace of Monaco"). Lifts the score above MIN_MATCH_SCORE
+        // so we don't AI-fallback when Google has the perfect photo. Only
+        // applies to destination heroes — venue searches still need name match.
+        if (entityType === 'destination' && score < 0.6) {
+          const destFolded = accentFold(destination);
+          const haystack = accentFold(`${displayName} ${address}`);
+          if (destFolded && haystack.includes(destFolded)) {
+            score = Math.max(score, 0.65);
+          }
+        }
 
         if (score < MIN_MATCH_SCORE) {
           console.log(`[Images] Rejecting (low score ${score.toFixed(2)}):`, displayName);
