@@ -261,7 +261,14 @@ export function useTripHeroImage({
       return { url: canonicalUrl, source: 'db_curated' };
     }
 
-    // 3. Curated images — pinned to [0], no rotation
+    // 3. Stable internal storage map (durable last-trusted tier;
+    // closes Dublin/Copenhagen/Barcelona blank-hero regression when
+    // canonical points at a missing storage object).
+    if (storageUrl && !storageFailed) {
+      return { url: storageUrl, source: 'db_curated' };
+    }
+
+    // 4. Curated images — pinned to [0], no rotation
     if (hasCurated && !curatedFailed && curatedImages[curatedIndex]) {
       return { url: curatedImages[curatedIndex], source: 'curated' };
     }
