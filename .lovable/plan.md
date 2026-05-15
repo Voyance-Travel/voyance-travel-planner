@@ -1,54 +1,42 @@
-## What's actually happening
+## Plan: stop the persistent “−$X just now” and “Reconciling…” loop
 
-The Monaco trip hero is showing a **Gemini-generated AI image labeled "Hércules Port"** — not a real Monaco photo. It's also not the airplane bug from earlier; that's been cleared. Google API is working — but the destination-images pipeline is choosing a bad POI to query, then rejecting all of Google's real results, then falling all the way through to AI image generation.
+### What I found
+- The Monaco trip has `activity_costs` rows whose `activity_id`s no longer match the current itinerary JSON activity IDs.
+- The header total uses `useTripFinancialSnapshot`, which tries to rescue orphan/missing cost rows.
+- The inline equation and Payments badge also use `useTripDayBreakdown`, which currently sums raw `activity_costs` rows directly and does not use the same canonical resolver/orphan filtering.
+- That means the header total, day subtotal, and Payments total can disagree forever even when no user action happened, producing:
+  - persistent `Reconciling…`
+  - stale `−$120 just now` / similar delta indicators
+  - repeated patterns across Bali, Barcelona, Monaco
 
-## Root cause (verified via logs + DB)
+### Implementation steps
+1. **Unify day breakdown with the canonical resolver**
+   - Update `useTripDayBreakdown` so it receives enough trip context (`itinerary_data`, travelers, manual payments, include toggles) and aggregates the same resolved rows that `useTripFinancialSnapshot` uses.
+   - This prevents raw orphan rows from being counted in one place while rescued/dropped rows are counted differently elsewhere.
 
-1. `destinations.points_of_interest` for Monaco is `["Monte Carlo Casino", "Prince's Palace of Monaco", ..., "Hércules Port"]`.
-2. `getDestinationPOI` sorts alphabetically with `localeCompare` and picks **`Hércules Port`** as the canonical POI (the `H` + accented `é` sorts to the top).
-3. Hero search is run as `"Hércules Port landmark attraction Monaco"`.
-4. Google Places v1 returns the right places — `Prince's Palace of Monaco`, `Monaco Hercules harbour`, etc. — verified in edge logs.
-5. `calculateMatchScore(venueTokens, displayName)` does token-overlap matching against `"Hércules Port"`. None of Google's display names contain `Hércules` (accent + `é` token), so they all score `0.00` and are rejected with `[Images] Rejecting (low score 0.00)`.
-6. Unsplash returns `no quality results for "Monaco"`. Wikimedia/TripAdvisor return nothing useful.
-7. Pipeline falls through to `generateAIImage` (gemini-2.5-flash-image-preview) → returns a giant base64 PNG of a generic harbor/clouds tagged "Made with Google AI". That's the cloud image you see.
+2. **Prevent load-time/system deltas from rendering as user-facing changes**
+   - Harden `useTripFinancialSnapshot` so automatic reconciliation/refetch/backfill deltas do not set `lastDelta`.
+   - Keep diagnostics in console logs, but do not show “−$X just now” unless the change follows a clear user action or attributed pricing repair.
 
-## Fix
+3. **Make the reconcile badge bounded and non-sticky**
+   - Keep the existing timeout behavior, but make sure a persistent data mismatch does not continually remount/re-arm the badge.
+   - If the numbers still disagree after the one silent resolve attempt, hide the label and log the mismatch for debugging instead of showing “Reconciling…” indefinitely.
 
-Three small, scoped changes in `supabase/functions/destination-images/index.ts` (no DB schema changes):
+4. **Add regression coverage**
+   - Add/adjust tests around the Monaco-style case: stale `activity_costs.activity_id`s + current itinerary JSON IDs.
+   - Verify header total, equation row, and Payments trip total all use the same resolved total.
 
-### 1. POI selection: rank by quality, not alphabet
-Replace `getDestinationPOI`'s alphabetical sort with a quality preference:
-- Prefer POIs that contain a destination/landmark keyword (`palace`, `casino`, `cathedral`, `museum`, `garden`, `beach`, `square`, `tower`, `bridge`).
-- Drop accent-only or single-word POIs from first-pick when better candidates exist.
-- Keep deterministic ordering (still sorted, just with the keyword-bonus tier first) so cache keys stay stable.
+5. **Validate against recent affected trips**
+   - Check Monaco (`0c8b2a37…`), plus the recent Bali and Barcelona trips, confirming:
+     - no persistent “Reconciling…”
+     - no load-time “−$X just now” indicator
+     - Payments total matches the itinerary header within the expected tolerance
 
-For Monaco this picks `"Monte Carlo Casino"` or `"Prince's Palace of Monaco"` instead of `"Hércules Port"`.
-
-### 2. Match scoring: accent-fold + city-name credit
-In the loop at lines 548–600:
-- Normalize both `venueTokens` and `displayName` with `.normalize('NFKD').replace(/\p{Diacritic}/gu, '')` before scoring so `Hércules` ↔ `Hercules` matches.
-- Award a partial-match credit when `displayName` contains the destination name (e.g. "...of Monaco") even if POI tokens miss — these are the right place by definition for a destination-tier hero.
-
-### 3. Retry with the bare destination name when the POI search yields zero candidates
-If the POI-driven Google Places search returns no scored survivors AND we're resolving a destination hero, run one more search using just the destination name (`"Monaco landmark attraction"`) before falling through to AI generation. This is the safety net that guarantees Google Places gets a fair shot for any city we have a place_id-able name for.
-
-## What this does NOT change
-
-- Frontend resolver chain (`useTripHeroImage`) — unchanged
-- DB tables, RLS, migrations — unchanged
-- AI generation path — still exists as last resort, but won't be hit for cities with real Google Places coverage
-- Other endpoints (activity images, hotel images) — unchanged
-
-## Verification after deploy
-
-1. Hard-refresh `/trip/0c8b2a37…` (Monaco) — hero should be a real photo of Monte Carlo Casino or Prince's Palace, served from `googleapis`/Places photo CDN.
-2. Edge logs show `[Images] Found 7 POIs for Monaco, using canonical: Monte Carlo Casino` and at least one `Rejecting (low score …)` count drops to 0 for the chosen POI.
-3. Spot-check 4 other accented-POI cities (Faro, São Paulo, Curaçao, Düsseldorf) — each gets a real photo, not a base64 AI placeholder.
-4. `psql -c "SELECT count(*) FROM image_quality_log WHERE rejected_reason='low_score' AND created_at > now() - interval '1 hour'"` — sharp drop.
-
-## Memory update
-
-Refresh `mem://constraints/visual/destination-canonical-stock-fallback` (or add a sibling `destination-hero-poi-selection`) noting:
-- Destination-hero POI selection MUST prefer landmark-keyword candidates over alphabetical first
-- Match scoring MUST accent-fold both sides
-- POI-driven search MUST fall back to bare-destination Google Places query before AI generation
+### Technical notes
+- Primary files likely involved:
+  - `src/hooks/useTripFinancialSnapshot.ts`
+  - `src/hooks/useTripDayBreakdown.ts`
+  - `src/hooks/useReconcilingState.ts`
+  - `src/components/itinerary/PaymentsTab.tsx`
+  - existing tests around financial snapshot / Payments totals
+- No database schema change should be needed; this is a frontend canonicalization/resolver consistency fix.

@@ -1,25 +1,24 @@
 /**
  * useTripDayBreakdown
  *
- * Per-day canonical aggregator. Reads from `activity_costs` using the SAME
- * inclusion rule as `useTripFinancialSnapshot`, so the per-day badges and
- * the trip header total can never disagree.
+ * Per-day canonical aggregator. Reads from `activity_costs` AND routes the
+ * rows through the SAME `resolveCanonicalCostRows` resolver that
+ * `useTripFinancialSnapshot` uses. This guarantees that the per-day badges,
+ * the day subtotal, and the trip header total are computed from an
+ * identical set of resolved rows — including orphan rescue, $0 JSON
+ * rescue, and the toggle filter.
  *
- * Returns, for each day_number present in the table:
- *   - totalCents:    sum of all included rows for the day (group-cost USD cents)
- *   - visibleCents:  subset of totalCents whose activity_id matches the rendered
- *                    list passed in via `visibleActivityIds`
- *   - otherCents:    totalCents − visibleCents (transit micro-legs, fees,
- *                    logistics rows that aren't rendered as activity cards)
- *   - rows:          raw rows for the "Other / fees" expansion
- *
- * Designed to share fetches with the snapshot — both subscribe to the same
- * `booking-changed` event and refetch in lockstep.
+ * Without this parity, raw activity_costs rows whose `activity_id` no
+ * longer exists in itinerary_data leak into the day subtotal but are
+ * dropped from `useTripFinancialSnapshot.tripTotalCents`, producing the
+ * persistent "Reconciling…" badge and the load-time "−$X just now" indicator
+ * (Bali / Barcelona / Monaco pattern).
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { shouldCountRow } from '@/services/tripBudgetService';
+import { resolveCanonicalCostRows, type CanonicalLiveActivity } from '@/services/canonicalCostRows';
+import { TRIP_PERSISTED_EVENT } from '@/lib/itinerary/resyncItineraryFromDb';
 
 export interface DayBreakdownRow {
   id: string;
@@ -52,13 +51,10 @@ export function useTripDayBreakdown(
   tripId: string,
   visibleActivityIds: Set<string> | string[] = new Set(),
 ): TripDayBreakdown {
-  const [rows, setRows] = useState<DayBreakdownRow[]>([]);
-  const [includeHotel, setIncludeHotel] = useState(true);
-  const [includeFlight, setIncludeFlight] = useState(false);
+  const [resolvedRows, setResolvedRows] = useState<DayBreakdownRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Stabilize the set across renders. Callers may pass a fresh array each
-  // render — that should not refetch, only re-derive the visible/other split.
+  // Stabilize the set across renders.
   const visibleSet = useMemo(() => {
     if (visibleActivityIds instanceof Set) return visibleActivityIds;
     return new Set(visibleActivityIds);
@@ -67,41 +63,85 @@ export function useTripDayBreakdown(
     : Array.from(visibleActivityIds).join('|')]);
 
   const fetchData = useCallback(async () => {
-    if (!tripId) return;
+    if (!tripId) {
+      setLoading(false);
+      return;
+    }
 
-    const [tripRes, costsRes] = await Promise.all([
+    const [tripRes, costsRes, paymentsRes] = await Promise.all([
       supabase
         .from('trips')
-        .select('budget_include_hotel, budget_include_flight')
+        .select('budget_include_hotel, budget_include_flight, itinerary_data, travelers')
         .eq('id', tripId)
         .single(),
       supabase
         .from('activity_costs')
-        .select('id, activity_id, day_number, category, cost_per_person_usd, num_travelers, notes, source, is_paid')
+        .select('id, activity_id, day_number, category, cost_per_person_usd, num_travelers, notes, source, is_paid, paid_amount_usd')
         .eq('trip_id', tripId),
+      supabase
+        .from('trip_payments')
+        .select('item_type, item_id, amount_cents, quantity, status')
+        .eq('trip_id', tripId)
+        .is('archived_at', null),
     ]);
 
-    setIncludeHotel(tripRes.data?.budget_include_hotel ?? true);
-    setIncludeFlight(tripRes.data?.budget_include_flight ?? false);
+    const includeHotel = tripRes.data?.budget_include_hotel ?? true;
+    const includeFlight = tripRes.data?.budget_include_flight ?? false;
+    const tripTravelers = Number((tripRes.data as any)?.travelers) || 1;
 
-    const mapped: DayBreakdownRow[] = (costsRes.data || []).map((r: any) => {
-      const perPerson = Number(r.cost_per_person_usd) || 0;
-      const trav = Number(r.num_travelers) || 1;
+    // Build live-activity index from itinerary_data.days, identical to the
+    // snapshot's projection so the resolver produces the same outcome.
+    const liveActivities: CanonicalLiveActivity[] = [];
+    const days = ((tripRes.data as any)?.itinerary_data?.days) || [];
+    for (const day of days) {
+      const dayNum = Number(day?.dayNumber) || 0;
+      for (const a of (day?.activities || [])) {
+        if (!a?.id) continue;
+        const explicit = typeof a.cost === 'number' ? a.cost
+          : (a.cost && typeof a.cost === 'object' && typeof a.cost.amount === 'number') ? a.cost.amount
+          : (typeof a.explicitCost === 'number' ? a.explicitCost : 0);
+        liveActivities.push({
+          id: String(a.id),
+          dayNumber: dayNum,
+          name: String(a.title || a.name || ''),
+          category: String(a.category || a.type || '').toLowerCase(),
+          jsonCost: Number(explicit) || 0,
+        });
+      }
+    }
+
+    const canonical = resolveCanonicalCostRows({
+      costs: (costsRes.data || []) as any,
+      liveActivities,
+      includeHotel,
+      includeFlight,
+      manualPayments: (paymentsRes.data || []) as any,
+      travelers: tripTravelers,
+    });
+
+    // Index source rows by id to recover notes / paid mirror metadata.
+    const sourceById = new Map<string, any>();
+    for (const r of (costsRes.data || []) as any[]) {
+      if (r?.id) sourceById.set(String(r.id), r);
+    }
+
+    const mapped: DayBreakdownRow[] = canonical.rows.map((r) => {
+      const src = sourceById.get(r.rowKey);
       return {
-        id: r.id,
-        activityId: r.activity_id || null,
-        dayNumber: r.day_number == null ? 0 : Number(r.day_number),
+        id: r.rowKey,
+        activityId: r.effectiveActivityId,
+        dayNumber: r.dayNumber,
         category: r.category || null,
-        costPerPersonUsd: perPerson,
-        numTravelers: trav,
-        totalUsdCents: Math.round(perPerson * trav * 100),
-        notes: r.notes || null,
-        source: r.source || null,
-        isPaid: r.is_paid === true,
+        costPerPersonUsd: r.numTravelers > 0 ? (r.cents / 100) / r.numTravelers : (r.cents / 100),
+        numTravelers: r.numTravelers,
+        totalUsdCents: r.cents,
+        notes: src?.notes || null,
+        source: r.source,
+        isPaid: r.isPaid,
       };
     });
 
-    setRows(mapped);
+    setResolvedRows(mapped);
     setLoading(false);
   }, [tripId]);
 
@@ -110,17 +150,20 @@ export function useTripDayBreakdown(
     fetchData();
   }, [fetchData]);
 
-  // Stay in sync with snapshot — same event channel.
+  // Stay in sync with snapshot — same event channels.
   useEffect(() => {
     const handler = () => fetchData();
     window.addEventListener('booking-changed', handler);
-    return () => window.removeEventListener('booking-changed', handler);
+    window.addEventListener(TRIP_PERSISTED_EVENT, handler);
+    return () => {
+      window.removeEventListener('booking-changed', handler);
+      window.removeEventListener(TRIP_PERSISTED_EVENT, handler);
+    };
   }, [fetchData]);
 
   const byDay = useMemo<Record<number, DayBreakdown>>(() => {
     const acc: Record<number, DayBreakdown> = {};
-    for (const row of rows) {
-      if (!shouldCountRow({ category: row.category }, includeHotel, includeFlight)) continue;
+    for (const row of resolvedRows) {
       const day = row.dayNumber ?? 0;
       if (!acc[day]) acc[day] = { totalCents: 0, visibleCents: 0, otherCents: 0, rows: [], otherRows: [] };
       const bucket = acc[day];
@@ -135,7 +178,7 @@ export function useTripDayBreakdown(
       }
     }
     return acc;
-  }, [rows, includeHotel, includeFlight, visibleSet]);
+  }, [resolvedRows, visibleSet]);
 
   return useMemo(() => ({
     byDay,
