@@ -72,7 +72,10 @@ export function applyValidationGate(
   // Repair §10b should have caught these via scrubActivity; this handles
   // residuals (e.g. single-segment phantom-only fields that snuck through).
   const ghostWarnings = results.filter(r =>
-    r.severity === 'warning' && r.code === FAILURE_CODES.DESCRIPTION_GHOST_REFERENCE
+    r.severity === 'warning' && (
+      r.code === FAILURE_CODES.DESCRIPTION_GHOST_REFERENCE
+      || r.code === FAILURE_CODES.VENUE_DESCRIPTION_MISMATCH
+    )
   );
   let ghostBlanked = 0;
   for (const r of ghostWarnings) {
@@ -87,7 +90,7 @@ export function applyValidationGate(
     }
   }
   if (ghostBlanked > 0) {
-    console.log(`[VALIDATION_GATE] DESCRIPTION_GHOST_REFERENCE day=${ctx.dayNumber} blanked=${ghostBlanked}`);
+    console.log(`[VALIDATION_GATE] DESCRIPTION_GHOST_REFERENCE/VENUE_DESCRIPTION_MISMATCH day=${ctx.dayNumber} blanked=${ghostBlanked}`);
   }
 
   if (counters.critical === 0) {
