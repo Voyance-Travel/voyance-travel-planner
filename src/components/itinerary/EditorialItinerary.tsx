@@ -192,6 +192,23 @@ import { classifyItineraryCompleteness } from '@/utils/itineraryCompleteness';
 // BOARDING PASS VIEW BUTTON (inline helper)
 // =============================================================================
 
+// Bounded "Reconciling…" hint — wraps useReconcilingState so the predicate
+// in the IIFE-rendered header strip can still drive a hook safely.
+function ReconcilingHint({
+  active,
+  site,
+  tripId,
+}: { active: boolean; site: string; tripId?: string | null }) {
+  const { visible } = useReconcilingState(active, { site, tripId });
+  if (!visible) return null;
+  return (
+    <div className="text-[11px] text-muted-foreground/60 text-center mt-1" aria-live="polite">
+      Reconciling…
+    </div>
+  );
+}
+
+
 function BoardingPassViewButton({ storagePath }: { storagePath: string }) {
   const handleView = async () => {
     try {
