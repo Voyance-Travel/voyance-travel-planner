@@ -936,6 +936,7 @@ export function TripHealthPanel({
   const totalChecklist = checklist.length;
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className={cn('rounded-xl border border-border bg-card overflow-hidden', className)} data-tour="health-score">
       {/* Collapsed Header */}
       <button
@@ -945,28 +946,35 @@ export function TripHealthPanel({
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex items-center gap-2.5">
-            {/* Completion ring */}
-            <div className="relative w-10 h-10 shrink-0">
-              <svg className="w-10 h-10 -rotate-90" viewBox="0 0 36 36">
-                <path
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  className="stroke-muted"
-                  strokeWidth="3"
-                />
-                <path
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  className="stroke-primary"
-                  strokeWidth="3"
-                  strokeDasharray={`${completionPct}, 100`}
-                  strokeLinecap="round"
-                />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-foreground">
-                {completionPct}%
-              </span>
-            </div>
+            {/* Setup ring */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="relative w-10 h-10 shrink-0">
+                  <svg className="w-10 h-10 -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      className="stroke-muted"
+                      strokeWidth="3"
+                    />
+                    <path
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      className="stroke-primary"
+                      strokeWidth="3"
+                      strokeDasharray={`${completionPct}, 100`}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-foreground">
+                    {completionPct}%
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                Setup progress — flights, hotel, days planned, transport.
+              </TooltipContent>
+            </Tooltip>
 
             <div className="text-left min-w-0">
               <p className="text-sm font-medium text-foreground">
@@ -974,7 +982,7 @@ export function TripHealthPanel({
               </p>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[11px] text-muted-foreground">
-                  {doneCount}/{totalChecklist} items ready
+                  Setup: {doneCount}/{totalChecklist} ready
                 </span>
                 {healthIssues.length > 0 && healthScore < 95 && (
                   <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0', healthColor, 'border-current')}>
@@ -987,16 +995,23 @@ export function TripHealthPanel({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Health pill */}
-          <div className={cn(
-            'hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium',
-            healthScore >= 80 ? 'bg-green-500/10 text-green-600' :
-            healthScore >= 50 ? 'bg-amber-500/10 text-amber-600' :
-            'bg-destructive/10 text-destructive'
-          )}>
-            <Shield className="w-3 h-3" />
-            Health: {healthScore}
-          </div>
+          {/* Plan-quality pill */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className={cn(
+                'hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium',
+                healthScore >= 80 ? 'bg-green-500/10 text-green-600' :
+                healthScore >= 50 ? 'bg-amber-500/10 text-amber-600' :
+                'bg-destructive/10 text-destructive'
+              )}>
+                <Shield className="w-3 h-3" />
+                Plan quality: {healthScore}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[240px] text-xs">
+              Plan quality — timing, pacing, gaps, missing meals. Independent of Setup %.
+            </TooltipContent>
+          </Tooltip>
           <ChevronDown className={cn(
             'w-4 h-4 text-muted-foreground transition-transform duration-200',
             isExpanded && 'rotate-180',
@@ -1016,14 +1031,27 @@ export function TripHealthPanel({
           >
             <div className="px-4 pb-4 space-y-4 border-t border-border pt-4">
 
-              {/* ── Completion Progress ── */}
+              {/* ── Reconciliation hint when the two metrics diverge ── */}
+              {healthScore >= 95 && completionPct < 100 && (
+                <p className="text-xs text-muted-foreground italic">
+                  Everything you've added looks good — finish the checklist below to reach 100%.
+                </p>
+              )}
+              {completionPct === 100 && healthScore < 95 && (
+                <p className="text-xs text-muted-foreground italic">
+                  Setup complete — fix the issues below to raise plan quality.
+                </p>
+              )}
+
+              {/* ── Setup checklist ── */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-foreground">Trip Completion</span>
+                  <span className="font-medium text-foreground">Setup checklist</span>
                   <span className="text-muted-foreground">{completionPct}%</span>
                 </div>
                 <Progress value={completionPct} className="h-2" />
               </div>
+
 
               {/* ── Checklist ── */}
               <div className="space-y-1.5">
