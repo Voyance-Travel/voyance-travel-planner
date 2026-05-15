@@ -105,6 +105,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     committedFlightCents: 0,
     manualHotelDelta: 0,
     manualFlightDelta: 0,
+    buckets: { ...EMPTY_BUCKETS },
+    residualFoldedCents: 0,
     loading: true,
   });
   const [lastDelta, setLastDelta] = useState<FinancialDelta | null>(null);
