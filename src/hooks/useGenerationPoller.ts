@@ -81,7 +81,7 @@ export function useGenerationPoller({
   onFailedRef.current = onFailed;
   onStalledRef.current = onStalled;
   
-  // Track whether we already fired onStalled / attempted auto-resume
+  // Track whether we already fired onStalled (one notification per stall cycle)
   const stalledFiredRef = useRef(false);
   // Guard: only fire onReady once per generation cycle
   const onReadyCalledRef = useRef(false);
