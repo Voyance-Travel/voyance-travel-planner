@@ -490,7 +490,7 @@ export function PaymentsTab({
   const reserveCents = !financialSnapshot.loading
     ? (financialSnapshot.miscReserveCents || 0)
     : 0;
-  const essentialItems = essentialItems;
+  // (essentials = flights + hotels, sourced directly from usePayableItems above)
 
   // ─── Split EVERY non-essential payable item by its Budget by Category bucket
   //     so the Payments tab matches the Budget tab one-to-one. We key off
