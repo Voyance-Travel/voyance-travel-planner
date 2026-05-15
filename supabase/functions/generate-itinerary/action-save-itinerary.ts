@@ -1391,6 +1391,11 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       ...(emptyItineraryDetected ? { ...existingMetadataForEmpty, generation_failure_reason: failureReason, empty_itinerary_detected_at: new Date().toISOString() } : {}),
       persist_validation: persistValidationStamp,
       ...(freezeStamp ? { itinerary_frozen_at: freezeStamp } : {}),
+      // User edits to an already-ready trip are synchronous — keep fully_persisted true.
+      // See mem://constraints/itinerary/saved-badge-honesty.
+      ...((nextStatus === 'ready' || nextStatus === 'generated')
+        ? { fully_persisted: true, fully_persisted_at: new Date().toISOString() }
+        : {}),
     },
   };
   const { error, regressionBlocked } = await persistTripItinerary(supabase, tripId, itinerary, {

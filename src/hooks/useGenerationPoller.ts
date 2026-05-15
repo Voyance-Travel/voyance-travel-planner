@@ -162,8 +162,14 @@ export function useGenerationPoller({
       completedDaysHWM.current = completedDays;
       const progress = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
 
-      // Check for completion — backend uses 'ready', some docs say 'generated'
-      if (itineraryStatus === 'ready' || itineraryStatus === 'generated') {
+      // Check for completion — backend uses 'ready', some docs say 'generated'.
+      // Honest "Saved" gate: don't fire onReady while backend has explicitly
+      // marked metadata.fully_persisted === false (Phase 4/5/6 still running).
+      // Legacy trips with no fully_persisted field pass through unchanged.
+      // See mem://constraints/itinerary/saved-badge-honesty.
+      const fullyPersistedFlag = (meta as any)?.fully_persisted;
+      const enrichmentInFlight = fullyPersistedFlag === false;
+      if ((itineraryStatus === 'ready' || itineraryStatus === 'generated') && !enrichmentInFlight) {
         stalledFiredRef.current = false;
         setState({ status: 'ready', completedDays: totalDays || completedDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
         if (!onReadyCalledRef.current) {
@@ -177,7 +183,7 @@ export function useGenerationPoller({
       // CRITICAL: Do NOT mark ready from itinerary_days row count alone — shell rows
       // with empty activities caused the Tokyo 8-day regression (trip appears "ready"
       // but no activities exist, causing bounce-back to "Ready to plan your adventure").
-      if (totalDays > 0 && data.itinerary_data) {
+      if (totalDays > 0 && data.itinerary_data && !enrichmentInFlight) {
         // Check canonical source: itinerary_data.days must have activities
         const daysWithActivities = partialDays.filter(
           (d: any) => d && Array.isArray(d.activities) && d.activities.length > 0

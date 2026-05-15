@@ -3477,11 +3477,16 @@ async function _handleGenerateTripDayInner(
           failed_day_numbers: isComplete ? [] : (Array.isArray((meta as any)?.failed_day_numbers) ? (meta as any).failed_day_numbers : []),
           // Always overwrite stale persist_validation from intermediate saves.
           ...(finalPersistValidation ? { persist_validation: finalPersistValidation } : {}),
-          // FREEZE STAMP — first ready transition. See
-          // mem://constraints/itinerary/frozen-after-ready.
-          ...(finalStatus === 'ready'
-            ? { itinerary_frozen_at: (meta as any)?.itinerary_frozen_at || new Date().toISOString() }
+          // FREEZE DEFERRED — see mem://constraints/itinerary/saved-badge-honesty.
+          // The freeze stamp + fully_persisted=true are written below in a
+          // SECOND update after table-sync + activity_costs succeed, so a
+          // hard refresh during enrichment doesn't leave the trip frozen on
+          // a partial snapshot. Existing frozen stamps are preserved.
+          ...((meta as any)?.itinerary_frozen_at
+            ? { itinerary_frozen_at: (meta as any).itinerary_frozen_at }
             : {}),
+          // Mark in-flight enrichment so UI shows Reconciling and arms beforeunload.
+          ...(finalStatus === 'ready' ? { fully_persisted: false } : {}),
         },
       },
     });
@@ -3585,6 +3590,34 @@ async function _handleGenerateTripDayInner(
     // available only as:
     //   1) one-time legacy backfill (gated by trips.last_cost_repair_at), or
     //   2) the explicit "Repair pricing" user action in the UI.
+
+    // ── PHASE 6: FREEZE STAMP + fully_persisted=true ────────────────
+    // Only after table-sync + activity_costs succeed do we declare the
+    // trip fully saved. See mem://constraints/itinerary/saved-badge-honesty
+    // + mem://constraints/itinerary/frozen-after-ready.
+    if (finalStatus === 'ready' && isComplete) {
+      try {
+        const { data: latestRow } = await supabase
+          .from('trips')
+          .select('metadata')
+          .eq('id', tripId)
+          .single();
+        const latestMeta = (latestRow?.metadata as Record<string, any>) || {};
+        const finalMeta = {
+          ...latestMeta,
+          itinerary_frozen_at: latestMeta.itinerary_frozen_at || new Date().toISOString(),
+          fully_persisted: true,
+          fully_persisted_at: new Date().toISOString(),
+        };
+        await supabase
+          .from('trips')
+          .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
+          .eq('id', tripId);
+        console.log(`[generate-trip-day] Phase 6 freeze + fully_persisted stamped for trip ${tripId}`);
+      } catch (freezeErr) {
+        console.warn('[generate-trip-day] Phase 6 freeze stamp failed (non-blocking):', freezeErr);
+      }
+    }
 
     await triggerNextJourneyLeg(supabase, tripId);
 

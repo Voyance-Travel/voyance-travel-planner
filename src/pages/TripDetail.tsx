@@ -336,6 +336,31 @@ export default function TripDetail() {
     return () => { if (stalledTimerRef.current) clearTimeout(stalledTimerRef.current); };
   }, [generationStalled, trip?.itinerary_status]);
 
+  // ── Reload-loss guard ──────────────────────────────────────────────────
+  // While the trip is generating OR is ready-but-not-yet-fully-persisted
+  // (Phase 4/5/6 still running on the backend), warn the user before they
+  // refresh — a hard reload would drop the still-arriving dining/enrichment
+  // cards and render the partial DB snapshot. Cleared as soon as backend
+  // stamps metadata.fully_persisted = true.
+  // See mem://constraints/itinerary/saved-badge-honesty.
+  useEffect(() => {
+    const meta = (trip?.metadata as Record<string, any> | null | undefined) || {};
+    const fullyPersisted = meta?.fully_persisted === true;
+    const status = trip?.itinerary_status as string | undefined;
+    const isReadyish = status === 'ready' || status === 'generated';
+    const shouldGuard = isServerGenerating || (isReadyish && !fullyPersisted && !!trip?.itinerary_data);
+    if (!shouldGuard) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      const msg = 'Your itinerary is still saving. Refreshing now may lose dining and enriched content.';
+      e.preventDefault();
+      e.returnValue = msg;
+      return msg;
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [trip?.metadata, trip?.itinerary_status, trip?.itinerary_data, isServerGenerating]);
+
+
   // Single source of truth: when any save site reports a successful persist,
   // re-read the canonical itinerary_data from DB and apply it to local state.
   // Closes the "pre-refresh ≠ post-refresh" divergence (timing cascade,
