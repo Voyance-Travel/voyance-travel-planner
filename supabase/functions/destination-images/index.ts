@@ -277,9 +277,19 @@ const BAD_KEYWORDS = [
   'gas station', 'petrol', 'atm', 'bank branch'
 ];
 
+/**
+ * Accent-fold and lowercase a string so `Hércules` matches `Hercules`,
+ * `São Paulo` matches `Sao Paulo`, etc. Without this fold the token
+ * scorer rejects every Google Places result whose display name lacks
+ * the exact accented form of the POI we queried (root cause of the
+ * Monaco "Hércules Port" → AI-fallback regression).
+ */
+function accentFold(s: string): string {
+  return s.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+}
+
 function tokenize(s: string): string[] {
-  return s
-    .toLowerCase()
+  return accentFold(s)
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
