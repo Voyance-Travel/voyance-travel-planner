@@ -1374,7 +1374,11 @@ export function PaymentsTab({
             </Card>
           )}
 
-          {/* Category cards — mirror Budget by Category buckets so totals agree */}
+          {/* Category cards — mirror Budget by Category buckets so totals agree.
+              Bucket header total reads from `financialSnapshot.buckets[key]`
+              (authoritative; sums to displayedTotal by construction) instead of
+              re-summing items locally. Closes the Bali "$900+$480+$200=$1,580
+              vs $1,322" pattern. See mem://constraints/finance/single-cost-decomposition. */}
           {([
             { key: 'food', items: foodItems, label: 'Food & Dining', icon: <Utensils className="h-5 w-5 text-accent" /> },
             { key: 'activities', items: activitiesOnlyItems, label: 'Activities & Experiences', icon: <Camera className="h-5 w-5 text-accent" /> },
@@ -1398,7 +1402,11 @@ export function PaymentsTab({
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <p className="font-medium">
-                      {formatCurrency(items.reduce((sum, i) => sum + i.amountCents, 0))}
+                      {formatCurrency(
+                        financialSnapshot.loading
+                          ? items.reduce((sum, i) => sum + i.amountCents, 0)
+                          : (financialSnapshot.buckets?.[key] ?? items.reduce((sum, i) => sum + i.amountCents, 0))
+                      )}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {items.filter(i => i.payment?.status === 'paid').length}/{items.length} paid
