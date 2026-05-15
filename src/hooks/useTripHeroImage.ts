@@ -243,7 +243,7 @@ export function useTripHeroImage({
     return () => {
       cancelled = true;
     };
-  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, dbCuratedUrl, apiFetched, canonicalFetched, canonicalUrl]);
+  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, dbCuratedUrl, apiFetched, canonicalFetched, canonicalUrl, canonicalFailed, storageUrl, storageFailed]);
 
   // Determine current image URL based on fallback chain
   const getImageUrl = (): { url: string; source: UseTripHeroImageResult['source'] } => {
