@@ -1,48 +1,65 @@
-## Problem
-A real-world activity card (Coastal Bike Exploration, Day 2) shipped to the user with `description: "The."` — a single article + period. Investigation shows our defenses miss this exact shape:
+## What the data says for this Monaco trip
 
-- `checkActivityDescriptions` (validate-day.ts) flags `description.length < 30` as `MISSING_DESCRIPTION`, but the **repair** is delegated to `fillMissingDescriptions` in `_shared/description-fill.ts`. When that 8s LLM call times out / errors / returns < 30 chars / fails the restaurant guard, the function **leaves the original string in place** (`act.description` is only assigned in the success branch). So `"The."` survives.
-- `scrubSentenceFragments` in `_shared/prompt-leak-scrub.ts` is a no-op for **single-sentence** strings (intentional — see line 210: "Single-sentence: only flag, don't strip"). `"The."` is one sentence.
-- No FE sanitizer drops article-only descriptions either, so the persisted card renders verbatim.
+Trip `0c8b2a37…` (Monaco, USD, 2 travelers, `budget_include_hotel=true`, `budget_include_flight=false`, `budget_allocations={}`).
 
-This affects every code path: fresh generation (refill failed silently), chain regen, and any legacy persisted trip whose description-fill round failed.
+`activity_costs` rolls up to:
 
-## Fix — Defense in Depth (3 layers)
+```
+Day 0 hotel (logistics-sync)   $700
+Day 1+ paid activities  5×$20  $100
+Day 1+ dining   $40 + $60 + $40 = $140
+Day 1+ transport (1 taxi leg)    $4
+                              ──────
+Trip total                     $944
+```
 
-### Layer 1 — Backend: blank degenerate descriptions instead of preserving them
+(Earlier note in chat said $924 — I miscounted one activity row; the table sum is **$944**, hotel $700 + days $244.)
 
-In `supabase/functions/_shared/description-fill.ts`:
-- After the success-branch assignment loop, walk `targets` once more. For each target whose final `act.description` is still degenerate (regex `^\s*(the|a|an|it|this|that|here|there)\s*\.?\s*$/i` OR `trim().length < DESC_MIN_CHARS / 2` ≈ <15 chars), set `act.description = ''`. This guarantees no path leaves "The." / "A." / a 4-char stub on the card. Empty is recoverable downstream; "The." is not.
-- Add a counter `counters.blanked` and include it in the `[DESC_FILL]` sentinel.
+Zero rows in `trip_payments`. `budget_allocations.misc_percent = 0`, so no spending-money reserve is folded.
 
-### Layer 2 — Unified Output Validation Layer
+Through the canonical pipeline this should resolve to:
+- `snapshot.tripTotalCents = 944_00`
+- `snapshot.effectiveHotelCents = 700_00`
+- `daysSubtotalCents = 244_00` (days > 0)
+- `chipSumUsd = 244 + 700 + 0 = 944`
+- `displayedTripTotalUsd = max(944, 944) = 944`
+- Payments `Trip Total = 944`, bucket sum `= 700 + 140 + 100 + 4 = 944`
 
-In `supabase/functions/_shared/scrub-activity.ts`:
-- Add a small `scrubDegenerateBodyFields(act)` step (composed before the existing `scrubSentenceFragmentsOnAct` call) that blanks `description`, `notes`, `tips`, `summary` when they match the same article-only / `<15` chars regex above. Increment a new `ops.degenerate` counter.
-- Wired automatically at every existing `scrubActivity` call site (repair-day §10b, action-save-itinerary `normalizeDays`, UI sanitizer chain) — no new boundaries needed.
+So **the canonical resolver already reconciles this trip to $944 across all three surfaces**. The earlier "$985 / $1,120 / $1,066" snapshot is either pre-fix or pre-edit cached state. The remaining risk is that we don't *prove* it on every render — the [PaymentsTab] divergence log only fires once per (tripId, path) and the header strip silently clamps with `max(tripTotal, chipSum)`, so future regressions stay invisible until a user complains.
 
-### Layer 3 — Frontend safety net for legacy persisted trips
+## Plan
 
-In `src/lib/itinerary/activityNameSanitizer.ts` (or the matching `sanitizeActivityText` chain — confirmed during edit): mirror the same article-only / `<15` chars blanker on read so already-saved trips like the user's Day 2 stop showing "The." without waiting for a regen.
+### 1. Verify the live Monaco trip matches the DB
 
-### Memory update
-Extend `mem://constraints/itinerary/sentence-integrity-guard` to record:
-- Article-only / sub-15-char descriptions are blanked, not preserved.
-- Three boundaries (description-fill failure path, scrubActivity, FE sanitizer) all enforce identically.
-- Reasoning: empty card description is recoverable (next regen / dining-description-backfill), an article-fragment stub is not.
+- Run a one-off check via `useTripFinancialSnapshot` + `useTripDayBreakdown` (Node script using the canonical resolver against the DB rows already in hand) to confirm the three numbers (`displayedTotalCents`, `bucketSumCents`, `daysSubtotal + hotel + flight`) equal $944.
+- If they diverge, the gap will localize to one of: (a) JSON live-activity index dropping a costed row that activity_costs still references, (b) `shouldCountRow` filtering a row that the bucket sum still picks up, or (c) `computeHeaderStripValues` clamping silently. The script's output names the path.
 
-## Out of Scope
-- Health-engine, Payments tab, same-day venue dedup, cost reconciliation — none touched.
-- No prompt/template changes; this is purely an output-validation tightening.
+No source changes from this step.
 
-## Verification
-- Add unit tests in `supabase/functions/_shared/__tests__/scrub-activity.test.ts` covering `description: "The."`, `"A."`, `"It."`, `"The"` (no period), and a legitimate 35-char description (must NOT be blanked).
-- Add a description-fill test: when the LLM mock returns a 5-char string, the original "The." is replaced with `''`, not retained.
-- Spot-check the user's affected trip after deploy: card body should render empty state, not "The."
+### 2. Always-on attributed drift log (replace once-per-fingerprint guard)
 
-## Files to edit
-- `supabase/functions/_shared/description-fill.ts`
-- `supabase/functions/_shared/scrub-activity.ts`
-- `src/lib/itinerary/activityNameSanitizer.ts` (or equivalent FE text sanitizer)
-- `supabase/functions/_shared/__tests__/scrub-activity.test.ts` (extend)
-- `mem://constraints/itinerary/sentence-integrity-guard` (extend)
+`src/components/itinerary/PaymentsTab.tsx` currently fingerprints `(tripId, path, totals)` and logs only on first divergence. Change to: **log every time `bucketDrift > $1 OR payableDrift > $2 OR paidDrift > $2` while `snapshotReady`**, but rate-limit to one log per 5 s per tripId. Include the three constituents (`snapshot.tripTotalCents`, `bucketSumCents`, `payableTotalCents`, `daysSubtotalCents`, `hotelCents`, `flightCents`, `reserveCents`) so the gap source is named in the console — no more "user sees X, we have no log".
+
+### 3. Promote `snapshotOverChips` / `snapshotUnderChips` from silent to visible (dev only)
+
+`computeHeaderStripValues` already detects both directions but only sets booleans. In `EditorialItinerary` header strip, when `import.meta.env.DEV` AND either flag is true, render a small amber chip "Δ = $X (snapshotOverChips|snapshotUnderChips)" next to the equation. Production stays unchanged. This catches the Casablanca/Kyoto pattern (snapshot==daysGroup with a hotel chip visible) before a user reports it.
+
+### 4. Single equality assertion at the persist boundary
+
+In `useTripFinancialSnapshot` after `resolveCanonicalCostRows` returns, assert `effectiveTotalCents === <sum of per-day buckets> + (manualOther) + (reserve if folded)`. On mismatch, `console.error('[snapshot] resolver invariant broken', {…})`. Already partly present in PaymentsTab; move it one level up so every consumer (Budget tab, header, Payments) benefits without each surface re-implementing it.
+
+### 5. Document & memory
+
+Update `mem://constraints/finance/displayed-trip-total-single-source` with the explicit Monaco case: "Header $944 = Days $244 + Hotel $700, no Flight, no Reserve. Reproduced via DB read on 2026-05-15." This anchors the expected-state baseline for the next time someone reports a similar 3-way drift.
+
+## Out of scope
+
+- Touching `resolveCanonicalCostRows`, `usePayableItems`, or `useTripFinancialSnapshot` logic — they already produce the right number for this trip. The plan is purely **observability + invariant guards** unless step 1's script proves an actual logic divergence, in which case I'll come back with a targeted patch instead of these guards.
+- Payments tab visual redesign.
+- Budget tab business logic.
+
+## Technical notes
+
+- The fingerprint guard at PaymentsTab L562–L575 (`driftReportedRef`) was added to avoid console spam during snapshot stabilization. Switching to a 5 s rate-limit keeps that benefit while restoring per-render visibility into post-stabilization drift.
+- `computeHeaderStripValues` line 71 (`Math.max(tripTotalUsd, chipSumUsd)`) is the silent clamp — keeping it as the runtime fallback is correct (the equation must balance), but the dev chip in step 3 makes the clamp visible so we can fix the root cause instead of living with it.
+- The Monaco snapshot will need a hard refresh after step 3 ships to clear the cached resolver result before the dev chip is meaningful.
