@@ -197,6 +197,42 @@ export function applyValidationGate(
         counters.forcedDowngrades++;
         break;
       }
+      case FAILURE_CODES.DUPLICATE_VENUE_SAME_DAY: {
+        // Re-resolve the later (current) slot via fallback DB. Seed usedNames
+        // with every existing dining venue in the day so we can't pick a name
+        // already in play. If the resolver returns the same key (city pool
+        // exhausted), applyFallbackToActivity will downgrade to the unverified
+        // sentinel ($0, needsVenuePick) — a visible "find a place" slot is
+        // better than a duplicate.
+        const dest = ctx.destination || '';
+        if (!dest) break;
+        const usedNames = new Set<string>();
+        for (let j = 0; j < day.activities.length; j++) {
+          if (j === idx) continue;
+          const other = day.activities[j] as any;
+          const otherKey = normalizeVenueKey(other?.location?.name || other?.venue_name || other?.title || '');
+          if (otherKey) usedNames.add(otherKey);
+          // Also add the raw venue name lowercase (resolveAnyMealFallback
+          // checks against name.toLowerCase() in getRandomFallbackRestaurant)
+          const rawName = String(other?.location?.name || other?.venue_name || '').toLowerCase().trim();
+          if (rawName) usedNames.add(rawName);
+        }
+        const startTimeStr = act.startTime || act.start_time || act.time || '12:00';
+        const mealType = parseMealType(String(startTimeStr));
+        try {
+          const fallback = resolveAnyMealFallback(dest, mealType, usedNames);
+          applyFallbackToActivity(act, fallback, mealType, usedNames, undefined, dest);
+          act.category = 'dining';
+          act._duplicate_venue_repaired = true;
+          counters.forcedDowngrades++;
+          console.log(
+            `[VALIDATION_GATE] DUPLICATE_VENUE_SAME_DAY day=${ctx.dayNumber} idx=${idx} → "${act.title}"`,
+          );
+        } catch (e) {
+          console.warn(`[VALIDATION_GATE] DUPLICATE_VENUE_SAME_DAY repair errored:`, e);
+        }
+        break;
+      }
       default: {
         // Unknown critical → blank the offending field if any, else drop.
         if (r.field && typeof act[r.field] === 'string') {
