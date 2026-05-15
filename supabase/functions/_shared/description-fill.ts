@@ -228,6 +228,24 @@ export async function fillMissingDescriptions(
     clearTimeout(timer);
   }
 
+  // Final safety net — even when refill skipped/timed out, NEVER leave a
+  // degenerate stub like "The." / "A." / "It." / sub-15-char fragment on the
+  // card. Blank → recoverable; "The." → ships to user. Walk the original
+  // flagged set so we cover every refill outcome path.
+  for (const t of targets) {
+    const act = activities[t.index];
+    if (!act) continue;
+    if (isDegenerateDescription(act.description)) {
+      const before = String(act.description).slice(0, 40);
+      act.description = '';
+      counters.blanked++;
+      console.warn(`[DESC_FILL] day=${dayNumber} blanked degenerate description before="${before}" title="${act.title || act.name || '?'}"`);
+    }
+  }
+  if (counters.blanked > 0) {
+    console.log(`[DESC_FILL] day=${dayNumber} blanked=${counters.blanked}`);
+  }
+
   return counters;
 }
 
