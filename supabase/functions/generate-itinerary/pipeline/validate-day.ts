@@ -182,6 +182,8 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkWalkOverThreshold(activities, results, budgetTier);
   checkCategoryVenueCoherence(activities, results);
   checkPhantomEventRefs(activities, results);
+  checkSameDayDuplicateVenues(activities, results);
+  checkVenueDescriptionCoherence(activities, results);
 
   // --- DESCRIPTION COVERAGE (intermittent blank blurbs after phantom-ref scrub) ---
   checkActivityDescriptions(activities, results);
