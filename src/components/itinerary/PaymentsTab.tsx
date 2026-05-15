@@ -558,8 +558,10 @@ export function PaymentsTab({
     const payableDrift = Math.abs(payableTotalCents - financialSnapshot.tripTotalCents);
     const paidDrift = Math.abs((totals.paid || 0) - financialSnapshot.paidCents);
     let path: 'A' | 'B' | 'C' | 'none' = 'none';
+    // Bucket sum MUST equal headline within $1 — reserve lives inside miscItems
+    // and is folded into displayedTotalCents via computeHeaderStripValues.
     if (payableDrift > 200) path = 'A';
-    else if (bucketDrift > 200) path = 'B';
+    else if (bucketDrift > 100) path = 'B';
     else if (paidDrift > 200) path = 'C';
     if (path !== 'none') {
       const fingerprint = `${tripId}|${path}|${estimatedTotal}|${bucketSumCents}|${paidAmount}`;
@@ -568,11 +570,13 @@ export function PaymentsTab({
         console.warn('[PaymentsTab] divergence', {
           path,
           snapshotTotal: financialSnapshot.tripTotalCents,
+          displayedTotalCents: displayedTotal.displayedTotalCents,
           bucketSum: bucketSumCents,
           payableTotal: payableTotalCents,
           tripPaymentsPaidSum: totals.paid,
           snapshotPaidCents: financialSnapshot.paidCents,
           reserveCents,
+          tripCurrency,
           tripId,
         });
       }
