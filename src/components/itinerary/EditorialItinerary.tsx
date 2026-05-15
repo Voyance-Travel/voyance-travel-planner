@@ -6273,11 +6273,11 @@ export function EditorialItinerary({
                           <span className="font-semibold text-foreground tabular-nums">{formatCurrency(displayCost(displayedTripTotalUsd), tripCurrency)}</span>
                         </span>
                       </div>
-                      {showReconcilingHint && (
-                        <div className="text-[11px] text-muted-foreground/60 text-center mt-1" aria-live="polite">
-                          Reconciling…
-                        </div>
-                      )}
+                      <ReconcilingHint
+                        active={reconcilingActive}
+                        site="header"
+                        tripId={tripId}
+                      />
                       {travelers > 1 && (
                         <div className="text-[11px] text-muted-foreground/70 text-center mt-1">
                           Day badges show /pp · multiply by {travelers} for group cost
