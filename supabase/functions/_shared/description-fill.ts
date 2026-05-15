@@ -81,7 +81,27 @@ export interface DescriptionFillCounters {
   flagged: number;
   filled: number;
   skipped: number;
+  blanked: number;
   errored: boolean;
+}
+
+/**
+ * Article-only / sub-15-char fragment detector. Matches "The.", "A.", "It.",
+ * "The" (no period), "Here.", or any string < 15 chars after trim. Used to
+ * blank degenerate descriptions instead of preserving them — empty is
+ * recoverable downstream (next regen / dining-description-backfill); an
+ * article-fragment stub is not. See mem://constraints/itinerary/sentence-integrity-guard.
+ */
+export const DEGENERATE_DESC_RE = /^\s*(?:the|a|an|it|this|that|here|there|these|those)\s*[.!?\u2026]?\s*$/i;
+export function isDegenerateDescription(s: unknown): boolean {
+  if (typeof s !== 'string') return false;
+  const t = s.trim();
+  if (!t) return false;
+  if (DEGENERATE_DESC_RE.test(t)) return true;
+  // Sub-15 chars AND not a complete sentence (no actionable content).
+  // 15 = DESC_MIN_CHARS / 2 — symmetric with validator threshold.
+  if (t.length < 15) return true;
+  return false;
 }
 
 export async function fillMissingDescriptions(
