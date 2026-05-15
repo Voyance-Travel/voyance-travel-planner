@@ -182,6 +182,8 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkWalkOverThreshold(activities, results, budgetTier);
   checkCategoryVenueCoherence(activities, results);
   checkPhantomEventRefs(activities, results);
+  checkSameDayDuplicateVenues(activities, results);
+  checkVenueDescriptionCoherence(activities, results);
 
   // --- DESCRIPTION COVERAGE (intermittent blank blurbs after phantom-ref scrub) ---
   checkActivityDescriptions(activities, results);
@@ -1430,3 +1432,119 @@ function checkActivityDescriptions(activities: any[], results: ValidationResult[
     }
   }
 }
+
+// =============================================================================
+// SAME-DAY VENUE UNIQUENESS — same venue name in two meal slots in one day
+// (Monaco Pâtisserie Riviera bug). Critical → repair via re-resolve in gate.
+// =============================================================================
+
+export function normalizeVenueKey(name: string): string {
+  if (!name) return '';
+  let s = String(name).toLowerCase().trim();
+  // Strip "Breakfast at " / "Lunch at " / "Dinner at " / "Drinks at " / leading "at "
+  s = s.replace(/^(?:breakfast|brunch|lunch|dinner|drinks|nightcap|coffee|snack)\s+at\s+/i, '');
+  s = s.replace(/^at\s+/, '');
+  // Strip diacritics
+  s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  // Drop punctuation, collapse whitespace
+  s = s.replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+  return s;
+}
+
+function dayDiningKey(act: any): string {
+  const venue = act?.location?.name || act?.venue_name || '';
+  const title = act?.title || act?.name || '';
+  // Prefer venue name; fall back to title (with meal-prefix stripped).
+  return normalizeVenueKey(venue || title);
+}
+
+function isDiningSlot(act: any): boolean {
+  if (!act) return false;
+  const cat = String(act.category || '').toLowerCase();
+  if (DINING_CATS_LOWER.has(cat) || cat === 'cafe') return true;
+  const sub = String(act.subcategory || '').toLowerCase();
+  if (/restaurant|dining|breakfast|brunch|lunch|dinner|cafe/.test(sub)) return true;
+  const title = String(act.title || act.name || '');
+  return /\b(breakfast|brunch|lunch|dinner|nightcap)\s+at\b/i.test(title);
+}
+
+function checkSameDayDuplicateVenues(activities: any[], results: ValidationResult[]): void {
+  const seen = new Map<string, number>(); // key → first index
+  for (let i = 0; i < activities.length; i++) {
+    const act = activities[i];
+    if (!act || !isDiningSlot(act)) continue;
+    if (act.isLocked || act.userAdded || act.userEdited || act.extracted || act.pinned || act.isManual) continue;
+    const key = dayDiningKey(act);
+    if (!key || key.length < 3) continue;
+    const prior = seen.get(key);
+    if (prior == null) {
+      seen.set(key, i);
+      continue;
+    }
+    results.push({
+      code: FAILURE_CODES.DUPLICATE_VENUE_SAME_DAY,
+      severity: 'critical',
+      message: `Venue "${act?.location?.name || act?.title || key}" used twice in one day (slots ${prior} and ${i})`,
+      activityIndex: i,
+      field: 'title',
+      autoRepairable: true,
+    });
+  }
+}
+
+// =============================================================================
+// VENUE / DESCRIPTION COHERENCE — pâtisserie/café titled venue with a
+// pasta/sushi/steak description (Monaco Pâtisserie Riviera bug, lunch slot).
+// Warning → blank description so description-fill rebuilds a coherent blurb.
+// =============================================================================
+
+interface CoherenceGroup {
+  titleRe: RegExp;
+  forbiddenDescRe: RegExp;
+  label: string;
+}
+
+const VENUE_COHERENCE_GROUPS: CoherenceGroup[] = [
+  {
+    label: 'bakery/cafe',
+    titleRe: /\b(p[âa]tisserie|boulangerie|bakery|caf[ée]|coffee|tea\s+house|cr[êe]perie|gelateria|ice\s+cream|juice\s+bar|smoothie|donut|doughnut|bagel)\b/i,
+    forbiddenDescRe: /\b(pasta|pizza|ramen|sushi|sashimi|steak|burger|tacos|paella|risotto|truffle\s+pasta|prime\s+rib|carbonara|bolognese|lasagna|gnocchi|nigiri|kebab|curry|pho|dim\s+sum)\b/i,
+  },
+  {
+    label: 'sushi',
+    titleRe: /\b(sushi|sushiya|omakase|kaiten|nigiri\s+bar)\b/i,
+    forbiddenDescRe: /\b(pasta|pizza|carbonara|bolognese|paella|tacos|burger|steak\s+frites|croissant|baguette)\b/i,
+  },
+  {
+    label: 'pizzeria',
+    titleRe: /\b(pizzeria|pizza)\b/i,
+    forbiddenDescRe: /\b(sushi|sashimi|ramen|dim\s+sum|kebab|tacos|paella|croissant|p[âa]tisserie)\b/i,
+  },
+];
+
+function checkVenueDescriptionCoherence(activities: any[], results: ValidationResult[]): void {
+  for (let i = 0; i < activities.length; i++) {
+    const act = activities[i];
+    if (!act || !isDiningSlot(act)) continue;
+    if (act.isLocked || act.userAdded || act.userEdited || act.extracted || act.pinned || act.isManual) continue;
+    const title = String(act.title || act.name || '');
+    const venue = String(act?.location?.name || act?.venue_name || '');
+    const haystack = `${title} ${venue}`;
+    const desc = String(act.description || '');
+    if (!desc) continue;
+    for (const grp of VENUE_COHERENCE_GROUPS) {
+      if (!grp.titleRe.test(haystack)) continue;
+      if (!grp.forbiddenDescRe.test(desc)) continue;
+      results.push({
+        code: FAILURE_CODES.VENUE_DESCRIPTION_MISMATCH,
+        severity: 'warning',
+        message: `Venue "${venue || title}" reads as ${grp.label} but description mentions a non-matching cuisine ("${desc.slice(0, 80)}…")`,
+        activityIndex: i,
+        field: 'description',
+        autoRepairable: true,
+      });
+      break; // one mismatch per activity is enough
+    }
+  }
+}
+

@@ -23,6 +23,12 @@ import { FAILURE_CODES, type ValidationResult } from './types.ts';
 import type { StrictDayMinimal, StrictActivityMinimal } from '../day-validation.ts';
 import { pickTransitFallback } from '../../_shared/transit-mode.ts';
 import { trimToLastSentence } from './repair-day.ts';
+import {
+  resolveAnyMealFallback,
+  applyFallbackToActivity,
+  parseMealType,
+} from '../fix-placeholders.ts';
+import { normalizeVenueKey } from './validate-day.ts';
 
 export interface GateCounters {
   critical: number;
@@ -66,7 +72,10 @@ export function applyValidationGate(
   // Repair §10b should have caught these via scrubActivity; this handles
   // residuals (e.g. single-segment phantom-only fields that snuck through).
   const ghostWarnings = results.filter(r =>
-    r.severity === 'warning' && r.code === FAILURE_CODES.DESCRIPTION_GHOST_REFERENCE
+    r.severity === 'warning' && (
+      r.code === FAILURE_CODES.DESCRIPTION_GHOST_REFERENCE
+      || r.code === FAILURE_CODES.VENUE_DESCRIPTION_MISMATCH
+    )
   );
   let ghostBlanked = 0;
   for (const r of ghostWarnings) {
@@ -81,7 +90,7 @@ export function applyValidationGate(
     }
   }
   if (ghostBlanked > 0) {
-    console.log(`[VALIDATION_GATE] DESCRIPTION_GHOST_REFERENCE day=${ctx.dayNumber} blanked=${ghostBlanked}`);
+    console.log(`[VALIDATION_GATE] DESCRIPTION_GHOST_REFERENCE/VENUE_DESCRIPTION_MISMATCH day=${ctx.dayNumber} blanked=${ghostBlanked}`);
   }
 
   if (counters.critical === 0) {
@@ -186,6 +195,42 @@ export function applyValidationGate(
         if (typeof act.price === 'number') act.price = 0;
         counters.blankedFields++;
         counters.forcedDowngrades++;
+        break;
+      }
+      case FAILURE_CODES.DUPLICATE_VENUE_SAME_DAY: {
+        // Re-resolve the later (current) slot via fallback DB. Seed usedNames
+        // with every existing dining venue in the day so we can't pick a name
+        // already in play. If the resolver returns the same key (city pool
+        // exhausted), applyFallbackToActivity will downgrade to the unverified
+        // sentinel ($0, needsVenuePick) — a visible "find a place" slot is
+        // better than a duplicate.
+        const dest = ctx.destination || '';
+        if (!dest) break;
+        const usedNames = new Set<string>();
+        for (let j = 0; j < day.activities.length; j++) {
+          if (j === idx) continue;
+          const other = day.activities[j] as any;
+          const otherKey = normalizeVenueKey(other?.location?.name || other?.venue_name || other?.title || '');
+          if (otherKey) usedNames.add(otherKey);
+          // Also add the raw venue name lowercase (resolveAnyMealFallback
+          // checks against name.toLowerCase() in getRandomFallbackRestaurant)
+          const rawName = String(other?.location?.name || other?.venue_name || '').toLowerCase().trim();
+          if (rawName) usedNames.add(rawName);
+        }
+        const startTimeStr = act.startTime || act.start_time || act.time || '12:00';
+        const mealType = parseMealType(String(startTimeStr));
+        try {
+          const fallback = resolveAnyMealFallback(dest, mealType, usedNames);
+          applyFallbackToActivity(act, fallback, mealType, usedNames, undefined, dest);
+          act.category = 'dining';
+          act._duplicate_venue_repaired = true;
+          counters.forcedDowngrades++;
+          console.log(
+            `[VALIDATION_GATE] DUPLICATE_VENUE_SAME_DAY day=${ctx.dayNumber} idx=${idx} → "${act.title}"`,
+          );
+        } catch (e) {
+          console.warn(`[VALIDATION_GATE] DUPLICATE_VENUE_SAME_DAY repair errored:`, e);
+        }
         break;
       }
       default: {

@@ -64,6 +64,10 @@ export const FAILURE_CODES = {
   MISSING_DESCRIPTION:               'MISSING_DESCRIPTION',
   GENERIC_DESCRIPTION:               'GENERIC_DESCRIPTION',
   RESTAURANT_MISSING_RECOMMENDATION: 'RESTAURANT_MISSING_RECOMMENDATION',
+
+  // Same-day venue uniqueness + name/description coherence (Monaco Pâtisserie Riviera bug)
+  DUPLICATE_VENUE_SAME_DAY:    'DUPLICATE_VENUE_SAME_DAY',
+  VENUE_DESCRIPTION_MISMATCH:  'VENUE_DESCRIPTION_MISMATCH',
 } as const;
 
 export type FailureCode = typeof FAILURE_CODES[keyof typeof FAILURE_CODES];
