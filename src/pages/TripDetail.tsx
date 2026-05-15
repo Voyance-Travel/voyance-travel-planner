@@ -1074,10 +1074,24 @@ export default function TripDetail() {
     if (hasItineraryData(trip)) return;
 
     notStartedHealAttempted.current = true;
-    console.log(`[TripDetail] Stuck not_started chat-planner trip ${trip.id} (age=${Math.round(ageMs/1000)}s) — invoking server-side generate-trip chain`);
+    console.log(`[TripDetail] Stuck not_started chat-planner trip ${trip.id} (age=${Math.round(ageMs/1000)}s) — checking normalized rows before invoking server-side generate-trip chain`);
 
     (async () => {
       try {
+        // Defense-in-depth: even if itinerary_data JSON is empty, the
+        // normalized itinerary_days table may already hold real
+        // generated content. Never invoke generation when those rows
+        // exist. See mem://constraints/itinerary/no-auto-resume-on-load.
+        const { count: existingDayRows } = await supabase
+          .from('itinerary_days')
+          .select('id', { count: 'exact', head: true })
+          .eq('trip_id', trip.id);
+        if ((existingDayRows ?? 0) > 0) {
+          console.warn(`[TripDetail] not_started self-heal SKIPPED for ${trip.id} — itinerary_days has ${existingDayRows} rows; refreshing instead.`);
+          queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+          return;
+        }
+
         const { data: fullTrip } = await supabase
           .from('trips')
           .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id')
