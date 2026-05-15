@@ -21,6 +21,11 @@ interface PersistIssue {
 
 interface PersistIssuesEventDetail {
   tripId?: string;
+  /** Caller reason from safeUpdateItineraryData. `self-heal-*` and
+   *  `integrity-blocked-resync` are silently dropped — only user-initiated
+   *  saves should surface "needs regeneration" toasts. See
+   *  mem://constraints/itinerary/persist-issues-toast-user-only. */
+  source?: string;
   errors?: PersistIssue[];
   warnings?: PersistIssue[];
   persistedDespiteErrors?: boolean;
@@ -48,13 +53,25 @@ function describe(i: PersistIssue): string {
   return `${i.code}${i.detail ? `: ${i.detail}` : ''}`;
 }
 
+/** Sources that must NEVER produce a user-visible toast. Belt-and-braces:
+ *  upstream `safeUpdateItineraryData` already suppresses self-heal saves,
+ *  but any other dispatcher (now or future) gets caught here too. */
+function isSilentSource(source: string | undefined): boolean {
+  if (!source) return false;
+  if (source.startsWith('self-heal-')) return true;
+  if (source === 'integrity-blocked-resync') return true;
+  return false;
+}
+
+// Module-scoped so the buffer survives re-renders/unmounts within the session.
+const loadedTrips = new Set<string>();
+
 export function PersistIssuesListener() {
   const recentRef = useRef<Map<string, number>>(new Map());
+  const bufferRef = useRef<Map<string, PersistIssuesEventDetail[]>>(new Map());
 
   useEffect(() => {
-    function handle(ev: Event) {
-      const detail = (ev as CustomEvent<PersistIssuesEventDetail>).detail;
-      if (!detail) return;
+    function showToastsFor(detail: PersistIssuesEventDetail) {
       const errors = detail.errors || [];
       const warnings = detail.warnings || [];
       const all: PersistIssue[] = [...errors, ...warnings];
@@ -92,8 +109,51 @@ export function PersistIssuesListener() {
       }
     }
 
+    function handle(ev: Event) {
+      const detail = (ev as CustomEvent<PersistIssuesEventDetail>).detail;
+      if (!detail) return;
+
+      // Defense-in-depth: drop silent (self-heal) sources outright.
+      if (isSilentSource(detail.source)) return;
+
+      const tripKey = detail.tripId ?? '_';
+
+      // Buffer until the trip is fully loaded — page-load false alarms
+      // happen in this window. See plan .lovable/plan.md.
+      if (!loadedTrips.has(tripKey)) {
+        const bucket = bufferRef.current.get(tripKey) || [];
+        bucket.push(detail);
+        // Keep most recent 5 to avoid unbounded growth
+        if (bucket.length > 5) bucket.shift();
+        bufferRef.current.set(tripKey, bucket);
+        return;
+      }
+
+      showToastsFor(detail);
+    }
+
+    function handleLoaded(ev: Event) {
+      const tripId = (ev as CustomEvent<{ tripId?: string }>).detail?.tripId;
+      const tripKey = tripId ?? '_';
+      loadedTrips.add(tripKey);
+      const buffered = bufferRef.current.get(tripKey);
+      bufferRef.current.delete(tripKey);
+      if (!buffered) return;
+      for (const detail of buffered) {
+        // Re-filter — silent sources are already gated above, but a buffered
+        // event from an unknown source is treated as user-initiated only if
+        // its source isn't silent.
+        if (isSilentSource(detail.source)) continue;
+        showToastsFor(detail);
+      }
+    }
+
     window.addEventListener('itinerary-persist-issues', handle);
-    return () => window.removeEventListener('itinerary-persist-issues', handle);
+    window.addEventListener('voyance:trip-loaded', handleLoaded);
+    return () => {
+      window.removeEventListener('itinerary-persist-issues', handle);
+      window.removeEventListener('voyance:trip-loaded', handleLoaded);
+    };
   }, []);
 
   return null;
