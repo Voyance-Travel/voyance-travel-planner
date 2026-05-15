@@ -84,6 +84,39 @@ interface PaymentsTabProps {
 
 // PayableItem type is now imported from usePayableItems
 
+// Bounded Payments-tab "Reconciling…" badge — wraps useReconcilingState so the
+// amber state can never latch indefinitely (after 10s it silently drops).
+function PaymentsReconcileBadge({
+  matches,
+  tripId,
+  totalsCents,
+}: {
+  matches: boolean;
+  tripId: string;
+  totalsCents: { a: number; b: number };
+}) {
+  const { visible } = useReconcilingState(!matches, {
+    site: 'payments',
+    tripId,
+    totalsCents,
+  });
+  if (matches) {
+    return (
+      <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
+        <CheckCircle2 className="h-3 w-3 text-green-600" />
+        Matches itinerary
+      </p>
+    );
+  }
+  if (!visible) return null;
+  return (
+    <p className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1 justify-end">
+      <AlertCircle className="h-3 w-3" />
+      Reconciling…
+    </p>
+  );
+}
+
 export function PaymentsTab({ 
   tripId, 
   days, 
