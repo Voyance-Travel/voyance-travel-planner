@@ -1452,7 +1452,12 @@ export function PaymentsTab({
                   </div>
                   <div className="text-left">
                     <h4 className="font-medium">{label}</h4>
-                    <p className="text-xs text-muted-foreground">{items.length} bookable item{items.length === 1 ? '' : 's'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {items.length} bookable item{items.length === 1 ? '' : 's'}
+                      {key === 'misc' && reserveCents > 0 && (
+                        <> · includes {displayMoney(reserveCents)} spending-money reserve</>
+                      )}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
