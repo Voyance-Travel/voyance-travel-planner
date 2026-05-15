@@ -1244,7 +1244,11 @@ export function PaymentsTab({
             </p>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-semibold text-primary">{displayMoney(estimatedTotal)}</p>
+            {headerTotalReady ? (
+              <p className="text-2xl font-semibold text-primary">{displayMoney(estimatedTotal)}</p>
+            ) : (
+              <Skeleton className="h-7 w-24 ml-auto" />
+            )}
             <p className="text-xs text-muted-foreground">Trip Total</p>
             {(() => {
               // Real equality check: only claim "Matches itinerary" when our
