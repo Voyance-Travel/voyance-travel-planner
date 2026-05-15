@@ -44,10 +44,10 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   getTripPayments, 
-  formatCurrency, 
   type TripPayment,
   type PaymentTotals
 } from '@/services/tripPaymentsAPI';
+import { formatMoneyFromUsdCents } from '@/lib/currency';
 import { markActivityPaid } from '@/services/activityCostService';
 import { useTripMembers, addTripMember, type TripMember } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
