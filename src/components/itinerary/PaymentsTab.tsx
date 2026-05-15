@@ -1345,7 +1345,11 @@ export function PaymentsTab({
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <p className="font-medium">
-                      {formatCurrency(essentialItemsWithReserve.reduce((sum, i) => sum + i.amountCents, 0))}
+                      {formatCurrency(
+                        financialSnapshot.loading
+                          ? essentialItemsWithReserve.reduce((sum, i) => sum + i.amountCents, 0)
+                          : (financialSnapshot.buckets?.essentials ?? essentialItemsWithReserve.reduce((sum, i) => sum + i.amountCents, 0))
+                      )}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {essentialItemsWithReserve.filter(i => i.payment?.status === 'paid').length}/{essentialItemsWithReserve.length} paid
