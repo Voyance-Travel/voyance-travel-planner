@@ -746,7 +746,13 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   }, [fetchData, tripId]);
 
   const refetch = useCallback(() => fetchData(), [fetchData]);
-  const acknowledgeDelta = useCallback(() => setLastDelta(null), []);
+  const acknowledgeDelta = useCallback(() => {
+    if (deltaTimerRef.current) {
+      clearTimeout(deltaTimerRef.current);
+      deltaTimerRef.current = null;
+    }
+    setLastDelta(null);
+  }, []);
 
   return useMemo(() => {
     const toBePaid = Math.max(0, data.tripTotalCents - data.paidCents);
