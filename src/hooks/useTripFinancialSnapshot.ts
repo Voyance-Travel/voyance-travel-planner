@@ -534,6 +534,19 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
         `displayed=${decomposition.displayedTotalCents} bucketsRaw=${decomposition.displayedTotalCents - decomposition.residualFoldedCents}`
       );
     }
+    // Single resolver invariant: snapshot total === decomposition total. Both
+    // derive from the same canonical resolver, so any mismatch means one of
+    // the two paths re-implemented bookkeeping (regression risk). Surfaced
+    // here so every consumer (Budget tab, header strip, Payments) inherits
+    // the guard. See mem://constraints/finance/displayed-trip-total-single-source.
+    if (Math.abs(decomposition.displayedTotalCents - totalCents) > 100) {
+      console.error(
+        `[useTripFinancialSnapshot] resolver invariant broken: snapshot=$${(totalCents / 100).toFixed(2)} ` +
+        `vs decomposition=$${(decomposition.displayedTotalCents / 100).toFixed(2)}. tripId=${tripId} ` +
+        `reserveCents=${miscReserveContributionCents}`
+      );
+    }
+
 
     // Compute delta against the previous fetch (skip on initial load and
     // during the brief stabilization window where hydration / logistics-sync
