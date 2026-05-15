@@ -982,6 +982,21 @@ export default function TripDetail() {
         return; // Has progress, not stuck
       }
 
+      // Defense-in-depth: even with 0 itinerary_days rows, if the
+      // embedded JSON has real activities, do NOT regenerate — that
+      // would silently overwrite visible content. Correct status
+      // instead. See mem://constraints/itinerary/no-auto-resume-on-load.
+      if (hasItineraryData(trip)) {
+        console.warn(`[TripDetail] Stuck-heal SKIPPED for ${trip.id} — itinerary_data has real activities; correcting status to 'ready'.`);
+        stuckHealAttempted.current = true;
+        await supabase.from('trips').update({
+          itinerary_status: 'ready',
+          updated_at: new Date().toISOString(),
+        }).eq('id', trip.id);
+        queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+        return;
+      }
+
       stuckHealAttempted.current = true;
       console.log(`[TripDetail] Detected stuck journey leg ${trip.id} — attempting self-heal`);
 
