@@ -342,7 +342,15 @@ export function useTripHeroImage({
 
     // Handle canonical image failure
     if (canonicalUrl && !canonicalFailed) {
+      console.warn('[useTripHeroImage] canonical failed, advancing to next tier:', canonicalUrl);
       setCanonicalFailed(true);
+      return;
+    }
+
+    // Handle storage-map image failure
+    if (storageUrl && !storageFailed) {
+      console.warn('[useTripHeroImage] storage hero failed, advancing to next tier:', storageUrl);
+      setStorageFailed(true);
       return;
     }
 
