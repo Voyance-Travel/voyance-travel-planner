@@ -1,42 +1,30 @@
-## What we were trying to fix
-Prevent page-load/background logic from silently re-running itinerary generation and overwriting an already-saved itinerary with new LLM output. The prior work removed the two true regressions: `useAutoResume` and the `useGenerationPoller` stall auto-invoke.
+# No-Auto-Resume-On-Load — Verification
 
-## What I verified
-- `useGenerationPoller` now only reports stalls; it no longer invokes `generate-itinerary` or passes `isResume: true`.
-- `TripDetail.tsx` still has exactly five `action: 'generate-trip'` call sites:
-  1. `handleResumeGeneration` — explicit user retry/regenerate action.
-  2. `triggerGeneration` — queued multi-city leg handoff.
-  3. `stuckHealAttempted` — journey leg recovery.
-  4. `notStartedHealAttempted` — mobile/chat-planner empty-trip recovery.
-  5. Extend-days dialog — explicit user-confirmed new-day generation.
-- The remaining concern is not that those sites exist; it is that their guards should be strong enough to avoid firing when saved activity data already exists.
+## What we were fixing
 
-## Correct fix to implement
-1. **Harden queued-leg handoff**
-   - Before `triggerGeneration` invokes generation, re-check the current trip row for existing `itinerary_data` and `itinerary_days` rows.
-   - If either contains real activities/days, do not invoke generation; instead refresh local state and/or correct stale status.
+A trip with saved activities was being silently overwritten on page load because background self-heal paths in `TripDetail.tsx` were invoking `generate-itinerary` (`action: 'generate-trip'`) without first checking whether the trip already had real content. Combined with `useGenerationPoller` previously auto-invoking on stall, this regressed visible itineraries to a degraded state after refresh.
 
-2. **Harden stuck journey self-heal**
-   - Keep the existing `count(itinerary_days) === 0` guard.
-   - Add a second guard against real `itinerary_data` activities before invoking generation.
-   - This prevents table/JSON mismatch cases from regenerating over visible content.
+## What is in place right now (verified)
 
-3. **Harden not-started chat-planner self-heal**
-   - Keep the existing `hasItineraryData(trip)` guard.
-   - Add a backend table-count guard (`itinerary_days` count must be zero) before marking the trip `generating` or invoking generation.
-   - This covers cases where JSON is stale/empty but normalized day rows already exist.
+1. **`useGenerationPoller`** — no longer invokes `generate-itinerary` on stall; only logs and reports. `useAutoResume` deleted.
 
-4. **Strengthen regression tests**
-   - Update `TripDetail.no-silent-regen.test.ts` so it does more than count call sites:
-     - queued-leg branch must check current-trip stored data before invoke;
-     - stuck-heal branch must check both `itinerary_days` and `hasItineraryData`;
-     - not-started branch must check both `hasItineraryData` and `itinerary_days`.
-   - Keep the existing guard banning `useAutoResume` and poller auto-resume.
+2. **`TripDetail.tsx` — 5 allow-listed `action:'generate-trip'` sites**, each guarded:
+   - **L527** `handleResumeGeneration` — explicit user button.
+   - **L816** `triggerGeneration` (queued journey leg) — fetches `itinerary_data` + counts `itinerary_days`; **skips + refreshes** if either has activities (L795–812).
+   - **L1014** `stuckHealAttempted` — gated by `count(itinerary_days)===0` AND `!hasItineraryData(trip)`; otherwise auto-corrects status to `ready` (L989–998).
+   - **L1117** `notStartedHealAttempted` — gated by `!hasItineraryData(trip)` AND backend `count(itinerary_days)===0` re-check (L1085–1093).
+   - **L4238** extend-days — explicit user action.
 
-5. **Update memory/documentation**
-   - Update the no-auto-resume memory to state the full invariant: no page-load generation unless both JSON itinerary data and normalized day rows are empty, except explicit user actions.
+3. **Tests passing** (8/8):
+   - `useGenerationPoller.no-auto-resume.test.ts` — 3 tests confirm no `generate-itinerary` invocation on stall.
+   - `TripDetail.no-silent-regen.test.ts` — 5 tests assert each guard exists in source.
 
-## Out of scope
-- Do not delete the legitimate mobile/server-chain recovery paths.
-- Do not change backend generation logic.
-- Do not alter user-facing design or payment behavior.
+4. **Memory updated** — `mem://constraints/itinerary/no-auto-resume-on-load` documents the 5-site allow-list, both-layer guards (JSON + normalized rows), and bans re-introducing `useAutoResume` / `autoResumeAttemptedRef`.
+
+## Recommendation
+
+**No additional code changes.** The fix from the prior turn is complete, correct, and locked by tests. If you are still seeing the symptom in preview (e.g. activities disappearing on refresh on a specific trip), that would be a different bug — most likely one of the persistence-layer defenses (Frozen-After-Ready, No-Regression-Overwrite, DB-Is-Source-of-Truth), not auto-resume.
+
+## If you want me to proceed
+
+Tell me which trip ID is still misbehaving and what you observed (before/after refresh), and I'll trace it against the persistence layer instead of auto-resume. Otherwise this work item is closed.
