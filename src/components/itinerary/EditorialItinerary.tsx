@@ -11519,7 +11519,8 @@ function ActivityRow({
 
     const timeDisplay = (() => {
       const start = formatTime(time);
-      const end = activity.endTime ? formatTime(activity.endTime) : null;
+      const renderedEnd = getRenderedEndTime(activity);
+      const end = renderedEnd ? formatTime(renderedEnd) : null;
       if (start && end) return `${start} – ${end}`;
       if (start) return start;
       return null;
