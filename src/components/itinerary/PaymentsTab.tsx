@@ -458,35 +458,35 @@ export function PaymentsTab({
 
   // Manual payments are now folded into useTripFinancialSnapshot directly
   // (override-aware for hotel/flight, additive for others). No local delta needed.
-  // baseTotal mirrors the itinerary header (`displayedTotalCents`) — same
-  // hook, same math, same number. Falls back to payable items only while the
-  // displayed total is still loading and we have no snapshot yet.
-  const baseTotal = displayedTotal.loading
-    ? payableTotalCents
-    : (displayedTotal.displayedTotalCents > 0
-        ? displayedTotal.displayedTotalCents
-        : payableTotalCents);
-  const estimatedTotal = Math.max(0, baseTotal);
+  //
+  // SINGLE SOURCE OF TRUTH: PaymentsTab Trip Total MUST equal the header's
+  // `displayedTotal.displayedTotalCents` exactly. Never fall back to
+  // `payableTotalCents` — it resolves on a different code path and excludes
+  // the misc/spending-money reserve, which silently caused the recurring
+  // "Header €915 vs Payments $1,120" three-way drift. While the displayed
+  // total is loading or zero, render a Skeleton instead of a divergent number.
+  // See mem://constraints/finance/displayed-trip-total-single-source.
+  const headerTotalReady =
+    !displayedTotal.loading && displayedTotal.displayedTotalCents > 0;
+  const estimatedTotal = headerTotalReady ? displayedTotal.displayedTotalCents : 0;
   // "Paid so far" must follow the same orphan-aware logic as the snapshot —
   // otherwise stale paid trip_payments rows from a regenerated trip inflate
   // the headline and trigger a phantom "Overpaid" warning. Snapshot already
   // filters orphans synchronously; trust it once it's loaded.
   const paidAmount = financialSnapshot.loading ? totals.paid : financialSnapshot.paidCents;
-  const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
+  const unpaidAmount = headerTotalReady ? Math.max(0, estimatedTotal - paidAmount) : 0;
   // Surface overpayment as an explicit anomaly instead of silently clamping
   // "Remaining to pay" at $0 (e.g. orphaned payments left over from a prior
   // itinerary version still count toward `paidAmount`).
-  const overpaidAmount = Math.max(0, paidAmount - estimatedTotal);
+  const overpaidAmount = headerTotalReady ? Math.max(0, paidAmount - estimatedTotal) : 0;
   const isOverpaid = overpaidAmount > 0 && estimatedTotal > 0;
   const progressPercent = estimatedTotal > 0 ? (paidAmount / estimatedTotal) * 100 : 0;
 
   // Travel Essentials = flights + hotels only. The misc/spending-money reserve
-  // is surfaced as its own bucket below so users can see exactly where the
-  // headline total comes from.
-  // Reserve gating: only fold once the snapshot has FULLY loaded — using
-  // `tripTotalCents > 0` as a readiness proxy fails for hotel-only / empty
-  // trips (snapshot total = 0 with a non-zero reserve mid-fetch flips the
-  // bucket→header relationship and latches a phantom drift badge).
+  // is surfaced as its own bucket below (Misc) so users can see exactly where
+  // the headline total comes from. Reserve gating: only fold once the snapshot
+  // has FULLY loaded — using `tripTotalCents > 0` as a readiness proxy fails
+  // for hotel-only / empty trips.
   const reserveCents = !financialSnapshot.loading
     ? (financialSnapshot.miscReserveCents || 0)
     : 0;
