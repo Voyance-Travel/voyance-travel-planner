@@ -605,6 +605,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       committedFlightCents: canonicalFlightCents,
       manualHotelDelta: canonical.manualHotelDelta,
       manualFlightDelta: canonical.manualFlightDelta,
+      buckets: decomposition.buckets,
+      residualFoldedCents: decomposition.residualFoldedCents,
       loading: false,
     });
     } catch (err) {
