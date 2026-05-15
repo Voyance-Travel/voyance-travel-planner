@@ -6174,12 +6174,15 @@ export function EditorialItinerary({
                         </TooltipContent>
                       </Tooltip>
                     )}
-                    {!isBudgetCalculating && (
-                      <TripTotalDeltaIndicator
-                        delta={financialSnapshot.lastDelta}
-                        onDismiss={financialSnapshot.acknowledgeDelta}
-                      />
-                    )}
+                    {/* TripTotalDeltaIndicator removed 2026-05-15: the inline
+                        "−$X just now" badge could latch indefinitely when a
+                        background system refetch (orphan archive, backfill,
+                        cost-table sync) produced a non-zero delta the user
+                        never caused. Pricing changes attributable to a
+                        repair pass still surface via the toast.info path in
+                        useTripFinancialSnapshot. See plan
+                        .lovable/plan.md (2026-05-15).
+                        Bali/Barcelona/Monaco repro pattern. */}
                   </div>
                   {localCurrency !== 'USD' && (
                     <Tooltip delayDuration={200}>
