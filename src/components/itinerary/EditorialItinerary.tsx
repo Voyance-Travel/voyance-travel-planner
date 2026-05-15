@@ -41,7 +41,7 @@ import { CREDIT_COSTS, formatCredits } from '@/config/pricing';
 import { CreditNudge } from './CreditNudge';
 import { UnlockBanner } from './UnlockBanner';
 import { LockedDayCard } from './LockedDayCard';
-import { TripTotalDeltaIndicator } from './TripTotalDeltaIndicator';
+// TripTotalDeltaIndicator import removed — see comment near header total.
 import { useReconcilingState } from '@/hooks/useReconcilingState';
 import { FrostedGateOverlay } from './FrostedGateOverlay';
 import { BulkUnlockBanner, getBulkUnlockCost } from './BulkUnlockBanner';
