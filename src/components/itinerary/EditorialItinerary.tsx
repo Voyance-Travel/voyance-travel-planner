@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { getRenderedStartTime, getRenderedEndTime } from '@/lib/itinerary/displayTime';
 import { isWeakAddress } from '@/lib/address-quality';
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 import { timeOfDayBand } from '@/lib/itinerary/timeOfDayBand';
@@ -11359,7 +11360,7 @@ function ActivityRow({
   const cost = costInfo.amount;
   // Use tripCurrency (user's preferred display currency) instead of activity's native currency
   const existingPhoto = getActivityPhoto(activity);
-  const time = activity.startTime || activity.time;
+  const time = getRenderedStartTime(activity);
   
   // Normalize title: use title, fallback to name (backend may return either), and strip system prefixes.
   // CRITICAL: pass the full activity so sanitizer can see location.name / venue_name / placeId /
@@ -11518,7 +11519,8 @@ function ActivityRow({
 
     const timeDisplay = (() => {
       const start = formatTime(time);
-      const end = activity.endTime ? formatTime(activity.endTime) : null;
+      const renderedEnd = getRenderedEndTime(activity);
+      const end = renderedEnd ? formatTime(renderedEnd) : null;
       if (start && end) return `${start} – ${end}`;
       if (start) return start;
       return null;
@@ -11862,8 +11864,8 @@ function ActivityRow({
               <span className="text-sm font-medium text-foreground">{formatTime(time)}</span>
               {isEditable && <Edit3 className="h-3 w-3 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />}
             </div>
-            {activity.endTime && (
-              <p className="text-xs text-muted-foreground mt-0.5">→ {formatTime(activity.endTime)}</p>
+            {getRenderedEndTime(activity) && (
+              <p className="text-xs text-muted-foreground mt-0.5">→ {formatTime(getRenderedEndTime(activity))}</p>
             )}
             {activity.duration && (
               <p className="text-xs text-primary/70 mt-0.5 font-medium">

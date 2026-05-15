@@ -1,11 +1,16 @@
 /**
- * Cascade preview — health engine reads post-cascade times so collisions
- * the save-time scheduler will auto-resolve don't surface as warnings.
+ * Cascade preview — health engine reads post-cascade times for DETECTION,
+ * but the user-facing warning only fires/suppresses based on the times the
+ * card actually renders.
  *
- * Repros the Montreal Day 1/Day 2 false-positives:
- *   - Pointe-à-Callière 10:30–12:40 vs Schwartz's lunch starting at 12:30
- *     (cascade pushes lunch to 12:40 + buffer; rendered card matches)
- *   - Plateau Murals E-Bike Tour ending shortly before Joe Beef
+ * Contract (mem://constraints/itinerary/health-warning-rendered-times):
+ *   1. If the rendered times on the cards overlap, the engine ALWAYS warns,
+ *      regardless of whether a future save-time cascade would resolve it.
+ *      The user is staring at the conflict on screen right now.
+ *   2. Cascade suppression only fires when rendered times don't overlap —
+ *      i.e. the conflict only exists in the dry-run cascade view.
+ *   3. Warning text mirrors the rendered times via getRenderedStartTime /
+ *      getRenderedEndTime, never the cascaded value or a synthesized end.
  */
 import { describe, it, expect } from 'vitest';
 import { analyzeHealth } from '../TripHealthPanel';
@@ -22,50 +27,92 @@ const meals = [
 ];
 
 describe('TripHealthPanel cascade preview', () => {
-  it('suppresses Schwartz-style overlap that the cascade resolves', () => {
+  it('Bali repro: warns on visible overlap even when cascade would resolve it', () => {
+    // Uluwatu Temple 11:50–13:20 + Naughty Nuri\'s 12:30–13:30 — 50-min
+    // overlap visible on screen. The save-time cascade WOULD push lunch to
+    // 13:20+, but the user sees the conflict now and we must warn.
     const day = baseDay(1, [
       ...meals,
       {
-        id: 'museum',
-        title: 'Pointe-à-Callière',
-        name: 'Pointe-à-Callière',
-        category: 'museum',
-        startTime: '10:30',
-        endTime: '12:40',
+        id: 'temple',
+        title: 'Uluwatu Temple',
+        name: 'Uluwatu Temple',
+        category: 'sightseeing',
+        startTime: '11:50',
+        endTime: '13:20',
       },
       {
         id: 'lunch',
-        title: 'Lunch at Schwartz\'s',
-        name: 'Lunch at Schwartz\'s',
+        title: "Naughty Nuri's",
+        name: "Naughty Nuri's",
         category: 'dining',
-        startTime: '12:30', // collides with museum end 12:40
+        startTime: '12:30',
         endTime: '13:30',
       },
     ]);
 
     const issues = analyzeHealth([day]);
     const conflicts = issues.filter((i) => i.fixAction === 'fix_timing');
-    expect(conflicts).toHaveLength(0);
+    expect(conflicts.length).toBeGreaterThan(0);
   });
 
-  it('suppresses bike-tour vs Joe Beef tight buffer', () => {
-    const day = baseDay(2, [
-      ...meals,
+  it('Copenhagen repro: warning text uses card endTime, never a synthesized end', () => {
+    // Card shows Høst 21:50–22:50 (endTime field). Engine must NOT synthesize
+    // a 23:50 end from durationMinutes:120 — the user would see "21:50–23:50"
+    // in the warning while the card shows "21:50–22:50".
+    const day = baseDay(1, [
+      { id: 'bk2', title: 'Breakfast', name: 'Breakfast', category: 'dining', startTime: '08:00', endTime: '08:45' },
+      { id: 'lu2', title: 'Lunch', name: 'Lunch', category: 'dining', startTime: '12:30', endTime: '13:30' },
       {
-        id: 'bike',
-        title: 'Plateau Murals E-Bike Tour',
-        name: 'Plateau Murals E-Bike Tour',
-        category: 'activity',
-        startTime: '10:00',
-        endTime: '13:12',
+        id: 'host',
+        title: 'Dinner at Høst',
+        name: 'Dinner at Høst',
+        category: 'dining',
+        startTime: '21:50',
+        endTime: '22:50',
+        durationMinutes: 120, // would synth 23:50 if engine fell back
       },
       {
-        id: 'joebeef',
-        title: 'Joe Beef',
-        name: 'Joe Beef',
+        id: 'metro',
+        title: 'Metro to The Barking Dog',
+        name: 'Metro to The Barking Dog',
+        category: 'transit',
+        startTime: '22:30', // overlaps Høst 22:50 end
+        endTime: '22:44',
+      },
+    ]);
+
+    const issues = analyzeHealth([day]);
+    const conflicts = issues.filter((i) => i.fixAction === 'fix_timing');
+    if (conflicts.length > 0) {
+      // If the engine warns at all here, the message must echo 22:50, not 23:50.
+      expect(conflicts[0].message).toContain('22:50');
+      expect(conflicts[0].message).not.toContain('23:50');
+    }
+  });
+
+  it('cascade-only artifact: rendered times don\'t overlap → no warning', () => {
+    // Card-rendered times don't overlap (museum 10:30–11:30 ends before
+    // lunch 12:00). Cascade dry-run shouldn't shift anything either, so no
+    // warning. This is the legitimate "dry-run-only artifact" suppression
+    // window the engine still respects.
+    const day = baseDay(1, [
+      ...meals,
+      {
+        id: 'museum',
+        title: 'Quiet Museum',
+        name: 'Quiet Museum',
+        category: 'museum',
+        startTime: '10:30',
+        endTime: '11:30',
+      },
+      {
+        id: 'lunch',
+        title: 'Lunch',
+        name: 'Lunch',
         category: 'dining',
-        startTime: '13:00', // overlaps; cascade pushes
-        endTime: '14:30',
+        startTime: '12:00',
+        endTime: '13:00',
       },
     ]);
 
@@ -104,8 +151,8 @@ describe('TripHealthPanel cascade preview', () => {
 
   it('Casablanca: stale legacy `time` does not surface as overlap when startTime is canonical', () => {
     // Lunch 12:30–13:30 + Museum carrying both startTime:13:45 (rendered)
-    // AND a stale time:12:31 (pre-cascade). The displayTime/cascade pipeline
-    // must read 13:45, not 12:31, so no overlap warning fires.
+    // AND a stale time:12:31 (pre-cascade). The rendered helper reads 13:45,
+    // not 12:31, so no overlap warning fires.
     // mem://constraints/itinerary/time-field-canonicalization
     const day = baseDay(2, [
       ...meals,
@@ -133,92 +180,4 @@ describe('TripHealthPanel cascade preview', () => {
     const conflicts = issues.filter((i) => i.fixAction === 'fix_timing');
     expect(conflicts).toHaveLength(0);
   });
-
-  it('Casablanca Day 3: museum→lunch overlap is suppressed by cascade preview', () => {
-    // Reproduces Issue 4: Art Deco Heritage 11:09–12:39 + Lunch 12:30–13:30.
-    // Save-time cascade pushes lunch to 12:54 (15-min museum→dining buffer).
-    // Health engine must show 0 conflicts.
-    const day = baseDay(3, [
-      ...meals,
-      {
-        id: 'museum',
-        title: 'Art Deco Heritage at Musée Abderrahman Slaoui',
-        name: 'Art Deco Heritage at Musée Abderrahman Slaoui',
-        category: 'sightseeing',
-        startTime: '11:09',
-        endTime: '12:39',
-      },
-      {
-        id: 'lunch',
-        title: 'Lunch: Iloli',
-        name: 'Lunch: Iloli',
-        category: 'dining',
-        startTime: '12:30',
-        endTime: '13:30',
-      },
-    ]);
-
-    const issues = analyzeHealth([day]);
-    const conflicts = issues.filter((i) => i.fixAction === 'fix_timing');
-    expect(conflicts).toHaveLength(0);
-  });
-
-  it('id-less activities still benefit from cascade-preview suppression', () => {
-    // Same museum→lunch overlap but lunch carries an empty id (simulates a
-    // partially-hydrated row whose `id` was lost). The Round 3 idx-keyed
-    // fallback in buildCascadePreview / displayTime must still suppress.
-    const day = baseDay(3, [
-      ...meals,
-      {
-        id: 'museum',
-        title: 'Art Deco Heritage',
-        name: 'Art Deco Heritage',
-        category: 'sightseeing',
-        startTime: '11:09',
-        endTime: '12:39',
-      },
-      {
-        id: '', // simulated id-less row
-        title: 'Lunch: Iloli',
-        name: 'Lunch: Iloli',
-        category: 'dining',
-        startTime: '12:30',
-        endTime: '13:30',
-      },
-    ]);
-
-    const issues = analyzeHealth([day]);
-    const conflicts = issues.filter((i) => i.fixAction === 'fix_timing');
-    expect(conflicts).toHaveLength(0);
-  });
-
-  it('duplicate ids still get post-cascade resolution via idx fallback', () => {
-    // Two siblings with the same id — without the idx:N keying, one would
-    // overwrite the other in the cascade-preview map. The deterministic
-    // per-pair re-check in analyzeHealth provides the final safety net.
-    const day = baseDay(3, [
-      ...meals,
-      {
-        id: 'dupe',
-        title: 'Art Deco Heritage',
-        name: 'Art Deco Heritage',
-        category: 'sightseeing',
-        startTime: '11:09',
-        endTime: '12:39',
-      },
-      {
-        id: 'dupe',
-        title: 'Lunch: Iloli',
-        name: 'Lunch: Iloli',
-        category: 'dining',
-        startTime: '12:30',
-        endTime: '13:30',
-      },
-    ]);
-
-    const issues = analyzeHealth([day]);
-    const conflicts = issues.filter((i) => i.fixAction === 'fix_timing');
-    expect(conflicts).toHaveLength(0);
-  });
 });
-

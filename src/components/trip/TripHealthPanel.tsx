@@ -20,7 +20,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { inferDayModeFallback } from '@/lib/itinerary/inferDayMode';
-import { getDisplayStartTime, getDisplayEndTime } from '@/lib/itinerary/displayTime';
+import {
+  getDisplayStartTime,
+  getDisplayEndTime,
+  getRenderedStartTime,
+  getRenderedEndTime,
+} from '@/lib/itinerary/displayTime';
 import { buildCascadePreview, indexKey } from '@/lib/itinerary/healthCascadePreview';
 import { enforceTimingAndBuffers, parseTime as parseCascadeTime } from '@/utils/itinerary/timingCascade';
 import { isActivityLocked } from '@/lib/itinerary/persistDayContract';
@@ -306,16 +311,29 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
       // past midnight; should never anchor a buffer/overlap warning.
       .filter(({ a }) => !isHotelReturn(a))
       .map(({ a, idx }) => {
-        // Cascade-preview times power overlap detection + suppression. The
-        // user-facing warning text echoes the SAME times rendered on the
-        // card (no cascade map) so the message never disagrees with what
-        // the user sees. Closes Copenhagen "card 20:50 / warning 21:50"
-        // pattern — root cause: dry-run cascade reshuffled times the user
-        // hadn't saved yet.
+        // Cascade-preview times power overlap DETECTION (the dry-run that
+        // tells us what a future save will look like). The warning TEXT
+        // mirrors the times painted on the card via the rendered helper —
+        // never the cascaded value, never a synthesized end. Closes
+        // Copenhagen "card 22:50 / warning 23:50" and Bali "engine missed
+        // visible 50-min overlap" patterns.
         const cascadedStart = getDisplayStartTime(a, cascadePreview, idx);
         const cascadedEnd = getDisplayEndTime(a, cascadePreview, idx);
-        const renderedStart = getDisplayStartTime(a, undefined, idx);
-        const renderedEnd = getDisplayEndTime(a, undefined, idx);
+        const renderedStart = getRenderedStartTime(a);
+        const renderedEnd = getRenderedEndTime(a);
+        // Drift telemetry: rendered string disagrees with helper. Should be
+        // impossible because the card and helper share the same precedence,
+        // but log if it ever drifts in the future.
+        if (typeof console !== 'undefined' && renderedStart && cascadedStart && renderedStart !== cascadedStart) {
+          // eslint-disable-next-line no-console
+          console.warn('[HEALTH_RENDERED_VS_CARD_DRIFT]', {
+            day: dayNum,
+            idx,
+            title: a?.name || a?.title,
+            renderedStart,
+            cascadedStart,
+          });
+        }
         return {
           source: a,
           sourceIdx: idx,
@@ -410,10 +428,16 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
     };
 
     for (let i = 0; i < timed.length - 1; i++) {
-      // Primary overlap signal: rendered times the user actually sees.
-      // Without this, a dry-run cascade that shifts a card forward could
-      // synthesize an overlap on times that DON'T actually conflict on
-      // screen (Copenhagen pattern).
+      // Two overlap signals:
+      //   • renderedOverlaps — the times the user can SEE on the card right
+      //     now. Never suppress this; the cascade hasn't been saved yet, so
+      //     the user is staring at a real overlap on screen.
+      //   • cascadeOverlaps  — the dry-run cascade still puts these in
+      //     conflict. Suppression via cascade re-check ONLY applies when the
+      //     rendered times don't already overlap (a true dry-run-only artifact).
+      // This is the Bali fix: Uluwatu 11:50–13:20 + Naughty Nuri 12:30–13:30
+      // showed a 50-min visible overlap that the engine was suppressing
+      // because the cascade would have shifted lunch later.
       const renderedLeftEnd = parseTime(timed[i].endStr);
       const renderedRightStart = parseTime(timed[i + 1].startStr);
       const renderedOverlaps = renderedLeftEnd > renderedRightStart;
@@ -428,21 +452,24 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           isTransitLike(timed[i].category, timed[i].name) ||
           isTransitLike(timed[i + 1].category, timed[i + 1].name);
 
-        // Deterministic per-pair re-check: suppress if cascade would resolve.
-        if (!pairStillOverlapsAfterCascade(
-          (timed[i] as any).sourceIdx,
-          (timed[i + 1] as any).sourceIdx,
-          timed[i].name,
-          timed[i + 1].name,
-          timed[i].start,
-          timed[i + 1].start
-        )) {
-          continue;
+        // Cascade suppression — ONLY when the rendered times don't overlap.
+        // If the user can see the overlap on screen, we always warn,
+        // regardless of whether a future save would auto-resolve it.
+        if (!renderedOverlaps) {
+          if (!pairStillOverlapsAfterCascade(
+            (timed[i] as any).sourceIdx,
+            (timed[i + 1] as any).sourceIdx,
+            timed[i].name,
+            timed[i + 1].name,
+            timed[i].start,
+            timed[i + 1].start
+          )) {
+            continue;
+          }
+          // Rendered times don't overlap, only cascade does — that's a
+          // dry-run artifact the user can't see; never warn.
+          if (cascadeOverlaps) continue;
         }
-
-        // Bonus suppression: rendered times don't overlap, only cascade does
-        // — that's a dry-run artifact the user can't see; never warn.
-        if (!renderedOverlaps && cascadeOverlaps) continue;
 
         issues.push({
           id: `conflict-day-${dayNum}-${i}`,
