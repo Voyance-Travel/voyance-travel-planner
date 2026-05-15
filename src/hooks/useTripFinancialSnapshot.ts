@@ -64,6 +64,13 @@ export interface FinancialSnapshot {
    *  Use these — not local computeHotelCostUsd / leg sums — when decomposing the trip total. */
   effectiveHotelCents: number;
   effectiveFlightCents: number;
+  /** Per-bucket cents. Invariant: sum(buckets) === tripTotalCents. Read these
+   *  in PaymentsTab bucket headers so they cannot drift from the headline. */
+  buckets: BucketCents;
+  bucketsSumCents: number;
+  /** Signed residual folded into `buckets.misc` to maintain the invariant.
+   *  |x| > $2 = an upstream contract bug — surfaced via console.warn. */
+  residualFoldedCents: number;
   loading: boolean;
   lastDelta: FinancialDelta | null;
   refetch: () => void;
