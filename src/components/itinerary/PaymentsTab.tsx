@@ -559,7 +559,13 @@ export function PaymentsTab({
   // can attribute live drift reports without spamming the console. Classifies
   // the mismatch as Path A (snapshot ≠ payable items header), Path B (bucket
   // sum ≠ headline), or Path C (orphan paid drift).
-  const driftReportedRef = useRef<string | null>(null);
+  // Always-on attributed drift telemetry — rate-limited to one log per 5 s
+  // per (tripId, path) so the gap source is named in the console every time
+  // it appears post-stabilization. Replaces the prior once-per-fingerprint
+  // guard which silently swallowed all subsequent divergences after first
+  // emit, hiding regressions until the next user complaint. See
+  // mem://constraints/finance/displayed-trip-total-single-source.
+  const driftLastLogRef = useRef<Map<string, number>>(new Map());
   if (snapshotReady && estimatedTotal > 0) {
     const bucketDrift = Math.abs(bucketSumCents - estimatedTotal);
     const payableDrift = Math.abs(payableTotalCents - financialSnapshot.tripTotalCents);
@@ -571,18 +577,31 @@ export function PaymentsTab({
     else if (bucketDrift > 100) path = 'B';
     else if (paidDrift > 200) path = 'C';
     if (path !== 'none') {
-      const fingerprint = `${tripId}|${path}|${estimatedTotal}|${bucketSumCents}|${paidAmount}`;
-      if (driftReportedRef.current !== fingerprint) {
-        driftReportedRef.current = fingerprint;
+      const key = `${tripId}|${path}`;
+      const now = Date.now();
+      const last = driftLastLogRef.current.get(key) || 0;
+      if (now - last > 5000) {
+        driftLastLogRef.current.set(key, now);
         console.warn('[PaymentsTab] divergence', {
           path,
+          drift: { bucketDrift, payableDrift, paidDrift },
           snapshotTotal: financialSnapshot.tripTotalCents,
           displayedTotalCents: displayedTotal.displayedTotalCents,
+          daysSubtotalCents: displayedTotal.headerStripValues
+            ? Math.round(displayedTotal.headerStripValues.chipSumUsd * 100)
+                - financialSnapshot.effectiveHotelCents
+                - financialSnapshot.effectiveFlightCents
+            : null,
+          chipSumCents: displayedTotal.chipSumCents,
+          hotelCents: financialSnapshot.effectiveHotelCents,
+          flightCents: financialSnapshot.effectiveFlightCents,
           bucketSum: bucketSumCents,
           payableTotal: payableTotalCents,
           tripPaymentsPaidSum: totals.paid,
           snapshotPaidCents: financialSnapshot.paidCents,
           reserveCents,
+          snapshotUnderChips: displayedTotal.snapshotUnderChips,
+          snapshotOverChips: displayedTotal.snapshotOverChips,
           tripCurrency,
           tripId,
         });
