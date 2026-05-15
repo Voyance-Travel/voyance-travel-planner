@@ -56,6 +56,7 @@ import { setCachedVersion, clearCachedVersion, saveItineraryOptimistic, fetchAnd
 import { saveTripDateVersion, restoreTripDateVersion } from '@/services/tripDateVersionHistory';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import { useScrollLockCleanup } from '@/hooks/useScrollLockCleanup';
+import { useItineraryPreservation } from '@/hooks/useItineraryPreservation';
 import { useTripLearning } from '@/services/tripLearningsAPI';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Tables } from '@/integrations/supabase/types';
@@ -158,6 +159,7 @@ export default function TripDetail() {
   const debriefPromptAttempted = useRef(false);
   const autoGenerateTriggered = useRef(false);
   const tripRef = useRef<Trip | null>(null);
+  useItineraryPreservation(tripId, trip);
 
   useEffect(() => {
     tripRef.current = trip;
