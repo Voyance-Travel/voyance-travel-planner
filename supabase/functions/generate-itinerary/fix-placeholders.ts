@@ -1167,7 +1167,7 @@ export async function generateFallbackRestaurant(
 // =============================================================================
 // HELPER: Determine meal type from start time
 // =============================================================================
-function parseMealType(startTime: string): 'breakfast' | 'lunch' | 'dinner' | 'drinks' {
+export function parseMealType(startTime: string): 'breakfast' | 'lunch' | 'dinner' | 'drinks' {
   const hourMatch = startTime.match(/^(\d{1,2})/);
   const hour24 = hourMatch ? parseInt(hourMatch[1], 10) : 12;
   if (hour24 < 11) return 'breakfast';
