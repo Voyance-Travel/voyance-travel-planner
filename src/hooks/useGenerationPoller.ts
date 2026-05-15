@@ -83,8 +83,6 @@ export function useGenerationPoller({
   
   // Track whether we already fired onStalled / attempted auto-resume
   const stalledFiredRef = useRef(false);
-  const autoResumeCountRef = useRef(0);
-  const MAX_AUTO_RESUME_ATTEMPTS = 3;
   // Guard: only fire onReady once per generation cycle
   const onReadyCalledRef = useRef(false);
   // High-water mark: completedDays should never decrease during a generation cycle
@@ -167,7 +165,6 @@ export function useGenerationPoller({
       // Check for completion — backend uses 'ready', some docs say 'generated'
       if (itineraryStatus === 'ready' || itineraryStatus === 'generated') {
         stalledFiredRef.current = false;
-        autoResumeCountRef.current = 0;
         setState({ status: 'ready', completedDays: totalDays || completedDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
         if (!onReadyCalledRef.current) {
           onReadyCalledRef.current = true;
@@ -187,7 +184,6 @@ export function useGenerationPoller({
         ).length;
         if (daysWithActivities >= totalDays) {
           stalledFiredRef.current = false;
-          autoResumeCountRef.current = 0;
           setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
           if (!onReadyCalledRef.current) {
             onReadyCalledRef.current = true;
@@ -203,7 +199,6 @@ export function useGenerationPoller({
         if (partialDays.length > 0 && totalDays > 0 && partialDays.length >= totalDays) {
           console.log('[useGenerationPoller] Status is "failed" but itinerary_data has all days — treating as ready');
           stalledFiredRef.current = false;
-          autoResumeCountRef.current = 0;
           setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
           if (!onReadyCalledRef.current) {
             onReadyCalledRef.current = true;
@@ -221,7 +216,6 @@ export function useGenerationPoller({
           if (daysWithRealActivities >= totalDays) {
             console.log('[useGenerationPoller] Status is "failed" but itinerary_data has all days with activities — treating as ready');
             stalledFiredRef.current = false;
-            autoResumeCountRef.current = 0;
             setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
             if (!onReadyCalledRef.current) {
               onReadyCalledRef.current = true;
@@ -240,7 +234,6 @@ export function useGenerationPoller({
         }
 
         stalledFiredRef.current = false;
-        autoResumeCountRef.current = 0;
         const genError = (meta.generation_error as string)
           || (meta.chain_error as string)
           || 'Generation failed';
@@ -255,7 +248,6 @@ export function useGenerationPoller({
 
       if (itineraryStatus === 'partial') {
         stalledFiredRef.current = false;
-        autoResumeCountRef.current = 0;
         const genError = (meta.generation_error as string) || 'Generation paused';
         setState({ status: 'partial', completedDays, totalDays, progress, error: genError, partialDays, generatedDaysList: daysList, currentCity });
         return;
@@ -365,7 +357,6 @@ export function useGenerationPoller({
 
       // Active generation — progress detected, reset stall tracking
       stalledFiredRef.current = false;
-      autoResumeCountRef.current = 0;
       consecutiveErrorsRef.current = 0; // Reset on success
       setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
     } catch (err) {
@@ -379,7 +370,6 @@ export function useGenerationPoller({
     if (!enabled || !tripId) {
       setState(prev => prev.status === 'idle' ? prev : { ...prev, status: 'idle' });
       stalledFiredRef.current = false;
-      autoResumeCountRef.current = 0;
       onReadyCalledRef.current = false;
       lastFailedErrorRef.current = null;
       completedDaysHWM.current = 0;
@@ -403,7 +393,6 @@ export function useGenerationPoller({
       if (document.visibilityState === 'visible') {
         justResumedRef.current = true;
         resumedAtRef.current = Date.now();
-        autoResumeCountRef.current = 0; // Reset resume counter on tab return
         // Immediate fresh poll before any error state can flash
         poll().finally(() => {
           // Clear the resume flag after grace period
@@ -478,7 +467,6 @@ export function useGenerationPoller({
 
   const startPolling = useCallback(() => {
     stalledFiredRef.current = false;
-    autoResumeCountRef.current = 0;
     onReadyCalledRef.current = false;
     lastFailedErrorRef.current = null;
     completedDaysHWM.current = 0;
