@@ -5,7 +5,7 @@ import { trackCost, type CostTracker } from "../_shared/cost-tracker.ts";
 import { checkVenueCache, cacheVenueResult } from "../_shared/venue-cache.ts";
 import { googlePlacesTextSearch } from "../_shared/google-api.ts";
 import { isGoogleBillableUrl } from "../_shared/is-google-billable.ts";
-import { detectCrossCityMention } from "../generate-itinerary/cross-city-filter.ts";
+import { detectCrossCityMention } from "../_shared/cross-city-filter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
