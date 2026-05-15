@@ -4,17 +4,17 @@
  * activities. Silent auto-regen overwrites user-visible content (Dublin
  * 2026-05-14, Clinton Brooks Madrid 358cc606).
  *
- * Allowed `generate-itinerary` invocation sites in TripDetail.tsx (4):
+ * Allowed `action:'generate-trip'` invocation sites in TripDetail.tsx (5):
  *   1. handleResumeGeneration  — explicit user "Regenerate" button
  *   2. triggerGeneration       — multi-city queued-leg handoff
- *   3. stuckHealAttempted      — stuck `generating` leg, gated on count===0
- *   4. notStartedHealAttempted — chat-planner `not_started`, gated on !hasItineraryData
- *   5. extend-days user action  — explicit "add days" UI flow
+ *   3. stuckHealAttempted      — stuck `generating` leg
+ *   4. notStartedHealAttempted — chat-planner `not_started`
+ *   5. extend-days user action — explicit "add days" UI flow
  *
- * Each self-heal site has a guard that prevents firing when the trip
- * already has saved activities. See:
+ * Each self-heal site (2,3,4) MUST short-circuit when the trip already
+ * has saved activities — checked against BOTH itinerary_data JSON and
+ * the normalized itinerary_days table. See:
  *   mem://constraints/itinerary/no-auto-resume-on-load
- *   mem://constraints/itinerary/mobile-uses-server-chain
  *   Core: Frozen After Ready / No-Regression Overwrite / DB Is Source of Truth
  */
 import { readFileSync } from 'fs';
@@ -28,34 +28,34 @@ const SRC = readFileSync(
 
 describe('TripDetail — no silent regen on mount', () => {
   it('contains exactly 5 allow-listed action:"generate-trip" invocations', () => {
-    // Allow-listed sites:
-    //   handleResumeGeneration (button) | triggerGeneration (queued leg)
-    //   stuckHealAttempted | notStartedHealAttempted | extend-days user action
-    // The other 2 generate-itinerary invocations use action:"save-itinerary"
-    // and are persistence calls, not regeneration triggers.
     const matches = SRC.match(/action:\s*['"]generate-trip['"]/g);
     expect(matches?.length ?? 0).toBe(5);
   });
 
   it('never re-introduces the useAutoResume hook or its ref', () => {
-    // The comment at L309 may name autoResumeAttemptedRef as a do-not-reintroduce
-    // sentinel — match only on actual code usage (`= useRef`, `.current`).
     expect(SRC).not.toMatch(/from\s+['"][^'"]*useAutoResume['"]/);
     expect(SRC).not.toMatch(/autoResumeAttemptedRef\.current/);
     expect(SRC).not.toMatch(/autoResumeAttemptedRef\s*=\s*useRef/);
   });
 
-  it('stuck-leg self-heal is gated on zero saved itinerary_days rows', () => {
-    // The stuck-heal branch only invokes generate-itinerary when the
-    // count of itinerary_days rows is 0 — see TripDetail.tsx ~L920.
-    expect(SRC).toMatch(/stuckHealAttempted/);
-    expect(SRC).toMatch(/from\(['"]itinerary_days['"]\)[\s\S]{0,200}count:\s*['"]exact['"]/);
+  it('queued-leg trigger short-circuits when saved activities already exist', () => {
+    // Must check BOTH itinerary_data and itinerary_days before invoking.
+    expect(SRC).toMatch(/Queued-leg trigger SKIPPED/);
+    expect(SRC).toMatch(/hasJsonActivities/);
   });
 
-  it('not_started self-heal is gated on !hasItineraryData', () => {
-    // The not-started branch must short-circuit when itinerary data
-    // already exists — see TripDetail.tsx ~L1036.
+  it('stuck-leg self-heal short-circuits on hasItineraryData(trip)', () => {
+    expect(SRC).toMatch(/stuckHealAttempted/);
+    // Existing zero-row guard.
+    expect(SRC).toMatch(/from\(['"]itinerary_days['"]\)[\s\S]{0,200}count:\s*['"]exact['"]/);
+    // New JSON-data guard before invoke.
+    expect(SRC).toMatch(/Stuck-heal SKIPPED[\s\S]{0,200}itinerary_data has real activities/);
+  });
+
+  it('not_started self-heal short-circuits on hasItineraryData and itinerary_days rows', () => {
     expect(SRC).toMatch(/notStartedHealAttempted/);
     expect(SRC).toMatch(/if\s*\(\s*hasItineraryData\(trip\)\s*\)\s*return/);
+    // New normalized-rows guard before mutating + invoking.
+    expect(SRC).toMatch(/not_started self-heal SKIPPED[\s\S]{0,200}itinerary_days has/);
   });
 });
