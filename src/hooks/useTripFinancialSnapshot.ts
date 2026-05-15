@@ -656,7 +656,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
         suppressNextToastRef.current = { active: false, reason: '' };
       }
     }
-  }, [tripId]);
+  }, [tripId, armDeltaAutoDismiss]);
 
   useEffect(() => {
     // Reset bookkeeping when tripId changes
