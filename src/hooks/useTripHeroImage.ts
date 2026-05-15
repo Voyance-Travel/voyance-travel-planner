@@ -388,6 +388,8 @@ export function useTripHeroImage({
     dbCuratedFailed,
     apiImageUrl,
     apiFailed,
+    storageUrl,
+    storageFailed,
   ]);
 
   const onError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
