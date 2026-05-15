@@ -20,6 +20,31 @@ import { getHeroImageByName, getDestinationCanonicalImage } from '@/services/des
 import { supabase } from '@/integrations/supabase/client';
 import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
 import { detectCrossCityMention } from '@/lib/crossCityFilter';
+import { DESTINATION_STORAGE_IMAGES } from '@/data/destinationStorageImages';
+
+/**
+ * Stable internal-storage fallback tier.
+ *
+ * Closes recurring "blank brown/tan gradient hero" pattern (Dublin/Copenhagen/
+ * Barcelona). Root cause: the canonical resolver only checks URL trust by host,
+ * not whether the storage object actually exists. When `destinations.hero_image_url`
+ * points at a `site-images/photo-*` object that 404s, the chain fell straight
+ * through to the gradient because downstream tiers were gated on
+ * `!canonicalUrl`. We now (a) keep advancing past `canonicalFailed`, and (b)
+ * carry a hand-curated internal storage map keyed by city slug as the last
+ * trusted tier before API/gradient.
+ */
+function lookupStorageHero(destination: string): string | null {
+  if (!destination) return null;
+  const cityOnly = destination.split(',')[0].trim().toLowerCase();
+  const slug = cityOnly.replace(/\s+/g, '-');
+  const candidates = [cityOnly, slug, cityOnly.replace(/-/g, ' ')];
+  for (const k of candidates) {
+    const hit = DESTINATION_STORAGE_IMAGES[k];
+    if (hit?.imageUrl) return hit.imageUrl;
+  }
+  return null;
+}
 
 /**
  * Shared predicate: a seeded hero URL we should treat as broken/unusable.
