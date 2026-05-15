@@ -27,19 +27,22 @@ const SRC = readFileSync(
 );
 
 describe('TripDetail — no silent regen on mount', () => {
-  it('contains exactly the 5 allow-listed generate-itinerary invocations', () => {
-    const matches = SRC.match(
-      /supabase\.functions\.invoke\(\s*['"]generate-itinerary['"]/g,
-    );
-    // 4 self-heal/handoff/button sites + 1 extend-days user action = 5.
-    // If this number changes, audit the new call site against the
-    // memory constraint before bumping the count.
+  it('contains exactly 5 allow-listed action:"generate-trip" invocations', () => {
+    // Allow-listed sites:
+    //   handleResumeGeneration (button) | triggerGeneration (queued leg)
+    //   stuckHealAttempted | notStartedHealAttempted | extend-days user action
+    // The other 2 generate-itinerary invocations use action:"save-itinerary"
+    // and are persistence calls, not regeneration triggers.
+    const matches = SRC.match(/action:\s*['"]generate-trip['"]/g);
     expect(matches?.length ?? 0).toBe(5);
   });
 
-  it('never re-introduces useAutoResume hook', () => {
-    expect(SRC).not.toMatch(/useAutoResume/);
-    expect(SRC).not.toMatch(/autoResumeAttemptedRef/);
+  it('never re-introduces the useAutoResume hook or its ref', () => {
+    // The comment at L309 may name autoResumeAttemptedRef as a do-not-reintroduce
+    // sentinel — match only on actual code usage (`= useRef`, `.current`).
+    expect(SRC).not.toMatch(/from\s+['"][^'"]*useAutoResume['"]/);
+    expect(SRC).not.toMatch(/autoResumeAttemptedRef\.current/);
+    expect(SRC).not.toMatch(/autoResumeAttemptedRef\s*=\s*useRef/);
   });
 
   it('stuck-leg self-heal is gated on zero saved itinerary_days rows', () => {
