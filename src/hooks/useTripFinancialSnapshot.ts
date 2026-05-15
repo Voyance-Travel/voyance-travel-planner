@@ -496,6 +496,28 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       totalCents += miscReserveContributionCents;
     }
 
+    // ── Decompose into Payments-tab buckets. By construction the bucket sum
+    //    equals `totalCents`; any residual is folded into `misc` and surfaced
+    //    via `residualFoldedCents` for telemetry. This is the contract that
+    //    closes the Bali "$900 + $480 + $200 = $1,580 vs $1,322" pattern.
+    //    See mem://constraints/finance/single-cost-decomposition.
+    const decomposition = decomposeTripCost({
+      costs: (costs || []) as any,
+      liveActivities,
+      includeHotel,
+      includeFlight,
+      manualPayments: (allPayments || []) as any,
+      travelers: tripTravelers,
+      miscReserveContributionCents,
+    });
+    if (Math.abs(decomposition.residualFoldedCents) > 200) {
+      console.warn(
+        `[useTripFinancialSnapshot] decomposition residual $${(decomposition.residualFoldedCents / 100).toFixed(2)} ` +
+        `folded into misc — upstream contract violation. tripId=${tripId} ` +
+        `displayed=${decomposition.displayedTotalCents} bucketsRaw=${decomposition.displayedTotalCents - decomposition.residualFoldedCents}`
+      );
+    }
+
     // Compute delta against the previous fetch (skip on initial load and
     // during the brief stabilization window where hydration / logistics-sync
     // can legitimately move the total without it being a user-perceived change).
