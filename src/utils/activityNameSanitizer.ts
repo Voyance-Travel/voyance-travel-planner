@@ -367,6 +367,20 @@ function scrubSentenceFragmentsUI(text: string): string {
   return kept.join(' ');
 }
 
+// Article-only / sub-15-char fragment detector — twin of
+// supabase/functions/_shared/description-fill.ts::isDegenerateDescription.
+// Catches "The.", "A.", "It.", "Here." that survive backend blanking on
+// already-persisted legacy trips. Empty-string output triggers the card's
+// own empty-state fallback. See mem://constraints/itinerary/sentence-integrity-guard.
+const DEGENERATE_DESC_RE_UI = /^\s*(?:the|a|an|it|this|that|here|there|these|those)\s*[.!?\u2026]?\s*$/i;
+function isDegenerateDescriptionUI(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  if (DEGENERATE_DESC_RE_UI.test(t)) return true;
+  if (t.length < 15) return true;
+  return false;
+}
+
 export function sanitizeActivityText(text: string | undefined | null): string {
   if (!text) return '';
   const scrubbed = text
@@ -403,5 +417,7 @@ export function sanitizeActivityText(text: string | undefined | null): string {
     .replace(/\s*[-–—]?\s*(?:Popular with locals|A local favou?rite|Great for (?:families|groups|couples)|Tourist (?:hotspot|favorite)|Well[- ]known (?:locally|spot)|Hidden gem|Must[- ]visit|Highly recommended|A must[- ]try|Local institution|Neighborhood favou?rite|A true gem|Worth (?:a|the) visit)\.?\s*/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
-  return scrubSentenceFragmentsUI(scrubbed);
+  const afterFrag = scrubSentenceFragmentsUI(scrubbed);
+  // Final degenerate-stub guard — prevents legacy persisted "The." from rendering.
+  return isDegenerateDescriptionUI(afterFrag) ? '' : afterFrag;
 }
