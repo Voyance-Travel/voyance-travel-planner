@@ -826,6 +826,28 @@ export function isPlaceholderMeal(activity: any, cityName: string): boolean {
 // drops the immediately preceding orphan transit ("Walk to <placeholder>")
 // connector. Returns the number of activities stripped.
 // =============================================================================
+
+/**
+ * Seed `usedNames` with normalized + raw-lowercase forms of every existing
+ * real (non-placeholder) dining venue in `activities`. Closes the same-day
+ * venue-recycle path in the late nuclear sweeps (Monaco Pâtisserie Riviera).
+ */
+function seedUsedNamesFromExistingDining(activities: any[], usedNames: Set<string>): void {
+  const DINING_CATS = new Set(['dining', 'restaurant', 'food', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe']);
+  for (const a of activities) {
+    if (!a) continue;
+    const cat = String(a.category || '').toLowerCase();
+    const isDining = DINING_CATS.has(cat) || /\b(breakfast|brunch|lunch|dinner|nightcap)\s+at\b/i.test(String(a.title || ''));
+    if (!isDining) continue;
+    const venue = String(a.location?.name || a.venue_name || '').trim();
+    if (venue) {
+      usedNames.add(venue.toLowerCase());
+      // Also add a stripped form (no diacritics/punctuation) for resilient matching.
+      const stripped = venue.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+      if (stripped) usedNames.add(stripped);
+    }
+  }
+}
 export function nuclearDiningStrip(
   activities: any[],
   city: string,
