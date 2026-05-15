@@ -168,13 +168,14 @@ export function addOps(a: ScrubOps, b: ScrubOps): ScrubOps {
     mealLabel: a.mealLabel + b.mealLabel,
     downgraded: a.downgraded + b.downgraded,
     phantomRef: a.phantomRef + b.phantomRef,
+    degenerate: a.degenerate + b.degenerate,
   };
 }
 
 export function opsHadChange(o: ScrubOps): boolean {
   return o.titleLeak + o.bodyLeak + o.fragment + o.mealSuffix
        + o.crossCity + o.countryMismatch + o.mealLabel + o.downgraded
-       + o.phantomRef > 0;
+       + o.phantomRef + o.degenerate > 0;
 }
 
 /** Compact one-line render for logs. */
