@@ -128,10 +128,13 @@ export function useTripHeroImage({
   const curatedImages = getCuratedImages(destination);
   const hasCurated = hasCuratedImages(destination);
 
+  const [storageFailed, setStorageFailed] = useState(false);
+  const storageUrl = useMemoLikeStorage(destination);
+
   // Fetch canonical destination hero image (shared across all views)
   useEffect(() => {
-    const shouldFetch = 
-      (!seededHeroUrl || seededFailed) && 
+    const shouldFetch =
+      (!seededHeroUrl || seededFailed) &&
       !canonicalFetched;
 
     if (!shouldFetch || !destination) return;
@@ -151,12 +154,15 @@ export function useTripHeroImage({
     return () => { cancelled = true; };
   }, [destination, seededHeroUrl, seededFailed, canonicalFetched]);
 
-  // Fetch DB curated image if canonical and hardcoded curated not available
+  // Fetch DB curated image when canonical+curated+storage are exhausted
   useEffect(() => {
-    const shouldFetch = 
-      (!seededHeroUrl || seededFailed) && 
-      canonicalFetched && !canonicalUrl &&
-      !hasCurated && 
+    const canonicalDone = canonicalFetched && (!canonicalUrl || canonicalFailed);
+    const storageDone = !storageUrl || storageFailed;
+    const shouldFetch =
+      (!seededHeroUrl || seededFailed) &&
+      canonicalDone &&
+      !hasCurated &&
+      storageDone &&
       !dbCuratedFetched;
 
     if (!shouldFetch) return;
