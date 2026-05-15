@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { getRenderedStartTime, getRenderedEndTime } from '@/lib/itinerary/displayTime';
 import { isWeakAddress } from '@/lib/address-quality';
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 import { timeOfDayBand } from '@/lib/itinerary/timeOfDayBand';
