@@ -135,7 +135,16 @@ export function PaymentsTab({
   destinationCountry,
   journeyId,
   journeyName,
+  tripCurrency = 'USD',
 }: PaymentsTabProps) {
+  // Single money formatter — converts canonical USD cents into the trip's
+  // display currency (matching the itinerary header). Closes the recurring
+  // "header €1,244 vs Payments $1,446" perceived-mismatch where the two
+  // surfaces actually held the same value but rendered in different units.
+  const displayMoney = useCallback(
+    (usdCents: number) => formatMoneyFromUsdCents(usdCents, tripCurrency),
+    [tripCurrency],
+  );
   const queryClient = useQueryClient();
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
