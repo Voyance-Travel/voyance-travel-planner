@@ -184,12 +184,15 @@ export function useTripHeroImage({
     return () => { cancelled = true; };
   }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, canonicalFetched, canonicalUrl]);
 
-  // Fetch from API if canonical, curated, and DB curated aren't available
+  // Fetch from API once all earlier tiers are exhausted
   useEffect(() => {
-    const shouldFetch = 
-      (!seededHeroUrl || seededFailed) && 
-      canonicalFetched && !canonicalUrl &&
-      !hasCurated && 
+    const canonicalDone = canonicalFetched && (!canonicalUrl || canonicalFailed);
+    const storageDone = !storageUrl || storageFailed;
+    const shouldFetch =
+      (!seededHeroUrl || seededFailed) &&
+      canonicalDone &&
+      !hasCurated &&
+      storageDone &&
       dbCuratedFetched && !dbCuratedUrl &&
       !apiFetched;
 
