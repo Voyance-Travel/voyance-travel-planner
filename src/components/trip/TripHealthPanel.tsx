@@ -311,16 +311,29 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
       // past midnight; should never anchor a buffer/overlap warning.
       .filter(({ a }) => !isHotelReturn(a))
       .map(({ a, idx }) => {
-        // Cascade-preview times power overlap detection + suppression. The
-        // user-facing warning text echoes the SAME times rendered on the
-        // card (no cascade map) so the message never disagrees with what
-        // the user sees. Closes Copenhagen "card 20:50 / warning 21:50"
-        // pattern — root cause: dry-run cascade reshuffled times the user
-        // hadn't saved yet.
+        // Cascade-preview times power overlap DETECTION (the dry-run that
+        // tells us what a future save will look like). The warning TEXT
+        // mirrors the times painted on the card via the rendered helper —
+        // never the cascaded value, never a synthesized end. Closes
+        // Copenhagen "card 22:50 / warning 23:50" and Bali "engine missed
+        // visible 50-min overlap" patterns.
         const cascadedStart = getDisplayStartTime(a, cascadePreview, idx);
         const cascadedEnd = getDisplayEndTime(a, cascadePreview, idx);
-        const renderedStart = getDisplayStartTime(a, undefined, idx);
-        const renderedEnd = getDisplayEndTime(a, undefined, idx);
+        const renderedStart = getRenderedStartTime(a);
+        const renderedEnd = getRenderedEndTime(a);
+        // Drift telemetry: rendered string disagrees with helper. Should be
+        // impossible because the card and helper share the same precedence,
+        // but log if it ever drifts in the future.
+        if (typeof console !== 'undefined' && renderedStart && cascadedStart && renderedStart !== cascadedStart) {
+          // eslint-disable-next-line no-console
+          console.warn('[HEALTH_RENDERED_VS_CARD_DRIFT]', {
+            day: dayNum,
+            idx,
+            title: a?.name || a?.title,
+            renderedStart,
+            cascadedStart,
+          });
+        }
         return {
           source: a,
           sourceIdx: idx,
