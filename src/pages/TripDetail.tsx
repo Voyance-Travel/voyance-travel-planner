@@ -392,6 +392,30 @@ export default function TripDetail() {
     return () => window.removeEventListener(TRIP_PERSISTED_EVENT, handler);
   }, [tripId]);
 
+  // Emit `voyance:trip-loaded` once per mount, after the canonical itinerary
+  // has rendered AND a brief settle window has passed. PersistIssuesListener
+  // buffers any "needs regeneration" events that arrive before this fires
+  // and drops self-heal sources, so page-load reconciliation never produces
+  // false-alarm toasts. See
+  // mem://constraints/itinerary/persist-issues-toast-user-only.
+  const tripLoadedEmittedRef = useRef(false);
+  useEffect(() => {
+    if (!tripId || tripLoadedEmittedRef.current) return;
+    const itinData = trip?.itinerary_data as { days?: unknown[] } | null | undefined;
+    const hasDays = Array.isArray(itinData?.days) && (itinData!.days!.length > 0);
+    if (!hasDays) return;
+    if (isServerGenerating) return;
+    const t = window.setTimeout(() => {
+      if (tripLoadedEmittedRef.current) return;
+      tripLoadedEmittedRef.current = true;
+      try {
+        window.dispatchEvent(new CustomEvent('voyance:trip-loaded', { detail: { tripId } }));
+      } catch { /* non-fatal */ }
+    }, 1500);
+    return () => window.clearTimeout(t);
+  }, [tripId, trip?.itinerary_data, isServerGenerating]);
+
+
   const generationPoller = useGenerationPoller({
     tripId: tripId || null,
     enabled: isServerGenerating,
