@@ -3101,23 +3101,27 @@ export async function finalSaveItinerary(
 
     const willBeReady = !emptyItineraryDetected;
     const existingFrozenAt = (existingMetadata as Record<string, any>)?.itinerary_frozen_at;
-    const freezeStamp = willBeReady
-      ? (existingFrozenAt || new Date().toISOString())
-      : existingFrozenAt;
+    // FREEZE DEFERRED — see mem://constraints/itinerary/saved-badge-honesty.
+    // The freeze stamp + fully_persisted=true are written in a SECOND update
+    // after Phase 4 (activity_costs) and Phase 5 (trip_cities) succeed, so
+    // a hard refresh during enrichment doesn't leave the trip frozen on a
+    // partial snapshot. Re-freezing for trips that were already ready
+    // (existingFrozenAt) is preserved here so we don't un-freeze them.
     const updatePayload: Record<string, unknown> = {
       itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',
       dna_snapshot: dnaSnapshot,
       updated_at: new Date().toISOString(),
       ...(context.blendedDnaSnapshot && { blended_dna: context.blendedDnaSnapshot }),
-      // Always carry metadata so itinerary_frozen_at is stamped on first ready.
-      // See mem://constraints/itinerary/frozen-after-ready.
       metadata: {
         ...existingMetadata,
         ...(emptyItineraryDetected && {
           generation_failure_reason: failureReason,
           empty_itinerary_detected_at: new Date().toISOString(),
         }),
-        ...(freezeStamp ? { itinerary_frozen_at: freezeStamp } : {}),
+        // Mark in-flight enrichment so UI can show Reconciling and arm beforeunload.
+        ...(willBeReady ? { fully_persisted: false } : {}),
+        // Preserve any prior freeze stamp; do NOT introduce a new one yet.
+        ...(existingFrozenAt ? { itinerary_frozen_at: existingFrozenAt } : {}),
       },
     };
     if (computedEndDate) {
