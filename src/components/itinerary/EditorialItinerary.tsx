@@ -6257,7 +6257,7 @@ export function EditorialItinerary({
                   // the hook's 4 s stabilisation window. The equation already
                   // balances visually — this just acknowledges the late
                   // refetch so the user doesn't think the math is wrong.
-                  const showReconcilingHint =
+                  const reconcilingActive =
                     !financialSnapshot.loading &&
                     (snapshotUnderChips || snapshotOverChips);
                   return (
