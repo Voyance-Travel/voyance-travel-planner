@@ -1,38 +1,83 @@
-## Bug 3 — Health engine false positives & false negatives
+## Problem
 
-The health engine already runs a dry-run cascade preview and prefers rendered times (see `mem://constraints/itinerary/health-warning-rendered-times`). Two specific gaps remain that explain the Copenhagen and Bali repros.
+Three independent failure modes on the Payments tab:
 
-### Root causes
+1. **Headline divergence**: PaymentsTab `Trip Total` and itinerary header `Trip Total` can disagree even though both already share `useDisplayedTripTotal`. The "Matches itinerary" badge uses a real `≤$1` tolerance check (`PaymentsTab.tsx` L1205-1208) — so when this lies, the underlying data diverged after one of them rendered, not because the badge is hard-coded.
 
-**Bali false negative (Uluwatu 11:50–13:20 vs Naughty Nuri's 12:30–13:30, missed):**
-In `analyzeHealth` (TripHealthPanel.tsx ~line 412), the conflict loop computes both `renderedOverlaps` and `cascadeOverlaps`, but then unconditionally calls `pairStillOverlapsAfterCascade(...)` first. When the dry-run cascade *would* shift Naughty Nuri's start to ≥13:20, the re-check returns false and the loop `continue`s — **even though the user can see the overlap on the rendered cards right now**. The cascade hasn't been saved, so suppressing the warning is wrong whenever rendered times collide.
+2. **Bucket sum ≠ headline (Bali pattern $900+$480+$200=$1,580 vs $1,322)**: PaymentsTab buckets are re-summed from `usePayableItems` rows (`bucketSumCents` at L495-500) while headline uses `useDisplayedTripTotal`. There is no invariant tying the two together — only a `console.warn` (`path='B'` at L514). Root causes of this drift today:
+   - `usePayableItems` skips `isLogisticsRow` rows (L364) but the snapshot's canonical resolver counts them in `totalCents`.
+   - Manual misc/shopping rows + the synthetic reserve row in `miscItems` (L475-489) double-count when the same dollars are already inside snapshot via `manualOtherCents` + `miscReserveContributionCents` (`useTripFinancialSnapshot` L297, L480).
+   - Reserve folding is asymmetric: snapshot adds `contributionToTotalCents` (clamped by `loggedMisc`) while PaymentsTab adds the **full** `miscReserveCents` to the misc bucket.
 
-**Copenhagen false positive (warning said 21:50–23:50, card showed 21:50–22:50):**
-The card's time row in `EditorialItinerary.tsx` (~line 11519) uses `activity.endTime` directly via `formatTime`. The engine uses `getDisplayEndTime(a, undefined, idx)` whose precedence chain is `displayEndTime → adjustedEndTime → metadata.displayEnd → endTime → end_time`. They are not the same source. When `endTime` is missing on the source row, the engine's `renderedEnd` falls through to the cascade-synthesized end (start + `durationMinutes`), and the warning text echoes that synthesized 23:50 instead of what the card actually rendered (22:50, or start-only). The two systems disagree on what "rendered" means.
+3. **Stale post-refresh (Bali $1,322 unchanged after 4 dining cards lost)**: The `activity_costs` table still holds the pre-loss rows, so the canonical resolver returns the old total even after the JSON regressed. The headline ALSO reads the same stale rows, hiding the contradiction. This is a sync-tables/freeze-timing issue surfacing here because Payments is the only place users compare numbers carefully.
 
-### Fix plan (frontend-only, presentation layer)
+## Goal
 
-1. **Stop suppressing visible overlaps (Bali fix).** In `analyzeHealth` conflict loop, change the suppression branches so the per-pair cascade re-check + "cascade-only" suppression only fire when `renderedOverlaps === false`. If the rendered times overlap, always emit the warning. Update the existing comment block at lines 412–445 to reflect the new invariant: *cascade suppression is a tool for hiding dry-run-only artifacts, never for hiding what the user can see*.
+Single decomposition service so Payments buckets sum to the headline by construction, badge truthfully reflects equality, and stale `activity_costs` rows trigger a resync rather than silently inflating Payments.
 
-2. **Single rendered-time helper shared by card + engine (Copenhagen fix).** Add `getRenderedStartTime(a)` / `getRenderedEndTime(a)` in `src/lib/itinerary/displayTime.ts` that mirror the card's actual precedence: prefer `startTime`/`endTime` (and `start_time`/`end_time`) verbatim, never read forward-compat display fields, and never synthesize from duration. Switch the card render in `EditorialItinerary.tsx` (~line 11519, plus mobile/grid time rows at ~11694, ~11862) to call the helper. Switch the engine's "rendered" reads in `TripHealthPanel.tsx` (lines 245–247 drift telemetry, 317–318 warning-text source, and `detectGapsForDay` if it touches rendered times) to call the same helper. The cascade-preview lookups continue to use the existing `getDisplayStartTime/EndTime` (with cascade map) for *detection*; only the rendered-text source changes.
+## Plan
 
-3. **Drift telemetry hardening.** Update the existing `[HEALTH_CASCADE_DRIFT]` warn at lines 237–261 and add a new `[HEALTH_RENDERED_VS_CARD_DRIFT]` warn that fires whenever the engine's rendered string disagrees with what the helper returns for the same activity. This becomes the trip-wire for any future divergence.
+### 1. New service `src/services/tripCostDecomposition.ts`
 
-4. **Tests.** Add cases to `src/components/trip/__tests__/TripHealthPanel.cascadePreview.test.ts`:
-   - Bali repro: two overlapping cards where the cascade *would* resolve them — assert the warning fires.
-   - Copenhagen repro: card with `endTime: '22:50'`, no display fields, `durationMinutes: 120` — assert engine's warning text uses 22:50, not the synthesized 23:50.
-   - Cross-check: a true cascade-only artifact (rendered times don't overlap, cascade dry-run shifts something forward) — assert no warning.
+Input: same as the canonical resolver (`costs`, `liveActivities`, `manualPayments`, `includeHotel`, `includeFlight`, `travelers`, `miscReserveContributionCents`).
 
-### Out of scope
+Output:
+```ts
+{
+  displayedTotalCents: number;          // matches useDisplayedTripTotal
+  buckets: {
+    essentials: number;                 // hotel + flight (effective)
+    food: number;
+    activities: number;
+    transit: number;
+    misc: number;                       // manual misc + reserveContribution + unattributed remainder
+  };
+  rowsByBucket: Record<bucketKey, ResolvedRow[]>;
+  // Invariant: sum(buckets) === displayedTotalCents (residual folded into misc).
+  residualFoldedCents: number;
+}
+```
 
-- No backend changes, no save pipeline changes, no cascade engine changes.
-- Bug #1 (deferred-freeze + reload guard) and Bug #2 (`PersistIssuesListener` load gate) already shipped — not retouched.
-- Health-score weighting/score arithmetic untouched; only the issue-detection inputs change.
+Implementation: walk `canonical.rows` once, classify into a bucket via the existing `toBudgetCategory` map, count `manualHotelDelta` / `manualFlightDelta` / `manualOtherCents` / `miscReserveContributionCents` from the same resolver result, then compute `residual = displayedTotal − sum(buckets)` and add it to `misc`. Telemetry-warn when `|residual| > $2`.
 
-### Files
+### 2. Refactor `usePayableItems` and `useTripFinancialSnapshot` to consume it
 
-- `src/lib/itinerary/displayTime.ts` — add `getRenderedStartTime` / `getRenderedEndTime`.
-- `src/components/trip/TripHealthPanel.tsx` — guard cascade suppression on `!renderedOverlaps`; switch warning-text source to renderedHelper.
-- `src/components/itinerary/EditorialItinerary.tsx` — route the 3 time-row render sites through the renderedHelper.
-- `src/components/trip/__tests__/TripHealthPanel.cascadePreview.test.ts` — 3 new cases.
-- Memory: update `mem://constraints/itinerary/health-warning-rendered-times` to record the rendered-helper invariant + cascade-suppression-only-when-not-rendered rule.
+Both keep their public APIs but internally delegate the bucket math + headline math to `tripCostDecomposition`. Concretely:
+- `useTripFinancialSnapshot.tripTotalCents` ← `decomposition.displayedTotalCents` (already what header shows).
+- `usePayableItems` keeps emitting `PayableItem[]` for the UI but uses `decomposition.rowsByBucket` so logistics rows that were silently dropped (case 2.a above) now surface as a per-day row in the right bucket instead of vanishing.
+
+### 3. PaymentsTab (`src/components/itinerary/PaymentsTab.tsx`)
+
+- Replace local `bucketSumCents` (L495-500) and the per-bucket recomputations (L456-489) with values from `decomposition.buckets`. Bucket renderers continue to render `PayableItem[]` from `decomposition.rowsByBucket`.
+- Drop the synthetic `misc-reserve` row injection (L475-489) — reserve is folded inside `decomposition.buckets.misc` and rendered as a labeled sub-row from `rowsByBucket.misc`.
+- Keep the `[PaymentsTab] divergence` telemetry but downgrade Path B to `console.error` (now a contract violation, not a known drift).
+
+### 4. "Matches itinerary" badge truth check
+
+Already does the right thing structurally (L1205-1208). Only change: read `displayedTotal.displayedTotalCents` AND `decomposition.bucketsSumCents` and require `Math.abs(displayedTotal − bucketsSum) ≤ $1`. Otherwise render `Reconciling…`. This makes the badge a true post-condition of the new invariant.
+
+### 5. Stale `activity_costs` resync (Bali post-refresh case)
+
+In `useTripFinancialSnapshot.fetchData`, after the existing coverage backfill block (L420-443), add a *reverse* check:
+- Build `liveActivityIds` (already available).
+- Find `activity_costs` rows where `activity_id` is non-null, `day_number > 0`, and the id is NOT in `liveActivityIds` AND NOT covered by orphan rescue.
+- When the dropped-row cents sum exceeds `$5` and is `> 5%` of the current total, fire a one-shot `sync-trip-cost-table` invocation (same fingerprint guard) so dining cards lost from JSON also drop from the cost table within one refetch.
+- Telemetry: `console.info('[useTripFinancialSnapshot] stale activity_costs detected, triggering resync', { staleCents, total })`.
+
+### 6. Tests
+
+Extend `src/services/__tests__/canonicalCostRows.test.ts` siblings:
+- `tripCostDecomposition.test.ts`: invariant `sum(buckets) === displayedTotalCents` across 6 fixtures (Bali manual-misc, Copenhagen hotel-only, Casablanca chip-clamp, Osaka logistics-on-day-N, Tokyo manual-flight override, empty).
+- `tripCostDecomposition.staleResync.test.ts`: fixture with 4 orphaned dining rows triggers resync flag.
+
+## Out of scope
+
+- Header strip equation rendering — already correct, untouched.
+- Backend writers (`writeActivityCostsFromItinerary`, `sync-trip-cost-table`) — covered by existing memories; only the *trigger* condition is added.
+- Currency / per-person display.
+- Bug #1 freeze policy and Bug #2 toast suppression — already shipped.
+
+## Files
+
+- New: `src/services/tripCostDecomposition.ts`, two test files.
+- Edited: `src/hooks/usePayableItems.ts`, `src/hooks/useTripFinancialSnapshot.ts`, `src/components/itinerary/PaymentsTab.tsx`, `mem://index.md` + new constraint memory `mem://constraints/finance/single-cost-decomposition`.
