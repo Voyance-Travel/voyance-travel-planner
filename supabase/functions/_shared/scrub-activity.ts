@@ -19,6 +19,9 @@ import {
 import { stripVenueMealSuffix, VENUE_MEAL_SUFFIX_RE } from './venue-name.ts';
 import { downgradeCrossCityActivity } from '../generate-itinerary/fix-placeholders.ts';
 import { activityCountryMismatch } from './address-city-resolve.ts';
+import { isDegenerateDescription } from './description-fill.ts';
+
+const DEGENERATE_BODY_FIELDS = ['description', 'notes', 'tips', 'summary', 'insider_tip', 'insiderTip'] as const;
 
 export interface ScrubOps {
   titleLeak: number;
