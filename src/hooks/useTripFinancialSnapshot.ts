@@ -28,7 +28,12 @@ import { toast } from 'sonner';
 import { shouldCountRow } from '@/services/tripBudgetService';
 import { computeMiscReserve } from '@/services/budgetReserve';
 import { resolveCanonicalCostRows, type CanonicalLiveActivity } from '@/services/canonicalCostRows';
+import { decomposeTripCost, type BucketCents } from '@/services/tripCostDecomposition';
 import { TRIP_PERSISTED_EVENT } from '@/lib/itinerary/resyncItineraryFromDb';
+
+const EMPTY_BUCKETS: BucketCents = {
+  essentials: 0, food: 0, activities: 0, transit: 0, misc: 0,
+};
 
 export interface FinancialDelta {
   previousTotalCents: number;
