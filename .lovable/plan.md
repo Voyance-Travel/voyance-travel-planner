@@ -1,66 +1,46 @@
-## Problem
+## Bug
 
-Three numbers shown side-by-side disagree:
+Day 2 lists **Pâtisserie Riviera** as both 8:30 AM breakfast AND 1:57 PM lunch, with two different addresses and a lunch description claiming it's a pasta-with-truffle restaurant. Three problems combined:
 
-- **Header Trip Total**: €915 (~$985) — `useDisplayedTripTotal.displayedTotalCents` rendered via `formatCurrency(..., tripCurrency)`.
-- **PaymentsTab Trip Total**: $1,120 — `displayMoney(estimatedTotal)`.
-- **PaymentsTab bucket sum**: $1,066 — `essentials + food + activities + transit + misc(+reserve)`.
+1. **No same-day venue-name dedup.** Cross-day dedup exists (ledger-check), but nothing blocks the same venue name from filling two meal slots on the same day.
+2. **Nuclear placeholder sweeps don't seed `usedNames` from existing real dining.** `nuclearPlaceholderSweep` and `nuclearDiningStrip` (`fix-placeholders.ts:836,911`) start with an empty `Set`, so a late-pass replacement can pick the same venue the AI already used earlier in the day.
+3. **No name/description coherence check** — a "Pâtisserie / Boulangerie / Café" titled venue with a "pasta / pizza / sushi / steak / ramen" description ships unflagged. Either the AI hallucinated, or the fallback DB has two unrelated records sharing a display name; either way validation should catch it.
 
-Three divergence paths in `src/components/itinerary/PaymentsTab.tsx`:
+## Plan
 
-1. **Silent fallback to a different source.** `baseTotal` (lines 463-467) silently swaps to `payableTotalCents` whenever `displayedTotal.loading` is true OR `displayedTotal.displayedTotalCents <= 0`. `payableTotalCents` does NOT include the misc/spending-money reserve and uses a different code path (`usePayableItems`) than the header (`useTripFinancialSnapshot` + `computeHeaderStripValues`). Any moment the snapshot is mid-fetch or returns 0, Payments shows a *different number* than the header instead of waiting. The "Reconciling…" badge is gated to hide while loading (line 1251), so the user sees the divergent number with no warning.
+### 1. Same-day duplicate-venue validator + repair (single boundary)
 
-2. **Misnamed reserve fold.** Line 492: `const essentialItemsWithReserve = essentialItems;` — reserve was never actually folded into essentials despite the name. Reserve is added only to `miscItems` (lines 522-536). When `displayedTotal` is loading and `baseTotal = payableTotalCents` (no reserve), the bucket sum still includes reserve via miscItems → `bucketSumCents > estimatedTotal` by exactly `reserveCents` (~$54 in this case, matching the $1,120 − $1,066 = $54 gap).
+Add `checkSameDayDuplicateVenues(activities)` to `supabase/functions/generate-itinerary/pipeline/validation-gate.ts`:
+- Walk dining + restaurant + cafe categories per day.
+- Normalize venue name (lowercase, strip "at "/"breakfast at "/"lunch at " prefix, strip diacritics, drop punctuation).
+- When the same normalized name appears twice in one day, emit `DUPLICATE_VENUE_SAME_DAY` (severity: critical).
+- Repair: keep the **earliest** occurrence, re-resolve the later one via `resolveAnyMealFallback(city, mealType, usedNamesSeededWithDayDining)` + `applyFallbackToActivity`. If the resolver returns the same name again (city pool exhausted), downgrade later slot to `unverifiedMealSentinel` (`needsVenuePick`, $0).
+- Wire into the existing `applyValidationGate` flow so it runs at repair-day §10b and at `action-save-itinerary normalizeDays`.
 
-3. **Currency assumption.** Header "(~$985)" is the user mentally converting €915→USD; PaymentsTab is rendering $1,120 — meaning either both surfaces are in the same currency (and the gap is real, see #1) or `tripCurrency` differs at the moment of paint. Currency is threaded via the same `tripCurrency` prop, so this collapses into #1: render a skeleton until both surfaces can quote the same canonical number in the same currency.
+### 2. Seed nuclear sweeps with existing real dining names
 
-## Fix
+In `nuclearPlaceholderSweep` and `nuclearDiningStrip` (`fix-placeholders.ts`):
+- Before the loop, walk `activities` once and seed `usedNames` with normalized names of every existing non-placeholder dining/restaurant/cafe row (not just the ones the loop replaces).
+- Closes the late-pass recycling path that lets meal #2 land on meal #1's venue.
 
-All edits in `src/components/itinerary/PaymentsTab.tsx`. No backend changes — `useTripFinancialSnapshot` already returns the canonical reserve-inclusive total; the bug is PaymentsTab choosing not to wait for it.
+### 3. Name/description coherence validator
 
-1. **Remove the divergent-source fallback.** Delete the `payableTotalCents` branch in `baseTotal`. Replace with:
+Add `checkVenueDescriptionCoherence(activity)` in the same validation-gate file:
+- Title-side regex groups: `pâtisserie|patisserie|boulangerie|bakery|café|cafe|coffee|tea house|crêperie|gelateria|ice cream|juice|smoothie`.
+- Description-side mismatch tokens for each group (e.g. for bakery/café: `pasta|pizza|ramen|sushi|steak|burger|tacos|paella|risotto|truffle pasta|prime rib`).
+- On mismatch emit `VENUE_DESCRIPTION_MISMATCH` (severity: warning) → blank `description`. The existing `_shared/description-fill.ts` post-pass will refill a coherent blurb (cuisine inferred from title).
+- Optional: same check at UI sanitizer (`activityNameSanitizer.ts`) read-time as a last-resort blank for already-persisted trips.
 
-   ```ts
-   const headerTotalReady =
-     !displayedTotal.loading && displayedTotal.displayedTotalCents > 0;
-   const estimatedTotal = headerTotalReady ? displayedTotal.displayedTotalCents : null;
-   ```
+### 4. Memory + tests
 
-   When `estimatedTotal === null`, render a `<Skeleton className="h-7 w-24" />` in place of `displayMoney(estimatedTotal)` (line 1242), and short-circuit the "Remaining to pay" / "Paid" / progress-bar math so it doesn't compute against a phantom number. The header is the single source of truth — if it isn't ready, Payments waits.
-
-2. **Reconcile the bucket sum to the headline.** Two parts:
-
-   a. Drop the misnamed `essentialItemsWithReserve` alias; replace every reference with `essentialItems`. Reserve stays in `miscItems` (matching the Budget tab).
-
-   b. Add an inline reserve caption under the Misc bucket header when `reserveCents > 0`: "Includes <displayMoney(reserveCents)> spending-money reserve" so the equation `essentials + food + activities + transit + misc = Trip Total` reads cleanly to the user.
-
-   c. Tighten the dev assertion (lines 555-578): after #1 lands, `bucketSumCents` must equal `estimatedTotal` to within $1 whenever `headerTotalReady` is true. Bump the existing `[PaymentsTab] divergence` Path B threshold from $2.00 → $1.00 and include `reserveCents`, `payableTotalCents`, and `displayedTotal.displayedTotalCents` in the warn payload (already there for most — just confirm).
-
-3. **Belt-and-braces currency check.** Add a one-shot `useEffect` that warns when the live `tripCurrency` prop changes after first paint and the snapshot value would re-render in a different unit, so any future regression of `showLocalCurrency` toggle desync surfaces in dev:
-
-   ```ts
-   useEffect(() => {
-     console.debug('[PaymentsTab] tripCurrency=', tripCurrency);
-   }, [tripCurrency]);
-   ```
-
-   No user-facing behavior change.
+- New constraint memory: `mem://constraints/itinerary/same-day-venue-uniqueness` summarizing the three layers, sentinels (`[VALIDATION_GATE] DUPLICATE_VENUE_SAME_DAY`, `[VALIDATION_GATE] VENUE_DESCRIPTION_MISMATCH`, `[NUCLEAR] dedup-seeded-from-existing`).
+- Unit tests under `supabase/functions/generate-itinerary/__tests__/`:
+  - `duplicate-venue-same-day.test.ts` — two breakfast+lunch rows w/ identical normalized name → second is re-resolved or sentinelized.
+  - `venue-description-mismatch.test.ts` — "Pâtisserie X" + "truffle pasta" description → description blanked.
+  - `nuclear-sweep-seeds-existing-dining.test.ts` — existing real lunch venue is excluded from the breakfast placeholder fill pool.
 
 ## Out of scope
 
-- `useTripFinancialSnapshot`, `useDisplayedTripTotal`, `useTripDayBreakdown`, `usePayableItems`, `resolveCanonicalCostRows` — all stay untouched. The contract is right; PaymentsTab just stopped honoring it.
-- Header math / `computeHeaderStripValues`.
-- Backend `activity_costs` schema or `archive_orphan_trip_payments` RPC.
-
-## Verification
-
-1. **Loading-state convergence**: Throttle network to Slow 3G, hard-refresh a trip. PaymentsTab "Trip Total" must render a skeleton (not a different number) until the header has a value, then both must show the same number in the same currency.
-2. **Reserve reconciliation**: For a trip with `miscReserveCents > 0`, expand the Misc bucket. Sum the 5 buckets — must equal headline Trip Total exactly. The reserve caption must show under Misc.
-3. **Currency parity**: Toggle local↔USD on the header. PaymentsTab Trip Total must re-render in the new currency on the next paint, no stale value.
-4. **Console**: No `[PaymentsTab] divergence` warns on a healthy trip post-fix.
-
-## Memory
-
-After landing, append a Memory entry under the existing `Displayed Trip Total Single Source` constraint:
-
-> PaymentsTab `estimatedTotal` MUST be `useDisplayedTripTotal.displayedTotalCents` only — never fall back to `usePayableItems.totalCents` (the latter excludes the misc reserve and resolves on a different code path). While the displayed total is loading or zero, render a skeleton — never a divergent number. Closes "Header €915 vs Payments $1,120 vs bucket $1,066" three-way drift.
+- The actual fallback-DB row(s) named "Pâtisserie Riviera" — if curation finds two distinct records sharing a display name, that's a separate data fix; the validator above handles the symptom regardless.
+- Cross-day dedup, ledger-check meal-recurrence rules, cost reconciliation. Untouched.
+- No changes to `action-save-itinerary` cost path, snapshot, header strip, or Payments tab.
