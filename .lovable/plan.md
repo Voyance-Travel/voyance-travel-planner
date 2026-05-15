@@ -1,56 +1,54 @@
-## What's actually wrong
+## What's actually happening
 
-Google Places **is** working — the bug is one tier above it. Your Monaco trip card is showing the famous Unsplash "airplane wing over clouds" photo (`photo-1500835556837-99ac94a94552`) because the **canonical destinations table** has it set as Monaco's `hero_image_url`.
+The Monaco trip hero is showing a **Gemini-generated AI image labeled "Hércules Port"** — not a real Monaco photo. It's also not the airplane bug from earlier; that's been cleared. Google API is working — but the destination-images pipeline is choosing a bad POI to query, then rejecting all of Google's real results, then falling all the way through to AI image generation.
 
-It's not just Monaco — **2,009 destinations** share that exact same plane photo as their canonical hero (Sorrento, Boston, Maldives, Las Vegas, Auckland, Lagos, Cartagena, Tunis, St. Lucia, etc.). Another ~5 photos are duplicated across 15–26 destinations each (~2,100 rows total are poisoned).
+## Root cause (verified via logs + DB)
 
-### Root cause
-
-The 2026-05-14 migration `Destination Canonical Stock Fallback` (memory) backfilled `stock_image_url → hero_image_url` for 2,219 rows to fix the Copenhagen/Dublin "blank gradient" bug. It assumed `stock_image_url` was per-destination. It wasn't — for ~90% of destinations the legacy `stock_image_url` was a single generic travel placeholder (the airplane). So a fix for "no hero" became "wrong hero" at scale.
-
-The resolver chain runs: seeded → **canonical (poisoned)** → storage map → curated → DB curated → Google Places → gradient. It stops at canonical and never reaches Google.
+1. `destinations.points_of_interest` for Monaco is `["Monte Carlo Casino", "Prince's Palace of Monaco", ..., "Hércules Port"]`.
+2. `getDestinationPOI` sorts alphabetically with `localeCompare` and picks **`Hércules Port`** as the canonical POI (the `H` + accented `é` sorts to the top).
+3. Hero search is run as `"Hércules Port landmark attraction Monaco"`.
+4. Google Places v1 returns the right places — `Prince's Palace of Monaco`, `Monaco Hercules harbour`, etc. — verified in edge logs.
+5. `calculateMatchScore(venueTokens, displayName)` does token-overlap matching against `"Hércules Port"`. None of Google's display names contain `Hércules` (accent + `é` token), so they all score `0.00` and are rejected with `[Images] Rejecting (low score 0.00)`.
+6. Unsplash returns `no quality results for "Monaco"`. Wikimedia/TripAdvisor return nothing useful.
+7. Pipeline falls through to `generateAIImage` (gemini-2.5-flash-image-preview) → returns a giant base64 PNG of a generic harbor/clouds tagged "Made with Google AI". That's the cloud image you see.
 
 ## Fix
 
-Two-part, both backend-only — no UI or resolver code changes.
+Three small, scoped changes in `supabase/functions/destination-images/index.ts` (no DB schema changes):
 
-### 1. Database migration: null the poisoned canonical heroes
+### 1. POI selection: rank by quality, not alphabet
+Replace `getDestinationPOI`'s alphabetical sort with a quality preference:
+- Prefer POIs that contain a destination/landmark keyword (`palace`, `casino`, `cathedral`, `museum`, `garden`, `beach`, `square`, `tower`, `bridge`).
+- Drop accent-only or single-word POIs from first-pick when better candidates exist.
+- Keep deterministic ordering (still sorted, just with the keyword-bonus tier first) so cache keys stay stable.
 
-For any `destinations` row whose `hero_image_url` (or `stock_image_url`) is shared by ≥2 other destinations, null both columns. That's the mass-duplication signal — a real Monaco hero is unique to Monaco.
+For Monaco this picks `"Monte Carlo Casino"` or `"Prince's Palace of Monaco"` instead of `"Hércules Port"`.
 
-```sql
-WITH dups AS (
-  SELECT hero_image_url
-  FROM destinations
-  WHERE hero_image_url IS NOT NULL
-  GROUP BY hero_image_url
-  HAVING COUNT(*) >= 2
-)
-UPDATE destinations d
-SET hero_image_url = NULL,
-    stock_image_url = CASE WHEN stock_image_url = d.hero_image_url THEN NULL ELSE stock_image_url END
-FROM dups
-WHERE d.hero_image_url = dups.hero_image_url;
-```
+### 2. Match scoring: accent-fold + city-name credit
+In the loop at lines 548–600:
+- Normalize both `venueTokens` and `displayName` with `.normalize('NFKD').replace(/\p{Diacritic}/gu, '')` before scoring so `Hércules` ↔ `Hercules` matches.
+- Award a partial-match credit when `displayName` contains the destination name (e.g. "...of Monaco") even if POI tokens miss — these are the right place by definition for a destination-tier hero.
 
-Same pass for `stock_image_url` standalone duplicates. Also blacklist the same URLs in `curated_images` so they can't sneak back in.
-
-Expected impact: ~2,100 destinations re-enter the resolver chain. They'll resolve via Google Places (already working — the Monaco edge logs show successful Places v1 calls for venues right now) on first view, then persist a unique URL via the existing write-back in `useTripHeroImage` (lines 296–335).
-
-### 2. Memory + guard
-
-- Update `mem://constraints/visual/destination-canonical-stock-fallback` to record the regression: backfill is forbidden when the source column has cross-destination duplicates.
-- Add a one-line uniqueness check in the next migration: any future bulk `hero_image_url` write must reject if the same URL would land on ≥2 cities.
+### 3. Retry with the bare destination name when the POI search yields zero candidates
+If the POI-driven Google Places search returns no scored survivors AND we're resolving a destination hero, run one more search using just the destination name (`"Monaco landmark attraction"`) before falling through to AI generation. This is the safety net that guarantees Google Places gets a fair shot for any city we have a place_id-able name for.
 
 ## What this does NOT change
 
-- No edge function code changes (Google Places call is already correct).
-- No frontend resolver changes (`useTripHeroImage`, `heroUrlPolicy`, `DestinationHeroImage`).
-- No new image fetches up front — Google Places fires lazily on first view, same as today.
-- The trip's stored `metadata.hero_image` for Monaco (currently empty) will be filled by the existing write-back once the fresh image resolves.
+- Frontend resolver chain (`useTripHeroImage`) — unchanged
+- DB tables, RLS, migrations — unchanged
+- AI generation path — still exists as last resort, but won't be hit for cities with real Google Places coverage
+- Other endpoints (activity images, hotel images) — unchanged
 
-## Verification after apply
+## Verification after deploy
 
-- Monaco trip card on `/` shows a Monaco photo (Google Places result), not a plane.
-- `SELECT COUNT(*) FROM destinations WHERE hero_image_url = '…1500835556837…'` returns `0`.
-- Spot-check 5 of the previously-poisoned cities (Boston, Maldives, Sorrento, Auckland, Cartagena) — each gets a distinct hero.
+1. Hard-refresh `/trip/0c8b2a37…` (Monaco) — hero should be a real photo of Monte Carlo Casino or Prince's Palace, served from `googleapis`/Places photo CDN.
+2. Edge logs show `[Images] Found 7 POIs for Monaco, using canonical: Monte Carlo Casino` and at least one `Rejecting (low score …)` count drops to 0 for the chosen POI.
+3. Spot-check 4 other accented-POI cities (Faro, São Paulo, Curaçao, Düsseldorf) — each gets a real photo, not a base64 AI placeholder.
+4. `psql -c "SELECT count(*) FROM image_quality_log WHERE rejected_reason='low_score' AND created_at > now() - interval '1 hour'"` — sharp drop.
+
+## Memory update
+
+Refresh `mem://constraints/visual/destination-canonical-stock-fallback` (or add a sibling `destination-hero-poi-selection`) noting:
+- Destination-hero POI selection MUST prefer landmark-keyword candidates over alphabetical first
+- Match scoring MUST accent-fold both sides
+- POI-driven search MUST fall back to bare-destination Google Places query before AI generation
