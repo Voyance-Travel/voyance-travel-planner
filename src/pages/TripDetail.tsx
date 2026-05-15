@@ -159,6 +159,7 @@ export default function TripDetail() {
   const debriefPromptAttempted = useRef(false);
   const autoGenerateTriggered = useRef(false);
   const tripRef = useRef<Trip | null>(null);
+  useItineraryPreservation(tripId, trip);
 
   useEffect(() => {
     tripRef.current = trip;
