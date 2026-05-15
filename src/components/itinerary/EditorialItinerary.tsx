@@ -993,35 +993,37 @@ function getActivityCostInfo(
     return { amount: 0, isEstimated: false, confidence: 'high' as const, basis: 'flat' as CostBasis };
   }
   
-  // Defense-in-depth: if the activity_costs ledger has a server-floored
-  // price (Michelin/ticketed/auto-corrected/reference) that is materially
-  // higher than the JSONB cost, prefer the ledger value. This guarantees
-  // the card matches Budget/Payments even if a save funnel slipped past
-  // preserveLedgerCosts and downgraded the JSONB.
+  // Ledger is the single source of truth: `activity_costs` is what Budget
+  // and Payments read. Whenever a ledger row exists for this activity, the
+  // card MUST display the ledger value so all three surfaces reconcile —
+  // EXCEPT when the user authored / imported / booked the cost (their input
+  // is authoritative) or we're in manual mode.
+  // See mem://constraints/finance/displayed-trip-total-single-source.
   const ledgerOverride = getLedgerOverride((activity as any).id);
-  if (ledgerOverride) {
+  const costBasisLower = String((activity as any).cost?.basis || '').toLowerCase();
+  const isUserAuthored =
+    (activity as any).costSource === 'imported' ||
+    (activity as any).costSource === 'user_override' ||
+    costBasisLower === 'user' ||
+    costBasisLower === 'user_override' ||
+    costBasisLower === 'booked' ||
+    costBasisLower === 'imported';
+  if (ledgerOverride && !isUserAuthored && !isManualMode) {
     const jsonbAmt = costAmount ?? 0;
-    // Prefer the ledger when (a) it's a protected server floor materially above
-    // the JSONB value, OR (b) the JSONB has no usable cost — this aligns the
-    // card with the day badge / Budget tab, which both read activity_costs.
-    const floorOverride = ledgerOverride.isProtectedFloor && ledgerOverride.perPersonUsd >= jsonbAmt * 2;
-    const jsonbMissing = jsonbAmt === 0;
-    if (floorOverride || jsonbMissing) {
-      if (floorOverride) {
-        warnOnceLedgerOverride(String((activity as any).id), {
-          jsonbAmount: jsonbAmt,
-          ledgerAmount: ledgerOverride.perPersonUsd,
-          source: ledgerOverride.source,
-          title,
-        });
-      }
-      return {
-        amount: ledgerOverride.perPersonUsd,
-        isEstimated: false,
-        confidence: 'high' as const,
-        basis: 'per_person' as CostBasis,
-      };
+    if (jsonbAmt > 0 && Math.abs(jsonbAmt - ledgerOverride.perPersonUsd) >= 1) {
+      warnOnceLedgerOverride(String((activity as any).id), {
+        jsonbAmount: jsonbAmt,
+        ledgerAmount: ledgerOverride.perPersonUsd,
+        source: ledgerOverride.source,
+        title,
+      });
     }
+    return {
+      amount: ledgerOverride.perPersonUsd,
+      isEstimated: false,
+      confidence: 'high' as const,
+      basis: 'per_person' as CostBasis,
+    };
   }
 
   // Check cost.amount first - this is explicit pricing from venue data
