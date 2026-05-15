@@ -141,6 +141,23 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     active: false,
     reason: '',
   });
+  // Auto-dismiss timer for lastDelta. The "−$306 just now" indicator must
+  // never latch across a session — convergence (next equal total) clears it
+  // immediately; absent convergence, this timer drops it after 8s so the
+  // copy can't keep lying about freshness. See
+  // mem://constraints/finance/reconciling-and-delta-bounded-lifetime.
+  const DELTA_AUTO_DISMISS_MS = 8_000;
+  const deltaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const armDeltaAutoDismiss = useCallback((startedAt: number) => {
+    if (deltaTimerRef.current) clearTimeout(deltaTimerRef.current);
+    deltaTimerRef.current = setTimeout(() => {
+      console.warn(
+        `[DELTA_AUTO_DISMISS] tripId=${tripId} ageMs=${Date.now() - startedAt}`
+      );
+      setLastDelta(null);
+      deltaTimerRef.current = null;
+    }, DELTA_AUTO_DISMISS_MS);
+  }, [tripId]);
 
   const fetchData = useCallback(async () => {
     if (!tripId) {
