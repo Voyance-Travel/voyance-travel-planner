@@ -11360,7 +11360,7 @@ function ActivityRow({
   const cost = costInfo.amount;
   // Use tripCurrency (user's preferred display currency) instead of activity's native currency
   const existingPhoto = getActivityPhoto(activity);
-  const time = activity.startTime || activity.time;
+  const time = getRenderedStartTime(activity);
   
   // Normalize title: use title, fallback to name (backend may return either), and strip system prefixes.
   // CRITICAL: pass the full activity so sanitizer can see location.name / venue_name / placeId /
