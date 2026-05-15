@@ -1237,9 +1237,11 @@ export function PaymentsTab({
           <div>
             <h3 className="text-lg font-semibold">Trip Expenses</h3>
             <p className="text-sm text-muted-foreground">
-              {budgetLimitCents && budgetLimitCents > 0 
-                ? `${Math.round((estimatedTotal / budgetLimitCents) * 100)}% of budget`
-                : `${Math.round(progressPercent)}% paid`
+              {!headerTotalReady
+                ? 'Calculating…'
+                : budgetLimitCents && budgetLimitCents > 0
+                  ? `${Math.round((estimatedTotal / budgetLimitCents) * 100)}% of budget`
+                  : `${Math.round(progressPercent)}% paid`
               }
             </p>
           </div>
