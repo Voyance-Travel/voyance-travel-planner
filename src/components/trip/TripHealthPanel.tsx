@@ -428,10 +428,16 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
     };
 
     for (let i = 0; i < timed.length - 1; i++) {
-      // Primary overlap signal: rendered times the user actually sees.
-      // Without this, a dry-run cascade that shifts a card forward could
-      // synthesize an overlap on times that DON'T actually conflict on
-      // screen (Copenhagen pattern).
+      // Two overlap signals:
+      //   • renderedOverlaps — the times the user can SEE on the card right
+      //     now. Never suppress this; the cascade hasn't been saved yet, so
+      //     the user is staring at a real overlap on screen.
+      //   • cascadeOverlaps  — the dry-run cascade still puts these in
+      //     conflict. Suppression via cascade re-check ONLY applies when the
+      //     rendered times don't already overlap (a true dry-run-only artifact).
+      // This is the Bali fix: Uluwatu 11:50–13:20 + Naughty Nuri 12:30–13:30
+      // showed a 50-min visible overlap that the engine was suppressing
+      // because the cascade would have shifted lunch later.
       const renderedLeftEnd = parseTime(timed[i].endStr);
       const renderedRightStart = parseTime(timed[i + 1].startStr);
       const renderedOverlaps = renderedLeftEnd > renderedRightStart;
@@ -446,21 +452,24 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           isTransitLike(timed[i].category, timed[i].name) ||
           isTransitLike(timed[i + 1].category, timed[i + 1].name);
 
-        // Deterministic per-pair re-check: suppress if cascade would resolve.
-        if (!pairStillOverlapsAfterCascade(
-          (timed[i] as any).sourceIdx,
-          (timed[i + 1] as any).sourceIdx,
-          timed[i].name,
-          timed[i + 1].name,
-          timed[i].start,
-          timed[i + 1].start
-        )) {
-          continue;
+        // Cascade suppression — ONLY when the rendered times don't overlap.
+        // If the user can see the overlap on screen, we always warn,
+        // regardless of whether a future save would auto-resolve it.
+        if (!renderedOverlaps) {
+          if (!pairStillOverlapsAfterCascade(
+            (timed[i] as any).sourceIdx,
+            (timed[i + 1] as any).sourceIdx,
+            timed[i].name,
+            timed[i + 1].name,
+            timed[i].start,
+            timed[i + 1].start
+          )) {
+            continue;
+          }
+          // Rendered times don't overlap, only cascade does — that's a
+          // dry-run artifact the user can't see; never warn.
+          if (cascadeOverlaps) continue;
         }
-
-        // Bonus suppression: rendered times don't overlap, only cascade does
-        // — that's a dry-run artifact the user can't see; never warn.
-        if (!renderedOverlaps && cascadeOverlaps) continue;
 
         issues.push({
           id: `conflict-day-${dayNum}-${i}`,
