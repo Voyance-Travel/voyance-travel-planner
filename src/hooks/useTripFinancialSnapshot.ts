@@ -28,7 +28,12 @@ import { toast } from 'sonner';
 import { shouldCountRow } from '@/services/tripBudgetService';
 import { computeMiscReserve } from '@/services/budgetReserve';
 import { resolveCanonicalCostRows, type CanonicalLiveActivity } from '@/services/canonicalCostRows';
+import { decomposeTripCost, type BucketCents } from '@/services/tripCostDecomposition';
 import { TRIP_PERSISTED_EVENT } from '@/lib/itinerary/resyncItineraryFromDb';
+
+const EMPTY_BUCKETS: BucketCents = {
+  essentials: 0, food: 0, activities: 0, transit: 0, misc: 0,
+};
 
 export interface FinancialDelta {
   previousTotalCents: number;
@@ -59,6 +64,13 @@ export interface FinancialSnapshot {
    *  Use these — not local computeHotelCostUsd / leg sums — when decomposing the trip total. */
   effectiveHotelCents: number;
   effectiveFlightCents: number;
+  /** Per-bucket cents. Invariant: sum(buckets) === tripTotalCents. Read these
+   *  in PaymentsTab bucket headers so they cannot drift from the headline. */
+  buckets: BucketCents;
+  bucketsSumCents: number;
+  /** Signed residual folded into `buckets.misc` to maintain the invariant.
+   *  |x| > $2 = an upstream contract bug — surfaced via console.warn. */
+  residualFoldedCents: number;
   loading: boolean;
   lastDelta: FinancialDelta | null;
   refetch: () => void;
@@ -76,6 +88,8 @@ interface SnapshotData {
   committedFlightCents: number;
   manualHotelDelta: number;
   manualFlightDelta: number;
+  buckets: BucketCents;
+  residualFoldedCents: number;
   loading: boolean;
 }
 
@@ -91,6 +105,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     committedFlightCents: 0,
     manualHotelDelta: 0,
     manualFlightDelta: 0,
+    buckets: { ...EMPTY_BUCKETS },
+    residualFoldedCents: 0,
     loading: true,
   });
   const [lastDelta, setLastDelta] = useState<FinancialDelta | null>(null);
@@ -480,6 +496,28 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       totalCents += miscReserveContributionCents;
     }
 
+    // ── Decompose into Payments-tab buckets. By construction the bucket sum
+    //    equals `totalCents`; any residual is folded into `misc` and surfaced
+    //    via `residualFoldedCents` for telemetry. This is the contract that
+    //    closes the Bali "$900 + $480 + $200 = $1,580 vs $1,322" pattern.
+    //    See mem://constraints/finance/single-cost-decomposition.
+    const decomposition = decomposeTripCost({
+      costs: (costs || []) as any,
+      liveActivities,
+      includeHotel,
+      includeFlight,
+      manualPayments: (allPayments || []) as any,
+      travelers: tripTravelers,
+      miscReserveContributionCents,
+    });
+    if (Math.abs(decomposition.residualFoldedCents) > 200) {
+      console.warn(
+        `[useTripFinancialSnapshot] decomposition residual $${(decomposition.residualFoldedCents / 100).toFixed(2)} ` +
+        `folded into misc — upstream contract violation. tripId=${tripId} ` +
+        `displayed=${decomposition.displayedTotalCents} bucketsRaw=${decomposition.displayedTotalCents - decomposition.residualFoldedCents}`
+      );
+    }
+
     // Compute delta against the previous fetch (skip on initial load and
     // during the brief stabilization window where hydration / logistics-sync
     // can legitimately move the total without it being a user-perceived change).
@@ -567,6 +605,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       committedFlightCents: canonicalFlightCents,
       manualHotelDelta: canonical.manualHotelDelta,
       manualFlightDelta: canonical.manualFlightDelta,
+      buckets: decomposition.buckets,
+      residualFoldedCents: decomposition.residualFoldedCents,
       loading: false,
     });
     } catch (err) {
@@ -693,6 +733,11 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       manualFlightDelta: data.manualFlightDelta,
       effectiveHotelCents,
       effectiveFlightCents,
+      buckets: data.buckets,
+      bucketsSumCents:
+        data.buckets.essentials + data.buckets.food + data.buckets.activities +
+        data.buckets.transit + data.buckets.misc,
+      residualFoldedCents: data.residualFoldedCents,
       loading: data.loading,
       lastDelta,
       refetch,
