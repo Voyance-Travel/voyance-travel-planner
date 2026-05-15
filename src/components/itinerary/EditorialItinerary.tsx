@@ -42,6 +42,7 @@ import { CreditNudge } from './CreditNudge';
 import { UnlockBanner } from './UnlockBanner';
 import { LockedDayCard } from './LockedDayCard';
 import { TripTotalDeltaIndicator } from './TripTotalDeltaIndicator';
+import { useReconcilingState } from '@/hooks/useReconcilingState';
 import { FrostedGateOverlay } from './FrostedGateOverlay';
 import { BulkUnlockBanner, getBulkUnlockCost } from './BulkUnlockBanner';
 import { useUnlockDay } from '@/hooks/useUnlockDay';
@@ -190,6 +191,23 @@ import { classifyItineraryCompleteness } from '@/utils/itineraryCompleteness';
 // =============================================================================
 // BOARDING PASS VIEW BUTTON (inline helper)
 // =============================================================================
+
+// Bounded "Reconciling…" hint — wraps useReconcilingState so the predicate
+// in the IIFE-rendered header strip can still drive a hook safely.
+function ReconcilingHint({
+  active,
+  site,
+  tripId,
+}: { active: boolean; site: string; tripId?: string | null }) {
+  const { visible } = useReconcilingState(active, { site, tripId });
+  if (!visible) return null;
+  return (
+    <div className="text-[11px] text-muted-foreground/60 text-center mt-1" aria-live="polite">
+      Reconciling…
+    </div>
+  );
+}
+
 
 function BoardingPassViewButton({ storagePath }: { storagePath: string }) {
   const handleView = async () => {
@@ -6256,7 +6274,7 @@ export function EditorialItinerary({
                   // the hook's 4 s stabilisation window. The equation already
                   // balances visually — this just acknowledges the late
                   // refetch so the user doesn't think the math is wrong.
-                  const showReconcilingHint =
+                  const reconcilingActive =
                     !financialSnapshot.loading &&
                     (snapshotUnderChips || snapshotOverChips);
                   return (
@@ -6272,11 +6290,11 @@ export function EditorialItinerary({
                           <span className="font-semibold text-foreground tabular-nums">{formatCurrency(displayCost(displayedTripTotalUsd), tripCurrency)}</span>
                         </span>
                       </div>
-                      {showReconcilingHint && (
-                        <div className="text-[11px] text-muted-foreground/60 text-center mt-1" aria-live="polite">
-                          Reconciling…
-                        </div>
-                      )}
+                      <ReconcilingHint
+                        active={reconcilingActive}
+                        site="header"
+                        tripId={tripId}
+                      />
                       {travelers > 1 && (
                         <div className="text-[11px] text-muted-foreground/70 text-center mt-1">
                           Day badges show /pp · multiply by {travelers} for group cost

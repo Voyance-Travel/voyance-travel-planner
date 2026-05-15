@@ -141,6 +141,23 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     active: false,
     reason: '',
   });
+  // Auto-dismiss timer for lastDelta. The "−$306 just now" indicator must
+  // never latch across a session — convergence (next equal total) clears it
+  // immediately; absent convergence, this timer drops it after 8s so the
+  // copy can't keep lying about freshness. See
+  // mem://constraints/finance/reconciling-and-delta-bounded-lifetime.
+  const DELTA_AUTO_DISMISS_MS = 8_000;
+  const deltaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const armDeltaAutoDismiss = useCallback((startedAt: number) => {
+    if (deltaTimerRef.current) clearTimeout(deltaTimerRef.current);
+    deltaTimerRef.current = setTimeout(() => {
+      console.warn(
+        `[DELTA_AUTO_DISMISS] tripId=${tripId} ageMs=${Date.now() - startedAt}`
+      );
+      setLastDelta(null);
+      deltaTimerRef.current = null;
+    }, DELTA_AUTO_DISMISS_MS);
+  }, [tripId]);
 
   const fetchData = useCallback(async () => {
     if (!tripId) {
@@ -523,71 +540,87 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // can legitimately move the total without it being a user-perceived change).
     const prev = prevTotalRef.current;
     const withinStabilization = Date.now() - mountedAtRef.current < STABILIZATION_MS;
-    if (!initialLoadRef.current && !withinStabilization && prev != null && prev !== totalCents) {
-      const delta: FinancialDelta = {
-        previousTotalCents: prev,
-        deltaCents: totalCents - prev,
-        at: Date.now(),
-      };
-      setLastDelta(delta);
-
-      // Defensive guard: warn on large unexpected jumps. Threshold = 25%.
-      const ratio = prev > 0 ? Math.abs(delta.deltaCents) / prev : Infinity;
-      // Consume one-shot suppression flag from a silent system-driven event.
-      const suppressed = suppressNextToastRef.current.active;
-      const suppressReason = suppressNextToastRef.current.reason;
-      if (suppressed) {
-        suppressNextToastRef.current = { active: false, reason: '' };
-      }
-      if (ratio > 0.25 && lastWarnedTotalRef.current !== totalCents) {
-        lastWarnedTotalRef.current = totalCents;
-        const sign = delta.deltaCents >= 0 ? '+' : '−';
-        const amount = Math.abs(delta.deltaCents) / 100;
-
-        // Always log the diagnostic. The user-visible toast is gated below.
-        console.warn(
-          `[useTripFinancialSnapshot] Trip total jumped ${sign}$${amount.toFixed(0)} ` +
-          `(${(ratio * 100).toFixed(0)}%). prev=${prev} new=${totalCents} tripId=${tripId} suppressed=${suppressed}${suppressed ? ` reason=${suppressReason}` : ''}`
-        );
-
-        // Try to attribute the jump to a recent cost-repair pass. Only an
-        // ATTRIBUTED change ever surfaces a toast — and only when this fetch
-        // was not a system-reconcile (silent booking-changed). The previous
-        // unattributed "Trip total changed by ±$X" toast was removed because
-        // it fired phantom pops on tab switch with no actionable info; the
-        // race between per-instance suppress flags and parallel async RPCs
-        // (orphan-archive, sync-trip-cost-table) made it unreliable to gate.
-        if (!suppressed) {
-          try {
-            const { getRecentCostChanges } = await import('@/services/activityCostService');
-            const changes = await getRecentCostChanges(tripId, 8_000);
-            if (changes.length > 0) {
-              const top = changes.slice(0, 2).map(c => {
-                const d = (c.new_cents - c.previous_cents) / 100;
-                const s = d >= 0 ? '+' : '−';
-                return `${c.activity_title || 'Activity'} ${s}$${Math.abs(d).toFixed(0)}`;
-              }).join(', ');
-              const more = changes.length > 2 ? ` and ${changes.length - 2} more` : '';
-              console.warn(
-                `[useTripFinancialSnapshot] Total ${sign}$${amount.toFixed(0)} attributed to repair: ${top}${more}`
-              );
-              try {
-                toast.info(`Pricing updated: ${sign}$${amount.toFixed(0)}`, {
-                  description: `${top}${more}`,
-                  duration: 7000,
-                });
-              } catch {}
-            }
-          } catch {}
+    if (!initialLoadRef.current && !withinStabilization && prev != null) {
+      // Convergence is the natural completion condition — when the new total
+      // matches the previous one, any prior unresolved indicator must clear.
+      if (prev === totalCents) {
+        if (deltaTimerRef.current) {
+          clearTimeout(deltaTimerRef.current);
+          deltaTimerRef.current = null;
         }
-      } else if (suppressed && ratio > 0.25) {
-        const sign = delta.deltaCents >= 0 ? '+' : '−';
-        const amount = Math.abs(delta.deltaCents) / 100;
-        console.info(
-          `[useTripFinancialSnapshot] suppressed system-reconcile toast (reason=${suppressReason}) ${sign}$${amount.toFixed(0)} tripId=${tripId}`
-        );
-        // Still mark so a later identical-total real event doesn't double-fire
-        lastWarnedTotalRef.current = totalCents;
+        setLastDelta(null);
+      } else {
+        const delta: FinancialDelta = {
+          previousTotalCents: prev,
+          deltaCents: totalCents - prev,
+          at: Date.now(),
+        };
+        // Defensive guard: warn on large unexpected jumps. Threshold = 25%.
+        const ratio = prev > 0 ? Math.abs(delta.deltaCents) / prev : Infinity;
+        // Consume one-shot suppression flag from a silent system-driven event.
+        const suppressed = suppressNextToastRef.current.active;
+        const suppressReason = suppressNextToastRef.current.reason;
+        if (suppressed) {
+          suppressNextToastRef.current = { active: false, reason: '' };
+        }
+        // CRITICAL: silent system reconciliations must NOT populate the
+        // header `lastDelta` — a tab-switch / orphan-archive refetch would
+        // otherwise latch a phantom "−$X just now" badge. Only surface the
+        // delta when the change is user-perceivable.
+        if (!suppressed) {
+          setLastDelta(delta);
+          armDeltaAutoDismiss(delta.at);
+        }
+        if (ratio > 0.25 && lastWarnedTotalRef.current !== totalCents) {
+          lastWarnedTotalRef.current = totalCents;
+          const sign = delta.deltaCents >= 0 ? '+' : '−';
+          const amount = Math.abs(delta.deltaCents) / 100;
+
+          // Always log the diagnostic. The user-visible toast is gated below.
+          console.warn(
+            `[useTripFinancialSnapshot] Trip total jumped ${sign}$${amount.toFixed(0)} ` +
+            `(${(ratio * 100).toFixed(0)}%). prev=${prev} new=${totalCents} tripId=${tripId} suppressed=${suppressed}${suppressed ? ` reason=${suppressReason}` : ''}`
+          );
+
+          // Try to attribute the jump to a recent cost-repair pass. Only an
+          // ATTRIBUTED change ever surfaces a toast — and only when this fetch
+          // was not a system-reconcile (silent booking-changed). The previous
+          // unattributed "Trip total changed by ±$X" toast was removed because
+          // it fired phantom pops on tab switch with no actionable info; the
+          // race between per-instance suppress flags and parallel async RPCs
+          // (orphan-archive, sync-trip-cost-table) made it unreliable to gate.
+          if (!suppressed) {
+            try {
+              const { getRecentCostChanges } = await import('@/services/activityCostService');
+              const changes = await getRecentCostChanges(tripId, 8_000);
+              if (changes.length > 0) {
+                const top = changes.slice(0, 2).map(c => {
+                  const d = (c.new_cents - c.previous_cents) / 100;
+                  const s = d >= 0 ? '+' : '−';
+                  return `${c.activity_title || 'Activity'} ${s}$${Math.abs(d).toFixed(0)}`;
+                }).join(', ');
+                const more = changes.length > 2 ? ` and ${changes.length - 2} more` : '';
+                console.warn(
+                  `[useTripFinancialSnapshot] Total ${sign}$${amount.toFixed(0)} attributed to repair: ${top}${more}`
+                );
+                try {
+                  toast.info(`Pricing updated: ${sign}$${amount.toFixed(0)}`, {
+                    description: `${top}${more}`,
+                    duration: 7000,
+                  });
+                } catch {}
+              }
+            } catch {}
+          }
+        } else if (suppressed && ratio > 0.25) {
+          const sign = delta.deltaCents >= 0 ? '+' : '−';
+          const amount = Math.abs(delta.deltaCents) / 100;
+          console.info(
+            `[useTripFinancialSnapshot] suppressed system-reconcile toast (reason=${suppressReason}) ${sign}$${amount.toFixed(0)} tripId=${tripId}`
+          );
+          // Still mark so a later identical-total real event doesn't double-fire
+          lastWarnedTotalRef.current = totalCents;
+        }
       }
     }
     prevTotalRef.current = totalCents;
@@ -623,7 +656,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
         suppressNextToastRef.current = { active: false, reason: '' };
       }
     }
-  }, [tripId]);
+  }, [tripId, armDeltaAutoDismiss]);
 
   useEffect(() => {
     // Reset bookkeeping when tripId changes
@@ -632,7 +665,17 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     lastWarnedTotalRef.current = null;
     mountedAtRef.current = Date.now();
     setLastDelta(null);
+    if (deltaTimerRef.current) {
+      clearTimeout(deltaTimerRef.current);
+      deltaTimerRef.current = null;
+    }
     fetchData();
+    return () => {
+      if (deltaTimerRef.current) {
+        clearTimeout(deltaTimerRef.current);
+        deltaTimerRef.current = null;
+      }
+    };
   }, [fetchData]);
 
   // Re-fetch when bookings change (hotel/flight added)
@@ -703,7 +746,13 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   }, [fetchData, tripId]);
 
   const refetch = useCallback(() => fetchData(), [fetchData]);
-  const acknowledgeDelta = useCallback(() => setLastDelta(null), []);
+  const acknowledgeDelta = useCallback(() => {
+    if (deltaTimerRef.current) {
+      clearTimeout(deltaTimerRef.current);
+      deltaTimerRef.current = null;
+    }
+    setLastDelta(null);
+  }, []);
 
   return useMemo(() => {
     const toBePaid = Math.max(0, data.tripTotalCents - data.paidCents);
