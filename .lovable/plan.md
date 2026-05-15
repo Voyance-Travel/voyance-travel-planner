@@ -1,46 +1,48 @@
-## Bug
+## Problem
+A real-world activity card (Coastal Bike Exploration, Day 2) shipped to the user with `description: "The."` — a single article + period. Investigation shows our defenses miss this exact shape:
 
-Day 2 lists **Pâtisserie Riviera** as both 8:30 AM breakfast AND 1:57 PM lunch, with two different addresses and a lunch description claiming it's a pasta-with-truffle restaurant. Three problems combined:
+- `checkActivityDescriptions` (validate-day.ts) flags `description.length < 30` as `MISSING_DESCRIPTION`, but the **repair** is delegated to `fillMissingDescriptions` in `_shared/description-fill.ts`. When that 8s LLM call times out / errors / returns < 30 chars / fails the restaurant guard, the function **leaves the original string in place** (`act.description` is only assigned in the success branch). So `"The."` survives.
+- `scrubSentenceFragments` in `_shared/prompt-leak-scrub.ts` is a no-op for **single-sentence** strings (intentional — see line 210: "Single-sentence: only flag, don't strip"). `"The."` is one sentence.
+- No FE sanitizer drops article-only descriptions either, so the persisted card renders verbatim.
 
-1. **No same-day venue-name dedup.** Cross-day dedup exists (ledger-check), but nothing blocks the same venue name from filling two meal slots on the same day.
-2. **Nuclear placeholder sweeps don't seed `usedNames` from existing real dining.** `nuclearPlaceholderSweep` and `nuclearDiningStrip` (`fix-placeholders.ts:836,911`) start with an empty `Set`, so a late-pass replacement can pick the same venue the AI already used earlier in the day.
-3. **No name/description coherence check** — a "Pâtisserie / Boulangerie / Café" titled venue with a "pasta / pizza / sushi / steak / ramen" description ships unflagged. Either the AI hallucinated, or the fallback DB has two unrelated records sharing a display name; either way validation should catch it.
+This affects every code path: fresh generation (refill failed silently), chain regen, and any legacy persisted trip whose description-fill round failed.
 
-## Plan
+## Fix — Defense in Depth (3 layers)
 
-### 1. Same-day duplicate-venue validator + repair (single boundary)
+### Layer 1 — Backend: blank degenerate descriptions instead of preserving them
 
-Add `checkSameDayDuplicateVenues(activities)` to `supabase/functions/generate-itinerary/pipeline/validation-gate.ts`:
-- Walk dining + restaurant + cafe categories per day.
-- Normalize venue name (lowercase, strip "at "/"breakfast at "/"lunch at " prefix, strip diacritics, drop punctuation).
-- When the same normalized name appears twice in one day, emit `DUPLICATE_VENUE_SAME_DAY` (severity: critical).
-- Repair: keep the **earliest** occurrence, re-resolve the later one via `resolveAnyMealFallback(city, mealType, usedNamesSeededWithDayDining)` + `applyFallbackToActivity`. If the resolver returns the same name again (city pool exhausted), downgrade later slot to `unverifiedMealSentinel` (`needsVenuePick`, $0).
-- Wire into the existing `applyValidationGate` flow so it runs at repair-day §10b and at `action-save-itinerary normalizeDays`.
+In `supabase/functions/_shared/description-fill.ts`:
+- After the success-branch assignment loop, walk `targets` once more. For each target whose final `act.description` is still degenerate (regex `^\s*(the|a|an|it|this|that|here|there)\s*\.?\s*$/i` OR `trim().length < DESC_MIN_CHARS / 2` ≈ <15 chars), set `act.description = ''`. This guarantees no path leaves "The." / "A." / a 4-char stub on the card. Empty is recoverable downstream; "The." is not.
+- Add a counter `counters.blanked` and include it in the `[DESC_FILL]` sentinel.
 
-### 2. Seed nuclear sweeps with existing real dining names
+### Layer 2 — Unified Output Validation Layer
 
-In `nuclearPlaceholderSweep` and `nuclearDiningStrip` (`fix-placeholders.ts`):
-- Before the loop, walk `activities` once and seed `usedNames` with normalized names of every existing non-placeholder dining/restaurant/cafe row (not just the ones the loop replaces).
-- Closes the late-pass recycling path that lets meal #2 land on meal #1's venue.
+In `supabase/functions/_shared/scrub-activity.ts`:
+- Add a small `scrubDegenerateBodyFields(act)` step (composed before the existing `scrubSentenceFragmentsOnAct` call) that blanks `description`, `notes`, `tips`, `summary` when they match the same article-only / `<15` chars regex above. Increment a new `ops.degenerate` counter.
+- Wired automatically at every existing `scrubActivity` call site (repair-day §10b, action-save-itinerary `normalizeDays`, UI sanitizer chain) — no new boundaries needed.
 
-### 3. Name/description coherence validator
+### Layer 3 — Frontend safety net for legacy persisted trips
 
-Add `checkVenueDescriptionCoherence(activity)` in the same validation-gate file:
-- Title-side regex groups: `pâtisserie|patisserie|boulangerie|bakery|café|cafe|coffee|tea house|crêperie|gelateria|ice cream|juice|smoothie`.
-- Description-side mismatch tokens for each group (e.g. for bakery/café: `pasta|pizza|ramen|sushi|steak|burger|tacos|paella|risotto|truffle pasta|prime rib`).
-- On mismatch emit `VENUE_DESCRIPTION_MISMATCH` (severity: warning) → blank `description`. The existing `_shared/description-fill.ts` post-pass will refill a coherent blurb (cuisine inferred from title).
-- Optional: same check at UI sanitizer (`activityNameSanitizer.ts`) read-time as a last-resort blank for already-persisted trips.
+In `src/lib/itinerary/activityNameSanitizer.ts` (or the matching `sanitizeActivityText` chain — confirmed during edit): mirror the same article-only / `<15` chars blanker on read so already-saved trips like the user's Day 2 stop showing "The." without waiting for a regen.
 
-### 4. Memory + tests
+### Memory update
+Extend `mem://constraints/itinerary/sentence-integrity-guard` to record:
+- Article-only / sub-15-char descriptions are blanked, not preserved.
+- Three boundaries (description-fill failure path, scrubActivity, FE sanitizer) all enforce identically.
+- Reasoning: empty card description is recoverable (next regen / dining-description-backfill), an article-fragment stub is not.
 
-- New constraint memory: `mem://constraints/itinerary/same-day-venue-uniqueness` summarizing the three layers, sentinels (`[VALIDATION_GATE] DUPLICATE_VENUE_SAME_DAY`, `[VALIDATION_GATE] VENUE_DESCRIPTION_MISMATCH`, `[NUCLEAR] dedup-seeded-from-existing`).
-- Unit tests under `supabase/functions/generate-itinerary/__tests__/`:
-  - `duplicate-venue-same-day.test.ts` — two breakfast+lunch rows w/ identical normalized name → second is re-resolved or sentinelized.
-  - `venue-description-mismatch.test.ts` — "Pâtisserie X" + "truffle pasta" description → description blanked.
-  - `nuclear-sweep-seeds-existing-dining.test.ts` — existing real lunch venue is excluded from the breakfast placeholder fill pool.
+## Out of Scope
+- Health-engine, Payments tab, same-day venue dedup, cost reconciliation — none touched.
+- No prompt/template changes; this is purely an output-validation tightening.
 
-## Out of scope
+## Verification
+- Add unit tests in `supabase/functions/_shared/__tests__/scrub-activity.test.ts` covering `description: "The."`, `"A."`, `"It."`, `"The"` (no period), and a legitimate 35-char description (must NOT be blanked).
+- Add a description-fill test: when the LLM mock returns a 5-char string, the original "The." is replaced with `''`, not retained.
+- Spot-check the user's affected trip after deploy: card body should render empty state, not "The."
 
-- The actual fallback-DB row(s) named "Pâtisserie Riviera" — if curation finds two distinct records sharing a display name, that's a separate data fix; the validator above handles the symptom regardless.
-- Cross-day dedup, ledger-check meal-recurrence rules, cost reconciliation. Untouched.
-- No changes to `action-save-itinerary` cost path, snapshot, header strip, or Payments tab.
+## Files to edit
+- `supabase/functions/_shared/description-fill.ts`
+- `supabase/functions/_shared/scrub-activity.ts`
+- `src/lib/itinerary/activityNameSanitizer.ts` (or equivalent FE text sanitizer)
+- `supabase/functions/_shared/__tests__/scrub-activity.test.ts` (extend)
+- `mem://constraints/itinerary/sentence-integrity-guard` (extend)

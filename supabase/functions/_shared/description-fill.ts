@@ -81,7 +81,27 @@ export interface DescriptionFillCounters {
   flagged: number;
   filled: number;
   skipped: number;
+  blanked: number;
   errored: boolean;
+}
+
+/**
+ * Article-only / sub-15-char fragment detector. Matches "The.", "A.", "It.",
+ * "The" (no period), "Here.", or any string < 15 chars after trim. Used to
+ * blank degenerate descriptions instead of preserving them — empty is
+ * recoverable downstream (next regen / dining-description-backfill); an
+ * article-fragment stub is not. See mem://constraints/itinerary/sentence-integrity-guard.
+ */
+export const DEGENERATE_DESC_RE = /^\s*(?:the|a|an|it|this|that|here|there|these|those)\s*[.!?\u2026]?\s*$/i;
+export function isDegenerateDescription(s: unknown): boolean {
+  if (typeof s !== 'string') return false;
+  const t = s.trim();
+  if (!t) return false;
+  if (DEGENERATE_DESC_RE.test(t)) return true;
+  // Sub-15 chars AND not a complete sentence (no actionable content).
+  // 15 = DESC_MIN_CHARS / 2 — symmetric with validator threshold.
+  if (t.length < 15) return true;
+  return false;
 }
 
 export async function fillMissingDescriptions(
@@ -95,6 +115,7 @@ export async function fillMissingDescriptions(
     flagged: 0,
     filled: 0,
     skipped: 0,
+    blanked: 0,
     errored: false,
   };
 
@@ -205,6 +226,24 @@ export async function fillMissingDescriptions(
     console.warn(`[DESC_FILL] day=${dayNumber} failed: ${msg}`);
   } finally {
     clearTimeout(timer);
+  }
+
+  // Final safety net — even when refill skipped/timed out, NEVER leave a
+  // degenerate stub like "The." / "A." / "It." / sub-15-char fragment on the
+  // card. Blank → recoverable; "The." → ships to user. Walk the original
+  // flagged set so we cover every refill outcome path.
+  for (const t of targets) {
+    const act = activities[t.index];
+    if (!act) continue;
+    if (isDegenerateDescription(act.description)) {
+      const before = String(act.description).slice(0, 40);
+      act.description = '';
+      counters.blanked++;
+      console.warn(`[DESC_FILL] day=${dayNumber} blanked degenerate description before="${before}" title="${act.title || act.name || '?'}"`);
+    }
+  }
+  if (counters.blanked > 0) {
+    console.log(`[DESC_FILL] day=${dayNumber} blanked=${counters.blanked}`);
   }
 
   return counters;

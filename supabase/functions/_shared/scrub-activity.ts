@@ -19,6 +19,9 @@ import {
 import { stripVenueMealSuffix, VENUE_MEAL_SUFFIX_RE } from './venue-name.ts';
 import { downgradeCrossCityActivity } from '../generate-itinerary/fix-placeholders.ts';
 import { activityCountryMismatch } from './address-city-resolve.ts';
+import { isDegenerateDescription } from './description-fill.ts';
+
+const DEGENERATE_BODY_FIELDS = ['description', 'notes', 'tips', 'summary', 'insider_tip', 'insiderTip'] as const;
 
 export interface ScrubOps {
   titleLeak: number;
@@ -30,6 +33,7 @@ export interface ScrubOps {
   mealLabel: number;
   downgraded: number;
   phantomRef: number;
+  degenerate: number;
 }
 
 export const EMPTY_OPS: ScrubOps = Object.freeze({
@@ -42,6 +46,7 @@ export const EMPTY_OPS: ScrubOps = Object.freeze({
   mealLabel: 0,
   downgraded: 0,
   phantomRef: 0,
+  degenerate: 0,
 }) as ScrubOps;
 
 export interface ScrubContext {
@@ -66,9 +71,18 @@ export function scrubActivity(act: any, ctx: ScrubContext = {}): ScrubOps {
   const ops: ScrubOps = {
     titleLeak: 0, bodyLeak: 0, fragment: 0, mealSuffix: 0,
     crossCity: 0, countryMismatch: 0, mealLabel: 0, downgraded: 0,
-    phantomRef: 0,
+    phantomRef: 0, degenerate: 0,
   };
   if (!act || typeof act !== 'object') return ops;
+
+  // L1 — degenerate body fields ("The.", "A.", sub-15-char stubs).
+  // Blank instead of preserving — empty is recoverable, fragment isn't.
+  for (const k of DEGENERATE_BODY_FIELDS) {
+    if (k in act && isDegenerateDescription((act as any)[k])) {
+      (act as any)[k] = '';
+      ops.degenerate++;
+    }
+  }
 
   // L2 — pure scrubs
   if (scrubTitleLeaks(act).changed) ops.titleLeak++;
@@ -154,13 +168,14 @@ export function addOps(a: ScrubOps, b: ScrubOps): ScrubOps {
     mealLabel: a.mealLabel + b.mealLabel,
     downgraded: a.downgraded + b.downgraded,
     phantomRef: a.phantomRef + b.phantomRef,
+    degenerate: a.degenerate + b.degenerate,
   };
 }
 
 export function opsHadChange(o: ScrubOps): boolean {
   return o.titleLeak + o.bodyLeak + o.fragment + o.mealSuffix
        + o.crossCity + o.countryMismatch + o.mealLabel + o.downgraded
-       + o.phantomRef > 0;
+       + o.phantomRef + o.degenerate > 0;
 }
 
 /** Compact one-line render for logs. */

@@ -73,5 +73,37 @@ Deno.test("scrubActivity: drops sentence fragment 'spot for together'", () => {
 });
 
 Deno.test("formatOps: empty bag renders {none}", () => {
-  assertEquals(formatOps({ titleLeak:0,bodyLeak:0,fragment:0,mealSuffix:0,crossCity:0,countryMismatch:0,mealLabel:0,downgraded:0 }), "{none}");
+  assertEquals(formatOps({ titleLeak:0,bodyLeak:0,fragment:0,mealSuffix:0,crossCity:0,countryMismatch:0,mealLabel:0,downgraded:0,phantomRef:0,degenerate:0 }), "{none}");
 });
+
+Deno.test("scrubActivity: blanks degenerate description 'The.'", () => {
+  const a: any = { title: "Coastal Bike Exploration", description: "The." };
+  const ops = scrubActivity(a, { destination: "Monaco" });
+  assertEquals(ops.degenerate, 1);
+  assertEquals(a.description, "");
+});
+
+Deno.test("scrubActivity: blanks degenerate description 'A.' / 'It.' / 'The'", () => {
+  for (const stub of ["A.", "It.", "The", "Here.", "  this. "]) {
+    const a: any = { title: "X", description: stub };
+    scrubActivity(a, { destination: "Monaco" });
+    assertEquals(a.description, "", `failed for stub="${stub}"`);
+  }
+});
+
+Deno.test("scrubActivity: preserves legitimate 35-char description", () => {
+  const desc = "Order the truffle pasta — house specialty.";
+  const a: any = { title: "Trattoria", description: desc };
+  const ops = scrubActivity(a, { destination: "Venice, Italy" });
+  assertEquals(ops.degenerate, 0);
+  assertEquals(a.description, desc);
+});
+
+Deno.test("scrubActivity: blanks notes/tips/summary degenerate stubs too", () => {
+  const a: any = { title: "X", description: "Long enough description with detail.", notes: "The.", tips: "A.", summary: "It." };
+  scrubActivity(a, { destination: "Monaco" });
+  assertEquals(a.notes, "");
+  assertEquals(a.tips, "");
+  assertEquals(a.summary, "");
+});
+
