@@ -11864,8 +11864,8 @@ function ActivityRow({
               <span className="text-sm font-medium text-foreground">{formatTime(time)}</span>
               {isEditable && <Edit3 className="h-3 w-3 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />}
             </div>
-            {activity.endTime && (
-              <p className="text-xs text-muted-foreground mt-0.5">→ {formatTime(activity.endTime)}</p>
+            {getRenderedEndTime(activity) && (
+              <p className="text-xs text-muted-foreground mt-0.5">→ {formatTime(getRenderedEndTime(activity))}</p>
             )}
             {activity.duration && (
               <p className="text-xs text-primary/70 mt-0.5 font-medium">
