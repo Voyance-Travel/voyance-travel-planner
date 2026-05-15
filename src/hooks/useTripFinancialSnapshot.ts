@@ -733,6 +733,11 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       manualFlightDelta: data.manualFlightDelta,
       effectiveHotelCents,
       effectiveFlightCents,
+      buckets: data.buckets,
+      bucketsSumCents:
+        data.buckets.essentials + data.buckets.food + data.buckets.activities +
+        data.buckets.transit + data.buckets.misc,
+      residualFoldedCents: data.residualFoldedCents,
       loading: data.loading,
       lastDelta,
       refetch,
