@@ -1784,6 +1784,30 @@ async function fetchImageTiered(
     );
     if (googleImage) {
       candidates.push(googleImage);
+    } else if (
+      entityType === 'destination' &&
+      destination &&
+      cleanName.toLowerCase() !== destination.toLowerCase()
+    ) {
+      // Destination-hero safety net: if the POI-driven Google Places search
+      // returned nothing (e.g. obscure/accented POI like "Hércules Port" matched
+      // zero candidates), retry once with the bare destination name before
+      // letting the pipeline AI-fallback to a Gemini-generated placeholder.
+      // This is the difference between a real Monaco photo and a generic
+      // base64 cloud image.
+      console.log(`[Images] POI-driven Google Places miss — retrying with bare destination: "${destination}"`);
+      const fallbackImage = await getGooglePlacesPhoto(
+        'destination',
+        destination,
+        destination,
+        googleApiKey,
+        'sightseeing',
+        costTracker,
+      );
+      if (fallbackImage) {
+        console.log(`[Images] ✅ Bare-destination retry succeeded for "${destination}"`);
+        candidates.push(fallbackImage);
+      }
     }
   }
 
