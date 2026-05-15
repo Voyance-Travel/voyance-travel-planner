@@ -80,6 +80,10 @@ interface PaymentsTabProps {
   /** Journey fields for linked trips */
   journeyId?: string | null;
   journeyName?: string | null;
+  /** Trip currency for display (USD/EUR/JPY/...) — mirrors header so the
+   *  Payments "Trip Total" reads in the same units as the itinerary header.
+   *  Defaults to USD for backwards compatibility. */
+  tripCurrency?: string;
 }
 
 // PayableItem type is now imported from usePayableItems
