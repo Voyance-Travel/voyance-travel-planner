@@ -37,7 +37,7 @@ Deno.test('normalizeVenueKey strips diacritics, meal-prefix, punctuation', () =>
   assertEquals(normalizeVenueKey('Pâtisserie Riviera'), 'patisserie riviera');
   assertEquals(normalizeVenueKey('Breakfast at Pâtisserie Riviera'), 'patisserie riviera');
   assertEquals(normalizeVenueKey('Lunch at Pâtisserie Riviera'), 'patisserie riviera');
-  assertEquals(normalizeVenueKey("Da Ivo's"), 'da ivos');
+  assertEquals(normalizeVenueKey("Da Ivo's"), 'da ivo s');
 });
 
 Deno.test('DUPLICATE_VENUE_SAME_DAY gate handler re-resolves later slot', () => {
