@@ -115,6 +115,7 @@ export async function fillMissingDescriptions(
     flagged: 0,
     filled: 0,
     skipped: 0,
+    blanked: 0,
     errored: false,
   };
 
