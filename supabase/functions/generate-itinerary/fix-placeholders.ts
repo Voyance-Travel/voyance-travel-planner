@@ -834,6 +834,10 @@ export function nuclearDiningStrip(
   if (!Array.isArray(activities) || activities.length === 0) return 0;
   const destinationCity = (city || '').toLowerCase().split(',')[0].trim();
   const usedNames = new Set<string>();
+  // Seed with every existing real dining venue so a late-pass replacement
+  // can't recycle a name already in play earlier in the day (Monaco
+  // Pâtisserie Riviera bug, breakfast slot reused for lunch).
+  seedUsedNamesFromExistingDining(activities, usedNames);
   let stripped = 0;
 
   let preservedManualPick = 0;
