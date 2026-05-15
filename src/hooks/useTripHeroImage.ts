@@ -9,7 +9,7 @@
  * 5. Gradient fallback (deterministic, always works)
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   getDestinationImage, 
   getDestinationImages as getCuratedImages,
@@ -20,6 +20,31 @@ import { getHeroImageByName, getDestinationCanonicalImage } from '@/services/des
 import { supabase } from '@/integrations/supabase/client';
 import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
 import { detectCrossCityMention } from '@/lib/crossCityFilter';
+import { DESTINATION_STORAGE_IMAGES } from '@/data/destinationStorageImages';
+
+/**
+ * Stable internal-storage fallback tier.
+ *
+ * Closes recurring "blank brown/tan gradient hero" pattern (Dublin/Copenhagen/
+ * Barcelona). Root cause: the canonical resolver only checks URL trust by host,
+ * not whether the storage object actually exists. When `destinations.hero_image_url`
+ * points at a `site-images/photo-*` object that 404s, the chain fell straight
+ * through to the gradient because downstream tiers were gated on
+ * `!canonicalUrl`. We now (a) keep advancing past `canonicalFailed`, and (b)
+ * carry a hand-curated internal storage map keyed by city slug as the last
+ * trusted tier before API/gradient.
+ */
+function lookupStorageHero(destination: string): string | null {
+  if (!destination) return null;
+  const cityOnly = destination.split(',')[0].trim().toLowerCase();
+  const slug = cityOnly.replace(/\s+/g, '-');
+  const candidates = [cityOnly, slug, cityOnly.replace(/-/g, ' ')];
+  for (const k of candidates) {
+    const hit = DESTINATION_STORAGE_IMAGES[k];
+    if (hit?.imageUrl) return hit.imageUrl;
+  }
+  return null;
+}
 
 /**
  * Shared predicate: a seeded hero URL we should treat as broken/unusable.
@@ -103,10 +128,13 @@ export function useTripHeroImage({
   const curatedImages = getCuratedImages(destination);
   const hasCurated = hasCuratedImages(destination);
 
+  const [storageFailed, setStorageFailed] = useState(false);
+  const storageUrl = useMemo(() => lookupStorageHero(destination), [destination]);
+
   // Fetch canonical destination hero image (shared across all views)
   useEffect(() => {
-    const shouldFetch = 
-      (!seededHeroUrl || seededFailed) && 
+    const shouldFetch =
+      (!seededHeroUrl || seededFailed) &&
       !canonicalFetched;
 
     if (!shouldFetch || !destination) return;
@@ -126,12 +154,15 @@ export function useTripHeroImage({
     return () => { cancelled = true; };
   }, [destination, seededHeroUrl, seededFailed, canonicalFetched]);
 
-  // Fetch DB curated image if canonical and hardcoded curated not available
+  // Fetch DB curated image when canonical+curated+storage are exhausted
   useEffect(() => {
-    const shouldFetch = 
-      (!seededHeroUrl || seededFailed) && 
-      canonicalFetched && !canonicalUrl &&
-      !hasCurated && 
+    const canonicalDone = canonicalFetched && (!canonicalUrl || canonicalFailed);
+    const storageDone = !storageUrl || storageFailed;
+    const shouldFetch =
+      (!seededHeroUrl || seededFailed) &&
+      canonicalDone &&
+      !hasCurated &&
+      storageDone &&
       !dbCuratedFetched;
 
     if (!shouldFetch) return;
@@ -153,12 +184,15 @@ export function useTripHeroImage({
     return () => { cancelled = true; };
   }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, canonicalFetched, canonicalUrl]);
 
-  // Fetch from API if canonical, curated, and DB curated aren't available
+  // Fetch from API once all earlier tiers are exhausted
   useEffect(() => {
-    const shouldFetch = 
-      (!seededHeroUrl || seededFailed) && 
-      canonicalFetched && !canonicalUrl &&
-      !hasCurated && 
+    const canonicalDone = canonicalFetched && (!canonicalUrl || canonicalFailed);
+    const storageDone = !storageUrl || storageFailed;
+    const shouldFetch =
+      (!seededHeroUrl || seededFailed) &&
+      canonicalDone &&
+      !hasCurated &&
+      storageDone &&
       dbCuratedFetched && !dbCuratedUrl &&
       !apiFetched;
 
@@ -209,7 +243,7 @@ export function useTripHeroImage({
     return () => {
       cancelled = true;
     };
-  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, dbCuratedUrl, apiFetched, canonicalFetched, canonicalUrl]);
+  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, dbCuratedUrl, apiFetched, canonicalFetched, canonicalUrl, canonicalFailed, storageUrl, storageFailed]);
 
   // Determine current image URL based on fallback chain
   const getImageUrl = (): { url: string; source: UseTripHeroImageResult['source'] } => {
@@ -227,7 +261,14 @@ export function useTripHeroImage({
       return { url: canonicalUrl, source: 'db_curated' };
     }
 
-    // 3. Curated images — pinned to [0], no rotation
+    // 3. Stable internal storage map (durable last-trusted tier;
+    // closes Dublin/Copenhagen/Barcelona blank-hero regression when
+    // canonical points at a missing storage object).
+    if (storageUrl && !storageFailed) {
+      return { url: storageUrl, source: 'db_curated' };
+    }
+
+    // 4. Curated images — pinned to [0], no rotation
     if (hasCurated && !curatedFailed && curatedImages[curatedIndex]) {
       return { url: curatedImages[curatedIndex], source: 'curated' };
     }
@@ -301,7 +342,15 @@ export function useTripHeroImage({
 
     // Handle canonical image failure
     if (canonicalUrl && !canonicalFailed) {
+      console.warn('[useTripHeroImage] canonical failed, advancing to next tier:', canonicalUrl);
       setCanonicalFailed(true);
+      return;
+    }
+
+    // Handle storage-map image failure
+    if (storageUrl && !storageFailed) {
+      console.warn('[useTripHeroImage] storage hero failed, advancing to next tier:', storageUrl);
+      setStorageFailed(true);
       return;
     }
 
@@ -339,6 +388,8 @@ export function useTripHeroImage({
     dbCuratedFailed,
     apiImageUrl,
     apiFailed,
+    storageUrl,
+    storageFailed,
   ]);
 
   const onError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
