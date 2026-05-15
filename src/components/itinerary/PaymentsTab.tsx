@@ -146,6 +146,13 @@ export function PaymentsTab({
     (usdCents: number) => formatMoneyFromUsdCents(usdCents, tripCurrency),
     [tripCurrency],
   );
+  // Belt-and-braces: surface tripCurrency drift in dev so any future
+  // showLocalCurrency-toggle desync between header and PaymentsTab is visible.
+  useEffect(() => {
+    if (typeof console !== 'undefined') {
+      console.debug('[PaymentsTab] tripCurrency=', tripCurrency);
+    }
+  }, [tripCurrency]);
   const queryClient = useQueryClient();
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
