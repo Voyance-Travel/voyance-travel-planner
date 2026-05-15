@@ -3477,11 +3477,16 @@ async function _handleGenerateTripDayInner(
           failed_day_numbers: isComplete ? [] : (Array.isArray((meta as any)?.failed_day_numbers) ? (meta as any).failed_day_numbers : []),
           // Always overwrite stale persist_validation from intermediate saves.
           ...(finalPersistValidation ? { persist_validation: finalPersistValidation } : {}),
-          // FREEZE STAMP — first ready transition. See
-          // mem://constraints/itinerary/frozen-after-ready.
-          ...(finalStatus === 'ready'
-            ? { itinerary_frozen_at: (meta as any)?.itinerary_frozen_at || new Date().toISOString() }
+          // FREEZE DEFERRED — see mem://constraints/itinerary/saved-badge-honesty.
+          // The freeze stamp + fully_persisted=true are written below in a
+          // SECOND update after table-sync + activity_costs succeed, so a
+          // hard refresh during enrichment doesn't leave the trip frozen on
+          // a partial snapshot. Existing frozen stamps are preserved.
+          ...((meta as any)?.itinerary_frozen_at
+            ? { itinerary_frozen_at: (meta as any).itinerary_frozen_at }
             : {}),
+          // Mark in-flight enrichment so UI shows Reconciling and arms beforeunload.
+          ...(finalStatus === 'ready' ? { fully_persisted: false } : {}),
         },
       },
     });
