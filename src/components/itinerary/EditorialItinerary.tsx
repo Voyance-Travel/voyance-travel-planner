@@ -6292,6 +6292,14 @@ export function EditorialItinerary({
                           <span className="text-muted-foreground/70">Trip Total</span>{' '}
                           <span className="font-semibold text-foreground tabular-nums">{formatCurrency(displayCost(displayedTripTotalUsd), tripCurrency)}</span>
                         </span>
+                        {typeof import.meta !== 'undefined' &&
+                          (import.meta as any).env?.DEV &&
+                          (snapshotUnderChips || snapshotOverChips) && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[10px] font-mono">
+                            Δ {formatCurrency(displayCost(Math.abs(displayedTripTotalUsd - (financialSnapshot.tripTotalCents / 100))), tripCurrency)}{' '}
+                            ({snapshotUnderChips ? 'snapshot<chips' : 'snapshot>chips'})
+                          </span>
+                        )}
                       </div>
                       <ReconcilingHint
                         active={reconcilingActive}
