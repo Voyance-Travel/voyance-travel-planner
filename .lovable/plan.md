@@ -1,42 +1,51 @@
-## Diagnosis
+## Root cause
 
-The hero fallback is still not fixed because the resolver only checks whether a stored URL is “trusted” by host/pattern. It does **not** verify that the object actually exists before choosing it.
+The Trip Total architecture is intact — `useDisplayedTripTotal` is the single source for both surfaces, and the canonical sum in `activity_costs` exactly matches what Payments displays ($1,446 for Barcelona `4197c39d…`).
 
-What I found:
-- `destinations` has canonical hero URLs for Dublin, Copenhagen, Barcelona, Paris, and Bali.
-- Paris and Bali objects load successfully.
-- Barcelona’s canonical object returns `400 {"message":"Object not found"}`:
-  - `site-images/photo-1583422409516-2895a77efed6`
-- The app then falls back to a generated SVG gradient, producing the brown/tan blank hero.
-- Browser network also showed multiple `site-images/photo-*` requests blocked/failing because the URL points to missing storage objects.
-- There are already valid destination-bucket assets for Barcelona and Copenhagen:
-  - `destination-images/destination/barcelona-1.jpg`
-  - `destination-images/destination/barcelona-2.jpg`
-  - `destination-images/destination/copenhagen-0.jpg`, etc.
-- `src/data/destinationStorageImages.ts` already contains a stable internal map for many destinations, including Barcelona/Copenhagen/Bali/Paris, but the trip hero path (`useTripHeroImage`) does not use it.
+The reported "mismatch" is actually a **currency-display divergence + a stuck Reconciling badge**:
 
-## Plan
+- **Header** renders Trip Total in `tripCurrency` (EUR for Barcelona/Dublin/Paris) via `displayCost(displayedTripTotalUsd)` → applies FX.
+- **PaymentsTab "Trip Total"** renders raw `estimatedTotal` cents through `formatCurrency`, which is **always USD**.
+- The "Matches itinerary" badge in `PaymentsTab` (line ~1240) compares the two as if both were USD cents — they are, but the user-visible numbers below them are in different currencies, so the user sees a "mismatch" and the panel is functionally lying. Worse, when the snapshot/chip clamp asymmetry triggers `snapshotUnderChips` or `snapshotOverChips`, the badge falls into bounded "Reconciling…" and never resolves because the underlying state is stable, not transient.
 
-1. **Add a stable internal destination fallback tier**
-   - In `useTripHeroImage`, import the existing `DESTINATION_STORAGE_IMAGES` map.
-   - Resolve a destination key like `Barcelona` → `barcelona` and use `imageUrl` from that map before falling through to API/gradient.
-   - This gives Barcelona/Copenhagen/Paris/Bali and other mapped cities a real internal image even if `destinations.hero_image_url` is stale or missing.
+The three "bugs" reported across cities collapse to:
 
-2. **Do not let broken canonical URLs become terminal**
-   - When canonical/seeded images fail `onError`, continue down the resolver chain to mapped storage image / DB curated / API before gradient.
-   - Keep the current trust-policy checks, but add the missing “file failed to load” behavior to the source chain.
+1. Header EUR vs Payments USD (perceived mismatch).
+2. User's manual bucket arithmetic omitted the Transit and Reserve rows that Payments correctly includes.
+3. "Reconciling…" latches when the equality check runs against pre-FX cents while the user reads post-FX header chrome.
 
-3. **Patch known bad canonical rows through code path, not a fragile one-off**
-   - Barcelona should display `destination-images/destination/barcelona-1.jpg` from the existing stable map when the stored `site-images/photo-158342...` 404s.
-   - Copenhagen and Dublin should still display canonical if loadable; if they fail later, they also get the same durable fallback route.
+## Fix scope (UI only)
 
-4. **Add lightweight diagnostics**
-   - Log a clear warning when a hero source fails and the resolver advances, e.g. `[useTripHeroImage] source failed; trying next hero tier`.
-   - This makes future “blank hero” regressions traceable without guessing.
+### 1. PaymentsTab "Trip Total" must render in `tripCurrency` like the header
+File: `src/components/itinerary/PaymentsTab.tsx`
 
-5. **Verify with the requested cities**
-   - Re-check the relevant grep/import path.
-   - Reproduce Barcelona in preview and confirm the hero `<img>` is no longer a `data:image/svg` gradient after the bad canonical URL fails.
-   - Confirm the loaded URL is an internal `destination-images/destination/barcelona-*.jpg` image.
+- Pull `tripCurrency` from the same source the header uses (already available via the trip record / `useTripCurrency` hook used in `EditorialItinerary.tsx`).
+- Replace the `formatCurrency(estimatedTotal)` headline (line ~1229) and Paid/Unpaid/Overpaid lines (1288, 1302, 1335, 1745, 1781) with `formatCurrency(displayCost(estimatedTotal/100), tripCurrency)` so Payments and header speak the same units.
+- Also convert the per-bucket totals so the breakdown numbers match what's in the cards.
 
-No database schema change is needed.
+### 2. "Matches itinerary" / "Reconciling…" badge must use the same units as what the user sees
+- Compare `displayedTotal.displayedTotalCents` vs `estimatedTotal` AFTER converting both through the same `displayCost` lens (or assert in raw USD cents but then never render mixed units above the badge).
+- Add a hard cap: if `useReconcilingState` is still un-resolved after 8s of stable inputs, dismiss the badge entirely and emit a `[PaymentsTab] reconcile-timeout` warn instead of leaving "Reconciling…" forever.
+
+### 3. Currency-source guard
+- Add a one-liner dev assertion: when `tripCurrency !== 'USD'` and the header strip's `displayedTripTotalUsd` differs from `displayedTotal.displayedTotalCents/100` by more than $1, log `[Trip Total] FX-render drift` so future regressions surface in console.
+
+### 4. Optional — surface category total inline next to bucket header
+Tiny UX win: render `($1,446 of $1,446)` next to the breakdown title so users can self-verify the categories sum. Avoids the Bali/Barcelona "I added wrong" confusion.
+
+## Out of scope
+
+- No backend / `useTripFinancialSnapshot` / `resolveCanonicalCostRows` changes — the canonical data is correct.
+- No edits to `useDisplayedTripTotal` or `computeHeaderStripValues` — they already produce a single number; only the rendering currency differs between surfaces.
+
+## Verification
+
+1. Open Barcelona `4197c39d-e069-40ad-9bde-78f8edaa2a68`. Header = `€1,244`, Payments Trip Total now also = `€1,244` (same FX). Badge shows "Matches itinerary" within 1s.
+2. Bali (USD trip) — both render `$1,678`. Badge stable green.
+3. Dublin (EUR) — both render `€1,340`. No "Reconciling…" latch.
+4. Console: zero `[PaymentsTab] divergence` and zero `[Trip Total] FX-render drift`.
+5. After 8s, no trip leaves a "Reconciling…" badge on screen even if upstream `useReconcilingState` thinks it's still pending.
+
+## Memory note (post-ship)
+
+Add to `mem://constraints/finance/displayed-trip-total-single-source`: "PaymentsTab `Trip Total` headline + bucket subtotals + Matches/Reconciling badge MUST render in `tripCurrency` (same `displayCost` lens as the header). Comparing pre-FX USD cents above a post-FX EUR header is the recurring 'totals don't match' regression vector."

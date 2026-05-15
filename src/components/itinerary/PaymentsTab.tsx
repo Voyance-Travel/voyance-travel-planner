@@ -44,10 +44,10 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   getTripPayments, 
-  formatCurrency, 
   type TripPayment,
   type PaymentTotals
 } from '@/services/tripPaymentsAPI';
+import { formatMoneyFromUsdCents } from '@/lib/currency';
 import { markActivityPaid } from '@/services/activityCostService';
 import { useTripMembers, addTripMember, type TripMember } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
@@ -80,6 +80,10 @@ interface PaymentsTabProps {
   /** Journey fields for linked trips */
   journeyId?: string | null;
   journeyName?: string | null;
+  /** Trip currency for display (USD/EUR/JPY/...) — mirrors header so the
+   *  Payments "Trip Total" reads in the same units as the itinerary header.
+   *  Defaults to USD for backwards compatibility. */
+  tripCurrency?: string;
 }
 
 // PayableItem type is now imported from usePayableItems
@@ -131,7 +135,16 @@ export function PaymentsTab({
   destinationCountry,
   journeyId,
   journeyName,
+  tripCurrency = 'USD',
 }: PaymentsTabProps) {
+  // Single money formatter — converts canonical USD cents into the trip's
+  // display currency (matching the itinerary header). Closes the recurring
+  // "header €1,244 vs Payments $1,446" perceived-mismatch where the two
+  // surfaces actually held the same value but rendered in different units.
+  const displayMoney = useCallback(
+    (usdCents: number) => formatMoneyFromUsdCents(usdCents, tripCurrency),
+    [tripCurrency],
+  );
   const queryClient = useQueryClient();
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
@@ -1128,7 +1141,7 @@ export function PaymentsTab({
 
         <div className="flex items-center gap-2">
           <span className={cn("font-medium text-sm", isPaid && "text-green-600")}>
-            {formatCurrency(item.amountCents)}
+            {displayMoney(item.amountCents)}
           </span>
           
           {/* Assign button */}
@@ -1194,7 +1207,7 @@ export function PaymentsTab({
           {item.subItems.map(sub => (
             <div key={sub.id} className="flex items-center justify-between text-xs text-muted-foreground py-1 border-b border-border/30 last:border-0">
               <span className="truncate pr-2">{sub.name}</span>
-              <span className="tabular-nums">{formatCurrency(sub.amountCents)}</span>
+              <span className="tabular-nums">{displayMoney(sub.amountCents)}</span>
             </div>
           ))}
         </div>
@@ -1226,7 +1239,7 @@ export function PaymentsTab({
             </p>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-semibold text-primary">{formatCurrency(estimatedTotal)}</p>
+            <p className="text-2xl font-semibold text-primary">{displayMoney(estimatedTotal)}</p>
             <p className="text-xs text-muted-foreground">Trip Total</p>
             {(() => {
               // Real equality check: only claim "Matches itinerary" when our
@@ -1265,7 +1278,7 @@ export function PaymentsTab({
             {estimatedTotal > budgetLimitCents && (
               <div className="flex items-center gap-2 mb-4 text-destructive text-sm">
                 <AlertCircle className="h-4 w-4" />
-                Over budget by {formatCurrency(estimatedTotal - budgetLimitCents)}
+                Over budget by {displayMoney(estimatedTotal - budgetLimitCents)}
               </div>
             )}
           </>
@@ -1285,7 +1298,7 @@ export function PaymentsTab({
               <CheckCircle2 className="h-4 w-4 text-green-600" />
             </div>
             <div>
-              <p className="text-sm font-medium">{formatCurrency(paidAmount)}</p>
+              <p className="text-sm font-medium">{displayMoney(paidAmount)}</p>
               <p className="text-xs text-muted-foreground">Paid so far</p>
             </div>
           </div>
@@ -1299,7 +1312,7 @@ export function PaymentsTab({
               </div>
               <div>
                 <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
-                  Overpaid by {formatCurrency(overpaidAmount)}
+                  Overpaid by {displayMoney(overpaidAmount)}
                 </p>
                 <button
                   type="button"
@@ -1332,7 +1345,7 @@ export function PaymentsTab({
                 <Wallet className="h-4 w-4 text-amber-600" />
               </div>
               <div>
-                <p className="text-sm font-medium">{formatCurrency(unpaidAmount)}</p>
+                <p className="text-sm font-medium">{displayMoney(unpaidAmount)}</p>
                 <p className="text-xs text-muted-foreground">Remaining to pay</p>
               </div>
             </div>
@@ -1373,7 +1386,7 @@ export function PaymentsTab({
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <p className="font-medium">
-                      {formatCurrency(
+                      {displayMoney(
                         financialSnapshot.loading
                           ? essentialItemsWithReserve.reduce((sum, i) => sum + i.amountCents, 0)
                           : (financialSnapshot.buckets?.essentials ?? essentialItemsWithReserve.reduce((sum, i) => sum + i.amountCents, 0))
@@ -1434,7 +1447,7 @@ export function PaymentsTab({
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <p className="font-medium">
-                      {formatCurrency(
+                      {displayMoney(
                         financialSnapshot.loading
                           ? items.reduce((sum, i) => sum + i.amountCents, 0)
                           : (financialSnapshot.buckets?.[key] ?? items.reduce((sum, i) => sum + i.amountCents, 0))
@@ -1511,7 +1524,7 @@ export function PaymentsTab({
                           }
                         </span>
                         <span className="font-medium text-foreground">
-                          {formatCurrency(payment.amount_cents * (payment.quantity || 1))}
+                          {displayMoney(payment.amount_cents * (payment.quantity || 1))}
                         </span>
                       </div>
                     </div>
@@ -1574,9 +1587,9 @@ export function PaymentsTab({
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="font-semibold">{formatCurrency(breakdown.assigned)}</p>
+                            <p className="font-semibold">{displayMoney(breakdown.assigned)}</p>
                             <p className="text-xs text-muted-foreground">
-                              {formatCurrency(breakdown.paid)} paid
+                              {displayMoney(breakdown.paid)} paid
                             </p>
                           </div>
                         </div>
@@ -1602,7 +1615,7 @@ export function PaymentsTab({
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0 ml-2">
                                 <span className="font-medium text-foreground">
-                                  {formatCurrency(splitAmount)}
+                                  {displayMoney(splitAmount)}
                                 </span>
                                 <Users className="h-3 w-3 text-primary opacity-60" />
                               </div>
@@ -1633,7 +1646,7 @@ export function PaymentsTab({
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="font-semibold text-muted-foreground">{formatCurrency(unassigned.assigned)}</p>
+                            <p className="font-semibold text-muted-foreground">{displayMoney(unassigned.assigned)}</p>
                           </div>
                         </div>
 
@@ -1723,7 +1736,7 @@ export function PaymentsTab({
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0 ml-2">
                                 <span className="font-medium text-muted-foreground">
-                                  {formatCurrency(splitAmount)}
+                                  {displayMoney(splitAmount)}
                                 </span>
                                 <UserPlus className="h-3 w-3 text-primary opacity-60" />
                               </div>
@@ -1742,7 +1755,7 @@ export function PaymentsTab({
                     If split equally among {travelers} travelers:
                   </p>
                   <p className="text-xl font-semibold text-primary">
-                    {formatCurrency(Math.floor(estimatedTotal / travelers / 100) * 100)} per person
+                    {displayMoney(Math.floor(estimatedTotal / travelers / 100) * 100)} per person
                   </p>
                 </div>
               )}
@@ -1778,7 +1791,7 @@ export function PaymentsTab({
                       If split equally among {travelers} travelers:
                     </p>
                     <p className="text-xl font-semibold text-primary">
-                      {formatCurrency(Math.floor(estimatedTotal / travelers / 100) * 100)} per person
+                      {displayMoney(Math.floor(estimatedTotal / travelers / 100) * 100)} per person
                     </p>
                   </div>
                 )}
@@ -1805,7 +1818,7 @@ export function PaymentsTab({
                   {getItemIcon(markPaidModal.type)}
                   <span className="font-medium text-sm">{markPaidModal.name}</span>
                 </div>
-                <span className="font-semibold">{formatCurrency(markPaidModal.amountCents)}</span>
+                <span className="font-semibold">{displayMoney(markPaidModal.amountCents)}</span>
               </div>
 
               {tripMembers.length > 0 && (
@@ -1870,7 +1883,7 @@ export function PaymentsTab({
                   {getItemIcon(assigningItem.type)}
                   <span className="font-medium text-sm">{assigningItem.name}</span>
                 </div>
-                <span className="font-semibold">{formatCurrency(assigningItem.amountCents)}</span>
+                <span className="font-semibold">{displayMoney(assigningItem.amountCents)}</span>
               </div>
 
               <div className="space-y-2">
@@ -1927,7 +1940,7 @@ export function PaymentsTab({
                 <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/10 rounded-lg">
                   <Split className="h-4 w-4 text-primary shrink-0" />
                   <p className="text-sm text-foreground">
-                    <span className="font-medium">{formatCurrency(Math.round(assigningItem.amountCents / assignMemberIds.length))}</span>
+                    <span className="font-medium">{displayMoney(Math.round(assigningItem.amountCents / assignMemberIds.length))}</span>
                     {' '}per person ({assignMemberIds.length}-way split)
                   </p>
                 </div>
@@ -2147,7 +2160,7 @@ export function PaymentsTab({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this expense?</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteTarget ? `${deleteTarget.name} — ${formatCurrency(deleteTarget.amountCents)}. This can't be undone.` : ''}
+              {deleteTarget ? `${deleteTarget.name} — ${displayMoney(deleteTarget.amountCents)}. This can't be undone.` : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

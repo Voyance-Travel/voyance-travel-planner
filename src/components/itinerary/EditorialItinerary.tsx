@@ -7544,6 +7544,7 @@ export function EditorialItinerary({
             destinationCountry={destinationCountry}
             journeyId={journeyId}
             journeyName={journeyName}
+            tripCurrency={tripCurrency}
           />
         )}
 
