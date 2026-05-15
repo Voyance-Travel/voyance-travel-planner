@@ -1,63 +1,38 @@
-# Fix: "Needs Regeneration" False Alarm on Page Load (Paris)
+## Bug 3 — Health engine false positives & false negatives
 
-## Root cause
+The health engine already runs a dry-run cascade preview and prefers rendered times (see `mem://constraints/itinerary/health-warning-rendered-times`). Two specific gaps remain that explain the Copenhagen and Bali repros.
 
-On page load, `TripDetail` fires several self-heal `safeUpdateItineraryData` calls (`self-heal-predawn-cascade`, `self-heal-rebuild-from-tables`, `self-heal-local-sync`, `self-heal-empty-day-placeholder`, etc.). These hit `action-save-itinerary`, which runs `validateItineraryForPersist`. When the persisted JSON snapshot is mid-reconciliation (e.g. dining cards not yet enriched in JSON, or `meal_policy_at_generation` cached for a different policy than `detectMealSlots` now sees), the validator emits `MISSING_REQUIRED_MEAL` and the backend returns HTTP 422 with `code: 'NEEDS_REGENERATION'`.
+### Root causes
 
-`safeUpdateItineraryData` then dispatches `itinerary-persist-issues` for every 422, regardless of whether the save was user-initiated or a silent self-heal. `PersistIssuesListener` turns each into a "Day N needs regeneration — regenerate this day to fix" toast. Meanwhile `TripHealthPanel` reads the live render state and correctly reports 100/0 — the two systems disagree because the validator runs on a transient persisted snapshot, the health engine on the rendered view.
+**Bali false negative (Uluwatu 11:50–13:20 vs Naughty Nuri's 12:30–13:30, missed):**
+In `analyzeHealth` (TripHealthPanel.tsx ~line 412), the conflict loop computes both `renderedOverlaps` and `cascadeOverlaps`, but then unconditionally calls `pairStillOverlapsAfterCascade(...)` first. When the dry-run cascade *would* shift Naughty Nuri's start to ≥13:20, the re-check returns false and the loop `continue`s — **even though the user can see the overlap on the rendered cards right now**. The cascade hasn't been saved, so suppressing the warning is wrong whenever rendered times collide.
 
-This is the same desync class as the reload-loses-dining bug, surfaced as a misleading toast instead of silent content loss.
+**Copenhagen false positive (warning said 21:50–23:50, card showed 21:50–22:50):**
+The card's time row in `EditorialItinerary.tsx` (~line 11519) uses `activity.endTime` directly via `formatTime`. The engine uses `getDisplayEndTime(a, undefined, idx)` whose precedence chain is `displayEndTime → adjustedEndTime → metadata.displayEnd → endTime → end_time`. They are not the same source. When `endTime` is missing on the source row, the engine's `renderedEnd` falls through to the cascade-synthesized end (start + `durationMinutes`), and the warning text echoes that synthesized 23:50 instead of what the card actually rendered (22:50, or start-only). The two systems disagree on what "rendered" means.
 
-## What changes
+### Fix plan (frontend-only, presentation layer)
 
-### 1. `src/services/safeUpdateItineraryData.ts` — suppress on self-heal
+1. **Stop suppressing visible overlaps (Bali fix).** In `analyzeHealth` conflict loop, change the suppression branches so the per-pair cascade re-check + "cascade-only" suppression only fire when `renderedOverlaps === false`. If the rendered times overlap, always emit the warning. Update the existing comment block at lines 412–445 to reflect the new invariant: *cascade suppression is a tool for hiding dry-run-only artifacts, never for hiding what the user can see*.
 
-In the 422 / `NEEDS_REGENERATION` branch (around lines 211–227):
+2. **Single rendered-time helper shared by card + engine (Copenhagen fix).** Add `getRenderedStartTime(a)` / `getRenderedEndTime(a)` in `src/lib/itinerary/displayTime.ts` that mirror the card's actual precedence: prefer `startTime`/`endTime` (and `start_time`/`end_time`) verbatim, never read forward-compat display fields, and never synthesize from duration. Switch the card render in `EditorialItinerary.tsx` (~line 11519, plus mobile/grid time rows at ~11694, ~11862) to call the helper. Switch the engine's "rendered" reads in `TripHealthPanel.tsx` (lines 245–247 drift telemetry, 317–318 warning-text source, and `detectGapsForDay` if it touches rendered times) to call the same helper. The cascade-preview lookups continue to use the existing `getDisplayStartTime/EndTime` (with cascade map) for *detection*; only the rendered-text source changes.
 
-- If `options.reason` starts with `self-heal-`, OR `options.skipLedgerCheck === true`, **do not** dispatch `itinerary-persist-issues`. Log a `[safeUpdateItineraryData] persist gate flagged issues (suppressed: self-heal)` warn instead.
-- Still trigger the canonical `dispatchTripPersisted` resync (so the view heals from DB) and still return `{ error: null, persistVerdict: body }`.
-- For non-self-heal saves, dispatch as today, but include `source: options.reason ?? 'user'` in the event detail so the listener can apply additional filtering.
+3. **Drift telemetry hardening.** Update the existing `[HEALTH_CASCADE_DRIFT]` warn at lines 237–261 and add a new `[HEALTH_RENDERED_VS_CARD_DRIFT]` warn that fires whenever the engine's rendered string disagrees with what the helper returns for the same activity. This becomes the trip-wire for any future divergence.
 
-Rationale: every page-load save uses a `self-heal-*` reason. User-initiated mutations (chat actions, manual edits, drag/drop, regenerate-day button) do not. Suppressing self-heal removes the entire class of false alarms in one chokepoint.
+4. **Tests.** Add cases to `src/components/trip/__tests__/TripHealthPanel.cascadePreview.test.ts`:
+   - Bali repro: two overlapping cards where the cascade *would* resolve them — assert the warning fires.
+   - Copenhagen repro: card with `endTime: '22:50'`, no display fields, `durationMinutes: 120` — assert engine's warning text uses 22:50, not the synthesized 23:50.
+   - Cross-check: a true cascade-only artifact (rendered times don't overlap, cascade dry-run shifts something forward) — assert no warning.
 
-### 2. `src/components/itinerary/PersistIssuesListener.tsx` — load-complete gate + source filter
+### Out of scope
 
-- Read an in-memory `Set<tripId>` `loadedTrips` populated when `TripDetail` dispatches a `voyance:trip-loaded` event (added in step 3). Until the trip is in the set, buffer incoming `itinerary-persist-issues` events (cap: latest 5 per trip).
-- On flip to loaded, drop any buffered events whose `detail.source` starts with `self-heal-` or is `'integrity-blocked-resync'`. Keep user-initiated ones.
-- For events that arrive **after** load, also drop self-heal sources as a belt-and-braces (already filtered upstream in step 1 — this is defense in depth).
-- Keep the existing 5-second dedupe window.
+- No backend changes, no save pipeline changes, no cascade engine changes.
+- Bug #1 (deferred-freeze + reload guard) and Bug #2 (`PersistIssuesListener` load gate) already shipped — not retouched.
+- Health-score weighting/score arithmetic untouched; only the issue-detection inputs change.
 
-### 3. `src/pages/TripDetail.tsx` — emit `voyance:trip-loaded`
+### Files
 
-Once both conditions hold:
-- The trip's canonical `itinerary_data` has been read (existing `parsedDays` is non-empty), AND
-- The first post-mount `TRIP_PERSISTED_EVENT` from a self-heal cycle has settled (or 1.5s after first render if no self-heal fires)
-
-…dispatch `window.dispatchEvent(new CustomEvent('voyance:trip-loaded', { detail: { tripId } }))` exactly once per mount. Use a `useRef` flag.
-
-This is the "load-complete gate" the user asked for. It mirrors how the health engine waits for the live render state.
-
-### 4. Test
-
-Add `src/components/itinerary/__tests__/PersistIssuesListener.suppress.test.ts`:
-- Dispatching `itinerary-persist-issues` with `source: 'self-heal-predawn-cascade'` produces no toast.
-- Dispatching with `source: 'user'` produces a toast.
-- Events fired before `voyance:trip-loaded` are buffered; self-heal ones are dropped on flip, user ones surface.
-
-## Out of scope
-
-- No changes to the backend validator or `validateItineraryForPersist` — the validator is correct, it just shouldn't be user-visible during silent reconciliation.
-- No changes to the health engine, generation pipeline, or freeze/`fully_persisted` work from the previous task.
-- Real "needs regeneration" surfaces (when a user actually edits or regenerates a day and it fails) continue to fire as today.
-
-## Files touched
-
-- `src/services/safeUpdateItineraryData.ts` (1 branch + event detail field)
-- `src/components/itinerary/PersistIssuesListener.tsx` (buffer + filter)
-- `src/pages/TripDetail.tsx` (one `useEffect` to emit `voyance:trip-loaded`)
-- `src/components/itinerary/__tests__/PersistIssuesListener.suppress.test.ts` (new)
-
-## Memory
-
-Add `mem://constraints/itinerary/persist-issues-toast-user-only`:
-> `itinerary-persist-issues` toasts must only fire on user-initiated saves AND only after `voyance:trip-loaded`. Self-heal reasons (`self-heal-*`, `integrity-blocked-resync`) suppressed at `safeUpdateItineraryData` chokepoint + filtered again in `PersistIssuesListener`. Closes Paris page-load "3 days need regeneration" false alarm.
+- `src/lib/itinerary/displayTime.ts` — add `getRenderedStartTime` / `getRenderedEndTime`.
+- `src/components/trip/TripHealthPanel.tsx` — guard cascade suppression on `!renderedOverlaps`; switch warning-text source to renderedHelper.
+- `src/components/itinerary/EditorialItinerary.tsx` — route the 3 time-row render sites through the renderedHelper.
+- `src/components/trip/__tests__/TripHealthPanel.cascadePreview.test.ts` — 3 new cases.
+- Memory: update `mem://constraints/itinerary/health-warning-rendered-times` to record the rendered-helper invariant + cascade-suppression-only-when-not-rendered rule.
