@@ -3591,6 +3591,34 @@ async function _handleGenerateTripDayInner(
     //   1) one-time legacy backfill (gated by trips.last_cost_repair_at), or
     //   2) the explicit "Repair pricing" user action in the UI.
 
+    // ── PHASE 6: FREEZE STAMP + fully_persisted=true ────────────────
+    // Only after table-sync + activity_costs succeed do we declare the
+    // trip fully saved. See mem://constraints/itinerary/saved-badge-honesty
+    // + mem://constraints/itinerary/frozen-after-ready.
+    if (finalStatus === 'ready' && isComplete) {
+      try {
+        const { data: latestRow } = await supabase
+          .from('trips')
+          .select('metadata')
+          .eq('id', tripId)
+          .single();
+        const latestMeta = (latestRow?.metadata as Record<string, any>) || {};
+        const finalMeta = {
+          ...latestMeta,
+          itinerary_frozen_at: latestMeta.itinerary_frozen_at || new Date().toISOString(),
+          fully_persisted: true,
+          fully_persisted_at: new Date().toISOString(),
+        };
+        await supabase
+          .from('trips')
+          .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
+          .eq('id', tripId);
+        console.log(`[generate-trip-day] Phase 6 freeze + fully_persisted stamped for trip ${tripId}`);
+      } catch (freezeErr) {
+        console.warn('[generate-trip-day] Phase 6 freeze stamp failed (non-blocking):', freezeErr);
+      }
+    }
+
     await triggerNextJourneyLeg(supabase, tripId);
 
     console.log(`[generate-trip-day] 📤 Returning completion response for trip ${tripId} (day ${dayNumber}/${totalDays}). If client disconnected, data is already saved.`);
