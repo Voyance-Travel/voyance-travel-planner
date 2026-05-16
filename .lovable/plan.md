@@ -1,35 +1,39 @@
 ## Problem
 
-Activity Concierge sheet returns "Sorry, I couldn't process that request. Invalid token" on cards (e.g. Lunch at Azul Histórico).
+In the Itinerary Assistant chat, "Suggested change" cards (and all action cards) clip the proposal explanation to 2 lines via `line-clamp-2`. The user sees only the first ~2 lines of text like:
 
-Tracing:
-- `src/hooks/useActivityConcierge.ts` correctly sends `Bearer ${session.access_token}` (not the publishable key).
-- `supabase/functions/activity-concierge/index.ts` validates the token via `authClient.auth.getUser(token)` and returns the literal string `"Invalid token"` when that call errors.
-- `supabase/config.toml` has `verify_jwt = false` for this function, so the platform doesn't pre-validate — the in-code `getUser` is the sole gate.
+> "I can replace the e-bike tour on Day 1 with a private, deep-dive walking tour of Roma Norte's architecture and hidden plazas to better fit your preference for walking and intimate experiences."
 
-Root cause: the client picks up an **expired / near-expired** access token from `getSession()` and doesn't refresh it before calling the edge function. `getSession()` returns the cached token even when it's stale (auto-refresh only fires on a timer; long-idle tabs / sheets opened well after navigation hit a stale token). The edge function then rejects it with the generic "Invalid token" message.
+…cut off mid-sentence with no way to expand, so the user can't tell what they're approving.
+
+## Root cause
+
+`src/components/itinerary/ItineraryAssistant.tsx` line 764 renders the action description with:
+
+```tsx
+<p className="text-xs text-muted-foreground line-clamp-2">
+  {displayInfo.description}
+</p>
+```
+
+`line-clamp-2` was reasonable for compact auto-applied confirmations, but the same component now also renders `propose_change` cards where the description IS the proposal the user must read before clicking Apply.
 
 ## Fix
 
-**`src/hooks/useActivityConcierge.ts`** (the only file changed):
+Remove the line clamp so the full proposal renders, and let it wrap naturally with `whitespace-pre-wrap` (mirroring the chat-message bubble above it). One line change, frontend-only, scoped to the action card description.
 
-1. Replace the bare `supabase.auth.getSession()` block with a helper that:
-   - Calls `getSession()`.
-   - If no session → keep the existing "Please sign in to chat with the concierge." path.
-   - If `session.expires_at` is within 60s of now (or already past) → call `supabase.auth.refreshSession()` and use the refreshed token. If refresh fails → show "Your session expired. Please refresh the page and try again."
-   - Otherwise use the existing token.
+```tsx
+<p className="text-xs text-muted-foreground whitespace-pre-wrap break-words">
+  {isThisExecuting ? 'Applying changes...' : displayInfo.description}
+</p>
+```
 
-2. On a `401` response from the edge function (defensive — refresh race), perform a one-shot `supabase.auth.refreshSession()` and retry the fetch exactly once with the new token. If the retry also returns 401, surface the friendlier "Your session expired. Please refresh the page and try again." message instead of the raw "Invalid token" string.
+Applies to all action cards (propose_change, swap, rewrite, etc.) — they all benefit from showing the full reasoning, and the action card already lives inside a `max-w-[85%]` bubble inside a scrollable `ScrollArea`, so layout stays contained.
 
-**`supabase/functions/activity-concierge/index.ts`**:
+## Files
 
-3. Add a `console.warn("activity-concierge auth failed:", authError?.message, "token_prefix:", token.slice(0,8))` line right before the 401 return so future regressions show the actual reason (expired_token, jwt malformed, signature mismatch, …) in edge logs without leaking the token. No behavior change — still returns `{ error: "Invalid token" }` to the client.
-
-No other files, no auth/business-logic changes, no schema changes.
+- `src/components/itinerary/ItineraryAssistant.tsx` — replace `line-clamp-2` with `whitespace-pre-wrap break-words` on the action description `<p>` (line 764).
 
 ## Verification
 
-1. Open an itinerary card → AI Concierge sheet → send a message immediately → streams normally.
-2. Leave the tab idle for >1h (token expires after 1h by default), open the concierge sheet, send a message → hook auto-refreshes, request succeeds (no "Invalid token").
-3. If refresh genuinely fails (e.g. signed out in another tab) → message reads "Your session expired. Please refresh the page and try again." instead of the cryptic "Invalid token".
-4. Check `supabase functions logs activity-concierge` after a forced bad token → see the new `auth failed: …` diagnostic line.
+Open the assistant, ask for a swap that triggers a `propose_change` card, confirm the full multi-sentence explanation renders without truncation and the Apply / decline buttons still sit cleanly below it.
