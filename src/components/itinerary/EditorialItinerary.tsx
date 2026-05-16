@@ -2795,10 +2795,16 @@ export function EditorialItinerary({
    const [newlyAddedMember, setNewlyAddedMember] = useState<string | null>(null);
    const [isCreatingInvite, setIsCreatingInvite] = useState(false);
    const [inviteCopied, setInviteCopied] = useState(false);
-   // Currency display preference — ALWAYS starts in USD on every page load.
-   // Toggling to local is session-only; refresh resets to USD.
-   const [showLocalCurrency, setShowLocalCurrency] = useState<boolean>(false);
+   // Currency display preference — every trip starts in USD.
+   // Toggling to local is session-only and scoped to the current trip; route
+   // changes/newly generated trips must not inherit a prior trip's local toggle.
+   const [currencyPreference, setCurrencyPreference] = useState<{ tripId: string; showLocal: boolean }>(() => ({
+     tripId,
+     showLocal: false,
+   }));
+   const showLocalCurrency = currencyPreference.tripId === tripId ? currencyPreference.showLocal : false;
    useEffect(() => {
+     setCurrencyPreference({ tripId, showLocal: false });
      // Best-effort cleanup of any pre-existing persisted preference from earlier builds.
      if (typeof window === 'undefined') return;
      try {
@@ -2809,7 +2815,7 @@ export function EditorialItinerary({
        }
        keys.forEach(k => window.localStorage.removeItem(k));
      } catch { /* ignore */ }
-   }, []);
+   }, [tripId]);
   
   // Edit Flight/Hotel modal state
   const [editFlightOpen, setEditFlightOpen] = useState(false);
