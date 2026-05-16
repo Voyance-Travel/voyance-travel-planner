@@ -34,6 +34,7 @@ export interface ScrubOps {
   downgraded: number;
   phantomRef: number;
   degenerate: number;
+  addressCity: number;
 }
 
 export const EMPTY_OPS: ScrubOps = Object.freeze({
@@ -47,6 +48,7 @@ export const EMPTY_OPS: ScrubOps = Object.freeze({
   downgraded: 0,
   phantomRef: 0,
   degenerate: 0,
+  addressCity: 0,
 }) as ScrubOps;
 
 export interface ScrubContext {
@@ -71,7 +73,7 @@ export function scrubActivity(act: any, ctx: ScrubContext = {}): ScrubOps {
   const ops: ScrubOps = {
     titleLeak: 0, bodyLeak: 0, fragment: 0, mealSuffix: 0,
     crossCity: 0, countryMismatch: 0, mealLabel: 0, downgraded: 0,
-    phantomRef: 0, degenerate: 0,
+    phantomRef: 0, degenerate: 0, addressCity: 0,
   };
   if (!act || typeof act !== 'object') return ops;
 
@@ -153,6 +155,20 @@ export function scrubActivity(act: any, ctx: ScrubContext = {}): ScrubOps {
     }
   }
 
+  // L4 — bare-neighborhood address: append destination city when missing.
+  // Closes "Bakers & Roasters / De Pijp" resolving to Atlanta in Google Maps.
+  if (ctx.destination && loc && typeof loc === 'object' && typeof loc.address === 'string') {
+    const addr = loc.address.trim();
+    const destShort = ctx.destination.split(',')[0]?.trim();
+    if (addr.length > 0
+        && !addr.includes(',')
+        && destShort && destShort.length > 0
+        && !addr.toLowerCase().includes(destShort.toLowerCase())) {
+      loc.address = `${addr}, ${destShort}`;
+      ops.addressCity++;
+    }
+  }
+
   return ops;
 }
 
@@ -169,13 +185,14 @@ export function addOps(a: ScrubOps, b: ScrubOps): ScrubOps {
     downgraded: a.downgraded + b.downgraded,
     phantomRef: a.phantomRef + b.phantomRef,
     degenerate: a.degenerate + b.degenerate,
+    addressCity: a.addressCity + b.addressCity,
   };
 }
 
 export function opsHadChange(o: ScrubOps): boolean {
   return o.titleLeak + o.bodyLeak + o.fragment + o.mealSuffix
        + o.crossCity + o.countryMismatch + o.mealLabel + o.downgraded
-       + o.phantomRef + o.degenerate > 0;
+       + o.phantomRef + o.degenerate + o.addressCity > 0;
 }
 
 /** Compact one-line render for logs. */
