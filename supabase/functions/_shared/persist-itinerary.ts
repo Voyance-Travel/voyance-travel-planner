@@ -114,6 +114,16 @@ export interface PersistItineraryOptions {
   /** Free-form save reason — also consulted by the FROZEN gate whitelist
    *  (`frozen-guard.ts::isUserSaveReason`). */
   saveReason?: string;
+  /**
+   * Opt out of the MEAL-ONLY guard. Default false. The guard rejects writes
+   * whose `nonMealMeaningfulCount === 0` when either the previously-persisted
+   * itinerary OR the latest `itinerary_versions` row for any day has ≥3
+   * non-meal meaningful activities. Closes the Stockholm pattern where a
+   * save-itinerary call collapsed a rich generation down to meals + logistics.
+   * Only pass `true` for explicit user-initiated meal-only edits (e.g. user
+   * deleted every non-meal card themselves).
+   */
+  allowMealOnly?: boolean;
 }
 
 export interface PersistResult {
@@ -125,6 +135,8 @@ export interface PersistResult {
   /** True when the FROZEN gate blocked the JSONB write (extraUpdate metadata
    *  / status flags still applied). */
   frozenBlocked?: boolean;
+  /** True when the MEAL-ONLY guard blocked the JSONB write. */
+  mealOnlyBlocked?: boolean;
 }
 
 /** Capped-size ring buffer of rejected attempts written under
