@@ -351,8 +351,6 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     warningLevel,
     isLoading,
     isGenerating,
-    formattedBudget,
-    formattedRemaining,
     updateSettings,
     removeEntry,
     refetch,
