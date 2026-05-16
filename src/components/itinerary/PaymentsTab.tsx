@@ -132,6 +132,7 @@ export function PaymentsTab({
   hotelSelection,
   travelers,
   budgetLimitCents,
+  budgetCurrency,
   ownerId,
   ownerName,
   budgetTier = 'moderate',
@@ -141,21 +142,35 @@ export function PaymentsTab({
   journeyName,
   tripCurrency = 'USD',
 }: PaymentsTabProps) {
-  // Single money formatter — converts canonical USD cents into the trip's
-  // display currency (matching the itinerary header). Closes the recurring
-  // "header €1,244 vs Payments $1,446" perceived-mismatch where the two
-  // surfaces actually held the same value but rendered in different units.
-  const displayMoney = useCallback(
-    (usdCents: number) => formatMoneyFromUsdCents(usdCents, tripCurrency),
-    [tripCurrency],
+  // Canonical display currency — when a budget currency is set, it wins so
+  // BudgetTab and PaymentsTab render the same headline (and "% of budget"
+  // compares apples to apples). Closes Mallorca "$2,500 budget vs €1,608 /
+  // 92%" cross-currency mismatch.
+  const displayCurrency = useMemo(
+    () => getCanonicalDisplayCurrency({ budgetCurrency, tripCurrency }),
+    [budgetCurrency, tripCurrency],
   );
-  // Belt-and-braces: surface tripCurrency drift in dev so any future
-  // showLocalCurrency-toggle desync between header and PaymentsTab is visible.
+  // Convert the budget limit (raw cents in `budgetCurrency`) into canonical
+  // USD cents so it can be compared directly to snapshot.tripTotalCents.
+  // Without this the % ratio mixes units when budgetCurrency !== USD.
+  const budgetLimitUsdCents = useMemo(() => {
+    if (!budgetLimitCents || budgetLimitCents <= 0) return 0;
+    const bc = (budgetCurrency || 'USD').toUpperCase();
+    if (bc === 'USD') return budgetLimitCents;
+    const usd = convertToUSD(budgetLimitCents / 100, bc);
+    return Math.round(usd * 100);
+  }, [budgetLimitCents, budgetCurrency]);
+  // Single money formatter — converts canonical USD cents into the display
+  // currency. All snapshot/ledger values are USD cents.
+  const displayMoney = useCallback(
+    (usdCents: number) => formatMoneyFromUsdCents(usdCents, displayCurrency),
+    [displayCurrency],
+  );
   useEffect(() => {
     if (typeof console !== 'undefined') {
-      console.debug('[PaymentsTab] tripCurrency=', tripCurrency);
+      console.debug('[PaymentsTab] displayCurrency=', displayCurrency, 'budgetCurrency=', budgetCurrency, 'tripCurrency=', tripCurrency);
     }
-  }, [tripCurrency]);
+  }, [displayCurrency, budgetCurrency, tripCurrency]);
   const queryClient = useQueryClient();
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
