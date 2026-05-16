@@ -116,9 +116,10 @@ export function BudgetSetupDialog({
   const perPersonCents = Math.round(totalCents / travelers);
 
   const formatCurrency = (cents: number) => {
+    const cur = (displayCurrency || settings?.budget_currency || 'USD').toUpperCase();
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: settings?.budget_currency || 'USD',
+      currency: cur,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(cents / 100);
