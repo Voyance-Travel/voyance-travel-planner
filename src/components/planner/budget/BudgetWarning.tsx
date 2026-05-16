@@ -9,15 +9,17 @@
 import { AlertTriangle, XCircle, ArrowRight, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { formatMoneyFromUsdCents } from '@/lib/currency';
 
 interface BudgetWarningProps {
   status: 'yellow' | 'red';
   /** Total used as a percentage of budget (e.g. 138 for 138%) */
   usedPercent: number;
-  /** Cents over budget when status === 'red'. Ignored otherwise. */
+  /** Canonical USD cents over budget when status === 'red'. */
   overageCents: number;
-  /** Cents remaining when status === 'yellow'. Ignored otherwise. */
+  /** Canonical USD cents remaining when status === 'yellow'. */
   remainingCents: number;
+  /** Active display currency (USD/local toggle). */
   currency: string;
   onDismiss?: () => void;
   onRebalance?: () => void;
@@ -42,14 +44,7 @@ export function BudgetWarning({
   const safeOverageCents = isFinite(overageCents) ? Math.max(0, overageCents) : 0;
   const safeRemainingCents = isFinite(remainingCents) ? Math.max(0, remainingCents) : 0;
 
-  const formatCurrency = (cents: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(cents / 100);
-  };
+  const formatCurrency = (usdCents: number) => formatMoneyFromUsdCents(usdCents, currency);
 
   return (
     <div
