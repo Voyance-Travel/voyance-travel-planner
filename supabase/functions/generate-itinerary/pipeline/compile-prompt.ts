@@ -194,8 +194,30 @@ function vagueTimeToStart(period: string): string | null {
   }
 }
 
-function parseUserActivities(dayActivitiesString: string, dayNumber: number): LockedCard[] {
+/**
+ * A vague-wish title is a category-only request (cuisine/meal/spa) with no
+ * proper-noun venue token. We refuse to lock these because the result is a
+ * naked card on top of the day with no time, description, or address — the
+ * exact "thrown on top" symptom users complain about.
+ */
+const VAGUE_WISH_TITLE_RE = /^(?:a\s+|some\s+|the\s+)?(?:nice\s+|casual\s+|fancy\s+|quick\s+|light\s+|rooftop\s+|local\s+)?(?:breakfast|brunch|lunch|dinner|supper|drinks?|cocktails?|nightcap|aperitif|aperitivo|spa|massage|hammam|sauna|pool|relax|rest|wine\s*bar|sushi|ramen|izakaya|tapas|trattoria|osteria|bistro|brasserie|pizza|pasta|paella|steakhouse|seafood|bbq|cafe|café|bakery|patisserie|coffee|tea|shopping|stroll|walk)(?:\s+(?:lunch|dinner|breakfast|brunch|drinks?|spot|place|out|time))?$/i;
+
+function isVagueWishTitle(text: string): boolean {
+  return VAGUE_WISH_TITLE_RE.test(text.trim());
+}
+
+export interface ParsedUserEntry {
+  locked: LockedCard | null;
+  /** Present when the entry is too vague to lock — pass to Day Brief as USER WISH. */
+  flexibleWish: string | null;
+}
+
+function parseUserActivities(dayActivitiesString: string, dayNumber: number): {
+  lockedCards: LockedCard[];
+  flexibleWishes: string[];
+} {
   const lockedCards: LockedCard[] = [];
+  const flexibleWishes: string[] = [];
 
   // Normalize en-dashes and em-dashes to hyphens for consistent regex matching
   const normalized = dayActivitiesString.replace(/[–—]/g, '-');
@@ -235,6 +257,19 @@ function parseUserActivities(dayActivitiesString: string, dayNumber: number): Lo
     const category = detectActivityCategory(activityText);
     const venueName = extractVenueName(activityText);
 
+    // ── HARD LOCK GATE ────────────────────────────────────────────────────
+    // Only lock entries with enough structure to commit verbatim:
+    //   - explicit start time, OR
+    //   - a real proper-noun venue name
+    // Vague wishes ("sushi lunch", "spa", "nice dinner") become flexible
+    // Day Brief hints instead of blank locked cards on top of the day.
+    const hasNamedVenue = !!venueName;
+    const isVague = !startTime && !hasNamedVenue && isVagueWishTitle(activityText);
+    if (isVague) {
+      flexibleWishes.push(activityText);
+      continue;
+    }
+
     lockedCards.push({
       title: activityText,
       start_time: startTime,
@@ -247,7 +282,7 @@ function parseUserActivities(dayActivitiesString: string, dayNumber: number): Lo
     });
   }
 
-  return lockedCards;
+  return { lockedCards, flexibleWishes };
 }
 
 function findTimeGaps(lockedCards: LockedCard[], dayNumber: number, totalDays: number): Array<{ from: string; to: string; suggestion: string }> {
@@ -421,7 +456,9 @@ export async function compilePrompt(
 
   if (currentDayActivities) {
     // === LOCK PHASE: Parse user activities into locked cards ===
-    lockedCardsForDay = parseUserActivities(currentDayActivities.activities, dayNumber);
+    const parsed = parseUserActivities(currentDayActivities.activities, dayNumber);
+    lockedCardsForDay = parsed.lockedCards;
+    const flexibleWishes = parsed.flexibleWishes;
 
     // Extract TBD entries for AI to fill
     const tdbEntries: string[] = [];
@@ -429,6 +466,10 @@ export async function compilePrompt(
       const t = entry.trim();
       if (/\bTBD\b|to be determined|choose|pick\b/i.test(t)) tdbEntries.push(t);
     }
+
+    const wishBlock = flexibleWishes.length > 0
+      ? `\n\n## 🎯 USER WISHES FOR DAY ${dayNumber} (incorporate naturally)\nThe traveler asked for these without a fixed time or named venue. For EACH wish: pick a real specific venue in ${resolvedDestination}, schedule it in a believable slot, write a real description, include address. Do NOT echo the wish back as a bare card with no time or description:\n${flexibleWishes.map(w => `  - ${w}`).join('\n')}\n`
+      : '';
 
     if (lockedCardsForDay.length > 0) {
       // Build a timeline showing the AI what's locked
@@ -466,10 +507,14 @@ RULES:
 5. Match the traveler's DNA for gap-filling activities.
 6. Do NOT add meals the user didn't specify. If they said "Breakfast" and "Dinner" but no lunch, there is no lunch.
 7. Do NOT inject activities from other cities. Only plan for the current city: ${resolvedDestination}.
-`;
-      console.log(`[compile-prompt] LOCK PHASE: ${lockedCardsForDay.length} locked cards for Day ${dayNumber}, ${gaps.length} gaps, ${tdbEntries.length} TBD slots`);
+${wishBlock}`;
+      console.log(`[compile-prompt] LOCK PHASE: ${lockedCardsForDay.length} locked cards, ${flexibleWishes.length} flexible wishes for Day ${dayNumber}, ${gaps.length} gaps, ${tdbEntries.length} TBD slots`);
+    } else if (flexibleWishes.length > 0) {
+      // All entries were vague wishes — feed them as USER WISHES guidance only.
+      mustDoPrompt = wishBlock + `\nRULES:\n- Only plan for the current city: ${resolvedDestination}.\n- Do NOT add meals the user didn't specify.\n`;
+      console.log(`[compile-prompt] WISH-ONLY PHASE: ${flexibleWishes.length} flexible wishes for Day ${dayNumber}`);
     } else {
-      // No parseable locked cards, fall back to original prompt style
+      // No parseable locked cards or wishes, fall back to original prompt style
       mustDoPrompt = `
 ## 🚨 USER-SPECIFIED ACTIVITIES FOR DAY ${dayNumber} (MANDATORY — DO NOT CHANGE)
 

@@ -140,6 +140,7 @@ export function applyAnchorsWin(
 
   const allAnchors = [...pinned, ...distributedAnchors];
 
+  let droppedPinnedSoft = 0;
   for (const anchor of allAnchors) {
     const targetDayNum = (anchor.dayNumber as number) || 0;
     if (targetDayNum < 1 || targetDayNum > days.length) continue;
@@ -153,6 +154,14 @@ export function applyAnchorsWin(
       return lockTitle && aTitle && (aTitle.includes(lockTitle) || lockTitle.includes(aTitle));
     });
     if (!existing) {
+      // Soft-wish guard: don't restore a vague pinned anchor (no time AND no
+      // venueName) as a naked locked card. The Day Brief carries it as a
+      // USER WISH so the generator can pick a real venue + slot + description.
+      // See mem://constraints/itinerary/soft-vs-hard-user-intent.
+      if (!anchor.startTime && !anchor.venueName) {
+        droppedPinnedSoft++;
+        continue;
+      }
       // Flag for enrichment so description + address backfill runs on this
       // restored card (see mem://constraints/itinerary/anchor-enrichment-allowed).
       // Without `needsAnchorEnrichment` the row persists as a bare 60-min
@@ -200,6 +209,9 @@ export function applyAnchorsWin(
         );
       }
     }
+  }
+  if (droppedPinnedSoft > 0) {
+    console.log(`[ANCHOR_GUARD] pinned_soft_dropped count=${droppedPinnedSoft} reason=no_time_no_venue (handled as USER WISH in Day Brief)`);
   }
 
   return { days, restored, reaffirmed };
