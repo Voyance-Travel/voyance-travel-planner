@@ -81,19 +81,6 @@ export function useActivityConcierge() {
 
     const apiMessages = userMessages.map(m => ({ role: m.role, content: m.content }));
 
-    const getFreshToken = async (): Promise<string | null> => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return null;
-      const nowSec = Math.floor(Date.now() / 1000);
-      const expSec = (session.expires_at ?? 0) as number;
-      if (!expSec || expSec - nowSec < 60) {
-        const { data: refreshed, error } = await supabase.auth.refreshSession();
-        if (error || !refreshed?.session?.access_token) return null;
-        return refreshed.session.access_token;
-      }
-      return session.access_token;
-    };
-
     const callConcierge = (token: string) =>
       fetch(CONCIERGE_URL, {
         method: 'POST',
@@ -111,7 +98,7 @@ export function useActivityConcierge() {
       });
 
     try {
-      let token = await getFreshToken();
+      let token = await getValidAccessToken();
       if (!token) {
         setMessages(prev => [...prev, {
           role: 'assistant',
@@ -123,9 +110,9 @@ export function useActivityConcierge() {
 
       let resp = await callConcierge(token);
 
-      // Defensive: one-shot refresh+retry on 401 (refresh race / clock skew)
+      // Defensive: one-shot guarded refresh+retry on 401 (refresh race / clock skew)
       if (resp.status === 401) {
-        const { data: refreshed } = await supabase.auth.refreshSession();
+        const { data: refreshed } = await guardedRefreshSession();
         const newToken = refreshed?.session?.access_token;
         if (newToken) {
           resp = await callConcierge(newToken);
