@@ -480,25 +480,39 @@ export async function persistTripItinerary(
   const extra = options.extraUpdate || {};
   const updatePayload: Record<string, any> = { ...extra };
 
-  if (regressionBlocked) {
+  if (regressionBlocked || mealOnlyBlocked) {
     // Do NOT write itinerary_data — preserve the healthy on-disk version.
     // Still merge metadata + rejected_attempts ring buffer.
-    const existingRejected = Array.isArray((oldMetadata as any)?.rejected_attempts)
-      ? ((oldMetadata as any).rejected_attempts as any[])
+    const blockReason = mealOnlyBlocked && !regressionBlocked
+      ? 'meal_only_blocked'
+      : 'regression_blocked';
+    let priorMeta = oldMetadata;
+    if (!priorMeta) {
+      try {
+        const { data: priorRow } = await supabase
+          .from('trips').select('metadata').eq('id', tripId).maybeSingle();
+        priorMeta = (priorRow?.metadata as Record<string, any>) || {};
+      } catch (_e) { priorMeta = {}; }
+    }
+    const existingRejected = Array.isArray((priorMeta as any)?.rejected_attempts)
+      ? ((priorMeta as any).rejected_attempts as any[])
       : [];
     const callerMetadata = (extra.metadata && typeof extra.metadata === 'object')
       ? extra.metadata as Record<string, any>
       : {};
-    const newEntry = {
+    const newEntry: Record<string, any> = {
       at: new Date().toISOString(),
       label,
-      reason: 'regression_blocked',
+      reason: blockReason,
       old: oldSummary,
-      attempted: newSummary,
+      attempted: newSummary || { meaningfulCount: 0, paidMeaningfulCount: 0, dayCount: Array.isArray(days) ? days.length : 0 },
     };
+    if (mealOnlyBlocked) {
+      newEntry.incomingNonMealCount = countNonMealMeaningfulActivities(days);
+    }
     const rejected = [...existingRejected, newEntry].slice(-MAX_REJECTED_ATTEMPTS);
     updatePayload.metadata = {
-      ...(oldMetadata || {}),
+      ...(priorMeta || {}),
       ...callerMetadata,
       rejected_attempts: rejected,
     };
@@ -511,5 +525,5 @@ export async function persistTripItinerary(
   if (error) {
     console.error(`[${label}] trips.update failed:`, error);
   }
-  return { error, regressionBlocked };
+  return { error, regressionBlocked, mealOnlyBlocked };
 }
