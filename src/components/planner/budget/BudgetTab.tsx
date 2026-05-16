@@ -351,8 +351,6 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     warningLevel,
     isLoading,
     isGenerating,
-    formattedBudget,
-    formattedRemaining,
     updateSettings,
     removeEntry,
     refetch,
@@ -524,6 +522,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           onOpenChange={setShowSetupDialog}
           memberNames={memberNames}
           tripTotalCents={snapshot.tripTotalCents}
+          displayCurrency={displayCurrency}
           onSave={async (newSettings) => {
             await updateSettings(newSettings);
             refetch();
@@ -698,11 +697,11 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                 <p className="text-xs text-muted-foreground mt-1">
                   {isHotelDriven ? (
                     <>
-                      Your hotel ({formatCurrency(hotelCents)}) is <span className="font-medium text-foreground">{hotelMultiplier} your trip budget</span> of {formattedBudget}. The rest of the plan ({formatCurrency(discretionaryCents)} for food, activities &amp; transit{includeFlight && flightCents > 0 ? ' + flights' : ''}) sits on top.
+                      Your hotel ({formatCurrency(hotelCents)}) is <span className="font-medium text-foreground">{hotelMultiplier} your trip budget</span> of {formatCurrency(budgetCents)}. The rest of the plan ({formatCurrency(discretionaryCents)} for food, activities &amp; transit{includeFlight && flightCents > 0 ? ' + flights' : ''}) sits on top.
                     </>
                   ) : (
                     <>
-                      Your budget is {formattedBudget} but the estimated cost for {travelers} traveler{travelers !== 1 ? 's' : ''} is {formatCurrency(snapshot.tripTotalCents)}.
+                      Your budget is {formatCurrency(budgetCents)} but the estimated cost for {travelers} traveler{travelers !== 1 ? 's' : ''} is {formatCurrency(snapshot.tripTotalCents)}.
                       {fit.drivers[0] && (
                         <> Largest driver: <span className="font-medium text-foreground">{fit.drivers[0].kind === 'discretionary' ? 'food, activities & transit' : fit.drivers[0].kind} ({formatCurrency(fit.drivers[0].cents)})</span>.</>
                       )}
@@ -913,7 +912,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold">
-                {formattedBudget}
+                {formatCurrency(settings?.budget_total_cents || 0)}
               </span>
               {settings?.budget_input_mode === 'per_person' && (
                 <span className="text-xs text-muted-foreground">
@@ -1422,6 +1421,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         tripTotalCents={snapshot.tripTotalCents}
         hotelCents={summary?.committedHotelCents || 0}
         totalNights={Math.max(0, totalDays - 1)}
+        displayCurrency={displayCurrency}
         onSave={async (newSettings) => {
           await updateSettings(newSettings);
           refetch();

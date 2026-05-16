@@ -38,6 +38,9 @@ interface BudgetSetupDialogProps {
   hotelCents?: number;
   /** Number of nights, for hotel breakdown copy */
   totalNights?: number;
+  /** Active display currency (from the global USD/local header toggle).
+   *  Falls back to `settings.budget_currency` then USD. */
+  displayCurrency?: string;
 }
 
 export function BudgetSetupDialog({
@@ -51,6 +54,7 @@ export function BudgetSetupDialog({
   tripTotalCents,
   hotelCents = 0,
   totalNights = 0,
+  displayCurrency,
 }: BudgetSetupDialogProps) {
   const [inputMode, setInputMode] = useState<'total' | 'per_person'>(settings?.budget_input_mode || 'total');
   const [amount, setAmount] = useState('');
@@ -112,9 +116,10 @@ export function BudgetSetupDialog({
   const perPersonCents = Math.round(totalCents / travelers);
 
   const formatCurrency = (cents: number) => {
+    const cur = (displayCurrency || settings?.budget_currency || 'USD').toUpperCase();
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: settings?.budget_currency || 'USD',
+      currency: cur,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(cents / 100);

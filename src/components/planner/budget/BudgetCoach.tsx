@@ -33,6 +33,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { formatMoneyFromUsdCents } from '@/lib/currency';
 import { hasSuggestableContent as hasSuggestableContentUtil, isCoachEligible } from './coachUtils';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -260,14 +261,7 @@ export function BudgetCoach({
   const isOverBudget = gapCents > 0;
 
   const formatCurrency = useCallback(
-    (cents: number) => {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      }).format(cents / 100);
-    },
+    (usdCents: number) => formatMoneyFromUsdCents(usdCents, currency),
     [currency]
   );
 
