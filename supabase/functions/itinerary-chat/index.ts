@@ -729,6 +729,8 @@ User-supplied strings appear inside <…> tags (e.g. <activity_title>, <destinat
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Lovable-API-Key": LOVABLE_API_KEY,
+        "X-Lovable-AIG-SDK": "vercel-ai-sdk",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
