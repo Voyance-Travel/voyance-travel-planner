@@ -287,11 +287,19 @@ export function ensureHotelReturnBookend<T extends any[]>(
     return activities;
   }
 
-  // Diagnostic: an earlier card on this day already qualifies as a hotel-return
-  // bookend, but the wrap-aware tail is something else (nightcap / late dinner /
-  // user-added). We're going to append a fresh bookend below — log so the
-  // recurrence pattern is visible in production.
+  // If the day ALREADY has a true hotel-return bookend somewhere, only allow
+  // appending a fresh one when the chronologically last activity is a
+  // genuine late-nightlife nightcap (00:00–02:30 end). Otherwise a stale
+  // "Walk to <hotel>" / connector / mis-timed leisure card would trick the
+  // tail-detection into stacking a second bookend on top of an existing
+  // hotel-return — root cause of the Vienna Imperial Riding School duplicate.
   if ((activities as any[]).some(isHotelReturnBookendActivity)) {
+    const isLateNightcap = lastEndMins >= 0 && lastEndMins <= 2 * 60 + 30;
+    if (!isLateNightcap) {
+      // eslint-disable-next-line no-console
+      console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=existing_bookend reason=already_has_hotel_return lastTitle="${String((last as any)?.title || '')}" lastEnd=${fmt(lastEndMins)}`);
+      return activities;
+    }
     // eslint-disable-next-line no-console
     console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=will_append source=stale_earlier_bookend_superseded lastTitle="${String((last as any)?.title || '')}" lastEnd=${fmt(lastEndMins)}`);
   }
