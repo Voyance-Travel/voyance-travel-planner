@@ -1,22 +1,62 @@
-Root issue: the header is visually reading as EUR because the current toggle UI is ambiguous and the selected-state styling can make the local currency look active even though the code tries to initialize `showLocalCurrency` to false. There is also still too much per-component currency logic in `EditorialItinerary.tsx`, so prior fixes only patched one path instead of making USD the enforced display contract.
+## Problem
 
-Plan:
-1. Make USD the hard initial display currency
-   - Keep the session-only state, but derive the selected currency through a small explicit helper so `tripCurrency` cannot fall back to local/budget currency on first render.
-   - Reset to USD whenever `tripId` changes and keep clearing legacy `voyance.currencyToggle.*` localStorage keys.
+In Day 02 (Amsterdam), a recent chat ask produced three bugs:
 
-2. Fix the toggle visual so the selected side is unmistakable
-   - Replace the current `USD ↔ EUR` text treatment with a true two-segment control.
-   - The active segment gets the filled/primary styling; inactive segment is muted.
-   - This prevents “EUR appears selected by default” even when the numeric value is USD.
+1. **Van Gogh Museum was "thrown on top"** — it has an image, price, duration, and a lock icon, but **no startTime** and **no description**. The chronological sort pushes timeless cards to the top of the day, above Omelegg at 08:30.
+2. **Omelegg breakfast applied cleanly** — proving the executor itself worked, but the model emitted Van Gogh as a bare locked anchor (the same "Soft vs Hard User-Intent" pattern memory already mitigates for chips, not for chat-driven `rewrite_day`).
+3. **"Canal tour" was silently dropped** — the model didn't include it and nothing in the executor verified that every user-named ask actually landed in the new day.
 
-3. Propagate the same selected currency everywhere on the trip page
-   - Continue passing `tripCurrency` into Payments/Budget/Flights/Hotels, but ensure it is always `'USD'` until the user explicitly clicks local.
-   - Keep all totals canonical USD internally; only the display conversion changes after the user toggles.
+Result: the user sees one success, one untimed locked stub, and one missing item, with a green "applied" toast that lies about coverage.
 
-4. Add a regression test for the Amsterdam/EUR case
-   - Mount/validate the currency-selection behavior for a Eurozone destination: first render must show USD selected and no EUR-formatted trip total.
-   - Toggle once should switch to EUR, and changing trips should reset back to USD.
+## Plan
 
-5. Update the project memory note if needed
-   - Strengthen the existing currency memory with the concrete UI rule: selected display currency must be explicit, not inferred from destination/budget on initial render.
+### 1. Catch untimed new locks at the executor boundary
+
+In `src/services/itineraryActionExecutor.ts → executeRewriteDayAction` (and the same shape inside swap / regenerate), after the AI returns `newActivities`:
+
+- Identify rows that are **new** (not in `day.activities` by id) AND `locked || protected` AND missing `startTime/endTime`.
+- For each, run the existing `fillMissingStartTimes` helper from `_shared/timing-cascade.ts` (port already used at parse/save). If the row still has no usable anchor, assign a believable slot using the surrounding timed activities (insert into the largest gap ≥ duration, or default to a category-typed slot: museum → 10:00, dining → meal band, tour → afternoon).
+- Stamp `needsAnchorEnrichment: true` + `anchorSource: 'chat-added'` so the existing anchor-enrichment path backfills description/address on the next read.
+
+This keeps the fix in frontend executor code — no generator prompt changes — and prevents the "thrown on top" visual regression at the source.
+
+### 2. Verify every user-named ask actually landed
+
+Still in `executeRewriteDayAction`, before persisting:
+
+- Extract candidate intents from `instructions` using a lightweight tokenizer (already have `intentsFromUserAnchors` in `src/utils/userAnchors.ts`; reuse or wrap it). For `"do flight and hotel, add a canal tour"` this yields `['flight','hotel','canal tour']`.
+- Match each intent against `newActivities` using title/category/keyword (e.g. `canal tour` → title or description contains `canal` AND category in `tour|activity|sightseeing`).
+- Collect `missingIntents` for any intent with zero match.
+- If `missingIntents.length > 0`:
+  - Return `success: true` but include a structured `partial: { missing: [...] }` field and rewrite the toast copy to `"Applied N changes — couldn't fit: canal tour. Ask me to try again."` instead of the unconditional green confirm.
+
+### 3. Surface the partial result in the chat UI
+
+In `src/components/itinerary/ItineraryAssistant.tsx` (the consumer of executor results):
+
+- When `result.partial?.missing` is present, render a one-line follow-up: `"I missed: canal tour. Want me to retry just that?"` with a retry chip that re-fires `rewrite_day` scoped to the missing intents only.
+
+### 4. Regression coverage
+
+Add `src/services/__tests__/itineraryActionExecutor.rewriteDay.test.ts`:
+
+- Case A: AI returns a new locked activity without startTime → executor assigns a slot, marks `needsAnchorEnrichment`, never persists with `startTime==null`.
+- Case B: instructions mention "canal tour" but AI omits it → executor returns `partial.missing = ['canal tour']` and message reflects it; persist still happens for the rest.
+- Case C: all intents matched → no `partial` field, classic success.
+
+### 5. Memory
+
+Append a short rule to `mem://constraints/itinerary/soft-vs-hard-user-intent`: "Chat `rewrite_day` results MUST run intent-coverage check + untimed-new-lock backfill in the executor before persist; otherwise free-text asks silently disappear and locked anchors land untimed at top-of-day."
+
+## Out of scope
+
+- No changes to the generator prompt or `generate-itinerary` edge function — the executor is the right chokepoint and a smaller, lower-risk surface.
+- No changes to the universal locking contract — chat-added locks remain locked; we only fix their timing and verify coverage.
+
+## Files touched (estimated)
+
+- `src/services/itineraryActionExecutor.ts` — add untimed-lock backfill + intent-coverage check
+- `src/utils/userAnchors.ts` — small export tweak if `intentsFromUserAnchors` isn't already callable from the executor
+- `src/components/itinerary/ItineraryAssistant.tsx` — render `partial.missing` follow-up
+- `src/services/__tests__/itineraryActionExecutor.rewriteDay.test.ts` — new
+- `mem://constraints/itinerary/soft-vs-hard-user-intent` — append rule
