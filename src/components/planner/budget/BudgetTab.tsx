@@ -463,17 +463,21 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   // Hotel/flight costs are now synced to activity_costs via budgetLedgerSync
   // when they are saved — no separate ledger sync needed here.
 
+  // Resolve the display currency: the user's global toggle wins, then the
+  // trip's `budget_currency`, then USD. All three trip surfaces (Itinerary
+  // header, PaymentsTab, BudgetTab) render in the same currency.
+  const displayCurrency = (displayCurrencyProp || settings?.budget_currency || 'USD').toUpperCase();
+
   const formatCurrency = useCallback((cents: number) => {
     if (!isFinite(cents)) return '$0';
-    const currency = settings?.budget_currency || 'USD';
     const amount = cents / 100;
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency,
+      currency: displayCurrency,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
-  }, [settings?.budget_currency]);
+  }, [displayCurrency]);
 
   if (isLoading) {
     return (
