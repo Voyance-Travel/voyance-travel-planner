@@ -77,16 +77,17 @@ describe('buildUserAnchors — chat-trip-planner real-world format', () => {
 });
 
 describe('buildUserAnchors — Step 3 simple-form placeholder examples', () => {
-  it('parses multi-line "Day N: foo TIME" placeholder', () => {
+  it('parses multi-line "Day N: foo TIME" placeholder, dropping soft wishes', () => {
     const text = [
       'Day 1: Colosseum 9am',
       'Day 2: Dinner at Roscioli 7:30 PM',
-      'Day trip to Tivoli',
+      'Day trip to Tivoli', // soft wish: no time, no extractable venue → handled via USER WISHES
     ].join('\n');
     const anchors = buildUserAnchors({ mustDoActivities: text, source: 'manual_paste' });
 
-    // 3 distinct anchors, two pinned, one floating
-    expect(anchors.length).toBe(3);
+    // 2 hard anchors. "Day trip to Tivoli" is a soft wish and stays in
+    // metadata.mustDoActivities for the Day Brief, not as a locked card.
+    expect(anchors.length).toBe(2);
 
     const day1 = anchors.find((a) => a.title.toLowerCase().includes('colosseum'));
     expect(day1?.dayNumber).toBe(1);
