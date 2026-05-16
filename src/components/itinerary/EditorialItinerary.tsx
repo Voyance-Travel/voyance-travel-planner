@@ -6227,7 +6227,10 @@ export function EditorialItinerary({
                     <Tooltip delayDuration={200}>
                       <TooltipTrigger asChild>
                         <button
-                          onClick={() => setShowLocalCurrency((v) => !v)}
+                          onClick={() => setCurrencyPreference((prev) => ({
+                            tripId,
+                            showLocal: prev.tripId === tripId ? !prev.showLocal : true,
+                          }))}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-xs font-medium hover:bg-secondary transition-colors"
                           aria-label="Switch Currency"
                           data-tour="currency-toggle"
