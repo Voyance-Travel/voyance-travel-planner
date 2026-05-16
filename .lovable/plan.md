@@ -1,60 +1,16 @@
-# Fix Step 3 "Anything else?" Free-Text Box
+Problem found: the itinerary header toggle itself is initialized to USD, but several other money paths can still bypass that default.
 
-## The bug
+Root causes:
+- `BudgetTab` receives the USD display currency, but it still uses `useTripBudget.formattedBudget` / `formattedRemaining`, which are formatted from `settings.budget_currency` instead of the global trip display currency.
+- `BudgetSetupDialog` formats feasibility/hotel warning amounts directly with `settings.budget_currency`, so it can show local currency even when the page is in USD mode.
+- `JourneyBudgetSummary` reads each linked trip’s `budget_currency` and uses that over the parent display currency.
+- Some older formatter components use raw `Intl.NumberFormat(currency)` on values that are canonical USD cents, which changes the symbol without consistently using the selected display currency.
+- The specific Jeju trip row already has `budget_currency = USD`, so this is not a database value problem for that trip; it is a frontend display-path problem.
 
-On Start.tsx Step 3, there are two distinct UI controls but they share one state:
-
-1. **Must-do chips / paste** (landmarks picker, custom-must-dos, paste list) — venue names
-2. **"Anything else?" textarea** ("Paste notes, other AI suggestions, skip requests, or special requirements...")
-
-Both currently write into `metadata.mustDoActivities` (Start.tsx L2504 lumps the textarea string into `formMustDoList` alongside the venue chips).
-
-Downstream, `parseMustDoInput` treats every entry as a venue name. So when the user types something like *"Skip museums, focus on hiking and food markets, we love sunset views"*, that whole sentence becomes a single "must-do venue" and the model is told to emit it as an activity card titled with the raw sentence. The actual *intent* (skip museums, prefer hiking, prefer markets, sunsets) is never seen as guidance — it gets paste-as-activity'd or silently dropped.
-
-Meanwhile `metadata.additionalNotes` IS the correct channel — `compile-prompt.ts` L591–600 renders it as `## 🎯 TRAVELER'S TRIP PURPOSE` and feeds it as freeform context to the model. The chat-planner path already routes free text there (Start.tsx L3078). The form path doesn't.
-
-## The fix
-
-### 1. Separate state for the textarea (`src/pages/Start.tsx`)
-
-- Add `const [additionalNotes, setAdditionalNotes] = useState('')` and load/persist it alongside the existing draft state.
-- Rename the existing `mustDoActivities` state usage on L3432–3433 to bind the textarea to `additionalNotes` / `setAdditionalNotes`.
-- Keep `mustDoActivities` state for the legacy paste-list affordance if it's still wired (audit — it may now be vestigial after the chip picker covers that case; if so, delete the state and any references).
-- Update the placeholder copy to make the role clear: *"Tell us what to optimize for — vibes, things to skip, special requests, or context we should know."*
-
-### 2. Persist correctly on submit (`Start.tsx` L2500–2545)
-
-- `formMustDoList` (fed to `metadata.mustDoActivities`) now contains ONLY: `selectedLandmarks` + `customMustDos`. The textarea contents are removed from this array.
-- Add `additionalNotes: additionalNotes.trim() || null` to the trip insert/update payload (both form-path branches around L2511 and L2525).
-- Mirror the same wiring in the chat-path block around L3072–3098 — it already writes `additionalNotes`, just make sure the new form-path field name matches.
-
-### 3. Mirror on `ItineraryContextForm` (`src/components/planner/ItineraryContextForm.tsx`)
-
-- The current Step-3 refine card already has a single textarea bound to `mustDoActivities`. Split it into TWO inputs:
-  - **"Add a must-do (optional)"** — chips/paste, feeds `mustDoActivities` (existing parse + chip preview stays).
-  - **"Anything else? (optional)"** — short textarea, feeds new `additionalNotes` field on the form's submit payload.
-- Update `ItineraryContextData` type to carry `additionalNotes?: string`.
-- In `ItineraryPreview.handleContextSubmit` (L317–333), add:
-  ```ts
-  if (data.additionalNotes) metadataUpdates.additionalNotes = data.additionalNotes;
-  ```
-
-### 4. One-shot heal for trip `82e56447-…`
-
-The trip's persisted days still show stale duplicate "Hallasan / Cheonjiyeon / Stone Park" cards from the earlier locked-anchor bug. `userAnchors` is already cleared, but the day rows haven't been regenerated. Two options:
-
-- **Preferred:** in-app, hit "Refresh Day" on Day 1 and Day 2 — the LLM will now place each landmark once with proper time, address, and description (anchor-guard no longer re-injects them).
-- **Optional:** a targeted backend script that regenerates just the affected days for this trip.
-
-### 5. Verify
-
-- Open Start, set destination, on Step 3 add chips for landmarks AND type freeform notes in "Anything else?".
-- After insert, query the trip row: `metadata.mustDoActivities` contains only the chip names; `metadata.additionalNotes` contains the freeform sentence.
-- Edge logs: `[compile-prompt] Must-do: N total, Day k: m assigned` for venues, AND `## 🎯 TRAVELER'S TRIP PURPOSE` block rendered with the freeform text (sentinel grep `additionalNotes` in compile-prompt log).
-- Generated days: venues integrated with real time/address/description; the freeform text influences day vibe but is NOT emitted as a literal activity card.
-
-## Out of scope
-
-- Prompt-template wording changes in `compile-prompt.ts`.
-- New chip-time picker UI.
-- Any change to chat-planner — it already routes both fields correctly.
+Plan:
+1. Make `BudgetTab` stop rendering `formattedBudget` / `formattedRemaining` from `useTripBudget`; compute those labels from canonical cents using the `displayCurrency` prop that comes from `EditorialItinerary`.
+2. Update `BudgetSetupDialog` to accept a `displayCurrency` prop and format its warning/preview amounts in that currency instead of `settings.budget_currency`.
+3. Update `JourneyBudgetSummary` so the parent display currency wins for all leg totals; do not let each trip’s stored `budget_currency` override the active USD/local toggle.
+4. Audit the Budget/Payments/Itinerary money render paths touched by the trip page and replace any remaining canonical-USD direct `Intl.NumberFormat` formatting with `formatMoneyFromUsdCents(..., displayCurrency)`.
+5. Add/update focused tests where practical for the formatter behavior: when `displayCurrency='USD'` and `settings.budget_currency='KRW'`, Budget tab labels must render `$`, not `₩`.
+6. Verify on the trip page that first load shows USD across Trip Total, Budget, Payments, warnings, and summaries; local currency should appear only after clicking the currency toggle.
