@@ -1,12 +1,26 @@
-import { useState } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Hotel, Plane, Clock, MapPin, Info, Sparkles, ArrowRight, Globe, CalendarCheck, Star, Plus, X } from 'lucide-react';
+import { Hotel, Plane, Clock, MapPin, Info, Sparkles, ArrowRight, Globe, CalendarCheck, Star, Plus, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { buildUserAnchors, type UserAnchor } from '@/utils/userAnchors';
+
+const MUST_DO_MAX = 1500;
+
+function formatTimeLabel(hhmm?: string): string | null {
+  if (!hhmm) return null;
+  const m = hhmm.match(/^(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const mins = m[2];
+  const period = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${mins} ${period}`;
+}
 
 export interface PreBookedCommitment {
   id: string;
