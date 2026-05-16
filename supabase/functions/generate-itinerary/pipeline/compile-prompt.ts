@@ -656,12 +656,44 @@ RULES FOR USER-SPECIFIED ACTIVITIES:
   let additionalNotesPrompt = '';
   const additionalNotes = (metadata?.additionalNotes as string) || '';
   if (additionalNotes.trim()) {
+    // ── INTENT RESOLUTION FROM NOTES ─────────────────────────────────────
+    // Parse free-text sentences into concrete venue picks for any that
+    // describe a cuisine/slot intent ("sushi lunch on day 2", "rooftop
+    // cocktails", "trattoria for dinner"). The residual prose stays in the
+    // TRIP PURPOSE block below.
+    let resolvedFromNotes: ResolvedMustDoEntry[] = [];
+    try {
+      resolvedFromNotes = await extractNotesAnchors(additionalNotes, {
+        destination: resolvedDestination || destination || '',
+        supabase,
+        googleCtx: { actionType: 'compile-prompt-notes-resolve', tripId, userId, reason: 'additionalNotes intent resolve' },
+        usedNames: new Set<string>(),
+      });
+      const resolvedCount = resolvedFromNotes.filter(r => r.resolved).length;
+      console.log(`[INTENT_RESOLVE_NOTES] sentences=${resolvedFromNotes.length} anchors=${resolvedCount}`);
+    } catch (e) {
+      console.warn(`[INTENT_RESOLVE_NOTES] resolution failed (non-blocking):`, e);
+    }
+
+    // Inject resolved venues as additional must-do bullets for THIS day.
+    const notesWithVenues = resolvedFromNotes.filter(r => r.resolved);
+    if (notesWithVenues.length > 0) {
+      const relevant = notesWithVenues.filter(r => !r.intent.preferredDay || r.intent.preferredDay === dayNumber);
+      if (relevant.length > 0) {
+        const bullets = relevant.map(r => {
+          const desc = r.resolved!.description ? ` — ${r.resolved!.description.slice(0, 200)}` : '';
+          return `- ${r.replacementText}\n    • VENUE: ${r.resolved!.name}\n    • ADDRESS: ${r.resolved!.address}${desc}`;
+        }).join('\n');
+        mustDoPrompt += `\n\n## 🎯 VENUES RESOLVED FROM TRAVELER'S NOTES (MANDATORY for Day ${dayNumber})\nThe traveler asked for these in their "anything else" notes. Use EACH listed venue + address EXACTLY:\n${bullets}\n`;
+      }
+    }
+
     additionalNotesPrompt = `\n## 🎯 TRAVELER'S TRIP PURPOSE
-The traveler's overall trip context (do NOT use this to schedule individual items — the DAY BRIEF above is the only source of truth for per-day requests):
+The traveler's overall trip context (specific venue intents have already been resolved above — use them; this paragraph is high-level context only):
 
 "${additionalNotes.trim()}"
 
-If this describes a primary purpose (event, wedding, conference), dedicate appropriate days to it; specific items already appear in the DAY BRIEF.
+If this describes a primary purpose (event, wedding, conference), dedicate appropriate days to it.
 `;
 
     if (!mustDoPrompt.trim()) {
