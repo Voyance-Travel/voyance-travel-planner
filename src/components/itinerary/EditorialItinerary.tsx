@@ -6240,17 +6240,31 @@ export function EditorialItinerary({
                     <Tooltip delayDuration={200}>
                       <TooltipTrigger asChild>
                         <button
-                          onClick={() => setCurrencyPreference((prev) => ({
-                            tripId,
-                            showLocal: prev.tripId === tripId ? !prev.showLocal : true,
-                          }))}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-xs font-medium hover:bg-secondary transition-colors"
+                          onClick={() => setShowLocalCurrency((prev) => !prev)}
+                          className="inline-flex items-center rounded-md bg-secondary/40 border border-border text-xs font-medium overflow-hidden"
                           aria-label="Switch Currency"
                           data-tour="currency-toggle"
                         >
-                          <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>USD</span>
-                          <span className="text-muted-foreground/50">↔</span>
-                          <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>{localCurrency}</span>
+                          <span
+                            className={cn(
+                              "px-3 py-1.5 transition-colors",
+                              !showLocalCurrency
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:bg-secondary"
+                            )}
+                          >
+                            USD
+                          </span>
+                          <span
+                            className={cn(
+                              "px-3 py-1.5 transition-colors",
+                              showLocalCurrency
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:bg-secondary"
+                            )}
+                          >
+                            {localCurrency}
+                          </span>
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom">
