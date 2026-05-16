@@ -2778,22 +2778,21 @@ export function EditorialItinerary({
    const [newlyAddedMember, setNewlyAddedMember] = useState<string | null>(null);
    const [isCreatingInvite, setIsCreatingInvite] = useState(false);
    const [inviteCopied, setInviteCopied] = useState(false);
-  // Currency display preference — defaults to USD on first load.
-  // Per-trip choice is persisted in localStorage so refresh keeps the pick.
-  const currencyToggleStorageKey = `voyance.currencyToggle.${tripId}`;
-  const [showLocalCurrency, setShowLocalCurrency] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      const v = window.localStorage.getItem(currencyToggleStorageKey);
-      return v === 'local';
-    } catch { return false; }
-  });
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      window.localStorage.setItem(currencyToggleStorageKey, showLocalCurrency ? 'local' : 'usd');
-    } catch { /* ignore quota errors */ }
-  }, [showLocalCurrency, currencyToggleStorageKey]);
+   // Currency display preference — ALWAYS starts in USD on every page load.
+   // Toggling to local is session-only; refresh resets to USD.
+   const [showLocalCurrency, setShowLocalCurrency] = useState<boolean>(false);
+   useEffect(() => {
+     // Best-effort cleanup of any pre-existing persisted preference from earlier builds.
+     if (typeof window === 'undefined') return;
+     try {
+       const keys: string[] = [];
+       for (let i = 0; i < window.localStorage.length; i++) {
+         const k = window.localStorage.key(i);
+         if (k && k.startsWith('voyance.currencyToggle.')) keys.push(k);
+       }
+       keys.forEach(k => window.localStorage.removeItem(k));
+     } catch { /* ignore */ }
+   }, []);
   
   // Edit Flight/Hotel modal state
   const [editFlightOpen, setEditFlightOpen] = useState(false);
