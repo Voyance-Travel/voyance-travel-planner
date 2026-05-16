@@ -2503,10 +2503,22 @@ export default function Start() {
               ...customMustDos,
               ...(mustDoActivities ? [mustDoActivities] : []),
             ].filter(Boolean);
-            const userAnchors = buildUserAnchors({
+            // Build anchors but keep ONLY items that have both an explicit day pin AND a start time.
+            // Free-text must-dos like "Hallasan National Park" (no day, no time) should flow into
+            // the generator as SOFT requirements via metadata.mustDoActivities, not as locked rows
+            // that anchor-guard then paints onto every day with no description or address.
+            const allParsed = buildUserAnchors({
               mustDoActivities: formMustDoList.length > 0 ? formMustDoList : null,
               source: isMultiCity ? 'multi_city' : 'single_city',
             });
+            const userAnchors = allParsed.filter(
+              (a) => typeof a.dayNumber === 'number' && a.dayNumber >= 1 && !!a.startTime,
+            );
+            if (allParsed.length !== userAnchors.length) {
+              console.log(
+                `[trip-create] anchors: ${userAnchors.length} pinned (day+time), ${allParsed.length - userAnchors.length} soft must-dos kept in mustDoActivities only`,
+              );
+            }
             return ({
               isFirstTimeVisitor,
               firstTimePerCity: isMultiCity && Object.keys(firstTimePerCity).length > 0 ? firstTimePerCity : null,

@@ -66,7 +66,16 @@ function distributeFloatingAnchors(
   for (const i of pool) fillCount.set(i, 0);
 
   const out: Array<Record<string, any>> = [];
+  let dropped = 0;
   for (const anchor of anchors) {
+    // Defense-in-depth: anchors without a startTime AND without a venueName are soft
+    // must-dos that escaped the front-end gate. Don't paint them onto days as locked
+    // naked rows — they'll appear with no time, no description, no address. The
+    // generator's prompt-level MANDATORY block already handles these as soft requirements.
+    if (!anchor.startTime && !anchor.venueName) {
+      dropped++;
+      continue;
+    }
     const fp = fingerprintFn(anchor);
     // 1. Prefer a day that doesn't already contain a fingerprint match AND has the lowest fill count.
     let best = -1;
@@ -85,6 +94,9 @@ function distributeFloatingAnchors(
     if (best < 0) continue;
     fillCount.set(best, (fillCount.get(best) ?? 0) + 1);
     out.push({ ...anchor, dayNumber: best + 1 });
+  }
+  if (dropped > 0) {
+    console.log(`[ANCHOR_GUARD] floating_dropped count=${dropped} reason=soft_must_do (no startTime, no venueName)`);
   }
   return out;
 }
