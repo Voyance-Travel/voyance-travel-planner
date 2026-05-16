@@ -165,6 +165,221 @@ export interface ActionExecutionResult {
   diff?: DiffEntry[];
   costDelta?: number; // positive = more expensive, negative = cheaper
   error?: string;
+  /**
+   * Set when one or more user-named asks from the chat instructions did not
+   * land in the new day plan. Surfaces in the toast + chat follow-up so the
+   * green "Action applied" copy doesn't lie about coverage.
+   * See mem://constraints/itinerary/soft-vs-hard-user-intent.
+   */
+  partial?: { missing: string[] };
+}
+
+// ============================================================================
+// INSTRUCTION COVERAGE + UNTIMED-LOCK BACKFILL
+// ============================================================================
+
+/**
+ * Lightweight tokenizer that pulls candidate "asks" out of free-text chat
+ * instructions like "do flight and hotel, add a canal tour". Returns short
+ * phrase tokens we can later match against the new day's activities to
+ * detect silently-dropped intents.
+ */
+function extractInstructionIntents(instructions: string): string[] {
+  if (!instructions) return [];
+  const cleaned = instructions
+    .toLowerCase()
+    .replace(/[.;!?\n]+/g, ',')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Split on commas and the conjunctions "and" / " plus " / " also " / " then ".
+  const rawParts = cleaned
+    .split(/,| and | plus | also | then /)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  // Strip leading verbs/articles that don't help matching.
+  const LEAD_VERB_RE = /^(please\s+|can you\s+|could you\s+|i want to\s+|i'd like to\s+|let's\s+|lets\s+|do\s+|add\s+|include\s+|book\s+|plan\s+|put in\s+|schedule\s+|insert\s+|fit in\s+|squeeze in\s+|a\s+|an\s+|the\s+|some\s+|my\s+)+/i;
+
+  // Verbs that signal *removal* — we don't want to flag those as missing.
+  const REMOVE_RE = /^(remove|delete|drop|skip|cancel|move|reschedule|swap)\b/i;
+
+  const intents: string[] = [];
+  for (const part of rawParts) {
+    if (REMOVE_RE.test(part)) continue;
+    const stripped = part.replace(LEAD_VERB_RE, '').trim();
+    if (!stripped) continue;
+    if (stripped.length < 3) continue;
+    // Drop pure filler phrases.
+    if (/^(it|that|this|something|anything|stuff)$/.test(stripped)) continue;
+    intents.push(stripped);
+  }
+  // Dedupe while preserving order.
+  return Array.from(new Set(intents));
+}
+
+const INTENT_CATEGORY_MAP: Array<{ re: RegExp; cats: RegExp }> = [
+  { re: /\b(flight|fly|plane|airline)\b/i, cats: /flight|transport|logistics/i },
+  { re: /\b(hotel|check.?in|check.?out|stay|accommodation)\b/i, cats: /hotel|accommodation|stay|logistics/i },
+  { re: /\b(dinner|supper)\b/i, cats: /dining|food|restaurant/i },
+  { re: /\b(lunch)\b/i, cats: /dining|food|restaurant/i },
+  { re: /\b(breakfast|brunch)\b/i, cats: /dining|food|restaurant/i },
+  { re: /\b(canal|boat|cruise|kayak|sup|sail)\b/i, cats: /tour|activity|sightseeing|water|adventure/i },
+  { re: /\b(museum|gallery|exhibit)\b/i, cats: /culture|museum|sightseeing/i },
+  { re: /\b(spa|wellness|massage|hammam|sauna)\b/i, cats: /wellness|spa|relaxation/i },
+  { re: /\b(tour|walking tour|guided)\b/i, cats: /tour|activity|sightseeing/i },
+];
+
+function intentMatchesActivity(intent: string, act: Activity): boolean {
+  const hayParts = [
+    activityTitle(act),
+    (act.description as string) || '',
+    ((act.location as { name?: string; address?: string })?.name) || '',
+  ];
+  const hay = hayParts.join(' ').toLowerCase();
+  if (!hay) return false;
+  const cat = norm(act.category);
+
+  // Direct phrase match — every keyword token (length >= 3) must appear.
+  const tokens = intent.split(/\s+/).filter(t => t.length >= 3);
+  if (tokens.length > 0 && tokens.every(t => hay.includes(t))) return true;
+
+  // Domain-aware fallback: keyword in intent + matching category.
+  for (const { re, cats } of INTENT_CATEGORY_MAP) {
+    if (re.test(intent) && (cats.test(cat) || re.test(hay))) return true;
+  }
+  return false;
+}
+
+function findMissingIntents(instructions: string, before: Activity[], after: Activity[]): string[] {
+  const intents = extractInstructionIntents(instructions);
+  if (intents.length === 0) return [];
+  // If the intent was already in `before`, don't flag — preserve-locked branch
+  // probably keeps it. We only care about NEW asks the model failed to add.
+  const missing: string[] = [];
+  for (const intent of intents) {
+    const matchedAfter = after.some(a => intentMatchesActivity(intent, a));
+    if (matchedAfter) continue;
+    const matchedBefore = before.some(a => intentMatchesActivity(intent, a));
+    if (matchedBefore) continue;
+    missing.push(intent);
+  }
+  return missing;
+}
+
+const CATEGORY_DEFAULT_TIME: Array<{ re: RegExp; start: string; mins: number }> = [
+  { re: /breakfast|brunch/i, start: '09:00', mins: 60 },
+  { re: /lunch/i, start: '12:30', mins: 75 },
+  { re: /dinner|supper/i, start: '19:30', mins: 90 },
+  { re: /museum|gallery|culture/i, start: '10:00', mins: 90 },
+  { re: /tour|sightseeing|boat|canal|cruise/i, start: '14:00', mins: 90 },
+  { re: /spa|wellness|massage/i, start: '15:30', mins: 75 },
+  { re: /activity|adventure|outdoor/i, start: '11:00', mins: 90 },
+  { re: /shopping|market|souk|bazaar/i, start: '16:00', mins: 75 },
+];
+
+function defaultSlotForActivity(a: Activity): { start: string; mins: number } {
+  const cat = norm(a.category);
+  const title = norm(activityTitle(a));
+  for (const { re, start, mins } of CATEGORY_DEFAULT_TIME) {
+    if (re.test(cat) || re.test(title)) return { start, mins };
+  }
+  return { start: '11:00', mins: 60 };
+}
+
+function toMin(hhmm?: string): number | null {
+  if (!hhmm) return null;
+  const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+}
+function fromMin(mins: number): string {
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/**
+ * Find a believable slot for an untimed new activity: insert into the largest
+ * gap between existing timed activities, else use a category-typed default.
+ */
+function pickBelievableSlot(act: Activity, peers: Activity[]): { startTime: string; endTime: string } {
+  const def = defaultSlotForActivity(act);
+  const timed = peers
+    .filter(a => a !== act)
+    .map(a => ({ s: toMin(a.startTime || a.time), e: toMin(a.endTime as string) }))
+    .filter(p => p.s != null && p.e != null && (p.e as number) > (p.s as number))
+    .sort((a, b) => (a.s as number) - (b.s as number));
+
+  if (timed.length === 0) {
+    const start = toMin(def.start) as number;
+    return { startTime: def.start, endTime: fromMin(start + def.mins) };
+  }
+
+  // Build day-window gaps: [09:00 .. first.s], [prev.e .. next.s], [last.e .. 22:00]
+  const DAY_START = 9 * 60, DAY_END = 22 * 60;
+  type Gap = { start: number; end: number };
+  const gaps: Gap[] = [];
+  if ((timed[0].s as number) - DAY_START >= def.mins + 15) {
+    gaps.push({ start: DAY_START, end: timed[0].s as number });
+  }
+  for (let i = 0; i < timed.length - 1; i++) {
+    const gapStart = timed[i].e as number;
+    const gapEnd = timed[i + 1].s as number;
+    if (gapEnd - gapStart >= def.mins + 15) gaps.push({ start: gapStart + 15, end: gapEnd });
+  }
+  if (DAY_END - (timed[timed.length - 1].e as number) >= def.mins + 15) {
+    gaps.push({ start: (timed[timed.length - 1].e as number) + 15, end: DAY_END });
+  }
+
+  if (gaps.length === 0) {
+    // Fall back to category default — let the cascade resolve any overlap.
+    const start = toMin(def.start) as number;
+    return { startTime: def.start, endTime: fromMin(start + def.mins) };
+  }
+  // Pick the largest gap and seat the activity at its start.
+  gaps.sort((a, b) => (b.end - b.start) - (a.end - a.start));
+  const chosen = gaps[0];
+  // Prefer the category-default start if it fits inside the gap.
+  const defStart = toMin(def.start) as number;
+  const start = (defStart >= chosen.start && defStart + def.mins <= chosen.end)
+    ? defStart
+    : chosen.start;
+  return { startTime: fromMin(start), endTime: fromMin(start + def.mins) };
+}
+
+/**
+ * Find new locked/protected activities that came back without a startTime,
+ * assign a believable slot, and stamp `needsAnchorEnrichment` so the
+ * existing anchor-enrichment path backfills description + address.
+ * See mem://constraints/itinerary/anchor-enrichment-allowed.
+ */
+function backfillUntimedNewLocks(before: Activity[], after: Activity[], dayNumber: number): {
+  patched: Activity[]; patchedCount: number;
+} {
+  const beforeIds = new Set(before.map(a => a.id).filter(Boolean));
+  const beforeTitles = new Set(before.map(a => norm(activityTitle(a))).filter(Boolean));
+  let patchedCount = 0;
+  const patched = after.map(act => {
+    const isNew = (!act.id || !beforeIds.has(act.id)) && !beforeTitles.has(norm(activityTitle(act)));
+    if (!isNew) return act;
+    const locked = isActivityLocked(act) || isProtectedActivity(act);
+    if (!locked) return act;
+    const start = act.startTime || act.time;
+    if (start) return act;
+    const slot = pickBelievableSlot(act, after);
+    patchedCount++;
+    return {
+      ...act,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      needsAnchorEnrichment: true,
+      anchorSource: (act as { anchorSource?: string }).anchorSource || 'chat-added',
+    } as Activity;
+  });
+  if (patchedCount > 0) {
+    console.warn(`[ActionExecutor] day=${dayNumber} backfilled ${patchedCount} untimed new lock(s) — assigned believable slot + needsAnchorEnrichment`);
+  }
+  return { patched, patchedCount };
 }
 
 // ============================================================================
