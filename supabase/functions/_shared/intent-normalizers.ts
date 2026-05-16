@@ -22,18 +22,36 @@ const MEAL_LABELS = new Set([
   'Spa', 'Massage', 'Hammam', 'Activity', 'Tour', 'Visit',
 ]);
 
+// Cuisine/category words that often title-case in user input — these alone
+// do NOT make something a named venue.
+const CUISINE_OR_CATEGORY_TOKENS = new Set([
+  'Sushi', 'Ramen', 'Izakaya', 'Kaiseki', 'Yakitori', 'Pizza', 'Pasta',
+  'Tapas', 'Paella', 'Steakhouse', 'Seafood', 'Bbq', 'Bakery', 'Cafe', 'Café',
+  'Bistro', 'Brasserie', 'Trattoria', 'Osteria', 'Pizzeria', 'Thai', 'Korean',
+  'Chinese', 'Indian', 'Mexican', 'Vietnamese', 'Japanese', 'Italian', 'French',
+  'Mediterranean', 'Michelin', 'Rooftop', 'Speakeasy', 'Nightcap', 'Aperitif',
+  'Aperitivo', 'Wine', 'Coffee', 'Tea', 'Sauna', 'Pool', 'Beach', 'Shopping',
+  'Stroll', 'Walk', 'Day', 'Morning', 'Afternoon', 'Evening', 'Night',
+]);
+
 function looksLikeNamedVenue(title: string): boolean {
   if (!title) return false;
+  // "at <Name>" is the strongest signal — single capitalized noun OK.
+  if (/\bat\s+[A-Z]/.test(title)) return true;
   // Strip leading meal/kind word
   const cleaned = title.replace(/^(at|to|for)\s+/i, '').trim();
-  // Look for a capitalized word that isn't a generic meal label
   const tokens = cleaned.split(/\s+/);
+  // Require ≥2 capitalized tokens that are not meal labels or generic
+  // cuisine/category words. "Sushi Lunch" → 0 (both are categories).
+  // "Sukiyabashi Jiro" → 2. "Le Bernardin" → 2.
+  let realCapCount = 0;
   for (const tok of tokens) {
-    if (/^[A-Z][\w'’&.-]{1,}$/.test(tok) && !MEAL_LABELS.has(tok)) return true;
+    if (!/^[A-Z][\w'’&.-]{1,}$/.test(tok)) continue;
+    if (MEAL_LABELS.has(tok)) continue;
+    if (CUISINE_OR_CATEGORY_TOKENS.has(tok)) continue;
+    realCapCount++;
   }
-  // "at <Name>" pattern
-  if (/\bat\s+[A-Z]/.test(title)) return true;
-  return false;
+  return realCapCount >= 2;
 }
 
 function stableHash(s: string): string {
