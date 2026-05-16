@@ -210,6 +210,9 @@ export function applyAnchorsWin(
       }
     }
   }
+  if (droppedPinnedSoft > 0) {
+    console.log(`[ANCHOR_GUARD] pinned_soft_dropped count=${droppedPinnedSoft} reason=no_time_no_venue (handled as USER WISH in Day Brief)`);
+  }
 
   return { days, restored, reaffirmed };
 }
