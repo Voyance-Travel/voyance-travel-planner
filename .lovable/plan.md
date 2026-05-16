@@ -1,62 +1,40 @@
-## Problem
+## Step 3 Must-Do Hardening Pass
 
-"Required" activities (user-specified must-dos / anchors that we lock into the itinerary) consistently render with no description and no address. They're correctly placed and locked, but their detail cards are empty.
+Make the free-text Must-Do textarea legible to users *and* more parseable to the backend, without changing the anchor or priority-parsing contracts.
 
-## Root cause
+### 1. Live parse preview (frontend only)
 
-User anchors are converted to activities by `anchorToActivity` in `supabase/functions/_shared/user-anchors.ts`:
+In `src/components/planner/ItineraryContextForm.tsx`:
+- Reuse the existing `buildUserAnchors({ mustDoActivities, source: 'manual_paste' })` from `src/utils/userAnchors.ts` (no new parser) inside a debounced `useMemo` against the textarea value.
+- Render a small "We understood:" chip list under the textarea showing each parsed anchor as `Day N · 7:30 PM · Dinner at Roscioli`. Items where `dayNumber === 0` render as `Any day · …` in muted style with a tooltip "Tip: add 'Day 2' to pin to a specific day".
+- Render parse failures (lines that produced no anchor) under a "Couldn't parse:" line so the user can fix them in place.
+- No business-logic changes — the chip list is purely a mirror of what the backend will see.
 
-- `location` is set to `{ name: venueName, address: '' }` (empty address)
-- `description` is never set at all
-- The activity is stamped `locked: true, isLocked: true`
+### 2. Lightweight input affordances
 
-Every downstream enrichment pass then **skips locked rows**, so the gaps are never filled:
+In the same component:
+- Add a character counter (`{n} / 1500`) and a soft cap at 1500 chars with `maxLength`.
+- Add two ghost buttons above the textarea: "Add Day N" inserts `\nDay 2: ` at the cursor; "Add time" inserts `7:30 PM `. Pure text-insertion helpers, no state model change.
+- Update placeholder to teach the syntax: `e.g.\nDay 1: Colosseum 9am\nDay 2: Dinner at Roscioli 7:30 PM\nDay trip to Tivoli`.
 
-1. `pipeline/enrich-day.ts` (venue + address enrichment) — line 42: `activities.filter(a => !a.isLocked && !a.locked)`
-2. `pipeline/validate-day.ts::shouldSkipDescriptionCheck` — line 1381: `if (act.isLocked ...) return true` — so `checkActivityDescriptions` never flags missing descriptions on anchors, and `fillMissingDescriptions` (which reuses `shouldSkipDescriptionCheck`) skips them too.
+### 3. Match chat-planner extraction in the simple form
 
-Net effect: anchor rows are immortal "blank cards" no matter how many regenerations run.
+In `ItineraryPreview.tsx::handleContextSubmit` (L294-338):
+- When the parsed anchors include any with `dayNumber > 0`, *also* write a `perDayActivities` array to `trips.metadata` (group anchors by dayNumber, join titles with `, `). This mirrors what `chat-trip-planner` does, so the backend's existing `perDayActivities`-preferred path (intent-normalizers §3c) kicks in and pins items to the right day. The original `mustDoActivities` string is still written as fallback.
 
-## Fix — single-purpose enrichment exemption for anchors
+### 4. Persist intent + tests
 
-Introduce a narrow exemption: a row that is locked **as a user anchor** AND is missing description or address may still be enriched (description-fill + venue/address lookup), but its title, time, category, and venue identity remain locked.
-
-### Changes
-
-1. **`supabase/functions/_shared/user-anchors.ts` — `anchorToActivity`**
-   - Initialize `description: ''` explicitly so downstream code sees the field exists and is empty (not undefined).
-   - Tag the row with `needsAnchorEnrichment: true` when `venueName` is present but address is empty, OR when description is empty.
-
-2. **`supabase/functions/generate-itinerary/pipeline/validate-day.ts::shouldSkipDescriptionCheck`**
-   - Tighten the locked-skip: keep skipping `userAdded / userEdited / extracted / pinned / isManual` rows, but for `isLocked` rows, only skip when `anchorSource` is not set. Anchor-locked rows with empty descriptions are no longer ignored.
-
-3. **`supabase/functions/_shared/description-fill.ts`**
-   - Already calls `shouldSkipDescriptionCheck` — the tightening in (2) is enough to make it fill anchor descriptions. Add a one-line log when filling an anchor row (`[DESC_FILL_ANCHOR] day=N id=…`) so we can confirm in edge logs.
-
-4. **`supabase/functions/generate-itinerary/pipeline/enrich-day.ts`**
-   - Replace the blanket `!a.isLocked && !a.locked` filter with: include the row when it's locked AND `anchorSource` is set AND `(location?.address` is empty/missing OR `venue_name` is empty`)`. Pass these into the same venue-enrichment Google Places lookup that runs for unlocked rows.
-   - In the merge-back step, preserve the original locked row's `title / startTime / endTime / category / isLocked / anchorSource / lockedSource`, but copy enriched `location` (address, lat/lng), `venue_name` (only if originally empty), and any returned phone / website / map link.
-
-5. **`supabase/functions/_shared/persist-itinerary.ts` (final safety net)**
-   - In the per-day dining-description-backfill path that already runs at every write boundary, allow anchor rows through (same `anchorSource`-aware predicate). This guarantees legacy already-persisted anchor rows get backfilled the next time the trip is saved (e.g., the existing `[DINING_DESC_PERSIST_NET]` sweep — extend its predicate, no new pass).
+- Stamp `metadata.mustDoSource = 'simple_form'` so anchor-guard / telemetry can distinguish the chat-planner vs textarea origin.
+- Add `src/utils/userAnchors.test.ts` cases covering the new placeholder examples to prevent regressions in `parseMustDoEntry` (`Day N` mid-string, inline times, day-trip phrasing).
 
 ### Out of scope
-
-- No change to cost handling — anchors stay $0 unless the user enters a price.
-- No change to scheduling / time / locking semantics. Locked is still locked for everything except address + description backfill.
-- No prompt changes — fix is deterministic post-generation enrichment, not LLM coaxing.
+- No changes to `must-do-priorities.ts` (priority parsing), `anchor-guard.ts`, or `enrich-day.ts`. The new constraint `mem://constraints/itinerary/anchor-enrichment-allowed` already handles description/address backfill for the anchors this produces.
+- No structured form fields per item (date pickers / time pickers per row) — the textarea stays the canonical input; we're just making the parse visible.
+- No DB schema changes — everything rides on existing `trips.metadata`.
 
 ### Verification
-
-- Pick a trip with a known anchor (`metadata.userAnchors`), regenerate one day, and confirm in edge logs: `[DESC_FILL_ANCHOR]` fires and `enrich-day` reports an enriched anchor row count.
-- Reload the trip in preview and confirm the previously empty "required" card now shows an address line + 1–2 sentence description.
-- For an already-persisted legacy trip, trigger any save (e.g., toggle a small edit) and confirm the persist-time backfill populated the empty anchor.
-
-### Sentinels to add
-
-- `[ENRICH_ANCHOR] day=N enriched=K` in `enrich-day.ts`
-- `[DESC_FILL_ANCHOR] day=N filled=K` in `description-fill.ts`
-
-### Memory follow-up (after build)
-
-Add a new memory entry under `mem://constraints/itinerary/anchor-enrichment-allowed` documenting that locked anchor rows are the **only** locked class still eligible for address + description enrichment, and listing the four touched files so future "why isn't enrichment skipping locked rows?" audits land on the exemption immediately.
+1. Type `Day 1: Colosseum 9am, Day 2: Dinner at Roscioli 7:30 PM` → confirm 2 chips, correct day + time.
+2. Type `Tivoli day trip` alone → chip shows `Any day · Tivoli day trip`.
+3. Submit and inspect `trips.metadata` → `mustDoActivities` (string) + `perDayActivities` (grouped) + `mustDoSource: 'simple_form'` all present.
+4. Generate → `[ENRICH_ANCHOR]` fires for required cards, addresses + descriptions populate.
+5. Reload → DB is source of truth, chips re-derive identically.
