@@ -178,7 +178,11 @@ export default function ItineraryContextForm({
   const handleContinue = () => {
     // Group pinned anchors by dayNumber → perDayActivities mirror (chat-planner parity)
     let perDayActivities: Array<{ dayNumber: number; activities: string }> | undefined;
-    const pinned = parsedAnchors.filter((a) => a.dayNumber > 0);
+    // Only items with BOTH a day pin AND an explicit start time become per-day anchors.
+    // Free-text lines without time stay in mustDoActivities (string) and feed the prompt
+    // as soft requirements so the model can place them with a real time/address/description
+    // instead of getting stamped on as locked rows with no detail.
+    const pinned = parsedAnchors.filter((a) => a.dayNumber > 0 && !!a.startTime);
     if (pinned.length > 0) {
       const byDay = new Map<number, string[]>();
       for (const a of pinned) {
