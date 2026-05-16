@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { getValidAccessToken, guardedRefreshSession } from '@/lib/authSessionGuard';
 
 export interface ConciergeMessage {
   role: 'user' | 'assistant';
