@@ -456,7 +456,9 @@ export async function compilePrompt(
 
   if (currentDayActivities) {
     // === LOCK PHASE: Parse user activities into locked cards ===
-    lockedCardsForDay = parseUserActivities(currentDayActivities.activities, dayNumber);
+    const parsed = parseUserActivities(currentDayActivities.activities, dayNumber);
+    lockedCardsForDay = parsed.lockedCards;
+    const flexibleWishes = parsed.flexibleWishes;
 
     // Extract TBD entries for AI to fill
     const tdbEntries: string[] = [];
@@ -464,6 +466,10 @@ export async function compilePrompt(
       const t = entry.trim();
       if (/\bTBD\b|to be determined|choose|pick\b/i.test(t)) tdbEntries.push(t);
     }
+
+    const wishBlock = flexibleWishes.length > 0
+      ? `\n\n## 🎯 USER WISHES FOR DAY ${dayNumber} (incorporate naturally)\nThe traveler asked for these without a fixed time or named venue. For EACH wish: pick a real specific venue in ${resolvedDestination}, schedule it in a believable slot, write a real description, include address. Do NOT echo the wish back as a bare card with no time or description:\n${flexibleWishes.map(w => `  - ${w}`).join('\n')}\n`
+      : '';
 
     if (lockedCardsForDay.length > 0) {
       // Build a timeline showing the AI what's locked
@@ -501,10 +507,14 @@ RULES:
 5. Match the traveler's DNA for gap-filling activities.
 6. Do NOT add meals the user didn't specify. If they said "Breakfast" and "Dinner" but no lunch, there is no lunch.
 7. Do NOT inject activities from other cities. Only plan for the current city: ${resolvedDestination}.
-`;
-      console.log(`[compile-prompt] LOCK PHASE: ${lockedCardsForDay.length} locked cards for Day ${dayNumber}, ${gaps.length} gaps, ${tdbEntries.length} TBD slots`);
+${wishBlock}`;
+      console.log(`[compile-prompt] LOCK PHASE: ${lockedCardsForDay.length} locked cards, ${flexibleWishes.length} flexible wishes for Day ${dayNumber}, ${gaps.length} gaps, ${tdbEntries.length} TBD slots`);
+    } else if (flexibleWishes.length > 0) {
+      // All entries were vague wishes — feed them as USER WISHES guidance only.
+      mustDoPrompt = wishBlock + `\nRULES:\n- Only plan for the current city: ${resolvedDestination}.\n- Do NOT add meals the user didn't specify.\n`;
+      console.log(`[compile-prompt] WISH-ONLY PHASE: ${flexibleWishes.length} flexible wishes for Day ${dayNumber}`);
     } else {
-      // No parseable locked cards, fall back to original prompt style
+      // No parseable locked cards or wishes, fall back to original prompt style
       mustDoPrompt = `
 ## 🚨 USER-SPECIFIED ACTIVITIES FOR DAY ${dayNumber} (MANDATORY — DO NOT CHANGE)
 
