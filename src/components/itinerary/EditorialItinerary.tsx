@@ -2799,25 +2799,34 @@ export function EditorialItinerary({
    const [newlyAddedMember, setNewlyAddedMember] = useState<string | null>(null);
    const [isCreatingInvite, setIsCreatingInvite] = useState(false);
    const [inviteCopied, setInviteCopied] = useState(false);
-   // Currency display preference — every trip starts in USD.
-   // Toggling to local is session-only and scoped to the current trip; route
-   // changes/newly generated trips must not inherit a prior trip's local toggle.
-   const [currencyPreference, setCurrencyPreference] = useState<{ tripId: string; showLocal: boolean }>(() => ({
-     tripId,
-     showLocal: false,
-   }));
-   const showLocalCurrency = currencyPreference.tripId === tripId ? currencyPreference.showLocal : false;
+   // Currency display preference — every trip ALWAYS opens in USD.
+   // Toggling to local is session-only and resets whenever `tripId` changes.
+   // No localStorage/sessionStorage persistence — legacy keys purged below.
+   // See mem://constraints/finance/currency-units-canonical.
+   const [showLocalCurrency, setShowLocalCurrency] = useState<boolean>(false);
    useEffect(() => {
-     setCurrencyPreference({ tripId, showLocal: false });
-     // Best-effort cleanup of any pre-existing persisted preference from earlier builds.
+     // Hard reset on every trip mount / id change. This is THE guarantee that
+     // navigating to a trip page always renders in USD first.
+     setShowLocalCurrency(false);
      if (typeof window === 'undefined') return;
      try {
        const keys: string[] = [];
        for (let i = 0; i < window.localStorage.length; i++) {
          const k = window.localStorage.key(i);
-         if (k && k.startsWith('voyance.currencyToggle.')) keys.push(k);
+         if (k && (k.startsWith('voyance.currencyToggle.') || k.startsWith('voyance.currency.'))) {
+           keys.push(k);
+         }
        }
        keys.forEach(k => window.localStorage.removeItem(k));
+       // Also purge sessionStorage equivalents defensively.
+       const sKeys: string[] = [];
+       for (let i = 0; i < window.sessionStorage.length; i++) {
+         const k = window.sessionStorage.key(i);
+         if (k && (k.startsWith('voyance.currencyToggle.') || k.startsWith('voyance.currency.'))) {
+           sKeys.push(k);
+         }
+       }
+       sKeys.forEach(k => window.sessionStorage.removeItem(k));
      } catch { /* ignore */ }
    }, [tripId]);
   
@@ -6231,17 +6240,31 @@ export function EditorialItinerary({
                     <Tooltip delayDuration={200}>
                       <TooltipTrigger asChild>
                         <button
-                          onClick={() => setCurrencyPreference((prev) => ({
-                            tripId,
-                            showLocal: prev.tripId === tripId ? !prev.showLocal : true,
-                          }))}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-xs font-medium hover:bg-secondary transition-colors"
+                          onClick={() => setShowLocalCurrency((prev) => !prev)}
+                          className="inline-flex items-center rounded-md bg-secondary/40 border border-border text-xs font-medium overflow-hidden"
                           aria-label="Switch Currency"
                           data-tour="currency-toggle"
                         >
-                          <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>USD</span>
-                          <span className="text-muted-foreground/50">↔</span>
-                          <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>{localCurrency}</span>
+                          <span
+                            className={cn(
+                              "px-3 py-1.5 transition-colors",
+                              !showLocalCurrency
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:bg-secondary"
+                            )}
+                          >
+                            USD
+                          </span>
+                          <span
+                            className={cn(
+                              "px-3 py-1.5 transition-colors",
+                              showLocalCurrency
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:bg-secondary"
+                            )}
+                          >
+                            {localCurrency}
+                          </span>
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom">
