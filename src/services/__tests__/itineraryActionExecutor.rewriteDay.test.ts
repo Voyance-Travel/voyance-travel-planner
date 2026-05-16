@@ -50,8 +50,9 @@ const baseDays = [
 function rewriteAction(instructions: string) {
   return {
     type: 'rewrite_day' as const,
+    status: 'pending' as const,
     params: { target_day: 2, instructions, preserve_locked: true },
-  };
+  } as any;
 }
 
 describe('executeRewriteDayAction', () => {
