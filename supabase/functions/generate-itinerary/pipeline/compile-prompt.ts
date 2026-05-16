@@ -1564,7 +1564,7 @@ CRITICAL GEOGRAPHIC RULE: Every restaurant and venue MUST be physically located 
     // all four entry points and by the assistant chat). FALLBACK: re-parse the
     // metadata blobs the legacy way. The blob fallback exists only for trips
     // generated before the structured table was introduced.
-    const extraIntents: Array<Record<string, any>> = [];
+    const extraIntents: Array<Record<string, any>> = [...softLockedDemoted];
     const tripWideNotes: string[] = [];
     let usedStructuredIntents = false;
     try {
