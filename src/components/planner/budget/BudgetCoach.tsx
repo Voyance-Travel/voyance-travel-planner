@@ -261,14 +261,7 @@ export function BudgetCoach({
   const isOverBudget = gapCents > 0;
 
   const formatCurrency = useCallback(
-    (cents: number) => {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      }).format(cents / 100);
-    },
+    (usdCents: number) => formatMoneyFromUsdCents(usdCents, currency),
     [currency]
   );
 
