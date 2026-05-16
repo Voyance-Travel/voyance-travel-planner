@@ -2778,7 +2778,22 @@ export function EditorialItinerary({
    const [newlyAddedMember, setNewlyAddedMember] = useState<string | null>(null);
    const [isCreatingInvite, setIsCreatingInvite] = useState(false);
    const [inviteCopied, setInviteCopied] = useState(false);
-  const [showLocalCurrency, setShowLocalCurrency] = useState(true); // Currency display preference
+  // Currency display preference — defaults to USD on first load.
+  // Per-trip choice is persisted in localStorage so refresh keeps the pick.
+  const currencyToggleStorageKey = `voyance.currencyToggle.${tripId}`;
+  const [showLocalCurrency, setShowLocalCurrency] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const v = window.localStorage.getItem(currencyToggleStorageKey);
+      return v === 'local';
+    } catch { return false; }
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(currencyToggleStorageKey, showLocalCurrency ? 'local' : 'usd');
+    } catch { /* ignore quota errors */ }
+  }, [showLocalCurrency, currencyToggleStorageKey]);
   
   // Edit Flight/Hotel modal state
   const [editFlightOpen, setEditFlightOpen] = useState(false);
