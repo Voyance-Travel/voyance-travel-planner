@@ -157,10 +157,11 @@ export function applyAnchorsWin(
     });
     if (!existing) {
       // Soft-wish guard: don't restore a vague pinned anchor (no time AND no
-      // venueName) as a naked locked card. The Day Brief carries it as a
+      // venue identity) as a naked locked card. The Day Brief carries it as a
       // USER WISH so the generator can pick a real venue + slot + description.
       // See mem://constraints/itinerary/soft-vs-hard-user-intent.
-      if (!anchor.startTime && !anchor.venueName) {
+      const pinnedVenue = anchor.venueName || (anchor as any).venue_name || (anchor as any).location?.name;
+      if (!anchor.startTime && !pinnedVenue) {
         droppedPinnedSoft++;
         continue;
       }
