@@ -1015,8 +1015,13 @@ export function parseItineraryDays(
       allTripActivities,
       dayIndex: i,
     });
-    if (withBookend !== result[i].activities) {
-      result[i] = { ...result[i], activities: withBookend as any };
+    // Re-run dedupe AFTER injection: if a stale "Walk to <hotel>" / non-terminal
+    // connector tricked ensureHotelReturnBookend into appending a second
+    // hotel-return on top of an already-persisted one, collapse to a single
+    // card (preferring protected/user-edited rows; otherwise keep latest).
+    const deduped = dedupeHotelReturnBookends(withBookend as any[], i + 1);
+    if (deduped !== result[i].activities) {
+      result[i] = { ...result[i], activities: deduped as any };
     }
   }
 
