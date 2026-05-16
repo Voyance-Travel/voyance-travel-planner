@@ -71,6 +71,11 @@ import {
 import {
   normalizeTo24h,
 } from '../flight-hotel-context.ts';
+import {
+  resolveMustDoList,
+  extractNotesAnchors,
+  type ResolvedMustDoEntry,
+} from '../../_shared/resolve-user-intent-venues.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
