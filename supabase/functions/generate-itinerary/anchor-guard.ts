@@ -68,11 +68,13 @@ function distributeFloatingAnchors(
   const out: Array<Record<string, any>> = [];
   let dropped = 0;
   for (const anchor of anchors) {
-    // Defense-in-depth: anchors without a startTime AND without a venueName are soft
-    // must-dos that escaped the front-end gate. Don't paint them onto days as locked
-    // naked rows — they'll appear with no time, no description, no address. The
-    // generator's prompt-level MANDATORY block already handles these as soft requirements.
-    if (!anchor.startTime && !anchor.venueName) {
+    // Defense-in-depth: anchors without a startTime AND without a venue identity
+    // (venueName / venue_name / location.name) are soft must-dos. Don't paint
+    // them onto days as locked naked rows — they'd appear with no time, no
+    // description, no address. The generator's USER WISHES Day Brief block
+    // handles these as soft requirements.
+    const anchorVenue = anchor.venueName || (anchor as any).venue_name || (anchor as any).location?.name;
+    if (!anchor.startTime && !anchorVenue) {
       dropped++;
       continue;
     }
@@ -155,10 +157,11 @@ export function applyAnchorsWin(
     });
     if (!existing) {
       // Soft-wish guard: don't restore a vague pinned anchor (no time AND no
-      // venueName) as a naked locked card. The Day Brief carries it as a
+      // venue identity) as a naked locked card. The Day Brief carries it as a
       // USER WISH so the generator can pick a real venue + slot + description.
       // See mem://constraints/itinerary/soft-vs-hard-user-intent.
-      if (!anchor.startTime && !anchor.venueName) {
+      const pinnedVenue = anchor.venueName || (anchor as any).venue_name || (anchor as any).location?.name;
+      if (!anchor.startTime && !pinnedVenue) {
         droppedPinnedSoft++;
         continue;
       }

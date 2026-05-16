@@ -77,16 +77,17 @@ describe('buildUserAnchors — chat-trip-planner real-world format', () => {
 });
 
 describe('buildUserAnchors — Step 3 simple-form placeholder examples', () => {
-  it('parses multi-line "Day N: foo TIME" placeholder', () => {
+  it('parses multi-line "Day N: foo TIME" placeholder, dropping soft wishes', () => {
     const text = [
       'Day 1: Colosseum 9am',
       'Day 2: Dinner at Roscioli 7:30 PM',
-      'Day trip to Tivoli',
+      'Day trip to Tivoli', // soft wish: no time, no extractable venue → handled via USER WISHES
     ].join('\n');
     const anchors = buildUserAnchors({ mustDoActivities: text, source: 'manual_paste' });
 
-    // 3 distinct anchors, two pinned, one floating
-    expect(anchors.length).toBe(3);
+    // 2 hard anchors. "Day trip to Tivoli" is a soft wish and stays in
+    // metadata.mustDoActivities for the Day Brief, not as a locked card.
+    expect(anchors.length).toBe(2);
 
     const day1 = anchors.find((a) => a.title.toLowerCase().includes('colosseum'));
     expect(day1?.dayNumber).toBe(1);
@@ -97,7 +98,7 @@ describe('buildUserAnchors — Step 3 simple-form placeholder examples', () => {
     expect(day2?.startTime).toBe('19:30');
 
     const tivoli = anchors.find((a) => a.title.toLowerCase().includes('tivoli'));
-    expect(tivoli?.dayNumber).toBe(0); // unpinned → "Any day"
+    expect(tivoli).toBeUndefined(); // soft wish, not an anchor
   });
 
   it('groups pinned anchors by day for perDayActivities mirror', () => {
@@ -109,5 +110,41 @@ describe('buildUserAnchors — Step 3 simple-form placeholder examples', () => {
     expect(pinned.length).toBe(3);
     const day1Count = pinned.filter((a) => a.dayNumber === 1).length;
     expect(day1Count).toBe(2);
+  });
+});
+
+describe('buildUserAnchors — soft vs hard classification', () => {
+  it('drops vague chip "sushi lunch" (no time, no venue)', () => {
+    const anchors = buildUserAnchors({
+      perDayActivities: [{ dayNumber: 2, activities: 'Sushi Lunch' }],
+      source: 'chat',
+    });
+    expect(anchors.length).toBe(0);
+  });
+
+  it('drops freeform wish "do flight and hotel"', () => {
+    const anchors = buildUserAnchors({
+      mustDoActivities: 'do flight and hotel',
+      source: 'chat',
+    });
+    expect(anchors.length).toBe(0);
+  });
+
+  it('keeps timed entry "7:30 PM - Dinner at Roscioli"', () => {
+    const anchors = buildUserAnchors({
+      perDayActivities: [{ dayNumber: 2, activities: '7:30 PM - Dinner at Roscioli' }],
+      source: 'chat',
+    });
+    expect(anchors.length).toBe(1);
+    expect(anchors[0].startTime).toBe('19:30');
+  });
+
+  it('keeps named venue without time (Sukiyabashi Jiro)', () => {
+    const anchors = buildUserAnchors({
+      mustDoActivities: 'Lunch at Sukiyabashi Jiro Day 3',
+      source: 'chat',
+    });
+    expect(anchors.length).toBe(1);
+    expect(anchors[0].venueName).toMatch(/jiro/i);
   });
 });
