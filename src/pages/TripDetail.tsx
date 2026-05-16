@@ -1567,6 +1567,30 @@ export default function TripDetail() {
                   if (hh < 15) return 'lunch';
                   return 'dinner';
                 };
+                const NON_MEAL_CAT_RE = /^(?!.*(dining|restaurant|breakfast|brunch|lunch|dinner|cafe|food|flight|transport|transfer|airport|accommodation|hotel|checkin|check-in|checkout|check-out|logistics|return)).+$/;
+                const isNonMealMeaningfulJson = (a: any): boolean => {
+                  const cat = String(a?.category || '').toLowerCase();
+                  const title = String(a?.title || a?.name || '').toLowerCase();
+                  if (!title) return false;
+                  if (/\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/.test(title)) return false;
+                  if (/^(return to|travel to|walk to|taxi to|metro to|bus to|train to|drive to|check[- ]?in|check[- ]?out|luggage drop|freshen up|head to|departure flight|arrival flight|transfer to)\b/.test(title)) return false;
+                  if (!NON_MEAL_CAT_RE.test(cat)) return false;
+                  return true;
+                };
+                const isNonMealMeaningfulRow = (r: any): boolean => {
+                  const cat = String(r?.category || '').toLowerCase();
+                  const title = String(r?.title || r?.name || '').toLowerCase();
+                  if (!title) return false;
+                  if (/\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/.test(title)) return false;
+                  if (/^(return to|travel to|walk to|taxi to|metro to|bus to|train to|drive to|check[- ]?in|check[- ]?out|luggage drop|freshen up|head to|departure flight|arrival flight|transfer to)\b/.test(title)) return false;
+                  if (!NON_MEAL_CAT_RE.test(cat)) return false;
+                  return true;
+                };
+                const tableNonMealByDay = new Map<number, number>();
+                for (const d of (dayIdRows || []) as Array<{ id: string; day_number: number }>) {
+                  const dayRows = (rows as any[]).filter((r) => r.itinerary_day_id === d.id);
+                  tableNonMealByDay.set(d.day_number, dayRows.filter(isNonMealMeaningfulRow).length);
+                }
                 for (const d of (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>) {
                   const dn = d?.dayNumber;
                   if (!dn) continue;
@@ -1577,26 +1601,33 @@ export default function TripDetail() {
                     const s = classifyJsonMealSlot(a);
                     if (s) jsonSlots.add(s);
                   }
+                  const jsonNonMeal = (acts as any[]).filter(isNonMealMeaningfulJson).length;
                   const stats = tableByDayNumber.get(dn) || { count: 0, mealSlots: new Set<string>() };
+                  const tableNonMeal = tableNonMealByDay.get(dn) || 0;
                   const countDrift = stats.count >= 3 && jsonCount < stats.count * 0.6;
                   // Slot-aware: only fire when the table has a meal SLOT
                   // (breakfast/lunch/dinner) the JSON is entirely missing.
-                  // Two lunches at different times = NOT drift; one lunch
-                  // missing entirely = drift.
                   const missingSlots: string[] = [];
                   for (const slot of stats.mealSlots) {
                     if (!jsonSlots.has(slot)) missingSlots.push(slot);
                   }
                   const mealDrift = missingSlots.length > 0;
-                  if (countDrift || mealDrift) {
+                  // Non-meal drift: JSON has 0 non-meal/non-logistics rows but
+                  // table has ≥3. Closes Stockholm pattern where day looks
+                  // "fine" by total count (6 meals+logistics) but every
+                  // activity-grade card has been stripped.
+                  const nonMealDrift = jsonNonMeal === 0 && tableNonMeal >= 3;
+                  if (countDrift || mealDrift || nonMealDrift) {
                     console.warn('[HEALTH_JSON_SPARSE_RESYNC]', {
                       tripId, day: dn,
                       jsonCount,
+                      jsonNonMeal,
                       jsonSlots: Array.from(jsonSlots),
                       tableCount: stats.count,
+                      tableNonMeal,
                       tableSlots: Array.from(stats.mealSlots),
                       missingSlots,
-                      reason: mealDrift ? (countDrift ? 'count+slots' : 'missing_slots') : 'count',
+                      reason: nonMealDrift ? 'missing_nonmeal' : (mealDrift ? (countDrift ? 'count+slots' : 'missing_slots') : 'count'),
                     });
                     perDayDriftSuspected = true;
                   }
