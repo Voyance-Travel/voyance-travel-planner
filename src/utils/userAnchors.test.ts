@@ -98,7 +98,7 @@ describe('buildUserAnchors — Step 3 simple-form placeholder examples', () => {
     expect(day2?.startTime).toBe('19:30');
 
     const tivoli = anchors.find((a) => a.title.toLowerCase().includes('tivoli'));
-    expect(tivoli?.dayNumber).toBe(0); // unpinned → "Any day"
+    expect(tivoli).toBeUndefined(); // soft wish, not an anchor
   });
 
   it('groups pinned anchors by day for perDayActivities mirror', () => {
