@@ -516,6 +516,7 @@ export async function persistTripItinerary(
       ...callerMetadata,
       rejected_attempts: rejected,
     };
+    console.log(`[persist-itinerary] meta-merge (blocked) tripId=${tripId} priorMustDo=${!!(priorMeta as any)?.mustDoActivities} newMustDo=${!!(callerMetadata as any)?.mustDoActivities} priorAnchors=${Array.isArray((priorMeta as any)?.userAnchors) ? (priorMeta as any).userAnchors.length : 0}`);
     delete updatePayload.itinerary_data; // belt-and-suspenders
   } else {
     updatePayload.itinerary_data = itinerary;
@@ -539,10 +540,12 @@ export async function persistTripItinerary(
           priorMeta = (priorRow?.metadata as Record<string, any>) || {};
         } catch (_e) { priorMeta = {}; }
       }
+      const callerMetaSuccess = extra.metadata as Record<string, any>;
       updatePayload.metadata = {
         ...(priorMeta || {}),
-        ...(extra.metadata as Record<string, any>),
+        ...callerMetaSuccess,
       };
+      console.log(`[persist-itinerary] meta-merge (success) tripId=${tripId} priorMustDo=${!!(priorMeta as any)?.mustDoActivities} newMustDo=${!!callerMetaSuccess?.mustDoActivities} priorAnchors=${Array.isArray((priorMeta as any)?.userAnchors) ? (priorMeta as any).userAnchors.length : 0}`);
     }
   }
 

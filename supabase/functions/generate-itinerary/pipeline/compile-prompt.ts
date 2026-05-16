@@ -377,6 +377,7 @@ export async function compilePrompt(
     const raw = metadata?.mustDoActivities;
     return Array.isArray(raw) ? raw.join('\n') : (raw as string || '');
   })();
+  console.log(`[compile-prompt] mustDoActivitiesRaw len=${mustDoActivitiesRaw.length} source=${requestMustDoText ? 'request' : 'metadata'} day=${dayNumber}`);
 
   const interestCategories = (
     Array.isArray(paramInterestCategories) && paramInterestCategories.length > 0
