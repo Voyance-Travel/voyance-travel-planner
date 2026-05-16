@@ -2525,6 +2525,15 @@ export default function Start() {
 
       if (error) throw error;
 
+      try {
+        const _mustDoCount = [
+          ...selectedLandmarks,
+          ...customMustDos,
+          ...(mustDoActivities ? [mustDoActivities] : []),
+        ].filter(Boolean).length;
+        console.log(`[trip-create] form path tripId=${trip?.id} mustDoActivities=${_mustDoCount} items selectedLandmarks=${selectedLandmarks.length} customMustDos=${customMustDos.length} paste=${mustDoActivities ? 'yes' : 'no'}`);
+      } catch (_e) { /* logging only */ }
+
       // Eagerly write the hotel cost row into activity_costs so the trip total
       // includes the hotel from the very first render. Without this we relied
       // on EditorialItinerary's mount-effect, which silently produced $0 for
@@ -3073,6 +3082,12 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                           .single();
 
                         if (error) throw error;
+                        try {
+                          const _mustDoCount = Array.isArray(details.mustDoActivities)
+                            ? details.mustDoActivities.length
+                            : (typeof details.mustDoActivities === 'string' && details.mustDoActivities ? details.mustDoActivities.split(',').filter(Boolean).length : 0);
+                          console.log(`[trip-create] chat path tripId=${trip?.id} mustDoActivities=${_mustDoCount} items source=chat_planner`);
+                        } catch (_e) { /* logging only */ }
 
                         // Insert trip_cities rows — STRICT: must succeed before navigation
                         if (isChatMultiCity) {

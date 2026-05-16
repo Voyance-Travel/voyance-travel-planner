@@ -313,8 +313,9 @@ export async function prepareContext(supabase: any, tripId: string, userId?: str
     // User research notes / must-do activities from Page 2 paste field (can be string or array)
     mustDoActivities: (() => {
       const raw = trip.metadata?.mustDoActivities;
-      if (Array.isArray(raw)) return raw.join('\n');
-      return raw || undefined;
+      const resolved = Array.isArray(raw) ? raw.join('\n') : (raw || undefined);
+      console.log(`[generation-core] context tripId=${trip.id} mustDoActivities=${resolved ? (typeof resolved === 'string' ? resolved.slice(0, 120) : '(non-string)') : '(empty)'} rawType=${Array.isArray(raw) ? `array(${raw.length})` : typeof raw}`);
+      return resolved;
     })(),
     // "Anything else" / additional notes from planner
     additionalNotes: (trip.metadata?.additionalNotes as string) || undefined,
