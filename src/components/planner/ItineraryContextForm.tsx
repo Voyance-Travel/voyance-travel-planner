@@ -42,6 +42,7 @@ export interface ItineraryContextData {
   preBookedCommitments?: PreBookedCommitment[]; // Fixed events that can't be moved
   mustDoActivities?: string; // User's must-do list as comma-separated string
   perDayActivities?: Array<{ dayNumber: number; activities: string }>; // Per-day structured activities from Just Tell Us
+  additionalNotes?: string; // Freeform "Anything else?" — feeds metadata.additionalNotes (prompt TRIP PURPOSE block)
 }
 
 interface ItineraryContextFormProps {
