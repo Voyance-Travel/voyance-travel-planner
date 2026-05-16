@@ -2236,7 +2236,10 @@ export default function Start() {
 
   const [isFirstTimeVisitor, setIsFirstTimeVisitor] = useState(true);
   const [firstTimePerCity, setFirstTimePerCity] = useState<Record<string, boolean>>({});
-   const [mustDoActivities, setMustDoActivities] = useState('');
+   // Freeform "Anything else?" notes — feeds metadata.additionalNotes (prompt's TRIP PURPOSE block),
+   // NOT metadata.mustDoActivities. Lumping freeform text into the must-do array used to make
+   // parseMustDoInput treat the whole sentence as a venue name.
+   const [additionalNotes, setAdditionalNotes] = useState('');
    const [generationRules, setGenerationRules] = useState<GenerationRule[]>([]);
   const [selectedLandmarks, setSelectedLandmarks] = useState<string[]>([]);
   const [selectedCategories] = useState<string[]>([]); // Kept for backward compat with saved metadata
