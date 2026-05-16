@@ -2285,7 +2285,9 @@ export default function Start() {
           if (savedDraft.manualHotel) setManualHotel(savedDraft.manualHotel);
           if (savedDraft.isFirstTimeVisitor !== undefined) setIsFirstTimeVisitor(savedDraft.isFirstTimeVisitor);
           if (savedDraft.firstTimePerCity) setFirstTimePerCity(savedDraft.firstTimePerCity);
-          if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
+          // Back-compat: legacy drafts stored this under `mustDoActivities`.
+          if (savedDraft.additionalNotes) setAdditionalNotes(savedDraft.additionalNotes);
+          else if (savedDraft.mustDoActivities) setAdditionalNotes(savedDraft.mustDoActivities);
           if (savedDraft.selectedLandmarks) setSelectedLandmarks(savedDraft.selectedLandmarks);
           // selectedCategories removed — interest categories are no longer user-facing
           if (savedDraft.customMustDos) setCustomMustDos(savedDraft.customMustDos);
