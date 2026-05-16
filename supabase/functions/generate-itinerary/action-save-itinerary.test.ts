@@ -93,20 +93,24 @@ Deno.test("applyAnchorsWin: dropped anchor is re-injected with correct fields", 
 });
 
 // ----------------------------------------------------------------------------
-// 4. Anchor with dayNumber out of range → silently skipped, no crash
+// 4. Anchor with out-of-range pinned dayNumber is skipped; floating (dayNumber
+//    <= 0) anchors get distributed across eligible days instead of dropped.
 // ----------------------------------------------------------------------------
-Deno.test("applyAnchorsWin: out-of-range dayNumber is skipped without crash", () => {
+Deno.test("applyAnchorsWin: out-of-range pinned skipped, floating distributed", () => {
   const days = [day(1, [act()])];
   const anchors = [
-    { dayNumber: 99, title: "Nonexistent", lockedSource: "manual" },
-    { dayNumber: 0, title: "Also nonexistent", lockedSource: "manual" },
-    { dayNumber: -1, title: "Negative", lockedSource: "manual" },
+    { dayNumber: 99, title: "Nonexistent pinned", lockedSource: "manual" },
+    { dayNumber: 0, title: "Floating one", lockedSource: "single_city" },
+    { dayNumber: -1, title: "Floating two", lockedSource: "single_city" },
   ];
   const result = applyAnchorsWin(days, anchors);
-  assertEquals(result.restored, 0);
+  // dayNumber=99 still out-of-range → dropped. The two floating anchors get
+  // round-robin distributed onto Day 1 (the only day) and restored.
+  assertEquals(result.restored, 2);
   assertEquals(result.reaffirmed, 0);
-  assertEquals(result.days[0].activities.length, 1);
+  assertEquals(result.days[0].activities.length, 3);
 });
+
 
 // ----------------------------------------------------------------------------
 // 5. Fingerprint match (lockedSource + title) reaffirms without duplicating
@@ -205,4 +209,41 @@ Deno.test("applyAnchorsWin: drifted title and time restored to anchor values", (
   assertEquals(a.startTime, "19:00");
   assertEquals(a.endTime, "21:00");
   assertEquals(a.locked, true);
+});
+
+// ----------------------------------------------------------------------------
+// 9. Paris-pattern: 3 must-do venues from Step 3 (single_city source,
+//    dayNumber=0) distributed across 3 days, skipping departure day.
+// ----------------------------------------------------------------------------
+Deno.test("applyAnchorsWin: floating must-dos distributed across days, departure day skipped", () => {
+  const days = [
+    day(1, [act({ title: "Breakfast" })]),
+    day(2, [act({ title: "Breakfast" })]),
+    day(3, [
+      act({ title: "Checkout from Hotel", category: "accommodation" }),
+      act({ title: "Travel to Airport", category: "transfer-to-airport" }),
+      act({ title: "Departure Flight", category: "departure-flight" }),
+    ]),
+  ];
+  const anchors = [
+    { dayNumber: 0, title: "Eiffel Tower", lockedSource: "Eiffel Tower", source: "single_city", category: "activity" },
+    { dayNumber: 0, title: "Louvre Museum", lockedSource: "Louvre Museum", source: "single_city", category: "explore" },
+    { dayNumber: 0, title: "Notre-Dame Cathedral", lockedSource: "Notre-Dame Cathedral", source: "single_city", category: "explore" },
+  ];
+  const result = applyAnchorsWin(days, anchors);
+  assertEquals(result.restored, 3);
+  // Day 1 and Day 2 each get one (round-robin), the third lands on Day 1.
+  // Departure day (Day 3) must NOT receive any anchors.
+  const day3Titles = result.days[2].activities.map((a: any) => a.title);
+  assert(!day3Titles.includes("Eiffel Tower"));
+  assert(!day3Titles.includes("Louvre Museum"));
+  assert(!day3Titles.includes("Notre-Dame Cathedral"));
+  // All three anchors must appear somewhere on Day 1 or Day 2.
+  const placedTitles = [
+    ...result.days[0].activities.map((a: any) => a.title),
+    ...result.days[1].activities.map((a: any) => a.title),
+  ];
+  assert(placedTitles.includes("Eiffel Tower"));
+  assert(placedTitles.includes("Louvre Museum"));
+  assert(placedTitles.includes("Notre-Dame Cathedral"));
 });
