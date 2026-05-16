@@ -353,7 +353,7 @@ export async function persistTripItinerary(
         identitySwap = flippedDays >= 2 && eligibleOldDays > 0 && (flippedDays / eligibleOldDays) >= 0.6;
       }
 
-      if ((isRegression || identitySwap) && !options.allowRegression) {
+      if ((isRegression || identitySwap) && !options.allowRegression && !activeRegen) {
         regressionBlocked = true;
         const reasonTag = isRegression && identitySwap
           ? 'regression+identity_swap'
@@ -363,6 +363,11 @@ export async function persistTripItinerary(
             `was meaningful=${oldSummary.meaningfulCount} paid=${oldSummary.paidMeaningfulCount}, ` +
             `now meaningful=${newSummary.meaningfulCount} paid=${newSummary.paidMeaningfulCount}` +
             (identitySwap ? ` overlap=${JSON.stringify(identityDetail)}` : ''),
+        );
+      } else if ((isRegression || identitySwap) && activeRegen) {
+        console.log(
+          `[${label}] [PERSIST_REGRESSION_BYPASS_ACTIVE_REGEN] status=${existingStatus} ` +
+            `was meaningful=${oldSummary.meaningfulCount}, now meaningful=${newSummary.meaningfulCount}`,
         );
       }
     }
