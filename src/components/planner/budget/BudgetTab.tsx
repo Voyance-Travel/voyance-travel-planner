@@ -119,6 +119,10 @@ interface BudgetTabProps {
   generationFailureReason?: string | null;
   /** Trigger a fresh itinerary regeneration (used in failed/empty banner CTA) */
   onRegenerate?: () => void;
+  /** Display currency from the global itinerary header toggle (USD/EUR/...).
+   *  Falls back to `settings.budget_currency` then USD. This makes the Budget
+   *  tab honor the user's USD ↔ local toggle alongside Payments + Itinerary. */
+  displayCurrency?: string;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
