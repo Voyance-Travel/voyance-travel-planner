@@ -3519,7 +3519,7 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                   manualHotel,
                   isFirstTimeVisitor,
                   firstTimePerCity,
-                  mustDoActivities,
+                  additionalNotes,
                   selectedLandmarks,
                   selectedCategories,
                   customMustDos,
