@@ -69,8 +69,12 @@ interface PaymentsTabProps {
     pricePerNight?: number;
   } | null;
   travelers: number;
-  /** Budget limit in cents from BudgetTab - shows spending limit */
+  /** Budget limit in cents from BudgetTab - in `budgetCurrency` (NOT USD cents). */
   budgetLimitCents?: number;
+  /** Budget currency (USD/EUR/JPY/...) — required to interpret budgetLimitCents
+   *  and to align the Payments display currency with the BudgetTab so "% of
+   *  budget" stays sane (was the Mallorca $2,500 vs €1,608 / 92% mismatch). */
+  budgetCurrency?: string;
   /** Trip owner info for Split Bill */
   ownerId?: string;
   ownerName?: string;
@@ -81,9 +85,8 @@ interface PaymentsTabProps {
   /** Journey fields for linked trips */
   journeyId?: string | null;
   journeyName?: string | null;
-  /** Trip currency for display (USD/EUR/JPY/...) — mirrors header so the
-   *  Payments "Trip Total" reads in the same units as the itinerary header.
-   *  Defaults to USD for backwards compatibility. */
+  /** Trip currency for display (USD/EUR/JPY/...) — used only when no
+   *  budgetCurrency is set. Defaults to USD for backwards compatibility. */
   tripCurrency?: string;
 }
 
