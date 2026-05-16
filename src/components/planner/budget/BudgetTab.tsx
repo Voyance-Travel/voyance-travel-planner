@@ -53,7 +53,7 @@ import { getCityBudgetBreakdown } from '@/services/tripBudgetService';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { rateDisclosure } from '@/lib/currency';
+import { rateDisclosure, formatMoneyFromUsdCents } from '@/lib/currency';
 import { assessBudgetFit, formatMultiplier } from '@/lib/budget-realism';
 import { supabase } from '@/integrations/supabase/client';
 import { usePayableItems, type PayableItem } from '@/hooks/usePayableItems';
@@ -468,16 +468,16 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   // header, PaymentsTab, BudgetTab) render in the same currency.
   const displayCurrency = (displayCurrencyProp || settings?.budget_currency || 'USD').toUpperCase();
 
-  const formatCurrency = useCallback((cents: number) => {
-    if (!isFinite(cents)) return '$0';
-    const amount = cents / 100;
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: displayCurrency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  }, [displayCurrency]);
+  // All `*Cents` values flowing through this component are canonical USD
+  // cents (see useTripBudget.formatCurrency comment + activity_costs schema).
+  // `formatMoneyFromUsdCents` converts USD → the user's chosen display
+  // currency via the shared FX module, so Budget matches the Itinerary
+  // header + Payments tab when the global toggle flips. Just relabeling
+  // (the previous Intl-only approach) left €-amounts showing a `$` symbol.
+  const formatCurrency = useCallback(
+    (cents: number) => formatMoneyFromUsdCents(isFinite(cents) ? cents : 0, displayCurrency),
+    [displayCurrency],
+  );
 
   if (isLoading) {
     return (
