@@ -1,48 +1,35 @@
-Yes — based on the actual code paths, this is only partially fixed.
+The issue is still real: the previous fix only covered some backend paths. The frontend still builds `userAnchors` from chat `perDayActivities` without filtering vague items, and the backend Day Brief still treats every existing `lockedActivities` row as a hard anchor even if it has no time/venue/purpose.
 
-What is fixed:
-- `userAnchors` now classify vague items like “sushi lunch” as soft/unlocked.
-- Day Brief now tells the model to pick a real venue and schedule the wish naturally.
-- `ledger-check` no longer inserts a bare placeholder for soft wishes.
+Plan:
 
-What is still not fixed:
-- `perDayActivities` still goes through `parseUserActivities()` and turns almost every non-TBD entry into a locked card, even when it has no time and no real venue.
-- `mustDoActivities` fallback from chat/planner still marks vague entries as `priority: 'must'` even when `locked: false`, so they can still be treated too rigidly.
-- The venue resolver exists, but it is mostly prompt-side; it does not reliably turn flexible requests into structured, fulfilled day intents before the lock/restore pipeline.
+1. Frontend anchor creation
+- Update `src/utils/userAnchors.ts` so `buildUserAnchors()` only returns true hard anchors.
+- Hard anchor = explicit time OR real named venue.
+- Soft wish = vague request like `sushi lunch`, `spa`, `nice dinner`, `do flight and hotel`; these stay in metadata/request context, but do not become `userAnchors`.
+- Add frontend regression tests so chat-planner `perDayActivities` no longer create locked anchors for vague untimed requests.
 
-Plan to finish the fix:
+2. Backend prompt lock phase
+- Tighten `parseUserActivities()` in `compile-prompt.ts` so *any* no-time/no-venue entry becomes a `USER WISH`, not only entries matching the current narrow vague regex.
+- Keep timed events and named venues locked.
+- This prevents generic text from falling through to the old “MANDATORY — DO NOT CHANGE” block.
 
-1. Update `parseUserActivities()` in `compile-prompt.ts`
-   - Only create `LockedCard`s for entries with explicit time or a clearly named venue.
-   - Treat vague items like “sushi lunch”, “spa”, “nice dinner”, “rooftop cocktails” as flexible fill requests, not locked cards.
-   - Keep true reservations/events locked: “7:30 PM Dinner at Roscioli”, “US Open 9am–6pm”, “Sukiyabashi Jiro”.
+3. Day Brief hard-vs-soft split
+- In `compile-prompt.ts`, filter `ledgerAnchors` before `buildDayLedger()`.
+- Locked rows with no start time and no venue/location should be demoted into `extraIntents` as soft `should`, not listed as `User locked this — DO NOT replace`.
+- Timed or venue-backed locked rows remain hard locks.
 
-2. Feed flexible per-day requests into the Day Brief instead of the locked timeline
-   - Add them as `USER WISHES` style guidance for that day.
-   - Tell generation to pick a real venue, schedule it in the right slot, add description/address, and route around it.
-   - Do not insert them as top-of-day placeholder cards.
+4. Anchor guard restoration
+- Extend `anchor-guard.ts` to treat `location.name` / `venue_name` / `venueName` consistently when deciding whether an anchor is real enough to restore.
+- Never restore no-time/no-venue anchors as visible blank cards.
 
-3. Normalize chat/planner `mustDoActivities` fallback priority
-   - For category-style entries with no time and no named venue, set `priority: 'should'`, `locked: false`.
-   - Keep only timed/named commitments as `must`.
+5. Regression coverage
+- Add/extend tests for:
+  - `Day 2: sushi lunch` is a soft wish, not a locked card.
+  - `Day 2: do flight and hotel` does not become a blank locked activity.
+  - `Dinner at Roscioli 7:30 PM` remains locked.
+  - Existing stale locked activity with no time/venue is demoted to soft intent in Day Brief.
 
-4. Wire resolved venues into structured intent metadata
-   - When “sushi lunch” resolves to a restaurant, store the venue name/address/description on the intent metadata so downstream generation and validation can verify it.
-   - Avoid relying only on raw prompt text.
-
-5. Tighten anchor restoration
-   - `anchor-guard` should only restore hard locks.
-   - It must never restore soft wishes as visible blank locked activities.
-
-6. Add regression tests
-   - “Day 2: sushi lunch” does not become a locked card.
-   - “Day 2: 1 PM sushi lunch” is scheduled but resolved to a restaurant, not echoed as “sushi lunch”.
-   - “Dinner at Roscioli 7:30 PM” remains locked.
-   - Missing soft wishes warn/repair, but do not create placeholder cards.
-
-Files to update:
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
-- `supabase/functions/_shared/intent-normalizers.ts`
-- `supabase/functions/generate-itinerary/anchor-guard.ts`
-- `supabase/functions/_shared/resolve-user-intent-venues.ts`
-- relevant tests under `supabase/functions/_shared/` and `supabase/functions/generate-itinerary/`
+Expected result:
+- Vague requested activities are incorporated into the generated day with a real venue, schedule slot, description, and purpose.
+- They are no longer thrown on top as locked blank cards.
+- Actual reservations, timed commitments, and named venues remain protected.
