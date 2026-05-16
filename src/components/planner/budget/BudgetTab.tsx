@@ -119,6 +119,10 @@ interface BudgetTabProps {
   generationFailureReason?: string | null;
   /** Trigger a fresh itinerary regeneration (used in failed/empty banner CTA) */
   onRegenerate?: () => void;
+  /** Display currency from the global itinerary header toggle (USD/EUR/...).
+   *  Falls back to `settings.budget_currency` then USD. This makes the Budget
+   *  tab honor the user's USD ↔ local toggle alongside Payments + Itinerary. */
+  displayCurrency?: string;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
@@ -278,7 +282,7 @@ function PayableCostsList({ items, formatCurrency, categoryColors, categoryIcons
   );
 }
 
-export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, destinationCountry, budgetTier, flightSelection, hotelSelection, journeyId, journeyName, isManualMode = false, tripStatus, generationFailureReason, onRegenerate }: BudgetTabProps) {
+export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, destinationCountry, budgetTier, flightSelection, hotelSelection, journeyId, journeyName, isManualMode = false, tripStatus, generationFailureReason, onRegenerate, displayCurrency: displayCurrencyProp }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const [payments, setPayments] = useState<TripPayment[]>([]);
   // Tracks the user's most recent in-session "Raise budget" so the Coach can
@@ -459,17 +463,21 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   // Hotel/flight costs are now synced to activity_costs via budgetLedgerSync
   // when they are saved — no separate ledger sync needed here.
 
+  // Resolve the display currency: the user's global toggle wins, then the
+  // trip's `budget_currency`, then USD. All three trip surfaces (Itinerary
+  // header, PaymentsTab, BudgetTab) render in the same currency.
+  const displayCurrency = (displayCurrencyProp || settings?.budget_currency || 'USD').toUpperCase();
+
   const formatCurrency = useCallback((cents: number) => {
     if (!isFinite(cents)) return '$0';
-    const currency = settings?.budget_currency || 'USD';
     const amount = cents / 100;
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency,
+      currency: displayCurrency,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
-  }, [settings?.budget_currency]);
+  }, [displayCurrency]);
 
   if (isLoading) {
     return (
@@ -645,7 +653,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             usedPercent={snapshotUsedPct}
             overageCents={snapshotOverageCents}
             remainingCents={snapshotRemainingCents}
-            currency={settings?.budget_currency || 'USD'}
+            currency={displayCurrency}
           />
         );
       })()}
@@ -808,7 +816,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             tripId={tripId}
             budgetTargetCents={summary.budgetTotalCents}
             currentTotalCents={snapshot.tripTotalCents}
-            currency={settings?.budget_currency || 'USD'}
+            currency={displayCurrency}
             destination={destination}
             itineraryDays={itineraryDays}
             travelers={travelers}
@@ -950,7 +958,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                   Calculating…
                 </span>
               )}
-              {(settings?.budget_currency || 'USD') !== 'USD' && rateDisclosure(settings?.budget_currency || 'USD') && (
+              {(displayCurrency) !== 'USD' && rateDisclosure(displayCurrency) && (
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
@@ -963,7 +971,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs">
-                      <span className="text-xs">{rateDisclosure(settings?.budget_currency || 'USD')}</span>
+                      <span className="text-xs">{rateDisclosure(displayCurrency)}</span>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -1401,7 +1409,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           journeyId={journeyId}
           journeyName={journeyName || null}
           currentTripId={tripId}
-          currency={settings?.budget_currency || 'USD'}
+          currency={displayCurrency}
         />
       )}
 

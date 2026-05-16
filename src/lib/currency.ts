@@ -80,21 +80,29 @@ export function formatBudgetCurrencyCents(
 }
 
 /**
- * Canonical display currency for a trip surface (PaymentsTab + BudgetTab).
- * Rules:
- *   1. If a budget currency is set, it wins — the only meaningful comparison
- *      on either surface is "spent vs budget", and that requires one currency.
- *   2. Otherwise honor the user's local/USD toggle (tripCurrency).
- *   3. Default USD.
+ * Canonical display currency for a trip surface (Itinerary header,
+ * PaymentsTab, BudgetTab). The user-facing header toggle (`tripCurrency`)
+ * is the single source of truth — when the user flips USD ↔ local, every
+ * surface re-renders in that currency.
+ *
+ * Precedence:
+ *   1. `tripCurrency` (the toggle) — wins whenever provided.
+ *   2. `budgetCurrency` — fallback only when no toggle is set (e.g. server
+ *      contexts that do not have user state, like PDF generators).
+ *   3. 'USD'.
+ *
+ * Ratios that mix snapshot USD cents with `budget_total_cents` (raw cents
+ * in `budgetCurrency`) MUST convert the budget side to USD via `convertToUSD`
+ * before dividing — display currency does not affect the math.
  */
 export function getCanonicalDisplayCurrency(opts: {
   budgetCurrency?: string | null;
   tripCurrency?: string | null;
 }): string {
-  const bc = (opts.budgetCurrency || '').toUpperCase();
-  if (bc) return bc;
   const tc = (opts.tripCurrency || '').toUpperCase();
-  return tc || 'USD';
+  if (tc) return tc;
+  const bc = (opts.budgetCurrency || '').toUpperCase();
+  return bc || 'USD';
 }
 
 /** Human-readable rate disclosure, e.g. "1 USD = 0.86 EUR (rates as of May 4, 2026)". */
