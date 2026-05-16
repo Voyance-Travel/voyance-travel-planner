@@ -1,39 +1,62 @@
-## Goal
-Stop the recurring Budget/Payments/header reconciliation drift by making every visible finance surface read from one canonical cost decomposition instead of mixing itinerary JSON costs, payable-item sums, and `activity_costs` rows.
+# Why Mallorca shows the purple block (root cause confirmed)
 
-## What I found on Monaco
-- The backend ledger for Monaco is internally consistent: **$944 total = $700 hotel + $244 itinerary costs**.
-- The visible itinerary JSON still contains older/higher per-card costs such as `$30`, `$75`, `$53`, while the canonical ledger has `$10`, `$30`, `$20` per person for those same activities.
-- That stale JSON-vs-ledger split is why this “keeps happening”: any surface that uses card JSON or payable item grouping can disagree with the canonical Budget/Payments snapshot.
+The `destinations` table is a red herring on this one. The real cause is in `curated_images`:
 
-## Implementation plan
-1. **Create one shared finance decomposition hook/service**
-   - Promote `decomposeTripCost` as the single frontend read path for headline total, bucket totals, day totals, hotel/flight, reserve, and manual-payment folds.
-   - Ensure Payments, Budget, header strip, and per-day badges consume the same decomposition values.
+```
+entity_type=destination  entity_key="alcudia old town"  destination=Mallorca
+source=no_result         image_url=NULL                 expires_at=2026-06-11
+```
 
-2. **Stop Payments bucket totals from summing `usePayableItems` as truth**
-   - Keep `usePayableItems` for row display and payment actions only.
-   - Read bucket header totals from the canonical decomposition, with row sums treated as diagnostics only.
+A previous lookup for "Alcudia Old Town" hit Google Places, got 0 results, and the edge function persisted a **`no_result` sentinel with a 30-day TTL**. Every subsequent visit reads that cached null and short-circuits — never calls Google, never falls back to the city ("Mallorca"), so `useTripHeroImage` exhausts every tier and the gradient placeholder paints.
 
-3. **Make itinerary card prices prefer the ledger for any matching activity**
-   - Current card override only wins for protected floors or missing JSON.
-   - Change it so if an `activity_costs` row exists for the card, the card displays the ledger amount by default, not stale JSON.
-   - Preserve explicit user/manual overrides.
+There is no city-level `entity_key="mallorca"` hero row. The 2026-05-14 destinations-table backfill memory entry is misleading: only 94/2,246 rows ever had a canonical hero. The cache *was* the source of truth and a single bad POI poisoned it.
 
-4. **Normalize JSON costs at save/persist boundaries**
-   - When activity costs are written or repaired, mirror the canonical per-person USD amount back into `cost`, `estimatedCost`, and legacy price fields.
-   - This prevents stale values like Monaco’s `$75` card cost from surviving after the ledger has settled to `$30`.
+# Goal
 
-5. **Backfill affected existing trips**
-   - Add a safe one-time repair path that detects `activity_costs.cost_per_person_usd` materially differing from `itinerary_data.days[].activities[].cost.amount` for the same `activity_id`.
-   - Rewrite only the JSON price fields to match the ledger; do not change titles, timing, descriptions, locked activities, or user-entered manual costs.
+Restore the original "Google pull → cache → serve" model and guarantee no destination ever renders a colored block or generic static.
 
-6. **Add regression tests**
-   - Monaco-style fixture: JSON card costs differ from ledger rows, and all computed totals must still equal the ledger total.
-   - Manual hotel/flight override fixture: manual rows replace Day-0 canonical rows only when a manual row exists.
-   - Reserve fixture: reserve appears in Misc and headline exactly once.
+# Plan
+
+## 1. Stop letting a `no_result` cache entry block real photos
+
+In `supabase/functions/destination-images/index.ts`:
+
+- **Read path** — when a `curated_images` row is found with `source='no_result'`, treat it as a miss for `entity_type='destination'` after 24 hours (not 30 days). For `entity_type='activity'` keep the longer TTL (those are genuinely obscure venues).
+- **Write path** — never cache `no_result` for `entity_type='destination'` until we've also tried (a) the bare destination string, (b) Unsplash with the destination name, and (c) Google Places with `destination + " landmark"`. Only cache null after all three miss; even then cap TTL at 24h.
+
+## 2. Always fall back from POI to city
+
+The current code passes `entityKey="alcudia old town"` and never tries `entityKey="mallorca"` when the POI misses. Add a deterministic fallback inside the destination branch of the resolver: if POI lookup yields no real image, recurse once with `cleanName = destination`. Cache the success under both keys so the next "Alcudia Old Town" hit serves the Mallorca city photo instead of repaying.
+
+## 3. Make the client cascade actually reach the API on first paint
+
+`useTripHeroImage` waits on `canonicalFetched && dbCuratedFetched` before calling the API. For destinations whose canonical is null AND whose DB-curated row is `no_result`, the API tier still has to fire. Confirm by passing `?force=1` when the DB-curated tier returned a `no_result` sentinel (we'll surface that flag from the new helper) so the edge function re-runs Google instead of replaying the cached null.
+
+## 4. Trip-level fallback for the hero strip itself
+
+`DestinationHeroImage.tsx` and the trip-detail purple band currently render a solid gradient when `imageUrl` is null. Replace that branch with a **shared bucket fallback**: pick from a small set of pre-uploaded country/region heroes in the existing `destination-images` storage bucket (Spain, France, Italy, Japan, USA, generic-coast, generic-city). Match by `destinations.country`. Worst case the user sees a real Spanish coastal photo for Mallorca, never a flat color. Only one storage read, no Google spend.
+
+## 5. Backfill / unstick existing trips
+
+One `UPDATE` to clear the `source='no_result'` rows for `entity_type='destination'` so the next page-load triggers a real Google fetch under the new logic. Also nullify the bad sentinels for the recurring offenders we've seen (Mallorca, Casablanca, La Palma, anything matching the pattern).
+
+## 6. Update memory
+
+Rewrite `mem://constraints/visual/destination-canonical-stock-fallback` to reflect the actual architecture:
+
+> Hero images flow Google Places → `curated_images` cache → UI. `destinations.hero_image_url` is an opportunistic write-back, never a source of truth. `no_result` rows for `entity_type='destination'` are capped at 24h TTL and skipped on read once the POI fallback to the city name is exhausted. UI must always render a real image — gradient placeholders are forbidden.
 
 ## Technical notes
-- No schema change is required.
-- The universal fix is mainly frontend finance-source unification plus a backend/front-end persist mirror for JSON price fields.
-- The invariant will be: `Trip Total === sum(canonical buckets) === header displayed total`, while row itemization is never allowed to redefine the total.
+
+Files touched:
+
+- `supabase/functions/destination-images/index.ts` — TTL cap, POI→city fallback, `force` flag.
+- `src/services/destinationImagesAPI.ts` — return `wasNoResult` from `getDbCuratedUrl`; pass `force=true` on the next API call.
+- `src/hooks/useTripHeroImage.ts` — wire `force=true` and add a final "country bucket" tier.
+- `src/components/common/DestinationHeroImage.tsx` (and the purple band in trip-detail header) — replace gradient with bucket fallback.
+- One Supabase migration: `DELETE FROM curated_images WHERE entity_type='destination' AND source='no_result'`.
+
+Out of scope:
+- Re-introducing a static `CURATED_DESTINATION_IMAGES` map.
+- Mass pre-warming Google Places for all 2,246 destinations (we let usage drive the cache, as before).
+- Changing itinerary generation.
