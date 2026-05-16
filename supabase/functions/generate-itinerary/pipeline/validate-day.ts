@@ -1378,7 +1378,11 @@ function isRestaurantActivity(act: any): boolean {
 
 export function shouldSkipDescriptionCheck(act: any): boolean {
   if (!act || typeof act !== 'object') return true;
-  if (act.isLocked || act.userAdded || act.userEdited || act.extracted || act.pinned || act.isManual) return true;
+  // Anchor-locked rows (user must-dos) are eligible for description backfill.
+  // Other locked / user-touched classes remain immortal — never overwrite.
+  // See mem://constraints/itinerary/anchor-enrichment-allowed.
+  const isAnchor = !!act.anchorSource;
+  if ((act.isLocked && !isAnchor) || act.userAdded || act.userEdited || act.extracted || act.pinned || act.isManual) return true;
   const cat = String(act.category || '').toLowerCase();
   if (DESC_SKIP_CATS_LOWER.has(cat)) return true;
   if (isTransitActivity(act)) return true;
