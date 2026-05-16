@@ -346,22 +346,97 @@ export default function ItineraryContextForm({
           </div>
         </div>
 
-        {/* Must-Do Activities — kept as simple textarea for this secondary flow */}
+        {/* Must-Do Activities — free-text with live parse preview */}
         <div className="space-y-3">
-          <Label className="flex items-center gap-2 text-sm font-medium">
-            <Star className="w-4 h-4 text-muted-foreground" />
-            Must-Do Activities
-            <span className="text-xs text-muted-foreground font-normal">(optional)</span>
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label className="flex items-center gap-2 text-sm font-medium">
+              <Star className="w-4 h-4 text-muted-foreground" />
+              Must-Do Activities
+              <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <div className="flex gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => insertAtCursor(mustDoActivities && !mustDoActivities.endsWith('\n') ? '\nDay 2: ' : 'Day 2: ')}
+              >
+                + Day N
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => insertAtCursor('7:30 PM ')}
+              >
+                + Time
+              </Button>
+            </div>
+          </div>
           <Textarea
+            ref={mustDoRef}
             value={mustDoActivities}
-            onChange={(e) => setMustDoActivities(e.target.value)}
-            placeholder="e.g., Visit the Colosseum, Eat at Roscioli, See the sunset from Piazzale Michelangelo..."
-            className="min-h-[80px] resize-none"
+            onChange={(e) => setMustDoActivities(e.target.value.slice(0, MUST_DO_MAX))}
+            maxLength={MUST_DO_MAX}
+            placeholder={'e.g.\nDay 1: Colosseum 9am\nDay 2: Dinner at Roscioli 7:30 PM\nDay trip to Tivoli'}
+            className="min-h-[110px] resize-none font-sans"
           />
-          <p className="text-xs text-muted-foreground">
-            Tell us what you absolutely can't miss. We'll make sure it's in your itinerary.
-          </p>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <p>Tell us what you can't miss. Add "Day 2" or a time to pin it.</p>
+            <span className={cn(mustDoActivities.length > MUST_DO_MAX * 0.9 && 'text-amber-600')}>
+              {mustDoActivities.length} / {MUST_DO_MAX}
+            </span>
+          </div>
+
+          {/* Live parse preview */}
+          {parsedAnchors.length > 0 && (
+            <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                We understood {parsedAnchors.length} item{parsedAnchors.length === 1 ? '' : 's'}:
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {parsedAnchors.map((a, i) => {
+                  const pinned = a.dayNumber > 0;
+                  const timeLabel = formatTimeLabel(a.startTime);
+                  return (
+                    <span
+                      key={i}
+                      className={cn(
+                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs',
+                        pinned
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'bg-muted text-muted-foreground border border-border'
+                      )}
+                      title={pinned ? undefined : 'Tip: add "Day 2" to pin this to a specific day'}
+                    >
+                      <span className="font-medium">
+                        {pinned ? `Day ${a.dayNumber}` : 'Any day'}
+                      </span>
+                      {timeLabel && <span>· {timeLabel}</span>}
+                      <span>· {a.title}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {unparsedLines.length > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-1 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Couldn't parse — please reword:
+              </div>
+              <ul className="text-xs text-amber-700 dark:text-amber-300 list-disc list-inside">
+                {unparsedLines.slice(0, 5).map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Pre-Booked Commitments */}
