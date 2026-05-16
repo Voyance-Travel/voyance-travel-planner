@@ -1,35 +1,33 @@
-# Add must-do diagnostic logging
+## Plan
 
-Short answer: **no — we have logging in the middle of the pipeline, but two critical boundaries are silent**, which is exactly why we can't tell whether the next failing trip is a write problem, a merge problem, or a prompt problem.
+Fix the itinerary currency display so every trip opens in USD by default, including the header, Budget, and Payments tabs.
 
-## What we already log
+## What I found
 
-- `compile-prompt.ts:508` — `[compile-prompt] Must-do: N total, Day X: K assigned, M events`
-- `generation-core.ts:2195` — `[Stage 2] Day N: MISSING must-do activities: …` (retry trigger)
-- `generation-core.ts:2204` — `[Stage 2] Day N must-do check error (non-blocking)`
+- `EditorialItinerary` already initializes `showLocalCurrency` to `false`, so the intended default is USD.
+- The visible screenshot still shows `CNY`, which means something is reusing local display currency after load or a child surface is prioritizing `budgetCurrency`/local currency over the header toggle.
+- The main likely weak spot is `PaymentsTab`/shared display currency behavior: `getCanonicalDisplayCurrency` falls back to `budgetCurrency` when `tripCurrency` is missing, which can reintroduce local currency if a component is rendered before the parent passes the USD toggle value.
 
-## What is silent (the blind spots)
+## Changes to make
 
-1. **Trip-creation insert** (`src/pages/Start.tsx` L2500 form path + L2915 chat path) — we don't log what `mustDoActivities` value was written to `metadata`. When the DB later shows `mh_count=0`, we can't tell if the user typed nothing vs. the UI dropped it.
-2. **persist-itinerary metadata merge** (`supabase/functions/_shared/persist-itinerary.ts` L489 + L534) — the merge that's supposed to preserve `mustDoActivities` across saves logs nothing. If a regeneration wipes it, we have no breadcrumb.
-3. **generation-core context build** (`generation-core.ts:314`) — we read `trip.metadata?.mustDoActivities` but don't log whether it was present/empty at generation start.
+1. **Harden the canonical currency helper**
+   - Update `getCanonicalDisplayCurrency` so it defaults to `USD` unless an explicit user toggle value is provided.
+   - Keep budget currency only as a server/non-toggle fallback where there truly is no UI currency state.
 
-## Plan: 4 one-line log additions
+2. **Make `EditorialItinerary` more defensive**
+   - Ensure the header’s display currency is explicitly initialized as `USD` and cannot be inferred from destination/budget on first render.
+   - Keep the local-currency toggle working as session-only: USD on reload, local only after the user clicks the toggle.
 
-| # | File | Where | Log line |
-|---|------|-------|----------|
-| 1 | `src/pages/Start.tsx` | After both inserts (L2500, L2915) | `console.log('[trip-create] tripId=… mustDoActivities=', formMustDoList?.length ?? 0, 'items')` |
-| 2 | `supabase/functions/_shared/persist-itinerary.ts` | Inside both merge blocks (L515, L543) | `console.log('[persist-itinerary] meta-merge tripId=… priorMustDo=', !!priorMeta?.mustDoActivities, 'newMustDo=', !!callerMeta?.mustDoActivities)` |
-| 3 | `supabase/functions/generate-itinerary/generation-core.ts` | At L314 after the `mustDoActivities` resolver | `console.log('[generation-core] context mustDoActivities=', context.mustDoActivities ? context.mustDoActivities.slice(0,120) : '(empty)')` |
-| 4 | `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` | At L376 after `mustDoActivitiesRaw` resolves | `console.log('[compile-prompt] mustDoActivitiesRaw len=', mustDoActivitiesRaw.length, 'source=', requestMustDoText ? 'request' : 'metadata')` |
+3. **Align child tabs**
+   - Confirm Budget and Payments receive the parent `tripCurrency` and render canonical USD cents through the shared formatter.
+   - Remove/adjust any fallback that lets `budgetCurrency` override the parent’s USD default.
 
-## What this buys us
+4. **Add a small diagnostic log if needed**
+   - Add a temporary/dev-only log showing `showLocalCurrency`, `localCurrency`, and `tripCurrency` on render so the next screenshot/log can prove whether the parent or a child is responsible.
 
-For the next failing trip, a single `supabase--edge_function_logs` search on `[trip-create]` → `[persist-itinerary] meta-merge` → `[generation-core] context` → `[compile-prompt]` will pinpoint exactly which boundary dropped the value, with no further investigation needed.
+## Validation
 
-## Out of scope
-
-- No prompt changes, no schema changes, no behavior changes.
-- The frontend `[trip-create]` log will surface in the user's browser console; the three edge-function logs flow to Supabase analytics. No PII (we log lengths/booleans, not user text — except the 120-char prompt slice for sanity).
-
-After approval I'll add the four log lines and nothing else.
+- Load a non-USD trip such as Shanghai.
+- Confirm the header initially shows `$…` and the toggle highlights `USD`.
+- Click the currency toggle and confirm it changes to `CNY` only for that session.
+- Refresh the page and confirm it returns to USD.
