@@ -1283,8 +1283,8 @@ export function PaymentsTab({
             <p className="text-sm text-muted-foreground">
               {!headerTotalReady
                 ? 'Calculating…'
-                : budgetLimitCents && budgetLimitCents > 0
-                  ? `${Math.round((estimatedTotal / budgetLimitCents) * 100)}% of budget`
+                : budgetLimitUsdCents && budgetLimitUsdCents > 0
+                  ? `${Math.round((estimatedTotal / budgetLimitUsdCents) * 100)}% of budget`
                   : `${Math.round(progressPercent)}% paid`
               }
             </p>
