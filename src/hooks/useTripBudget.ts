@@ -174,12 +174,14 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
   })();
   
   const formatCurrency = useCallback((cents: number) => {
-    // Canonical storage is USD cents. Convert to the user's chosen budget
-    // currency before formatting so the Budget tab matches the itinerary
-    // header (which converts via the same shared FX module).
-    const currency = settings?.budget_currency || 'USD';
-    return formatMoneyFromUsdCents(cents, currency);
-  }, [settings?.budget_currency]);
+    // Canonical storage is USD cents. Default to USD; surfaces that have a
+    // user-facing display currency (Itinerary header toggle) format via
+    // `formatMoneyFromUsdCents(cents, displayCurrency)` directly. This hook
+    // intentionally does NOT auto-relabel into `settings.budget_currency` —
+    // doing so leaked local currency (e.g. ₩, €) onto pages that the user
+    // has set to USD. See mem://constraints/finance/currency-units-canonical.
+    return formatMoneyFromUsdCents(cents, 'USD');
+  }, []);
 
   // Action handlers
   const updateSettings = async (newSettings: Partial<TripBudgetSettings>) => {
