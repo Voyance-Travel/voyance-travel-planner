@@ -93,6 +93,9 @@ export default function ItineraryContextForm({
   // Must-do activities
   const [mustDoActivities, setMustDoActivities] = useState('');
   const mustDoRef = useRef<HTMLTextAreaElement | null>(null);
+  // Freeform "Anything else?" notes (vibes, things to skip, special requests).
+  // Separate from mustDoActivities so the prompt treats it as context, not as a venue.
+  const [additionalNotes, setAdditionalNotes] = useState('');
 
   // Live parse preview — debounced, mirrors what backend `buildUserAnchors` will see
   const [debouncedMustDo, setDebouncedMustDo] = useState('');
