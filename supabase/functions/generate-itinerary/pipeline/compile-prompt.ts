@@ -490,13 +490,62 @@ RULES FOR USER-SPECIFIED ACTIVITIES:
     console.log(`[compile-prompt] Using perDayActivities for Day ${dayNumber}: ${currentDayActivities.activities.substring(0, 100)}...`);
   } else if (mustDoActivitiesRaw.trim()) {
     const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
-    const mustDoAnalysis = parseMustDoInput(mustDoActivitiesRaw, destination, forceAllMust, preferences?.startDate || date?.split('T')[0], totalDays);
+
+    // ── INTENT RESOLUTION PRE-PASS ─────────────────────────────────────────
+    // Turn category-style entries ("sushi lunch", "wine bar dinner") into
+    // concrete real venues BEFORE the LLM ever sees them. Named venues pass
+    // through unchanged.
+    const rawEntries = mustDoActivitiesRaw
+      .split(/\n+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    let resolvedMustDo: ResolvedMustDoEntry[] = [];
+    try {
+      resolvedMustDo = await resolveMustDoList(rawEntries, {
+        destination: resolvedDestination || destination || '',
+        supabase,
+        googleCtx: { actionType: 'compile-prompt-intent-resolve', tripId, userId, reason: 'mustdo intent resolve' },
+        usedNames: new Set<string>(),
+      });
+      const resolvedCount = resolvedMustDo.filter(r => r.resolved).length;
+      const sourceCounts = resolvedMustDo.reduce((acc, r) => {
+        if (r.resolved) acc[r.resolved.source] = (acc[r.resolved.source] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log(`[INTENT_RESOLVE] mustDo=${rawEntries.length} resolved=${resolvedCount} sources=${JSON.stringify(sourceCounts)}`);
+    } catch (e) {
+      console.warn(`[INTENT_RESOLVE] mustDo resolution failed (non-blocking):`, e);
+    }
+
+    // Feed the (possibly rewritten) text into the existing parser so day
+    // assignment + event detection continue to work unchanged.
+    const effectiveText = resolvedMustDo.length > 0
+      ? resolvedMustDo.map(r => r.replacementText).join('\n')
+      : mustDoActivitiesRaw;
+    const mustDoAnalysis = parseMustDoInput(effectiveText, destination, forceAllMust, preferences?.startDate || date?.split('T')[0], totalDays);
     if (mustDoAnalysis.length > 0) {
       const scheduled = scheduleMustDos(mustDoAnalysis, totalDays);
       const dayItems = scheduled.scheduled.filter((s: any) => s.assignedDay === dayNumber);
       mustDoEventItems = dayItems.filter((s: any) =>
         s.priority.activityType === 'all_day_event' || s.priority.activityType === 'half_day_event'
       );
+
+      // Build a quick lookup: resolved venue payload keyed by lowercased title
+      // fragment so we can decorate the prompt with address + description.
+      const resolvedByName = new Map<string, ResolvedMustDoEntry>();
+      for (const r of resolvedMustDo) {
+        if (!r.resolved) continue;
+        resolvedByName.set(r.resolved.name.toLowerCase(), r);
+        resolvedByName.set(r.replacementText.toLowerCase(), r);
+      }
+      const findResolved = (title: string): ResolvedMustDoEntry | undefined => {
+        const t = title.toLowerCase();
+        for (const [key, r] of resolvedByName) {
+          if (t.includes(key) || key.includes(t)) return r;
+        }
+        return undefined;
+      };
+
       if (dayItems.length > 0) {
         const blockedTimeLines = mustDoEventItems.map((ev: any) => {
           const { blockedStart, blockedEnd } = getBlockedTimeRange(ev);
@@ -504,7 +553,19 @@ RULES FOR USER-SPECIFIED ACTIVITIES:
   YOU MUST CREATE AN ACTIVITY ENTRY for "${ev.priority.title}" with startTime: "${blockedStart}", endTime: "${blockedEnd}".
   This MUST appear as a real activity card in the JSON output. Do NOT schedule any OTHER activities in this window.`;
         }).join('\n');
-        mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map((item: any) => `- ${item.priority.title} (${item.priority.priority})${item.priority.activityType === 'all_day_event' ? ' [ALL-DAY EVENT — YOU MUST generate an activity card for this event]' : item.priority.activityType === 'half_day_event' ? ' [HALF-DAY EVENT — YOU MUST generate an activity card for this event]' : ''}`).join('\n')}\n${blockedTimeLines ? '\n' + blockedTimeLines + '\n' : ''}\nRULES:\n- EVERY must-do venue listed above MUST appear as its own activity entry in the JSON output\n- For ALL-DAY events: CREATE the event as an activity card, then do NOT schedule OTHER activities during its time window\n- For HALF-DAY events: CREATE the event as an activity card, then fill the OTHER half of the day\n- Any OTHER activity overlapping a BLOCKED TIME window is a HARD FAILURE\n- Only add AI recommendations to fill remaining slots OUTSIDE blocked windows\n- CRITICAL DEDUP RULE: Do NOT generate a SEPARATE activity that is the same TYPE as a must-do. For example, if the user has "Comedy Show" as a must-do, do NOT also add your own "Stand-Up Comedy" or "Comedy Night" activity. The user's must-do IS the comedy show — you just need to create the card for it with a proper venue, not add a second one.\n- When creating the activity card for a must-do, use a PROPERLY FORMATTED title with a specific venue name (e.g., "Comedy Show at Comedy Cellar" not just the raw user text).\n`;
+        mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them with the EXACT venue name and address provided:\n${dayItems.map((item: any) => {
+          const r = findResolved(item.priority.title);
+          const tag = item.priority.activityType === 'all_day_event'
+            ? ' [ALL-DAY EVENT — YOU MUST generate an activity card for this event]'
+            : item.priority.activityType === 'half_day_event'
+              ? ' [HALF-DAY EVENT — YOU MUST generate an activity card for this event]'
+              : '';
+          if (r?.resolved) {
+            const desc = r.resolved.description ? ` — ${r.resolved.description.slice(0, 200)}` : '';
+            return `- ${item.priority.title} (${item.priority.priority})${tag}\n    • VENUE: ${r.resolved.name}\n    • ADDRESS: ${r.resolved.address}${desc}`;
+          }
+          return `- ${item.priority.title} (${item.priority.priority})${tag}`;
+        }).join('\n')}\n${blockedTimeLines ? '\n' + blockedTimeLines + '\n' : ''}\nRULES:\n- EVERY must-do venue listed above MUST appear as its own activity entry in the JSON output\n- When a VENUE + ADDRESS is provided above, use them EXACTLY in the activity's location.name and location.address — do not substitute or invent a different venue\n- For ALL-DAY events: CREATE the event as an activity card, then do NOT schedule OTHER activities during its time window\n- For HALF-DAY events: CREATE the event as an activity card, then fill the OTHER half of the day\n- Any OTHER activity overlapping a BLOCKED TIME window is a HARD FAILURE\n- Only add AI recommendations to fill remaining slots OUTSIDE blocked windows\n- CRITICAL DEDUP RULE: Do NOT generate a SEPARATE activity that is the same TYPE as a must-do. For example, if the user has "Comedy Show" as a must-do, do NOT also add your own "Stand-Up Comedy" or "Comedy Night" activity.\n`;
       } else {
         const unscheduledItems = scheduled.unschedulable || [];
         if (unscheduledItems.length > 0) {
