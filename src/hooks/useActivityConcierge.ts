@@ -80,22 +80,25 @@ export function useActivityConcierge() {
 
     const apiMessages = userMessages.map(m => ({ role: m.role, content: m.content }));
 
-    try {
+    const getFreshToken = async (): Promise<string | null> => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: 'Please sign in to chat with the concierge.',
-        }]);
-        setIsLoading(false);
-        return;
+      if (!session?.access_token) return null;
+      const nowSec = Math.floor(Date.now() / 1000);
+      const expSec = (session.expires_at ?? 0) as number;
+      if (!expSec || expSec - nowSec < 60) {
+        const { data: refreshed, error } = await supabase.auth.refreshSession();
+        if (error || !refreshed?.session?.access_token) return null;
+        return refreshed.session.access_token;
       }
+      return session.access_token;
+    };
 
-      const resp = await fetch(CONCIERGE_URL, {
+    const callConcierge = (token: string) =>
+      fetch(CONCIERGE_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           messages: apiMessages,
@@ -105,6 +108,31 @@ export function useActivityConcierge() {
         }),
         signal: controller.signal,
       });
+
+    try {
+      let token = await getFreshToken();
+      if (!token) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'Please sign in to chat with the concierge.',
+        }]);
+        setIsLoading(false);
+        return;
+      }
+
+      let resp = await callConcierge(token);
+
+      // Defensive: one-shot refresh+retry on 401 (refresh race / clock skew)
+      if (resp.status === 401) {
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        const newToken = refreshed?.session?.access_token;
+        if (newToken) {
+          resp = await callConcierge(newToken);
+        }
+        if (resp.status === 401) {
+          throw new Error('Your session expired. Please refresh the page and try again.');
+        }
+      }
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: 'Request failed' }));
