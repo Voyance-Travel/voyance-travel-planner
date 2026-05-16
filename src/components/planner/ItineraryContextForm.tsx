@@ -211,6 +211,7 @@ export default function ItineraryContextForm({
       preBookedCommitments: commitments.length > 0 ? commitments : undefined,
       mustDoActivities: mustDoActivities || undefined,
       perDayActivities,
+      additionalNotes: additionalNotes.trim() || undefined,
     });
   };
 
