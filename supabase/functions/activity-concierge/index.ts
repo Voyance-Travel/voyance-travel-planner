@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { parseAuth } from "../_shared/require-auth.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -119,8 +120,38 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const auth = await parseAuth(req);
-  if (auth instanceof Response) return auth;
+  // Primary auth: parseAuth -> getClaims (JWKS or /user)
+  let authUserId: string | null = null;
+  const primary = await parseAuth(req);
+  if (primary instanceof Response) {
+    // Fallback: try getUser() with an authed client. This rescues transient
+    // getClaims/JWKS failures that produce false 401s for valid user JWTs.
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    if (token) {
+      try {
+        const fallbackClient = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_ANON_KEY")!,
+          { global: { headers: { Authorization: `Bearer ${token}` } } },
+        );
+        const { data, error } = await fallbackClient.auth.getUser(token);
+        if (!error && data?.user?.id) {
+          authUserId = data.user.id;
+          console.log(`[concierge-auth] ok via=getUser user=${authUserId}`);
+        }
+      } catch (e) {
+        console.warn("[concierge-auth] getUser fallback threw", e);
+      }
+    }
+    if (!authUserId) {
+      console.warn("[concierge-auth] both parseAuth and getUser failed");
+      return primary;
+    }
+  } else {
+    authUserId = primary.userId;
+    console.log(`[concierge-auth] ok via=getClaims user=${authUserId}`);
+  }
 
   try {
     const { messages, activityContext, tripContext, surroundingContext } =

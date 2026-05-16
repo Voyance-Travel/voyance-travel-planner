@@ -1,62 +1,42 @@
 ## Problem
 
-In Day 02 (Amsterdam), a recent chat ask produced three bugs:
+Concierge chat consistently 401s with `Invalid token`. Auth logs show GoTrue `/user` returning `403: invalid claim: missing sub claim` — meaning the JWT reaching `parseAuth` (which calls `supabase.auth.getClaims(token)`) isn't a valid user JWT at the moment of the call.
 
-1. **Van Gogh Museum was "thrown on top"** — it has an image, price, duration, and a lock icon, but **no startTime** and **no description**. The chronological sort pushes timeless cards to the top of the day, above Omelegg at 08:30.
-2. **Omelegg breakfast applied cleanly** — proving the executor itself worked, but the model emitted Van Gogh as a bare locked anchor (the same "Soft vs Hard User-Intent" pattern memory already mitigates for chips, not for chat-driven `rewrite_day`).
-3. **"Canal tour" was silently dropped** — the model didn't include it and nothing in the executor verified that every user-named ask actually landed in the new day.
+Two converging root causes:
 
-Result: the user sees one success, one untimed locked stub, and one missing item, with a green "applied" toast that lies about coverage.
+1. **Client (`src/hooks/useActivityConcierge.ts`)** has its own bespoke token-refresh logic that races with the rest of the app (`getSession` → `refreshSession` is not deduped). Under refresh contention the call can fire with a stale/expired access_token, or with an empty token after a failed refresh.
+
+2. **Server (`supabase/functions/activity-concierge/index.ts`)** uses `parseAuth` → `auth.getClaims(token)`. In the current Lovable Cloud setup `getClaims` falls back to GoTrue `/user`, and any transient JWKS hiccup or millisecond-level expiry produces a hard 401 with no retry path.
 
 ## Plan
 
-### 1. Catch untimed new locks at the executor boundary
+### 1. Client: use the shared auth guard
 
-In `src/services/itineraryActionExecutor.ts → executeRewriteDayAction` (and the same shape inside swap / regenerate), after the AI returns `newActivities`:
+In `src/hooks/useActivityConcierge.ts`:
+- Replace the local `getFreshToken` with `getValidAccessToken()` from `src/lib/authSessionGuard.ts` (already exists, already deduped + cooldown-gated, already used elsewhere). This eliminates the refresh race that produces empty/stale tokens.
+- On a 401 response, call `guardedRefreshSession()` (not `supabase.auth.refreshSession()` directly) before the one-shot retry.
 
-- Identify rows that are **new** (not in `day.activities` by id) AND `locked || protected` AND missing `startTime/endTime`.
-- For each, run the existing `fillMissingStartTimes` helper from `_shared/timing-cascade.ts` (port already used at parse/save). If the row still has no usable anchor, assign a believable slot using the surrounding timed activities (insert into the largest gap ≥ duration, or default to a category-typed slot: museum → 10:00, dining → meal band, tour → afternoon).
-- Stamp `needsAnchorEnrichment: true` + `anchorSource: 'chat-added'` so the existing anchor-enrichment path backfills description/address on the next read.
+### 2. Server: harden `parseAuth` for the concierge
 
-This keeps the fix in frontend executor code — no generator prompt changes — and prevents the "thrown on top" visual regression at the source.
+In `supabase/functions/activity-concierge/index.ts`:
+- Keep `parseAuth` as the first check.
+- If `parseAuth` returns a `Response` (i.e. `getClaims` failed), do a single fallback: construct a fresh anon client with `global.headers.Authorization = Bearer <token>` and call `supabase.auth.getUser()`. If that returns a user with `id`, treat the request as authenticated. Only return 401 when both paths fail.
+- Log which path succeeded with a `[concierge-auth]` sentinel so we can confirm in edge logs whether the regression is JWKS-side or client-side.
 
-### 2. Verify every user-named ask actually landed
+This narrow server-side fallback is intentionally scoped to this one function — we are not changing the shared `parseAuth` helper used by 13+ paid endpoints.
 
-Still in `executeRewriteDayAction`, before persisting:
+### 3. Verify
 
-- Extract candidate intents from `instructions` using a lightweight tokenizer (already have `intentsFromUserAnchors` in `src/utils/userAnchors.ts`; reuse or wrap it). For `"do flight and hotel, add a canal tour"` this yields `['flight','hotel','canal tour']`.
-- Match each intent against `newActivities` using title/category/keyword (e.g. `canal tour` → title or description contains `canal` AND category in `tour|activity|sightseeing`).
-- Collect `missingIntents` for any intent with zero match.
-- If `missingIntents.length > 0`:
-  - Return `success: true` but include a structured `partial: { missing: [...] }` field and rewrite the toast copy to `"Applied N changes — couldn't fit: canal tour. Ask me to try again."` instead of the unconditional green confirm.
+- Reload the trip page, open concierge on an activity, send "suggest an alternative".
+- Confirm in edge logs: `[concierge-auth] ok via=getClaims` (or `via=getUser` fallback) and a 200 stream response.
+- Confirm browser console no longer shows `Concierge stream error: Invalid token`.
 
-### 3. Surface the partial result in the chat UI
+### Files touched
 
-In `src/components/itinerary/ItineraryAssistant.tsx` (the consumer of executor results):
+- `src/hooks/useActivityConcierge.ts` — swap to `getValidAccessToken` + `guardedRefreshSession`.
+- `supabase/functions/activity-concierge/index.ts` — add `getUser` fallback after `parseAuth` fails, plus sentinel logs.
 
-- When `result.partial?.missing` is present, render a one-line follow-up: `"I missed: canal tour. Want me to retry just that?"` with a retry chip that re-fires `rewrite_day` scoped to the missing intents only.
+### Out of scope
 
-### 4. Regression coverage
-
-Add `src/services/__tests__/itineraryActionExecutor.rewriteDay.test.ts`:
-
-- Case A: AI returns a new locked activity without startTime → executor assigns a slot, marks `needsAnchorEnrichment`, never persists with `startTime==null`.
-- Case B: instructions mention "canal tour" but AI omits it → executor returns `partial.missing = ['canal tour']` and message reflects it; persist still happens for the rest.
-- Case C: all intents matched → no `partial` field, classic success.
-
-### 5. Memory
-
-Append a short rule to `mem://constraints/itinerary/soft-vs-hard-user-intent`: "Chat `rewrite_day` results MUST run intent-coverage check + untimed-new-lock backfill in the executor before persist; otherwise free-text asks silently disappear and locked anchors land untimed at top-of-day."
-
-## Out of scope
-
-- No changes to the generator prompt or `generate-itinerary` edge function — the executor is the right chokepoint and a smaller, lower-risk surface.
-- No changes to the universal locking contract — chat-added locks remain locked; we only fix their timing and verify coverage.
-
-## Files touched (estimated)
-
-- `src/services/itineraryActionExecutor.ts` — add untimed-lock backfill + intent-coverage check
-- `src/utils/userAnchors.ts` — small export tweak if `intentsFromUserAnchors` isn't already callable from the executor
-- `src/components/itinerary/ItineraryAssistant.tsx` — render `partial.missing` follow-up
-- `src/services/__tests__/itineraryActionExecutor.rewriteDay.test.ts` — new
-- `mem://constraints/itinerary/soft-vs-hard-user-intent` — append rule
+- No changes to `_shared/require-auth.ts` (would affect 13 other paid endpoints).
+- No changes to other concierge UI surfaces.
