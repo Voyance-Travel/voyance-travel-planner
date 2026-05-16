@@ -215,6 +215,15 @@ export interface ChatExtractedInput {
 export function intentsFromChatPlannerExtraction(args: ChatExtractedInput): DayIntentInput[] {
   const out: DayIntentInput[] = [];
 
+  // Shared classifier: vague request (no time AND no named venue) → soft `should`.
+  // See mem://constraints/itinerary/soft-vs-hard-user-intent.
+  const classifyPriority = (title: string, startTime?: string | null, kind?: string): IntentPriority => {
+    if (kind === 'avoid') return 'avoid';
+    if (startTime) return 'must';
+    if (looksLikeNamedVenue(title)) return 'must';
+    return 'should';
+  };
+
   // 3a. perDayActivities — comma-separated activities per day (most structured).
   for (const d of args.perDayActivities || []) {
     if (!d || !d.dayNumber) continue;
@@ -231,7 +240,7 @@ export function intentsFromChatPlannerExtraction(args: ChatExtractedInput): DayI
         rawText: item.raw,
         startTime: item.startTime || null,
         endTime: item.endTime || null,
-        priority: 'must',
+        priority: classifyPriority(item.title, item.startTime, kind),
         locked: lock.locked,
         lockedSource: lock.lockedSource,
       });
@@ -254,6 +263,10 @@ export function intentsFromChatPlannerExtraction(args: ChatExtractedInput): DayI
       inferKindFromText(desc);
     const title = desc.length > 140 ? desc.slice(0, 137) + '…' : desc;
     const lock = maybeLock({ source: 'chat_planner', dayNumber: c.day, title, startTime: c.time, kind });
+    // Structured constraints (flight/time_block/full_day_event/preference/timed) keep
+    // their hard 'must' priority — they describe a real commitment. Open-ended chat
+    // wishes without a time fall through to the soft/should classifier.
+    const isStructured = isAvoid || isFlight || isAllDay || c.type === 'preference' || c.type === 'time_block' || !!c.time;
     out.push({
       dayNumber: c.day ?? null,
       source: 'chat_planner',
@@ -262,7 +275,7 @@ export function intentsFromChatPlannerExtraction(args: ChatExtractedInput): DayI
       rawText: desc,
       startTime: c.time || null,
       endTime: c.endTime || null,
-      priority: isAvoid ? 'avoid' : 'must',
+      priority: isAvoid ? 'avoid' : (isStructured ? 'must' : classifyPriority(title, c.time, kind)),
       locked: lock.locked,
       lockedSource: lock.lockedSource,
       metadata: { fullDayEvent: isAllDay || undefined },
@@ -283,7 +296,7 @@ export function intentsFromChatPlannerExtraction(args: ChatExtractedInput): DayI
         title: item.title,
         rawText: item.raw,
         startTime: item.startTime || null,
-        priority: 'must',
+        priority: classifyPriority(item.title, item.startTime, kind),
         locked: lock.locked,
         lockedSource: lock.lockedSource,
       });
