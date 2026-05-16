@@ -1,40 +1,49 @@
-## Step 3 Must-Do Hardening Pass
+## Stop "pasting" floating must-dos on top of the itinerary
 
-Make the free-text Must-Do textarea legible to users *and* more parseable to the backend, without changing the anchor or priority-parsing contracts.
+### What's happening on the live trip (Jeju, `82e56447…`)
 
-### 1. Live parse preview (frontend only)
+You entered three free-text must-dos with no day and no time:
+- Hallasan National Park
+- Cheonjiyeon Waterfall
+- Jeju Stone Park
 
-In `src/components/planner/ItineraryContextForm.tsx`:
-- Reuse the existing `buildUserAnchors({ mustDoActivities, source: 'manual_paste' })` from `src/utils/userAnchors.ts` (no new parser) inside a debounced `useMemo` against the textarea value.
-- Render a small "We understood:" chip list under the textarea showing each parsed anchor as `Day N · 7:30 PM · Dinner at Roscioli`. Items where `dayNumber === 0` render as `Any day · …` in muted style with a tooltip "Tip: add 'Day 2' to pin to a specific day".
-- Render parse failures (lines that produced no anchor) under a "Couldn't parse:" line so the user can fix them in place.
-- No business-logic changes — the chip list is purely a mirror of what the backend will see.
+At trip creation (`src/pages/Start.tsx` L2506) they were converted into **locked anchors** with `dayNumber: 0`, `source: 'single_city'`, no `startTime`, no `description`, no `location`. The `anchor-guard` then *injects* those naked locked rows back onto the days at every persistence boundary — that's why Cheonjiyeon Waterfall and Jeju Stone Park currently appear on Day 1 *and* Day 2 with no time, no address, no description, sitting on top of the real model-generated `Hallasan National Park Hike` (which does have an address + 284-char description). The previous "hardening pass" made it worse by widening that anchor-paste path, instead of fixing it.
 
-### 2. Lightweight input affordances
+The model **already** receives these items as a `## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)` block in `compile-prompt.ts` L521 and weaves them in properly. The locked-anchor projection is the layer that corrupts the output.
 
-In the same component:
-- Add a character counter (`{n} / 1500`) and a soft cap at 1500 chars with `maxLength`.
-- Add two ghost buttons above the textarea: "Add Day N" inserts `\nDay 2: ` at the cursor; "Add time" inserts `7:30 PM `. Pure text-insertion helpers, no state model change.
-- Update placeholder to teach the syntax: `e.g.\nDay 1: Colosseum 9am\nDay 2: Dinner at Roscioli 7:30 PM\nDay trip to Tivoli`.
+### The fix (single principle)
 
-### 3. Match chat-planner extraction in the simple form
+**Free-text must-dos without an explicit `Day N` and an explicit time are SOFT requirements only — not locked anchors.** They feed the prompt, the model places them with a real title / time / address / description, and the result is what you see.
 
-In `ItineraryPreview.tsx::handleContextSubmit` (L294-338):
-- When the parsed anchors include any with `dayNumber > 0`, *also* write a `perDayActivities` array to `trips.metadata` (group anchors by dayNumber, join titles with `, `). This mirrors what `chat-trip-planner` does, so the backend's existing `perDayActivities`-preferred path (intent-normalizers §3c) kicks in and pins items to the right day. The original `mustDoActivities` string is still written as fallback.
+### Changes
 
-### 4. Persist intent + tests
+1. **`src/pages/Start.tsx` (L2500-2521, trip creation):**
+   - Build `userAnchors` only for items where `parseMustDoEntry` extracted **both** `dayNumber >= 1` AND `startTime`. Drop the rest from `metadata.userAnchors`. They still go into `metadata.mustDoActivities` (string list), which is the prompt-feeding path.
+   - Same change for `selectedLandmarks` (chip picks) — landmarks were silently being locked too.
 
-- Stamp `metadata.mustDoSource = 'simple_form'` so anchor-guard / telemetry can distinguish the chat-planner vs textarea origin.
-- Add `src/utils/userAnchors.test.ts` cases covering the new placeholder examples to prevent regressions in `parseMustDoEntry` (`Day N` mid-string, inline times, day-trip phrasing).
+2. **`src/components/planner/ItineraryContextForm.tsx` (the form added in the hardening pass):**
+   - Mirror the same gate: only entries with parsed `dayNumber >= 1` AND `startTime` become anchors / `perDayActivities`. Free-text lines stay in `mustDoActivities` string. The "We understood" chip list keeps showing all parsed items, but with a clear "soft suggestion" vs "pinned to Day N · 7:30 PM" distinction so users know what will be locked vs woven in.
+
+3. **`supabase/functions/_shared/user-anchors.ts::buildUserAnchors`:**
+   - Add an `onlyPinned: true` option (default behavior unchanged for chat path where times are extracted). Frontend creation paths pass `onlyPinned: true`.
+   - Alternative: keep the function permissive and gate at call sites only. Pick whichever is cleaner during implementation — net effect must be: dayNumber:0 + no startTime entries never make it into `metadata.userAnchors`.
+
+4. **`supabase/functions/generate-itinerary/anchor-guard.ts::distributeFloatingAnchors`:**
+   - Defense in depth: if a floating anchor reaches this function with no `startTime` AND no `venueName`, skip it. Log `[ANCHOR_GUARD] floating_dropped reason=soft_must_do title=…`. This stops legacy trips and any other caller from regressing.
+
+5. **One-shot heal for the existing trip:**
+   - SQL migration that, for every trip where `metadata.userAnchors` contains entries with `dayNumber: 0 AND startTime IS NULL`, strips those entries from the array. Items remain in `metadata.mustDoActivities` so the next regenerate still respects them as soft requirements. No itinerary_data rewrite — user can hit "Refresh day" if they want the model to re-place them cleanly.
+
+6. **`enrich-day.ts` (already widened in last pass):**
+   - No further change. With the locked-naked rows gone, the only remaining anchors are *real* pinned ones (Day N + time), and the existing `anchor-enrichment-allowed` path will fill address + description on those.
 
 ### Out of scope
-- No changes to `must-do-priorities.ts` (priority parsing), `anchor-guard.ts`, or `enrich-day.ts`. The new constraint `mem://constraints/itinerary/anchor-enrichment-allowed` already handles description/address backfill for the anchors this produces.
-- No structured form fields per item (date pickers / time pickers per row) — the textarea stays the canonical input; we're just making the parse visible.
-- No DB schema changes — everything rides on existing `trips.metadata`.
+- No changes to the `compile-prompt.ts` MANDATORY block — it already does the right thing.
+- No changes to `must-do-priorities.ts` or how the prompt ranks must-dos.
+- No new UI for time-picker per item — the chip "soft / pinned" hint is enough.
 
-### Verification
-1. Type `Day 1: Colosseum 9am, Day 2: Dinner at Roscioli 7:30 PM` → confirm 2 chips, correct day + time.
-2. Type `Tivoli day trip` alone → chip shows `Any day · Tivoli day trip`.
-3. Submit and inspect `trips.metadata` → `mustDoActivities` (string) + `perDayActivities` (grouped) + `mustDoSource: 'simple_form'` all present.
-4. Generate → `[ENRICH_ANCHOR]` fires for required cards, addresses + descriptions populate.
-5. Reload → DB is source of truth, chips re-derive identically.
+### Verification on `82e56447…`
+1. Run the one-shot heal migration → `metadata.userAnchors` becomes `[]` for this trip.
+2. Hit "Refresh day" on Day 1 (or full regenerate) → model places Hallasan / Cheonjiyeon / Jeju Stone Park exactly once each, with `startTime`, `location.address`, and ≥30-char description; no orphan `single_city` locked rows.
+3. Re-enter "Day 2: Cheonjiyeon Waterfall 2pm" via the form → that one becomes a pinned anchor (locked, time 14:00), enrichment fills address + description, and it does NOT also appear on other days.
+4. Re-enter "Jeju Stone Park" with no day/time → it appears in the prompt block, model places it on whichever day fits best with full address + description, and `metadata.userAnchors` stays empty for that item.
