@@ -466,7 +466,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   // Resolve the display currency: the user's global toggle wins, then the
   // trip's `budget_currency`, then USD. All three trip surfaces (Itinerary
   // header, PaymentsTab, BudgetTab) render in the same currency.
-  const displayCurrency = (displayCurrencyProp || displayCurrency).toUpperCase();
+  const displayCurrency = (displayCurrencyProp || settings?.budget_currency || 'USD').toUpperCase();
 
   const formatCurrency = useCallback((cents: number) => {
     if (!isFinite(cents)) return '$0';
