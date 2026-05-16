@@ -12389,7 +12389,7 @@ function ActivityRow({
                     viatorProductCode: activity.viatorProductCode,
                     externalBookingUrl: activity.bookingUrl, // Pass actual URL for vendor links
                     cost,
-                    currency: activity.cost?.currency || 'USD',
+                    currency: tripCurrency,
                   }}
                   destination={destination}
                   estimatedCost={cost}
