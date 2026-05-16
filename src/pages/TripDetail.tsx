@@ -1567,6 +1567,30 @@ export default function TripDetail() {
                   if (hh < 15) return 'lunch';
                   return 'dinner';
                 };
+                const NON_MEAL_CAT_RE = /^(?!.*(dining|restaurant|breakfast|brunch|lunch|dinner|cafe|food|flight|transport|transfer|airport|accommodation|hotel|checkin|check-in|checkout|check-out|logistics|return)).+$/;
+                const isNonMealMeaningfulJson = (a: any): boolean => {
+                  const cat = String(a?.category || '').toLowerCase();
+                  const title = String(a?.title || a?.name || '').toLowerCase();
+                  if (!title) return false;
+                  if (/\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/.test(title)) return false;
+                  if (/^(return to|travel to|walk to|taxi to|metro to|bus to|train to|drive to|check[- ]?in|check[- ]?out|luggage drop|freshen up|head to|departure flight|arrival flight|transfer to)\b/.test(title)) return false;
+                  if (!NON_MEAL_CAT_RE.test(cat)) return false;
+                  return true;
+                };
+                const isNonMealMeaningfulRow = (r: any): boolean => {
+                  const cat = String(r?.category || '').toLowerCase();
+                  const title = String(r?.title || r?.name || '').toLowerCase();
+                  if (!title) return false;
+                  if (/\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/.test(title)) return false;
+                  if (/^(return to|travel to|walk to|taxi to|metro to|bus to|train to|drive to|check[- ]?in|check[- ]?out|luggage drop|freshen up|head to|departure flight|arrival flight|transfer to)\b/.test(title)) return false;
+                  if (!NON_MEAL_CAT_RE.test(cat)) return false;
+                  return true;
+                };
+                const tableNonMealByDay = new Map<number, number>();
+                for (const d of (dayIdRows || []) as Array<{ id: string; day_number: number }>) {
+                  const dayRows = (rows as any[]).filter((r) => r.itinerary_day_id === d.id);
+                  tableNonMealByDay.set(d.day_number, dayRows.filter(isNonMealMeaningfulRow).length);
+                }
                 for (const d of (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>) {
                   const dn = d?.dayNumber;
                   if (!dn) continue;
@@ -1577,26 +1601,33 @@ export default function TripDetail() {
                     const s = classifyJsonMealSlot(a);
                     if (s) jsonSlots.add(s);
                   }
+                  const jsonNonMeal = (acts as any[]).filter(isNonMealMeaningfulJson).length;
                   const stats = tableByDayNumber.get(dn) || { count: 0, mealSlots: new Set<string>() };
+                  const tableNonMeal = tableNonMealByDay.get(dn) || 0;
                   const countDrift = stats.count >= 3 && jsonCount < stats.count * 0.6;
                   // Slot-aware: only fire when the table has a meal SLOT
                   // (breakfast/lunch/dinner) the JSON is entirely missing.
-                  // Two lunches at different times = NOT drift; one lunch
-                  // missing entirely = drift.
                   const missingSlots: string[] = [];
                   for (const slot of stats.mealSlots) {
                     if (!jsonSlots.has(slot)) missingSlots.push(slot);
                   }
                   const mealDrift = missingSlots.length > 0;
-                  if (countDrift || mealDrift) {
+                  // Non-meal drift: JSON has 0 non-meal/non-logistics rows but
+                  // table has ≥3. Closes Stockholm pattern where day looks
+                  // "fine" by total count (6 meals+logistics) but every
+                  // activity-grade card has been stripped.
+                  const nonMealDrift = jsonNonMeal === 0 && tableNonMeal >= 3;
+                  if (countDrift || mealDrift || nonMealDrift) {
                     console.warn('[HEALTH_JSON_SPARSE_RESYNC]', {
                       tripId, day: dn,
                       jsonCount,
+                      jsonNonMeal,
                       jsonSlots: Array.from(jsonSlots),
                       tableCount: stats.count,
+                      tableNonMeal,
                       tableSlots: Array.from(stats.mealSlots),
                       missingSlots,
-                      reason: mealDrift ? (countDrift ? 'count+slots' : 'missing_slots') : 'count',
+                      reason: nonMealDrift ? 'missing_nonmeal' : (mealDrift ? (countDrift ? 'count+slots' : 'missing_slots') : 'count'),
                     });
                     perDayDriftSuspected = true;
                   }
@@ -1710,6 +1741,41 @@ export default function TripDetail() {
                   const t = String(a?.title || a?.name || '').toLowerCase();
                   return /\b(breakfast|brunch|lunch|dinner|supper)\b/.test(t);
                 };
+                const isLogisticsActivity = (a: any): boolean => {
+                  const cat = String(a?.category || '').toLowerCase();
+                  if (/flight|transport|transfer|airport|accommodation|hotel|checkin|check-in|checkout|check-out|logistics|return/.test(cat)) return true;
+                  const t = String(a?.title || a?.name || '').toLowerCase();
+                  return /^(return to|travel to|walk to|taxi to|metro to|bus to|train to|drive to|check[- ]?in|check[- ]?out|luggage drop|freshen up|head to|departure flight|arrival flight|transfer to)\b/.test(t);
+                };
+                const countNonMeal = (acts: any[]): number => {
+                  if (!Array.isArray(acts)) return 0;
+                  let n = 0;
+                  for (const a of acts) {
+                    if (!a) continue;
+                    if (isMealActivity(a)) continue;
+                    if (isLogisticsActivity(a)) continue;
+                    n++;
+                  }
+                  return n;
+                };
+
+                // 4th candidate: latest itinerary_versions row per day. Closes the
+                // Stockholm pattern where BOTH itinerary_data AND itinerary_activities
+                // table have been collapsed to meals + logistics but the original
+                // canonical generation is still preserved in itinerary_versions v1.
+                const versionsByDayNumber = new Map<number, any[]>();
+                try {
+                  const { data: versionRows } = await supabase
+                    .from('itinerary_versions')
+                    .select('day_number, version_number, activities')
+                    .eq('trip_id', tripId)
+                    .order('day_number', { ascending: true })
+                    .order('version_number', { ascending: false });
+                  for (const r of (versionRows || []) as any[]) {
+                    if (versionsByDayNumber.has(r.day_number)) continue;
+                    versionsByDayNumber.set(r.day_number, Array.isArray(r.activities) ? r.activities : []);
+                  }
+                } catch (_e) { /* non-blocking */ }
 
                 const jsonDaysByNumber = new Map<number, any>();
                 for (const d of (itinData?.days || []) as any[]) {
@@ -1722,21 +1788,30 @@ export default function TripDetail() {
                   const jsonActivities: any[] = Array.isArray(existingJsonDay?.activities) ? existingJsonDay.activities : [];
                   const embeddedActivities: any[] = Array.isArray(row.activities) ? row.activities : [];
                   const perRowActivities: any[] = dedupeRows(rowsByDayId.get(row.id) || []).map(rowToActivity);
+                  const versionActivities: any[] = versionsByDayNumber.get(row.day_number) || [];
 
-                  // Pick the candidate sources by meal-coverage first, then count.
+                  // Score order of priority:
+                  //   non-meal-meaningful count (10000×) — heavily penalize meals-only
+                  //   meal slot coverage (1000×)
+                  //   total card count (1×)
                   const score = (acts: any[]) => {
                     if (!acts || acts.length === 0) return -1;
                     const meals = acts.filter(isMealActivity).length;
-                    return meals * 1000 + acts.length;
+                    const nonMeal = countNonMeal(acts);
+                    return nonMeal * 10000 + meals * 1000 + acts.length;
                   };
                   const jsonScore = score(jsonActivities);
                   const embeddedScore = score(embeddedActivities);
                   const perRowScore = score(perRowActivities);
+                  const versionScore = score(versionActivities);
 
-                  const best = Math.max(jsonScore, embeddedScore, perRowScore);
+                  const best = Math.max(jsonScore, embeddedScore, perRowScore, versionScore);
                   let chosen: any[] = jsonActivities;
-                  let chosenSource: 'json' | 'embedded' | 'per-row' = 'json';
-                  if (best === perRowScore && perRowScore > jsonScore) {
+                  let chosenSource: 'json' | 'embedded' | 'per-row' | 'versions' = 'json';
+                  if (best === versionScore && versionScore > jsonScore) {
+                    chosen = versionActivities;
+                    chosenSource = 'versions';
+                  } else if (best === perRowScore && perRowScore > jsonScore) {
                     chosen = perRowActivities;
                     chosenSource = 'per-row';
                   } else if (best === embeddedScore && embeddedScore > jsonScore) {
@@ -1750,9 +1825,10 @@ export default function TripDetail() {
                       jsonCount: jsonActivities.length,
                       embeddedCount: embeddedActivities.length,
                       perRowCount: perRowActivities.length,
+                      versionCount: versionActivities.length,
                       chosenSource,
-                      jsonMeals: jsonActivities.filter(isMealActivity).length,
-                      perRowMeals: perRowActivities.filter(isMealActivity).length,
+                      jsonNonMeal: countNonMeal(jsonActivities),
+                      chosenNonMeal: countNonMeal(chosen),
                     });
                   }
 

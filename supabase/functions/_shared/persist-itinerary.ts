@@ -55,6 +55,36 @@ export function stripPromptArtifactsInTitles(days: any[]): number {
   return touched;
 }
 
+/**
+ * A "meaningful" activity that is NOT a meal and NOT a logistics row.
+ * Used by the meal-only persist guard so we can detect attempts to clobber
+ * a previously-rich day with a meals + logistics shell (Stockholm pattern:
+ * full generation produced Vasamuseet + City Hall + nightlife, a subsequent
+ * save persisted only Breakfast/Lunch/Dinner + flight/checkin).
+ */
+const MEAL_CAT_RE = /\b(dining|restaurant|breakfast|brunch|lunch|dinner|supper|cafe|food|snack|drinks|cocktail|nightcap)\b/i;
+const MEAL_TITLE_RE = /\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/i;
+const LOGISTICS_CAT_RE = /\b(flight|transport|transfer|airport|accommodation|hotel|checkin|check-in|checkout|check-out|logistics|return)\b/i;
+const LOGISTICS_TITLE_RE = /^(return to|travel to|walk to|taxi to|metro to|bus to|train to|drive to|check[- ]?in|check[- ]?out|luggage drop|freshen up|head to|departure flight|arrival flight|transfer to)\b/i;
+
+export function countNonMealMeaningfulActivities(days: any[]): number {
+  if (!Array.isArray(days)) return 0;
+  let total = 0;
+  for (const day of days) {
+    const acts = Array.isArray(day?.activities) ? day.activities : [];
+    for (const a of acts) {
+      if (!a) continue;
+      const cat = String(a.category || a.type || '').toLowerCase();
+      const title = String(a.title || a.name || '').trim();
+      if (!title) continue;
+      if (MEAL_CAT_RE.test(cat) || MEAL_TITLE_RE.test(title)) continue;
+      if (LOGISTICS_CAT_RE.test(cat) || LOGISTICS_TITLE_RE.test(title)) continue;
+      total++;
+    }
+  }
+  return total;
+}
+
 export interface PersistItineraryOptions {
   destination?: string | null;
   skipContract?: boolean;
@@ -84,6 +114,16 @@ export interface PersistItineraryOptions {
   /** Free-form save reason — also consulted by the FROZEN gate whitelist
    *  (`frozen-guard.ts::isUserSaveReason`). */
   saveReason?: string;
+  /**
+   * Opt out of the MEAL-ONLY guard. Default false. The guard rejects writes
+   * whose `nonMealMeaningfulCount === 0` when either the previously-persisted
+   * itinerary OR the latest `itinerary_versions` row for any day has ≥3
+   * non-meal meaningful activities. Closes the Stockholm pattern where a
+   * save-itinerary call collapsed a rich generation down to meals + logistics.
+   * Only pass `true` for explicit user-initiated meal-only edits (e.g. user
+   * deleted every non-meal card themselves).
+   */
+  allowMealOnly?: boolean;
 }
 
 export interface PersistResult {
@@ -95,6 +135,8 @@ export interface PersistResult {
   /** True when the FROZEN gate blocked the JSONB write (extraUpdate metadata
    *  / status flags still applied). */
   frozenBlocked?: boolean;
+  /** True when the MEAL-ONLY guard blocked the JSONB write. */
+  mealOnlyBlocked?: boolean;
 }
 
 /** Capped-size ring buffer of rejected attempts written under
@@ -375,29 +417,102 @@ export async function persistTripItinerary(
     console.warn(`[${label}] regression-guard probe failed (non-blocking):`, e);
   }
 
+  // 4b. Meal-only guard — reject any write that strips every non-meal
+  //     non-logistics activity from the plan when EITHER the on-disk version
+  //     OR the latest itinerary_versions row for any day has ≥3 such rows.
+  //     Closes the Stockholm pattern: rich generation (Vasamuseet + City
+  //     Hall + nightlife) silently overwritten by a meals + logistics shell.
+  //     NOT bypassed by activeRegen — a regen producing zero non-meal rows
+  //     is itself the bug. Opt-out: `allowMealOnly: true`.
+  let mealOnlyBlocked = false;
+  if (!regressionBlocked && !options.allowMealOnly) {
+    try {
+      const incomingNonMeal = countNonMealMeaningfulActivities(days);
+      if (incomingNonMeal === 0 && Array.isArray(days) && days.length > 0) {
+        // Reference 1: on-disk
+        let referenceNonMeal = 0;
+        let referenceSource: 'on_disk' | 'versions' | null = null;
+        try {
+          const { data: prior } = await supabase
+            .from('trips').select('itinerary_data').eq('id', tripId).maybeSingle();
+          const priorDays = Array.isArray((prior?.itinerary_data as any)?.days)
+            ? (prior!.itinerary_data as any).days : [];
+          const onDisk = countNonMealMeaningfulActivities(priorDays);
+          if (onDisk >= 3) { referenceNonMeal = onDisk; referenceSource = 'on_disk'; }
+        } catch (_e) {}
+        // Reference 2: latest itinerary_versions per day
+        if (referenceNonMeal < 3) {
+          try {
+            const { data: versionRows } = await supabase
+              .from('itinerary_versions')
+              .select('day_number, version_number, activities')
+              .eq('trip_id', tripId)
+              .order('day_number', { ascending: true })
+              .order('version_number', { ascending: false });
+            const seen = new Set<number>();
+            const latestPerDay: Array<{ activities: any[] }> = [];
+            for (const r of (versionRows || []) as any[]) {
+              if (seen.has(r.day_number)) continue;
+              seen.add(r.day_number);
+              latestPerDay.push({ activities: Array.isArray(r.activities) ? r.activities : [] });
+            }
+            const versionsNonMeal = countNonMealMeaningfulActivities(latestPerDay as any);
+            if (versionsNonMeal >= 3 && versionsNonMeal > referenceNonMeal) {
+              referenceNonMeal = versionsNonMeal;
+              referenceSource = 'versions';
+            }
+          } catch (_e) {}
+        }
+        if (referenceNonMeal >= 3) {
+          mealOnlyBlocked = true;
+          console.warn(
+            `[${label}] [PERSIST_MEAL_ONLY_BLOCKED] keeping previous days — ` +
+              `incoming has 0 non-meal meaningful rows; reference (${referenceSource}) has ${referenceNonMeal}`,
+          );
+        }
+      }
+    } catch (e) {
+      console.warn(`[${label}] meal-only guard probe failed (non-blocking):`, e);
+    }
+  }
+
   // 5. Write.
   const extra = options.extraUpdate || {};
   const updatePayload: Record<string, any> = { ...extra };
 
-  if (regressionBlocked) {
+  if (regressionBlocked || mealOnlyBlocked) {
     // Do NOT write itinerary_data — preserve the healthy on-disk version.
     // Still merge metadata + rejected_attempts ring buffer.
-    const existingRejected = Array.isArray((oldMetadata as any)?.rejected_attempts)
-      ? ((oldMetadata as any).rejected_attempts as any[])
+    const blockReason = mealOnlyBlocked && !regressionBlocked
+      ? 'meal_only_blocked'
+      : 'regression_blocked';
+    let priorMeta = oldMetadata;
+    if (!priorMeta) {
+      try {
+        const { data: priorRow } = await supabase
+          .from('trips').select('metadata').eq('id', tripId).maybeSingle();
+        priorMeta = (priorRow?.metadata as Record<string, any>) || {};
+      } catch (_e) { priorMeta = {}; }
+    }
+    const existingRejected = Array.isArray((priorMeta as any)?.rejected_attempts)
+      ? ((priorMeta as any).rejected_attempts as any[])
       : [];
     const callerMetadata = (extra.metadata && typeof extra.metadata === 'object')
       ? extra.metadata as Record<string, any>
       : {};
-    const newEntry = {
+    const newEntry: Record<string, any> = {
       at: new Date().toISOString(),
       label,
-      reason: 'regression_blocked',
+      reason: blockReason,
       old: oldSummary,
-      attempted: newSummary,
+      attempted: newSummary || { meaningfulCount: 0, paidMeaningfulCount: 0, dayCount: Array.isArray(days) ? days.length : 0 },
     };
+    if (mealOnlyBlocked) {
+      newEntry.incomingNonMealCount = countNonMealMeaningfulActivities(days);
+    }
     const rejected = [...existingRejected, newEntry].slice(-MAX_REJECTED_ATTEMPTS);
     updatePayload.metadata = {
-      ...(oldMetadata || {}),
+      ...(priorMeta || {}),
       ...callerMetadata,
       rejected_attempts: rejected,
     };
@@ -410,5 +525,5 @@ export async function persistTripItinerary(
   if (error) {
     console.error(`[${label}] trips.update failed:`, error);
   }
-  return { error, regressionBlocked };
+  return { error, regressionBlocked, mealOnlyBlocked };
 }
