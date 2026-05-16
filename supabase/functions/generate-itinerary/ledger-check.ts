@@ -71,6 +71,7 @@ export interface LedgerCheckWarning {
   kind:
     | 'missing_user_intent'
     | 'missing_user_intent_restored'
+    | 'missing_user_intent_soft'
     | 'repeat_already_done'
     | 'closure_violation'
     | 'vibe_clash';
