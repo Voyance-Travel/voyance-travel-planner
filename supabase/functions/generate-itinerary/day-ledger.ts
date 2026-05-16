@@ -372,17 +372,17 @@ export function renderDayLedgerPrompt(ledger: DayLedger): string {
     const should = ledger.userIntent.filter((u) => u.priority !== 'must');
     if (must.length > 0) {
       lines.push('');
-      lines.push('USER REQUIRED — DO NOT DROP, DO NOT REPLACE, DO NOT RETIME:');
+      lines.push('USER REQUIRED — these MUST appear with the exact title/time/venue. Build the rest of the day AROUND them (transit before/after, meals around them, a written description that explains the purpose). DO NOT drop, replace, retime, or rename:');
       for (const u of must) {
-        const time = u.startTime ? `${u.startTime}${u.endTime ? `–${u.endTime}` : ''}` : '(no fixed time)';
+        const time = u.startTime ? `${u.startTime}${u.endTime ? `–${u.endTime}` : ''}` : '(no fixed time — you pick a believable slot)';
         lines.push(`  - ${time}  ${u.kind.toUpperCase()} — ${u.title}    [source: ${u.source}]`);
       }
     }
     if (should.length > 0) {
       lines.push('');
-      lines.push('USER PREFERENCES — try to honour these unless impossible:');
+      lines.push('USER WISHES — incorporate these naturally as real scheduled activities. Each one means: pick a real specific venue (not a generic placeholder), schedule it in a believable slot, write a real description, and route the rest of the day around it. Do NOT echo the user\'s words back as a bare card.');
       for (const u of should) {
-        const time = u.startTime ? `${u.startTime}${u.endTime ? `–${u.endTime}` : ''}` : '(flexible)';
+        const time = u.startTime ? `${u.startTime}${u.endTime ? `–${u.endTime}` : ''}` : '(you pick the slot)';
         lines.push(`  - ${time}  ${u.kind.toUpperCase()} — ${u.title}    [source: ${u.source}]`);
       }
     }
