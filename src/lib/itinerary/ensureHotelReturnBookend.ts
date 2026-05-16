@@ -287,21 +287,38 @@ export function ensureHotelReturnBookend<T extends any[]>(
     return activities;
   }
 
-  // If the day ALREADY has a true hotel-return bookend somewhere, only allow
-  // appending a fresh one when the chronologically last activity is a
-  // genuine late-nightlife nightcap (00:00–02:30 end). Otherwise a stale
-  // "Walk to <hotel>" / connector / mis-timed leisure card would trick the
-  // tail-detection into stacking a second bookend on top of an existing
-  // hotel-return — root cause of the Vienna Imperial Riding School duplicate.
-  if ((activities as any[]).some(isHotelReturnBookendActivity)) {
-    const isLateNightcap = lastEndMins >= 0 && lastEndMins <= 2 * 60 + 30;
-    if (!isLateNightcap) {
+  // If the day ALREADY has a true hotel-return bookend, only allow appending
+  // a fresh one when the chronological tail genuinely EXTENDS the day past it
+  // (e.g. a real nightcap that ends later than the existing bookend). A stale
+  // "Walk to <hotel>" / "Transfer to <hotel>" connector with no real activity
+  // after the original bookend MUST NOT trigger a second append — that was
+  // the root cause of the Vienna Imperial Riding School duplicate where the
+  // 0-min walk-connector after the 8:15 PM return tricked tail detection.
+  const existingBookendEnd = (() => {
+    let best = -1;
+    for (const a of activities as any[]) {
+      if (!isHotelReturnBookendActivity(a)) continue;
+      const e = parseTime(a?.endTime) ?? parseTime(a?.end_time) ?? parseTime(a?.startTime) ?? parseTime(a?.start_time);
+      if (e == null) continue;
+      const rank = norm(e);
+      if (rank > best) best = rank;
+    }
+    return best;
+  })();
+  if (existingBookendEnd >= 0) {
+    const lastCat = String((last as any)?.category || '').toLowerCase();
+    const lastTitle = String((last as any)?.title || (last as any)?.name || '');
+    const isTransitConnector =
+      /^transit|transport|logistics|travel$/i.test(lastCat) ||
+      /^\s*(?:walk|stroll|transfer|taxi|drive|ride|shuttle|car|uber|lyft)\s+to\b/i.test(lastTitle);
+    const tailExtendsBeyondBookend = norm(lastEndMins) > existingBookendEnd;
+    if (isTransitConnector || !tailExtendsBeyondBookend) {
       // eslint-disable-next-line no-console
-      console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=existing_bookend reason=already_has_hotel_return lastTitle="${String((last as any)?.title || '')}" lastEnd=${fmt(lastEndMins)}`);
+      console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=skipped source=existing_bookend reason=${isTransitConnector ? 'tail_is_transit_connector' : 'tail_does_not_extend_past_bookend'} lastTitle="${lastTitle}" lastEnd=${fmt(lastEndMins)} bookendEnd=${fmt(existingBookendEnd % (24 * 60))}`);
       return activities;
     }
     // eslint-disable-next-line no-console
-    console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=will_append source=stale_earlier_bookend_superseded lastTitle="${String((last as any)?.title || '')}" lastEnd=${fmt(lastEndMins)}`);
+    console.log(`[BOOKEND_TRACE] day=${(opts.dayIndex ?? 0) + 1} site=readtime action=will_append source=stale_earlier_bookend_superseded lastTitle="${lastTitle}" lastEnd=${fmt(lastEndMins)}`);
   }
 
   const hotel =
