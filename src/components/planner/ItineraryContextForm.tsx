@@ -91,6 +91,56 @@ export default function ItineraryContextForm({
   });
   // Must-do activities
   const [mustDoActivities, setMustDoActivities] = useState('');
+  const mustDoRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Live parse preview — debounced, mirrors what backend `buildUserAnchors` will see
+  const [debouncedMustDo, setDebouncedMustDo] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedMustDo(mustDoActivities), 250);
+    return () => clearTimeout(t);
+  }, [mustDoActivities]);
+
+  const parsedAnchors = useMemo<UserAnchor[]>(() => {
+    if (!debouncedMustDo.trim()) return [];
+    try {
+      return buildUserAnchors({ mustDoActivities: debouncedMustDo, source: 'manual_paste' });
+    } catch {
+      return [];
+    }
+  }, [debouncedMustDo]);
+
+  const unparsedLines = useMemo<string[]>(() => {
+    if (!debouncedMustDo.trim()) return [];
+    const lines = debouncedMustDo.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    if (parsedAnchors.length === 0) return lines;
+    const matched = new Set(parsedAnchors.map((a) => (a.raw || a.title).trim().toLowerCase()));
+    return lines.filter((line) => {
+      const lower = line.toLowerCase();
+      // Line counts as parsed if any anchor's raw text appears within it (or vice versa)
+      for (const m of matched) {
+        if (lower.includes(m) || m.includes(lower)) return false;
+      }
+      return true;
+    });
+  }, [debouncedMustDo, parsedAnchors]);
+
+  const insertAtCursor = (snippet: string) => {
+    const el = mustDoRef.current;
+    if (!el) {
+      setMustDoActivities((prev) => (prev ? `${prev}${snippet}` : snippet));
+      return;
+    }
+    const start = el.selectionStart ?? mustDoActivities.length;
+    const end = el.selectionEnd ?? mustDoActivities.length;
+    const next = mustDoActivities.slice(0, start) + snippet + mustDoActivities.slice(end);
+    setMustDoActivities(next.slice(0, MUST_DO_MAX));
+    // Restore caret after React re-renders
+    requestAnimationFrame(() => {
+      const pos = Math.min(start + snippet.length, MUST_DO_MAX);
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    });
+  };
 
   // Detect complex constraints in must-do text
   const complexConstraintKeywords = /\b(school|class|work|meeting|hotel change|switching hotel|change hotel|moving hotel|new hotel|joining|my aunt|my mom|my friend|family joining|guest|arrives|leaving early|blocked|not available|unavailable|appointment|conference|seminar|5 hours|half.?day|morning off|afternoon off)\b/i;
