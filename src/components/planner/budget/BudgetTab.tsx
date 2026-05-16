@@ -1421,6 +1421,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         tripTotalCents={snapshot.tripTotalCents}
         hotelCents={summary?.committedHotelCents || 0}
         totalNights={Math.max(0, totalDays - 1)}
+        displayCurrency={displayCurrency}
         onSave={async (newSettings) => {
           await updateSettings(newSettings);
           refetch();
