@@ -119,31 +119,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return new Response(
-      JSON.stringify({ error: "Authentication required" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-  const authClient = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!
-  );
-  const token = authHeader.replace("Bearer ", "");
-  const { data: { user }, error: authError } = await authClient.auth.getUser(token);
-  if (authError || !user) {
-    console.warn(
-      "activity-concierge auth failed:",
-      authError?.message ?? "no user",
-      "token_prefix:",
-      token.slice(0, 8),
-    );
-    return new Response(
-      JSON.stringify({ error: "Invalid token" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
 
   try {
     const { messages, activityContext, tripContext, surroundingContext } =
