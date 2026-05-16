@@ -761,7 +761,7 @@ export function ItineraryAssistant({
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="font-medium text-sm">{displayInfo.title}</p>
-                                    <p className="text-xs text-muted-foreground line-clamp-2">
+                                    <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words">
                                       {isThisExecuting ? 'Applying changes...' : displayInfo.description}
                                     </p>
                                     <span className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
