@@ -696,11 +696,11 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                 <p className="text-xs text-muted-foreground mt-1">
                   {isHotelDriven ? (
                     <>
-                      Your hotel ({formatCurrency(hotelCents)}) is <span className="font-medium text-foreground">{hotelMultiplier} your trip budget</span> of {formattedBudget}. The rest of the plan ({formatCurrency(discretionaryCents)} for food, activities &amp; transit{includeFlight && flightCents > 0 ? ' + flights' : ''}) sits on top.
+                      Your hotel ({formatCurrency(hotelCents)}) is <span className="font-medium text-foreground">{hotelMultiplier} your trip budget</span> of {formatCurrency(budgetCents)}. The rest of the plan ({formatCurrency(discretionaryCents)} for food, activities &amp; transit{includeFlight && flightCents > 0 ? ' + flights' : ''}) sits on top.
                     </>
                   ) : (
                     <>
-                      Your budget is {formattedBudget} but the estimated cost for {travelers} traveler{travelers !== 1 ? 's' : ''} is {formatCurrency(snapshot.tripTotalCents)}.
+                      Your budget is {formatCurrency(budgetCents)} but the estimated cost for {travelers} traveler{travelers !== 1 ? 's' : ''} is {formatCurrency(snapshot.tripTotalCents)}.
                       {fit.drivers[0] && (
                         <> Largest driver: <span className="font-medium text-foreground">{fit.drivers[0].kind === 'discretionary' ? 'food, activities & transit' : fit.drivers[0].kind} ({formatCurrency(fit.drivers[0].cents)})</span>.</>
                       )}
