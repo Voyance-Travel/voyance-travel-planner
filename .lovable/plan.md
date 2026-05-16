@@ -1,33 +1,46 @@
+## Problem
+
+The recurring **“Invalid token”** error is not being caused by the user login token path alone. The failing functions are still using the wrong authentication style for **Lovable AI Gateway**:
+
+- `activity-concierge` sends `Authorization: Bearer ${LOVABLE_API_KEY}` to the AI gateway.
+- `itinerary-chat` does the same.
+- Lovable AI Gateway expects `LOVABLE_API_KEY` in the `Lovable-API-Key` header, plus `X-Lovable-AIG-SDK: vercel-ai-sdk`; it should not receive that key as a Bearer token.
+
+This explains why prior attempts focused on refreshing the user session but the error kept coming back.
+
 ## Plan
 
-Fix the itinerary currency display so every trip opens in USD by default, including the header, Budget, and Payments tabs.
+1. **Fix the AI Gateway auth in both assistant backends**
+   - Update `supabase/functions/activity-concierge/index.ts`.
+   - Update `supabase/functions/itinerary-chat/index.ts`.
+   - Replace the gateway request header from:
+     - `Authorization: Bearer ${LOVABLE_API_KEY}`
+   - To:
+     - `Lovable-API-Key: ${LOVABLE_API_KEY}`
+     - `X-Lovable-AIG-SDK: vercel-ai-sdk`
 
-## What I found
+2. **Keep user authentication separate and intact**
+   - Keep `parseAuth(req)` in `activity-concierge` so only signed-in users can use it.
+   - Keep the existing user token validation in `itinerary-chat`.
+   - Do not weaken auth or allow anonymous AI usage.
 
-- `EditorialItinerary` already initializes `showLocalCurrency` to `false`, so the intended default is USD.
-- The visible screenshot still shows `CNY`, which means something is reusing local display currency after load or a child surface is prioritizing `budgetCurrency`/local currency over the header toggle.
-- The main likely weak spot is `PaymentsTab`/shared display currency behavior: `getCanonicalDisplayCurrency` falls back to `budgetCurrency` when `tripCurrency` is missing, which can reintroduce local currency if a component is rendered before the parent passes the USD toggle value.
+3. **Improve diagnostics without exposing secrets**
+   - Add safe logs around gateway failures that include:
+     - function name
+     - response status
+     - short error body
+     - whether the managed AI key exists
+   - Do not log the AI key or user token.
 
-## Changes to make
+4. **Fix the client call path if needed**
+   - `useActivityConcierge.ts` already uses the user `session.access_token`, which is correct.
+   - I’ll keep the one-shot refresh retry, but make the error message clearer if the user session is actually missing or expired.
 
-1. **Harden the canonical currency helper**
-   - Update `getCanonicalDisplayCurrency` so it defaults to `USD` unless an explicit user toggle value is provided.
-   - Keep budget currency only as a server/non-toggle fallback where there truly is no UI currency state.
+5. **Validate with deployed function logs**
+   - Deploy/test `activity-concierge` and `itinerary-chat`.
+   - Call `activity-concierge` with the current preview user token if available.
+   - Check edge logs for a successful gateway call or a clear non-auth error.
 
-2. **Make `EditorialItinerary` more defensive**
-   - Ensure the header’s display currency is explicitly initialized as `USD` and cannot be inferred from destination/budget on first render.
-   - Keep the local-currency toggle working as session-only: USD on reload, local only after the user clicks the toggle.
+## Expected result
 
-3. **Align child tabs**
-   - Confirm Budget and Payments receive the parent `tripCurrency` and render canonical USD cents through the shared formatter.
-   - Remove/adjust any fallback that lets `budgetCurrency` override the parent’s USD default.
-
-4. **Add a small diagnostic log if needed**
-   - Add a temporary/dev-only log showing `showLocalCurrency`, `localCurrency`, and `tripCurrency` on render so the next screenshot/log can prove whether the parent or a child is responsible.
-
-## Validation
-
-- Load a non-USD trip such as Shanghai.
-- Confirm the header initially shows `$…` and the toggle highlights `USD`.
-- Click the currency toggle and confirm it changes to `CNY` only for that session.
-- Refresh the page and confirm it returns to USD.
+The assistant/concierge should stop returning **“Invalid token”** from the AI gateway. If a real user session expires, the UI will still ask the user to refresh/sign in, but AI Gateway requests will no longer be rejected because of the wrong Bearer-token header.

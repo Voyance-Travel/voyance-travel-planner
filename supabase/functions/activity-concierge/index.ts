@@ -159,6 +159,8 @@ serve(async (req) => {
         method: "POST",
         headers: {
           Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Lovable-API-Key": LOVABLE_API_KEY,
+          "X-Lovable-AIG-SDK": "vercel-ai-sdk",
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
@@ -167,6 +169,10 @@ serve(async (req) => {
 
     if (!response.ok) {
       const status = response.status;
+      console.error("[activity-concierge] AI gateway non-OK", {
+        status,
+        hasKey: Boolean(LOVABLE_API_KEY),
+      });
       if (status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
