@@ -519,6 +519,31 @@ export async function persistTripItinerary(
     delete updatePayload.itinerary_data; // belt-and-suspenders
   } else {
     updatePayload.itinerary_data = itinerary;
+    // ── Metadata merge (success branch) ─────────────────────────────
+    // Postgres jsonb columns are full-replace on UPDATE. Without this
+    // merge, every save overwrote the entire `metadata` column with
+    // just the caller's keys (persist_validation, itinerary_frozen_at,
+    // fully_persisted, quality, …), wiping setup intent set at trip
+    // creation (mustDoActivities, interestCategories, userAnchors,
+    // generationRules, celebrationDay, pacing, isFirstTimeVisitor,
+    // firstTimePerCity). The next regeneration leg then read an empty
+    // metadata and fell back to generic "find a local spot" stubs,
+    // ignoring user must-do spots. The regression-blocked branch
+    // above already does this; mirror it here.
+    if (extra.metadata && typeof extra.metadata === 'object') {
+      let priorMeta = oldMetadata;
+      if (!priorMeta) {
+        try {
+          const { data: priorRow } = await supabase
+            .from('trips').select('metadata').eq('id', tripId).maybeSingle();
+          priorMeta = (priorRow?.metadata as Record<string, any>) || {};
+        } catch (_e) { priorMeta = {}; }
+      }
+      updatePayload.metadata = {
+        ...(priorMeta || {}),
+        ...(extra.metadata as Record<string, any>),
+      };
+    }
   }
 
   const { error } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
