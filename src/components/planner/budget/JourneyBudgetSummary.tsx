@@ -137,7 +137,7 @@ export function JourneyBudgetSummary({ journeyId, journeyName, currentTripId, cu
                   )}
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {budget > 0 ? formatCurrency(budget, leg.currency) : 'No budget'}
+                  {budget > 0 ? formatCurrency(budget) : 'No budget'}
                 </span>
               </div>
 
@@ -145,9 +145,9 @@ export function JourneyBudgetSummary({ journeyId, journeyName, currentTripId, cu
                 <>
                   <Progress value={pct} className="h-1.5 mb-1" />
                   <div className="flex justify-between text-[11px] text-muted-foreground">
-                    <span>Spent: {formatCurrency(leg.spentCents, leg.currency)}</span>
+                    <span>Spent: {formatCurrency(leg.spentCents)}</span>
                     <span className={cn(isOver && 'text-destructive font-medium')}>
-                      {isOver ? `Over by ${formatCurrency(Math.abs(remaining), leg.currency)}` : `${formatCurrency(remaining, leg.currency)} left`}
+                      {isOver ? `Over by ${formatCurrency(Math.abs(remaining))}` : `${formatCurrency(remaining)} left`}
                     </span>
                   </div>
                 </>
