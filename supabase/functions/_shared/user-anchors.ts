@@ -251,6 +251,16 @@ export function buildUserAnchors(input: BuildAnchorsInput): UserAnchor[] {
 
 /** Convert an anchor into a normalized itinerary activity object. */
 export function anchorToActivity(a: UserAnchor, idx: number): Record<string, unknown> {
+  // NOTE: description is intentionally an empty string (not undefined) so that
+  // downstream enrichment (description-fill + venue-enrichment) sees a missing
+  // field and backfills it. Anchor rows are locked for time/title/category,
+  // but address + description remain eligible for backfill via the
+  // `anchorSource`-aware exemptions in:
+  //   - pipeline/enrich-day.ts (address/venue lookup)
+  //   - pipeline/validate-day.ts::shouldSkipDescriptionCheck
+  //   - _shared/description-fill.ts
+  //   - _shared/persist-itinerary.ts (final safety net)
+  // See mem://constraints/itinerary/anchor-enrichment-allowed.
   return {
     id: `anchor-d${a.dayNumber}-${idx}-${Date.now()}`,
     title: a.title,
@@ -261,10 +271,12 @@ export function anchorToActivity(a: UserAnchor, idx: number): Record<string, unk
     venue_name: a.venueName,
     location: a.venueName ? { name: a.venueName, address: '' } : undefined,
     cost: { amount: 0, currency: 'USD' },
+    description: '',
     locked: true,
     isLocked: true,
     lockedSource: a.lockedSource,
     anchorSource: a.source,
+    needsAnchorEnrichment: true,
     durationMinutes: a.startTime && a.endTime ? diffMinutes(a.startTime, a.endTime) : 60,
   };
 }
