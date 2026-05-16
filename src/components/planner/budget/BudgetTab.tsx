@@ -522,6 +522,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           onOpenChange={setShowSetupDialog}
           memberNames={memberNames}
           tripTotalCents={snapshot.tripTotalCents}
+          displayCurrency={displayCurrency}
           onSave={async (newSettings) => {
             await updateSettings(newSettings);
             refetch();
