@@ -321,6 +321,9 @@ export default function ItineraryPreview({
       if (data.perDayActivities && data.perDayActivities.length > 0) {
         metadataUpdates.perDayActivities = data.perDayActivities;
       }
+      if (data.additionalNotes && data.additionalNotes.trim()) {
+        metadataUpdates.additionalNotes = data.additionalNotes.trim();
+      }
       if (data.isFirstTimeVisitor !== undefined) {
         metadataUpdates.isFirstTimeVisitor = data.isFirstTimeVisitor;
       }

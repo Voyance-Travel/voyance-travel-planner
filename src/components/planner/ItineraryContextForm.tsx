@@ -42,6 +42,7 @@ export interface ItineraryContextData {
   preBookedCommitments?: PreBookedCommitment[]; // Fixed events that can't be moved
   mustDoActivities?: string; // User's must-do list as comma-separated string
   perDayActivities?: Array<{ dayNumber: number; activities: string }>; // Per-day structured activities from Just Tell Us
+  additionalNotes?: string; // Freeform "Anything else?" — feeds metadata.additionalNotes (prompt TRIP PURPOSE block)
 }
 
 interface ItineraryContextFormProps {
@@ -92,6 +93,9 @@ export default function ItineraryContextForm({
   // Must-do activities
   const [mustDoActivities, setMustDoActivities] = useState('');
   const mustDoRef = useRef<HTMLTextAreaElement | null>(null);
+  // Freeform "Anything else?" notes (vibes, things to skip, special requests).
+  // Separate from mustDoActivities so the prompt treats it as context, not as a venue.
+  const [additionalNotes, setAdditionalNotes] = useState('');
 
   // Live parse preview — debounced, mirrors what backend `buildUserAnchors` will see
   const [debouncedMustDo, setDebouncedMustDo] = useState('');
@@ -207,6 +211,7 @@ export default function ItineraryContextForm({
       preBookedCommitments: commitments.length > 0 ? commitments : undefined,
       mustDoActivities: mustDoActivities || undefined,
       perDayActivities,
+      additionalNotes: additionalNotes.trim() || undefined,
     });
   };
 
@@ -460,6 +465,24 @@ export default function ItineraryContextForm({
               </ul>
             </div>
           )}
+        </div>
+
+        {/* Anything else? — freeform context (vibe, things to skip, special requests) */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm font-medium">
+            Anything else?
+            <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+          </Label>
+          <Textarea
+            value={additionalNotes}
+            onChange={(e) => setAdditionalNotes(e.target.value.slice(0, 1000))}
+            maxLength={1000}
+            placeholder="Tell us what to optimize for — vibes, things to skip, special requests, or context we should know."
+            className="min-h-[80px] resize-none"
+          />
+          <p className="text-xs text-muted-foreground">
+            We'll weave this into how the trip feels — not as a separate activity.
+          </p>
         </div>
 
         {/* Pre-Booked Commitments */}

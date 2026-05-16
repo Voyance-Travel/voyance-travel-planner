@@ -2236,7 +2236,10 @@ export default function Start() {
 
   const [isFirstTimeVisitor, setIsFirstTimeVisitor] = useState(true);
   const [firstTimePerCity, setFirstTimePerCity] = useState<Record<string, boolean>>({});
-   const [mustDoActivities, setMustDoActivities] = useState('');
+   // Freeform "Anything else?" notes — feeds metadata.additionalNotes (prompt's TRIP PURPOSE block),
+   // NOT metadata.mustDoActivities. Lumping freeform text into the must-do array used to make
+   // parseMustDoInput treat the whole sentence as a venue name.
+   const [additionalNotes, setAdditionalNotes] = useState('');
    const [generationRules, setGenerationRules] = useState<GenerationRule[]>([]);
   const [selectedLandmarks, setSelectedLandmarks] = useState<string[]>([]);
   const [selectedCategories] = useState<string[]>([]); // Kept for backward compat with saved metadata
@@ -2282,7 +2285,9 @@ export default function Start() {
           if (savedDraft.manualHotel) setManualHotel(savedDraft.manualHotel);
           if (savedDraft.isFirstTimeVisitor !== undefined) setIsFirstTimeVisitor(savedDraft.isFirstTimeVisitor);
           if (savedDraft.firstTimePerCity) setFirstTimePerCity(savedDraft.firstTimePerCity);
-          if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
+          // Back-compat: legacy drafts stored this under `mustDoActivities`.
+          if (savedDraft.additionalNotes) setAdditionalNotes(savedDraft.additionalNotes);
+          else if (savedDraft.mustDoActivities) setAdditionalNotes(savedDraft.mustDoActivities);
           if (savedDraft.selectedLandmarks) setSelectedLandmarks(savedDraft.selectedLandmarks);
           // selectedCategories removed — interest categories are no longer user-facing
           if (savedDraft.customMustDos) setCustomMustDos(savedDraft.customMustDos);
@@ -2498,15 +2503,14 @@ export default function Start() {
           status: 'draft',
           owner_plan_tier: ownerPlanTier,
           metadata: (() => {
+            // mustDoActivities = venue chips ONLY (landmarks + custom). The freeform
+            // "Anything else?" textarea flows separately into metadata.additionalNotes,
+            // which the prompt renders as the TRIP PURPOSE block — keeps the model from
+            // pasting a whole sentence as a literal activity card.
             const formMustDoList = [
               ...selectedLandmarks,
               ...customMustDos,
-              ...(mustDoActivities ? [mustDoActivities] : []),
             ].filter(Boolean);
-            // Build anchors but keep ONLY items that have both an explicit day pin AND a start time.
-            // Free-text must-dos like "Hallasan National Park" (no day, no time) should flow into
-            // the generator as SOFT requirements via metadata.mustDoActivities, not as locked rows
-            // that anchor-guard then paints onto every day with no description or address.
             const allParsed = buildUserAnchors({
               mustDoActivities: formMustDoList.length > 0 ? formMustDoList : null,
               source: isMultiCity ? 'multi_city' : 'single_city',
@@ -2519,10 +2523,12 @@ export default function Start() {
                 `[trip-create] anchors: ${userAnchors.length} pinned (day+time), ${allParsed.length - userAnchors.length} soft must-dos kept in mustDoActivities only`,
               );
             }
+            const notes = additionalNotes.trim();
             return ({
               isFirstTimeVisitor,
               firstTimePerCity: isMultiCity && Object.keys(firstTimePerCity).length > 0 ? firstTimePerCity : null,
               mustDoActivities: formMustDoList.length > 0 ? formMustDoList : null,
+              additionalNotes: notes ? notes : null,
               interestCategories: selectedCategories.length > 0 ? selectedCategories : null,
               generationRules: generationRules.length > 0 ? generationRules : null,
               celebrationDay: celebrationDay || null,
@@ -2541,9 +2547,8 @@ export default function Start() {
         const _mustDoCount = [
           ...selectedLandmarks,
           ...customMustDos,
-          ...(mustDoActivities ? [mustDoActivities] : []),
         ].filter(Boolean).length;
-        console.log(`[trip-create] form path tripId=${trip?.id} mustDoActivities=${_mustDoCount} items selectedLandmarks=${selectedLandmarks.length} customMustDos=${customMustDos.length} paste=${mustDoActivities ? 'yes' : 'no'}`);
+        console.log(`[trip-create] form path tripId=${trip?.id} mustDoActivities=${_mustDoCount} items selectedLandmarks=${selectedLandmarks.length} customMustDos=${customMustDos.length} additionalNotes=${additionalNotes ? 'yes' : 'no'}`);
       } catch (_e) { /* logging only */ }
 
       // Eagerly write the hotel cost row into activity_costs so the trip total
@@ -3429,9 +3434,9 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                           <span className="text-xs text-muted-foreground/60">(optional)</span>
                         </div>
                         <Textarea
-                          value={mustDoActivities}
-                          onChange={(e) => setMustDoActivities(e.target.value)}
-                          placeholder="Paste notes, other AI suggestions, skip requests, or special requirements..."
+                          value={additionalNotes}
+                          onChange={(e) => setAdditionalNotes(e.target.value)}
+                          placeholder="Tell us what to optimize for — vibes, things to skip, special requests, or context we should know."
                           className="min-h-[70px] resize-none text-sm"
                         />
                       </div>
@@ -3514,7 +3519,7 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                   manualHotel,
                   isFirstTimeVisitor,
                   firstTimePerCity,
-                  mustDoActivities,
+                  additionalNotes,
                   selectedLandmarks,
                   selectedCategories,
                   customMustDos,
