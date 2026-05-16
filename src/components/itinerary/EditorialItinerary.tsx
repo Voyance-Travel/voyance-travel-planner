@@ -6219,9 +6219,9 @@ export function EditorialItinerary({
                           aria-label="Switch Currency"
                           data-tour="currency-toggle"
                         >
-                          <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>{localCurrency}</span>
-                          <span className="text-muted-foreground/50">↔</span>
                           <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>USD</span>
+                          <span className="text-muted-foreground/50">↔</span>
+                          <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>{localCurrency}</span>
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom">
