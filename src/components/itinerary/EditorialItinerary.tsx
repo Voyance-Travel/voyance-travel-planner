@@ -1972,8 +1972,15 @@ export function EditorialItinerary({
             price = returnLeg.price;
 
             const explicitMode = (flightSelection as any).transportMode as string | undefined;
+            const carrierLower = (carrier || '').toLowerCase();
+            const IATA_RE = /^[A-Z]{3}$/;
+            const fromIsAirport = IATA_RE.test((depAirport || '').trim().toUpperCase());
+            const toIsAirport = IATA_RE.test((arrAirport || '').trim().toUpperCase());
             tType = explicitMode
-              || (flightNum ? 'flight' : (carrier && !(carrier || '').toLowerCase().includes('train') ? 'flight' : 'train'));
+              || (flightNum ? 'flight'
+                  : /\b(train|rail|sncf|amtrak|eurostar|trenitalia|renfe|db\s|ice)\b/i.test(carrierLower) ? 'train'
+                  : (fromIsAirport || toIsAirport) ? 'flight'
+                  : 'flight'); // flightSelection.legs implies a flight
             hasReturnData = true;
           }
         }
