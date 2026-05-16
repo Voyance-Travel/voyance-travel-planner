@@ -217,6 +217,9 @@ export async function fillMissingDescriptions(
       if (!act) { counters.skipped++; continue; }
       act.description = next;
       counters.filled++;
+      if (act.anchorSource) {
+        console.log(`[DESC_FILL_ANCHOR] day=${dayNumber} id=${t.id} title="${t.title.slice(0, 60)}"`);
+      }
     }
 
     console.log(`[DESC_FILL] day=${dayNumber} flagged=${counters.flagged} filled=${counters.filled} skipped=${counters.skipped}`);
