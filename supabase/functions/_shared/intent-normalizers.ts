@@ -138,6 +138,19 @@ export function intentsFromUserAnchors(
       ? mapCategoryToKind(a.category, title)
       : inferKindFromText(title);
     const source = mapAnchorSource(a.source, fallbackSource);
+
+    // ── Hard lock vs soft wish classification ──────────────────────────
+    // A "hard lock" needs enough structure that the user clearly meant a
+    // specific commitment: explicit time OR a real proper-noun venue.
+    // Vague chips like "sushi lunch" or "spa" come in with no time and no
+    // venueName — treat them as `should`/unlocked so the Day Brief tells the
+    // AI to incorporate them naturally (pick a real venue, schedule a
+    // believable slot, build the day around them) instead of being restored
+    // verbatim as a blank locked card.
+    const hasTime = !!a.startTime;
+    const hasNamedVenue = !!a.venueName || looksLikeNamedVenue(title);
+    const isHardLock = hasTime || hasNamedVenue;
+
     out.push({
       dayNumber: a.dayNumber,
       source,
@@ -146,9 +159,9 @@ export function intentsFromUserAnchors(
       rawText: a.lockedSource || title,
       startTime: a.startTime || null,
       endTime: a.endTime || null,
-      priority: 'must',
-      locked: true,
-      lockedSource: a.lockedSource,
+      priority: isHardLock ? 'must' : 'should',
+      locked: isHardLock,
+      lockedSource: isHardLock ? a.lockedSource : null,
     });
   }
   return out;
