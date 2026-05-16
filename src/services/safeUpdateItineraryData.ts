@@ -248,6 +248,34 @@ export async function safeUpdateItineraryData(
       }
     }
 
+    // Persist gate (HTTP 200 + code: 'NEEDS_REGENERATION') — the backend
+    // returns 200 (not 422) for this verdict so the browser doesn't log a
+    // red console error on every self-heal page-load save. The body shape
+    // is identical to the legacy 422 branch above. Same suppression rules.
+    if (!error && (data as any)?.code === 'NEEDS_REGENERATION') {
+      const body = data as any;
+      const reasonStr = String(options.reason || '');
+      const isSelfHeal = reasonStr.startsWith('self-heal-') || options.skipLedgerCheck === true;
+      if (!isSelfHeal) {
+        try {
+          window.dispatchEvent(new CustomEvent('itinerary-persist-issues', {
+            detail: { tripId, source: reasonStr || 'user', ...body },
+          }));
+        } catch { /* non-fatal */ }
+        console.warn('[safeUpdateItineraryData] persist gate flagged issues:', body);
+      } else {
+        console.warn(
+          `[safeUpdateItineraryData] persist gate flagged issues (suppressed: self-heal reason="${reasonStr}"):`,
+          body,
+        );
+      }
+      try {
+        const { dispatchTripPersisted } = await import('@/lib/itinerary/resyncItineraryFromDb');
+        dispatchTripPersisted({ tripId, prevDays: nextDays, source: 'persist-gate-flagged' });
+      } catch { /* non-fatal */ }
+      return { error: null, persistVerdict: body } as any;
+    }
+
     if (error) {
       // IMPORTANT: do NOT fall back to a raw `trips.update({ itinerary_data })`
       // here. The raw write bypasses the persist-day contract (ghost rows,
