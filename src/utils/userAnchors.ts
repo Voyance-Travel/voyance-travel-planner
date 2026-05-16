@@ -180,10 +180,25 @@ export interface BuildAnchorsInput {
   source: UserAnchorSource;
 }
 
+/**
+ * A real anchor needs enough structure to lock verbatim: explicit start time
+ * OR a proper-noun venue name. Vague chips like "sushi lunch", "spa", or
+ * "do flight and hotel" must NOT become anchors — they end up as blank
+ * locked cards thrown on top of the day. They stay in `mustDoActivities`
+ * / `perDayActivities` metadata so the generator can pick a real venue
+ * and schedule a believable slot via the USER WISHES prompt block.
+ * See mem://constraints/itinerary/soft-vs-hard-user-intent.
+ */
+function isHardAnchor(a: UserAnchor): boolean {
+  return !!a.startTime || !!a.venueName;
+}
+
 export function buildUserAnchors(input: BuildAnchorsInput): UserAnchor[] {
   const seen = new Set<string>();
   const out: UserAnchor[] = [];
+  let softDropped = 0;
   const push = (a: UserAnchor) => {
+    if (!isHardAnchor(a)) { softDropped++; return; }
     const key = fingerprint(a.dayNumber, a.title, a.startTime);
     if (seen.has(key)) return;
     seen.add(key);
@@ -208,6 +223,10 @@ export function buildUserAnchors(input: BuildAnchorsInput): UserAnchor[] {
   for (const raw of mustDoList) {
     const a = parseMustDoEntry(raw, input.source);
     if (a) push(a);
+  }
+
+  if (softDropped > 0 && typeof console !== 'undefined') {
+    console.log(`[buildUserAnchors] dropped ${softDropped} soft wish(es) (no time, no venue) — handled as USER WISHES in Day Brief`);
   }
 
   return out;
