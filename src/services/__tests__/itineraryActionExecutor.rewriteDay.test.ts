@@ -10,19 +10,30 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock supabase before importing the executor.
+// Mock supabase before importing the executor. We make `.from('trips')` look
+// like a local-only trip (PGRST116) so updateTripItinerary short-circuits to
+// `{ success: true, local: true }` without doing real DB I/O.
 const invokeMock = vi.fn();
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    functions: { invoke: (...args: unknown[]) => invokeMock(...args) },
-    from: vi.fn(() => ({
-      update: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockResolvedValue({ data: {}, error: null }),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: {}, error: null }),
-    })),
-  },
+vi.mock('@/integrations/supabase/client', () => {
+  const tripsBuilder = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: { code: 'PGRST116' } }),
+  };
+  return {
+    supabase: {
+      functions: { invoke: (...args: unknown[]) => invokeMock(...args) },
+      from: vi.fn(() => tripsBuilder),
+    },
+  };
+});
+
+// Pass-through meal/sweep utilities so we don't pull in heavy deps.
+vi.mock('@/utils/mealGuard', () => ({
+  enforceItineraryMealComplianceAsync: vi.fn().mockResolvedValue({ totalInjected: 0 }),
 }));
+vi.mock('@/utils/preSaveMealSweep', () => ({ preSaveMealStubSweep: vi.fn() }));
+vi.mock('@/utils/durationNormalize', () => ({ normalizeDurationsInDays: vi.fn() }));
 
 // Mock accommodation merge to a pass-through.
 vi.mock('@/utils/accommodationActivities', () => ({
