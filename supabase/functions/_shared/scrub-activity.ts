@@ -34,6 +34,7 @@ export interface ScrubOps {
   downgraded: number;
   phantomRef: number;
   degenerate: number;
+  addressCity: number;
 }
 
 export const EMPTY_OPS: ScrubOps = Object.freeze({
@@ -47,6 +48,7 @@ export const EMPTY_OPS: ScrubOps = Object.freeze({
   downgraded: 0,
   phantomRef: 0,
   degenerate: 0,
+  addressCity: 0,
 }) as ScrubOps;
 
 export interface ScrubContext {
