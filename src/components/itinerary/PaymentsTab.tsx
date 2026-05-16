@@ -1321,19 +1321,19 @@ export function PaymentsTab({
         </div>
         
         {/* Show budget progress if budget is set */}
-        {budgetLimitCents && budgetLimitCents > 0 ? (
+        {budgetLimitUsdCents && budgetLimitUsdCents > 0 ? (
           <>
             <Progress 
-              value={Math.min((estimatedTotal / budgetLimitCents) * 100, 100)} 
+              value={Math.min((estimatedTotal / budgetLimitUsdCents) * 100, 100)} 
               className={cn(
                 "h-2 mb-4",
-                estimatedTotal > budgetLimitCents && "[&>div]:bg-destructive"
+                estimatedTotal > budgetLimitUsdCents && "[&>div]:bg-destructive"
               )}
             />
-            {estimatedTotal > budgetLimitCents && (
+            {estimatedTotal > budgetLimitUsdCents && (
               <div className="flex items-center gap-2 mb-4 text-destructive text-sm">
                 <AlertCircle className="h-4 w-4" />
-                Over budget by {displayMoney(estimatedTotal - budgetLimitCents)}
+                Over budget by {displayMoney(estimatedTotal - budgetLimitUsdCents)}
               </div>
             )}
           </>
