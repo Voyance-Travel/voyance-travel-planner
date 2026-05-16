@@ -124,8 +124,18 @@ async function checkCuratedCache(
       return null;
     }
 
-    // Check for negative cache entry (no_result) — skip API calls entirely
-    const negativeHit = data.find((row: any) => row.source === 'no_result');
+    // Check for negative cache entry (no_result) — skip API calls entirely.
+    // For destination heroes we intentionally honor the negative cache for only
+    // 24h (vs 30d for activities), so a single bad POI lookup (e.g. "Alcudia
+    // Old Town") never permanently poisons the city's hero photo. See plan:
+    // "Restore Google→cache→serve" — destinations must keep trying real photos.
+    const negativeHit = data.find((row: any) => {
+      if (row.source !== 'no_result') return false;
+      if (entityType !== 'destination') return true;
+      const updatedAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+      const ageMs = Date.now() - updatedAt;
+      return ageMs < 24 * 60 * 60 * 1000;
+    });
     if (negativeHit) {
       console.log(`[Images] ⛔ Negative cache hit for "${entityKey}" — skipping API calls`);
       return {
@@ -1904,7 +1914,12 @@ async function fetchImageTiered(
   // Prevents repeated Google API calls for venues that consistently return nothing.
   try {
     const normalizedKey = venueName.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
-    const negativeExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+    // 24h TTL for destination heroes (must keep retrying real photos),
+    // 30d for activities (genuinely obscure venues rarely flip).
+    const negativeTtlMs = entityType === 'destination'
+      ? 24 * 60 * 60 * 1000
+      : 30 * 24 * 60 * 60 * 1000;
+    const negativeExpiresAt = new Date(Date.now() + negativeTtlMs).toISOString();
 
     await supabase.from("curated_images").upsert({
       entity_type: entityType,
