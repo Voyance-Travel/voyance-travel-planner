@@ -210,3 +210,40 @@ Deno.test("applyAnchorsWin: drifted title and time restored to anchor values", (
   assertEquals(a.endTime, "21:00");
   assertEquals(a.locked, true);
 });
+
+// ----------------------------------------------------------------------------
+// 9. Paris-pattern: 3 must-do venues from Step 3 (single_city source,
+//    dayNumber=0) distributed across 3 days, skipping departure day.
+// ----------------------------------------------------------------------------
+Deno.test("applyAnchorsWin: floating must-dos distributed across days, departure day skipped", () => {
+  const days = [
+    day(1, [act({ title: "Breakfast" })]),
+    day(2, [act({ title: "Breakfast" })]),
+    day(3, [
+      act({ title: "Checkout from Hotel", category: "accommodation" }),
+      act({ title: "Travel to Airport", category: "transfer-to-airport" }),
+      act({ title: "Departure Flight", category: "departure-flight" }),
+    ]),
+  ];
+  const anchors = [
+    { dayNumber: 0, title: "Eiffel Tower", lockedSource: "Eiffel Tower", source: "single_city", category: "activity" },
+    { dayNumber: 0, title: "Louvre Museum", lockedSource: "Louvre Museum", source: "single_city", category: "explore" },
+    { dayNumber: 0, title: "Notre-Dame Cathedral", lockedSource: "Notre-Dame Cathedral", source: "single_city", category: "explore" },
+  ];
+  const result = applyAnchorsWin(days, anchors);
+  assertEquals(result.restored, 3);
+  // Day 1 and Day 2 each get one (round-robin), the third lands on Day 1.
+  // Departure day (Day 3) must NOT receive any anchors.
+  const day3Titles = result.days[2].activities.map((a: any) => a.title);
+  assert(!day3Titles.includes("Eiffel Tower"));
+  assert(!day3Titles.includes("Louvre Museum"));
+  assert(!day3Titles.includes("Notre-Dame Cathedral"));
+  // All three anchors must appear somewhere on Day 1 or Day 2.
+  const placedTitles = [
+    ...result.days[0].activities.map((a: any) => a.title),
+    ...result.days[1].activities.map((a: any) => a.title),
+  ];
+  assert(placedTitles.includes("Eiffel Tower"));
+  assert(placedTitles.includes("Louvre Museum"));
+  assert(placedTitles.includes("Notre-Dame Cathedral"));
+});
