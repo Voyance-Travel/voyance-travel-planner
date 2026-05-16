@@ -48,7 +48,7 @@ import {
   type TripPayment,
   type PaymentTotals
 } from '@/services/tripPaymentsAPI';
-import { formatMoneyFromUsdCents } from '@/lib/currency';
+import { formatMoneyFromUsdCents, getCanonicalDisplayCurrency, convertToUSD } from '@/lib/currency';
 import { markActivityPaid } from '@/services/activityCostService';
 import { useTripMembers, addTripMember, type TripMember } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
@@ -69,8 +69,12 @@ interface PaymentsTabProps {
     pricePerNight?: number;
   } | null;
   travelers: number;
-  /** Budget limit in cents from BudgetTab - shows spending limit */
+  /** Budget limit in cents from BudgetTab - in `budgetCurrency` (NOT USD cents). */
   budgetLimitCents?: number;
+  /** Budget currency (USD/EUR/JPY/...) — required to interpret budgetLimitCents
+   *  and to align the Payments display currency with the BudgetTab so "% of
+   *  budget" stays sane (was the Mallorca $2,500 vs €1,608 / 92% mismatch). */
+  budgetCurrency?: string;
   /** Trip owner info for Split Bill */
   ownerId?: string;
   ownerName?: string;
@@ -81,9 +85,8 @@ interface PaymentsTabProps {
   /** Journey fields for linked trips */
   journeyId?: string | null;
   journeyName?: string | null;
-  /** Trip currency for display (USD/EUR/JPY/...) — mirrors header so the
-   *  Payments "Trip Total" reads in the same units as the itinerary header.
-   *  Defaults to USD for backwards compatibility. */
+  /** Trip currency for display (USD/EUR/JPY/...) — used only when no
+   *  budgetCurrency is set. Defaults to USD for backwards compatibility. */
   tripCurrency?: string;
 }
 
@@ -129,6 +132,7 @@ export function PaymentsTab({
   hotelSelection,
   travelers,
   budgetLimitCents,
+  budgetCurrency,
   ownerId,
   ownerName,
   budgetTier = 'moderate',
@@ -138,21 +142,35 @@ export function PaymentsTab({
   journeyName,
   tripCurrency = 'USD',
 }: PaymentsTabProps) {
-  // Single money formatter — converts canonical USD cents into the trip's
-  // display currency (matching the itinerary header). Closes the recurring
-  // "header €1,244 vs Payments $1,446" perceived-mismatch where the two
-  // surfaces actually held the same value but rendered in different units.
-  const displayMoney = useCallback(
-    (usdCents: number) => formatMoneyFromUsdCents(usdCents, tripCurrency),
-    [tripCurrency],
+  // Canonical display currency — when a budget currency is set, it wins so
+  // BudgetTab and PaymentsTab render the same headline (and "% of budget"
+  // compares apples to apples). Closes Mallorca "$2,500 budget vs €1,608 /
+  // 92%" cross-currency mismatch.
+  const displayCurrency = useMemo(
+    () => getCanonicalDisplayCurrency({ budgetCurrency, tripCurrency }),
+    [budgetCurrency, tripCurrency],
   );
-  // Belt-and-braces: surface tripCurrency drift in dev so any future
-  // showLocalCurrency-toggle desync between header and PaymentsTab is visible.
+  // Convert the budget limit (raw cents in `budgetCurrency`) into canonical
+  // USD cents so it can be compared directly to snapshot.tripTotalCents.
+  // Without this the % ratio mixes units when budgetCurrency !== USD.
+  const budgetLimitUsdCents = useMemo(() => {
+    if (!budgetLimitCents || budgetLimitCents <= 0) return 0;
+    const bc = (budgetCurrency || 'USD').toUpperCase();
+    if (bc === 'USD') return budgetLimitCents;
+    const usd = convertToUSD(budgetLimitCents / 100, bc);
+    return Math.round(usd * 100);
+  }, [budgetLimitCents, budgetCurrency]);
+  // Single money formatter — converts canonical USD cents into the display
+  // currency. All snapshot/ledger values are USD cents.
+  const displayMoney = useCallback(
+    (usdCents: number) => formatMoneyFromUsdCents(usdCents, displayCurrency),
+    [displayCurrency],
+  );
   useEffect(() => {
     if (typeof console !== 'undefined') {
-      console.debug('[PaymentsTab] tripCurrency=', tripCurrency);
+      console.debug('[PaymentsTab] displayCurrency=', displayCurrency, 'budgetCurrency=', budgetCurrency, 'tripCurrency=', tripCurrency);
     }
-  }, [tripCurrency]);
+  }, [displayCurrency, budgetCurrency, tripCurrency]);
   const queryClient = useQueryClient();
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
@@ -1265,8 +1283,8 @@ export function PaymentsTab({
             <p className="text-sm text-muted-foreground">
               {!headerTotalReady
                 ? 'Calculating…'
-                : budgetLimitCents && budgetLimitCents > 0
-                  ? `${Math.round((estimatedTotal / budgetLimitCents) * 100)}% of budget`
+                : budgetLimitUsdCents && budgetLimitUsdCents > 0
+                  ? `${Math.round((estimatedTotal / budgetLimitUsdCents) * 100)}% of budget`
                   : `${Math.round(progressPercent)}% paid`
               }
             </p>
@@ -1303,19 +1321,19 @@ export function PaymentsTab({
         </div>
         
         {/* Show budget progress if budget is set */}
-        {budgetLimitCents && budgetLimitCents > 0 ? (
+        {budgetLimitUsdCents && budgetLimitUsdCents > 0 ? (
           <>
             <Progress 
-              value={Math.min((estimatedTotal / budgetLimitCents) * 100, 100)} 
+              value={Math.min((estimatedTotal / budgetLimitUsdCents) * 100, 100)} 
               className={cn(
                 "h-2 mb-4",
-                estimatedTotal > budgetLimitCents && "[&>div]:bg-destructive"
+                estimatedTotal > budgetLimitUsdCents && "[&>div]:bg-destructive"
               )}
             />
-            {estimatedTotal > budgetLimitCents && (
+            {estimatedTotal > budgetLimitUsdCents && (
               <div className="flex items-center gap-2 mb-4 text-destructive text-sm">
                 <AlertCircle className="h-4 w-4" />
-                Over budget by {displayMoney(estimatedTotal - budgetLimitCents)}
+                Over budget by {displayMoney(estimatedTotal - budgetLimitUsdCents)}
               </div>
             )}
           </>

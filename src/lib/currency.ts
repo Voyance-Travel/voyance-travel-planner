@@ -65,6 +65,38 @@ export function formatMoneyFromUsdCents(
   return formatCurrency(amount, targetCurrency);
 }
 
+/**
+ * Format raw cents that are ALREADY in `currency` (no FX conversion).
+ * Use this for `settings.budget_total_cents` and budget-allocation rows —
+ * never for `snapshot.tripTotalCents` (those are canonical USD cents and
+ * must go through `formatMoneyFromUsdCents`).
+ */
+export function formatBudgetCurrencyCents(
+  cents: number | null | undefined,
+  currency: string = 'USD'
+): string {
+  if (cents === null || cents === undefined || !isFinite(cents)) return '-';
+  return formatCurrency(cents / 100, currency);
+}
+
+/**
+ * Canonical display currency for a trip surface (PaymentsTab + BudgetTab).
+ * Rules:
+ *   1. If a budget currency is set, it wins — the only meaningful comparison
+ *      on either surface is "spent vs budget", and that requires one currency.
+ *   2. Otherwise honor the user's local/USD toggle (tripCurrency).
+ *   3. Default USD.
+ */
+export function getCanonicalDisplayCurrency(opts: {
+  budgetCurrency?: string | null;
+  tripCurrency?: string | null;
+}): string {
+  const bc = (opts.budgetCurrency || '').toUpperCase();
+  if (bc) return bc;
+  const tc = (opts.tripCurrency || '').toUpperCase();
+  return tc || 'USD';
+}
+
 /** Human-readable rate disclosure, e.g. "1 USD = 0.86 EUR (rates as of May 4, 2026)". */
 export function rateDisclosure(targetCurrency: string): string | null {
   const code = targetCurrency.toUpperCase();
