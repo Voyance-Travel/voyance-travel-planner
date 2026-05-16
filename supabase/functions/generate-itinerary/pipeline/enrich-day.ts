@@ -91,6 +91,7 @@ async function enrichActivities(
     const batch = activitiesToEnrich.slice(i, i + batchSize);
     const enrichedBatch = await Promise.all(
       batch.map(async (act: StrictActivity) => {
+        const isAnchor = !!(act as any).anchorSource;
         try {
           const result = await enrichActivityWithRetry(
             act,
@@ -102,7 +103,30 @@ async function enrichActivities(
             1, // maxRetries
             hotelCoordinates
           );
-          return result.activity;
+          const enriched: any = result.activity;
+          if (!isAnchor) return enriched;
+          // Restore anchor identity: title/time/category/anchorSource/locked
+          // remain immutable; only copy newly resolved geo+contact fields.
+          const original: any = act;
+          const merged = {
+            ...original,
+            location: enriched?.location?.address
+              ? { ...(original.location || {}), ...enriched.location }
+              : original.location,
+            venue_name: original.venue_name || enriched.venue_name,
+            rating: enriched.rating ?? original.rating,
+            photoUrl: enriched.photoUrl ?? original.photoUrl,
+            phone: enriched.phone ?? original.phone,
+            website: enriched.website ?? original.website,
+            mapLink: enriched.mapLink ?? original.mapLink,
+            placeId: enriched.placeId ?? original.placeId,
+            // Drop the enrichment-needed flag once an address is populated
+            needsAnchorEnrichment: enriched?.location?.address ? false : original.needsAnchorEnrichment,
+          };
+          if (enriched?.location?.address && !original?.location?.address) {
+            console.log(`[ENRICH_ANCHOR] filled address="${String(enriched.location.address).slice(0, 80)}" for "${original.title}"`);
+          }
+          return merged;
         } catch (e) {
           console.log(`[enrich-day] Enrichment failed for "${act.title}":`, e);
           return act; // Return original if enrichment fails
