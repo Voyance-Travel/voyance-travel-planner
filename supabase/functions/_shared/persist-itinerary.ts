@@ -417,6 +417,65 @@ export async function persistTripItinerary(
     console.warn(`[${label}] regression-guard probe failed (non-blocking):`, e);
   }
 
+  // 4b. Meal-only guard — reject any write that strips every non-meal
+  //     non-logistics activity from the plan when EITHER the on-disk version
+  //     OR the latest itinerary_versions row for any day has ≥3 such rows.
+  //     Closes the Stockholm pattern: rich generation (Vasamuseet + City
+  //     Hall + nightlife) silently overwritten by a meals + logistics shell.
+  //     NOT bypassed by activeRegen — a regen producing zero non-meal rows
+  //     is itself the bug. Opt-out: `allowMealOnly: true`.
+  let mealOnlyBlocked = false;
+  if (!regressionBlocked && !options.allowMealOnly) {
+    try {
+      const incomingNonMeal = countNonMealMeaningfulActivities(days);
+      if (incomingNonMeal === 0 && Array.isArray(days) && days.length > 0) {
+        // Reference 1: on-disk
+        let referenceNonMeal = 0;
+        let referenceSource: 'on_disk' | 'versions' | null = null;
+        try {
+          const { data: prior } = await supabase
+            .from('trips').select('itinerary_data').eq('id', tripId).maybeSingle();
+          const priorDays = Array.isArray((prior?.itinerary_data as any)?.days)
+            ? (prior!.itinerary_data as any).days : [];
+          const onDisk = countNonMealMeaningfulActivities(priorDays);
+          if (onDisk >= 3) { referenceNonMeal = onDisk; referenceSource = 'on_disk'; }
+        } catch (_e) {}
+        // Reference 2: latest itinerary_versions per day
+        if (referenceNonMeal < 3) {
+          try {
+            const { data: versionRows } = await supabase
+              .from('itinerary_versions')
+              .select('day_number, version_number, activities')
+              .eq('trip_id', tripId)
+              .order('day_number', { ascending: true })
+              .order('version_number', { ascending: false });
+            const seen = new Set<number>();
+            const latestPerDay: Array<{ activities: any[] }> = [];
+            for (const r of (versionRows || []) as any[]) {
+              if (seen.has(r.day_number)) continue;
+              seen.add(r.day_number);
+              latestPerDay.push({ activities: Array.isArray(r.activities) ? r.activities : [] });
+            }
+            const versionsNonMeal = countNonMealMeaningfulActivities(latestPerDay as any);
+            if (versionsNonMeal >= 3 && versionsNonMeal > referenceNonMeal) {
+              referenceNonMeal = versionsNonMeal;
+              referenceSource = 'versions';
+            }
+          } catch (_e) {}
+        }
+        if (referenceNonMeal >= 3) {
+          mealOnlyBlocked = true;
+          console.warn(
+            `[${label}] [PERSIST_MEAL_ONLY_BLOCKED] keeping previous days — ` +
+              `incoming has 0 non-meal meaningful rows; reference (${referenceSource}) has ${referenceNonMeal}`,
+          );
+        }
+      }
+    } catch (e) {
+      console.warn(`[${label}] meal-only guard probe failed (non-blocking):`, e);
+    }
+  }
+
   // 5. Write.
   const extra = options.extraUpdate || {};
   const updatePayload: Record<string, any> = { ...extra };
