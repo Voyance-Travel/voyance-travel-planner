@@ -192,7 +192,7 @@ export function addOps(a: ScrubOps, b: ScrubOps): ScrubOps {
 export function opsHadChange(o: ScrubOps): boolean {
   return o.titleLeak + o.bodyLeak + o.fragment + o.mealSuffix
        + o.crossCity + o.countryMismatch + o.mealLabel + o.downgraded
-       + o.phantomRef + o.degenerate > 0;
+       + o.phantomRef + o.degenerate + o.addressCity > 0;
 }
 
 /** Compact one-line render for logs. */
