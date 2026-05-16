@@ -111,3 +111,39 @@ describe('buildUserAnchors — Step 3 simple-form placeholder examples', () => {
     expect(day1Count).toBe(2);
   });
 });
+
+describe('buildUserAnchors — soft vs hard classification', () => {
+  it('drops vague chip "sushi lunch" (no time, no venue)', () => {
+    const anchors = buildUserAnchors({
+      perDayActivities: [{ dayNumber: 2, activities: 'Sushi Lunch' }],
+      source: 'chat',
+    });
+    expect(anchors.length).toBe(0);
+  });
+
+  it('drops freeform wish "do flight and hotel"', () => {
+    const anchors = buildUserAnchors({
+      mustDoActivities: 'do flight and hotel',
+      source: 'chat',
+    });
+    expect(anchors.length).toBe(0);
+  });
+
+  it('keeps timed entry "7:30 PM - Dinner at Roscioli"', () => {
+    const anchors = buildUserAnchors({
+      perDayActivities: [{ dayNumber: 2, activities: '7:30 PM - Dinner at Roscioli' }],
+      source: 'chat',
+    });
+    expect(anchors.length).toBe(1);
+    expect(anchors[0].startTime).toBe('19:30');
+  });
+
+  it('keeps named venue without time (Sukiyabashi Jiro)', () => {
+    const anchors = buildUserAnchors({
+      mustDoActivities: 'Lunch at Sukiyabashi Jiro Day 3',
+      source: 'chat',
+    });
+    expect(anchors.length).toBe(1);
+    expect(anchors[0].venueName).toMatch(/jiro/i);
+  });
+});
