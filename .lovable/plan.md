@@ -1,68 +1,31 @@
-# Fix: Must-Do Venues Silently Dropped (Paris trip pattern)
+# Fix Regenerate: 422 error, flicker storm, and toast spam
 
-## What's broken on `1777da80-…`
+## What's broken
+Clicking the existing "Regenerate itinerary" button on a failed/partial trip causes:
+1. **422 from `generate-itinerary`** — the identity-swap / no-regression guard in `persist-itinerary.ts` blocks the new save because the prior (broken) trip still has a few rows.
+2. **UI flicker + `[ITIN_RESYNC_DRIFT] cascade would still mutate on load` spam** — the drift-probe `useEffect` in `EditorialItinerary.tsx` re-fires on every realtime row update while the server chain is writing.
+3. **Login-style toast storm** — global listeners (notifications, credits, friend requests, persist-issues) all re-emit during the regen burst because nothing suppresses them while `isServerGenerating` is true.
 
-The trip has **3 days, 3 must-do venues** (Eiffel Tower, Louvre, Notre-Dame entered in Step 3), but the final itinerary contains only meals, hotel check-in/out, and the departure transfer — zero sightseeing.
+No new button, endpoint, or visual style is added. Same `handleResumeGeneration` path the user already clicks.
 
-Database evidence:
-- `metadata.mustDoActivities = ["Eiffel Tower", "Louvre Museum", "Notre-Dame Cathedral"]` ✅ captured
-- `metadata.userAnchors` — all three have **`dayNumber: 0`** ❌
-- `metadata.itinerary_status = 'failed'`, `generation_failure_reason = 'incomplete_itinerary'`
-- `metadata.rejected_attempts` — 3 consecutive `save-itinerary` writes blocked by **regression-overwrite guard** (attempted 0 meaningful vs. existing 7), so the broken state is now stuck — even retries can't replace it.
+## Changes
 
-## Root cause
+1. **`src/pages/TripDetail.tsx`** — `handleResumeGeneration` passes `allowRegression: true` and `saveReason: 'user-regenerate'` through to `generate-itinerary` so the new plan can overwrite a failed/incomplete one.
 
-`supabase/functions/_shared/user-anchors.ts → parseMustDoEntry` defaults `dayNumber: 0` when the must-do string has no explicit "Day N" prefix (which is always the case for venues entered in the Step 3 box).
+2. **`supabase/functions/_shared/persist-itinerary.ts`** — no-regression guard auto-bypasses when prior `itinerary_status ∈ {failed, incomplete_itinerary}` OR caller passes `allowRegression: true`. Still stamps `metadata.rejected_attempts` for audit. Frozen-after-ready still honored unless `allowFrozenWrite`.
 
-Then `supabase/functions/generate-itinerary/anchor-guard.ts:45`:
+3. **`supabase/functions/generate-itinerary/action-generate-trip-day.ts` + `generation-core.ts`** — thread `allowRegression` from request body into every `persistTripItinerary` call in the chain.
 
-```ts
-const targetDayNum = (anchor.dayNumber as number) || 0;
-if (targetDayNum < 1 || targetDayNum > days.length) continue;
-```
+4. **`src/components/itinerary/EditorialItinerary.tsx`** — drift-probe `useEffect` early-returns when `isServerGenerating` or `itinerary_status ∈ {generating, partial, queued}`. Kills the postMessage/dynamic-import storm and the `[ITIN_RESYNC_DRIFT]` log flood.
 
-…silently skips every dayNumber=0 anchor. So the post-generation safety net that's supposed to **restore missing must-do venues into the day** never fires for un-pinned must-dos. If the model also omits them (as happened here), they vanish without a trace.
+5. **Toast suppression during regen** — add a lightweight `isTripRegenerating(tripId)` gate (reads the same status the poller uses) and apply it in the 3 noisy listeners that fired during the storm:
+   - `PersistIssuesListener` (already buffers until `voyance:trip-loaded` — extend to also drop while regenerating)
+   - notifications + credits toast emitters in `TripDetail` mount effects (suppress info-level toasts when `isServerGenerating`)
+   - friend-request page-load toast (already silenced for transient errors — confirm `classifyBackendError` path is taken)
 
-`action-save-itinerary.ts:1195` has the same `d.dayNumber > 0` filter, compounding the drop on save.
+6. **Memory** — update `mem://constraints/itinerary/no-regression-overwrite` to document the `failed`/`incomplete_itinerary` + `allowRegression` bypass and the regen-toast suppression rule.
 
-## Fix
-
-### 1. Distribute un-pinned must-do anchors across days (anchor-guard)
-
-In `restoreUserAnchors` (`supabase/functions/generate-itinerary/anchor-guard.ts`), before the existing per-anchor loop:
-
-- Partition anchors into `pinned` (`dayNumber ≥ 1`) and `floating` (`dayNumber < 1`).
-- For each `floating` anchor, assign a target day by round-robin starting at Day 1, **skipping the departure day** (last day if `metadata.departureDay`-flagged or if it already contains a `transfer-to-airport` / `Departure Flight` activity).
-- Prefer days that don't already contain a fingerprint-match (avoids piling multiple anchors on Day 1 when later days are emptier).
-- Then run the existing restore-or-reaffirm logic with the assigned `targetDayNum`.
-
-Telemetry: log `[ANCHOR_GUARD] floating_distributed count=N days=[…]` so future regressions are visible.
-
-### 2. Mirror the distribution at save-time (action-save-itinerary)
-
-In `action-save-itinerary.ts` around line 1195, before applying the `d.dayNumber > 0` filter, run the same distribution helper so anchors persisted with `dayNumber: 0` (legacy rows like this trip) get bound on the next save instead of being filtered out.
-
-### 3. Allow this trip to recover
-
-The regression-overwrite guard is correctly protecting the user — we **keep it**. But because the on-disk state is the bad state for this trip, add a one-shot self-heal path:
-
-- In `TripDetail.tsx`, when `metadata.generation_failure_reason === 'incomplete_itinerary'` AND `metadata.userAnchors` has un-bound entries (`dayNumber < 1`) AND no successful regeneration since the last `empty_itinerary_detected_at`, surface the existing **"Regenerate itinerary"** CTA prominently instead of silently swallowing the failure. Don't auto-trigger (DB-is-source-of-truth + No-Auto-Resume-On-Load constraints).
-- Backfill (one-shot SQL migration): for trips where `userAnchors` exists with `dayNumber=0`, recompute and stamp distributed `dayNumber` values so the next user-initiated regenerate picks them up correctly.
-
-### 4. Shared helper
-
-Add `supabase/functions/_shared/distribute-floating-anchors.ts` exporting `distributeFloatingAnchors(anchors, dayCount, departureDayNum?)` so anchor-guard, save-itinerary, and any future caller share one implementation. Add unit test covering: 3 floating + 3 days (one each), 5 floating + 3 days (2-2-1 with departure-day skip), 0 floating (no-op).
-
-## Files touched
-
-- `supabase/functions/_shared/distribute-floating-anchors.ts` (new)
-- `supabase/functions/generate-itinerary/anchor-guard.ts`
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts`
-- `src/pages/TripDetail.tsx` (CTA visibility for incomplete-itinerary state — display only, no auto-regen)
-- One migration to backfill `metadata.userAnchors[].dayNumber` for affected legacy trips
-- New `__tests__/distribute-floating-anchors.test.ts`
-
-## Out of scope
-
-- The bogus `MISSING_REQUIRED_MEAL` validation errors in `persist_validation` (Day 1–2 meals exist) — separate validator drift, not blocking this fix.
-- The regression-overwrite guard itself — working as designed.
+## Verification
+- Reproduce on the broken trip: click Regenerate → expect no 422, no flicker, no toast burst, single "Regenerating…" indicator, then normal Saved snapshot when chain completes.
+- Grep: `rg "ITIN_RESYNC_DRIFT" src/` should only fire outside generation windows.
+- Tests: extend `persist-itinerary` test for the failed-status bypass; add a `TripDetail.regenerate.test.tsx` asserting `allowRegression:true` is forwarded.
