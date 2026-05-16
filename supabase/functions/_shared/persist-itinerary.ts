@@ -55,6 +55,36 @@ export function stripPromptArtifactsInTitles(days: any[]): number {
   return touched;
 }
 
+/**
+ * A "meaningful" activity that is NOT a meal and NOT a logistics row.
+ * Used by the meal-only persist guard so we can detect attempts to clobber
+ * a previously-rich day with a meals + logistics shell (Stockholm pattern:
+ * full generation produced Vasamuseet + City Hall + nightlife, a subsequent
+ * save persisted only Breakfast/Lunch/Dinner + flight/checkin).
+ */
+const MEAL_CAT_RE = /\b(dining|restaurant|breakfast|brunch|lunch|dinner|supper|cafe|food|snack|drinks|cocktail|nightcap)\b/i;
+const MEAL_TITLE_RE = /\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/i;
+const LOGISTICS_CAT_RE = /\b(flight|transport|transfer|airport|accommodation|hotel|checkin|check-in|checkout|check-out|logistics|return)\b/i;
+const LOGISTICS_TITLE_RE = /^(return to|travel to|walk to|taxi to|metro to|bus to|train to|drive to|check[- ]?in|check[- ]?out|luggage drop|freshen up|head to|departure flight|arrival flight|transfer to)\b/i;
+
+export function countNonMealMeaningfulActivities(days: any[]): number {
+  if (!Array.isArray(days)) return 0;
+  let total = 0;
+  for (const day of days) {
+    const acts = Array.isArray(day?.activities) ? day.activities : [];
+    for (const a of acts) {
+      if (!a) continue;
+      const cat = String(a.category || a.type || '').toLowerCase();
+      const title = String(a.title || a.name || '').trim();
+      if (!title) continue;
+      if (MEAL_CAT_RE.test(cat) || MEAL_TITLE_RE.test(title)) continue;
+      if (LOGISTICS_CAT_RE.test(cat) || LOGISTICS_TITLE_RE.test(title)) continue;
+      total++;
+    }
+  }
+  return total;
+}
+
 export interface PersistItineraryOptions {
   destination?: string | null;
   skipContract?: boolean;
