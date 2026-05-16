@@ -2484,6 +2484,16 @@ export function EditorialItinerary({
   const driftProbeRef = useRef<string | null>(null);
   useEffect(() => {
     if (!days || days.length === 0) return;
+    // Skip the drift probe entirely while the backend is actively writing.
+    // Realtime row updates during generation cause `days` to churn on every
+    // insert, which previously fired a postMessage/dynamic-import loop and
+    // spammed `[ITIN_RESYNC_DRIFT] cascade would still mutate on load`.
+    // The probe is telemetry-only — its sole purpose is catching post-load
+    // cascade drift on a steady-state itinerary. See plan .lovable/plan.md.
+    const status = String(itineraryStatus || '').toLowerCase();
+    if (status === 'generating' || status === 'partial' || status === 'queued' || status === 'not_started') {
+      return;
+    }
     const fp = days.map(d => (d.activities || []).map(a => `${a.id}@${a.startTime || (a as any).time || ''}|${a.endTime || ''}`).join('|')).join('||');
     if (driftProbeRef.current === fp) return;
     driftProbeRef.current = fp;
@@ -2516,7 +2526,7 @@ export function EditorialItinerary({
       }
     })();
     return () => { cancelled = true; };
-  }, [days]);
+  }, [days, itineraryStatus]);
 
   
   const handleRefreshDay = useCallback(async (dayIndex: number) => {
