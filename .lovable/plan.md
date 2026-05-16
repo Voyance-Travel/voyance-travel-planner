@@ -1,59 +1,69 @@
-# Why the AI Concierge says "Invalid token"
+# Budget vs Payments mismatch — root cause + fix
 
-`src/hooks/useActivityConcierge.ts` calls the `activity-concierge` edge function with a hand-rolled `fetch`. It sends:
+## What the user actually saw
 
-```ts
-Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
-```
+- **BudgetTab**: "$2,500 budget · $0 expenses"
+- **PaymentsTab**: "€1,608 · 92% of budget"
 
-The edge function (`supabase/functions/activity-concierge/index.ts:133`) then does:
+Same trip, same underlying ledger — three different-looking numbers.
 
-```ts
-const { data: { user }, error } = await authClient.auth.getUser(token);
-if (authError || !user) return 401 "Invalid token";
-```
+## Root cause (one bug with two symptoms)
 
-`auth.getUser()` expects a **user JWT**, not the project's publishable/anon key. With Supabase's new signing-keys flow this is strictly rejected — historically it silently returned `user=null`, the function probably worked when auth wasn't gated, and recent backend pinning now surfaces the 401. Result: every concierge request fails with the literal string "Invalid token", which the hook bubbles into the chat bubble as "Sorry, I couldn't process that request. Invalid token".
+The codebase has **two different "cents" fields that look identical but mean different things**, and the two tabs handle them inconsistently:
 
-Two other call sites have the same anti-pattern and will trip the same way once their edge functions tighten auth:
+| Field | Real unit | Used by |
+|---|---|---|
+| `snapshot.tripTotalCents` | **canonical USD cents** (always USD, regardless of trip) | both tabs |
+| `settings.budget_total_cents` | raw cents in `settings.budget_currency` (USD, EUR, …) — **no conversion** | both tabs |
 
-- `src/utils/quizMapping.ts:517`
-- `src/pages/OnboardConversation.tsx:70`
+What each tab does today:
 
-# Fix
+- **PaymentsTab** formats `snapshot.tripTotalCents` via `formatMoneyFromUsdCents(cents, tripCurrency)` where `tripCurrency` defaults to the **destination's local currency** (EUR for Mallorca). FX-converts USD→EUR correctly → shows **€1,608**.
+- **PaymentsTab** then computes `% of budget = snapshot.tripTotalCents / settings.budget_total_cents`. This divides **USD cents by budget-currency cents** — only correct when `budget_currency === 'USD'`. For a USD budget + EUR display, the % is mathematically right (USD÷USD) but the user is staring at "€1,608 / $2,500 = 92%" which looks impossible.
+- **BudgetTab**'s `formatCurrency(cents)` does `new Intl.NumberFormat({ currency: budget_currency }).format(cents/100)` — it **never converts**, it just relabels. So a `snapshot.tripTotalCents` of 232000 (=$2,320) prints as "$2,320" when `budget_currency='USD'` (correct), or "€2,320" when `budget_currency='EUR'` (silently wrong by ~30%).
+- The "$0 expenses" the user saw is most likely BudgetTab caught mid-snapshot-load (the `isGenerating && snapshot.tripTotalCents === 0` branch renders a spinner-ish $0), not a real ledger divergence. Once snapshot resolves, both tabs read the same number — they just *render* it differently.
 
-## 1. Send the user's real session token in the concierge fetch
+This is the same family of "two tabs disagree" bugs already locked down in memory (`displayed-trip-total-single-source`, `header-strip-mirrors-snapshot`), but those fixes were USD-only and never closed the cross-currency leak.
 
-In `src/hooks/useActivityConcierge.ts`, before the `fetch`:
+## Fix (frontend-only, ~4 small edits)
 
-```ts
-import { supabase } from '@/integrations/supabase/client';
-const { data: { session } } = await supabase.auth.getSession();
-if (!session?.access_token) {
-  // Surface "Sign in to use the concierge" instead of a confusing error,
-  // and short-circuit before we burn a network round-trip.
-}
-Authorization: `Bearer ${session.access_token}`
-```
+### 1. Single canonical display currency
 
-When `session` is null, render an assistant bubble that says the user must be signed in instead of throwing.
+Add `getCanonicalDisplayCurrency({ budgetCurrency, tripCurrency, showLocalCurrency })` in `src/lib/currency.ts`:
 
-## 2. Apply the same fix to the other two leak sites
+- If a `budget_currency` is set, **it wins** — because the only meaningful comparison on either tab is "spent vs budget", and that has to be in the same currency.
+- Otherwise fall back to today's `tripCurrency` (local / USD toggle).
 
-Same change in `quizMapping.ts:517` and `OnboardConversation.tsx:70` — read the session once and send `access_token`. These are user-scoped endpoints and would 401 next time their auth gets tightened; better to fix all three in one pass than wait for the next user report.
+### 2. PaymentsTab: align with budget currency
 
-## 3. Add a memory entry
+`src/components/itinerary/PaymentsTab.tsx`:
 
-`mem://constraints/security/edge-fn-bearer-must-be-user-jwt` — short rule: client fetches to authed edge functions MUST send `session.access_token`, never `VITE_SUPABASE_PUBLISHABLE_KEY`, because the gateway and our `parseAuth` / `auth.getUser` paths both validate the JWT against the user. Use `supabase.functions.invoke()` when possible (it threads the session automatically); when a hand-rolled `fetch` is required for streaming, pull `session.access_token` first.
+- Accept new optional `budgetCurrency` prop alongside existing `budgetLimitCents`.
+- Replace local `displayMoney = formatMoneyFromUsdCents(c, tripCurrency)` with `formatMoneyFromUsdCents(c, getCanonicalDisplayCurrency(...))`.
+- For the `% of budget` ratio, convert `budgetLimitCents` (which is in `budget_currency`) into USD cents first via `convertToUSD`, then divide by `snapshot.tripTotalCents` (already USD cents). Same fix for the "Over budget by X" line and progress bar value.
+
+`src/components/itinerary/EditorialItinerary.tsx` line 7552: pass `budgetCurrency={budgetSettings?.budget_currency}` next to the existing `budgetLimitCents`.
+
+### 3. BudgetTab: stop silently mislabeling USD cents
+
+`src/components/planner/budget/BudgetTab.tsx` line 462-472: rewrite `formatCurrency` to delegate to `formatMoneyFromUsdCents(cents, budget_currency)` so non-USD budgets get **converted**, not relabeled. (`snapshot.tripTotalCents` is canonical USD cents — today's `Intl.NumberFormat` call assumes they're already in `budget_currency`, which is the silent bug.)
+
+Audit the few places BudgetTab feeds non-snapshot cents into `formatCurrency` (e.g. `settings.budget_total_cents` itself, manual allocations) — those rows are **already** in `budget_currency`, so they need a separate small formatter (`formatBudgetCurrencyCents`) that does *not* convert. Two formatters, each with one clear meaning.
+
+### 4. Memory entry
+
+Add `mem://constraints/finance/currency-units-canonical`:
+
+> Two cents fields exist with different units: `snapshot.tripTotalCents` is canonical USD cents; `settings.budget_total_cents` is raw cents in `settings.budget_currency`. Never format the first as if it were the second (and vice versa). Always go through `formatMoneyFromUsdCents` for snapshot-derived totals; use `formatBudgetCurrencyCents` for `budget_total_cents`/allocation rows. Any % or delta that compares the two MUST convert one side into the other's units first.
 
 ## Out of scope
 
-- Refactoring the streaming `fetch` to `supabase.functions.invoke()`. Possible later but unnecessary for the fix.
-- Changing the edge function — the function is correct; the client is the bug.
-- Re-touching the destination-images / hero-image work from the prior turn.
+- No backend / SQL / ledger changes — the ledger is correct; only display layer is wrong.
+- No change to the show-local-currency toggle behavior when no budget is set.
+- No re-touching of hero-image or AI Concierge work from prior turns.
 
-# Verification after build
+## Verification
 
-1. Open any activity card → AI Concierge → ask a question. Expect a streamed reply, no "Invalid token".
-2. Sign out → open concierge → expect the friendly "sign in" message, no network call.
-3. Quiz mapping + onboarding conversation flows still work end-to-end signed in.
+1. Open Mallorca trip → Budget tab and Payments tab should now show **the same headline amount** in the same currency.
+2. Toggle `budget_currency` between USD and EUR on a test trip; both tabs continue to agree, and the % of budget stays sane (no 92% on what should be 70%).
+3. `rg "Intl.NumberFormat.*currency:" src/components/planner/budget` should return only the new `formatBudgetCurrencyCents` helper site.
