@@ -153,6 +153,11 @@ export function applyAnchorsWin(
       return lockTitle && aTitle && (aTitle.includes(lockTitle) || lockTitle.includes(aTitle));
     });
     if (!existing) {
+      // Flag for enrichment so description + address backfill runs on this
+      // restored card (see mem://constraints/itinerary/anchor-enrichment-allowed).
+      // Without `needsAnchorEnrichment` the row persists as a bare 60-min
+      // locked card with no description, no map link, and no purpose — exactly
+      // the "thrown on top" symptom the user keeps reporting.
       day.activities.push({
         id: `anchor-restore-d${targetDayNum}-${restored}-${Date.now()}`,
         title: anchor.title,
@@ -163,10 +168,12 @@ export function applyAnchorsWin(
         venue_name: anchor.venueName || undefined,
         location: anchor.venueName ? { name: anchor.venueName, address: '' } : undefined,
         cost: { amount: 0, currency: 'USD' },
+        description: '',
         locked: true,
         isLocked: true,
         lockedSource: anchor.lockedSource,
-        anchorSource: anchor.source,
+        anchorSource: anchor.source || 'restored',
+        needsAnchorEnrichment: true,
         durationMinutes: 60,
       });
       restored++;

@@ -1,68 +1,84 @@
-# Resolve user requests to real venues (no more raw "sushi lunch")
+## Plan: make locked activities incorporated, not dumped on top
 
-## What's happening today
+### Problem to fix
+Locked/user-stated activities are currently treated too literally in two paths:
 
-You're right — we're throwing them in raw.
+1. If they have no time, venue, description, or purpose, they can become hard `userAnchors` and later get restored by `anchor-guard` as a blank 60-minute locked row.
+2. The Day Brief tells the AI “do not drop/replace/retime,” but does not give enough context to schedule around flexible requests or explain their purpose.
+3. Post-generation `ledger-check` can insert placeholders for missing user intents, which again surfaces the words instead of an incorporated plan.
 
-**Must-do items** (`metadata.mustDoActivities`):
-- `parseMustDoInput` (must-do-priorities.ts) only **title-cases** entries: `"sushi lunch"` → `"Sushi Lunch"`. It tries to match `KNOWN_LANDMARKS` (Eiffel Tower, etc.) and event patterns (US Open, weddings). Anything else — cuisines, vibes, generic meal types — is passed to the LLM as a title with no venue, address, or description, and the prompt tells the model "create a card for Sushi Lunch with a proper venue." The LLM then either invents or leaves blank.
-- `anchorToActivity` (user-anchors.ts) seeds these as locked anchors with `description: ''`, `venue_name: undefined`, `location: undefined`. Enrichment is *allowed* but only by title — there's no cuisine signal, so backfill regularly misses.
+So yes: the system is still sometimes “throwing them on top.” The venue resolver helped one case, but it did not fix the anchor/ledger behavior.
 
-**Additional Notes** (`metadata.additionalNotes`):
-- Injected only as a "🎯 TRAVELER'S TRIP PURPOSE" paragraph at compile-prompt.ts L590. The model is explicitly told *not* to schedule from it ("the DAY BRIEF above is the only source of truth"). So sentences like *"I want a sushi lunch on day 2 and a rooftop cocktail on day 3"* become decorative context, not real picks.
+### What I will change
 
-Result: blank addresses, blank descriptions, generic titles — exactly the bug you keep seeing.
+#### 1. Split user requests into hard locks vs flexible intents
+Update the shared anchor parsing rules in both backend and frontend mirrors:
 
-## What this plan changes
+- Hard locked anchor only if it has enough structure:
+  - fixed day + fixed time, or
+  - a named/resolved venue with enough detail, or
+  - a true booked/pre-existing commitment.
+- Generic/flexible wishes like “sushi lunch,” “spa day,” “rooftop cocktails,” or “some shopping” become `trip_day_intents`, not locked activities.
+- This preserves user intent without forcing an empty activity card.
 
-Add a **venue-resolution pre-pass** that runs once, before prompt compile and before `buildUserAnchors`, and turns category/cuisine/vibe phrases into concrete picks. Specific named venues ("Sukiyabashi Jiro", "Le Bernardin") bypass and stay as-is.
+#### 2. Carry purpose/context into the Day Brief
+Enhance `UserAnchor` / `DayIntent` metadata so the Day Brief can say things like:
 
-### 1. New module: `_shared/resolve-user-intent-venues.ts`
+```text
+USER INTENT — incorporate naturally:
+- Lunch request: sushi lunch. Pick a real sushi restaurant, schedule it as lunch, add description/address, and route the day around it.
+```
 
-For each must-do entry and each sentence in additionalNotes:
+Instead of:
 
-1. **Classify**: is it a *named venue* (proper noun, multi-word capitalized, matches `verified_venues.name`) or a *category intent* (cuisine + meal slot, e.g. `sushi + lunch`, `wine bar + evening`, `rooftop + cocktail`, `omakase + dinner`)?
-2. **Skip** named venues — current path already handles them.
-3. **For category intents**, extract `{ cuisine, slot, vibe, preferredDay }` via the same regex inventory we already use in `intent-normalizers.ts` + `fix-placeholders.ts` (sushi/ramen/izakaya/trattoria/tapas/rooftop/speakeasy/etc.), then resolve in this order:
-   - `verified_venues` table filtered by `(destination, cuisine, meal_slot)` — pick highest-rated unused.
-   - Google Places text search `"{cuisine} {slot} {destination}"` via existing `googlePlacesTextSearch` wrapper (already cost-tracked).
-   - `INLINE_FALLBACK_MEALS` / `REGIONAL_EMERGENCY_FALLBACK` in `fix-placeholders.ts` (city-keyed, cuisine-aware where present).
-4. Return a `ResolvedAnchor` with concrete `title`, `venueName`, `address`, `placeId`, `mapLink`, `priceRange`, `description` template, `cuisine` tag — so enrichment has full data, not just a string.
+```text
+USER REQUIRED — DO NOT DROP: Sushi Lunch (no fixed time)
+```
 
-### 2. Wire into must-do path
+#### 3. Resolve generic dining/drink intents before generation
+Extend the resolver work so resolved venues are not only written into prompt text, but also into structured day intents:
 
-In `compile-prompt.ts` around L486–522 and in `user-anchors.ts::buildUserAnchors`:
+- “sushi lunch” -> `lunch` intent with resolved restaurant name/address when possible.
+- “rooftop cocktails day 3” -> `drinks` intent with resolved bar name/address.
+- If no venue can be resolved, it stays flexible and the AI must pick a real venue, not create a placeholder.
 
-- Before calling `parseMustDoInput`, run the resolver on the raw must-do list. Replace each category-intent entry with its resolved venue title (`"Sushi Lunch" → "Sushi Lunch at Sushi Saito"`).
-- Pass the resolved metadata into `anchorToActivity` so the seeded card carries `venue_name`, `location.address`, `description` (short cuisine cue), `cost` — no more blank scaffolding.
-- Keep the lock semantics: title/time/category locked; address/description still eligible for enrichment as a safety net.
+#### 4. Stop placeholder restoration for flexible intent misses
+Change `ledger-check` behavior:
 
-### 3. Wire into additionalNotes path
+- For flexible must intents, do not insert a naked placeholder row.
+- Instead, flag the day for repair/regeneration or add a rich validation warning so the next repair pass fills it with a real scheduled activity.
+- Hard locked/booked activities still get restored exactly.
 
-In `compile-prompt.ts` L590–612:
+#### 5. Make anchor restore richer only for true locks
+When `anchor-guard` restores a real hard lock, it will preserve any available:
 
-- Run the resolver against split sentences/clauses of `additionalNotes`. Any clause that parses to `{cuisine, slot}` (with optional `Day N` / day-of-week) becomes a **real anchor** via `buildUserAnchors`, not a paragraph.
-- Keep the residual prose (non-resolvable purpose statements like "celebrating our anniversary") in the existing TRIP PURPOSE block.
-- Promoted anchors flow through the same locked-anchor pipeline as must-dos — so they appear on the correct day with venue + address + description guaranteed.
+- description
+- purpose/note
+- venue name
+- address
+- source metadata
 
-### 4. Telemetry + safety
+But it will no longer manufacture a visible empty card from a vague wish.
 
-- Sentinels: `[INTENT_RESOLVE] mustDo=N resolved=K source=verified|google|fallback` and `[INTENT_RESOLVE_NOTES] sentences=N anchors=K`.
-- Cross-city + meal-suffix guards already in place catch any bad fallback.
-- If resolution fails on all 3 tiers, fall back to today's behavior (title-only) — never block generation.
+#### 6. Add regression tests
+Add tests for the exact failure class:
 
-## Files touched
+- “sushi lunch” becomes a flexible lunch intent / resolved restaurant, not a locked empty card.
+- timed named request stays a hard lock.
+- no-time/no-description user wishes are not restored as top-of-day placeholders.
+- Day Brief wording says “incorporate naturally” for flexible intents and “do not retime” only for true locks.
 
-- **new** `supabase/functions/_shared/resolve-user-intent-venues.ts`
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` (must-do + additionalNotes blocks)
-- `supabase/functions/_shared/user-anchors.ts` (`anchorToActivity` accepts pre-resolved venue payload)
-- `supabase/functions/generate-itinerary/must-do-priorities.ts::parseMustDoInput` (accept optional pre-resolved metadata)
-- tests: `resolve-user-intent-venues.test.ts` + extend `user-anchors.test.ts`
+### Files to update
 
-## Out of scope
+- `supabase/functions/_shared/user-anchors.ts`
+- `src/utils/userAnchors.ts`
+- `supabase/functions/_shared/intent-normalizers.ts`
+- `supabase/functions/_shared/day-intents-store.ts`
+- `supabase/functions/generate-itinerary/day-ledger.ts`
+- `supabase/functions/generate-itinerary/ledger-check.ts`
+- `supabase/functions/generate-itinerary/anchor-guard.ts`
+- `supabase/functions/_shared/resolve-user-intent-venues.ts`
+- related tests in `_shared` and `generate-itinerary`
 
-- Changing the locking contract (anchors remain locked for time/title/category).
-- Changing the AI prompt structure for non-anchor activities.
-- Frontend changes — Step 3 already writes the data correctly; only backend interpretation changes.
-
-Want me to implement?
+### Expected behavior after this
+Users can type natural requests like “sushi lunch” or “spa afternoon,” and the itinerary engine treats them as planning requirements: find or pick a real place, schedule it in a believable slot, add description/address, and route the day around it. Only genuinely fixed commitments are locked verbatim.
