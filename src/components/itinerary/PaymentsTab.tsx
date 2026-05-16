@@ -142,13 +142,14 @@ export function PaymentsTab({
   journeyName,
   tripCurrency = 'USD',
 }: PaymentsTabProps) {
-  // Canonical display currency — when a budget currency is set, it wins so
-  // BudgetTab and PaymentsTab render the same headline (and "% of budget"
-  // compares apples to apples). Closes Mallorca "$2,500 budget vs €1,608 /
-  // 92%" cross-currency mismatch.
+  // Canonical display currency — the user's header toggle (`tripCurrency`)
+  // is the single source of truth across Itinerary / Payments / Budget.
+  // `budgetCurrency` is the fallback only when no explicit toggle is set.
+  // Ratios still convert `budgetLimitCents` to USD first (see below) so
+  // the % stays unit-safe regardless of which currency we render in.
   const displayCurrency = useMemo(
-    () => getCanonicalDisplayCurrency({ budgetCurrency, tripCurrency }),
-    [budgetCurrency, tripCurrency],
+    () => getCanonicalDisplayCurrency({ tripCurrency, budgetCurrency }),
+    [tripCurrency, budgetCurrency],
   );
   // Convert the budget limit (raw cents in `budgetCurrency`) into canonical
   // USD cents so it can be compared directly to snapshot.tripTotalCents.
