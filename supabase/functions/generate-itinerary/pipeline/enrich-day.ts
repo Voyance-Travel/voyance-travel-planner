@@ -38,9 +38,27 @@ async function enrichActivities(
   lovableApiKey: string,
   hotelCoordinates?: { lat: number; lng: number },
 ): Promise<any[]> {
-  // Only enrich unlocked (newly generated) activities
-  const activitiesToEnrich = activities.filter((a: any) => !a.isLocked && !a.locked);
-  const alreadyEnriched = activities.filter((a: any) => a.isLocked || a.locked);
+  // Anchor-locked rows (user must-dos) with empty address/venue are eligible
+  // for venue/address enrichment even though they're locked. After enrichment
+  // we restore their locked identity (title/time/category/anchorSource) and
+  // only copy the new geo data (address, lat/lng, phone, website, photo).
+  // See mem://constraints/itinerary/anchor-enrichment-allowed.
+  const isAnchorNeedingEnrichment = (a: any) => {
+    if (!a?.anchorSource) return false;
+    if (a.needsAnchorEnrichment === true) return true;
+    const addr = String(a?.location?.address || '').trim();
+    const venue = String(a?.location?.name || a?.venue_name || '').trim();
+    return !addr || !venue;
+  };
+
+  // Only enrich unlocked (newly generated) activities, PLUS anchor rows that
+  // are still missing an address or venue identity.
+  const activitiesToEnrich = activities.filter((a: any) => (!a.isLocked && !a.locked) || isAnchorNeedingEnrichment(a));
+  const alreadyEnriched = activities.filter((a: any) => (a.isLocked || a.locked) && !isAnchorNeedingEnrichment(a));
+  const anchorEnrichCount = activitiesToEnrich.filter(isAnchorNeedingEnrichment).length;
+  if (anchorEnrichCount > 0) {
+    console.log(`[ENRICH_ANCHOR] queued=${anchorEnrichCount} (anchor rows missing address/venue)`);
+  }
 
   if (activitiesToEnrich.length === 0 || !googleMapsApiKey) {
     if (!googleMapsApiKey) {
