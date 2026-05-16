@@ -1,5 +1,9 @@
 /**
  * JourneyBudgetSummary — Read-only cross-leg budget overview for linked trips.
+ *
+ * All cents are normalized to canonical USD cents and rendered via the parent
+ * `currency` prop (the global header USD/local toggle). Per-trip
+ * `budget_currency` no longer overrides the active display currency.
  */
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -7,14 +11,16 @@ import { Globe, MapPin } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { formatMoneyFromUsdCents, convertToUSD } from '@/lib/currency';
 
 interface LegBudget {
   id: string;
   destination: string;
   journeyOrder: number;
+  /** Canonical USD cents (FX-converted from stored budget_currency). */
   budgetTotalCents: number | null;
+  /** Canonical USD cents. */
   spentCents: number;
-  currency: string;
 }
 
 interface JourneyBudgetSummaryProps {
@@ -30,7 +36,6 @@ export function JourneyBudgetSummary({ journeyId, journeyName, currentTripId, cu
 
   useEffect(() => {
     async function fetchJourneyBudgets() {
-      // Fetch all legs with budget info
       const { data: trips } = await supabase
         .from('trips')
         .select('id, destination, journey_order, budget_total_cents, budget_currency')
@@ -42,44 +47,43 @@ export function JourneyBudgetSummary({ journeyId, journeyName, currentTripId, cu
         return;
       }
 
-      // Fetch spending for each leg from activity_costs
       const tripIds = trips.map(t => t.id);
       const { data: costs } = await supabase
         .from('activity_costs')
         .select('trip_id, total_cost_usd')
         .in('trip_id', tripIds);
 
-      // Sum spend per trip
       const spendMap = new Map<string, number>();
       (costs || []).forEach(c => {
         const prev = spendMap.get(c.trip_id) || 0;
-        // total_cost_usd is in dollars, convert to cents
         spendMap.set(c.trip_id, prev + Math.round((c.total_cost_usd || 0) * 100));
       });
 
-      setLegs(trips.map(t => ({
-        id: t.id,
-        destination: t.destination,
-        journeyOrder: t.journey_order ?? 0,
-        budgetTotalCents: t.budget_total_cents,
-        spentCents: spendMap.get(t.id) || 0,
-        currency: t.budget_currency || currency,
-      })));
+      setLegs(trips.map(t => {
+        const storedCur = (t.budget_currency || 'USD').toUpperCase();
+        const rawCents = t.budget_total_cents;
+        // `budget_total_cents` is stored in `budget_currency`. Convert to USD cents
+        // so we can format with the active display currency via the shared FX module.
+        const usdBudgetCents = rawCents == null
+          ? null
+          : storedCur === 'USD'
+            ? rawCents
+            : Math.round(convertToUSD(rawCents / 100, storedCur) * 100);
+        return {
+          id: t.id,
+          destination: t.destination,
+          journeyOrder: t.journey_order ?? 0,
+          budgetTotalCents: usdBudgetCents,
+          spentCents: spendMap.get(t.id) || 0,
+        };
+      }));
       setLoading(false);
     }
     fetchJourneyBudgets();
-  }, [journeyId, currency]);
+  }, [journeyId]);
 
-  const formatCurrency = (cents: number, cur: string = currency) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: cur,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(cents / 100);
-  };
+  const formatCurrency = (usdCents: number) => formatMoneyFromUsdCents(usdCents, currency);
 
-  // Only show if at least one leg has a budget
   const anyBudget = legs.some(l => l.budgetTotalCents && l.budgetTotalCents > 0);
   if (loading || !anyBudget) return null;
 
