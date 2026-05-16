@@ -467,6 +467,24 @@ export default function ItineraryContextForm({
           )}
         </div>
 
+        {/* Anything else? — freeform context (vibe, things to skip, special requests) */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm font-medium">
+            Anything else?
+            <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+          </Label>
+          <Textarea
+            value={additionalNotes}
+            onChange={(e) => setAdditionalNotes(e.target.value.slice(0, 1000))}
+            maxLength={1000}
+            placeholder="Tell us what to optimize for — vibes, things to skip, special requests, or context we should know."
+            className="min-h-[80px] resize-none"
+          />
+          <p className="text-xs text-muted-foreground">
+            We'll weave this into how the trip feels — not as a separate activity.
+          </p>
+        </div>
+
         {/* Pre-Booked Commitments */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
