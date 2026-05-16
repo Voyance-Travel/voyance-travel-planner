@@ -2547,9 +2547,8 @@ export default function Start() {
         const _mustDoCount = [
           ...selectedLandmarks,
           ...customMustDos,
-          ...(mustDoActivities ? [mustDoActivities] : []),
         ].filter(Boolean).length;
-        console.log(`[trip-create] form path tripId=${trip?.id} mustDoActivities=${_mustDoCount} items selectedLandmarks=${selectedLandmarks.length} customMustDos=${customMustDos.length} paste=${mustDoActivities ? 'yes' : 'no'}`);
+        console.log(`[trip-create] form path tripId=${trip?.id} mustDoActivities=${_mustDoCount} items selectedLandmarks=${selectedLandmarks.length} customMustDos=${customMustDos.length} additionalNotes=${additionalNotes ? 'yes' : 'no'}`);
       } catch (_e) { /* logging only */ }
 
       // Eagerly write the hotel cost row into activity_costs so the trip total
