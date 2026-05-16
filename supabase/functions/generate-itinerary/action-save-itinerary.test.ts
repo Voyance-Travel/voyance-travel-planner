@@ -93,20 +93,24 @@ Deno.test("applyAnchorsWin: dropped anchor is re-injected with correct fields", 
 });
 
 // ----------------------------------------------------------------------------
-// 4. Anchor with dayNumber out of range → silently skipped, no crash
+// 4. Anchor with out-of-range pinned dayNumber is skipped; floating (dayNumber
+//    <= 0) anchors get distributed across eligible days instead of dropped.
 // ----------------------------------------------------------------------------
-Deno.test("applyAnchorsWin: out-of-range dayNumber is skipped without crash", () => {
+Deno.test("applyAnchorsWin: out-of-range pinned skipped, floating distributed", () => {
   const days = [day(1, [act()])];
   const anchors = [
-    { dayNumber: 99, title: "Nonexistent", lockedSource: "manual" },
-    { dayNumber: 0, title: "Also nonexistent", lockedSource: "manual" },
-    { dayNumber: -1, title: "Negative", lockedSource: "manual" },
+    { dayNumber: 99, title: "Nonexistent pinned", lockedSource: "manual" },
+    { dayNumber: 0, title: "Floating one", lockedSource: "single_city" },
+    { dayNumber: -1, title: "Floating two", lockedSource: "single_city" },
   ];
   const result = applyAnchorsWin(days, anchors);
-  assertEquals(result.restored, 0);
+  // dayNumber=99 still out-of-range → dropped. The two floating anchors get
+  // round-robin distributed onto Day 1 (the only day) and restored.
+  assertEquals(result.restored, 2);
   assertEquals(result.reaffirmed, 0);
-  assertEquals(result.days[0].activities.length, 1);
+  assertEquals(result.days[0].activities.length, 3);
 });
+
 
 // ----------------------------------------------------------------------------
 // 5. Fingerprint match (lockedSource + title) reaffirms without duplicating
