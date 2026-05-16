@@ -1029,7 +1029,9 @@ function getActivityCostInfo(
   // Check cost.amount first - this is explicit pricing from venue data
   // BUT if it's 0 and the category should never be free, fall through to estimation
   if (costAmount !== undefined && costAmount > 0) {
-    return { amount: costAmount, isEstimated: false, confidence: 'high', basis };
+    const sourceCurrency = normalizeCurrencyCode(activity.cost?.currency) || 'USD';
+    const amountUsd = sourceCurrency === 'USD' ? costAmount : convertToUSD(costAmount, sourceCurrency);
+    return { amount: amountUsd, isEstimated: false, confidence: 'high', basis };
   }
   
   // If cost is explicitly 0 and source is imported/user-override, respect it as-is
@@ -1062,8 +1064,10 @@ function getActivityCostInfo(
     ? rawEstAmount : undefined;
     
   if (estAmount !== undefined && estAmount > 0) {
+    const sourceCurrency = normalizeCurrencyCode(activity.estimatedCost?.currency) || 'USD';
+    const amountUsd = sourceCurrency === 'USD' ? estAmount : convertToUSD(estAmount, sourceCurrency);
     return { 
-      amount: estAmount, 
+      amount: amountUsd, 
       isEstimated: true,
       estimateReason: 'AI-estimated based on venue type',
       confidence: 'medium',
