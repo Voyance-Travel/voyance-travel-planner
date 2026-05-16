@@ -530,6 +530,13 @@ async function executeRewriteDayAction(
   const lockGuard = verifyLocksPreserved(day.activities, newActivities, target_day);
   newActivities = lockGuard.restored;
 
+  // Untimed-new-lock backfill — the model sometimes returns a chat-added
+  // locked anchor (e.g. "Van Gogh Museum") with no startTime, which makes
+  // the chronological sort throw it at the top of the day above breakfast.
+  // Assign a believable slot + mark for anchor enrichment.
+  const untimedFix = backfillUntimedNewLocks(day.activities, newActivities, target_day);
+  newActivities = untimedFix.patched;
+
   // Preserve distinct accommodation intents (check-in, freshen-up, return, checkout)
   // instead of collapsing all hotel cards into one
   {
@@ -541,7 +548,7 @@ async function executeRewriteDayAction(
   const budgetDownKeywords = /cheap|budget|afford|save money|less expensive|lower cost|reduce.*cost|cut.*spending|frugal/i;
   if (budgetDownKeywords.test(instructions || '')) {
     for (const newAct of newActivities) {
-      const origMatch = day.activities.find((a: any) => 
+      const origMatch = day.activities.find((a: any) =>
         a.startTime === newAct.startTime || a.title === newAct.title
       );
       if (origMatch) {
@@ -555,6 +562,9 @@ async function executeRewriteDayAction(
       }
     }
   }
+
+  // Intent-coverage check — did every user-named ask actually land?
+  const missingIntents = findMissingIntents(instructions || '', day.activities, newActivities);
 
   const diff = computeDayDiff(target_day, day.activities, newActivities);
 
@@ -599,13 +609,17 @@ async function executeRewriteDayAction(
   const restoredSuffix = lockGuard.violations > 0
     ? ` (restored ${lockGuard.violations} locked item${lockGuard.violations === 1 ? '' : 's'} the AI tried to change)`
     : '';
+  const missingSuffix = missingIntents.length > 0
+    ? ` — couldn't fit: ${missingIntents.join(', ')}`
+    : '';
 
   return {
     success: true,
-    message: (reason || `Rewrote Day ${target_day} based on your instructions`) + restoredSuffix,
+    message: (reason || `Rewrote Day ${target_day} based on your instructions`) + restoredSuffix + missingSuffix,
     updatedDays,
     diff,
     costDelta,
+    ...(missingIntents.length > 0 ? { partial: { missing: missingIntents } } : {}),
   };
 }
 
