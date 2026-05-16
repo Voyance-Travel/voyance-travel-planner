@@ -75,3 +75,39 @@ describe('buildUserAnchors — chat-trip-planner real-world format', () => {
     expect(anchors[0].title.toLowerCase()).toContain('serenity spa');
   });
 });
+
+describe('buildUserAnchors — Step 3 simple-form placeholder examples', () => {
+  it('parses multi-line "Day N: foo TIME" placeholder', () => {
+    const text = [
+      'Day 1: Colosseum 9am',
+      'Day 2: Dinner at Roscioli 7:30 PM',
+      'Day trip to Tivoli',
+    ].join('\n');
+    const anchors = buildUserAnchors({ mustDoActivities: text, source: 'manual_paste' });
+
+    // 3 distinct anchors, two pinned, one floating
+    expect(anchors.length).toBe(3);
+
+    const day1 = anchors.find((a) => a.title.toLowerCase().includes('colosseum'));
+    expect(day1?.dayNumber).toBe(1);
+    expect(day1?.startTime).toBe('09:00');
+
+    const day2 = anchors.find((a) => a.title.toLowerCase().includes('roscioli'));
+    expect(day2?.dayNumber).toBe(2);
+    expect(day2?.startTime).toBe('19:30');
+
+    const tivoli = anchors.find((a) => a.title.toLowerCase().includes('tivoli'));
+    expect(tivoli?.dayNumber).toBe(0); // unpinned → "Any day"
+  });
+
+  it('groups pinned anchors by day for perDayActivities mirror', () => {
+    const anchors = buildUserAnchors({
+      mustDoActivities: 'Day 1: Colosseum 9am\nDay 1: Lunch at Roscioli 1pm\nDay 2: Vatican 10am',
+      source: 'manual_paste',
+    });
+    const pinned = anchors.filter((a) => a.dayNumber > 0);
+    expect(pinned.length).toBe(3);
+    const day1Count = pinned.filter((a) => a.dayNumber === 1).length;
+    expect(day1Count).toBe(2);
+  });
+});
