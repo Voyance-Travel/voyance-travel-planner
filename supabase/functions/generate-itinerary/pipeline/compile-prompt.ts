@@ -1527,14 +1527,31 @@ CRITICAL GEOGRAPHIC RULE: Every restaurant and venue MUST be physically located 
     const { buildDayLedger, renderDayLedgerPrompt } = await import('../day-ledger.ts');
     const { parseFineTuneIntoDailyIntents } = await import('../../_shared/parse-fine-tune-intents.ts');
 
-    const ledgerAnchors = (lockedActivities || []).map((l: any) => ({
-      title: l.title || l.name,
-      startTime: l.startTime,
-      endTime: l.endTime,
-      category: l.category,
-      source: l.lockedSource || 'pinned',
-      lockedSource: l.lockedSource,
-    }));
+    // Partition lockedActivities: rows with a startTime OR a venue/location name
+    // are real anchors; bare untimed/unvenued rows are stale "throw on top"
+    // entries that we demote into soft USER WISHES so the model schedules them
+    // with a real slot + description instead of restoring them as blank cards.
+    // See mem://constraints/itinerary/soft-vs-hard-user-intent.
+    const ledgerAnchors: Array<Record<string, any>> = [];
+    const softLockedDemoted: Array<Record<string, any>> = [];
+    for (const l of (lockedActivities || []) as any[]) {
+      const title = l.title || l.name;
+      const hasTime = !!(l.startTime || l.start_time);
+      const hasVenue = !!(l.venue_name || l.venueName || l.location?.name);
+      const anchor = {
+        title,
+        startTime: l.startTime,
+        endTime: l.endTime,
+        category: l.category,
+        source: l.lockedSource || 'pinned',
+        lockedSource: l.lockedSource,
+      };
+      if (hasTime || hasVenue) ledgerAnchors.push(anchor);
+      else softLockedDemoted.push({ ...anchor, kind: 'activity', priority: 'should', raw: title });
+    }
+    if (softLockedDemoted.length > 0) {
+      console.log(`[compile-prompt] Day ${dayNumber}: demoted ${softLockedDemoted.length} stale untimed/unvenued locked row(s) to soft USER WISHES`);
+    }
     const priorList: Array<{ title: string; dayNumber: number }> = [];
     for (const prev of (previousDayActivities || [])) {
       const t = (prev.title || prev.name || '').trim();
