@@ -562,26 +562,44 @@ export function ItineraryAssistant({
           });
         }
 
-        toast.success('Action applied', {
-          id: actionId,
-          description: result.message + (result.costDelta != null && result.costDelta !== 0
-            ? ` (${result.costDelta > 0 ? '+' : ''}$${result.costDelta.toFixed(0)} cost impact)`
-            : ''),
-        });
+        const missingList = result.partial?.missing ?? [];
+        if (missingList.length > 0) {
+          toast.warning('Applied — with gaps', {
+            id: actionId,
+            description: `Couldn't fit: ${missingList.join(', ')}. Ask me to try again.`,
+          });
+        } else {
+          toast.success('Action applied', {
+            id: actionId,
+            description: result.message + (result.costDelta != null && result.costDelta !== 0
+              ? ` (${result.costDelta > 0 ? '+' : ''}$${result.costDelta.toFixed(0)} cost impact)`
+              : ''),
+          });
+        }
 
         // Show diff summary in chat
         if (result.diff && result.diff.length > 0) {
-          const diffLines = result.diff.map(d => 
+          const diffLines = result.diff.map(d =>
             d.type === 'removed' ? `− ${d.activityTitle}${d.costBefore ? ` ($${d.costBefore})` : ''}`
             : `+ ${d.activityTitle}${d.costAfter ? ` ($${d.costAfter})` : ''}`
           ).join('\n');
           const costNote = result.costDelta != null && result.costDelta !== 0
             ? `\n\n💰 Cost impact: ${result.costDelta > 0 ? '+' : ''}$${result.costDelta.toFixed(0)}`
             : '';
+          const missingNote = missingList.length > 0
+            ? `\n\n⚠️ I couldn't fit: **${missingList.join(', ')}**. Want me to retry just those?`
+            : '';
           setMessages(prev => [...prev, {
             id: `msg_${Date.now()}_diff`,
             role: 'assistant',
-            content: `**Changes applied:**\n${diffLines}${costNote}`,
+            content: `**Changes applied:**\n${diffLines}${costNote}${missingNote}`,
+            timestamp: new Date(),
+          }]);
+        } else if (missingList.length > 0) {
+          setMessages(prev => [...prev, {
+            id: `msg_${Date.now()}_missing`,
+            role: 'assistant',
+            content: `I applied your changes, but I couldn't fit: **${missingList.join(', ')}**. Want me to retry just those?`,
             timestamp: new Date(),
           }]);
         }
