@@ -155,6 +155,20 @@ export function scrubActivity(act: any, ctx: ScrubContext = {}): ScrubOps {
     }
   }
 
+  // L4 — bare-neighborhood address: append destination city when missing.
+  // Closes "Bakers & Roasters / De Pijp" resolving to Atlanta in Google Maps.
+  if (ctx.destination && loc && typeof loc === 'object' && typeof loc.address === 'string') {
+    const addr = loc.address.trim();
+    const destShort = ctx.destination.split(',')[0]?.trim();
+    if (addr.length > 0
+        && !addr.includes(',')
+        && destShort && destShort.length > 0
+        && !addr.toLowerCase().includes(destShort.toLowerCase())) {
+      loc.address = `${addr}, ${destShort}`;
+      ops.addressCity++;
+    }
+  }
+
   return ops;
 }
 
@@ -171,6 +185,7 @@ export function addOps(a: ScrubOps, b: ScrubOps): ScrubOps {
     downgraded: a.downgraded + b.downgraded,
     phantomRef: a.phantomRef + b.phantomRef,
     degenerate: a.degenerate + b.degenerate,
+    addressCity: a.addressCity + b.addressCity,
   };
 }
 
