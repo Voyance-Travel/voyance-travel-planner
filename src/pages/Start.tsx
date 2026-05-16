@@ -2503,15 +2503,14 @@ export default function Start() {
           status: 'draft',
           owner_plan_tier: ownerPlanTier,
           metadata: (() => {
+            // mustDoActivities = venue chips ONLY (landmarks + custom). The freeform
+            // "Anything else?" textarea flows separately into metadata.additionalNotes,
+            // which the prompt renders as the TRIP PURPOSE block — keeps the model from
+            // pasting a whole sentence as a literal activity card.
             const formMustDoList = [
               ...selectedLandmarks,
               ...customMustDos,
-              ...(mustDoActivities ? [mustDoActivities] : []),
             ].filter(Boolean);
-            // Build anchors but keep ONLY items that have both an explicit day pin AND a start time.
-            // Free-text must-dos like "Hallasan National Park" (no day, no time) should flow into
-            // the generator as SOFT requirements via metadata.mustDoActivities, not as locked rows
-            // that anchor-guard then paints onto every day with no description or address.
             const allParsed = buildUserAnchors({
               mustDoActivities: formMustDoList.length > 0 ? formMustDoList : null,
               source: isMultiCity ? 'multi_city' : 'single_city',
@@ -2524,10 +2523,12 @@ export default function Start() {
                 `[trip-create] anchors: ${userAnchors.length} pinned (day+time), ${allParsed.length - userAnchors.length} soft must-dos kept in mustDoActivities only`,
               );
             }
+            const notes = additionalNotes.trim();
             return ({
               isFirstTimeVisitor,
               firstTimePerCity: isMultiCity && Object.keys(firstTimePerCity).length > 0 ? firstTimePerCity : null,
               mustDoActivities: formMustDoList.length > 0 ? formMustDoList : null,
+              additionalNotes: notes ? notes : null,
               interestCategories: selectedCategories.length > 0 ? selectedCategories : null,
               generationRules: generationRules.length > 0 ? generationRules : null,
               celebrationDay: celebrationDay || null,
