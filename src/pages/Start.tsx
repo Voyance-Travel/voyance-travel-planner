@@ -3434,9 +3434,9 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                           <span className="text-xs text-muted-foreground/60">(optional)</span>
                         </div>
                         <Textarea
-                          value={mustDoActivities}
-                          onChange={(e) => setMustDoActivities(e.target.value)}
-                          placeholder="Paste notes, other AI suggestions, skip requests, or special requirements..."
+                          value={additionalNotes}
+                          onChange={(e) => setAdditionalNotes(e.target.value)}
+                          placeholder="Tell us what to optimize for — vibes, things to skip, special requests, or context we should know."
                           className="min-h-[70px] resize-none text-sm"
                         />
                       </div>
