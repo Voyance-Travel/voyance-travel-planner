@@ -310,4 +310,57 @@ describe('ensureHotelReturnBookend', () => {
     const out = ensureHotelReturnBookend(acts, { hotelName: 'Four Seasons Hotel Osaka', dayIndex: 2 });
     expect(out).toBe(acts);
   });
+
+  it('Vienna duplicate: existing 20:15 hotel-return + stale "Walk to <hotel>" connector → does NOT inject a second bookend', () => {
+    const acts = [
+      mk({ title: 'Dinner', category: 'dining', startTime: '18:30', endTime: '20:00' }),
+      mk({
+        title: 'Return to Imperial Riding School, Autograph Collection',
+        category: 'accommodation',
+        startTime: '20:15',
+        endTime: '20:40',
+        source: 'bookend-validator',
+      }),
+      mk({
+        title: 'Walk to Return to Imperial Riding School, Autograph Collection',
+        category: 'transit',
+        startTime: '20:40',
+        endTime: '20:40',
+      }),
+    ];
+    const out = ensureHotelReturnBookend(acts, {
+      hotelName: 'Imperial Riding School, Autograph Collection',
+      dayIndex: 1,
+    });
+    expect(out).toBe(acts);
+    expect(
+      out.filter((a: any) => /^Return to /i.test(a.title)).length,
+    ).toBe(1);
+  });
+
+  it('Vienna duplicate (late nightcap exception): nightcap ends 01:10 AM after existing bookend → still appends late-nightlife bookend', () => {
+    const acts = [
+      mk({ title: 'Dinner', category: 'dining', startTime: '18:30', endTime: '20:00' }),
+      mk({
+        title: 'Return to Imperial Riding School, Autograph Collection',
+        category: 'accommodation',
+        startTime: '20:15',
+        endTime: '20:40',
+        source: 'bookend-validator',
+      }),
+      mk({
+        title: 'Nightcap at Loos American Bar',
+        category: 'nightlife',
+        startTime: '23:30',
+        endTime: '01:10',
+      }),
+    ];
+    const out = ensureHotelReturnBookend(acts, {
+      hotelName: 'Imperial Riding School, Autograph Collection',
+      dayIndex: 1,
+    });
+    expect(out.length).toBe(acts.length + 1);
+    const last = out[out.length - 1];
+    expect(last.tags).toContain('late_nightlife_bookend');
+  });
 });
