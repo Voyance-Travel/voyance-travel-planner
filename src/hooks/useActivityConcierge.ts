@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface ConciergeMessage {
   role: 'user' | 'assistant';
@@ -80,11 +81,21 @@ export function useActivityConcierge() {
     const apiMessages = userMessages.map(m => ({ role: m.role, content: m.content }));
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'Please sign in to chat with the concierge.',
+        }]);
+        setIsLoading(false);
+        return;
+      }
+
       const resp = await fetch(CONCIERGE_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           messages: apiMessages,

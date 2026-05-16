@@ -508,13 +508,19 @@ export async function calculateTravelDNAAdvanced(
       console.warn('[TravelDNA] Failed to pre-compute traits:', err);
     }
 
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      console.warn('[TravelDNA] No active session — falling back to local calculation');
+      return calculateTravelDNA(answers);
+    }
+
     const response = await fetch(
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/calculate-travel-dna`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ 
           answers, 
