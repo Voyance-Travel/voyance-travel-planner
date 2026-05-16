@@ -1,12 +1,26 @@
-import { useState } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Hotel, Plane, Clock, MapPin, Info, Sparkles, ArrowRight, Globe, CalendarCheck, Star, Plus, X } from 'lucide-react';
+import { Hotel, Plane, Clock, MapPin, Info, Sparkles, ArrowRight, Globe, CalendarCheck, Star, Plus, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { buildUserAnchors, type UserAnchor } from '@/utils/userAnchors';
+
+const MUST_DO_MAX = 1500;
+
+function formatTimeLabel(hhmm?: string): string | null {
+  if (!hhmm) return null;
+  const m = hhmm.match(/^(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const mins = m[2];
+  const period = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${mins} ${period}`;
+}
 
 export interface PreBookedCommitment {
   id: string;
@@ -77,6 +91,56 @@ export default function ItineraryContextForm({
   });
   // Must-do activities
   const [mustDoActivities, setMustDoActivities] = useState('');
+  const mustDoRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Live parse preview — debounced, mirrors what backend `buildUserAnchors` will see
+  const [debouncedMustDo, setDebouncedMustDo] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedMustDo(mustDoActivities), 250);
+    return () => clearTimeout(t);
+  }, [mustDoActivities]);
+
+  const parsedAnchors = useMemo<UserAnchor[]>(() => {
+    if (!debouncedMustDo.trim()) return [];
+    try {
+      return buildUserAnchors({ mustDoActivities: debouncedMustDo, source: 'manual_paste' });
+    } catch {
+      return [];
+    }
+  }, [debouncedMustDo]);
+
+  const unparsedLines = useMemo<string[]>(() => {
+    if (!debouncedMustDo.trim()) return [];
+    const lines = debouncedMustDo.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    if (parsedAnchors.length === 0) return lines;
+    const matched = new Set(parsedAnchors.map((a) => (a.raw || a.title).trim().toLowerCase()));
+    return lines.filter((line) => {
+      const lower = line.toLowerCase();
+      // Line counts as parsed if any anchor's raw text appears within it (or vice versa)
+      for (const m of matched) {
+        if (lower.includes(m) || m.includes(lower)) return false;
+      }
+      return true;
+    });
+  }, [debouncedMustDo, parsedAnchors]);
+
+  const insertAtCursor = (snippet: string) => {
+    const el = mustDoRef.current;
+    if (!el) {
+      setMustDoActivities((prev) => (prev ? `${prev}${snippet}` : snippet));
+      return;
+    }
+    const start = el.selectionStart ?? mustDoActivities.length;
+    const end = el.selectionEnd ?? mustDoActivities.length;
+    const next = mustDoActivities.slice(0, start) + snippet + mustDoActivities.slice(end);
+    setMustDoActivities(next.slice(0, MUST_DO_MAX));
+    // Restore caret after React re-renders
+    requestAnimationFrame(() => {
+      const pos = Math.min(start + snippet.length, MUST_DO_MAX);
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    });
+  };
 
   // Detect complex constraints in must-do text
   const complexConstraintKeywords = /\b(school|class|work|meeting|hotel change|switching hotel|change hotel|moving hotel|new hotel|joining|my aunt|my mom|my friend|family joining|guest|arrives|leaving early|blocked|not available|unavailable|appointment|conference|seminar|5 hours|half.?day|morning off|afternoon off)\b/i;
@@ -112,6 +176,24 @@ export default function ItineraryContextForm({
   };
 
   const handleContinue = () => {
+    // Group pinned anchors by dayNumber → perDayActivities mirror (chat-planner parity)
+    let perDayActivities: Array<{ dayNumber: number; activities: string }> | undefined;
+    const pinned = parsedAnchors.filter((a) => a.dayNumber > 0);
+    if (pinned.length > 0) {
+      const byDay = new Map<number, string[]>();
+      for (const a of pinned) {
+        const entry = a.startTime
+          ? `${formatTimeLabel(a.startTime)} - ${a.title}`
+          : a.title;
+        const list = byDay.get(a.dayNumber) || [];
+        list.push(entry);
+        byDay.set(a.dayNumber, list);
+      }
+      perDayActivities = Array.from(byDay.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([dayNumber, items]) => ({ dayNumber, activities: items.join(', ') }));
+    }
+
     onContinue({
       hotelLocation: hotelLocation || undefined,
       arrivalTime: arrivalTime || undefined,
@@ -120,6 +202,7 @@ export default function ItineraryContextForm({
       childrenAges: showChildrenAges && childrenAges.length > 0 ? childrenAges : undefined,
       preBookedCommitments: commitments.length > 0 ? commitments : undefined,
       mustDoActivities: mustDoActivities || undefined,
+      perDayActivities,
     });
   };
 
@@ -282,22 +365,97 @@ export default function ItineraryContextForm({
           </div>
         </div>
 
-        {/* Must-Do Activities — kept as simple textarea for this secondary flow */}
+        {/* Must-Do Activities — free-text with live parse preview */}
         <div className="space-y-3">
-          <Label className="flex items-center gap-2 text-sm font-medium">
-            <Star className="w-4 h-4 text-muted-foreground" />
-            Must-Do Activities
-            <span className="text-xs text-muted-foreground font-normal">(optional)</span>
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label className="flex items-center gap-2 text-sm font-medium">
+              <Star className="w-4 h-4 text-muted-foreground" />
+              Must-Do Activities
+              <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <div className="flex gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => insertAtCursor(mustDoActivities && !mustDoActivities.endsWith('\n') ? '\nDay 2: ' : 'Day 2: ')}
+              >
+                + Day N
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => insertAtCursor('7:30 PM ')}
+              >
+                + Time
+              </Button>
+            </div>
+          </div>
           <Textarea
+            ref={mustDoRef}
             value={mustDoActivities}
-            onChange={(e) => setMustDoActivities(e.target.value)}
-            placeholder="e.g., Visit the Colosseum, Eat at Roscioli, See the sunset from Piazzale Michelangelo..."
-            className="min-h-[80px] resize-none"
+            onChange={(e) => setMustDoActivities(e.target.value.slice(0, MUST_DO_MAX))}
+            maxLength={MUST_DO_MAX}
+            placeholder={'e.g.\nDay 1: Colosseum 9am\nDay 2: Dinner at Roscioli 7:30 PM\nDay trip to Tivoli'}
+            className="min-h-[110px] resize-none font-sans"
           />
-          <p className="text-xs text-muted-foreground">
-            Tell us what you absolutely can't miss. We'll make sure it's in your itinerary.
-          </p>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <p>Tell us what you can't miss. Add "Day 2" or a time to pin it.</p>
+            <span className={cn(mustDoActivities.length > MUST_DO_MAX * 0.9 && 'text-amber-600')}>
+              {mustDoActivities.length} / {MUST_DO_MAX}
+            </span>
+          </div>
+
+          {/* Live parse preview */}
+          {parsedAnchors.length > 0 && (
+            <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                We understood {parsedAnchors.length} item{parsedAnchors.length === 1 ? '' : 's'}:
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {parsedAnchors.map((a, i) => {
+                  const pinned = a.dayNumber > 0;
+                  const timeLabel = formatTimeLabel(a.startTime);
+                  return (
+                    <span
+                      key={i}
+                      className={cn(
+                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs',
+                        pinned
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'bg-muted text-muted-foreground border border-border'
+                      )}
+                      title={pinned ? undefined : 'Tip: add "Day 2" to pin this to a specific day'}
+                    >
+                      <span className="font-medium">
+                        {pinned ? `Day ${a.dayNumber}` : 'Any day'}
+                      </span>
+                      {timeLabel && <span>· {timeLabel}</span>}
+                      <span>· {a.title}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {unparsedLines.length > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-1 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Couldn't parse — please reword:
+              </div>
+              <ul className="text-xs text-amber-700 dark:text-amber-300 list-disc list-inside">
+                {unparsedLines.slice(0, 5).map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Pre-Booked Commitments */}
