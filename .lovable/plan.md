@@ -1,37 +1,34 @@
-# Clean up the two console errors
+## Diagnosis
 
-The itinerary still loads — both errors are noise, not functional breakage — but they shouldn't show in console. Two unrelated issues, one fix each.
+The screenshot is from **travelwithvoyance.com** (the published site), not the preview. Two signals confirm the published bundle is stale:
 
-## 1. `422` from `generate-itinerary` (save-itinerary)
+1. **Toggle order**: screenshot renders `CNY ↔ USD`, but the current code in `EditorialItinerary.tsx` (line 6229) renders `USD ↔ {localCurrency}`. The published build pre-dates the order change.
+2. **Default**: `useState<boolean>(false)` for `showLocalCurrency` (line 2800) + the cleanup `useEffect` that purges any legacy `voyance.currencyToggle.*` localStorage key (lines 2801–2812) are both already present in source.
 
-**What's happening**
-- `action-save-itinerary.ts` line 1478 returns HTTP **422** with `code: 'NEEDS_REGENERATION'` whenever the persist-time validator (`_shared/validate-itinerary-for-persist.ts`) finds any per-day issue (missing meal, empty dining description, predawn card, etc.).
-- The trip still saves (`persistedDespiteErrors: true`), which is why the itinerary renders.
-- Per the **Persist-Issues Toast User-Only** memory, the front-end already suppresses the toast for `self-heal-*` / `skipLedgerCheck` reasons, but the underlying `fetch` still resolves with HTTP 422 — so Chrome logs `Failed to load resource: 422` to the console regardless of how the client handles the body.
-- The two 422 hits in the trace line up with two page-load self-heals firing into save-itinerary.
+So in the preview (and in any new publish), the header **will** start on USD. The custom-domain bundle just hasn't been redeployed since the fix landed.
 
-**Fix**
-- Change the validation-failure branch in `action-save-itinerary.ts` to return **HTTP 200** with the same `success: false, code: 'NEEDS_REGENERATION'` body. The body already carries `persistedDespiteErrors: true` plus the errors/warnings arrays, so every client-side branch that today reads `code === 'NEEDS_REGENERATION'` keeps working — they just don't surface as a red console error.
-- Reserve real non-200 status only for hard failures (auth, db write error, etc.), which already use `errorJson`.
+## Plan
 
-This mirrors how other "soft" verdicts are already returned (e.g. cost-repair writes a 200 with `success: false`). No behavior change for the user; only the console noise goes away.
+### Step 1 — Republish
 
-## 2. `<circle> attribute r: Expected length, "undefined"` from `motion-*.js`
+Click **Publish** so the latest bundle (with the USD default + localStorage purge) ships to `travelwithvoyance.com`. After a hard refresh, the Trip Total header should read `$X,XXX` with the toggle showing `USD ↔ CNY` (USD highlighted).
 
-**What's happening**
-- The chunk name `motion-*` = framer-motion. The only `motion.circle` elements in the codebase that animate `r` are in `src/components/planner/shared/GenerationAnimation.tsx` (lines 87–108): three `<motion.circle>` with `animate={{ r: [52, 72] }}` style keyframes.
-- During the very first frame, framer-motion can emit an interim DOM update where `r` is `undefined` if the initial `r` was set as a JSX attribute (not as a `style`/`initial`). That triggers exactly the "Expected length, undefined" warning.
+### Step 2 — Verify after publish
 
-**Fix**
-- For each animated `<motion.circle>` in `GenerationAnimation.tsx`, also pass `initial={{ r: <number> }}` matching the first keyframe (52 / 48 / etc.). framer-motion then has a known starting numeric value and never momentarily writes `undefined` to the DOM attribute.
-- Leaves the visual identical.
+Open `travelwithvoyance.com/trip/d1535be4-...` in a fresh tab (or hard refresh with cache disabled). Expected:
+- Trip Total renders with `$` symbol on first paint.
+- Toggle shows `USD ↔ CNY` with USD as the primary-colored span.
+- Clicking the toggle flips to `CN¥…` for the session; a refresh returns to USD.
 
-## Out of scope
+### Step 3 — (Optional safety net, only if needed)
 
-- The underlying persist-validator errors (real "needs regeneration" issues) — those are surfaced via the existing in-app banner system and are tracked separately. This change only stops them from polluting the browser console.
-- The unrelated `403` resource line in the trace looks like a third-party asset (not generate-itinerary); will investigate only if it persists after these two changes.
+If after republish + hard refresh the header still starts on local currency for some users, the most likely cause is a third-party script or service-worker cache. We would then:
+- Add a `?v=` query bust to the entry chunk, **or**
+- Move the localStorage purge from `useEffect` to module-init so it runs before first paint (currently runs after first paint, which is fine because state already starts `false`).
 
-## Files to touch
+No code edit needed yet — Step 1 alone should resolve it.
 
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (one return statement, ~L1469–1478)
-- `src/components/planner/shared/GenerationAnimation.tsx` (add `initial={{ r }}` to ~3 motion.circle elements)
+## Files involved (reference only, no edits planned)
+
+- `src/components/itinerary/EditorialItinerary.tsx` lines 2798–2812 (default state + localStorage purge)
+- `src/components/itinerary/EditorialItinerary.tsx` lines 6220–6238 (toggle UI)
