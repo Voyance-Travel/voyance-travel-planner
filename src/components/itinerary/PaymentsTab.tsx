@@ -48,7 +48,7 @@ import {
   type TripPayment,
   type PaymentTotals
 } from '@/services/tripPaymentsAPI';
-import { formatMoneyFromUsdCents } from '@/lib/currency';
+import { formatMoneyFromUsdCents, getCanonicalDisplayCurrency, convertToUSD } from '@/lib/currency';
 import { markActivityPaid } from '@/services/activityCostService';
 import { useTripMembers, addTripMember, type TripMember } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
