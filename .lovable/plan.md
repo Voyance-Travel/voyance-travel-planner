@@ -1,62 +1,59 @@
-# Why Mallorca shows the purple block (root cause confirmed)
+# Why the AI Concierge says "Invalid token"
 
-The `destinations` table is a red herring on this one. The real cause is in `curated_images`:
+`src/hooks/useActivityConcierge.ts` calls the `activity-concierge` edge function with a hand-rolled `fetch`. It sends:
 
+```ts
+Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
 ```
-entity_type=destination  entity_key="alcudia old town"  destination=Mallorca
-source=no_result         image_url=NULL                 expires_at=2026-06-11
+
+The edge function (`supabase/functions/activity-concierge/index.ts:133`) then does:
+
+```ts
+const { data: { user }, error } = await authClient.auth.getUser(token);
+if (authError || !user) return 401 "Invalid token";
 ```
 
-A previous lookup for "Alcudia Old Town" hit Google Places, got 0 results, and the edge function persisted a **`no_result` sentinel with a 30-day TTL**. Every subsequent visit reads that cached null and short-circuits — never calls Google, never falls back to the city ("Mallorca"), so `useTripHeroImage` exhausts every tier and the gradient placeholder paints.
+`auth.getUser()` expects a **user JWT**, not the project's publishable/anon key. With Supabase's new signing-keys flow this is strictly rejected — historically it silently returned `user=null`, the function probably worked when auth wasn't gated, and recent backend pinning now surfaces the 401. Result: every concierge request fails with the literal string "Invalid token", which the hook bubbles into the chat bubble as "Sorry, I couldn't process that request. Invalid token".
 
-There is no city-level `entity_key="mallorca"` hero row. The 2026-05-14 destinations-table backfill memory entry is misleading: only 94/2,246 rows ever had a canonical hero. The cache *was* the source of truth and a single bad POI poisoned it.
+Two other call sites have the same anti-pattern and will trip the same way once their edge functions tighten auth:
 
-# Goal
+- `src/utils/quizMapping.ts:517`
+- `src/pages/OnboardConversation.tsx:70`
 
-Restore the original "Google pull → cache → serve" model and guarantee no destination ever renders a colored block or generic static.
+# Fix
 
-# Plan
+## 1. Send the user's real session token in the concierge fetch
 
-## 1. Stop letting a `no_result` cache entry block real photos
+In `src/hooks/useActivityConcierge.ts`, before the `fetch`:
 
-In `supabase/functions/destination-images/index.ts`:
+```ts
+import { supabase } from '@/integrations/supabase/client';
+const { data: { session } } = await supabase.auth.getSession();
+if (!session?.access_token) {
+  // Surface "Sign in to use the concierge" instead of a confusing error,
+  // and short-circuit before we burn a network round-trip.
+}
+Authorization: `Bearer ${session.access_token}`
+```
 
-- **Read path** — when a `curated_images` row is found with `source='no_result'`, treat it as a miss for `entity_type='destination'` after 24 hours (not 30 days). For `entity_type='activity'` keep the longer TTL (those are genuinely obscure venues).
-- **Write path** — never cache `no_result` for `entity_type='destination'` until we've also tried (a) the bare destination string, (b) Unsplash with the destination name, and (c) Google Places with `destination + " landmark"`. Only cache null after all three miss; even then cap TTL at 24h.
+When `session` is null, render an assistant bubble that says the user must be signed in instead of throwing.
 
-## 2. Always fall back from POI to city
+## 2. Apply the same fix to the other two leak sites
 
-The current code passes `entityKey="alcudia old town"` and never tries `entityKey="mallorca"` when the POI misses. Add a deterministic fallback inside the destination branch of the resolver: if POI lookup yields no real image, recurse once with `cleanName = destination`. Cache the success under both keys so the next "Alcudia Old Town" hit serves the Mallorca city photo instead of repaying.
+Same change in `quizMapping.ts:517` and `OnboardConversation.tsx:70` — read the session once and send `access_token`. These are user-scoped endpoints and would 401 next time their auth gets tightened; better to fix all three in one pass than wait for the next user report.
 
-## 3. Make the client cascade actually reach the API on first paint
+## 3. Add a memory entry
 
-`useTripHeroImage` waits on `canonicalFetched && dbCuratedFetched` before calling the API. For destinations whose canonical is null AND whose DB-curated row is `no_result`, the API tier still has to fire. Confirm by passing `?force=1` when the DB-curated tier returned a `no_result` sentinel (we'll surface that flag from the new helper) so the edge function re-runs Google instead of replaying the cached null.
+`mem://constraints/security/edge-fn-bearer-must-be-user-jwt` — short rule: client fetches to authed edge functions MUST send `session.access_token`, never `VITE_SUPABASE_PUBLISHABLE_KEY`, because the gateway and our `parseAuth` / `auth.getUser` paths both validate the JWT against the user. Use `supabase.functions.invoke()` when possible (it threads the session automatically); when a hand-rolled `fetch` is required for streaming, pull `session.access_token` first.
 
-## 4. Trip-level fallback for the hero strip itself
+## Out of scope
 
-`DestinationHeroImage.tsx` and the trip-detail purple band currently render a solid gradient when `imageUrl` is null. Replace that branch with a **shared bucket fallback**: pick from a small set of pre-uploaded country/region heroes in the existing `destination-images` storage bucket (Spain, France, Italy, Japan, USA, generic-coast, generic-city). Match by `destinations.country`. Worst case the user sees a real Spanish coastal photo for Mallorca, never a flat color. Only one storage read, no Google spend.
+- Refactoring the streaming `fetch` to `supabase.functions.invoke()`. Possible later but unnecessary for the fix.
+- Changing the edge function — the function is correct; the client is the bug.
+- Re-touching the destination-images / hero-image work from the prior turn.
 
-## 5. Backfill / unstick existing trips
+# Verification after build
 
-One `UPDATE` to clear the `source='no_result'` rows for `entity_type='destination'` so the next page-load triggers a real Google fetch under the new logic. Also nullify the bad sentinels for the recurring offenders we've seen (Mallorca, Casablanca, La Palma, anything matching the pattern).
-
-## 6. Update memory
-
-Rewrite `mem://constraints/visual/destination-canonical-stock-fallback` to reflect the actual architecture:
-
-> Hero images flow Google Places → `curated_images` cache → UI. `destinations.hero_image_url` is an opportunistic write-back, never a source of truth. `no_result` rows for `entity_type='destination'` are capped at 24h TTL and skipped on read once the POI fallback to the city name is exhausted. UI must always render a real image — gradient placeholders are forbidden.
-
-## Technical notes
-
-Files touched:
-
-- `supabase/functions/destination-images/index.ts` — TTL cap, POI→city fallback, `force` flag.
-- `src/services/destinationImagesAPI.ts` — return `wasNoResult` from `getDbCuratedUrl`; pass `force=true` on the next API call.
-- `src/hooks/useTripHeroImage.ts` — wire `force=true` and add a final "country bucket" tier.
-- `src/components/common/DestinationHeroImage.tsx` (and the purple band in trip-detail header) — replace gradient with bucket fallback.
-- One Supabase migration: `DELETE FROM curated_images WHERE entity_type='destination' AND source='no_result'`.
-
-Out of scope:
-- Re-introducing a static `CURATED_DESTINATION_IMAGES` map.
-- Mass pre-warming Google Places for all 2,246 destinations (we let usage drive the cache, as before).
-- Changing itinerary generation.
+1. Open any activity card → AI Concierge → ask a question. Expect a streamed reply, no "Invalid token".
+2. Sign out → open concierge → expect the friendly "sign in" message, no network call.
+3. Quiz mapping + onboarding conversation flows still work end-to-end signed in.
