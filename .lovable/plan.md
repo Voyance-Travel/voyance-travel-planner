@@ -1,54 +1,35 @@
-# Why the proposed bridge is a no-op
+# Add must-do diagnostic logging
 
-The spec assumes `metadata.mustHaves` is populated by step-3 and silently ignored by the generator. The codebase says otherwise:
+Short answer: **no — we have logging in the middle of the pipeline, but two critical boundaries are silent**, which is exactly why we can't tell whether the next failing trip is a write problem, a merge problem, or a prompt problem.
 
-**1. `metadata.mustHaves` is never written by any UI.**
-`src/services/mustHavesAPI.ts` exports `createMustHave` / `updateMustHave` / `useCreateMustHave` etc., but `grep -rn "mustHavesAPI\|useCreateMustHave\|createMustHave\|saveTripMustHaves" src/` returns only matches inside the file itself. It is dead code. No step-3 component imports it.
+## What we already log
 
-**2. The generator already reads `metadata.mustHaves` — twice.**
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts:559-561` reads `metadata.mustHaves` and feeds it through `buildMustHavesConstraintPrompt(...)`, injected at line 1624 (`${mustHavesConstraintPrompt}`).
-- `supabase/functions/generate-itinerary/generation-core.ts:324` passes `trip.metadata.mustHaves` into the generation context.
-- `must-do-priorities.ts:1054-1110` is the dedicated builder, explicitly differentiated from `mustDoActivities` (venue names vs schedule items).
+- `compile-prompt.ts:508` — `[compile-prompt] Must-do: N total, Day X: K assigned, M events`
+- `generation-core.ts:2195` — `[Stage 2] Day N: MISSING must-do activities: …` (retry trigger)
+- `generation-core.ts:2204` — `[Stage 2] Day N must-do check error (non-blocking)`
 
-**3. The real key step-3 writes is `metadata.mustDoActivities`** (string or string[]). See `src/pages/Start.tsx:2507/2513/3052/3056`, `src/contexts/TripPlannerContext.tsx:297/305`, `src/components/planner/ItineraryContextForm.tsx:122`. This already flows into the generator via `userAnchors.ts` / `buildPerDayActivitiesFromMustDo.ts` / the existing `userIntents` array.
+## What is silent (the blind spots)
 
-**4. The DB confirms it.** Last 8 trips (Beijing, Stockholm, Paris, Rome, Mexico City, Mallorca, Monaco, Barcelona — all created today/yesterday):
+1. **Trip-creation insert** (`src/pages/Start.tsx` L2500 form path + L2915 chat path) — we don't log what `mustDoActivities` value was written to `metadata`. When the DB later shows `mh_count=0`, we can't tell if the user typed nothing vs. the UI dropped it.
+2. **persist-itinerary metadata merge** (`supabase/functions/_shared/persist-itinerary.ts` L489 + L534) — the merge that's supposed to preserve `mustDoActivities` across saves logs nothing. If a regeneration wipes it, we have no breadcrumb.
+3. **generation-core context build** (`generation-core.ts:314`) — we read `trip.metadata?.mustDoActivities` but don't log whether it was present/empty at generation start.
 
-```
-mh_count = 0   ui_count = 0   for all 8 trips
-```
+## Plan: 4 one-line log additions
 
-The Beijing trip the user is debugging has `metadata = { persist_validation, itinerary_frozen_at }` — `mustDoActivities` is also empty. Applying the bridge would iterate an empty array and log nothing. The user would still see ignored must-dos.
+| # | File | Where | Log line |
+|---|------|-------|----------|
+| 1 | `src/pages/Start.tsx` | After both inserts (L2500, L2915) | `console.log('[trip-create] tripId=… mustDoActivities=', formMustDoList?.length ?? 0, 'items')` |
+| 2 | `supabase/functions/_shared/persist-itinerary.ts` | Inside both merge blocks (L515, L543) | `console.log('[persist-itinerary] meta-merge tripId=… priorMustDo=', !!priorMeta?.mustDoActivities, 'newMustDo=', !!callerMeta?.mustDoActivities)` |
+| 3 | `supabase/functions/generate-itinerary/generation-core.ts` | At L314 after the `mustDoActivities` resolver | `console.log('[generation-core] context mustDoActivities=', context.mustDoActivities ? context.mustDoActivities.slice(0,120) : '(empty)')` |
+| 4 | `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` | At L376 after `mustDoActivitiesRaw` resolves | `console.log('[compile-prompt] mustDoActivitiesRaw len=', mustDoActivitiesRaw.length, 'source=', requestMustDoText ? 'request' : 'metadata')` |
 
-## The actual question to answer first
+## What this buys us
 
-Why does `metadata.mustDoActivities` end up empty on the Beijing trip even though step-3 has a write path for it?
+For the next failing trip, a single `supabase--edge_function_logs` search on `[trip-create]` → `[persist-itinerary] meta-merge` → `[generation-core] context` → `[compile-prompt]` will pinpoint exactly which boundary dropped the value, with no further investigation needed.
 
-Two known suspects:
+## Out of scope
 
-- **A. Yesterday's `persistTripItinerary` metadata-merge fix isn't on the affected branch yet** (the persist-merge constraint exists in mem://constraints/itinerary/persist-metadata-merge, edited today). The Beijing trip was created at 14:10 UTC — could pre-date or post-date deploy of that fix. Need to confirm deploy time vs trip creation time.
-- **B. The user didn't actually fill in must-dos in step-3 for the Beijing trip.** Easy to falsify by asking, or by reproducing with a fresh trip + must-dos filled in.
+- No prompt changes, no schema changes, no behavior changes.
+- The frontend `[trip-create]` log will surface in the user's browser console; the three edge-function logs flow to Supabase analytics. No PII (we log lengths/booleans, not user text — except the 120-char prompt slice for sanity).
 
-## Plan (gated on investigation)
-
-### Phase 1 — investigation only (no code change)
-
-1. Confirm deploy status of `persist-itinerary.ts` (the success-branch metadata merge). If not yet deployed, deploy it and re-test before touching anything else.
-2. Create a fresh test trip with 3 must-dos entered in step-3. After save, `SELECT metadata->'mustDoActivities' FROM trips WHERE id = …` and confirm it survives.
-3. Pull `[must-do]` / `[user-anchors]` lines from `generate-itinerary` edge logs for that test trip to see whether the prompt actually carries the items.
-
-### Phase 2 — only if Phase 1 proves a real gap
-
-Decide based on what we find:
-
-- If `mustDoActivities` is present in metadata but the generator ignores it → fix is in `userAnchors.ts` / `must-do-priorities.ts` / prompt construction, NOT in a `mustHaves → userIntents` bridge.
-- If `mustDoActivities` is wiped → re-confirm the persist-merge constraint actually patched both write paths (`persistTripItinerary` success branch + `action-save-itinerary` callers). The merge already exists in code at `supabase/functions/_shared/persist-itinerary.ts`; verify with `grep -n "priorMeta" supabase/functions/_shared/persist-itinerary.ts`.
-- If we discover step-3 has a separate "Must-Have items" UI we missed that uses `mustHavesAPI.ts` → wire that UI's writes into `mustDoActivities` (the canonical key the generator already consumes) rather than introduce a second redundant channel.
-
-### Phase 3 — bridge file (only if Phase 2 proves it's needed)
-
-Even then, the right shape is probably not a `mustHaves → recordedIntents` bridge but a `mustHavesAPI.ts → mustDoActivities` writer alignment, since `mustDoActivities` is the actively-consumed key with established prompt plumbing.
-
-## Recommendation
-
-Do not ship the proposed file + 2 wire-in edits. They are syntactically correct but will silently do nothing because the source array is always empty. Start with Phase 1 — that's a 5-minute test that tells us which of the three real fixes to make.
+After approval I'll add the four log lines and nothing else.
