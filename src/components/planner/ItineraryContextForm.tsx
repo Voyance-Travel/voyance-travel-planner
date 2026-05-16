@@ -176,6 +176,24 @@ export default function ItineraryContextForm({
   };
 
   const handleContinue = () => {
+    // Group pinned anchors by dayNumber → perDayActivities mirror (chat-planner parity)
+    let perDayActivities: Array<{ dayNumber: number; activities: string }> | undefined;
+    const pinned = parsedAnchors.filter((a) => a.dayNumber > 0);
+    if (pinned.length > 0) {
+      const byDay = new Map<number, string[]>();
+      for (const a of pinned) {
+        const entry = a.startTime
+          ? `${formatTimeLabel(a.startTime)} - ${a.title}`
+          : a.title;
+        const list = byDay.get(a.dayNumber) || [];
+        list.push(entry);
+        byDay.set(a.dayNumber, list);
+      }
+      perDayActivities = Array.from(byDay.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([dayNumber, items]) => ({ dayNumber, activities: items.join(', ') }));
+    }
+
     onContinue({
       hotelLocation: hotelLocation || undefined,
       arrivalTime: arrivalTime || undefined,
@@ -184,6 +202,7 @@ export default function ItineraryContextForm({
       childrenAges: showChildrenAges && childrenAges.length > 0 ? childrenAges : undefined,
       preBookedCommitments: commitments.length > 0 ? commitments : undefined,
       mustDoActivities: mustDoActivities || undefined,
+      perDayActivities,
     });
   };
 
