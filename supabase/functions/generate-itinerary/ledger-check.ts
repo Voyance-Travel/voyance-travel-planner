@@ -256,34 +256,46 @@ export async function ledgerCheck(
     const ledger = ledgerByDay.get(dayNum);
     if (!ledger) continue;
 
-    // 1) Check missing userIntent — for 'must' items, INSERT a visible placeholder
-    //    so the user can see their request. Anchor-guard handles locked items;
-    //    this catches soft 'must' intents (fine-tune, assistant chat) that the
-    //    AI silently ignored.
-    for (const u of ledger.userIntent) {
-      const present = day.activities.some((a: any) =>
-        fuzzyMatch(a.title || a.name || '', u.title)
-      );
-      if (present) continue;
+    // 1) Check missing userIntent — for 'must' items WITH enough structure
+     //    (a startTime OR a proper-noun venue in the title), INSERT a visible
+     //    placeholder so the user can see their request. For vague soft musts
+     //    ("sushi lunch", "spa") we DO NOT inject a bare placeholder card
+     //    (that's exactly the "thrown on top with no time/description/purpose"
+     //    pattern); we only warn and let the next repair/fill pass schedule a
+     //    real venue. Anchor-guard handles hard-locked items.
+     const looksNamed = (title: string): boolean => /[A-Z][\p{L}'’&.-]+(\s+[A-Z][\p{L}'’&.-]+)+/u.test(title);
+     for (const u of ledger.userIntent) {
+       const present = day.activities.some((a: any) =>
+         fuzzyMatch(a.title || a.name || '', u.title)
+       );
+       if (present) continue;
 
-      if (u.priority === 'must' && !u.locked && u.kind !== 'avoid') {
-        // Insert placeholder so the user sees their intent surfaced.
-        const placeholder = buildPlaceholderForIntent(u, dayNum);
-        day.activities.push(placeholder);
-        inserted++;
-        warnings.push({
-          dayNumber: dayNum,
-          kind: 'missing_user_intent_restored',
-          detail: `User-requested "${u.title}" was missing on day ${dayNum} — inserted a placeholder so the user can confirm or replace it.`,
-        });
-      } else {
-        warnings.push({
-          dayNumber: dayNum,
-          kind: 'missing_user_intent',
-          detail: `User-locked "${u.title}" missing on day ${dayNum} (anchor-guard should restore it).`,
-        });
-      }
-    }
+       if (u.priority === 'must' && !u.locked && u.kind !== 'avoid') {
+         const hasStructure = !!u.startTime || looksNamed(u.title);
+         if (!hasStructure) {
+           warnings.push({
+             dayNumber: dayNum,
+             kind: 'missing_user_intent_soft',
+             detail: `Soft user wish "${u.title}" on day ${dayNum} was not incorporated. Leaving for next repair pass to schedule a real venue (no bare placeholder inserted).`,
+           });
+           continue;
+         }
+         const placeholder = buildPlaceholderForIntent(u, dayNum);
+         day.activities.push(placeholder);
+         inserted++;
+         warnings.push({
+           dayNumber: dayNum,
+           kind: 'missing_user_intent_restored',
+           detail: `User-requested "${u.title}" was missing on day ${dayNum} — inserted a placeholder so the user can confirm or replace it.`,
+         });
+       } else {
+         warnings.push({
+           dayNumber: dayNum,
+           kind: 'missing_user_intent',
+           detail: `User-locked "${u.title}" missing on day ${dayNum} (anchor-guard should restore it).`,
+         });
+       }
+     }
 
     // 2) Repeat-of-alreadyDone — drop offending activity (only if not user-locked).
     //    EXEMPTION: daily anchors (Return to Hotel, Freshen Up, Check-in, in-hotel
