@@ -911,7 +911,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold">
-                {formattedBudget}
+                {formatCurrency(settings?.budget_total_cents || 0)}
               </span>
               {settings?.budget_input_mode === 'per_person' && (
                 <span className="text-xs text-muted-foreground">
