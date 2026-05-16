@@ -263,11 +263,24 @@ export async function persistTripItinerary(
   try {
     const { data: existing } = await supabase
       .from('trips')
-      .select('itinerary_data, metadata')
+      .select('itinerary_data, metadata, itinerary_status')
       .eq('id', tripId)
       .maybeSingle();
     if (existing) {
       oldMetadata = (existing.metadata as Record<string, any>) || {};
+      // ── Active-generation bypass ────────────────────────────────────
+      // The regression / identity-swap guards exist to prevent stale
+      // refresh-time writes from clobbering a healthy SAVED itinerary
+      // (Dublin pattern). When the trip is in an active generation
+      // window (status='generating') OR previously hard-failed
+      // ('failed' / 'incomplete_itinerary'), the new days are *meant*
+      // to replace whatever skeleton is on disk — that's the whole
+      // point of the user-clicked Regenerate button. Bypassing here
+      // keeps the guard from rejecting the legitimate overwrite.
+      const existingStatus = String((existing as any).itinerary_status || '');
+      const activeRegen = existingStatus === 'generating'
+        || existingStatus === 'failed'
+        || existingStatus === 'incomplete_itinerary';
       const oldDays = Array.isArray((existing.itinerary_data as any)?.days)
         ? (existing.itinerary_data as any).days
         : [];
