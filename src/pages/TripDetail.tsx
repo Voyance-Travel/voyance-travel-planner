@@ -550,6 +550,12 @@ export default function TripDetail() {
       currentTrip.itinerary_status === 'failed' && completedDays === 0;
     const resumeFromDay = wasHardFailedEmpty ? 1 : (completedDays + 1);
 
+    // Tell the persist-issues listener to re-buffer toasts for this trip
+    // while the regen burst is in flight. Cleared on completion (or error).
+    try {
+      window.dispatchEvent(new CustomEvent('voyance:trip-regenerating-start', { detail: { tripId } }));
+    } catch { /* noop */ }
+
     try {
       // Reset status to generating with fresh heartbeat + normalize total days
       await supabase.from('trips').update({
@@ -590,6 +596,14 @@ export default function TripDetail() {
           resumeFromDay,
           // Explicit user click → allowed to overwrite a frozen trip.
           allowOverwriteFrozen: true,
+          // Explicit user click → allowed to overwrite a previously
+          // failed/partial itinerary even when the new days look
+          // different from the broken skeleton on disk. The persist
+          // regression / identity-swap guards already bypass when
+          // existing status is `generating`/`failed`/`incomplete_itinerary`,
+          // but we pass this for defense in depth.
+          allowRegression: true,
+          saveReason: 'user-regenerate',
         },
       });
 
@@ -599,6 +613,9 @@ export default function TripDetail() {
       console.error('[Resume] Failed:', err);
       toast.error('Failed to resume generation. Please try again.');
       setGenerationStalled(true);
+      try {
+        window.dispatchEvent(new CustomEvent('voyance:trip-regenerating-end', { detail: { tripId } }));
+      } catch { /* noop */ }
     } finally {
       resumeInFlightRef.current = false;
       setResumingGeneration(false);
