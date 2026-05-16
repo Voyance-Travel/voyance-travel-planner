@@ -260,15 +260,18 @@ function parseUserActivities(dayActivitiesString: string, dayNumber: number): {
     // ── HARD LOCK GATE ────────────────────────────────────────────────────
     // Only lock entries with enough structure to commit verbatim:
     //   - explicit start time, OR
-    //   - a real proper-noun venue name
-    // Vague wishes ("sushi lunch", "spa", "nice dinner") become flexible
-    // Day Brief hints instead of blank locked cards on top of the day.
+    //   - a real proper-noun venue name (extracted via `at <Venue>` / dash form)
+    // ANY other entry — even ones that don't match the narrow vague-wish
+    // regex (e.g. "do flight and hotel", "see the city", "Sushi Lunch") —
+    // becomes a flexible USER WISH so the model picks a real venue + slot +
+    // description instead of dumping a blank locked card on top of the day.
     const hasNamedVenue = !!venueName;
-    const isVague = !startTime && !hasNamedVenue && isVagueWishTitle(activityText);
-    if (isVague) {
+    if (!startTime && !hasNamedVenue) {
       flexibleWishes.push(activityText);
       continue;
     }
+    // Suppress unused-warning for the narrow regex helper (kept for telemetry).
+    void isVagueWishTitle;
 
     lockedCards.push({
       title: activityText,
