@@ -7462,6 +7462,7 @@ export function EditorialItinerary({
             }
           >
           <BudgetTab
+            displayCurrency={tripCurrency}
             tripId={tripId}
             travelers={travelers}
             totalDays={days.length}
