@@ -1466,6 +1466,11 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   await triggerNextJourneyLeg(supabase, tripId);
 
   if (!persistVerdict.ok) {
+    // Return 200 (not 422) so the browser doesn't log a red "Failed to load
+    // resource" line on every page-load self-heal. The body still carries
+    // `success: false` + `code: 'NEEDS_REGENERATION'`, which is what every
+    // client branch reads to surface the in-app banner / suppress for
+    // self-heal saves. See mem://constraints/itinerary/persist-issues-toast-user-only.
     return okJson({
       success: false,
       code: 'NEEDS_REGENERATION',
@@ -1475,7 +1480,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       mealGuardInjections,
       errors: persistVerdict.errors,
       warnings: persistVerdict.warnings,
-    }, 422);
+    }, 200);
   }
 
   return okJson({

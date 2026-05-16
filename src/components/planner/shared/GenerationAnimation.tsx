@@ -88,6 +88,7 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
             cx={100} cy={100} r={52}
             className="fill-none stroke-primary/15"
             strokeWidth="1"
+            initial={{ r: 52, opacity: 0.4 }}
             animate={{ r: [52, 72], opacity: [0.4, 0] }}
             transition={{ duration: 2.5, repeat: Infinity, ease: 'easeOut' }}
           />
@@ -95,6 +96,7 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
             cx={100} cy={100} r={52}
             className="fill-none stroke-primary/10"
             strokeWidth="1"
+            initial={{ r: 52, opacity: 0.3 }}
             animate={{ r: [52, 80], opacity: [0.3, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeOut', delay: 0.8 }}
           />
@@ -103,6 +105,7 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
           <motion.circle
             cx={100} cy={100} r={48}
             className="fill-primary/5"
+            initial={{ r: 48, opacity: 0.06 }}
             animate={{ r: [48, 52, 48], opacity: [0.06, 0.12, 0.06] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           />
