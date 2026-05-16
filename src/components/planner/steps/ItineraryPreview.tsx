@@ -316,6 +316,7 @@ export default function ItineraryPreview({
       const metadataUpdates: Record<string, unknown> = { ...existingMetadata };
       if (data.mustDoActivities) {
         metadataUpdates.mustDoActivities = data.mustDoActivities;
+        metadataUpdates.mustDoSource = 'simple_form';
       }
       if (data.perDayActivities && data.perDayActivities.length > 0) {
         metadataUpdates.perDayActivities = data.perDayActivities;
