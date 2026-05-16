@@ -148,11 +148,24 @@ export function PersistIssuesListener() {
       }
     }
 
+    function handleRegenStart(ev: Event) {
+      // While a user-initiated regenerate is in flight, any persist-issues
+      // event for this trip is part of the regen burst — re-buffer it the
+      // same way we do for first-paint. Cleared by `voyance:trip-loaded`
+      // (which TripDetail re-fires once the trip is back to a steady state).
+      const tripId = (ev as CustomEvent<{ tripId?: string }>).detail?.tripId;
+      const tripKey = tripId ?? '_';
+      loadedTrips.delete(tripKey);
+      bufferRef.current.delete(tripKey);
+    }
+
     window.addEventListener('itinerary-persist-issues', handle);
     window.addEventListener('voyance:trip-loaded', handleLoaded);
+    window.addEventListener('voyance:trip-regenerating-start', handleRegenStart);
     return () => {
       window.removeEventListener('itinerary-persist-issues', handle);
       window.removeEventListener('voyance:trip-loaded', handleLoaded);
+      window.removeEventListener('voyance:trip-regenerating-start', handleRegenStart);
     };
   }, []);
 
