@@ -95,6 +95,9 @@ function distributeFloatingAnchors(
     fillCount.set(best, (fillCount.get(best) ?? 0) + 1);
     out.push({ ...anchor, dayNumber: best + 1 });
   }
+  if (dropped > 0) {
+    console.log(`[ANCHOR_GUARD] floating_dropped count=${dropped} reason=soft_must_do (no startTime, no venueName)`);
+  }
   return out;
 }
 
