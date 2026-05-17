@@ -293,6 +293,7 @@ async function _handleGenerateTripDayInner(
     console.warn('[generate-trip-day] trip_day_intents seeding failed (non-blocking):', seedErr);
   }
 
+  // STATUS RECOVERY: If frontend prematurely set status to 'ready' but we still have days to generate,
   // reset it back to 'generating'. This prevents the frontend self-heal from killing the chain.
   if (tripCheck.itinerary_status === 'ready' && dayNumber <= totalDays) {
     console.warn(`[generate-trip-day] ⚠️ STATUS RECOVERY: Trip ${tripId} status was prematurely set to 'ready' while generating day ${dayNumber}/${totalDays} — resetting to 'generating'`);
