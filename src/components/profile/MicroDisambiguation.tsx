@@ -226,8 +226,16 @@ export default function MicroDisambiguation({
     setIsSubmitting(true);
 
     try {
-      // Log the disambiguation event
-      await supabase
+      // 0. Session guard
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        console.error('[Disambig] step=session no active session');
+        toast.error('Please sign in again to refine your profile.');
+        return;
+      }
+
+      // 1. Log the disambiguation event (best-effort, non-blocking)
+      const { error: eventErr } = await supabase
         .from('voyance_events')
         .insert({
           user_id: userId,
@@ -240,50 +248,80 @@ export default function MicroDisambiguation({
             submitted_at: new Date().toISOString(),
           },
         });
+      if (eventErr) {
+        console.warn('[Disambig] step=event_insert (non-blocking)', eventErr);
+      }
 
-      // Apply disambiguation deltas as overrides, then trigger full recalc
-      // so archetypes and all derived data stay consistent
-      const { data: profileData } = await supabase
+      // 2. Read existing overrides
+      const { data: profileData, error: profileReadErr } = await supabase
         .from('profiles')
         .select('travel_dna_overrides')
         .eq('id', userId)
         .maybeSingle();
+      if (profileReadErr) {
+        console.error('[Disambig] step=profile_read', profileReadErr);
+        toast.error(`Couldn't load your profile: ${profileReadErr.message}`);
+        return;
+      }
 
       const existingOverrides = (profileData?.travel_dna_overrides as Record<string, number>) || {};
       const mergedOverrides = { ...existingOverrides };
-      
       for (const [trait, delta] of Object.entries(selectedOption.deltas)) {
         const currentValue = mergedOverrides[trait] || 0;
         mergedOverrides[trait] = Math.max(-10, Math.min(10, currentValue + delta));
       }
 
-      // Save overrides to profiles table
-      await supabase
+      // 3. Write overrides; .select() exposes row count so 0-row updates fail loudly
+      const { data: updatedRows, error: profileUpdateErr } = await supabase
         .from('profiles')
         .update({ travel_dna_overrides: mergedOverrides })
-        .eq('id', userId);
+        .eq('id', userId)
+        .select('id');
+      if (profileUpdateErr) {
+        console.error('[Disambig] step=profile_update', profileUpdateErr);
+        toast.error(`Couldn't save preferences: ${profileUpdateErr.message}`);
+        return;
+      }
+      if (!updatedRows || updatedRows.length === 0) {
+        console.error('[Disambig] step=profile_update affected 0 rows for', userId);
+        toast.error("Couldn't save preferences (profile row not found).");
+        return;
+      }
 
-      // Full recalculation — updates archetypes, tone tags, everything
-      await recalculateDNAFromPreferences(userId);
+      // 4. Full DNA recalc - returns {success} instead of throwing
+      const recalcResult = await recalculateDNAFromPreferences(userId);
+      if (!recalcResult.success) {
+        console.error('[Disambig] step=dna_recalc returned success=false');
+        toast.error('Profile saved but DNA recalculation failed. Please try again.');
+        return;
+      }
 
-      // Persist resolution to DB so it follows the user across devices/browsers
-      await supabase
+      // 5. Mark resolution - upsert so users without an existing DNA row also persist
+      const { error: resolveErr } = await supabase
         .from('travel_dna_profiles')
-        .update({
-          disambiguation_resolved_at: new Date().toISOString(),
-          disambiguation_question_id: question.id,
-          disambiguation_answer_id: selectedAnswer,
-        })
-        .eq('user_id', userId);
+        .upsert(
+          {
+            user_id: userId,
+            disambiguation_resolved_at: new Date().toISOString(),
+            disambiguation_question_id: question.id,
+            disambiguation_answer_id: selectedAnswer,
+          },
+          { onConflict: 'user_id' }
+        );
+      if (resolveErr) {
+        console.error('[Disambig] step=resolve_upsert', resolveErr);
+        toast.error(`Couldn't mark refinement complete: ${resolveErr.message}`);
+        return;
+      }
 
       localStorage.setItem(dismissKey, 'true');
       setIsResolved(true);
       toast.success('Thanks! Your profile has been refined.');
       onResolved?.();
-
     } catch (error) {
-      console.error('Failed to submit disambiguation:', error);
-      toast.error('Something went wrong. Please try again.');
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[Disambig] step=unexpected', error);
+      toast.error(`Something went wrong: ${msg}`);
     } finally {
       setIsSubmitting(false);
     }
