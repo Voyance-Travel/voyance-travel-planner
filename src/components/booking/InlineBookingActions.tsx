@@ -350,7 +350,7 @@ export function InlineBookingActions({
             onClick={handleFindBookingLink}
             disabled={isLookingUpUrl}
             className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0 disabled:opacity-60"
-            title={`Premium experience (${formatPrice(price * 100, activity.currency || 'USD')}) — find the official booking page`}
+            title={`Premium experience (${formatPrice(price * 100, activity.currency || 'USD')}) - find the official booking page`}
           >
             {isLookingUpUrl ? (
               <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin" />

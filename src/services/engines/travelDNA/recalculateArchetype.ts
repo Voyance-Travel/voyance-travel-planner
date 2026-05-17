@@ -77,7 +77,7 @@ export async function recalculateArchetype(userId: string): Promise<RecalculateR
   }
 
   console.log(
-    `[recalculateArchetype] user=${userId} primary=${primary} secondary=${secondary ?? "—"} conf=${confidenceLabel}(${confidenceScore})`,
+    `[recalculateArchetype] user=${userId} primary=${primary} secondary=${secondary ?? "-"} conf=${confidenceLabel}(${confidenceScore})`,
   );
 
   return { success: true, primary, secondary, confidence: confidenceScore };
@@ -131,7 +131,7 @@ export async function recalculateIfNeeded(userId: string): Promise<RecalculateIf
   const shifted = result.primary !== previousPrimary;
   if (shifted) {
     console.log(
-      `[recalculateIfNeeded] shift user=${userId} ${previousPrimary ?? "—"} → ${result.primary}`,
+      `[recalculateIfNeeded] shift user=${userId} ${previousPrimary ?? "-"} → ${result.primary}`,
     );
   }
   return {

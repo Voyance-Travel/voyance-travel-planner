@@ -199,7 +199,7 @@ export default function EditorialRenderer({
     const start = new Date(tripStartDate);
     const end = tripEndDate ? new Date(tripEndDate) : null;
     const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    if (end) return `${fmt(start)} – ${fmt(end)}`;
+    if (end) return `${fmt(start)} - ${fmt(end)}`;
     return fmt(start);
   }, [tripStartDate, tripEndDate]);
 

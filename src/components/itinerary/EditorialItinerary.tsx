@@ -1655,7 +1655,7 @@ export function EditorialItinerary({
     // Day-1 "Grand Entrance" dinner — purely cosmetic description prefix when
     // the generator/quality-pass tagged this activity. Skips locked items and
     // never modifies anything beyond the description.
-    const GRAND_ENTRANCE_PREFIX = 'Your Grand Entrance dinner — ';
+    const GRAND_ENTRANCE_PREFIX = 'Your Grand Entrance dinner - ';
     const labelGrandEntrance = (a: any): any => {
       if (!a || a.locked || a.isLocked) return a;
       const tags = Array.isArray(a.tags) ? a.tags : [];
@@ -2583,7 +2583,7 @@ export function EditorialItinerary({
             return next;
           });
           setRefreshSheetDay(prev => (prev === day.dayNumber ? null : prev));
-          toast.success('Day timeline checked — looks clean');
+          toast.success('Day timeline checked - looks clean');
         } else {
           setRefreshResults(prev => ({ ...prev, [day.dayNumber]: result }));
           setRefreshSheetDay(day.dayNumber);
@@ -2595,11 +2595,11 @@ export function EditorialItinerary({
         }
       } else {
         console.error('[handleRefreshDay] refresh-day returned null');
-        toast.error('Refresh failed — please try again');
+        toast.error('Refresh failed - please try again');
       }
     } catch (err: any) {
       console.error('[handleRefreshDay] failed', err);
-      toast.error('Refresh failed — please try again');
+      toast.error('Refresh failed - please try again');
     } finally {
       setRefreshingDayNumber(null);
     }
@@ -2611,7 +2611,7 @@ export function EditorialItinerary({
     const idx = days.findIndex((d: any) => d.dayNumber === refreshDayRequest.dayNumber);
     if (idx < 0) {
       console.warn('[refresh_day] day not found in editor', { dayNumber: refreshDayRequest.dayNumber, available: days.map((d: any) => d.dayNumber) });
-      toast.error(`Day ${refreshDayRequest.dayNumber} is not loaded — try reopening the trip.`);
+      toast.error(`Day ${refreshDayRequest.dayNumber} is not loaded - try reopening the trip.`);
       return;
     }
     setSelectedDayIndex(idx);
@@ -2627,7 +2627,7 @@ export function EditorialItinerary({
     const idx = days.findIndex((d: any) => d.dayNumber === fixTimingRequest.dayNumber);
     if (idx < 0) {
       console.warn('[fix_timing] day not found in editor', { dayNumber: fixTimingRequest.dayNumber, available: days.map((d: any) => d.dayNumber) });
-      toast.error(`Day ${fixTimingRequest.dayNumber} is not loaded — try reopening the trip.`);
+      toast.error(`Day ${fixTimingRequest.dayNumber} is not loaded - try reopening the trip.`);
       return;
     }
     (async () => {
@@ -2705,7 +2705,7 @@ export function EditorialItinerary({
       const remaining = nonTimingIssues.length;
       if (remaining === 0) {
         toast.success(
-          `Day ${day.dayNumber} timing fixed — applied ${timeOnlyChanges.length} adjustment${timeOnlyChanges.length === 1 ? '' : 's'}.`
+          `Day ${day.dayNumber} timing fixed - applied ${timeOnlyChanges.length} adjustment${timeOnlyChanges.length === 1 ? '' : 's'}.`
         );
       } else {
         toast(`Timing fixed. Day ${day.dayNumber} still has ${remaining} ${remaining === 1 ? 'issue' : 'issues'} that need review.`, { icon: 'ℹ️' });
@@ -5442,7 +5442,7 @@ export function EditorialItinerary({
         if (error) throw error;
         if (isFailedDay(data?.day)) {
           await refundRegenCredits('placeholder_day');
-          toast.error("We couldn't regenerate this day — credits refunded");
+          toast.error("We couldn't regenerate this day - credits refunded");
           return;
         }
         if (data?.day) {
@@ -5472,7 +5472,7 @@ export function EditorialItinerary({
     } catch (err) {
       console.error('Regenerate error:', err);
       await refundRegenCredits('generation_failed', err instanceof Error ? err.message : String(err));
-      toast.error('Failed to regenerate day — credits refunded');
+      toast.error('Failed to regenerate day - credits refunded');
     } finally {
       setRegeneratingDay(null);
       setPendingGuidedPreferences(null);
@@ -5824,7 +5824,7 @@ export function EditorialItinerary({
     setTimeEditModal(null);
     toast.success(cascade ? 'Schedule shifted' : 'Activity time updated');
     if (cascadeHitLock) {
-      toast.info('Some locked activities were kept in place — review the schedule for overlaps.');
+      toast.info('Some locked activities were kept in place - review the schedule for overlaps.');
     }
 
     // Persist immediately so a refresh / concurrent backend repair doesn't drop the edit.
@@ -6136,8 +6136,8 @@ export function EditorialItinerary({
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {generationFailureReason === 'incomplete_itinerary'
-                      ? 'Generation finished without a full plan of restaurants, activities, and transit. Tap Regenerate to try again — your flights, hotel, and trip settings are preserved.'
-                      : 'Generation finished without any restaurants, activities, or transit. Tap Regenerate to try again — your flights, hotel, and trip settings are preserved.'}
+                      ? 'Generation finished without a full plan of restaurants, activities, and transit. Tap Regenerate to try again - your flights, hotel, and trip settings are preserved.'
+                      : 'Generation finished without any restaurants, activities, or transit. Tap Regenerate to try again - your flights, hotel, and trip settings are preserved.'}
                   </p>
                   <Button
                     size="sm"
@@ -6204,7 +6204,7 @@ export function EditorialItinerary({
                     {isBudgetCalculating && (
                       <span
                         className="inline-flex items-center gap-1 text-xs text-muted-foreground"
-                        title="Final trip total may differ — itinerary still generating"
+                        title="Final trip total may differ - itinerary still generating"
                       >
                         <Loader2 className="h-3 w-3 animate-spin" />
                         Calculating…
@@ -6828,7 +6828,7 @@ export function EditorialItinerary({
                 <span className="text-xs font-medium text-muted-foreground inline-flex items-center gap-1">
                   <span>
                     {isActivelyGenerating ? expectedTotalDays : days.length} day{(isActivelyGenerating ? expectedTotalDays : days.length) !== 1 ? 's' : ''}
-                    {startDate && endDate ? ` · ${safeFormatDate(startDate, 'MMM d')} – ${safeFormatDate(endDate, 'MMM d')}` : ''}
+                    {startDate && endDate ? ` · ${safeFormatDate(startDate, 'MMM d')} - ${safeFormatDate(endDate, 'MMM d')}` : ''}
                   </span>
                   {onDateChange && (
                     <TripDateEditorInline
@@ -6975,7 +6975,7 @@ export function EditorialItinerary({
                               </span>
                             </>
                           ) : (
-                            <span className="text-lg font-bold leading-tight">–</span>
+                            <span className="text-lg font-bold leading-tight">-</span>
                           )}
                           {/* City name for multi-city */}
                           {cityName && (
@@ -7028,7 +7028,7 @@ export function EditorialItinerary({
                                 <span className="text-[10px] text-muted-foreground">{format(dayDate, 'EEE')}, {format(dayDate, 'MMM')}</span>
                               </>
                             ) : (
-                              <span className="text-lg font-bold leading-tight text-muted-foreground">–</span>
+                              <span className="text-lg font-bold leading-tight text-muted-foreground">-</span>
                             )}
                             <Loader2 className="h-3 w-3 animate-spin text-muted-foreground mt-0.5" />
                           </div>
@@ -7546,7 +7546,7 @@ export function EditorialItinerary({
               const resolved = resolveLiveActivity(days as any, activityId);
               if (!resolved.found) {
                 toast.error(
-                  "Couldn't drop — that item is no longer in your itinerary. The list may have been regenerated."
+                  "Couldn't drop - that item is no longer in your itinerary. The list may have been regenerated."
                 );
                 return;
               }
@@ -7580,9 +7580,9 @@ export function EditorialItinerary({
               if (!result.ok) {
                 if (suggestion.swap_type === 'drop') {
                   if (result.reason === 'not-found') {
-                    toast.error("Couldn't drop — item is no longer in your itinerary.");
+                    toast.error("Couldn't drop - item is no longer in your itinerary.");
                   } else {
-                    toast.error("Couldn't drop — that suggestion no longer matches your itinerary. Refresh suggestions.");
+                    toast.error("Couldn't drop - that suggestion no longer matches your itinerary. Refresh suggestions.");
                   }
                 }
                 if (result.reason === 'cost-not-lower') {
@@ -7601,7 +7601,7 @@ export function EditorialItinerary({
 
               if (suggestion.swap_type === 'drop' && droppedTitle) {
                 const savedAmount = (suggestion.savings || 0) * (travelers || 1);
-                toast.success(`Dropped "${droppedTitle}" — saved ${formatCurrency(savedAmount)}`);
+                toast.success(`Dropped "${droppedTitle}" - saved ${formatCurrency(savedAmount)}`);
               }
               return true;
             }}
@@ -9363,7 +9363,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
           'No visa required for tourism (US/EU citizens)',
           'Must show proof of return/onward travel',
           'May need to show proof of accommodation',
-          'UK ETA is now required for most non-EU/non-Irish visitors — apply online before travel'
+          'UK ETA is now required for most non-EU/non-Irish visitors - apply online before travel'
         ],
         passport: 'Valid passport required',
         passportTips: [
@@ -9388,7 +9388,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
         visaTips: [
           'Part of Schengen Area - 90 days in any 180-day period',
-          'ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking',
+          'ETIAS pre-travel authorisation will be required once it launches - check the official EU travel site before booking',
           'No visa required for tourism (US/EU citizens)',
           'Count all Schengen countries toward 90-day limit'
         ],
@@ -9415,7 +9415,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
         visaTips: [
           'Part of Schengen Area - 90 days in any 180-day period',
-          'ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking',
+          'ETIAS pre-travel authorisation will be required once it launches - check the official EU travel site before booking',
           'No visa required for tourism (US/EU citizens)',
           'Register at local police station if staying 8+ days (handled by hotels)'
         ],
@@ -9442,7 +9442,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
         visaTips: [
           'Part of Schengen Area - 90 days in any 180-day period',
-          'ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking',
+          'ETIAS pre-travel authorisation will be required once it launches - check the official EU travel site before booking',
           'No visa required for tourism (US/EU citizens)',
           'Count all Schengen countries toward 90-day limit'
         ],
@@ -9469,7 +9469,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
         visaTips: [
           'Part of Schengen Area - 90 days in any 180-day period',
-          'ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking',
+          'ETIAS pre-travel authorisation will be required once it launches - check the official EU travel site before booking',
           'No visa required for tourism (US/EU citizens)',
           'Count all Schengen countries toward 90-day limit'
         ],
@@ -11622,7 +11622,7 @@ function ActivityRow({
       const start = formatTime(time);
       const renderedEnd = getRenderedEndTime(activity);
       const end = renderedEnd ? formatTime(renderedEnd) : null;
-      if (start && end) return `${start} – ${end}`;
+      if (start && end) return `${start} - ${end}`;
       if (start) return start;
       return null;
     })();
@@ -11986,7 +11986,7 @@ function ActivityRow({
             {activity.duration ? (
               <span className="text-xs text-primary/70 font-medium">{activity.duration}</span>
             ) : (
-              <span className="text-sm text-muted-foreground">—</span>
+              <span className="text-sm text-muted-foreground">-</span>
             )}
           </div>
         )}

@@ -28,15 +28,15 @@ export const ARCHETYPE_REVEALS: Record<string, ArchetypeReveal> = {
     id: 'cultural_anthropologist',
     name: 'The Cultural Anthropologist',
     category: 'EXPLORER',
-    revealParagraph: "You don't just visit a place — you want to understand it. A great trip leaves you with a real sense of where you were, balanced with all the food, shopping, and wandering that makes a vacation a vacation.",
+    revealParagraph: "You don't just visit a place - you want to understand it. A great trip leaves you with a real sense of where you were, balanced with all the food, shopping, and wandering that makes a vacation a vacation.",
     youProbably: [
-      "Read a little about a place before you go — not too much, just enough",
+      "Read a little about a place before you go - not too much, just enough",
       "Take the cultural tour AND the long lunch right after",
       "Notice details on a neighborhood walk that other travelers blow past",
       "Come back with stories that have substance, not just photos"
     ],
     itineraryWillInclude: [
-      "1–2 cultural anchors per trip — a tour, museum, or guided neighborhood walk",
+      "1-2 cultural anchors per trip - a tour, museum, or guided neighborhood walk",
       "Plenty of unstructured time for shopping, wandering, lingering",
       "Family-run restaurants with a real story to them",
       "Just enough context to understand what you're looking at"
@@ -266,7 +266,7 @@ Your trips will be designed for two. Romance isn't just about luxury (though we'
     id: 'community_builder',
     name: 'The Purpose Voyager',
     category: 'CONNECTOR',
-    revealParagraph: "You've been everywhere — and everyone asks you for advice. You don't just travel; you accumulate the kind of knowledge that makes you the friend everyone texts before a trip.",
+    revealParagraph: "You've been everywhere - and everyone asks you for advice. You don't just travel; you accumulate the kind of knowledge that makes you the friend everyone texts before a trip.",
     youProbably: [
       "Have a list of recommendations memorized for half the cities you've visited",
       "Get genuine joy from helping a friend nail their itinerary",
@@ -274,7 +274,7 @@ Your trips will be designed for two. Romance isn't just about luxury (though we'
       "Track destinations less for the count, more for the expertise"
     ],
     itineraryWillInclude: [
-      "Higher activity density — you cover a lot",
+      "Higher activity density - you cover a lot",
       "Iconic landmarks AND off-the-beaten-path spots in equal measure",
       "Local-favorite restaurants alongside the famous ones",
       "Notes-worthy moments you'll be recommending for years"
@@ -290,7 +290,7 @@ Your trips will be designed for two. Romance isn't just about luxury (though we'
     id: 'story_seeker',
     name: 'The Story Seeker',
     category: 'CONNECTOR',
-    revealParagraph: "You travel for the moments you couldn't have planned. The midnight swim, the local who invited you to dinner, the detour that became the whole trip — that's the stuff you came for.",
+    revealParagraph: "You travel for the moments you couldn't have planned. The midnight swim, the local who invited you to dinner, the detour that became the whole trip - that's the stuff you came for.",
     youProbably: [
       "Say yes to invitations from strangers more often than you should",
       "Skip the famous landmark for the local-only spot down the street",
@@ -379,7 +379,7 @@ Your trips will have edge. We'll find the experiences that require something fro
     id: 'collection_curator',
     name: 'The Passport Collector',
     category: 'ACHIEVER',
-    revealParagraph: "Your map is your scoreboard. You'd rather hit three new places than spend a week in one — breadth is the point, and you're optimizing for it.",
+    revealParagraph: "Your map is your scoreboard. You'd rather hit three new places than spend a week in one - breadth is the point, and you're optimizing for it.",
     youProbably: [
       "Count countries the way other people count birthdays",
       "Have a running list of which stamp comes next",
@@ -389,7 +389,7 @@ Your trips will have edge. We'll find the experiences that require something fro
     ],
     itineraryWillInclude: [
       "Routes designed to maximize new-country / new-city count",
-      "An iconic landmark anchor in each stop — the proof you were there",
+      "An iconic landmark anchor in each stop - the proof you were there",
       "Tight, efficient logistics between destinations",
       "Less time per place, more places overall"
     ],
@@ -468,7 +468,7 @@ Your trips will honor that. Contemplative spaces, spiritual depth, room for sile
     id: 'retreat_regular',
     name: 'The Wellness Devotee',
     category: 'RESTORER',
-    revealParagraph: "You travel to disappear from your life. The retreat is the cocoon — quiet, restorative, mostly on-property — with one real day outside before you sink back in.",
+    revealParagraph: "You travel to disappear from your life. The retreat is the cocoon - quiet, restorative, mostly on-property - with one real day outside before you sink back in.",
     youProbably: [
       "Pick the retreat first, then figure out the destination",
       "Treat the spa, the yoga room, and the quiet garden as the main attractions",
@@ -477,7 +477,7 @@ Your trips will honor that. Contemplative spaces, spiritual depth, room for sile
       "Come home rebuilt, not just rested"
     ],
     itineraryWillInclude: [
-      "70–80% of the trip happening at the retreat or property",
+      "70-80% of the trip happening at the retreat or property",
       "Daily wellness rituals: spa, meditation, yoga, or healthy dining",
       "One full day out for a market, lunch in town, or a real adventure",
       "Quiet evenings, early nights, no over-stimulation"
@@ -493,7 +493,7 @@ Your trips will honor that. Contemplative spaces, spiritual depth, room for sile
     id: 'beach_therapist',
     name: 'The Beach Therapist',
     category: 'RESTORER',
-    revealParagraph: "Water is your home. Give you the ocean, a lake, a river at sunset — and everything else falls into place.",
+    revealParagraph: "Water is your home. Give you the ocean, a lake, a river at sunset - and everything else falls into place.",
     youProbably: [
       "Plan the trip around the water before anything else",
       "Know the difference between swim beaches and view beaches",
@@ -736,7 +736,7 @@ Your trips will reflect your self-knowledge. We won't give you the same itinerar
     id: 'sabbatical_scholar',
     name: 'The Immersion Seeker',
     category: 'TRANSFORMER',
-    revealParagraph: "Your vacation is your education. Every meal, hotel, museum, walking tour is part of the curriculum — and you're the eager student.",
+    revealParagraph: "Your vacation is your education. Every meal, hotel, museum, walking tour is part of the curriculum - and you're the eager student.",
     youProbably: [
       "Pick the historically significant hotel over the slick one",
       "Actually read the museum placards (and the footnotes)",

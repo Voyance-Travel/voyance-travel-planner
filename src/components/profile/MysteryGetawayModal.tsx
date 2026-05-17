@@ -677,7 +677,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
                   </div>
                   <div className="flex items-baseline gap-1 mb-1">
                     <span className="text-2xl font-display font-bold">${flightEstimate.priceRangeLow}</span>
-                    <span className="text-muted-foreground">–</span>
+                    <span className="text-muted-foreground">-</span>
                     <span className="text-2xl font-display font-bold">${flightEstimate.priceRangeHigh}</span>
                     <span className="text-sm text-muted-foreground ml-1">round trip</span>
                   </div>

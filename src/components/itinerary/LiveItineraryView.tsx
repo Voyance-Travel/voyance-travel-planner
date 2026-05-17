@@ -220,7 +220,7 @@ function TimelineActivityCard({
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <Clock className="w-3 h-3" />
                   {formatTime12h(activity.startTime)}
-                  {activity.endTime && ` – ${formatTime12h(activity.endTime)}`}
+                  {activity.endTime && ` - ${formatTime12h(activity.endTime)}`}
                 </span>
               )}
               {isCurrent && (
@@ -686,7 +686,7 @@ export function LiveItineraryView({
                       {(currentActivity.startTime || currentActivity.endTime) && (
                         <p className="text-sm text-muted-foreground mt-0.5">
                           {currentActivity.startTime}
-                          {currentActivity.endTime && ` – ${currentActivity.endTime}`}
+                          {currentActivity.endTime && ` - ${currentActivity.endTime}`}
                         </p>
                       )}
 

@@ -244,10 +244,10 @@ export default function ImageGallery() {
   const HELP_ITEMS = [
     { icon: Maximize2, action: 'Preview', desc: 'Opens a full-size view. Free, no side effects.' },
     { icon: Replace, action: 'Replace URL', desc: 'Paste a new URL to swap the image link in the database. Old URL is overwritten.' },
-    { icon: Upload, action: 'Upload Replace', desc: 'Upload a file from your computer to replace this image. Goes to your own storage — permanent & free to serve.' },
+    { icon: Upload, action: 'Upload Replace', desc: 'Upload a file from your computer to replace this image. Goes to your own storage - permanent & free to serve.' },
     { icon: Ban, action: 'Blacklist', desc: 'Hides the image permanently. Stays in DB but never shown to users again. Use for bad or irrelevant images.' },
     { icon: ImagePlus, action: 'Upload Image (top bar)', desc: 'Adds a brand-new image. You pick entity name, type, and destination.' },
-    { icon: SortAsc, action: 'Sort: Unreviewed', desc: 'Shows images with fewest votes first — the ones nobody has reviewed yet.' },
+    { icon: SortAsc, action: 'Sort: Unreviewed', desc: 'Shows images with fewest votes first - the ones nobody has reviewed yet.' },
     { icon: AlertTriangle, action: 'Broken Only', desc: 'Filters to images whose URLs failed to load (detected as the page renders).' },
     { icon: CheckSquare, action: 'Checkbox Select', desc: 'Select multiple images, then bulk-blacklist them all at once.' },
   ];

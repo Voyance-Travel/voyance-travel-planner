@@ -36,35 +36,35 @@ const FEATURES = [
     id: 'generate',
     title: 'AI-Curated Itinerary',
     subtitle: 'A magazine-quality plan, built for you',
-    description: 'Our AI analyzes thousands of options and builds a day-by-day editorial itinerary — complete with insider tips, time-of-day flow, and curated activity cards.',
+    description: 'Our AI analyzes thousands of options and builds a day-by-day editorial itinerary - complete with insider tips, time-of-day flow, and curated activity cards.',
     valuePoint: 'Save 8+ hours of research per trip.',
   },
   {
     id: 'command',
     title: 'Your Trip Command Center',
     subtitle: 'Everything at a glance',
-    description: 'Track your total budget with real-time currency conversion, monitor Trip Health score, and access quick actions — all from one dashboard.',
+    description: 'Track your total budget with real-time currency conversion, monitor Trip Health score, and access quick actions - all from one dashboard.',
     valuePoint: 'Full control without the spreadsheets.',
   },
   {
     id: 'customize',
     title: 'Customize Any Activity',
     subtitle: 'Your trip, your control',
-    description: 'Every activity card is fully editable. Lock favorites, swap suggestions, move items between days, or ask the AI to replace them — all while keeping your day optimized.',
+    description: 'Every activity card is fully editable. Lock favorites, swap suggestions, move items between days, or ask the AI to replace them - all while keeping your day optimized.',
     valuePoint: 'The flexibility of DIY with the polish of a travel agent.',
   },
   {
     id: 'assistant',
     title: 'AI Trip Assistant',
     subtitle: 'Chat with your itinerary',
-    description: 'Ask questions, request changes, or get recommendations in natural language. "Make Day 3 more relaxed" — and watch the AI restructure your plan instantly.',
+    description: 'Ask questions, request changes, or get recommendations in natural language. "Make Day 3 more relaxed" - and watch the AI restructure your plan instantly.',
     valuePoint: 'Like having a personal travel consultant on call.',
   },
   {
     id: 'transit',
     title: 'Smart Routing & Transit',
     subtitle: 'More time exploring, less commuting',
-    description: 'See transit times between every activity — walking, metro, rideshare. Tap to switch modes, expand for step-by-step directions. Routes are pre-optimized to eliminate backtracking.',
+    description: 'See transit times between every activity - walking, metro, rideshare. Tap to switch modes, expand for step-by-step directions. Routes are pre-optimized to eliminate backtracking.',
     valuePoint: 'Average 45 minutes saved per day.',
   },
 ];
@@ -381,7 +381,7 @@ function GenerationVisual() {
   const activities = [
     { time: '9:00 AM', name: 'Fushimi Inari Shrine', type: 'Culture', tip: 'Arrive early to walk the torii gates with fewer crowds' },
     { time: '12:30 PM', name: 'Nishiki Market', type: 'Food', tip: 'Try the dashimaki tamago at Marutama, a local staple' },
-    { time: '3:00 PM', name: 'Arashiyama Bamboo Grove', type: 'Nature', tip: 'The light is magical between 3–4 PM for photos' },
+    { time: '3:00 PM', name: 'Arashiyama Bamboo Grove', type: 'Nature', tip: 'The light is magical between 3-4 PM for photos' },
   ];
 
   const showItinerary = step >= 3;

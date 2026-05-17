@@ -122,7 +122,7 @@ export default function ImageUploadDialog({ open, onClose, onUploaded, prefill }
             ) : (
               <div className="flex flex-col items-center gap-2 text-muted-foreground">
                 <ImageIcon className="h-10 w-10" />
-                <p className="text-sm">Click or drag to upload (JPG, PNG, WebP — max 5MB)</p>
+                <p className="text-sm">Click or drag to upload (JPG, PNG, WebP - max 5MB)</p>
               </div>
             )}
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />

@@ -268,7 +268,7 @@ export async function updateTrip(tripId: string, updates: Partial<{
   // days, renumbers, and updates trip_cities + hotel selection atomically).
   if ((updates.startDate || updates.endDate) && !options?.allowDateChange) {
     throw new Error(
-      '[voyanceAPI.updateTrip] Refusing to change start_date/end_date directly — ' +
+      '[voyanceAPI.updateTrip] Refusing to change start_date/end_date directly - ' +
       'this orphans activities outside the new window. Use TripDateEditor → ' +
       'TripDetail.handleDateChange, or pass { allowDateChange: true } if you ' +
       'have already reshaped itinerary_data.'

@@ -130,10 +130,10 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     id: 'cultural_anthropologist',
     name: 'The Cultural Anthropologist',
     category: 'EXPLORER',
-    hookLine: "You don't just visit a place — you want to understand it",
-    coreDescription: "You want a vacation, but you also want to know where you are. Not in a grad-school way — in a 'I had a great trip AND I learned what built this city' way. You'll happily spend half a day on a cultural tour or a guided neighborhood walk, then go shopping and have a long lunch. The trip should leave you with a real sense of the place's bones, history, and culture, balanced with everything else that makes a trip a trip.",
+    hookLine: "You don't just visit a place - you want to understand it",
+    coreDescription: "You want a vacation, but you also want to know where you are. Not in a grad-school way - in a 'I had a great trip AND I learned what built this city' way. You'll happily spend half a day on a cultural tour or a guided neighborhood walk, then go shopping and have a long lunch. The trip should leave you with a real sense of the place's bones, history, and culture, balanced with everything else that makes a trip a trip.",
     whatThisMeans: [
-      "1-2 cultural tour or museum activities per trip — not all day, every day",
+      "1-2 cultural tour or museum activities per trip - not all day, every day",
       "You're curious about local context but not on a learning marathon",
       "Food and shopping are part of the cultural experience, not a distraction from it"
     ],
@@ -415,10 +415,10 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     id: 'community_builder',
     name: 'The Purpose Voyager',
     category: 'CONNECTOR',
-    hookLine: "You've been everywhere — and everyone asks you for advice",
-    coreDescription: "You don't just travel — you accumulate. Every city stamped, every hidden gem uncovered becomes part of your authority. You're the one friends text before any trip because you've actually been there. You don't just want to visit places — you want to KNOW them well enough to be the expert. Your passport isn't a document; it's a résumé. And you're nowhere near done.",
+    hookLine: "You've been everywhere - and everyone asks you for advice",
+    coreDescription: "You don't just travel - you accumulate. Every city stamped, every hidden gem uncovered becomes part of your authority. You're the one friends text before any trip because you've actually been there. You don't just want to visit places - you want to KNOW them well enough to be the expert. Your passport isn't a document; it's a résumé. And you're nowhere near done.",
     whatThisMeans: [
-      "Higher activity density — you cover a lot",
+      "Higher activity density - you cover a lot",
       "Mix of iconic must-dos AND insider spots so you can recommend both",
       "You take notes you'll share later"
     ],
@@ -439,7 +439,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Story Seeker',
     category: 'CONNECTOR',
     hookLine: "You travel for the moments you couldn't have planned",
-    coreDescription: "You don't travel for the postcard moments. You travel for the stories no one would believe — the midnight swim, the local who invited you to dinner, the detour that became the whole trip. Polished AI itineraries make you nervous. You want unscripted, raw, 'you had to be there' energy. Your best memories are from saying yes to things you couldn't have planned.",
+    coreDescription: "You don't travel for the postcard moments. You travel for the stories no one would believe - the midnight swim, the local who invited you to dinner, the detour that became the whole trip. Polished AI itineraries make you nervous. You want unscripted, raw, 'you had to be there' energy. Your best memories are from saying yes to things you couldn't have planned.",
     whatThisMeans: [
       "At least one wildcard, free-form local discovery block per trip",
       "You'd skip the famous landmark for the local-only spot",
@@ -612,11 +612,11 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Passport Collector',
     category: 'ACHIEVER',
     hookLine: "Your map is your scoreboard",
-    coreDescription: "You count countries the way other people count years. Each new stamp matters. You'd rather hit three new places than spend a week in one. Breadth, not depth. The number on your passport is the metric — and you're optimizing for it. You don't need to be the expert; you just need to have been there.",
+    coreDescription: "You count countries the way other people count years. Each new stamp matters. You'd rather hit three new places than spend a week in one. Breadth, not depth. The number on your passport is the metric - and you're optimizing for it. You don't need to be the expert; you just need to have been there.",
     whatThisMeans: [
       "Trips designed to maximize new-country/new-city count",
       "Iconic landmarks anchor each visit (the proof you were there)",
-      "Less time per destination — coverage is the win"
+      "Less time per destination - coverage is the win"
     ],
     superpowers: [
       "Logistically efficient",
@@ -627,7 +627,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Sometimes trades depth for breadth in a way you regret later",
       "Can rush past the magic in pursuit of the next stamp"
     ],
-    perfectTripPreview: "3-country, 6-day route hitting the must-see iconic site in each — passport stamped, photos taken, on to the next",
+    perfectTripPreview: "3-country, 6-day route hitting the must-see iconic site in each - passport stamped, photos taken, on to the next",
     emoji: "🗺️"
   },
   status_seeker: {
@@ -660,7 +660,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Wellness Devotee',
     category: 'RESTORER',
     hookLine: "You travel to disappear from your life",
-    coreDescription: "You travel TO escape — from the inbox, the noise, the obligations. You want to retreat from your normal life. Mostly stillness inside the retreat property — spa, meditation, yoga, real food, quiet space. But unlike someone who never leaves, you'll surface for one real day outside. Then back to the cocoon. The combo of escape + sanctuary + wellness is the whole point.",
+    coreDescription: "You travel TO escape - from the inbox, the noise, the obligations. You want to retreat from your normal life. Mostly stillness inside the retreat property - spa, meditation, yoga, real food, quiet space. But unlike someone who never leaves, you'll surface for one real day outside. Then back to the cocoon. The combo of escape + sanctuary + wellness is the whole point.",
     whatThisMeans: [
       "70-80% of the trip happens at the retreat/property",
       "One day outside the retreat for a real adventure",
@@ -683,7 +683,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Beach Therapist',
     category: 'RESTORER',
     hookLine: "Water is your home",
-    coreDescription: "You're water. That's it. Give you the ocean, a lake, a river at sunset — and everything else falls into place. You don't need the fanciest hotel or the most packed itinerary. You need to hear waves. You need salt air or still water or the feeling of sand giving way under your feet. Other people plan trips around cities or food or culture. You plan around the water. Always have.",
+    coreDescription: "You're water. That's it. Give you the ocean, a lake, a river at sunset - and everything else falls into place. You don't need the fanciest hotel or the most packed itinerary. You need to hear waves. You need salt air or still water or the feeling of sand giving way under your feet. Other people plan trips around cities or food or culture. You plan around the water. Always have.",
     whatThisMeans: [
       "Water is accessible every day of the trip",
       "Hotel is waterfront or walkable to water",
@@ -698,7 +698,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
       "Can struggle on landlocked trips",
       "Sometimes underrates the inland gems near coastal spots"
     ],
-    perfectTripPreview: "Wake to ocean view, morning swim, beach lunch, sunset dinner with feet in sand — repeat",
+    perfectTripPreview: "Wake to ocean view, morning swim, beach lunch, sunset dinner with feet in sand - repeat",
     emoji: "🏖️"
   },
   art_aficionado: {
@@ -843,7 +843,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     name: 'The Immersion Seeker',
     category: 'TRANSFORMER',
     hookLine: "Your vacation is your education",
-    coreDescription: "Other people travel to relax. You travel to learn. Every meal, hotel, museum, walking tour is part of the curriculum. Your hotel is historically significant. Your dinner reservation is at the place that invented the dish. Your guide is the one who literally wrote the book. Vacation is class — and you're the eager student.",
+    coreDescription: "Other people travel to relax. You travel to learn. Every meal, hotel, museum, walking tour is part of the curriculum. Your hotel is historically significant. Your dinner reservation is at the place that invented the dish. Your guide is the one who literally wrote the book. Vacation is class - and you're the eager student.",
     whatThisMeans: [
       "Almost every activity has an educational angle",
       "You'd choose a context-rich place over a luxurious one",

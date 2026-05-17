@@ -708,7 +708,7 @@ function getArchetypeTagline(id: string): string {
     cultural_anthropologist: "You don't just visit places, you become them.",
     urban_nomad: 'Cities speak to you in neon and noise.',
     wilderness_pioneer: 'WiFi is optional, wilderness is essential.',
-    digital_explorer: 'WiFi, passport, laptop — anywhere is home.',
+    digital_explorer: 'WiFi, passport, laptop - anywhere is home.',
     explorer: 'The world is your playground.',
     // CONNECTOR
     social_butterfly: "Every stranger is a friend you haven't met.",
@@ -722,7 +722,7 @@ function getArchetypeTagline(id: string): string {
     status_seeker: "First class isn't a seat, it's a lifestyle.",
     // RESTORER
     zen_seeker: 'Breathe in experience, exhale expectation.',
-    retreat_regular: "Wellness isn't a trend — it's a travel style.",
+    retreat_regular: "Wellness isn't a trend - it's a travel style.",
     beach_therapist: 'Salt water heals everything.',
     slow_traveler: 'Stay long enough to have a favorite café.',
     escape_artist: 'Sometimes you need to leave to find yourself.',
@@ -731,11 +731,11 @@ function getArchetypeTagline(id: string): string {
     art_aficionado: 'Every gallery is a pilgrimage.',
     luxury_luminary: 'Champagne wishes, caviar dreams, economy never.',
     eco_ethicist: 'Travel gently, experience deeply.',
-    history_hunter: 'Every stone has a story — you just have to look.',
+    history_hunter: 'Every stone has a story - you just have to look.',
     // TRANSFORMER
     gap_year_graduate: 'The next horizon is always calling.',
     midlife_explorer: "The best chapter hasn't been written yet.",
-    sabbatical_scholar: "Every city has a story — I'm here to find it.",
+    sabbatical_scholar: "Every city has a story - I'm here to find it.",
     healing_journeyer: 'Travel is the medicine for the soul.',
     retirement_ranger: 'Your next chapter deserves the whole world as its backdrop.',
     // CONNECTOR (additional)

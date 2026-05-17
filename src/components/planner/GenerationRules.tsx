@@ -59,7 +59,7 @@ function getRuleSummary(rule: GenerationRule): string {
   switch (rule.type) {
     case 'blocked_time': {
       const dayLabels = (rule.days || []).map(d => DAY_OPTIONS.find(o => o.id === d)?.label || d).join(', ');
-      return `${dayLabels} ${rule.from}–${rule.to}${rule.reason ? ` · ${rule.reason}` : ''}`;
+      return `${dayLabels} ${rule.from}-${rule.to}${rule.reason ? ` · ${rule.reason}` : ''}`;
     }
     case 'special_event':
       return `${rule.date} · ${rule.description || 'Event'}`;

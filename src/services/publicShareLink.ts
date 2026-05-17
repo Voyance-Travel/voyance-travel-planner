@@ -152,7 +152,7 @@ export function getPublicShareErrorMessage(reason?: string): string {
     case 'sharing_disabled':
       return 'The trip owner turned off sharing for this link.';
     case 'trip_unavailable':
-      return 'Trip is loading — try again in a moment.';
+      return 'Trip is loading - try again in a moment.';
     case 'itinerary_not_ready':
       return 'Generate your itinerary first to share it.';
     case 'read_failed':

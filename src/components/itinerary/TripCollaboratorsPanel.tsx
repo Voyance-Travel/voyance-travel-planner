@@ -229,8 +229,8 @@ export function TripCollaboratorsPanel({
     // !== 'ready' (e.g. trip not generated yet, or another regen in progress).
     toast.success(
       newValue
-        ? 'Preferences included — re-blending itinerary now…'
-        : 'Preferences excluded — re-blending itinerary now…',
+        ? 'Preferences included - re-blending itinerary now…'
+        : 'Preferences excluded - re-blending itinerary now…',
       { duration: 5000 }
     );
 

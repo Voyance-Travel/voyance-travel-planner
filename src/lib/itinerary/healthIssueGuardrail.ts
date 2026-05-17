@@ -65,7 +65,7 @@ export function guardrailHealthIssues(issues: HealthIssue[], days: any[]): Healt
         }
         if (stillMissing.length === 0) {
           console.log(
-            `[HealthGuardrail] Suppressed false-positive: "${issue.message}" — all meals present on Day ${dn}`,
+            `[HealthGuardrail] Suppressed false-positive: "${issue.message}" - all meals present on Day ${dn}`,
           );
           continue;
         }

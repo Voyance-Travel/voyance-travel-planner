@@ -293,10 +293,10 @@ export default function HowItWorks() {
               {/* Compact cards on mobile, full cards on desktop */}
               <div className="space-y-2 md:space-y-4">
                 {[
-                  { icon: MapPin, title: 'Pick a City', desc: 'Choose destination, dates, budget – we build the itinerary.' },
+                  { icon: MapPin, title: 'Pick a City', desc: 'Choose destination, dates, budget - we build the itinerary.' },
                   { icon: Globe, title: 'Multi-City', desc: 'Plan a multi-stop trip with smart day allocation.' },
-                  { icon: MessageCircle, title: 'Just Tell Us', desc: 'Describe your dream trip – AI extracts the details.' },
-                  { icon: ClipboardPaste, title: 'Build It Yourself', desc: 'Paste an existing itinerary – we parse and enhance it.' },
+                  { icon: MessageCircle, title: 'Just Tell Us', desc: 'Describe your dream trip - AI extracts the details.' },
+                  { icon: ClipboardPaste, title: 'Build It Yourself', desc: 'Paste an existing itinerary - we parse and enhance it.' },
                 ].map(({ icon: Icon, title, desc }) => (
                   <div key={title} className="flex items-start gap-2 md:gap-4 p-2 md:p-4 rounded-lg md:rounded-xl bg-muted/50 border border-border">
                     <div className="w-7 h-7 md:w-10 md:h-10 rounded-md md:rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">

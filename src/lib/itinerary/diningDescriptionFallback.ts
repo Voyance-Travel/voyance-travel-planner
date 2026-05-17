@@ -100,11 +100,11 @@ export function deterministicDiningDescription(
   if (venue) {
     const addrHint = address ? ` Located at ${address}.` : '';
     if (cuisine) {
-      return `${venue} serves ${mealLabel}${cityHint} — known for ${cuisine}.${addrHint} Check opening hours and book ahead; ask staff what's freshest today.`;
+      return `${venue} serves ${mealLabel}${cityHint} - known for ${cuisine}.${addrHint} Check opening hours and book ahead; ask staff what's freshest today.`;
     }
-    return `${venue} serves ${mealLabel}${cityHint}.${addrHint} Check opening hours and book ahead — ask the staff what's freshest on the menu today.`;
+    return `${venue} serves ${mealLabel}${cityHint}.${addrHint} Check opening hours and book ahead - ask the staff what's freshest on the menu today.`;
   }
-  return `Pick a well-reviewed local spot for ${mealLabel}${cityHint} — book ahead and ask for the day's specials.`;
+  return `Pick a well-reviewed local spot for ${mealLabel}${cityHint} - book ahead and ask for the day's specials.`;
 }
 
 /**

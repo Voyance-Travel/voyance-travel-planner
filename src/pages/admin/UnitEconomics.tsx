@@ -78,18 +78,18 @@ const CREDIT_TIERS = [
 ];
 
 const CREDIT_ACTIONS = [
-  { action: 'Unlock Full Day', credits: 60, cost: 0.018, freeCap: '—', category: 'core', what: 'Reveals addresses, photos, hours, tips, booking links' },
-  { action: 'Smart Finish', credits: 50, cost: 0.040, freeCap: '—', category: 'core', what: 'AI enrichment for manual/imported trips' },
-  { action: 'Hotel Search', credits: 40, cost: 0.020, freeCap: '—', category: 'core', what: 'AI hotel suggestions per city' },
-  { action: 'Route Optimization', credits: 20, cost: 0.015, freeCap: '—', category: 'core', what: 'Google Routes + AI reorder per day' },
-  { action: 'Mystery Getaway', credits: 15, cost: 0.025, freeCap: '—', category: 'discovery', what: 'AI surprise destination suggestions' },
+  { action: 'Unlock Full Day', credits: 60, cost: 0.018, freeCap: '-', category: 'core', what: 'Reveals addresses, photos, hours, tips, booking links' },
+  { action: 'Smart Finish', credits: 50, cost: 0.040, freeCap: '-', category: 'core', what: 'AI enrichment for manual/imported trips' },
+  { action: 'Hotel Search', credits: 40, cost: 0.020, freeCap: '-', category: 'core', what: 'AI hotel suggestions per city' },
+  { action: 'Route Optimization', credits: 20, cost: 0.015, freeCap: '-', category: 'core', what: 'Google Routes + AI reorder per day' },
+  { action: 'Mystery Getaway', credits: 15, cost: 0.025, freeCap: '-', category: 'discovery', what: 'AI surprise destination suggestions' },
   { action: 'Regenerate Day', credits: 10, cost: 0.018, freeCap: '1-5/trip', category: 'editing', what: 'Full day regeneration with new venues' },
   { action: 'Swap Activity', credits: 5, cost: 0.009, freeCap: '3-15/trip', category: 'editing', what: 'Replace one activity with alternative' },
   { action: 'Add Activity', credits: 5, cost: 0.009, freeCap: '2-10/trip', category: 'editing', what: 'Add new activity to a day' },
   { action: 'Restaurant Rec', credits: 5, cost: 0.015, freeCap: '1-5/trip', category: 'dining', what: 'Perplexity-powered restaurant suggestion' },
   { action: 'AI Companion', credits: 5, cost: 0.005, freeCap: '5-25/trip', category: 'chat', what: 'Chat message with AI trip companion' },
-  { action: 'Mystery Logistics', credits: 5, cost: 0.015, freeCap: '—', category: 'discovery', what: 'Flight + hotel estimates for mystery trip' },
-  { action: 'Transport Mode', credits: 5, cost: 0.005, freeCap: '—', category: 'routing', what: 'Change transport mode for a route' },
+  { action: 'Mystery Logistics', credits: 5, cost: 0.015, freeCap: '-', category: 'discovery', what: 'Flight + hotel estimates for mystery trip' },
+  { action: 'Transport Mode', credits: 5, cost: 0.005, freeCap: '-', category: 'routing', what: 'Change transport mode for a route' },
 ];
 
 const TIER_RATES = [
@@ -463,7 +463,7 @@ function UsersTab({ data }: { data: UnitEconomicsData }) {
                       <TableCell className="text-right font-mono">{t.count.toLocaleString()}</TableCell>
                       <TableCell className="text-right font-mono text-muted-foreground">{total > 0 ? fmtPct((t.count / total) * 100) : '0%'}</TableCell>
                       <TableCell className="text-right font-mono">
-                        {t.tier === 'free' ? '—' : <span className={t.upgradedThisMonth > 0 ? 'text-primary' : 'text-muted-foreground'}>+{t.upgradedThisMonth}</span>}
+                        {t.tier === 'free' ? '-' : <span className={t.upgradedThisMonth > 0 ? 'text-primary' : 'text-muted-foreground'}>+{t.upgradedThisMonth}</span>}
                       </TableCell>
                     </TableRow>
                   ));
@@ -961,7 +961,7 @@ function CreditEconomicsTab({ data }: { data: UnitEconomicsData }) {
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs font-semibold">{row.credits}</TableCell>
                       <TableCell className="text-right text-xs">
-                        {row.freeCap !== '—' ? (
+                        {row.freeCap !== '-' ? (
                           <Badge variant="secondary" className="text-[10px] px-1.5">{row.freeCap}</Badge>
                         ) : (
                           <span className="text-muted-foreground">-</span>
@@ -997,7 +997,7 @@ function CreditEconomicsTab({ data }: { data: UnitEconomicsData }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard label="Most Expensive Action" value="Smart Finish" sub="$0.040 / 50 credits" accent="red" />
         <MetricCard label="Cheapest Action" value="AI Companion" sub="$0.005 / 5 credits" accent="green" />
-        <MetricCard label="Highest Volume" value="Unlock Day" sub="60 credits — core monetization" accent="teal" />
+        <MetricCard label="Highest Volume" value="Unlock Day" sub="60 credits - core monetization" accent="teal" />
         <MetricCard label="Worst Margin Action" value="Restaurant Rec" sub="$0.015 / 5cr = $0.003/cr" accent="amber" />
       </div>
 

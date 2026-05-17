@@ -106,7 +106,7 @@ export function assessBudgetFit(input: BudgetFitInput): BudgetFitAssessment {
 }
 
 export function formatMultiplier(cents: number, budgetCents: number): string {
-  if (budgetCents <= 0) return '—';
+  if (budgetCents <= 0) return '-';
   const x = cents / budgetCents;
   if (x >= 10) return `${Math.round(x)}×`;
   return `${x.toFixed(1)}×`;

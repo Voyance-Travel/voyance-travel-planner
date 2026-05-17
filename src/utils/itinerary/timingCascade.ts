@@ -213,7 +213,7 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
           activityTitle: next.title,
           before,
           after: `${next.title} @ ${next.startTime}`,
-          message: `"${curr.title}" and "${next.title}" both started at ${minutesToTime(currStart)} — pushed "${next.title}" forward.`,
+          message: `"${curr.title}" and "${next.title}" both started at ${minutesToTime(currStart)} - pushed "${next.title}" forward.`,
         });
       }
       continue;
@@ -233,7 +233,7 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
           activityTitle: next.title,
           before,
           after: `${next.title} @ ${next.startTime}`,
-          message: `"${curr.title}" ended at ${minutesToTime(currEffEnd)} but "${next.title}" started at ${minutesToTime(nextStart)} — pushed forward.`,
+          message: `"${curr.title}" ended at ${minutesToTime(currEffEnd)} but "${next.title}" started at ${minutesToTime(nextStart)} - pushed forward.`,
         });
       }
       continue;
@@ -256,7 +256,7 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
             activityTitle: next.title,
             before,
             after: `${next.title} @ ${next.startTime}`,
-            message: `Tight transition between "${curr.title}" and "${next.title}" — added ${delta} min.`,
+            message: `Tight transition between "${curr.title}" and "${next.title}" - added ${delta} min.`,
           });
         }
       }
@@ -273,7 +273,7 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
         activityId: act.id,
         activityTitle: act.title,
         before: `${act.title} @ ${act.startTime}`,
-        message: `"${act.title}" pushed past ${minutesToTime(cutoff)} — dropped.`,
+        message: `"${act.title}" pushed past ${minutesToTime(cutoff)} - dropped.`,
       });
       return false;
     }

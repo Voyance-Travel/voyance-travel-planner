@@ -81,7 +81,7 @@ export function getPatternGroupForArchetype(archetypeId: string): PatternGroup {
   }
 
   console.warn(
-    `[schema-generation] Unknown archetype "${archetypeId}" — falling back to "balanced"`
+    `[schema-generation] Unknown archetype "${archetypeId}" - falling back to "balanced"`
   );
   return 'balanced';
 }

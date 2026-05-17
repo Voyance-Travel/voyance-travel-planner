@@ -894,10 +894,10 @@ function BudgetSection({ preferences, onUpdate, isSaving }: SectionProps) {
           }}
           className="grid gap-3"
         >
-          <RadioOption value="budget" label="Budget" description="$50–150/day" />
-          <RadioOption value="moderate" label="Moderate" description="$150–300/day" />
-          <RadioOption value="comfort" label="Comfort" description="$300–500/day" />
-          <RadioOption value="premium" label="Premium" description="$500–800/day" />
+          <RadioOption value="budget" label="Budget" description="$50-150/day" />
+          <RadioOption value="moderate" label="Moderate" description="$150-300/day" />
+          <RadioOption value="comfort" label="Comfort" description="$300-500/day" />
+          <RadioOption value="premium" label="Premium" description="$500-800/day" />
           <RadioOption value="luxury" label="Luxury" description="$800+/day" />
         </RadioGroup>
         <p className="text-xs text-muted-foreground mt-3">

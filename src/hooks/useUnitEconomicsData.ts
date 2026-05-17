@@ -478,7 +478,7 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
 
   // Data integrity warnings
   if (paidUsersFromPurchases > 0 && paidUsersFromLedger === 0) {
-    warnings.push('credit_ledger has no purchase entries but credit_purchases does — ledger may not be syncing');
+    warnings.push('credit_ledger has no purchase entries but credit_purchases does - ledger may not be syncing');
   }
   
   // Outstanding credits from credit_balances (source of truth for display)

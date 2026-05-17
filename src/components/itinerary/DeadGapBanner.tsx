@@ -108,7 +108,7 @@ export function DeadGapBanner({ gap, context, onAddManually, onAcceptSuggestion 
           <span className="font-medium">{formatDeadGap(gap.minutes)} unplanned</span>
           <span className="text-muted-foreground"> between {gap.fromTitle || 'previous activity'} ({gap.fromTime}) and {gap.toTitle || 'next activity'} ({gap.toTime}).</span>
           {errored && !exhausted && (
-            <span className="ml-1 text-amber-700 dark:text-amber-400">No match found — try again or add manually.</span>
+            <span className="ml-1 text-amber-700 dark:text-amber-400">No match found - try again or add manually.</span>
           )}
         </p>
       </div>

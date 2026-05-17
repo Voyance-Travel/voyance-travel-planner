@@ -183,10 +183,10 @@ function unverifiedMealSentinel(city: string, mealType: MealSlot): FallbackResta
   const m = mealType === 'drinks' ? 'dinner' : mealType;
   const label = m === 'breakfast' ? 'Breakfast' : m === 'lunch' ? 'Lunch' : 'Dinner';
   return {
-    name: `${label} — find a local spot in ${city || 'the city'}`,
+    name: `${label} - find a local spot in ${city || 'the city'}`,
     address: city || '',
     price: 0,
-    description: `No vetted ${m} venue available — ask the concierge or pick a local favourite on arrival.`,
+    description: `No vetted ${m} venue available - ask the concierge or pick a local favourite on arrival.`,
     needsVenuePick: true,
   };
 }

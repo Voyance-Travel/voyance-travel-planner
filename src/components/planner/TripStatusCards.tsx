@@ -38,7 +38,7 @@ export default function TripStatusCards({
       icon: Calendar,
       label: 'Dates',
       value: startDate && endDate 
-        ? `${format(parseLocalDate(startDate), 'MMM d')} – ${format(parseLocalDate(endDate), 'MMM d')}`
+        ? `${format(parseLocalDate(startDate), 'MMM d')} - ${format(parseLocalDate(endDate), 'MMM d')}`
         : 'Not set',
       subValue: tripDays ? `${tripDays} days` : undefined,
       color: 'text-blue-500',

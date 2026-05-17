@@ -1764,7 +1764,7 @@ export function PaymentsTab({
                                   if (error) console.error('Failed to assign item:', item.name, error);
                                 }
                                 if (skippedCount > 0) {
-                                  toast.success(`Split ${splittableItems.length} items evenly — skipped ${skippedCount} already-paid item${skippedCount > 1 ? 's' : ''}`);
+                                  toast.success(`Split ${splittableItems.length} items evenly - skipped ${skippedCount} already-paid item${skippedCount > 1 ? 's' : ''}`);
                                 } else {
                                   toast.success(`Split ${splittableItems.length} items evenly among ${resolvedIds.length} members`);
                                 }
@@ -2221,7 +2221,7 @@ export function PaymentsTab({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this expense?</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteTarget ? `${deleteTarget.name} — ${displayMoney(deleteTarget.amountCents)}. This can't be undone.` : ''}
+              {deleteTarget ? `${deleteTarget.name} - ${displayMoney(deleteTarget.amountCents)}. This can't be undone.` : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

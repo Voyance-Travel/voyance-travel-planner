@@ -209,7 +209,7 @@ export function ItineraryAssistant({
     const body = observations.length > 0
       ? observations.slice(0, 2).join('\n\n')
       : `Everything looks solid! Just say the word if you want to swap an activity, adjust the pace, or explore different neighborhoods.`;
-    const outro = `\n\n💬 Chat's free — I only use credits when you apply a change.`;
+    const outro = `\n\n💬 Chat's free - I only use credits when you apply a change.`;
 
     return intro + body + outro;
   }, [currentDays, destination, accommodationInfo, blendedDna]);
@@ -564,7 +564,7 @@ export function ItineraryAssistant({
 
         const missingList = result.partial?.missing ?? [];
         if (missingList.length > 0) {
-          toast.warning('Applied — with gaps', {
+          toast.warning('Applied - with gaps', {
             id: actionId,
             description: `Couldn't fit: ${missingList.join(', ')}. Ask me to try again.`,
           });
@@ -605,7 +605,7 @@ export function ItineraryAssistant({
         }
       } else {
         await refundOnFailure('execution_failed', result.error || result.message);
-        toast.error(spendContext ? 'Action failed — credits refunded' : 'Action failed', {
+        toast.error(spendContext ? 'Action failed - credits refunded' : 'Action failed', {
           id: actionId,
           description: result.message,
         });
@@ -630,7 +630,7 @@ export function ItineraryAssistant({
 
       toast.error(
         spendContext && errMsg !== 'Insufficient credits'
-          ? 'Failed to execute action — credits refunded'
+          ? 'Failed to execute action - credits refunded'
           : 'Failed to execute action',
         {
           id: actionId,

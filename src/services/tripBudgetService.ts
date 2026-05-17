@@ -700,7 +700,7 @@ export async function getBudgetSummary(tripId: string, totalDays?: number): Prom
 
   if (isStale || (isLive && hasMeaningfulLedger && heartbeatAge >= HEARTBEAT_STALE_MS)) {
     console.warn(
-      `[getBudgetSummary] stale generation detected — flipping isGenerating off (tripId=${tripId} status=${status} heartbeatAgeMs=${heartbeatAge} ledgerRows=${ledger.length})`,
+      `[getBudgetSummary] stale generation detected - flipping isGenerating off (tripId=${tripId} status=${status} heartbeatAgeMs=${heartbeatAge} ledgerRows=${ledger.length})`,
     );
   }
 

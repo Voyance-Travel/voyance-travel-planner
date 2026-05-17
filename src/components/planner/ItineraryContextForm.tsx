@@ -477,7 +477,7 @@ export default function ItineraryContextForm({
             value={additionalNotes}
             onChange={(e) => setAdditionalNotes(e.target.value.slice(0, 1000))}
             maxLength={1000}
-            placeholder="Tell us what to optimize for — vibes, things to skip, special requests, or context we should know."
+            placeholder="Tell us what to optimize for - vibes, things to skip, special requests, or context we should know."
             className="min-h-[80px] resize-none"
           />
           <p className="text-xs text-muted-foreground">
