@@ -843,7 +843,7 @@ export function BudgetCoach({
       // here so we don't surface the misleading "cost not lower" message.
       if (result === false) {
         if (suggestion.swap_type !== 'drop') {
-          toast.error('Swap was blocked — the suggested cost was not lower.');
+          toast.error('Swap was blocked - the suggested cost was not lower.');
         }
         return;
       }

@@ -435,7 +435,7 @@ export default function ClientAgentPortal() {
                                 <Calendar className="h-4 w-4 text-muted-foreground" />
                                 <span>
                                   {format(parseLocalDate(trip.startDate), 'MMM d')}
-                                  {trip.endDate && ` – ${format(parseLocalDate(trip.endDate), 'MMM d, yyyy')}`}
+                                  {trip.endDate && ` - ${format(parseLocalDate(trip.endDate), 'MMM d, yyyy')}`}
                                 </span>
                                 {daysUntil !== null && daysUntil > 0 && daysUntil <= 30 && (
                                   <Badge variant="outline" className="ml-2">

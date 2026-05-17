@@ -44,7 +44,7 @@ async function uploadMemory(input: UploadMemoryInput): Promise<TripMemory> {
     throw new Error('File is too large (max 10 MB)');
   }
   if (input.file.type && !ALLOWED.includes(input.file.type.toLowerCase())) {
-    throw new Error('Unsupported image type — please use JPEG, PNG, or WEBP');
+    throw new Error('Unsupported image type - please use JPEG, PNG, or WEBP');
   }
 
   const formData = new FormData();

@@ -172,7 +172,7 @@ export async function restoreVersion(
 
     if (currentErr) {
       console.error('[restoreVersion] Pre-restore snapshot read failed — aborting restore', currentErr);
-      return { success: false, error: 'Could not snapshot current state — restore aborted to prevent data loss.' };
+      return { success: false, error: 'Could not snapshot current state - restore aborted to prevent data loss.' };
     }
 
     if (currentRow?.activities) {
@@ -196,7 +196,7 @@ export async function restoreVersion(
         });
       if (snapshotErr) {
         console.error('[restoreVersion] Pre-restore snapshot failed — aborting restore', snapshotErr);
-        return { success: false, error: 'Could not snapshot current state — restore aborted to prevent data loss.' };
+        return { success: false, error: 'Could not snapshot current state - restore aborted to prevent data loss.' };
       }
     }
 

@@ -452,7 +452,7 @@ export function BudgetSetupDialog({
                   title="Hostels, casual dining, free activities. Best for backpacking and longer stays."
                 >
                   <span className="font-medium">Value-Focused</span>
-                  <span className="text-[10px] text-muted-foreground">$80–150/day pp</span>
+                  <span className="text-[10px] text-muted-foreground">$80-150/day pp</span>
                 </Button>
                 <Button
                   variant="outline"
@@ -462,17 +462,17 @@ export function BudgetSetupDialog({
                   title="Mid-range hotels, bistros + one nicer dinner. Most travelers."
                 >
                   <span className="font-medium">Balanced</span>
-                  <span className="text-[10px] text-muted-foreground">$150–300/day pp</span>
+                  <span className="text-[10px] text-muted-foreground">$150-300/day pp</span>
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   className="flex-col h-auto py-2 items-start"
                   onClick={() => setAllocations(DEFAULT_ALLOCATIONS.splurge_forward)}
-                  title="4–5★ hotels, 1 splurge dinner, premium activities, private/airport transfers and frequent taxis. Not Michelin-every-night."
+                  title="4-5★ hotels, 1 splurge dinner, premium activities, private/airport transfers and frequent taxis. Not Michelin-every-night."
                 >
                   <span className="font-medium">Splurge-Forward</span>
-                  <span className="text-[10px] text-muted-foreground">$300–500/day pp · ~20% transit</span>
+                  <span className="text-[10px] text-muted-foreground">$300-500/day pp · ~20% transit</span>
                 </Button>
               </div>
               {/* Hotel realism note — fires when the chosen hotel alone exceeds the typed budget */}

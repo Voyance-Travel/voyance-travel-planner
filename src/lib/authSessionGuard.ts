@@ -50,7 +50,7 @@ export async function getValidAccessToken(): Promise<string | null> {
   }
 
   // Token missing, malformed, or nearly expired — force refresh
-  logger.debug('[AuthGuard] Token needs refresh — forcing refreshSession');
+  logger.debug('[AuthGuard] Token needs refresh - forcing refreshSession');
   const { data: refreshData, error } = await guardedRefreshSession();
   if (error || !refreshData?.session?.access_token) {
     logger.warn('[AuthGuard] getValidAccessToken failed after refresh');
@@ -70,13 +70,13 @@ export async function guardedRefreshSession(): Promise<{ data: any; error: any }
 
   // Cooldown: skip if we refreshed very recently
   if (now - _lastRefreshAt < REFRESH_COOLDOWN_MS) {
-    logger.debug('[AuthGuard] refreshSession skipped — cooldown active');
+    logger.debug('[AuthGuard] refreshSession skipped - cooldown active');
     return { data: null, error: null };
   }
 
   // Dedupe: return existing in-flight promise
   if (_refreshInFlight) {
-    logger.debug('[AuthGuard] refreshSession deduplicated — reusing in-flight call');
+    logger.debug('[AuthGuard] refreshSession deduplicated - reusing in-flight call');
     return _refreshInFlight;
   }
 

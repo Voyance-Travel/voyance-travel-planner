@@ -186,7 +186,7 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           id: `missing-meals-${dayNum}`,
           severity: sparseJsonLikely ? 'warning' : 'error',
           message: sparseJsonLikely
-            ? `Day ${dayNum} meals not yet loaded — recovering from saved data`
+            ? `Day ${dayNum} meals not yet loaded - recovering from saved data`
             : `Day ${dayNum} missing ${missingMeals.join(', ')}`,
           fixLabel: sparseJsonLikely ? undefined : 'Regenerate Day',
           fixAction: sparseJsonLikely ? undefined : 'refresh_day',
@@ -477,8 +477,8 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           id: `conflict-day-${dayNum}-${i}`,
           severity: transitInvolved ? 'warning' : 'error',
           message: transitInvolved
-            ? `Day ${dayNum}: Tight transition — "${timed[i].name}" (${timed[i].startStr}–${timed[i].endStr}) runs into "${timed[i + 1].name}" (${timed[i + 1].startStr}–${timed[i + 1].endStr}).`
-            : `Day ${dayNum}: "${timed[i].name}" (${timed[i].startStr}–${timed[i].endStr}) overlaps with "${timed[i + 1].name}" (${timed[i + 1].startStr}–${timed[i + 1].endStr}) — ${overlap} min conflict`,
+            ? `Day ${dayNum}: Tight transition - "${timed[i].name}" (${timed[i].startStr}-${timed[i].endStr}) runs into "${timed[i + 1].name}" (${timed[i + 1].startStr}-${timed[i + 1].endStr}).`
+            : `Day ${dayNum}: "${timed[i].name}" (${timed[i].startStr}-${timed[i].endStr}) overlaps with "${timed[i + 1].name}" (${timed[i + 1].startStr}-${timed[i + 1].endStr}) - ${overlap} min conflict`,
           fixLabel: 'Fix timing',
           fixAction: 'fix_timing',
           dayNumber: dayNum,
@@ -1178,7 +1178,7 @@ export function TripHealthPanel({
                                 size="sm"
                                 disabled={isReChecking}
                                 className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
-                                aria-label={`Re-check day ${issue.dayNumber}. Re-runs analysis only — use Fix timing to apply fixes.`}
+                                aria-label={`Re-check day ${issue.dayNumber}. Re-runs analysis only - use Fix timing to apply fixes.`}
                                 title="Re-runs analysis only. Use Fix timing to apply fixes."
                                 onClick={(e) => {
                                   e.stopPropagation();

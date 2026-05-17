@@ -305,7 +305,7 @@ export default function ActivityAlternativesDrawer({
 
       if (!data) {
         // Timed out — show a toast instead of spinning forever
-        toast.info('Taking longer than usual — showing quick suggestions');
+        toast.info('Taking longer than usual - showing quick suggestions');
         return;
       }
 
@@ -362,7 +362,7 @@ export default function ActivityAlternativesDrawer({
       if (fgRequestIdRef.current !== requestId) return;
 
       if (!data) {
-        toast.info('Taking longer than usual — try again shortly');
+        toast.info('Taking longer than usual - try again shortly');
         return;
       }
 

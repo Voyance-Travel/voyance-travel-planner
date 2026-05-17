@@ -256,7 +256,7 @@ export function useActivityConcierge() {
 
     const openingPrompt: ConciergeMessage = {
       role: 'user',
-      content: 'Give me a brief insider overview of this venue — what to expect, top tips, and anything I should know for my visit. Keep it concise with bullet points.',
+      content: 'Give me a brief insider overview of this venue - what to expect, top tips, and anything I should know for my visit. Keep it concise with bullet points.',
     };
 
     // Don't show the system-generated user message

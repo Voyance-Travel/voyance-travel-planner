@@ -235,7 +235,7 @@ function formatDateRange(startDate: string | null, endDate: string | null): stri
   const diffTime = Math.abs(end.getTime() - start.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
-  return `${formatDate(startDate)} – ${formatDate(endDate)} (${diffDays} days)`;
+  return `${formatDate(startDate)} - ${formatDate(endDate)} (${diffDays} days)`;
 }
 
 // Helper to check if a trip can be deleted

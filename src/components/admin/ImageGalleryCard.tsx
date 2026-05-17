@@ -117,7 +117,7 @@ export default function ImageGalleryCard({ image, selected, onSelect, onReplace,
         )}
         <div className="flex items-center justify-between text-[10px] text-muted-foreground">
           <span>Score: {image.vote_score ?? 0}</span>
-          <span>Quality: {image.quality_score?.toFixed(1) ?? '—'}</span>
+          <span>Quality: {image.quality_score?.toFixed(1) ?? '-'}</span>
         </div>
       </div>
     </Card>

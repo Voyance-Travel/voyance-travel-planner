@@ -317,7 +317,7 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
         .maybeSingle();
       if (error) throw error;
       if (!data) {
-        toast.error('Could not update deadline — you may not have permission');
+        toast.error('Could not update deadline - you may not have permission');
         return;
       }
       setSuggestions(prev => prev.map(s =>

@@ -69,7 +69,7 @@ export function BudgetWarning({
         <p className="text-sm opacity-80">
           {isRed
             ? `You're ${formatCurrency(safeOverageCents)} (${safeOveragePercent}%) over your budget.`
-            : `You've used ${safeUsedPercent}% of your budget — ${formatCurrency(safeRemainingCents)} remaining.`
+            : `You've used ${safeUsedPercent}% of your budget - ${formatCurrency(safeRemainingCents)} remaining.`
           }
         </p>
       </div>

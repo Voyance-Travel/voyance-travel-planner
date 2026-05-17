@@ -1165,7 +1165,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                           <div className="space-y-2">
                             <div
                               className="h-2 rounded-full bg-muted overflow-hidden"
-                              title="Cash reserved for tips, SIMs, pharmacy, market finds. Counts against your trip total — log expenses to track what's left."
+                              title="Cash reserved for tips, SIMs, pharmacy, market finds. Counts against your trip total - log expenses to track what's left."
                             >
                               <div
                                 className="h-full w-full bg-slate-400/70 dark:bg-slate-500/60"

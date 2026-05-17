@@ -422,7 +422,7 @@ export function usePayableItems({
         result.push({
           id: groupId,
           type: 'transport',
-          name: `Local transit — Day ${dayNumber}`,
+          name: `Local transit - Day ${dayNumber}`,
           amountCents: totalCents,
           dayNumber,
           payment: groupPayments[0],
@@ -566,7 +566,7 @@ export function usePayableItems({
         result.push({
           id: groupId,
           type: 'activity',
-          name: `Local transit — Day ${dayNumber}`,
+          name: `Local transit - Day ${dayNumber}`,
           amountCents: totalCents,
           dayNumber,
           payment: groupPayments[0],
@@ -624,7 +624,7 @@ export function usePayableItems({
       result.push({
         id: itemId,
         type: isTransitGroupId ? 'transport' : 'activity',
-        name: primary.item_name || (isTransitGroupId ? `Local transit — Day ${dayNumber}` : 'Activity'),
+        name: primary.item_name || (isTransitGroupId ? `Local transit - Day ${dayNumber}` : 'Activity'),
         amountCents: primary.amount_cents * (primary.quantity || 1),
         dayNumber,
         payment: primary,

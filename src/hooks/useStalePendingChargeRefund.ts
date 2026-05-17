@@ -94,7 +94,7 @@ export function useStalePendingChargeRefund(tripId: string | undefined) {
 
             if (spendCommitted) {
               console.log(
-                `[StalePendingCharge] self-heal: spend already committed for ${charge.id} — promoting to completed (no refund)`
+                `[StalePendingCharge] self-heal: spend already committed for ${charge.id} - promoting to completed (no refund)`
               );
               await (supabase
                 .from('pending_credit_charges')

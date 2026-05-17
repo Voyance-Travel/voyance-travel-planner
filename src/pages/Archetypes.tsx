@@ -267,7 +267,7 @@ export default function Archetypes() {
     const narrative = narrativeId ? ARCHETYPE_NARRATIVES[narrativeId] : null;
     if (narrative) {
       return {
-        title: `${narrative.name} — Travel DNA | Voyance`,
+        title: `${narrative.name} - Travel DNA | Voyance`,
         description: narrative.hookLine || `Discover the ${narrative.name} traveler type on Voyance.`,
         canonical: `https://travelwithvoyance.com/archetypes/${archetypeIdToSlug(narrativeId!)}`,
       };

@@ -142,7 +142,7 @@ export default function ConsumerTripShare() {
       );
     } else if (errorCode === 'trip_unavailable') {
       heading = 'Almost Ready';
-      body = 'Trip is loading — try again in a moment.';
+      body = 'Trip is loading - try again in a moment.';
       action = (
         <Button variant="outline" onClick={() => window.location.reload()}>
           Retry

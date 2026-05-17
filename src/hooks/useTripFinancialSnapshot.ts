@@ -346,7 +346,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // rescue path is a display safety net, not a steady state.
     if (canonical.pricedJsonRescueCents > 0) {
       console.warn(
-        `[useTripFinancialSnapshot] pricedJsonRescueCents=$${(canonical.pricedJsonRescueCents / 100).toFixed(2)} for trip ${tripId} — backend activity_costs writes lagging`
+        `[useTripFinancialSnapshot] pricedJsonRescueCents=$${(canonical.pricedJsonRescueCents / 100).toFixed(2)} for trip ${tripId} - backend activity_costs writes lagging`
       );
     }
 
@@ -409,7 +409,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
               // this; the log stays as an early-warning if regression occurs.
               if (count > orphanPaymentItemIds.size) {
                 console.warn(
-                  `[useTripFinancialSnapshot] orphan archive over-count ${count} > js=${orphanPaymentItemIds.size} — manual leak suspected (tripId=${tripId})`
+                  `[useTripFinancialSnapshot] orphan archive over-count ${count} > js=${orphanPaymentItemIds.size} - manual leak suspected (tripId=${tripId})`
                 );
               }
               window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId, silent: true, reason: 'orphan-archive' } }));
@@ -459,7 +459,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       const dest = String((tripData as any)?.destination || '');
       const tier = (tripData as any)?.budget_tier || null;
       console.info(
-        `[useTripFinancialSnapshot] activity_costs coverage ${(coverageRatio * 100).toFixed(0)}% for trip ${tripId} (uncovered=${uncoveredPricedCount}/${pricedJsonIds.size}) — triggering backfill`
+        `[useTripFinancialSnapshot] activity_costs coverage ${(coverageRatio * 100).toFixed(0)}% for trip ${tripId} (uncovered=${uncoveredPricedCount}/${pricedJsonIds.size}) - triggering backfill`
       );
       supabase.functions
         .invoke('sync-trip-cost-table', {
@@ -530,7 +530,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     if (Math.abs(decomposition.residualFoldedCents) > 200) {
       console.warn(
         `[useTripFinancialSnapshot] decomposition residual $${(decomposition.residualFoldedCents / 100).toFixed(2)} ` +
-        `folded into misc — upstream contract violation. tripId=${tripId} ` +
+        `folded into misc - upstream contract violation. tripId=${tripId} ` +
         `displayed=${decomposition.displayedTotalCents} bucketsRaw=${decomposition.displayedTotalCents - decomposition.residualFoldedCents}`
       );
     }

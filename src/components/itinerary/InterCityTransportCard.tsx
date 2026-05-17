@@ -84,7 +84,7 @@ export function InterCityTransportCard({ title, travelMeta, className, variant =
         onClick={() => setMobileExpanded(prev => !prev)}
       >
         <span className="text-xs font-semibold text-primary tabular-nums w-12 shrink-0">
-          {depTimeFormatted || '—'}
+          {depTimeFormatted || '-'}
         </span>
         <span className="p-1 rounded-md bg-primary/10 text-primary shrink-0">
           <Icon className="h-3.5 w-3.5" />
@@ -139,7 +139,7 @@ export function InterCityTransportCard({ title, travelMeta, className, variant =
 
       {/* ── Desktop: Time Column ── */}
       <div className="hidden sm:block w-24 shrink-0 p-4 border-r border-border bg-gradient-to-b from-secondary/20 to-secondary/5">
-        <span className="text-sm font-medium text-foreground">{depTimeFormatted || '—'}</span>
+        <span className="text-sm font-medium text-foreground">{depTimeFormatted || '-'}</span>
         {arrTimeFormatted && (
           <p className="text-xs text-muted-foreground mt-0.5">→ {arrTimeFormatted}</p>
         )}

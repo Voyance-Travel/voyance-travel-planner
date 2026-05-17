@@ -91,7 +91,7 @@ export function useItineraryPreservation(tripId: string | undefined, trip: any):
           .update({ itinerary_data: prev.itinerary, updated_at: new Date().toISOString() })
           .eq('id', tripId);
         if (error) throw error;
-        toast.warning('Detected unexpected itinerary change — restored your previous version.', {
+        toast.warning('Detected unexpected itinerary change - restored your previous version.', {
           description: 'Reload the page to see the restored itinerary.',
           duration: 10000,
         });

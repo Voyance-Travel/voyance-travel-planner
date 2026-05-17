@@ -177,7 +177,7 @@ export async function generateTripPdf(data: TripPdfData): Promise<void> {
   pdf.setTextColor(...COLORS.dark);
   pdf.setFontSize(11);
   pdf.setFont('helvetica', 'bold');
-  const dateRange = `${formatDate(data.startDate)} – ${formatDate(data.endDate)}`;
+  const dateRange = `${formatDate(data.startDate)} - ${formatDate(data.endDate)}`;
   pdf.text(dateRange, margin + 10, y + 14);
   pdf.text(`${data.travelerCount} ${data.travelerCount === 1 ? 'traveler' : 'travelers'}`, margin + 70, y + 14);
   if (data.clientName) {

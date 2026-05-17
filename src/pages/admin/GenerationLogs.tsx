@@ -442,7 +442,7 @@ export default function GenerationLogs() {
                                (!log.day_timings || log.day_timings.length === 0) && (
                                 <p className="text-sm text-muted-foreground italic">
                                   {log.status === 'started' || log.status === 'in_progress'
-                                    ? 'Generation in progress — data will appear as phases complete.'
+                                    ? 'Generation in progress - data will appear as phases complete.'
                                     : 'No timing data recorded for this run.'
                                   }
                                 </p>

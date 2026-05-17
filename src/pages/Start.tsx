@@ -114,8 +114,8 @@ const pacingOptions = [
 // Budget presets
 const budgetPresets = [
   { label: 'Budget', value: 500, description: 'Under $500' },
-  { label: 'Moderate', value: 1000, description: '$500–$1.5k' },
-  { label: 'Premium', value: 2500, description: '$1.5k–$3.5k' },
+  { label: 'Moderate', value: 1000, description: '$500-$1.5k' },
+  { label: 'Premium', value: 2500, description: '$1.5k-$3.5k' },
   { label: 'Luxury', value: 5000, description: '$3.5k+' },
 ];
 
@@ -1592,7 +1592,7 @@ function FlightHotelStep({
                                 <div className="text-sm font-medium truncate">{hotel.name}</div>
                                 <div className="text-xs text-muted-foreground">
                                   {hotel.checkInDate && hotel.checkOutDate
-                                    ? `${new Date(hotel.checkInDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(hotel.checkOutDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                    ? `${new Date(hotel.checkInDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(hotel.checkOutDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
                                     : hotel.address || 'No dates set'
                                   }
                                 </div>
@@ -3436,7 +3436,7 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                         <Textarea
                           value={additionalNotes}
                           onChange={(e) => setAdditionalNotes(e.target.value)}
-                          placeholder="Tell us what to optimize for — vibes, things to skip, special requests, or context we should know."
+                          placeholder="Tell us what to optimize for - vibes, things to skip, special requests, or context we should know."
                           className="min-h-[70px] resize-none text-sm"
                         />
                       </div>

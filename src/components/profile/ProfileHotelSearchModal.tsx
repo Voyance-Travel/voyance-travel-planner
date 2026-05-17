@@ -229,7 +229,7 @@ function TripOptionCard({
   muted?: boolean;
 }) {
   const formattedDates = trip.startDate && trip.endDate
-    ? `${format(parseLocalDate(trip.startDate), 'MMM d')} – ${format(parseLocalDate(trip.endDate), 'MMM d')}`
+    ? `${format(parseLocalDate(trip.startDate), 'MMM d')} - ${format(parseLocalDate(trip.endDate), 'MMM d')}`
     : 'Dates TBD';
 
   return (

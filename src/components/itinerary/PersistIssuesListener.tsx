@@ -31,7 +31,7 @@ interface PersistIssuesEventDetail {
   persistedDespiteErrors?: boolean;
 }
 
-const FIX_SUFFIX = ' — regenerate this day to fix';
+const FIX_SUFFIX = ' - regenerate this day to fix';
 
 const HUMAN: Record<string, (i: PersistIssue) => string> = {
   EMPTY_DAY: (i) => `Day ${i.dayNumber} has no activities${FIX_SUFFIX}`,

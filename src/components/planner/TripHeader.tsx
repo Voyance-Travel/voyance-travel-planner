@@ -43,10 +43,10 @@ export const TripHeader: React.FC<TripHeaderProps> = ({
     const endD = parseLocalDate(end);
 
     if (startD.getFullYear() === endD.getFullYear()) {
-      return `${format(startD, "MMM d")} – ${format(endD, "MMM d, yyyy")}`;
+      return `${format(startD, "MMM d")} - ${format(endD, "MMM d, yyyy")}`;
     }
 
-    return `${format(startD, "MMM d, yyyy")} – ${format(endD, "MMM d, yyyy")}`;
+    return `${format(startD, "MMM d, yyyy")} - ${format(endD, "MMM d, yyyy")}`;
   };
 
   const hasActions = onCurrencyToggle || onShare || onOptimize;

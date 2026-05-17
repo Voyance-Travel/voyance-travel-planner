@@ -138,7 +138,7 @@ export async function safeUpdateItineraryData(
       const nextFp = itineraryFingerprint(nextItinerary);
       if (prevFp === nextFp) {
         console.log(
-          `[safeUpdateItineraryData] Self-heal no-op: payload identical to DB (reason=${options.reason || 'unspecified'}, fp=${nextFp}) — skipping write`,
+          `[safeUpdateItineraryData] Self-heal no-op: payload identical to DB (reason=${options.reason || 'unspecified'}, fp=${nextFp}) - skipping write`,
         );
         return { error: null };
       }
@@ -290,7 +290,7 @@ export async function safeUpdateItineraryData(
     // reflects what the database actually persisted.
     if ((data as any)?.regressionBlocked) {
       console.warn(
-        `[safeUpdateItineraryData] regression blocked by backend (reason=${options.reason || 'unspecified'}, tripId=${tripId}) — forcing canonical resync`,
+        `[safeUpdateItineraryData] regression blocked by backend (reason=${options.reason || 'unspecified'}, tripId=${tripId}) - forcing canonical resync`,
       );
       try {
         const { dispatchTripPersisted } = await import('@/lib/itinerary/resyncItineraryFromDb');
