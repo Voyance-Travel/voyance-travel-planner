@@ -1,46 +1,33 @@
-## Goal
+## Problem
 
-Remove em dashes (`—`) from user-visible UI copy across the app. They currently appear in headings, body copy, toasts, empty states, tooltips, badges, and onboarding flows. Each occurrence gets the cleanest replacement for its sentence — typically a hyphen with spaces, a colon, or a comma — without changing meaning.
+Clicking **Refine My Profile** on `/profile` surfaces "Something went wrong. Please try again." The handler in `src/components/profile/MicroDisambiguation.tsx#handleSubmit` runs a chain of 4 Supabase calls + a DNA recalc, but only logs the final caught error — none of the intermediate Supabase responses are checked for `.error`, so the actual failing step is invisible (the user's screenshot has no surfaced detail, and the production site means we can't pull preview console logs).
 
-## Scope
+Most likely culprits (all currently silent):
+1. `voyance_events` insert — RLS gate `auth.uid() = user_id` rejects if the session is stale.
+2. `profiles.update({ travel_dna_overrides })` — same RLS pattern; 0-row updates also slip past.
+3. `recalculateDNAFromPreferences` → `calculate-travel-dna` edge fn — returns `{success:false}` without throwing, so we already "succeed" silently when DNA recalc fails.
+4. `travel_dna_profiles.update({ disambiguation_resolved_at })` — updates 0 rows if the user has no DNA row yet (then the banner re-appears next visit even on "success").
 
-**In scope** — frontend UI text only:
-- JSX/TSX text nodes (children of elements)
-- String literals passed to `toast.*`, `aria-label`, `title`, `placeholder`, `description`, `label` props
-- Empty-state, error, and loading copy in components
-- Constants files that feed UI (e.g. archetype copy, onboarding scripts) when they are clearly display strings
+## Fix
 
-**Out of scope** (will leave em dashes intact):
-- Code comments and JSDoc
-- `console.log` / `console.warn` / `console.error`
-- AI prompts, edge functions, and backend (`supabase/functions/**`)
-- Tests (`*.test.ts`, `*.test.tsx`)
-- Sentinel log strings and telemetry tags
-- Regexes that intentionally match `—` (e.g. phantom-ref scrub, prompt-leak scrub) — these must stay as-is to keep existing sanitizers working
-- `.md` files
+Rewrite `handleSubmit` so each step is checked and labeled, and so we cannot localStorage-dismiss the banner unless the underlying writes actually succeed.
 
-## Replacement rules (mixed, per context)
+1. **Guard session early** — `supabase.auth.getSession()`; if no `access_token`, `toast.error("Please sign in again")` and abort.
+2. **Sequence with explicit error capture**:
+   - `voyance_events.insert(...)` — capture `error`, log `[Disambig] event_insert`, continue regardless (analytics is non-blocking).
+   - `profiles.select('travel_dna_overrides').eq('id', userId)` — capture; on error abort with `toast.error("Couldn't load your profile")`.
+   - `profiles.update({ travel_dna_overrides: merged }).eq('id', userId).select('id')` — `.select()` makes the row count visible; if `data.length === 0` or `error`, abort with labeled toast.
+   - `recalculateDNAFromPreferences(userId)` — already returns `{success}`; on `success === false`, surface "Refinement saved but DNA recalc failed - try again" toast and DO NOT mark resolved.
+   - `travel_dna_profiles.upsert({ user_id, disambiguation_resolved_at, disambiguation_question_id, disambiguation_answer_id }, { onConflict: 'user_id' })` — use upsert so first-time users without a DNA row still get marked resolved.
+3. **Only set `isResolved=true` + `localStorage` flag after all required steps return OK** (events insert is best-effort).
+4. **Add `console.error('[Disambig] step=<name>', error)`** at every failure site so future occurrences can be diagnosed from preview logs.
+5. **Map error to a useful toast** instead of the generic copy: include the failing step name in the toast so QA can report it.
 
-1. **Subordinate clause / aside** → `, ` (comma) — e.g. `"Finding restaurant — please wait"` → `"Finding restaurant, please wait"`
-2. **Label : value** → `: ` (colon) — e.g. `"Trip total — $1,200"` → `"Trip total: $1,200"`
-3. **Range / separator / parenthetical phrase** → ` - ` (hyphen with spaces) — e.g. `"Day 1 — Arrival"` → `"Day 1 - Arrival"`
-4. **Strong break / emphasis** → split into two sentences when natural — e.g. `"All set — your trip is ready."` → `"All set. Your trip is ready."`
-5. **Within a URL, code snippet, or regex literal** → leave untouched
+## Files
 
-## Approach
+- `src/components/profile/MicroDisambiguation.tsx` — rewrite `handleSubmit` per above. ~40 lines changed.
 
-1. **Inventory pass**: list every `—` occurrence in `src/**/*.{ts,tsx}` excluding tests, scrubbers, and prompt-related modules. Tag each with file + line + surrounding context.
-2. **Classify each occurrence**: UI string vs. comment/log/regex/prompt. Skip non-UI.
-3. **Apply replacements** in batches grouped by file, picking rule 1–5 per occurrence.
-4. **Preserve guarded files**: explicitly skip `src/utils/textSanitizer.ts` regex constants, `phantom-ref` scrub paths, and any file matching `*scrub*`, `*sanitiz*`, `*prompt*` unless the occurrence is in a JSX text node.
-5. **Verify**: re-run the grep to confirm only intentional `—` remain (regex constants, comments, test fixtures). Spot-check the preview on a trip detail page, the home page, and the start flow.
+## Out of scope
 
-## Risk notes
-
-- Several files (`textSanitizer.ts`, phantom-ref guards) intentionally split copy on `—`. Those regexes must remain — only JSX text changes there.
-- Some constants in `src/data/**` may feed both AI prompts and UI. Where ambiguous, I'll prefer the colon/hyphen replacement (still grammatical for prompts) so prompts don't break.
-- No backend or DB changes. No behavior changes. No new dependencies.
-
-## Deliverable
-
-A single batch of edits across the ~165 TSX files (plus a handful of TS UI-string files), followed by a verification grep showing remaining `—` are only in allowlisted contexts (regexes, comments, prompts, tests).
+- No backend / edge function / RLS changes. If after the rewrite the labeled toast points at a specific RLS or edge-function failure, we'll address it in a follow-up with concrete evidence.
+- No new memory entry yet; will add one if the labeled telemetry reveals a recurring root cause.
