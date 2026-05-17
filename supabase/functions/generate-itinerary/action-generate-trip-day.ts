@@ -275,8 +275,24 @@ async function _handleGenerateTripDayInner(
       { headers: jsonHeaders }
     );
   }
-  
-  // STATUS RECOVERY: If frontend prematurely set status to 'ready' but we still have days to generate,
+
+  // ─── SEED `trip_day_intents` (idempotent) ───
+  // Server-chain path skips prepareContext but still needs structured intent
+  // rows so the Day Brief surfaces user must-dos. Unique index dedupes across
+  // re-runs and across days. Closes "Add your own must-dos is ignored" —
+  // trip-wide custom must-dos were never seeded for the server-chain path.
+  try {
+    const { seedDayIntentsFromMetadata } = await import('../_shared/day-intents-store.ts');
+    await seedDayIntentsFromMetadata(
+      supabase,
+      { id: tripId, user_id: userId, metadata: tripCheck?.metadata as any, start_date: startDate } as any,
+      totalDays || 1,
+      userId || null,
+    );
+  } catch (seedErr) {
+    console.warn('[generate-trip-day] trip_day_intents seeding failed (non-blocking):', seedErr);
+  }
+
   // reset it back to 'generating'. This prevents the frontend self-heal from killing the chain.
   if (tripCheck.itinerary_status === 'ready' && dayNumber <= totalDays) {
     console.warn(`[generate-trip-day] ⚠️ STATUS RECOVERY: Trip ${tripId} status was prematurely set to 'ready' while generating day ${dayNumber}/${totalDays} — resetting to 'generating'`);
