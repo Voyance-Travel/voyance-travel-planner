@@ -1572,11 +1572,32 @@ CRITICAL GEOGRAPHIC RULE: Every restaurant and venue MUST be physically located 
         const { fetchActiveDayIntents } = await import('../../_shared/day-intents-store.ts');
         const rows = await fetchActiveDayIntents(supabase, tripId);
         for (const r of rows) {
-          // Trip-wide notes (no day_number) feed userConstraints.tripWideNotes
+          // Trip-wide rows (no day_number): notes/constraints feed userConstraints;
+          // actionable wishes (dining/activity/event/etc.) are surfaced as soft
+          // USER WISHES on every generating day so the AI picks a believable slot
+          // for them on at least one day. Once fulfilled (status='fulfilled'),
+          // they stop re-injecting on later days in the chain. Closes "Add your
+          // own must-dos is ignored" — trip-wide custom must-dos were silently
+          // dropped here before.
           if (r.day_number == null) {
             if (r.intent_kind === 'note' || r.intent_kind === 'constraint') {
               tripWideNotes.push(r.title);
+              continue;
             }
+            if (r.status === 'fulfilled' && r.locked !== true) continue;
+            if (r.priority === 'avoid') continue;
+            extraIntents.push({
+              title: r.title,
+              startTime: r.start_time || undefined,
+              endTime: r.end_time || undefined,
+              kind: r.intent_kind,
+              source: r.source_entry_point,
+              priority: r.priority === 'must' ? 'must' : 'should',
+              raw: r.raw_text || r.title,
+              locked: !!r.locked,
+              lockedSource: r.locked_source || undefined,
+              tripWide: true,
+            });
             continue;
           }
           if (r.day_number !== dayNumber) continue;
