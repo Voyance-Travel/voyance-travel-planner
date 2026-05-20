@@ -314,7 +314,7 @@ export default function MicroDisambiguation({
         return;
       }
 
-      localStorage.setItem(dismissKey, 'true');
+      safeSetDismissFlag(dismissKey);
       setIsResolved(true);
       toast.success('Thanks! Your profile has been refined.');
       onResolved?.();
