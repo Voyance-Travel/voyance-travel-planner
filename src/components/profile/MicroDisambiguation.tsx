@@ -200,7 +200,7 @@ export default function MicroDisambiguation({
       if (cancelled) return;
       if (data?.disambiguation_resolved_at) {
         setIsResolved(true);
-        localStorage.setItem(dismissKey, 'true');
+        safeSetDismissFlag(dismissKey);
       }
       setCheckedDb(true);
     })();
