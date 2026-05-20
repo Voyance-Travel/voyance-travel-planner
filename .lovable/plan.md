@@ -1,33 +1,33 @@
 ## Problem
 
-Clicking **Refine My Profile** on `/profile` surfaces "Something went wrong. Please try again." The handler in `src/components/profile/MicroDisambiguation.tsx#handleSubmit` runs a chain of 4 Supabase calls + a DNA recalc, but only logs the final caught error — none of the intermediate Supabase responses are checked for `.error`, so the actual failing step is invisible (the user's screenshot has no surfaced detail, and the production site means we can't pull preview console logs).
+After the previous hardening pass, "Refine My Profile" now reaches the final step but throws:
 
-Most likely culprits (all currently silent):
-1. `voyance_events` insert — RLS gate `auth.uid() = user_id` rejects if the session is stale.
-2. `profiles.update({ travel_dna_overrides })` — same RLS pattern; 0-row updates also slip past.
-3. `recalculateDNAFromPreferences` → `calculate-travel-dna` edge fn — returns `{success:false}` without throwing, so we already "succeed" silently when DNA recalc fails.
-4. `travel_dna_profiles.update({ disambiguation_resolved_at })` — updates 0 rows if the user has no DNA row yet (then the banner re-appears next visit even on "success").
+```
+QuotaExceededError: Failed to execute 'setItem' on 'Storage':
+Setting the value of 'dna-disambig-resolved-<uid>' exceeded the quota.
+```
+
+The DB writes (profile update, DNA recalc, `travel_dna_profiles` upsert) all succeed, but the very last line — `localStorage.setItem(dismissKey, 'true')` in `src/components/profile/MicroDisambiguation.tsx` — throws because the user's localStorage is full (likely from accumulated trip drafts / cleanup checkpoints / itinerary caches). The uncaught throw lands in the outer `catch`, surfacing "Something went wrong" even though the refinement was saved server-side.
+
+`dismissKey` is a tiny 4-byte write; the quota error means the *bucket* is full, not this key. So we need to (a) never let this cosmetic write break the flow, and (b) free space proactively so the dismiss flag actually persists across reloads.
 
 ## Fix
 
-Rewrite `handleSubmit` so each step is checked and labeled, and so we cannot localStorage-dismiss the banner unless the underlying writes actually succeed.
+Edit `src/components/profile/MicroDisambiguation.tsx` only.
 
-1. **Guard session early** — `supabase.auth.getSession()`; if no `access_token`, `toast.error("Please sign in again")` and abort.
-2. **Sequence with explicit error capture**:
-   - `voyance_events.insert(...)` — capture `error`, log `[Disambig] event_insert`, continue regardless (analytics is non-blocking).
-   - `profiles.select('travel_dna_overrides').eq('id', userId)` — capture; on error abort with `toast.error("Couldn't load your profile")`.
-   - `profiles.update({ travel_dna_overrides: merged }).eq('id', userId).select('id')` — `.select()` makes the row count visible; if `data.length === 0` or `error`, abort with labeled toast.
-   - `recalculateDNAFromPreferences(userId)` — already returns `{success}`; on `success === false`, surface "Refinement saved but DNA recalc failed - try again" toast and DO NOT mark resolved.
-   - `travel_dna_profiles.upsert({ user_id, disambiguation_resolved_at, disambiguation_question_id, disambiguation_answer_id }, { onConflict: 'user_id' })` — use upsert so first-time users without a DNA row still get marked resolved.
-3. **Only set `isResolved=true` + `localStorage` flag after all required steps return OK** (events insert is best-effort).
-4. **Add `console.error('[Disambig] step=<name>', error)`** at every failure site so future occurrences can be diagnosed from preview logs.
-5. **Map error to a useful toast** instead of the generic copy: include the failing step name in the toast so QA can report it.
+1. **Wrap both `localStorage.setItem(dismissKey, ...)` calls (lines 203 + 317) in `try/catch`.** Log `console.warn('[Disambig] dismiss_flag_persist_failed', err)` and continue. The DB row in `travel_dna_profiles.disambiguation_resolved_at` is already the authoritative source of truth — the localStorage flag is only a same-session optimization to avoid a re-fetch flicker.
 
-## Files
+2. **Add a small `pruneLocalStorageForQuota()` helper** invoked once before the setItem retry:
+   - Remove obviously safe-to-evict keys in priority order: `voyance_trip_drafts`, `admin.*Cleanup.checkpoint.v1`, any key starting with `voyance.currencyToggle.`, any key matching `^trip-cache-` / `^itinerary-cache-`.
+   - After pruning, retry the `setItem` once inside the same try/catch.
+   - Never throw from the helper.
 
-- `src/components/profile/MicroDisambiguation.tsx` — rewrite `handleSubmit` per above. ~40 lines changed.
+3. **Keep state updates (`setIsResolved(true)` + success toast) regardless of the setItem outcome** — the server write already succeeded by this point, so the UI should reflect that. Today the throw aborts both.
+
+That's the entire change: ~25 lines in one file, no backend work, no new files.
 
 ## Out of scope
 
-- No backend / edge function / RLS changes. If after the rewrite the labeled toast points at a specific RLS or edge-function failure, we'll address it in a follow-up with concrete evidence.
-- No new memory entry yet; will add one if the labeled telemetry reveals a recurring root cause.
+- Migrating other localStorage writes app-wide to a safe wrapper. Only the two sites that currently break the Refine flow are touched. We already have `safeSetItem` patterns in `src/utils/tripPersistence.ts`; a broader migration can follow if quota errors surface elsewhere.
+- Changing the eviction policy of `tripPersistence` / cleanup checkpoints. The targeted prune above is enough to unstick this user.
+- Memory entry: will add one if the same QuotaExceededError reappears after this fix.

@@ -170,8 +170,57 @@ const DISAMBIGUATION_QUESTIONS: DisambiguationQuestion[] = [
 ];
 
 // ============================================================================
+// localStorage quota-safe helpers
+// ============================================================================
+
+function pruneLocalStorageForQuota(): number {
+  if (typeof window === 'undefined') return 0;
+  let removed = 0;
+  const exactKeys = ['voyance_trip_drafts'];
+  const prefixes = ['voyance.currencyToggle.', 'trip-cache-', 'itinerary-cache-'];
+  const patterns = [/^admin\..*Cleanup\.checkpoint\.v1$/];
+  try {
+    for (const k of exactKeys) {
+      if (localStorage.getItem(k) !== null) {
+        localStorage.removeItem(k);
+        removed++;
+      }
+    }
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) keys.push(k);
+    }
+    for (const k of keys) {
+      if (prefixes.some(p => k.startsWith(p)) || patterns.some(r => r.test(k))) {
+        localStorage.removeItem(k);
+        removed++;
+      }
+    }
+  } catch {
+    // never throw from the helper
+  }
+  return removed;
+}
+
+function safeSetDismissFlag(key: string): void {
+  try {
+    localStorage.setItem(key, 'true');
+  } catch (err) {
+    console.warn('[Disambig] dismiss_flag_persist_failed (will prune + retry)', err);
+    try {
+      pruneLocalStorageForQuota();
+      localStorage.setItem(key, 'true');
+    } catch (retryErr) {
+      console.warn('[Disambig] dismiss_flag_persist_failed after prune', retryErr);
+    }
+  }
+}
+
+// ============================================================================
 // COMPONENT
 // ============================================================================
+
 
 export default function MicroDisambiguation({
   userId,
@@ -200,7 +249,7 @@ export default function MicroDisambiguation({
       if (cancelled) return;
       if (data?.disambiguation_resolved_at) {
         setIsResolved(true);
-        localStorage.setItem(dismissKey, 'true');
+        safeSetDismissFlag(dismissKey);
       }
       setCheckedDb(true);
     })();
@@ -314,7 +363,7 @@ export default function MicroDisambiguation({
         return;
       }
 
-      localStorage.setItem(dismissKey, 'true');
+      safeSetDismissFlag(dismissKey);
       setIsResolved(true);
       toast.success('Thanks! Your profile has been refined.');
       onResolved?.();
