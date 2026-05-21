@@ -320,15 +320,20 @@ function calculateArchetypeScore(
 
   // If any required trait is not met, disqualify this archetype
   if (!requiredMet && (Object.keys(required).length > 0 || requiredAny.length > 0)) {
-    return {
-      id: archetypeId,
-      name: profile.name,
-      category: profile.category,
-      score: -Infinity,
-      confidence: 'low',
-      matchedRequirements,
-      penalties: ['failed required gate'],
-    };
+    if (!bypassGates) {
+      return {
+        id: archetypeId,
+        name: profile.name,
+        category: profile.category,
+        score: -Infinity,
+        confidence: 'low',
+        matchedRequirements,
+        penalties: ['failed required gate'],
+      };
+    }
+    // bypassGates fallback: heavy soft penalty instead of hard disqualification
+    score -= 25;
+    penalties.push('failed required gate (soft)');
   }
 
   // Apply booster scores
