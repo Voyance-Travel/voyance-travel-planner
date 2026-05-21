@@ -22,6 +22,45 @@ import { activityCountryMismatch } from './address-city-resolve.ts';
 import { isDegenerateDescription } from './description-fill.ts';
 
 const DEGENERATE_BODY_FIELDS = ['description', 'notes', 'tips', 'summary', 'insider_tip', 'insiderTip'] as const;
+const HEDGE_BODY_FIELDS = ['description', 'notes', 'tips', 'summary', 'insider_tip', 'insiderTip'] as const;
+
+// Hedging phrases the LLM uses when it can't commit ("or the nearby MAM",
+// "or alternatively Pinacoteca", "either A or B"). The card already names ONE
+// venue in `title`/`venue.name` — strip the dependent clause so the description
+// matches what was committed.
+const HEDGE_PATTERNS: RegExp[] = [
+  // " — or the nearby X", ", or the nearby X.", " or a nearby X"
+  /\s*[—,–-]?\s*\bor\s+(?:the\s+|a\s+)?nearby\b[^.;]*([.;]|$)/gi,
+  // ", or alternatively X"
+  /\s*[—,–-]?\s*\bor\s+alternatively\b[^.;]*([.;]|$)/gi,
+  // "either X or Y" → keep "X", drop " or Y"
+  /\b(either)\s+([^.;]+?)\s+or\s+[^.;]+?([.;]|$)/gi,
+];
+
+function scrubHedgedAlternatives(act: any): { changed: boolean } {
+  let changed = false;
+  for (const k of HEDGE_BODY_FIELDS) {
+    const v = act?.[k];
+    if (typeof v !== 'string' || !v) continue;
+    let next = v;
+    for (const re of HEDGE_PATTERNS) {
+      const pat = new RegExp(re.source, re.flags); // fresh regex (avoid stateful lastIndex)
+      next = next.replace(pat, (_m, ...g) => {
+        // For "either X or Y" preserve the X side
+        if (g.length >= 3 && typeof g[1] === 'string') {
+          return g[1].trim() + (g[2] || '.');
+        }
+        return g[0] || '.';
+      });
+    }
+    next = next.replace(/\s+/g, ' ').replace(/\s+([.;,])/g, '$1').trim();
+    if (next !== v) {
+      act[k] = next;
+      changed = true;
+    }
+  }
+  return { changed };
+}
 
 export interface ScrubOps {
   titleLeak: number;
@@ -35,6 +74,7 @@ export interface ScrubOps {
   phantomRef: number;
   degenerate: number;
   addressCity: number;
+  hedged: number;
 }
 
 export const EMPTY_OPS: ScrubOps = Object.freeze({
@@ -49,7 +89,9 @@ export const EMPTY_OPS: ScrubOps = Object.freeze({
   phantomRef: 0,
   degenerate: 0,
   addressCity: 0,
+  hedged: 0,
 }) as ScrubOps;
+
 
 export interface ScrubContext {
   /** Trip destination (e.g. "Venice, Italy"). Required for cross-city checks. */
@@ -73,9 +115,10 @@ export function scrubActivity(act: any, ctx: ScrubContext = {}): ScrubOps {
   const ops: ScrubOps = {
     titleLeak: 0, bodyLeak: 0, fragment: 0, mealSuffix: 0,
     crossCity: 0, countryMismatch: 0, mealLabel: 0, downgraded: 0,
-    phantomRef: 0, degenerate: 0, addressCity: 0,
+    phantomRef: 0, degenerate: 0, addressCity: 0, hedged: 0,
   };
   if (!act || typeof act !== 'object') return ops;
+
 
   // L1 — degenerate body fields ("The.", "A.", sub-15-char stubs).
   // Blank instead of preserving — empty is recoverable, fragment isn't.
@@ -90,6 +133,8 @@ export function scrubActivity(act: any, ctx: ScrubContext = {}): ScrubOps {
   if (scrubTitleLeaks(act).changed) ops.titleLeak++;
   if (scrubBodyPromptLeaks(act).changed) ops.bodyLeak++;
   if (scrubSentenceFragmentsOnAct(act).changed) ops.fragment++;
+  if (scrubHedgedAlternatives(act).changed) ops.hedged++;
+
   if (ctx.daySchedule) {
     const phantom = scrubPhantomEventRefs(act, ctx.daySchedule);
     if (phantom.changed) {
@@ -186,14 +231,16 @@ export function addOps(a: ScrubOps, b: ScrubOps): ScrubOps {
     phantomRef: a.phantomRef + b.phantomRef,
     degenerate: a.degenerate + b.degenerate,
     addressCity: a.addressCity + b.addressCity,
+    hedged: a.hedged + b.hedged,
   };
 }
 
 export function opsHadChange(o: ScrubOps): boolean {
   return o.titleLeak + o.bodyLeak + o.fragment + o.mealSuffix
        + o.crossCity + o.countryMismatch + o.mealLabel + o.downgraded
-       + o.phantomRef + o.degenerate + o.addressCity > 0;
+       + o.phantomRef + o.degenerate + o.addressCity + o.hedged > 0;
 }
+
 
 /** Compact one-line render for logs. */
 export function formatOps(o: ScrubOps): string {

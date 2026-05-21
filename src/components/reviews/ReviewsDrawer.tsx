@@ -51,6 +51,97 @@ interface ReviewsDrawerProps {
   activityReviewCount?: number;
 }
 
+// ── Context-aware open/closed label ─────────────────────────────────────────
+// `openNow:false` on its own panics users ("Closed!" next to a restaurant
+// they're scheduled to dine at). Translate it into actionable context:
+//   - "Opens at 7:30 PM" when today has later hours
+//   - "Closed today — opens tomorrow at 9:00 AM" when today is closed
+//   - "Closed now" only when we genuinely can't infer anything
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function parseClockToken(token: string): { h: number; m: number } | null {
+  const m = token.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm)?$/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = m[2] ? parseInt(m[2], 10) : 0;
+  const mer = m[3]?.toUpperCase();
+  if (mer === 'PM' && h < 12) h += 12;
+  if (mer === 'AM' && h === 12) h = 0;
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return { h, m: min };
+}
+
+function formatClock12(h: number, m: number): string {
+  const mer = h >= 12 ? 'PM' : 'AM';
+  const hh = h % 12 || 12;
+  return `${hh}:${String(m).padStart(2, '0')} ${mer}`;
+}
+
+interface OpenStatusLabel {
+  text: string;
+  tone: 'green' | 'amber' | 'red';
+}
+
+function computeOpenStatusLabel(
+  openingHours: string[] | undefined,
+  openNow: boolean | undefined,
+  now: Date = new Date(),
+): OpenStatusLabel | null {
+  if (openNow === true) return { text: 'Open now', tone: 'green' };
+  if (openNow !== false) return null;
+
+  if (!openingHours || openingHours.length === 0) {
+    return { text: 'Closed now', tone: 'red' };
+  }
+
+  // Build map: day name → line. Google Places format: "Monday: 7:30 PM – 11:00 PM"
+  const byDay: Record<string, string> = {};
+  for (const line of openingHours) {
+    const m = line.match(/^([A-Za-z]+)\s*:\s*(.+)$/);
+    if (m) byDay[m[1].toLowerCase()] = m[2].trim();
+  }
+  const todayName = DAY_NAMES[now.getDay()].toLowerCase();
+  const tomorrowName = DAY_NAMES[(now.getDay() + 1) % 7].toLowerCase();
+
+  // Helper: extract the first opening time from a day-line
+  const firstOpen = (line?: string): { h: number; m: number } | null => {
+    if (!line) return null;
+    if (/closed/i.test(line)) return null;
+    // Take left side of first range separator ("–", "-", " to ")
+    const left = line.split(/[–—-]| to /)[0];
+    return parseClockToken(left);
+  };
+
+  const todayLine = byDay[todayName];
+  const todayOpen = firstOpen(todayLine);
+  if (todayOpen) {
+    const openMins = todayOpen.h * 60 + todayOpen.m;
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    if (openMins > nowMins) {
+      return { text: `Opens at ${formatClock12(todayOpen.h, todayOpen.m)}`, tone: 'amber' };
+    }
+  }
+
+  // Closed for the day — look ahead to tomorrow
+  const tomorrowOpen = firstOpen(byDay[tomorrowName]);
+  if (tomorrowOpen) {
+    return {
+      text: `Closed today — opens tomorrow at ${formatClock12(tomorrowOpen.h, tomorrowOpen.m)}`,
+      tone: 'amber',
+    };
+  }
+
+  return { text: 'Closed today', tone: 'red' };
+}
+
+const TONE_CLASS: Record<OpenStatusLabel['tone'], string> = {
+  green: 'text-green-600',
+  amber: 'text-amber-600',
+  red: 'text-red-500',
+};
+
+
+
 export default function ReviewsDrawer({
   open,
   onClose,
@@ -215,33 +306,37 @@ export default function ReviewsDrawer({
                       </a>
                     </div>
                   )}
-                  {(place.openingHours && place.openingHours.length > 0) && (
-                    <div className="flex items-start gap-2">
-                      <Clock className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-                      <div className="flex-1 text-sm text-muted-foreground">
-                        <div className="font-medium mb-1">
-                          {place.openNow ? (
-                            <span className="text-green-600">Open now</span>
-                          ) : (
-                            <span className="text-red-500">Closed now</span>
+                  {(place.openingHours && place.openingHours.length > 0) && (() => {
+                    const label = computeOpenStatusLabel(place.openingHours, place.openNow);
+                    return (
+                      <div className="flex items-start gap-2">
+                        <Clock className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                        <div className="flex-1 text-sm text-muted-foreground">
+                          {label && (
+                            <div className="font-medium mb-1">
+                              <span className={TONE_CLASS[label.tone]}>{label.text}</span>
+                            </div>
                           )}
+                          <ul className="text-xs space-y-0.5">
+                            {place.openingHours.map((line: string, idx: number) => (
+                              <li key={idx}>{line}</li>
+                            ))}
+                          </ul>
                         </div>
-                        <ul className="text-xs space-y-0.5">
-                          {place.openingHours.map((line: string, idx: number) => (
-                            <li key={idx}>{line}</li>
-                          ))}
-                        </ul>
                       </div>
-                    </div>
-                  )}
-                  {(!place.openingHours || place.openingHours.length === 0) && place.openNow !== undefined && (
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-muted-foreground" />
-                      <span className={place.openNow ? 'text-green-600' : 'text-red-500'}>
-                        {place.openNow ? 'Open now' : 'Closed now'}
-                      </span>
-                    </div>
-                  )}
+                    );
+                  })()}
+                  {(!place.openingHours || place.openingHours.length === 0) && place.openNow !== undefined && (() => {
+                    const label = computeOpenStatusLabel(place.openingHours, place.openNow);
+                    if (!label) return null;
+                    return (
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-muted-foreground" />
+                        <span className={TONE_CLASS[label.tone]}>{label.text}</span>
+                      </div>
+                    );
+                  })()}
+
                   {place.website && (
                     <div className="flex items-center gap-2">
                       <Globe className="w-4 h-4 text-muted-foreground" />
