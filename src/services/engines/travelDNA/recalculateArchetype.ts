@@ -52,7 +52,16 @@ export async function recalculateArchetype(userId: string): Promise<RecalculateR
   }
 
   const primary = result.primary?.id ?? null;
-  const secondary = result.secondary?.id ?? null;
+  const existingSecondary = (data?.secondary_archetype_name as string | null) ?? null;
+  // Preserve existing secondary if matcher returns null OR same-as-primary;
+  // otherwise the canonical recalc would clobber a valid prior pairing.
+  const newSecondary = result.secondary?.id ?? null;
+  const secondary =
+    newSecondary && newSecondary !== primary
+      ? newSecondary
+      : existingSecondary && existingSecondary !== primary
+        ? existingSecondary
+        : null;
   const confidenceLabel = result.primary?.confidence ?? "low";
   const confidenceScore =
     confidenceLabel === "high" ? 90 : confidenceLabel === "medium" ? 70 : 50;
