@@ -338,7 +338,7 @@ const App = () => (
                 <WelcomeBonusManager />
                 <SiteOnboardingTour />
                 <OAuthReturnHandler />
-                <DNARecalcOnVisit />
+                {/* DNARecalcOnVisit removed: TS matchArchetypes was clobbering authoritative secondary from calculate-travel-dna edge fn */}
                 <OutOfCreditsModal />
                 <ErrorBoundary>
                   <AnimatedRoutes />
