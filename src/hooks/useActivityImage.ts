@@ -9,6 +9,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
+import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
+
 
 // ── localStorage cache with 7-day TTL ────────────────────────────────────────
 const CACHE_KEY_PREFIX = 'voyance_photo_';
