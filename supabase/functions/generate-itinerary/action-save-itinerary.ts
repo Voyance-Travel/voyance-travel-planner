@@ -14,6 +14,7 @@ import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { normalizePredawnCascade } from '../_shared/predawn-cascade-normalize.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
 import { validateItineraryForPersist } from '../_shared/validate-itinerary-for-persist.ts';
+import { validateDayThemes } from '../_shared/output-consistency.ts';
 import { scrubActivity, addOps, formatOps, EMPTY_OPS, type ScrubOps } from '../_shared/scrub-activity.ts';
 import { buildDayScheduleSummary } from '../_shared/prompt-leak-scrub.ts';
 import { ensureDayDiningDescriptions } from '../_shared/dining-description-backfill.ts';
