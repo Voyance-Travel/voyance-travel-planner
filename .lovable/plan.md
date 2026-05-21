@@ -1,33 +1,22 @@
-## Problem
+## Add closing-hours awareness
 
-After the previous hardening pass, "Refine My Profile" now reaches the final step but throws:
+Three small, self-contained changes — no behavior change beyond logging + a UI swap.
 
-```
-QuotaExceededError: Failed to execute 'setItem' on 'Storage':
-Setting the value of 'dna-disambig-resolved-<uid>' exceeded the quota.
-```
+### 1. New file: `supabase/functions/_shared/venue-hours-validator.ts`
+Pure utility exporting `validateClosingHours(activities)` plus `HoursViolation` type. Detects venue type from title regex (museum / basilica / church / cathedral / cemetery / gallery / market / palace / ruins), compares parsed `startTime`/`endTime` against a per-category typical close, returns violations. No external deps.
 
-The DB writes (profile update, DNA recalc, `travel_dna_profiles` upsert) all succeed, but the very last line — `localStorage.setItem(dismissKey, 'true')` in `src/components/profile/MicroDisambiguation.tsx` — throws because the user's localStorage is full (likely from accumulated trip drafts / cleanup checkpoints / itinerary caches). The uncaught throw lands in the outer `catch`, surfacing "Something went wrong" even though the refinement was saved server-side.
+### 2. Wire into `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
+- Add import for `validateClosingHours` near other `_shared` imports.
+- Just before the final `return { activities: deduped, repairs }` at line 5027, run the validator against `deduped`, `console.warn` each violation with `[venue-hours] Day {N} violation: …`, and stash the array on `day.metadata.quality.hours_violations`.
+- Non-blocking — purely observational + metadata. Generator output is unchanged on this pass.
 
-`dismissKey` is a tiny 4-byte write; the quota error means the *bucket* is full, not this key. So we need to (a) never let this cosmetic write break the flow, and (b) free space proactively so the dismiss flag actually persists across reloads.
+### 3. UI: `src/components/reviews/ReviewsDrawer.tsx` (~line 218)
+Replace the single-line `Open now / Closed` block with:
+- If `place.openingHours` has entries: render the live open/closed label on top + the full weekly list below.
+- Else fall back to the existing one-liner (now reads "Closed now" instead of "Closed" for symmetry).
 
-## Fix
+### Acceptance
+All 6 greps from the spec pass; Rome regen logs `[venue-hours] Day N violation: …` for Basilica San Clemente / Cemetery; ReviewsDrawer renders the weekly hours list when Google returned them.
 
-Edit `src/components/profile/MicroDisambiguation.tsx` only.
-
-1. **Wrap both `localStorage.setItem(dismissKey, ...)` calls (lines 203 + 317) in `try/catch`.** Log `console.warn('[Disambig] dismiss_flag_persist_failed', err)` and continue. The DB row in `travel_dna_profiles.disambiguation_resolved_at` is already the authoritative source of truth — the localStorage flag is only a same-session optimization to avoid a re-fetch flicker.
-
-2. **Add a small `pruneLocalStorageForQuota()` helper** invoked once before the setItem retry:
-   - Remove obviously safe-to-evict keys in priority order: `voyance_trip_drafts`, `admin.*Cleanup.checkpoint.v1`, any key starting with `voyance.currencyToggle.`, any key matching `^trip-cache-` / `^itinerary-cache-`.
-   - After pruning, retry the `setItem` once inside the same try/catch.
-   - Never throw from the helper.
-
-3. **Keep state updates (`setIsResolved(true)` + success toast) regardless of the setItem outcome** — the server write already succeeded by this point, so the UI should reflect that. Today the throw aborts both.
-
-That's the entire change: ~25 lines in one file, no backend work, no new files.
-
-## Out of scope
-
-- Migrating other localStorage writes app-wide to a safe wrapper. Only the two sites that currently break the Refine flow are touched. We already have `safeSetItem` patterns in `src/utils/tripPersistence.ts`; a broader migration can follow if quota errors surface elsewhere.
-- Changing the eviction policy of `tripPersistence` / cleanup checkpoints. The targeted prune above is enough to unstick this user.
-- Memory entry: will add one if the same QuotaExceededError reappears after this fix.
+### Out of scope
+Actually rescheduling violating activities (this PR only flags). Hooking the metadata into a user-visible health warning. Per-day-of-week parsing of typical-close (uses single weekday default).
