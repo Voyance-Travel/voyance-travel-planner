@@ -433,6 +433,7 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
     };
 
     for (let i = 0; i < timed.length - 1; i++) {
+      if (_untimedIds.has(String((timed[i] as any)?.source?.id || '')) || _untimedIds.has(String((timed[i + 1] as any)?.source?.id || ''))) continue;
       // Two overlap signals:
       //   • renderedOverlaps — the times the user can SEE on the card right
       //     now. Never suppress this; the cascade hasn't been saved yet, so
