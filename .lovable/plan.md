@@ -1,26 +1,25 @@
-# Budget Coach pricing fix: ID match + prompt clarification
+# Output consistency validator: new shared file + 2 wire-ins
 
-Two surgical edits to `supabase/functions/budget-coach/index.ts`.
+## Step 1 — Create `supabase/functions/_shared/output-consistency.ts`
 
-## Edit 1 — Fuzzy title fallback before LLM cost (line ~567)
+Verbatim from spec. Exports `validateActivityTitleTime`, `validateDayThemes`, `validateDayConsistency`, plus `ConsistencyIssue` interface and `TEMPORAL_WORD_WINDOWS` table (morning/midday/afternoon/evening/night). Title-time mismatch handles late-night wrap by normalizing `start < 6:00` to `+24h`.
 
-Replace the single-line `knownCostCents` lookup with a two-step recovery:
-1. Exact `activityCostCentsById.get(sid)` (current behavior).
-2. If undefined, iterate `activityTitleById` and bidirectional `includes` match on lowercased trimmed titles (>3 chars). On first non-zero hit, log `[budget-coach] Fuzzy ID recovery: …` and use that cost.
-3. Only fall back to LLM-emitted `s.current_cost` when both lookups miss.
+## Step 2 — Wire into `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
 
-Comment block includes the literal phrase `Bidirectional contains check` (acceptance grep).
+- Add import (near line 39, next to `validateClosingHours`):
+  `import { validateDayConsistency } from '../../_shared/output-consistency.ts';`
+- Insert the per-day check **after** the venue-hours block (~line 3885+) and **before** `return { activities, repairs };` at line 4178. Logs `[consistency] Day N type: detail. suggestion` per issue and stamps `day.metadata.quality.consistency_issues`.
 
-## Edit 2 — Per-person prompt clarification (lines 371 + 373)
+## Step 3 — Wire into `supabase/functions/generate-itinerary/action-save-itinerary.ts`
 
-Rewrite the schema `description` strings for `current_cost` and `new_cost` so the LLM is told explicitly to report the per-person value and NOT multiply by traveler count. Both strings contain `PER-PERSON value` and `DO NOT multiply by traveler count` (acceptance greps).
+- Add import near other `_shared` imports (~line 13-22):
+  `import { validateDayThemes } from '../_shared/output-consistency.ts';`
+- Insert the trip-level theme check **just before** the `persistTripItinerary` call at line 1401. Logs `[consistency] type: detail. suggestion` per issue. Non-blocking — warnings only.
 
 ## Out of scope
 
-- No changes to `activityCostCentsById` population logic.
-- No changes to swap-application / persist code paths.
-- No changes to validation or budget math elsewhere.
+No changes to repair pipeline behavior, persist gates, prompt templates, or LLM calls. Validators are observe-only: emit warnings + stamp metadata. No new auto-rewrites.
 
 ## Acceptance
 
-4 greps from the spec pass; post-deploy Rome 2-traveler Coach shows $45/pp Colosseum (not $90/pp) and edge logs may surface `[budget-coach] Fuzzy ID recovery` lines.
+5 greps from spec pass (file exists; ≥6 hits in new file; ≥2 hits each in repair-day + action-save-itinerary; ≥1 `consistency_issues`). Post-deploy Rome regen surfaces `[consistency] Day 1 title_time_mismatch` and `[consistency] duplicate_day_theme` in edge logs.
