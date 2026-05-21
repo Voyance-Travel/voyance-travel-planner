@@ -3760,6 +3760,21 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         ? pickTransitTier(derivedDist, destName || 'destination')
         : pickTransitFallback(null, curDur, destName);
 
+      // Sanity check: catch implausible durations from coord-parsing failures.
+      // Rome regression: "5 min" walk produced for a 6.6km journey because
+      // extractCoords returned incomplete addresses with near-zero haversine.
+      const _isAirport = /airport|terminal|gate/i.test(String(act?.title || ''));
+      if (tier && typeof tier.durationMinutes === 'number') {
+        if (!_isAirport && tier.durationMinutes < 8 && (derivedDist === 0 || derivedDist > 1500)) {
+          console.warn(`[transit-sanity] Implausibly short tier (${tier.durationMinutes}min, ${derivedDist}m). Falling back to 20-min taxi default.`);
+          tier = pickTransitFallback(null, 20, destName);
+        } else if (_isAirport && tier.durationMinutes > 120) {
+          console.warn(`[transit-sanity] Airport transfer inflated to ${tier.durationMinutes}min. Capping at 75min.`);
+          tier.durationMinutes = 75;
+          tier.instructions = `Transfer to ${destName || 'airport'} (~75 min by taxi)`;
+        }
+      }
+
       // Water-crossing override: pickTransitTier doesn't model ferries.
       const wc = (vr as any)?.meta?.waterCrossing as { city?: string; reason?: string } | undefined;
       if (wc) {
