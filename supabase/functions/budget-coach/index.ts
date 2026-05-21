@@ -564,7 +564,28 @@ Rules:
           }
 
           const newCostCents = swapType === "drop" ? 0 : Math.round(rawNew * 100);
-          const knownCostCents = activityCostCentsById.get(sid);
+          // Tighten ID match: exact lookup first, then fuzzy title match before falling
+          // back to LLM-emitted current_cost (which is unreliable — sometimes group
+          // total, sometimes 0 for activities the LLM can't price).
+          let knownCostCents = activityCostCentsById.get(sid);
+          if (knownCostCents === undefined) {
+            const llmTitle = String(s?.current_item || '').toLowerCase().trim();
+            if (llmTitle.length > 3) {
+              for (const [candidateId, candidateTitle] of activityTitleById.entries()) {
+                const ct = String(candidateTitle || '').toLowerCase().trim();
+                if (!ct) continue;
+                // Bidirectional contains check — handles LLM truncating or extending titles
+                if (ct.includes(llmTitle) || llmTitle.includes(ct)) {
+                  const recovered = activityCostCentsById.get(candidateId);
+                  if (recovered !== undefined && recovered > 0) {
+                    console.log(`[budget-coach] Fuzzy ID recovery: LLM emitted ${sid}, matched to ${candidateId} via title "${candidateTitle}" → ${recovered}c`);
+                    knownCostCents = recovered;
+                    break;
+                  }
+                }
+              }
+            }
+          }
           const currentCostCents = knownCostCents ?? Math.round((typeof s.current_cost === "number" ? s.current_cost : 0) * 100);
 
           if (swapType === "drop") {
