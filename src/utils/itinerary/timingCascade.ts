@@ -74,6 +74,7 @@ interface TransitEstimate {
   durationMinutes: number;
   method: string;
   distance: string;
+  unverified?: boolean;
 }
 
 function estimateTransit(a: CascadeActivity, b: CascadeActivity): TransitEstimate | null {
@@ -82,7 +83,9 @@ function estimateTransit(a: CascadeActivity, b: CascadeActivity): TransitEstimat
     { lat: a.location.lat, lng: a.location.lng },
     { lat: b.location.lat, lng: b.location.lng }
   );
-  const walkMin = Math.ceil(distMeters / 80);
+  const walkMinRaw = Math.ceil(distMeters / 80);
+  // Floor: anything past a same-building hop takes at least 4 min.
+  const walkMin = distMeters >= 80 ? Math.max(4, walkMinRaw) : walkMinRaw;
   const taxiMin = Math.max(3, Math.ceil(distMeters / 400));
   const isWalkable = walkMin <= 15;
   return {
@@ -90,6 +93,12 @@ function estimateTransit(a: CascadeActivity, b: CascadeActivity): TransitEstimat
     durationMinutes: isWalkable ? walkMin : distMeters < 10000 ? Math.max(5, Math.ceil(distMeters / 500) + 5) : taxiMin,
     distance: distMeters < 1000 ? `${Math.round(distMeters)}m` : `${(distMeters / 1000).toFixed(1)}km`,
   };
+}
+
+function estimateTransitOrUnverified(a: CascadeActivity, b: CascadeActivity): TransitEstimate {
+  const est = estimateTransit(a, b);
+  if (est) return est;
+  return { method: 'walking', durationMinutes: 15, distance: 'unknown', unverified: true };
 }
 
 const TRANSIT_CATS = ['transportation', 'transit', 'transfer', 'taxi', 'transport', 'commute', 'travel'];
