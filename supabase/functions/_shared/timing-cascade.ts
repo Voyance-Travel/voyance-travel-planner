@@ -31,7 +31,7 @@ export interface CascadeActivity {
 }
 
 export interface CascadeRepair {
-  type: 'same_start_fix' | 'overlap_fix' | 'buffer_fix' | 'dropped_past_midnight' | 'bookend_clamped';
+  type: 'same_start_fix' | 'overlap_fix' | 'buffer_fix' | 'dropped_past_midnight' | 'bookend_clamped' | 'transit_recomputed' | 'transit_unverified';
   activityId: string;
   activityTitle?: string;
   before?: string;
@@ -335,15 +335,25 @@ export interface TransitEstimate {
   durationMinutes: number;
   distance: string;
   recommended?: boolean;
+  /** True when coords were missing — minutes are a best-guess default. */
+  unverified?: boolean;
 }
 
+/**
+ * Estimate the walk/transit/taxi time between two activities from coords.
+ * Returns `null` when coords are missing (preserved for legacy callers).
+ *
+ * Hard floor: anything more than a same-building hop (~80m) takes at least
+ * 4 min — closes "AI-emitted 5 min walk between distant venues" leak.
+ */
 export function estimateTransit(a: CascadeActivity, b: CascadeActivity): TransitEstimate | null {
   if (a.location?.lat == null || b.location?.lat == null || a.location?.lng == null || b.location?.lng == null) return null;
   const distMeters = haversineMeters(
     { lat: a.location.lat, lng: a.location.lng },
     { lat: b.location.lat, lng: b.location.lng }
   );
-  const walkMin = Math.ceil(distMeters / 80);
+  const walkMinRaw = Math.ceil(distMeters / 80);
+  const walkMin = distMeters >= 80 ? Math.max(4, walkMinRaw) : walkMinRaw;
   const taxiMin = Math.max(3, Math.ceil(distMeters / 400));
   const isWalkable = walkMin <= 15;
   return {
@@ -353,6 +363,26 @@ export function estimateTransit(a: CascadeActivity, b: CascadeActivity): Transit
     durationMinutes: isWalkable ? walkMin : distMeters < 10000 ? Math.max(5, Math.ceil(distMeters / 500) + 5) : taxiMin,
     distance: distMeters < 1000 ? `${Math.round(distMeters)}m` : `${(distMeters / 1000).toFixed(1)}km`,
     recommended: true,
+  };
+}
+
+/**
+ * Best-effort estimate that never returns null. Missing coords → typed
+ * `unverified` walking estimate (15 min); the recompute pass flags the card
+ * `metadata.transit_unverified=true` so the FE health panel can suppress
+ * downstream "5 min conflict" warnings on cards we can't actually validate.
+ */
+export function estimateTransitOrUnverified(a: CascadeActivity, b: CascadeActivity): TransitEstimate {
+  const est = estimateTransit(a, b);
+  if (est) return est;
+  return {
+    fromId: a.id,
+    toId: b.id,
+    method: 'walking',
+    durationMinutes: 15,
+    distance: 'unknown',
+    recommended: false,
+    unverified: true,
   };
 }
 
@@ -412,7 +442,125 @@ function isEndOfDayBookend(act: CascadeActivity): boolean {
   return false;
 }
 
+// ─── Transit-card recompute ───────────────────────────────────────────────────
+// AI-emitted "Walk to X — 5 min" cards routinely undershoot reality. This pass
+// rewrites each transit card's `durationMinutes` (and recomputes `endTime`)
+// from a Haversine estimate between its immediate non-transit neighbours.
+// Locked / user-edited / booked / manually-added rows are exempt. Cards we
+// can't validate (missing coords on either neighbour) get tagged
+// `metadata.transit_unverified = true` so the FE health panel can suppress
+// "X min conflict" warnings for best-effort estimates.
+
+const TRANSIT_TITLE_RE = /^(walk|stroll|transit|transfer|taxi|drive|bus|metro|tram|train|ride|bike|cycle|uber|lyft|cab)\b/i;
+
+function isTransitCard(a: CascadeActivity): boolean {
+  const cat = String(a.category || '').toLowerCase();
+  if (TRANSIT_CATS.some(t => cat.includes(t))) return true;
+  return TRANSIT_TITLE_RE.test(String(a.title || ''));
+}
+
+function isUntouchableByRecompute(a: any, lockedIds: Set<string>): boolean {
+  if (lockedIds.has(a?.id)) return true;
+  if (a?.manuallyAdded || a?.extracted || a?.pinned || a?.isLocked) return true;
+  if (a?.lockState === 'locked') return true;
+  const basis = a?.cost?.basis || a?.estimatedCost?.basis;
+  if (basis === 'user' || basis === 'user_override' || basis === 'booked' || basis === 'manual' || basis === 'imported') return true;
+  return false;
+}
+
+export interface TransitRecomputeResult {
+  repairs: CascadeRepair[];
+  recomputed: number;
+  unverified: number;
+}
+
+/**
+ * Walks the day in order. For each transit card, finds the prior and next
+ * NON-transit neighbours and recomputes the transit card's `durationMinutes`
+ * (and `endTime`) from `estimateTransit(prev, next)`. Same-place neighbours
+ * (already ≤ ~80m apart) skip — the card represents in-venue movement.
+ * Mutates `activities` in place. Returns a small summary for telemetry.
+ */
+export function recomputeTransitCards<T extends CascadeActivity>(
+  activities: T[],
+  lockedIds: Set<string>,
+): TransitRecomputeResult {
+  const repairs: CascadeRepair[] = [];
+  let recomputed = 0;
+  let unverified = 0;
+
+  for (let i = 0; i < activities.length; i++) {
+    const card = activities[i];
+    if (!isTransitCard(card)) continue;
+    if (isUntouchableByRecompute(card, lockedIds)) continue;
+
+    // Find immediate non-transit neighbours within this day.
+    let prev: CascadeActivity | null = null;
+    for (let j = i - 1; j >= 0; j--) {
+      if (!isTransitCard(activities[j])) { prev = activities[j]; break; }
+    }
+    let next: CascadeActivity | null = null;
+    for (let j = i + 1; j < activities.length; j++) {
+      if (!isTransitCard(activities[j])) { next = activities[j]; break; }
+    }
+    if (!prev || !next) continue;
+    if (isSamePlace(prev, next)) continue;
+
+    const est = estimateTransitOrUnverified(prev, next);
+    const before = `${card.title} @ ${card.startTime} (${(card as any).durationMinutes ?? '?'} min)`;
+    const start = parseTime(card.startTime);
+
+    if (est.unverified) {
+      // Don't rewrite duration on an unverified estimate — just flag it so
+      // the FE can suppress "X min conflict" noise for this card.
+      const meta = ((card as any).metadata = (card as any).metadata || {});
+      if (meta.transit_unverified !== true) {
+        meta.transit_unverified = true;
+        unverified++;
+        repairs.push({
+          type: 'transit_unverified',
+          activityId: card.id,
+          activityTitle: card.title,
+          before,
+          message: `"${card.title}" lacked coords on either neighbour — duration left as-is, flagged unverified.`,
+        });
+      }
+      continue;
+    }
+
+    const currentDur = Number((card as any).durationMinutes) || (parseTime(card.endTime) !== null && start !== null ? (parseTime(card.endTime)! - start) : 0);
+    // Only rewrite when the engine's estimate disagrees by ≥ 3 min — avoids
+    // pointless 1-min churn on already-reasonable cards.
+    if (Math.abs(est.durationMinutes - currentDur) < 3) continue;
+
+    (card as any).durationMinutes = est.durationMinutes;
+    (card as any).duration_minutes = est.durationMinutes;
+    if (start !== null) {
+      const newEnd = minutesToTime(start + est.durationMinutes);
+      card.endTime = newEnd;
+      (card as any).end_time = newEnd;
+    }
+    // Refresh title hint when the AI baked the old duration in.
+    if (typeof card.title === 'string') {
+      card.title = card.title.replace(/\b\d{1,3}\s*min\b/i, `${est.durationMinutes} min`);
+    }
+    recomputed++;
+    repairs.push({
+      type: 'transit_recomputed',
+      activityId: card.id,
+      activityTitle: card.title,
+      before,
+      after: `${card.title} @ ${card.startTime} (${est.durationMinutes} min, ${est.method} ${est.distance})`,
+      message: `Recomputed transit "${card.title}" from ${currentDur || '?'} → ${est.durationMinutes} min based on ${est.method} ${est.distance} between "${prev.title}" and "${next.title}".`,
+    });
+  }
+
+  return { repairs, recomputed, unverified };
+}
+
 // ─── Core algorithm ───────────────────────────────────────────────────────────
+
+
 
 export function enforceTimingAndBuffers<T extends CascadeActivity>(
   input: T[],
@@ -434,6 +582,19 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
   // anchors Day 2's chronology and the cascade pushes every real activity into
   // 1-7 AM (Budapest Day 2: Parliament @ 1:47 AM, lunch @ 4:47 AM).
   pruneOrphanLateNightlifeBookend(input as any[], { path: 'enforceTimingAndBuffers' } as any);
+
+  // Pre-walk #4: recompute transit-card durations from their neighbours' coords
+  // so AI-emitted "Walk to X — 5 min" stubs between distant venues stop
+  // surviving into the schedule. Must run BEFORE the chronological sort so
+  // the cascade loop sees corrected endTimes when checking overlap/buffer.
+  const transitRecompute = recomputeTransitCards(input as any[], lockedIds);
+  if (transitRecompute.repairs.length) {
+    repairs.push(...transitRecompute.repairs);
+    try {
+      // eslint-disable-next-line no-console
+      console.log(`[CASCADE] transit_recomputed=${transitRecompute.recomputed} transit_unverified=${transitRecompute.unverified}`);
+    } catch { /* noop */ }
+  }
 
   // Sort chronologically; activities without a startTime go to the end.
   // Wrap-aware so a 00:55 late-nightlife hotel-return bookend sorts AFTER a

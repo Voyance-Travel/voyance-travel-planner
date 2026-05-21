@@ -74,6 +74,7 @@ interface TransitEstimate {
   durationMinutes: number;
   method: string;
   distance: string;
+  unverified?: boolean;
 }
 
 function estimateTransit(a: CascadeActivity, b: CascadeActivity): TransitEstimate | null {
@@ -82,7 +83,9 @@ function estimateTransit(a: CascadeActivity, b: CascadeActivity): TransitEstimat
     { lat: a.location.lat, lng: a.location.lng },
     { lat: b.location.lat, lng: b.location.lng }
   );
-  const walkMin = Math.ceil(distMeters / 80);
+  const walkMinRaw = Math.ceil(distMeters / 80);
+  // Floor: anything past a same-building hop takes at least 4 min.
+  const walkMin = distMeters >= 80 ? Math.max(4, walkMinRaw) : walkMinRaw;
   const taxiMin = Math.max(3, Math.ceil(distMeters / 400));
   const isWalkable = walkMin <= 15;
   return {
@@ -90,6 +93,12 @@ function estimateTransit(a: CascadeActivity, b: CascadeActivity): TransitEstimat
     durationMinutes: isWalkable ? walkMin : distMeters < 10000 ? Math.max(5, Math.ceil(distMeters / 500) + 5) : taxiMin,
     distance: distMeters < 1000 ? `${Math.round(distMeters)}m` : `${(distMeters / 1000).toFixed(1)}km`,
   };
+}
+
+function estimateTransitOrUnverified(a: CascadeActivity, b: CascadeActivity): TransitEstimate {
+  const est = estimateTransit(a, b);
+  if (est) return est;
+  return { method: 'walking', durationMinutes: 15, distance: 'unknown', unverified: true };
 }
 
 const TRANSIT_CATS = ['transportation', 'transit', 'transfer', 'taxi', 'transport', 'commute', 'travel'];
@@ -159,6 +168,64 @@ function effectiveEnd(act: CascadeActivity, startMins: number | null): number | 
   return startMins + dur;
 }
 
+// ─── Transit-card recompute (mirrors BE _shared/timing-cascade.ts) ───────────
+const TRANSIT_TITLE_RE = /^(walk|stroll|transit|transfer|taxi|drive|bus|metro|tram|train|ride|bike|cycle|uber|lyft|cab)\b/i;
+
+function isTransitCard(a: CascadeActivity): boolean {
+  const cat = String(a.category || '').toLowerCase();
+  if (TRANSIT_CATS.some(t => cat.includes(t))) return true;
+  return TRANSIT_TITLE_RE.test(String(a.title || (a as any).name || ''));
+}
+
+function isUntouchableByRecompute(a: any, lockedIds: Set<string>): boolean {
+  if (lockedIds.has(a?.id)) return true;
+  if (a?.manuallyAdded || a?.extracted || a?.pinned || a?.isLocked) return true;
+  if (a?.lockState === 'locked') return true;
+  const basis = a?.cost?.basis || a?.estimatedCost?.basis;
+  if (basis === 'user' || basis === 'user_override' || basis === 'booked' || basis === 'manual' || basis === 'imported') return true;
+  return false;
+}
+
+export function recomputeTransitCards<T extends CascadeActivity>(activities: T[], lockedIds: Set<string>): void {
+  for (let i = 0; i < activities.length; i++) {
+    const card = activities[i];
+    if (!isTransitCard(card)) continue;
+    if (isUntouchableByRecompute(card, lockedIds)) continue;
+
+    let prev: CascadeActivity | null = null;
+    for (let j = i - 1; j >= 0; j--) {
+      if (!isTransitCard(activities[j])) { prev = activities[j]; break; }
+    }
+    let next: CascadeActivity | null = null;
+    for (let j = i + 1; j < activities.length; j++) {
+      if (!isTransitCard(activities[j])) { next = activities[j]; break; }
+    }
+    if (!prev || !next) continue;
+    if (isSamePlace(prev, next)) continue;
+
+    const est = estimateTransitOrUnverified(prev, next);
+    const start = parseTime(card.startTime);
+
+    if (est.unverified) {
+      const meta = ((card as any).metadata = (card as any).metadata || {});
+      meta.transit_unverified = true;
+      continue;
+    }
+
+    const currentDur = Number((card as any).durationMinutes) ||
+      (parseTime(card.endTime) !== null && start !== null ? (parseTime(card.endTime)! - start) : 0);
+    if (Math.abs(est.durationMinutes - currentDur) < 3) continue;
+
+    (card as any).durationMinutes = est.durationMinutes;
+    if (start !== null) {
+      card.endTime = minutesToTime(start + est.durationMinutes);
+    }
+    if (typeof card.title === 'string') {
+      card.title = card.title.replace(/\b\d{1,3}\s*min\b/i, `${est.durationMinutes} min`);
+    }
+  }
+}
+
 export function enforceTimingAndBuffers<T extends CascadeActivity>(
   input: T[],
   opts: CascadeOptions = {}
@@ -168,11 +235,15 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
   const overlapBuffer = opts.overlapBufferMinutes ?? 5;
   const repairs: CascadeRepair[] = [];
 
+  // Recompute transit-card durations from neighbour coords before sorting.
+  recomputeTransitCards(input, lockedIds);
+
   let activities = [...input].sort((a, b) => {
     const ta = parseTime(a.startTime) ?? 99999;
     const tb = parseTime(b.startTime) ?? 99999;
     return ta - tb;
   });
+
 
   const cascadeShift = (fromIdx: number, delta: number) => {
     if (delta <= 0) return;

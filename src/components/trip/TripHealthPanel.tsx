@@ -458,6 +458,17 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           isTransitLike(timed[i].category, timed[i].name) ||
           isTransitLike(timed[i + 1].category, timed[i + 1].name);
 
+        // Suppress "tight transition" noise when the implicated transit card
+        // is flagged `metadata.transit_unverified` — coords were missing on
+        // a neighbour so the cascade left duration as a best-guess. Surfacing
+        // a hard "5 min conflict" warning over an admitted estimate is worse
+        // than staying quiet. See mem://constraints/itinerary/transit-mode-distance-guard.
+        const leftMeta = (timed[i] as any)?.source?.metadata;
+        const rightMeta = (timed[i + 1] as any)?.source?.metadata;
+        if (transitInvolved && (leftMeta?.transit_unverified || rightMeta?.transit_unverified)) {
+          continue;
+        }
+
         // Cascade suppression — ONLY when the rendered times don't overlap.
         // If the user can see the overlap on screen, we always warn,
         // regardless of whether a future save would auto-resolve it.
@@ -476,6 +487,7 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           // dry-run artifact the user can't see; never warn.
           if (cascadeOverlaps) continue;
         }
+
 
         issues.push({
           id: `conflict-day-${dayNum}-${i}`,
