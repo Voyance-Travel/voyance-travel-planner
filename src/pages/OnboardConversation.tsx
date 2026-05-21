@@ -11,7 +11,7 @@ import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { recalculateArchetype } from '@/services/engines/travelDNA/recalculateArchetype';
+// recalculateArchetype removed — see note in handleSave (was clobbering authoritative secondary)
 
 interface Archetype {
   id: string;
@@ -218,16 +218,10 @@ export default function OnboardConversation() {
           return;
         }
 
-        // P0.9: Re-derive archetype against the merged trait_scores. The RPC's
-        // JSONB merge preserves quiz-only traits (~17) when conversation runs
-        // second, but the caller-passed primary_archetype was computed against
-        // only the 8 conversation traits and goes stale on merge. Always
-        // recalc against the canonical merged keyset.
-        const recalc = await recalculateArchetype(user.id);
-        if (!recalc.success) {
-          const errMsg = 'error' in recalc ? recalc.error : 'unknown';
-          console.warn('[OnboardConversation] recalculateArchetype failed (non-fatal)', errMsg);
-        }
+        // NOTE: Auto-recalc via TS matchArchetypes removed — the save_onboarding_dna
+        // RPC is the authoritative writer for the conversation path. TS matcher was
+        // clobbering secondary_archetype_name=null on gate-failure profiles.
+
 
         toast.success('Your Travel DNA has been saved!');
         navigate(ROUTES.PROFILE.VIEW);

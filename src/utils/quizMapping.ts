@@ -891,19 +891,11 @@ export async function saveTravelDNA(
     return false;
   }
 
-  // P0.9: Re-derive archetype against the merged trait_scores. Single source of
-  // truth lives in the TS matcher; the caller's primary_archetype_name above is
-  // now superseded.
-  try {
-    const { recalculateArchetype } = await import('@/services/engines/travelDNA/recalculateArchetype');
-    const recalc = await recalculateArchetype(userId);
-    if (!recalc.success) {
-      const errMsg = 'error' in recalc ? recalc.error : 'unknown';
-      console.warn('[saveTravelDNA] recalculateArchetype failed (non-fatal)', errMsg);
-    }
-  } catch (recalcErr) {
-    console.warn('[saveTravelDNA] recalculateArchetype threw (non-fatal)', recalcErr);
-  }
+  // NOTE: Auto-recalc via TS matchArchetypes was REMOVED — it gate-failed on
+  // some trait profiles and wrote secondary=null, clobbering the authoritative
+  // result from the calculate-travel-dna edge function. The edge function is
+  // the sole authoritative writer; TS matcher is UI/preview only.
+
 
   // Also save to history
   await supabase.from('travel_dna_history').insert([{
