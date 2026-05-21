@@ -133,6 +133,8 @@ export function scrubActivity(act: any, ctx: ScrubContext = {}): ScrubOps {
   if (scrubTitleLeaks(act).changed) ops.titleLeak++;
   if (scrubBodyPromptLeaks(act).changed) ops.bodyLeak++;
   if (scrubSentenceFragmentsOnAct(act).changed) ops.fragment++;
+  if (scrubHedgedAlternatives(act).changed) ops.hedged++;
+
   if (ctx.daySchedule) {
     const phantom = scrubPhantomEventRefs(act, ctx.daySchedule);
     if (phantom.changed) {
