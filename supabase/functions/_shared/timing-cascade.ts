@@ -583,6 +583,19 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
   // 1-7 AM (Budapest Day 2: Parliament @ 1:47 AM, lunch @ 4:47 AM).
   pruneOrphanLateNightlifeBookend(input as any[], { path: 'enforceTimingAndBuffers' } as any);
 
+  // Pre-walk #4: recompute transit-card durations from their neighbours' coords
+  // so AI-emitted "Walk to X — 5 min" stubs between distant venues stop
+  // surviving into the schedule. Must run BEFORE the chronological sort so
+  // the cascade loop sees corrected endTimes when checking overlap/buffer.
+  const transitRecompute = recomputeTransitCards(input as any[], lockedIds);
+  if (transitRecompute.repairs.length) {
+    repairs.push(...transitRecompute.repairs);
+    try {
+      // eslint-disable-next-line no-console
+      console.log(`[CASCADE] transit_recomputed=${transitRecompute.recomputed} transit_unverified=${transitRecompute.unverified}`);
+    } catch { /* noop */ }
+  }
+
   // Sort chronologically; activities without a startTime go to the end.
   // Wrap-aware so a 00:55 late-nightlife hotel-return bookend sorts AFTER a
   // 23:30 nightcap instead of jumping to the top of the day.
