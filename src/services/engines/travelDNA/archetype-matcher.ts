@@ -485,7 +485,7 @@ export function matchArchetypes(
   secondaryCandidates.sort((a, b) => b.adjustedScore - a.adjustedScore);
 
   const secondary = secondaryCandidates.find(m =>
-    !isForbiddenPair(primary.id, m.id) && m.adjustedScore > 0
+    !isForbiddenPair(primary.id, m.id) && isFinite(m.adjustedScore)
   ) ?? null;
 
   return {
