@@ -368,9 +368,9 @@ Rules:
                 type: "object",
                 properties: {
                   current_item: { type: "string", description: "Name of the expensive item" },
-                  current_cost: { type: "number", description: "Current cost in whole currency units (e.g. 50 for $50)" },
+                  current_cost: { type: "number", description: "Current cost as the PER-PERSON value shown in the activity input. DO NOT multiply by traveler count or group size. Return the exact per-person dollar value (e.g. 45 for $45/pp)." },
                   suggested_swap: { type: "string", description: "The specific name of a real venue, restaurant, or experience to replace the current one. Must be a concrete, real place name (e.g. 'Trattoria da Mario', 'Self-guided walk through Montmartre') — NOT a generic description like 'lower cost restaurant' or 'cheaper option'." },
-                  new_cost: { type: "number", description: "New cost in whole currency units (e.g. 30 for $30)" },
+                  new_cost: { type: "number", description: "Suggested swap cost as the PER-PERSON value (same denomination as current_cost). DO NOT multiply by traveler count. Return the exact per-person dollar value." },
                   savings: { type: "number", description: "Savings in whole currency units" },
                   reason: { type: "string", description: "Brief explanation of why this swap saves money (shown in coach panel only)" },
                   suggested_description: { type: "string", description: "A short, experience-focused description of the replacement activity as it should appear on the itinerary card (e.g. 'Grab gourmet sandwiches from Lenwich and enjoy a picnic in Central Park'). Do NOT include budget reasoning here." },
