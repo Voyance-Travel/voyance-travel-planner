@@ -1310,6 +1310,15 @@ export function buildRegularDayPrompt(
   lines.push(`   - A description that doesn't add insider value will be flagged and trigger a regeneration pass.`);
   lines.push('');
 
+  lines.push(`   🎯 COMMIT TO ONE VENUE (HARD RULE):`);
+  lines.push(`   Each activity card represents ONE chosen venue. The "title", "venue.name", "location.name", and "description" MUST all name the same single venue.`);
+  lines.push(`   - BANNED: "Visit Pinacoteca Contemporânea (or the nearby MAM)", "Dinner at Baretto or alternatively Evvai", "Either Tate Modern or the Hayward".`);
+  lines.push(`   - BANNED phrases anywhere in description/notes/tips: "or the nearby …", "or alternatively …", "either … or …", "or a nearby …".`);
+  lines.push(`   - If you are unsure which venue to pick, pick the one with the higher rating and commit. Never hedge.`);
+  lines.push('');
+
+
+
   lines.push(`   TRANSIT REQUIREMENTS (between EVERY consecutive activity):`);
   lines.push(`   - Include as category: "transport" activities between stops`);
   lines.push(`   - Mode: walk, taxi, metro/tube/subway, bus, tram, rideshare`);
