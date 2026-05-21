@@ -37,6 +37,7 @@ import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-booke
 import { scrubBodyPromptLeaks, scrubTitleLeaks, buildDayScheduleSummary } from '../../_shared/prompt-leak-scrub.ts';
 import { scrubActivity, formatOps, opsHadChange } from '../../_shared/scrub-activity.ts';
 import { validateClosingHours } from '../../_shared/venue-hours-validator.ts';
+import { validateDayConsistency } from '../../_shared/output-consistency.ts';
 import {
   CATEGORY_PRICE_CEILINGS,
   inferSubcategory,
@@ -3891,6 +3892,17 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     _dayOut.metadata = _dayOut.metadata || {};
     _dayOut.metadata.quality = _dayOut.metadata.quality || {};
     _dayOut.metadata.quality.hours_violations = _hoursResult.violations;
+  }
+
+  // ── Output consistency pass (title-time mismatch) ──
+  const _consistencyIssues = validateDayConsistency({ dayNumber, activities });
+  if (_consistencyIssues.length > 0) {
+    for (const issue of _consistencyIssues) {
+      console.warn(`[consistency] Day ${dayNumber} ${issue.type}: ${issue.detail}. ${issue.suggestion}`);
+    }
+    _dayOut.metadata = _dayOut.metadata || {};
+    _dayOut.metadata.quality = _dayOut.metadata.quality || {};
+    _dayOut.metadata.quality.consistency_issues = _consistencyIssues;
   }
 
   return {
