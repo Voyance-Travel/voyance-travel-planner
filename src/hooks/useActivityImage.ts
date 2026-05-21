@@ -98,16 +98,17 @@ async function resolveDestinationId(destination: string): Promise<string | null>
   if (destinationIdCache.has(key)) return destinationIdCache.get(key)!;
   try {
     // Match the "City" portion (text before the first comma) — destinations table
-    // typically stores "Paris" not "Paris, France".
+    // stores city names like "Paris", not "Paris, France".
     const cityPart = key.split(',')[0].trim();
     const { data } = await supabase
       .from('destinations')
-      .select('id, name')
-      .ilike('name', cityPart)
+      .select('id, city')
+      .ilike('city', cityPart)
       .limit(1);
     const id = data?.[0]?.id ?? null;
     destinationIdCache.set(key, id);
     return id;
+
   } catch {
     destinationIdCache.set(key, null);
     return null;
