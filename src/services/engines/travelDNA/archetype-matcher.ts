@@ -491,7 +491,7 @@ export function matchArchetypes(
   return {
     primary,
     secondary,
-    allMatches: matches.filter(m => m.score > 0),
+    allMatches: matches.filter(m => isFinite(m.score)),
     traitScores: scores,
     lifeStage,
   };
