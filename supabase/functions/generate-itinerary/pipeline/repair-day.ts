@@ -37,6 +37,7 @@ import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-booke
 import { scrubBodyPromptLeaks, scrubTitleLeaks, buildDayScheduleSummary } from '../../_shared/prompt-leak-scrub.ts';
 import { scrubActivity, formatOps, opsHadChange } from '../../_shared/scrub-activity.ts';
 import { validateClosingHours } from '../../_shared/venue-hours-validator.ts';
+import { validateDayConsistency } from '../../_shared/output-consistency.ts';
 import {
   CATEGORY_PRICE_CEILINGS,
   inferSubcategory,
