@@ -120,7 +120,7 @@ export default function ReviewsDrawer({
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-xl p-0 flex flex-col">
+      <SheetContent side="right" className="w-full sm:max-w-xl p-0 flex flex-col h-full">
         <SheetHeader className="p-6 border-b border-border shrink-0">
           <SheetTitle className="flex items-center gap-2">
             <Star className="w-5 h-5 text-amber-500" />
@@ -131,7 +131,7 @@ export default function ReviewsDrawer({
           </SheetDescription>
         </SheetHeader>
 
-        <ScrollArea className="flex-1">
+        <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="p-6 space-y-6">
             {/* Loading State */}
             {loading && (
@@ -421,7 +421,7 @@ export default function ReviewsDrawer({
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Photo Modal */}
         {selectedPhoto && (
