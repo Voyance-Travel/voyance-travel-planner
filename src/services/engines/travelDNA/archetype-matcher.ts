@@ -401,7 +401,7 @@ export function matchArchetypes(
   scores: TraitScores,
   lifeStage: string | null
 ): MatchResult {
-  const matches: ArchetypeMatch[] = [];
+  let matches: ArchetypeMatch[] = [];
 
   for (const [archetypeId, profile] of Object.entries(archetypeProfiles)) {
     const match = calculateArchetypeScore(archetypeId, profile, scores, lifeStage);
@@ -413,6 +413,19 @@ export function matchArchetypes(
 
   // Sort by score descending
   matches.sort((a, b) => b.score - a.score);
+
+  // Gate-failure fallback: if no archetype passes any required gate (all -Infinity),
+  // re-score with bypassGates=true so we still surface a meaningful primary AND secondary
+  // instead of arbitrary iteration order + null secondary.
+  if (!matches.length || !isFinite(matches[0].score)) {
+    console.log('[ArchetypeMatcher] All archetypes gate-failed — re-scoring with soft gates');
+    matches = [];
+    for (const [archetypeId, profile] of Object.entries(archetypeProfiles)) {
+      if (profile.isDefault) continue;
+      matches.push(calculateArchetypeScore(archetypeId, profile, scores, lifeStage, true));
+    }
+    matches.sort((a, b) => b.score - a.score);
+  }
 
   // Diagnostic logging
   console.log('[ArchetypeMatcher] Top 5 matches:',
