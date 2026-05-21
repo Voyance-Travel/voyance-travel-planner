@@ -493,6 +493,7 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
 
     // Missing buffer — activities < 5 min apart (excluding transit)
     for (let i = 0; i < timed.length - 1; i++) {
+      if (_untimedIds.has(String((timed[i] as any)?.source?.id || '')) || _untimedIds.has(String((timed[i + 1] as any)?.source?.id || ''))) continue;
       const gap = timed[i + 1].start - timed[i].end;
       if (gap > 0 && gap < 5) {
         const isTransit =
