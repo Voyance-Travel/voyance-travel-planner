@@ -335,15 +335,25 @@ export interface TransitEstimate {
   durationMinutes: number;
   distance: string;
   recommended?: boolean;
+  /** True when coords were missing — minutes are a best-guess default. */
+  unverified?: boolean;
 }
 
+/**
+ * Estimate the walk/transit/taxi time between two activities from coords.
+ * Returns `null` when coords are missing (preserved for legacy callers).
+ *
+ * Hard floor: anything more than a same-building hop (~80m) takes at least
+ * 4 min — closes "AI-emitted 5 min walk between distant venues" leak.
+ */
 export function estimateTransit(a: CascadeActivity, b: CascadeActivity): TransitEstimate | null {
   if (a.location?.lat == null || b.location?.lat == null || a.location?.lng == null || b.location?.lng == null) return null;
   const distMeters = haversineMeters(
     { lat: a.location.lat, lng: a.location.lng },
     { lat: b.location.lat, lng: b.location.lng }
   );
-  const walkMin = Math.ceil(distMeters / 80);
+  const walkMinRaw = Math.ceil(distMeters / 80);
+  const walkMin = distMeters >= 80 ? Math.max(4, walkMinRaw) : walkMinRaw;
   const taxiMin = Math.max(3, Math.ceil(distMeters / 400));
   const isWalkable = walkMin <= 15;
   return {
@@ -353,6 +363,26 @@ export function estimateTransit(a: CascadeActivity, b: CascadeActivity): Transit
     durationMinutes: isWalkable ? walkMin : distMeters < 10000 ? Math.max(5, Math.ceil(distMeters / 500) + 5) : taxiMin,
     distance: distMeters < 1000 ? `${Math.round(distMeters)}m` : `${(distMeters / 1000).toFixed(1)}km`,
     recommended: true,
+  };
+}
+
+/**
+ * Best-effort estimate that never returns null. Missing coords → typed
+ * `unverified` walking estimate (15 min); the recompute pass flags the card
+ * `metadata.transit_unverified=true` so the FE health panel can suppress
+ * downstream "5 min conflict" warnings on cards we can't actually validate.
+ */
+export function estimateTransitOrUnverified(a: CascadeActivity, b: CascadeActivity): TransitEstimate {
+  const est = estimateTransit(a, b);
+  if (est) return est;
+  return {
+    fromId: a.id,
+    toId: b.id,
+    method: 'walking',
+    durationMinutes: 15,
+    distance: 'unknown',
+    recommended: false,
+    unverified: true,
   };
 }
 
