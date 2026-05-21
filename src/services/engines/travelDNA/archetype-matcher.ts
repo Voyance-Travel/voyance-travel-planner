@@ -246,7 +246,8 @@ function calculateArchetypeScore(
   archetypeId: string,
   profile: ArchetypeProfile,
   scores: TraitScores,
-  lifeStage: string | null
+  lifeStage: string | null,
+  bypassGates: boolean = false
 ): ArchetypeMatch {
   let score = 0;
   const matchedRequirements: string[] = [];
