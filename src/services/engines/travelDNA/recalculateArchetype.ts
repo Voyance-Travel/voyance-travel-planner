@@ -28,7 +28,7 @@ export async function recalculateArchetype(userId: string): Promise<RecalculateR
 
   const { data, error } = await supabase
     .from("travel_dna_profiles")
-    .select("trait_scores")
+    .select("trait_scores, secondary_archetype_name")
     .eq("user_id", userId)
     .maybeSingle();
 
