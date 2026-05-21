@@ -24,7 +24,7 @@ import { useErrorTracker } from '@/hooks/useErrorTracker';
 
 // Providers
 import { AuthProvider } from "@/contexts/AuthContext";
-import DNARecalcOnVisit from "@/components/system/DNARecalcOnVisit";
+// DNARecalcOnVisit removed — see note at usage site
 import { TripPlannerProvider } from "@/contexts/TripPlannerContext";
 import { QuizProvider } from "@/contexts/QuizContext";
 import { OutOfCreditsProvider } from "@/contexts/OutOfCreditsContext";
