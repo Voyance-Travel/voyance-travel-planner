@@ -267,14 +267,17 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
       });
     }
 
-    // Gate: skip timing checks if any non-transit activity is missing start/end.
-    // Prevents phantom overlap/buffer warnings from optimistic edits or partial hydration.
-    const allTimed = realActivities.every((a: any) => {
-      if (isTransitLike(a.category, a.name || a.title)) return true;
+    // Per-pair gate: skip individual pair checks when either endpoint lacks
+    // times, but don't disable all overlap detection on the day. Rome regression:
+    // one untimed stub card was hiding 5 visible overlaps from the user.
+    const _untimedIds = new Set<string>();
+    for (const a of realActivities) {
+      if (isTransitLike(a.category, a.name || a.title)) continue;
       const idx = activities.indexOf(a);
-      return !!getDisplayStartTime(a, cascadePreview, idx) && !!getDisplayEndTime(a, cascadePreview, idx);
-    });
-    if (!allTimed) return;
+      if (!getDisplayStartTime(a, cascadePreview, idx) || !getDisplayEndTime(a, cascadePreview, idx)) {
+        _untimedIds.add(String(a?.id || ''));
+      }
+    }
 
 
     // Buffer/conflict passes still source from `activities` (NOT realActivities)
