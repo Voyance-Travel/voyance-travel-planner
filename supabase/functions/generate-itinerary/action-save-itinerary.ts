@@ -1399,6 +1399,15 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         : {}),
     },
   };
+
+  // ── Trip-level duplicate-theme consistency check (observe-only) ──
+  const _themeIssues = validateDayThemes((itinerary as any).days || []);
+  if (_themeIssues.length > 0) {
+    for (const issue of _themeIssues) {
+      console.warn(`[consistency] ${issue.type}: ${issue.detail}. ${issue.suggestion}`);
+    }
+  }
+
   const { error, regressionBlocked } = await persistTripItinerary(supabase, tripId, itinerary, {
     destination: (currentTrip as any)?.destination ?? null,
     extraUpdate,
