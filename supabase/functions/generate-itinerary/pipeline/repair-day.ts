@@ -3894,6 +3894,17 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     _dayOut.metadata.quality.hours_violations = _hoursResult.violations;
   }
 
+  // ── Output consistency pass (title-time mismatch) ──
+  const _consistencyIssues = validateDayConsistency({ dayNumber, activities });
+  if (_consistencyIssues.length > 0) {
+    for (const issue of _consistencyIssues) {
+      console.warn(`[consistency] Day ${dayNumber} ${issue.type}: ${issue.detail}. ${issue.suggestion}`);
+    }
+    _dayOut.metadata = _dayOut.metadata || {};
+    _dayOut.metadata.quality = _dayOut.metadata.quality || {};
+    _dayOut.metadata.quality.consistency_issues = _consistencyIssues;
+  }
+
   return {
     day: _dayOut,
     repairs,
