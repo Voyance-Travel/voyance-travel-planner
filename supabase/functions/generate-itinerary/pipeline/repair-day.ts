@@ -3865,8 +3865,20 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     for (const a of activities) normalizeActivityDuration(a);
   } catch { /* non-blocking */ }
 
+  // ── Closing-hours observational pass ──
+  const _hoursResult = validateClosingHours(activities);
+  const _dayOut: any = { ...input.day, activities };
+  if (_hoursResult.violations.length > 0) {
+    for (const v of _hoursResult.violations) {
+      console.warn(`[venue-hours] Day ${dayNumber} violation: ${v.title} — ${v.reason}`);
+    }
+    _dayOut.metadata = _dayOut.metadata || {};
+    _dayOut.metadata.quality = _dayOut.metadata.quality || {};
+    _dayOut.metadata.quality.hours_violations = _hoursResult.violations;
+  }
+
   return {
-    day: { ...input.day, activities },
+    day: _dayOut,
     repairs,
   };
 }
