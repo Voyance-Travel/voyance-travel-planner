@@ -215,11 +215,30 @@ export default function ReviewsDrawer({
                       </a>
                     </div>
                   )}
-                  {place.openNow !== undefined && (
+                  {(place.openingHours && place.openingHours.length > 0) && (
+                    <div className="flex items-start gap-2">
+                      <Clock className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                      <div className="flex-1 text-sm text-muted-foreground">
+                        <div className="font-medium mb-1">
+                          {place.openNow ? (
+                            <span className="text-green-600">Open now</span>
+                          ) : (
+                            <span className="text-red-500">Closed now</span>
+                          )}
+                        </div>
+                        <ul className="text-xs space-y-0.5">
+                          {place.openingHours.map((line: string, idx: number) => (
+                            <li key={idx}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                  {(!place.openingHours || place.openingHours.length === 0) && place.openNow !== undefined && (
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 text-muted-foreground" />
                       <span className={place.openNow ? 'text-green-600' : 'text-red-500'}>
-                        {place.openNow ? 'Open now' : 'Closed'}
+                        {place.openNow ? 'Open now' : 'Closed now'}
                       </span>
                     </div>
                   )}

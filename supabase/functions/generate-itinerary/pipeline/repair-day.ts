@@ -36,6 +36,7 @@ import { enforceTimingAndBuffers, pruneOrphanLateNightlifeBookend } from '../../
 import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
 import { scrubBodyPromptLeaks, scrubTitleLeaks, buildDayScheduleSummary } from '../../_shared/prompt-leak-scrub.ts';
 import { scrubActivity, formatOps, opsHadChange } from '../../_shared/scrub-activity.ts';
+import { validateClosingHours } from '../../_shared/venue-hours-validator.ts';
 import {
   CATEGORY_PRICE_CEILINGS,
   inferSubcategory,
@@ -3865,8 +3866,20 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     for (const a of activities) normalizeActivityDuration(a);
   } catch { /* non-blocking */ }
 
+  // ── Closing-hours observational pass ──
+  const _hoursResult = validateClosingHours(activities);
+  const _dayOut: any = { ...input.day, activities };
+  if (_hoursResult.violations.length > 0) {
+    for (const v of _hoursResult.violations) {
+      console.warn(`[venue-hours] Day ${dayNumber} violation: ${v.title} — ${v.reason}`);
+    }
+    _dayOut.metadata = _dayOut.metadata || {};
+    _dayOut.metadata.quality = _dayOut.metadata.quality || {};
+    _dayOut.metadata.quality.hours_violations = _hoursResult.violations;
+  }
+
   return {
-    day: { ...input.day, activities },
+    day: _dayOut,
     repairs,
   };
 }
