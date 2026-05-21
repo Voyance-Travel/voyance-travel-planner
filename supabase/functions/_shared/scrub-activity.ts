@@ -231,14 +231,16 @@ export function addOps(a: ScrubOps, b: ScrubOps): ScrubOps {
     phantomRef: a.phantomRef + b.phantomRef,
     degenerate: a.degenerate + b.degenerate,
     addressCity: a.addressCity + b.addressCity,
+    hedged: a.hedged + b.hedged,
   };
 }
 
 export function opsHadChange(o: ScrubOps): boolean {
   return o.titleLeak + o.bodyLeak + o.fragment + o.mealSuffix
        + o.crossCity + o.countryMismatch + o.mealLabel + o.downgraded
-       + o.phantomRef + o.degenerate + o.addressCity > 0;
+       + o.phantomRef + o.degenerate + o.addressCity + o.hedged > 0;
 }
+
 
 /** Compact one-line render for logs. */
 export function formatOps(o: ScrubOps): string {
