@@ -39,6 +39,34 @@ function setLocalCache(key: string, url: string, source: string): void {
   }
 }
 
+// One-shot purge of legacy unscoped shared_attraction/shared_activity cache entries.
+// Earlier versions of fetchFromSharedTables ran an unscoped `ilike '%title%'` which
+// matched venues across cities (e.g. "MAM" → Dubrovnik photo). Those poisoned URLs
+// were cached in localStorage; flush them once so users self-heal on next load.
+const SHARED_CACHE_PURGE_KEY = 'voyance_photo_purge_v2';
+function purgeLegacySharedCacheOnce(): void {
+  try {
+    if (localStorage.getItem(SHARED_CACHE_PURGE_KEY)) return;
+    const keysToDelete: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(CACHE_KEY_PREFIX)) continue;
+      try {
+        const parsed = JSON.parse(localStorage.getItem(k) || '{}');
+        if (parsed.source === 'shared_attraction' || parsed.source === 'shared_activity') {
+          keysToDelete.push(k);
+        }
+      } catch { /* ignore */ }
+    }
+    keysToDelete.forEach(k => localStorage.removeItem(k));
+    localStorage.setItem(SHARED_CACHE_PURGE_KEY, String(Date.now()));
+    if (keysToDelete.length) {
+      console.log(`[ActivityImage] Purged ${keysToDelete.length} legacy unscoped photo cache entries`);
+    }
+  } catch { /* ignore */ }
+}
+purgeLegacySharedCacheOnce();
+
 // In-memory cache for same-session dedup
 const imageCache = new Map<string, { url: string; source: string }>();
 
@@ -61,37 +89,74 @@ function getCacheKey(title: string, destination?: string, cacheId?: string): str
   return normalized;
 }
 
-// ── Cross-share: Check attractions & activities tables ───────────────────────
+// ── Resolve destination_id from a destination name (cached per session) ──────
+const destinationIdCache = new Map<string, string | null>();
+
+async function resolveDestinationId(destination: string): Promise<string | null> {
+  const key = destination.trim().toLowerCase();
+  if (!key) return null;
+  if (destinationIdCache.has(key)) return destinationIdCache.get(key)!;
+  try {
+    // Match the "City" portion (text before the first comma) — destinations table
+    // typically stores "Paris" not "Paris, France".
+    const cityPart = key.split(',')[0].trim();
+    const { data } = await supabase
+      .from('destinations')
+      .select('id, name')
+      .ilike('name', cityPart)
+      .limit(1);
+    const id = data?.[0]?.id ?? null;
+    destinationIdCache.set(key, id);
+    return id;
+  } catch {
+    destinationIdCache.set(key, null);
+    return null;
+  }
+}
+
+// ── Cross-share: Check attractions & activities tables (DESTINATION-SCOPED) ──
+// Earlier version did an unscoped `.ilike('name','%title%')` which matched
+// venues across cities — e.g. a São Paulo MAM activity grabbed a Dubrovnik
+// photo. We now require:
+//   1. A resolvable destination_id for the trip destination
+//   2. Title length > 4 chars (3-letter acronyms like "MAM" are unsafe even scoped)
+//   3. URL passes isUntrustedHeroUrl
 async function fetchFromSharedTables(
   title: string,
   destination: string
 ): Promise<{ url: string; source: string } | null> {
   try {
     const cleanTitle = title.replace(STRIP_PREFIXES, '').trim();
-    if (cleanTitle.length < 3) return null;
+    if (cleanTitle.length <= 4) return null; // skip short titles & acronyms
 
-    // Try attractions table first (higher quality data)
+    const destId = await resolveDestinationId(destination);
+    if (!destId) return null; // can't scope → don't risk cross-city leak
+
+    // attractions first (richer data)
     const { data: attraction } = await supabase
       .from('attractions')
       .select('image_url, name')
+      .eq('destination_id', destId)
       .not('image_url', 'is', null)
       .ilike('name', `%${cleanTitle}%`)
       .limit(1);
 
-    if (attraction?.[0]?.image_url) {
-      return { url: attraction[0].image_url, source: 'shared_attraction' };
+    const aUrl = attraction?.[0]?.image_url;
+    if (aUrl && !isUntrustedHeroUrl(aUrl)) {
+      return { url: aUrl, source: 'shared_attraction' };
     }
 
-    // Try activities table
     const { data: activity } = await supabase
       .from('activities')
       .select('image_url, name')
+      .eq('destination_id', destId)
       .not('image_url', 'is', null)
       .ilike('name', `%${cleanTitle}%`)
       .limit(1);
 
-    if (activity?.[0]?.image_url) {
-      return { url: activity[0].image_url, source: 'shared_activity' };
+    const vUrl = activity?.[0]?.image_url;
+    if (vUrl && !isUntrustedHeroUrl(vUrl)) {
+      return { url: vUrl, source: 'shared_activity' };
     }
 
     return null;
@@ -99,6 +164,7 @@ async function fetchFromSharedTables(
     return null;
   }
 }
+
 
 // ── Write-back resolved photo to shared tables (fire-and-forget) ─────────────
 function writeBackToSharedTables(title: string, photoUrl: string): void {
