@@ -42,6 +42,7 @@ export interface HoursViolation {
   reason: string;
 }
 
+/** validateClosingHours — flags activities scheduled past a venue's typical close. */
 export function validateClosingHours(activities: any[]): { violations: HoursViolation[] } {
   const violations: HoursViolation[] = [];
   if (!Array.isArray(activities)) return { violations };
