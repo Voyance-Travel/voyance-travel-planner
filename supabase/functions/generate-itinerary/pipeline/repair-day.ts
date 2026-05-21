@@ -36,6 +36,7 @@ import { enforceTimingAndBuffers, pruneOrphanLateNightlifeBookend } from '../../
 import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
 import { scrubBodyPromptLeaks, scrubTitleLeaks, buildDayScheduleSummary } from '../../_shared/prompt-leak-scrub.ts';
 import { scrubActivity, formatOps, opsHadChange } from '../../_shared/scrub-activity.ts';
+import { validateClosingHours } from '../../_shared/venue-hours-validator.ts';
 import {
   CATEGORY_PRICE_CEILINGS,
   inferSubcategory,
