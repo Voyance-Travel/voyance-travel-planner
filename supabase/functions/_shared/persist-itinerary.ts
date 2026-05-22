@@ -562,7 +562,10 @@ export async function persistTripItinerary(
     // metadata and fell back to generic "find a local spot" stubs,
     // ignoring user must-do spots. The regression-blocked branch
     // above already does this; mirror it here.
-    if (extra.metadata && typeof extra.metadata === 'object') {
+    const callerMetaSuccess = (extra.metadata && typeof extra.metadata === 'object')
+      ? extra.metadata as Record<string, any>
+      : null;
+    if (callerMetaSuccess || chronologyTrace) {
       let priorMeta = oldMetadata;
       if (!priorMeta) {
         try {
@@ -571,12 +574,16 @@ export async function persistTripItinerary(
           priorMeta = (priorRow?.metadata as Record<string, any>) || {};
         } catch (_e) { priorMeta = {}; }
       }
-      const callerMetaSuccess = extra.metadata as Record<string, any>;
-      updatePayload.metadata = {
+      const merged: Record<string, any> = {
         ...(priorMeta || {}),
-        ...callerMetaSuccess,
+        ...(callerMetaSuccess || {}),
       };
-      console.log(`[persist-itinerary] meta-merge (success) tripId=${tripId} priorMustDo=${!!(priorMeta as any)?.mustDoActivities} newMustDo=${!!callerMetaSuccess?.mustDoActivities} priorAnchors=${Array.isArray((priorMeta as any)?.userAnchors) ? (priorMeta as any).userAnchors.length : 0}`);
+      if (chronologyTrace) {
+        const priorQuality = (merged.quality && typeof merged.quality === 'object') ? merged.quality : {};
+        merged.quality = { ...priorQuality, chronology_trace: chronologyTrace };
+      }
+      updatePayload.metadata = merged;
+      console.log(`[persist-itinerary] meta-merge (success) tripId=${tripId} priorMustDo=${!!(priorMeta as any)?.mustDoActivities} newMustDo=${!!callerMetaSuccess?.mustDoActivities} chronologyTrace=${chronologyTrace ? `pre=${chronologyTrace.issues_pre}/post=${chronologyTrace.issues_post}` : 'none'}`);
     }
   }
 
