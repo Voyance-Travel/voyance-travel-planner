@@ -250,6 +250,37 @@ export async function persistTripItinerary(
     console.warn(`[${label}] cross-day bleed guard failed (non-blocking):`, e);
   }
 
+  // 3a-bis. Chronology validator — sorts each day's activities by
+  // wrap-aware dayChronoKey and drops any leftover predawn non-bookend
+  // rows on Day N>=2 that earlier passes missed. This is the chokepoint
+  // that catches all write paths (chat executor / restore-version /
+  // manual upsert / optimistic save) which bypass action-save-itinerary's
+  // pre-save enforceTimingAndBuffers sort. Stamps
+  // metadata.quality.chronology_trace for observability.
+  // See mem://constraints/itinerary/chronology-validator-three-gates.
+  let chronologyTrace: Record<string, any> | null = null;
+  try {
+    const { validateChronology } = await import('./chronology-validator.ts');
+    const v = validateChronology(days, { site: label });
+    if (v.healed) {
+      for (let i = 0; i < days.length; i++) days[i] = v.days[i];
+      if (itinerary && typeof itinerary === 'object') {
+        (itinerary as any).days = days;
+      }
+    }
+    chronologyTrace = {
+      at: new Date().toISOString(),
+      issues_pre: v.issues.length,
+      issues_post: v.remainingIssues.length,
+      sorted_days: v.sortedDayCount,
+      dropped: v.droppedCount,
+      critical_after_heal: v.criticalAfterHeal,
+      sample: v.remainingIssues.slice(0, 5),
+    };
+  } catch (e) {
+    console.warn(`[${label}] chronology validator failed (non-blocking):`, e);
+  }
+
   // 3b. Dining description deterministic safety net — guarantees no dining
   // card persists with an empty `description`. Runs at the single boundary
   // so every write path (final-save, save-itinerary, repair-costs, lock
