@@ -1025,6 +1025,24 @@ export function parseItineraryDays(
     }
   }
 
+  // Step 4c: Chronology validator — final read-time sort + predawn-strip
+  // mirror of the persist boundary. Catches manually-inserted / restored /
+  // chat-action-applied days that were persisted out-of-order, so the
+  // customer never sees "9 AM → 12 PM → 6 AM" timelines while waiting for
+  // the next save to re-sort. Pure display heal — never mutates DB; the
+  // next persist boundary will canonicalize permanently.
+  // See mem://constraints/itinerary/chronology-validator-three-gates.
+  try {
+    const { validateChronology } = require('@/lib/itinerary/chronologyValidator') as
+      typeof import('@/lib/itinerary/chronologyValidator');
+    const v = validateChronology(result, { site: 'parser-step4c' });
+    if (v.healed) {
+      result = v.days as typeof result;
+    }
+  } catch (e) {
+    console.warn('[itineraryParser] chronology validator failed (non-blocking):', e);
+  }
+
   // Step 5: Day-count mismatch detection (diagnostic only, skip for partial/in-progress data)
   if (tripStartDate && tripEndDate && !options?.partial) {
     try {
