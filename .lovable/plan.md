@@ -1,79 +1,64 @@
-# Audit: Trip `44a68e13` — Milan, Jun 4–6 2026
+# Audit: Missing user must-haves — Milan trip `44a68e13`
 
-## What's actually broken (from `trips.metadata.persist_validation`)
+## What the user asked for (from start form)
 
-The trip is `status=ready`, `itinerary_frozen_at=2026-05-22T11:02:49Z`, `fully_persisted=true`. Save-time validation ran two minutes after the freeze and recorded these defects — but the freeze blocks any repair, so they stay on screen.
+`metadata.mustDoActivities`:
+1. **Duomo di Milano**
+2. **Brera Art Gallery**
+3. **pasta night**
 
-### Day 1 (Jun 4) — pre-dawn cascade
+## What's actually in the itinerary
 
-Six activities scheduled between **01:44 and 08:10 AM**, then a normal evening:
+| Must-do | Status | Evidence |
+|---|---|---|
+| Duomo di Milano | **MISSING** | Not present on any of the 3 days. Closest reference is Day 1 dinner "Cracco in Galleria" (adjacent to Duomo but not the cathedral visit). |
+| Brera Art Gallery | Present | Day 2 09:30 "Explore Brera Art Gallery Masterpieces" |
+| Pasta night | **Ambiguous / not honored** | Day 1 dinner = Cracco (fine-dining tasting, not pasta-forward). Day 2 dinner = Ristorante Berton (modern Italian, 2-star). No card titled or themed as a pasta night. Day 2 lunch at Trattoria Milanese is the only traditional Italian slot but it's lunch, not dinner. |
 
-```text
-01:44 Breakfast at Pavé
-03:09 Duomo Terraces & Cathedral
-04:57 Lunch at Giacomo Caffè
-06:02 Metro to 5 Vie
-06:19 Free roam 5 Vie
-07:54 Travel to ME Milan Il Duca
-08:15 Check-in
-09:05 Bike rental walk
-...   (normal day continues to 20:40 hotel return)
-```
+Score: **1 of 3 must-dos honored.**
 
-`persist_validation.errors`: 3× `PHANTOM_PREDAWN_CARD`.
+## Root cause
 
-Root cause chain:
-1. `metadata.generation_context.flight` / `arrivalTime` / `departureTime` are **all null**, and `meal_policy_at_generation` is **null**. The generator had no arrival clock for Day 1.
-2. With no clock, the Day-1 brief defaulted to "full day, breakfast required" — but seeded breakfast at hotel check-in time minus a meal stack walking backward, producing 01:44 AM.
-3. `normalizePredawnCascade` (Core: "Pre-Dawn Cascade Defense Layer") only shifts a **leading consecutive** `[00:00, 05:00)` block on **Day N ≥ 2**. It explicitly skips Day 1 and stops at the first non-exempt gap, so it never fires here.
-4. Trip got frozen at 11:02:49 with `fully_persisted=true`; validation at 11:04:57 logged the errors as advisory. The Frozen-After-Ready guard silently no-ops any `self-heal-*` save, so the pre-dawn block is now permanent until a user-initiated edit.
+`trip_day_intents` is **empty** for this trip (0 rows). The 3 must-dos from the start form never made it into the intents table, so:
 
-### Day 3 (Jun 6) — departure-day overlap + missing lunch
+- `compile-prompt.ts` had no USER WISHES injection on any day brief
+- `ledger-check` could not flag `missing_user_intent_soft`
+- The generator was free to pick any landmark / dinner theme
 
-```text
-08:30 Breakfast: Sartoria Gastronomica
-10:35 Golden Hour Group Walk through Brera  (ends 12:05)
-11:00 Checkout from ME Milan Il Duca         (ends 11:30)
-```
+This is the exact leak that the `Trip-Wide Intents Injected` core memory documents — `action-generate-trip-day` was patched on 2026-05-?? to call `seedDayIntentsFromMetadata`, but this trip was generated **before** that fix (or the chain-finalization path didn't run it). Both `mustDoActivities` and `userAnchors` are present in metadata but were never seeded.
 
-- `persist_validation.errors`: 1× `MISSING_REQUIRED_MEAL` (Day 3 missing lunch). This is a false positive — Day 3 is a departure day, lunch should be dropped, not required. No `savedDepartureTime24` in metadata → departure-day classifier didn't fire, so the meal policy still demands lunch.
-- The 10:35–12:05 walk straddles the 11:00 checkout (post-checkout leisure leak). §15z `enforceDepartureDayLogistics` should have pruned the walk or moved checkout, but ran without a flight clock and gave up.
+## Plan
 
-### Day 2 — clean except for a 6h gap warning
+### A. One-shot data heal for this trip
 
-13:30 lunch → 16:45 freshen-up → 19:00 dinner. Warning is cosmetic (mid-afternoon rest window for a 3-day trip), low priority.
+1. Seed `trip_day_intents` rows for the 3 must-dos (trip-wide, `day_number=NULL`, priority `should`):
+   - "Duomo di Milano" (landmark)
+   - "Brera Art Gallery" (landmark — mark `fulfilled` immediately, points to Day 2 activity)
+   - "Pasta night" (dining intent)
+2. Bypass the freeze gate (use `self-heal-seed-intents` save reason — add to `INTEGRITY_HEAL_SAVE_REASONS` allowlist).
+3. Trigger a single targeted repair pass that:
+   - **Day 1**: inserts a 60-min Duomo di Milano visit (afternoon, before Navigli bike) — Duomo is 5 min walk from Cracco/Galleria anyway, fits the existing geography.
+   - **Day 2 dinner**: swap Berton → a pasta-forward dinner venue (e.g. Trattoria Trippa, Ratanà, or Da Giacomo). Mark as the "pasta night."
+4. Re-mark Brera intent as `fulfilled`.
 
-## What to fix
+### B. Systemic guard so this trip class self-heals on next load
 
-Strictly the data path; no UI redesign.
+Add `TripDetail` mount-time check: if `trips.metadata.mustDoActivities.length > 0` AND `trip_day_intents` count = 0, call a new `backfill-trip-intents` edge endpoint once (gated by a `metadata.intents_backfilled_at` stamp to prevent loops). This catches every legacy trip silently — not just Milan.
 
-### A. Drop the freeze bypass for `PHANTOM_PREDAWN_CARD`
+### C. Optional: UI surface
 
-In `safeUpdateItineraryData` + `action-save-itinerary`, allow `self-heal-*` writes through the freeze guard **only when** `metadata.persist_validation.errors` contains one of: `PHANTOM_PREDAWN_CARD`, `LOGISTICS_SEQUENCE`, `POST_CHECKOUT_LEISURE`. Same trip stays frozen for everything else.
-
-### B. Extend `normalizePredawnCascade` to Day 1
-
-Today the helper skips Day 1 because arrival-day timing is "user-known". Change to: when **any** activity on **any day** starts in `[00:00, 05:00)` and is not bookend/locked/departure-logistics, shift the entire leading block to start `09:00` (or `arrivalLocalTime + 60min` when known). Preserve relative spacing. Sentinel `[PREDAWN_CASCADE_NORMALIZE day=1]`.
-
-Wire at the same 3 sites already used: `action-save-itinerary`, `itineraryParser` Step 4, lazy heal in `TripDetail` (now allowed through the freeze gate via A).
-
-### C. Backfill departure-day metadata at save time
-
-If `metadata.savedDepartureTime24` / `savedArrivalTime24` are null, infer from `itinerary_data.days[last].activities` last logistics card (checkout / airport-transfer / flight) and persist back to `metadata`. This unblocks `enforceDepartureDayLogistics` §15z and `meal_policy_at_generation` re-derivation for this trip and all legacy peers.
-
-### D. One-shot heal of this trip
-
-After A+B+C ship, dispatch `safeUpdateItineraryData(tripId, days, { reason:'self-heal-predawn-cascade', allowFrozenWrite:true })` once for `44a68e13` to clear the recorded errors and re-render.
+In the itinerary header, render a small "Must-do coverage: 1/3" pill that expands to show which intents were honored, partially honored, or missed. Reads from `trip_day_intents.status`. Out of scope for this heal but worth queueing as a follow-up.
 
 ## Out of scope
 
-- Day 2 6h afternoon gap warning (cosmetic).
-- Frontend "Fix Timing" CTA copy.
-- Cost / budget surfaces (untouched by this audit).
+- The 6h Day 2 afternoon gap (separate cosmetic issue)
+- Day 3 brevity (departure day, expected)
+- Cost / budget surfaces
 
 ## Acceptance
 
-- `persist_validation.errors=[]` for `44a68e13` after one heal cycle.
-- Day 1 cards re-cascade to start ≥ 09:00.
-- Day 3 lunch requirement drops; 10:35 walk either moves before 11:00 checkout or is pruned.
-- A second Milan trip generated without arrival flight metadata reproduces the bug on `main`, passes on this branch.
+- `trip_day_intents` has 3 rows for `44a68e13`
+- Day 1 contains a Duomo di Milano activity
+- Day 2 dinner is pasta-forward
+- All 3 intents show `status = fulfilled`
+- A freshly generated trip on `main` with `mustDoActivities` set still seeds intents correctly (regression check on the systemic guard)
