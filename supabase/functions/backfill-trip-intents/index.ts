@@ -19,7 +19,7 @@
  */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
-import { seedDayIntentsFromMetadata, fulfillIntentsByTitleMatch } from '../_shared/day-intents-store.ts';
+import { seedDayIntentsFromMetadata, reconcileFulfillment } from '../_shared/day-intents-store.ts';
 
 interface ReqBody {
   tripId: string;
@@ -99,15 +99,15 @@ Deno.serve(async (req) => {
       seeded = await seedDayIntentsFromMetadata(svc, trip as any, totalDays, trip.user_id);
 
       // Mark fulfilled intents by scanning persisted activities
-      if (seeded > 0) {
+      if (seeded > 0 && days.length > 0) {
         try {
-          for (let i = 0; i < days.length; i++) {
-            const dayNum = i + 1;
-            const acts = Array.isArray(days[i]?.activities) ? days[i].activities : [];
-            await fulfillIntentsByTitleMatch(svc, tripId, dayNum, acts);
-          }
+          const daysWithActivities = days.map((d: any, i: number) => ({
+            dayNumber: i + 1,
+            activities: Array.isArray(d?.activities) ? d.activities : [],
+          }));
+          await reconcileFulfillment(svc, tripId, daysWithActivities);
         } catch (e) {
-          console.warn('[backfill-trip-intents] fulfill scan failed (non-blocking):', String(e));
+          console.warn('[backfill-trip-intents] reconcile failed (non-blocking):', String(e));
         }
       }
     }
