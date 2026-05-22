@@ -9,6 +9,7 @@
  *
  * Mirrors the server algorithm so client-side auto-repair and the pre-save server pass agree.
  */
+import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 
 export interface CascadeActivity {
   id: string;
@@ -238,11 +239,13 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
   // Recompute transit-card durations from neighbour coords before sorting.
   recomputeTransitCards(input, lockedIds);
 
-  let activities = [...input].sort((a, b) => {
-    const ta = parseTime(a.startTime) ?? 99999;
-    const tb = parseTime(b.startTime) ?? 99999;
-    return ta - tb;
-  });
+  // Wrap-aware sort — keeps a 00:55 late-nightlife hotel-return bookend at
+  // the chronological tail instead of jumping to the top of the day. Mirrors
+  // backend `_shared/timing-cascade.ts`. See
+  // mem://constraints/itinerary/within-day-sort-wrap-aware.
+  let activities = [...input].sort(
+    (a, b) => dayChronoKey(a.startTime) - dayChronoKey(b.startTime)
+  );
 
 
   const cascadeShift = (fromIdx: number, delta: number) => {
@@ -265,6 +268,11 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
     const currEnd = parseTime(curr.endTime);
     const nextStart = parseTime(next.startTime);
     if (currStart === null || nextStart === null) continue;
+
+    // Wrap-aware skip: a next card in the [00:00, 06:00) wrap window after a
+    // late-evening current card belongs at the day's tail (00:55 bookend
+    // after 23:30 nightcap). Mirrors backend `_shared/timing-cascade.ts`.
+    if (nextStart < currStart && nextStart < 6 * 60) continue;
 
     // Synthesized end-of-current; mirrors same-start branch's anchorEnd
     // fallback so overlap/buffer branches don't silently bail when a record

@@ -1829,6 +1829,58 @@ export default function TripDetail() {
                   if (d?.dayNumber) jsonDaysByNumber.set(d.dayNumber, d);
                 }
 
+                // Timing sanity gate — reject any rebuild candidate carrying
+                // phantom pre-dawn rows or backward time jumps. The Milan
+                // `44a68e13` repro: itinerary_activities rows for Day 1 begin
+                // at 01:44 (phantom), but the per-row score was higher than
+                // JSON, so we'd swap healthy JSON for an "01:44 → 03:09 →
+                // 04:57 → 09:00" timeline. We now (1) penalize incoherent
+                // candidates so they can never beat JSON, and (2) prefer
+                // strictly-more-coherent candidates only when JSON is the
+                // weaker one.
+                const parseMin = (raw: any): number | null => {
+                  if (typeof raw !== 'string' || !raw) return null;
+                  const m = raw.match(/(\d{1,2}):(\d{2})/);
+                  if (!m) return null;
+                  let h = parseInt(m[1], 10);
+                  const mm = parseInt(m[2], 10);
+                  if (/pm/i.test(raw) && h < 12) h += 12;
+                  if (/am/i.test(raw) && h === 12) h = 0;
+                  if (!Number.isFinite(h) || !Number.isFinite(mm)) return null;
+                  return h * 60 + mm;
+                };
+                const BOOKEND_RE = /(return to|check[- ]?in|check[- ]?out|freshen up|wind down)/i;
+                const LOGISTICS_RE = /^(walk to|transfer to|drive to|taxi to|metro to|bus to|train to|tram to|flight|departure)\b/i;
+                const isCandidateLocked = (a: any) =>
+                  a?.isLocked === true || a?.locked === true || a?.is_locked === true;
+                const coherenceDefects = (acts: any[]): number => {
+                  if (!Array.isArray(acts) || acts.length === 0) return 0;
+                  let defects = 0;
+                  let prevStartMin: number | null = null;
+                  for (const a of acts) {
+                    const title = String(a?.title || a?.name || '');
+                    const startMin = parseMin(a?.startTime || a?.start_time || a?.time);
+                    const isBookend = BOOKEND_RE.test(title) || LOGISTICS_RE.test(title);
+                    // Pre-dawn (<06:00) non-bookend, non-locked activity = phantom.
+                    if (
+                      startMin !== null &&
+                      startMin < 6 * 60 &&
+                      !isBookend &&
+                      !isCandidateLocked(a)
+                    ) {
+                      defects++;
+                    }
+                    // Backward time jump >5 min that is not a legitimate
+                    // late-night wrap (prev ≥22:00 AND next <06:00).
+                    if (prevStartMin !== null && startMin !== null) {
+                      const wrap = prevStartMin >= 22 * 60 && startMin < 6 * 60;
+                      if (!wrap && startMin + 5 < prevStartMin) defects++;
+                    }
+                    if (startMin !== null) prevStartMin = startMin;
+                  }
+                  return defects;
+                };
+
                 let recoveryUsed = false;
                 const rebuiltDays = fullDayRows.map((row: any) => {
                   const existingJsonDay = jsonDaysByNumber.get(row.day_number);
@@ -1837,15 +1889,18 @@ export default function TripDetail() {
                   const perRowActivities: any[] = dedupeRows(rowsByDayId.get(row.id) || []).map(rowToActivity);
                   const versionActivities: any[] = versionsByDayNumber.get(row.day_number) || [];
 
-                  // Score order of priority:
-                  //   non-meal-meaningful count (10000×) — heavily penalize meals-only
+                  // Score order:
+                  //   coherence penalty (−100000× defects) — phantom predawn
+                  //     rows and backward jumps disqualify a candidate
+                  //   non-meal-meaningful count (10000×)
                   //   meal slot coverage (1000×)
                   //   total card count (1×)
                   const score = (acts: any[]) => {
                     if (!acts || acts.length === 0) return -1;
                     const meals = acts.filter(isMealActivity).length;
                     const nonMeal = countNonMeal(acts);
-                    return nonMeal * 10000 + meals * 1000 + acts.length;
+                    const defects = coherenceDefects(acts);
+                    return nonMeal * 10000 + meals * 1000 + acts.length - defects * 100000;
                   };
                   const jsonScore = score(jsonActivities);
                   const embeddedScore = score(embeddedActivities);
@@ -1873,6 +1928,8 @@ export default function TripDetail() {
                       embeddedCount: embeddedActivities.length,
                       perRowCount: perRowActivities.length,
                       versionCount: versionActivities.length,
+                      jsonDefects: coherenceDefects(jsonActivities),
+                      chosenDefects: coherenceDefects(chosen),
                       chosenSource,
                       jsonNonMeal: countNonMeal(jsonActivities),
                       chosenNonMeal: countNonMeal(chosen),
@@ -1894,29 +1951,40 @@ export default function TripDetail() {
                   days: rebuiltDays,
                 };
 
-                // The page-load sparse rebuild MUST NOT bypass the FROZEN gate.
-                // Doing so was the root cause of the Dublin "entire days replaced
-                // on reload" pattern — the rebuild persisted a different version
-                // over the user's finalized itinerary. Now we always pass the
-                // self-heal reason; safeUpdateItineraryData + the backend FROZEN
-                // gate will silently no-op for ready/generated trips. Local
-                // session state is still updated so the user sees the recovered
-                // content for this session, but the persisted DB row is left
-                // alone until the user makes an explicit edit.
-                const reason = recoveryUsed ? 'self-heal-recovery-rebuild-sparse-json' : 'self-heal-rebuild-from-tables';
-                console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount}); recoveryUsed=${recoveryUsed}, reason=${reason}`);
-                await safeUpdateItineraryData(
-                  tripId,
-                  healedItinerary,
-                  {},
-                  {
-                    skipLedgerCheck: true,
-                    reason,
-                  },
-                );
+                // Frozen-trip guard: if the trip is already frozen/ready AND
+                // no candidate beat JSON on coherence-aware score, do NOT
+                // touch local state. The DB JSON is the source of truth; a
+                // table-derived swap here only shows the user stale data
+                // until the page refreshes. The backend save will no-op too,
+                // so nothing is gained.
+                const isFrozenTrip =
+                  ((tripData?.metadata as any)?.itinerary_frozen_at != null) ||
+                  tripData?.itinerary_status === 'ready' ||
+                  (tripData?.itinerary_status as any) === 'generated';
+                if (isFrozenTrip && !recoveryUsed) {
+                  console.log(
+                    `[TripDetail] Self-heal: frozen trip and rebuild matched JSON — skipping setTrip swap`,
+                  );
+                } else {
+                  const reason = recoveryUsed
+                    ? 'self-heal-recovery-rebuild-sparse-json'
+                    : 'self-heal-rebuild-from-tables';
+                  console.log(
+                    `[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount}); recoveryUsed=${recoveryUsed}, reason=${reason}`,
+                  );
+                  await safeUpdateItineraryData(
+                    tripId,
+                    healedItinerary,
+                    {},
+                    {
+                      skipLedgerCheck: true,
+                      reason,
+                    },
+                  );
 
-                const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
-                setTrip(healedTripData);
+                  const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
+                  setTrip(healedTripData);
+                }
               }
             } catch (healErr) {
               console.error('[TripDetail] Self-heal rebuild failed:', healErr);
