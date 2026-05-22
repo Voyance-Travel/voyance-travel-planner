@@ -1,64 +1,61 @@
-# Audit: Missing user must-haves — Milan trip `44a68e13`
+# Plan: Fix itinerary timing regressions
 
-## What the user asked for (from start form)
+## What is wrong
 
-`metadata.mustDoActivities`:
-1. **Duomo di Milano**
-2. **Brera Art Gallery**
-3. **pasta night**
+The Milan trip shows two separate timing failures:
 
-## What's actually in the itinerary
+1. **The visible JSON itinerary is out of order.**
+   - Day 1 currently stores `Dinner: Cracco in Galleria` at 19:00 before `Visit Duomo di Milano` at 16:30.
+   - That came from the targeted must-have heal inserting Duomo without re-sorting Day 1 before save.
 
-| Must-do | Status | Evidence |
-|---|---|---|
-| Duomo di Milano | **MISSING** | Not present on any of the 3 days. Closest reference is Day 1 dinner "Cracco in Galleria" (adjacent to Duomo but not the cathedral visit). |
-| Brera Art Gallery | Present | Day 2 09:30 "Explore Brera Art Gallery Masterpieces" |
-| Pasta night | **Ambiguous / not honored** | Day 1 dinner = Cracco (fine-dining tasting, not pasta-forward). Day 2 dinner = Ristorante Berton (modern Italian, 2-star). No card titled or themed as a pasta night. Day 2 lunch at Trattoria Milanese is the only traditional Italian slot but it's lunch, not dinner. |
+2. **The normalized activity table is stale and more broken than the JSON.**
+   - `itinerary_activities` for the same trip still contains the previously removed 01:44–08:10 phantom Day 1 cards.
+   - It also still contains Day 3 `Golden Hour Group Walk through Brera` after/around checkout.
+   - The page-load sparse-rebuild code can temporarily prefer those per-row table activities when it thinks JSON is missing content, even when the trip is already frozen. The backend write no-ops, but the local page state is still replaced, so users can see “9 AM → 12 PM → 6 AM” style timelines.
 
-Score: **1 of 3 must-dos honored.**
+There is also one systemic parity gap:
 
-## Root cause
+- The **frontend timing cascade mirror** still uses raw minute sorting in one path, while the backend uses wrap-aware ordering plus orphan/pre-dawn cleanup. That makes analyzer/preview behavior disagree with the server and can keep reintroducing bad timing warnings.
 
-`trip_day_intents` is **empty** for this trip (0 rows). The 3 must-dos from the start form never made it into the intents table, so:
+## Fixes to implement
 
-- `compile-prompt.ts` had no USER WISHES injection on any day brief
-- `ledger-check` could not flag `missing_user_intent_soft`
-- The generator was free to pick any landmark / dinner theme
+### 1. One-shot heal for trip `44a68e13`
 
-This is the exact leak that the `Trip-Wide Intents Injected` core memory documents — `action-generate-trip-day` was patched on 2026-05-?? to call `seedDayIntentsFromMetadata`, but this trip was generated **before** that fix (or the chain-finalization path didn't run it). Both `mustDoActivities` and `userAnchors` are present in metadata but were never seeded.
+- Re-sort Day 1 JSON activities by canonical day chronology so Duomo appears before dinner.
+- Rebuild `itinerary_activities` for this trip from the canonical `trips.itinerary_data` JSON.
+- Remove stale normalized rows not present in JSON:
+  - Day 1 phantom 01:44–08:10 sequence
+  - Day 3 post-checkout Brera walk
+- Ensure Day 2 normalized dinner matches the JSON pasta-night repair (`Pasta Night at Trattoria Trippa`), not stale Berton.
 
-## Plan
+### 2. Stop stale table rows from overriding healthy frozen JSON
 
-### A. One-shot data heal for this trip
+- In `TripDetail` sparse rebuild, do **not** set local trip state from per-row/table reconstruction when the trip is frozen/ready and the backend save is blocked.
+- For frozen ready trips, use table rebuild only as diagnostics unless JSON is empty or explicitly user-recovered.
+- Gate the table-vs-JSON chooser so per-row data must pass timing sanity checks before it can ever replace JSON locally.
 
-1. Seed `trip_day_intents` rows for the 3 must-dos (trip-wide, `day_number=NULL`, priority `should`):
-   - "Duomo di Milano" (landmark)
-   - "Brera Art Gallery" (landmark — mark `fulfilled` immediately, points to Day 2 activity)
-   - "Pasta night" (dining intent)
-2. Bypass the freeze gate (use `self-heal-seed-intents` save reason — add to `INTEGRITY_HEAL_SAVE_REASONS` allowlist).
-3. Trigger a single targeted repair pass that:
-   - **Day 1**: inserts a 60-min Duomo di Milano visit (afternoon, before Navigli bike) — Duomo is 5 min walk from Cracco/Galleria anyway, fits the existing geography.
-   - **Day 2 dinner**: swap Berton → a pasta-forward dinner venue (e.g. Trattoria Trippa, Ratanà, or Da Giacomo). Mark as the "pasta night."
-4. Re-mark Brera intent as `fulfilled`.
+### 3. Add a shared timing sanity gate before table rebuild wins
 
-### B. Systemic guard so this trip class self-heals on next load
+Before any rebuild candidate from `itinerary_activities` can be chosen, reject it if it has:
 
-Add `TripDetail` mount-time check: if `trips.metadata.mustDoActivities.length > 0` AND `trip_day_intents` count = 0, call a new `backfill-trip-intents` edge endpoint once (gated by a `metadata.intents_backfilled_at` stamp to prevent loops). This catches every legacy trip silently — not just Milan.
+- Non-bookend activities before 06:00 on Day 2+.
+- Large backwards jumps in stored order, except legitimate late-night wrap after 22:00.
+- Non-logistics activities after checkout/departure on the final day.
+- A candidate that is less chronologically coherent than current JSON.
 
-### C. Optional: UI surface
+### 4. Bring frontend timing cascade back to backend parity
 
-In the itinerary header, render a small "Must-do coverage: 1/3" pill that expands to show which intents were honored, partially honored, or missed. Reads from `trip_day_intents.status`. Out of scope for this heal but worth queueing as a follow-up.
+- Update `src/utils/itinerary/timingCascade.ts` to use `dayChronoKey` sorting instead of raw minute sorting.
+- Mirror the backend’s orphan late-nightlife / pre-dawn cleanup behavior or delegate those checks to shared frontend helpers before the cascade dry-run.
+- Add regression tests for:
+  - Day 1 `19:00` followed by `16:30` is sorted correctly.
+  - Stale per-row predawn rows cannot win over healthy JSON.
+  - Day 3 post-checkout activity is rejected from rebuild.
+  - Frontend cascade keeps valid late-night 00:xx bookends at the tail but does not treat random 06:00 activities as a valid next morning sequence.
 
-## Out of scope
+## Acceptance criteria
 
-- The 6h Day 2 afternoon gap (separate cosmetic issue)
-- Day 3 brevity (departure day, expected)
-- Cost / budget surfaces
-
-## Acceptance
-
-- `trip_day_intents` has 3 rows for `44a68e13`
-- Day 1 contains a Duomo di Milano activity
-- Day 2 dinner is pasta-forward
-- All 3 intents show `status = fulfilled`
-- A freshly generated trip on `main` with `mustDoActivities` set still seeds intents correctly (regression check on the systemic guard)
+- Milan trip Day 1 displays in order: check-in → morning/afternoon activities → Duomo → dinner.
+- Milan normalized tables match the JSON, with no phantom predawn rows and no post-checkout Day 3 activity.
+- Reloading the trip cannot temporarily replace healthy JSON with stale `itinerary_activities` rows.
+- New itineraries no longer produce or surface backwards timing jumps like `09:00 → 12:00 → 06:00`.
