@@ -16,6 +16,7 @@ import { ensureHotelReturnBookend, isHotelReturnBookendActivity } from '@/lib/it
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 import { normalizePredawnCascade } from '@/lib/itinerary/normalizePredawnCascade';
 import { assertNoCrossDayBleed } from '@/lib/itinerary/crossDayBleedGuard';
+import { validateChronology } from '@/lib/itinerary/chronologyValidator';
 import { pruneDepartureUntimed } from '@/lib/itinerary/pruneDepartureUntimed';
 
 // Strip non-Latin scripts from AI text artifacts before rendering
