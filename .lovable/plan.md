@@ -1,48 +1,79 @@
-## Fix #1 — Scheduling Engine: kill fake "5 min" transit cards & bogus conflicts
+# Audit: Trip `44a68e13` — Milan, Jun 4–6 2026
 
-### Root causes (verified in code)
-1. `estimateTransit` (`supabase/functions/_shared/timing-cascade.ts:340`) returns `null` the moment either endpoint is missing `location.lat/lng`. Upstream callers then fall back to a flat default buffer, and **transit/walk cards themselves are never re-evaluated** — their AI-emitted `durationMinutes` (often a fabricated 5 min) survives unchanged.
-2. When coords *do* exist but are wrong/poisoned, Haversine yields nonsense distances and walk/taxi minutes propagate as-is.
-3. The cascade only shifts the *next* card forward; it never rewrites a transit card's own `durationMinutes` / `endTime` to match the geographic reality between its neighbors.
-4. Health panel surfaces the resulting "X min conflict" as a real warning even when the next save would silently dissolve it.
+## What's actually broken (from `trips.metadata.persist_validation`)
 
-### Scope
-- Backend: `supabase/functions/_shared/timing-cascade.ts` only.
-- Frontend: `src/lib/itinerary/healthCascadePreview.ts` (read-only preview parity).
-- No DB migration, no new edge function, no UI redesign, no matcher/cost-table changes.
+The trip is `status=ready`, `itinerary_frozen_at=2026-05-22T11:02:49Z`, `fully_persisted=true`. Save-time validation ran two minutes after the freeze and recorded these defects — but the freeze blocks any repair, so they stay on screen.
 
-### Plan
+### Day 1 (Jun 4) — pre-dawn cascade
 
-**A. `estimateTransit` — named-venue fallback + sanity floor**
-- When coords are missing on either side, fall back to deriving a synthetic distance from the prior/next venue name pair via the existing `INLINE_FALLBACK` venue tables already imported elsewhere in `_shared/`. If still unresolved, return a *typed* `unverified` estimate (method `walking`, `durationMinutes = 15`, `distance = 'unknown'`, `recommended: false`) instead of `null`. This kills the silent 15-min default path that lets 5-min cards survive.
-- Add a hard floor: walking < 80 m → drop to 0/merge candidate (already `isSamePlace`); 80–400 m → min 4 min; > 400 m → never less than `Math.ceil(distMeters/80)`.
-- Keep existing thresholds (`isWalkable ≤ 15 min`, transit < 10 km, else taxi).
+Six activities scheduled between **01:44 and 08:10 AM**, then a normal evening:
 
-**B. New pass: `recomputeTransitCards` inside `enforceTimingAndBuffers`**
-- Runs right after the pre-walks (line ~436), before the chronological sort.
-- For every card whose `category` matches `TRANSIT_CATS` *or* whose title starts with `walk|stroll|transit|transfer|taxi`, find its immediate non-transit neighbors (`prev`, `next`) in the day array.
-- Compute `est = estimateTransit(prev, next)`. If `est.method !== 'unknown'`:
-  - Overwrite `durationMinutes`, `endTime = startTime + durationMinutes`, and append `[CASCADE_TRANSIT_FIX]` repair note (`before`/`after` minutes).
-  - Respect lock: `lockedIds.has(card.id)` → skip.
-  - Respect user/booked/manual basis (mirror `isActivityLocked` check used in `healthCascadePreview`).
-- If `est` is unverified, mark the card `metadata.transit_unverified = true` so the FE preview can suppress its conflict warning (see step D).
-- Cap per-card adjustment at the same `MAX_CUMULATIVE_SHIFT = 120` already used by `cascadeShift`.
+```text
+01:44 Breakfast at Pavé
+03:09 Duomo Terraces & Cathedral
+04:57 Lunch at Giacomo Caffè
+06:02 Metro to 5 Vie
+06:19 Free roam 5 Vie
+07:54 Travel to ME Milan Il Duca
+08:15 Check-in
+09:05 Bike rental walk
+...   (normal day continues to 20:40 hotel return)
+```
 
-**C. Telemetry**
-- Per-day summary log `[CASCADE] day=N transit_recomputed=K transit_unverified=M` and per-repair `[CASCADE_TRANSIT_FIX]` entries pushed onto the existing `repairs[]` array (already surfaced through `metadata.quality.cascade_repairs`).
+`persist_validation.errors`: 3× `PHANTOM_PREDAWN_CARD`.
 
-**D. Health preview parity (`src/lib/itinerary/healthCascadePreview.ts`)**
-- After the dry-run cascade clone, also run the new `recomputeTransitCards` step against the clone so the preview-time durations match what save-time will write.
-- In `TripHealthPanel` filtering (already cascade-aware), suppress `overlap`/`buffer` warnings whose blamed card carries `metadata.transit_unverified === true` — these are best-effort estimates and shouldn't surface as red conflicts.
+Root cause chain:
+1. `metadata.generation_context.flight` / `arrivalTime` / `departureTime` are **all null**, and `meal_policy_at_generation` is **null**. The generator had no arrival clock for Day 1.
+2. With no clock, the Day-1 brief defaulted to "full day, breakfast required" — but seeded breakfast at hotel check-in time minus a meal stack walking backward, producing 01:44 AM.
+3. `normalizePredawnCascade` (Core: "Pre-Dawn Cascade Defense Layer") only shifts a **leading consecutive** `[00:00, 05:00)` block on **Day N ≥ 2**. It explicitly skips Day 1 and stops at the first non-exempt gap, so it never fires here.
+4. Trip got frozen at 11:02:49 with `fully_persisted=true`; validation at 11:04:57 logged the errors as advisory. The Frozen-After-Ready guard silently no-ops any `self-heal-*` save, so the pre-dawn block is now permanent until a user-initiated edit.
 
-### Out of scope
-- Real Google Directions calls (no new paid API surface).
-- Touching the FE editor's "Fix timing" CTA (already routes through `enforceTimingAndBuffers` — gets the fix for free).
-- Restyling transit cards.
+### Day 3 (Jun 6) — departure-day overlap + missing lunch
 
-### Ship order
-1. Land A + B + C behind no flag (deterministic, idempotent). Watch `[CASCADE]` logs for one regen cycle.
-2. Land D (preview parity + warning suppression) the same PR — without it the user still sees the stale red "5 min conflict" until the next save.
+```text
+08:30 Breakfast: Sartoria Gastronomica
+10:35 Golden Hour Group Walk through Brera  (ends 12:05)
+11:00 Checkout from ME Milan Il Duca         (ends 11:30)
+```
 
-### Acceptance
-- Regenerate a São Paulo / Madrid trip with transit-heavy days. `metadata.quality.cascade_repairs` shows `[CASCADE_TRANSIT_FIX]` entries for any AI-emitted 5-min walk between non-adjacent venues. Card duration matches the Haversine distance. Health panel shows zero "X min conflict" warnings for transit cards. Locked / user / booked transit rows untouched.
+- `persist_validation.errors`: 1× `MISSING_REQUIRED_MEAL` (Day 3 missing lunch). This is a false positive — Day 3 is a departure day, lunch should be dropped, not required. No `savedDepartureTime24` in metadata → departure-day classifier didn't fire, so the meal policy still demands lunch.
+- The 10:35–12:05 walk straddles the 11:00 checkout (post-checkout leisure leak). §15z `enforceDepartureDayLogistics` should have pruned the walk or moved checkout, but ran without a flight clock and gave up.
+
+### Day 2 — clean except for a 6h gap warning
+
+13:30 lunch → 16:45 freshen-up → 19:00 dinner. Warning is cosmetic (mid-afternoon rest window for a 3-day trip), low priority.
+
+## What to fix
+
+Strictly the data path; no UI redesign.
+
+### A. Drop the freeze bypass for `PHANTOM_PREDAWN_CARD`
+
+In `safeUpdateItineraryData` + `action-save-itinerary`, allow `self-heal-*` writes through the freeze guard **only when** `metadata.persist_validation.errors` contains one of: `PHANTOM_PREDAWN_CARD`, `LOGISTICS_SEQUENCE`, `POST_CHECKOUT_LEISURE`. Same trip stays frozen for everything else.
+
+### B. Extend `normalizePredawnCascade` to Day 1
+
+Today the helper skips Day 1 because arrival-day timing is "user-known". Change to: when **any** activity on **any day** starts in `[00:00, 05:00)` and is not bookend/locked/departure-logistics, shift the entire leading block to start `09:00` (or `arrivalLocalTime + 60min` when known). Preserve relative spacing. Sentinel `[PREDAWN_CASCADE_NORMALIZE day=1]`.
+
+Wire at the same 3 sites already used: `action-save-itinerary`, `itineraryParser` Step 4, lazy heal in `TripDetail` (now allowed through the freeze gate via A).
+
+### C. Backfill departure-day metadata at save time
+
+If `metadata.savedDepartureTime24` / `savedArrivalTime24` are null, infer from `itinerary_data.days[last].activities` last logistics card (checkout / airport-transfer / flight) and persist back to `metadata`. This unblocks `enforceDepartureDayLogistics` §15z and `meal_policy_at_generation` re-derivation for this trip and all legacy peers.
+
+### D. One-shot heal of this trip
+
+After A+B+C ship, dispatch `safeUpdateItineraryData(tripId, days, { reason:'self-heal-predawn-cascade', allowFrozenWrite:true })` once for `44a68e13` to clear the recorded errors and re-render.
+
+## Out of scope
+
+- Day 2 6h afternoon gap warning (cosmetic).
+- Frontend "Fix Timing" CTA copy.
+- Cost / budget surfaces (untouched by this audit).
+
+## Acceptance
+
+- `persist_validation.errors=[]` for `44a68e13` after one heal cycle.
+- Day 1 cards re-cascade to start ≥ 09:00.
+- Day 3 lunch requirement drops; 10:35 walk either moves before 11:00 checkout or is pruned.
+- A second Milan trip generated without arrival flight metadata reproduces the bug on `main`, passes on this branch.
