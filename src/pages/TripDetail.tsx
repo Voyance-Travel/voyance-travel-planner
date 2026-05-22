@@ -1214,6 +1214,53 @@ export default function TripDetail() {
   }, [trip?.id, trip?.journey_id, trip?.itinerary_status, trip?.metadata, trip?.created_at, queryClient]);
 
 
+  // ------------------------------------------------------------------
+  // Lazy backfill of trip_day_intents from legacy metadata must-dos.
+  // Trips generated before `seedDayIntentsFromMetadata` was wired into the
+  // server-chain path have empty `trip_day_intents` even though their
+  // start-form must-dos sit in `metadata.mustDoActivities`. Without intents,
+  // compile-prompt skips USER WISHES injection and the must-dos silently fall
+  // out of future regenerations / chat actions. One-shot per trip, gated by
+  // `metadata.intents_backfilled_at`. See mem://constraints/itinerary/trip-wide-intents-injected.
+  // ------------------------------------------------------------------
+  const intentsBackfillAttempted = useRef(false);
+  useEffect(() => {
+    if (!trip?.id || intentsBackfillAttempted.current) return;
+    const meta = (trip.metadata as Record<string, unknown>) || {};
+    if (meta.intents_backfilled_at) return; // already done
+
+    const mustDo = (meta.mustDoActivities as unknown[] | undefined) || [];
+    const perDay = (meta.perDayActivities as unknown[] | undefined) || [];
+    const anchors = (meta.userAnchors as unknown[] | undefined) || [];
+    const notes = typeof meta.additionalNotes === 'string' ? (meta.additionalNotes as string).trim() : '';
+    const hasUserIntents =
+      (Array.isArray(mustDo) && mustDo.length > 0) ||
+      (Array.isArray(perDay) && perDay.length > 0) ||
+      (Array.isArray(anchors) && anchors.length > 0) ||
+      notes.length > 0;
+    if (!hasUserIntents) return;
+
+    // Only run after itinerary is in a stable state — never during generation
+    if (trip.itinerary_status !== 'ready') return;
+
+    intentsBackfillAttempted.current = true;
+    (async () => {
+      try {
+        const { error } = await supabase.functions.invoke('backfill-trip-intents', {
+          body: { tripId: trip.id },
+        });
+        if (error) {
+          console.warn('[TripDetail] backfill-trip-intents failed (non-blocking):', error);
+          intentsBackfillAttempted.current = false; // allow retry next mount
+        }
+      } catch (err) {
+        console.warn('[TripDetail] backfill-trip-intents threw (non-blocking):', err);
+        intentsBackfillAttempted.current = false;
+      }
+    })();
+  }, [trip?.id, trip?.itinerary_status, trip?.metadata]);
+
+
   // Auto-trigger generation only when ?generate=true is present
   useEffect(() => {
     if (

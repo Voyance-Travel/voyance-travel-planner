@@ -89,6 +89,7 @@ export const INTEGRITY_HEAL_SAVE_REASONS: ReadonlyArray<string> = [
   'self-heal-predawn-cascade',
   'self-heal-departure-logistics',
   'self-heal-post-checkout-prune',
+  'self-heal-seed-intents',
 ];
 
 export function isIntegrityHealSaveReason(saveReason: string | undefined | null): boolean {
