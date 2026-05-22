@@ -1241,7 +1241,7 @@ export default function TripDetail() {
     if (!hasUserIntents) return;
 
     // Only run after itinerary is in a stable state — never during generation
-    if (trip.itinerary_status !== 'ready' && trip.itinerary_status !== 'generated') return;
+    if (trip.itinerary_status !== 'ready') return;
 
     intentsBackfillAttempted.current = true;
     (async () => {
