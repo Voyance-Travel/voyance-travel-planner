@@ -1,61 +1,53 @@
-# Plan: Fix itinerary timing regressions
 
-## What is wrong
+# Systemic Timing Integrity — Pre-Customer Guard
 
-The Milan trip shows two separate timing failures:
+## Problem (confirmed across trips, not just Milan)
+Symptoms keep recurring: 9 AM → 12 PM → 6 AM jumps, post-checkout floating cards, stale `itinerary_activities` rows winning over healthy JSON, JSON not re-sorted after inserts/swaps. Today's fix healed Milan but the same class of bug will hit the next trip. We need a **single chokepoint** that no itinerary can bypass before a customer sees it.
 
-1. **The visible JSON itinerary is out of order.**
-   - Day 1 currently stores `Dinner: Cracco in Galleria` at 19:00 before `Visit Duomo di Milano` at 16:30.
-   - That came from the targeted must-have heal inserting Duomo without re-sorting Day 1 before save.
+## Strategy — defense at 3 layers, one canonical validator
 
-2. **The normalized activity table is stale and more broken than the JSON.**
-   - `itinerary_activities` for the same trip still contains the previously removed 01:44–08:10 phantom Day 1 cards.
-   - It also still contains Day 3 `Golden Hour Group Walk through Brera` after/around checkout.
-   - The page-load sparse-rebuild code can temporarily prefer those per-row table activities when it thinks JSON is missing content, even when the trip is already frozen. The backend write no-ops, but the local page state is still replaced, so users can see “9 AM → 12 PM → 6 AM” style timelines.
+Build one shared `validateChronology(days)` module that returns structured issues (`PREDAWN_NON_BOOKEND`, `BACKWARD_JUMP`, `POST_CHECKOUT_LEISURE`, `UNSORTED_BY_START`, `TABLE_JSON_DRIFT`, `NEXT_DAY_BLEED`). Wire it at three gates:
 
-There is also one systemic parity gap:
+### Gate 1 — Write-time (server, hard block)
+- `persistTripItinerary` (single boundary) runs `validateChronology` after `enforceTimingAndBuffers` + `normalizePredawnCascade` + `assertNoCrossDayBleed`.
+- On any **critical** issue: auto-heal in place (re-sort by `dayChronoKey`, drop predawn non-bookend, prune post-checkout leisure via existing `pruneNonLogisticsAfterCheckout` / `enforceDepartureDayLogistics`), then re-validate.
+- If still critical after heal → write proceeds BUT stamp `metadata.quality.chronology_blocked = {issues, at}` and emit `[CHRONOLOGY_BLOCKED]` sentinel + Sentry-style log. Never silently ship broken data.
 
-- The **frontend timing cascade mirror** still uses raw minute sorting in one path, while the backend uses wrap-aware ordering plus orphan/pre-dawn cleanup. That makes analyzer/preview behavior disagree with the server and can keep reintroducing bad timing warnings.
+### Gate 2 — Read-time (parser, last-mile scrub)
+- `parseItineraryDays` runs the same validator after Step 4b ghost/bookend filter.
+- Auto-applies the same in-memory heals (sort + predawn strip + post-checkout prune) so even legacy persisted trips render clean on next page load.
+- Dispatches `voyance:chronology-healed` event → TripDetail lazily fires `safeUpdateItineraryData('self-heal-chronology')` (allowlisted in `frozen-guard.ts`) to persist the heal once.
 
-## Fixes to implement
+### Gate 3 — Table-vs-JSON drift gate (rebuild guard)
+- Today's `TripDetail` sparse-rebuild gate already penalizes broken timing. Promote it from "penalty score" to **hard reject**: if table-rebuild candidate fails `validateChronology` critically AND JSON passes, JSON wins unconditionally (no scoring tie-breaker).
+- Add reverse heal: when JSON wins, enqueue `action-sync-tables` to rewrite `itinerary_activities` from canonical JSON so the drift can't re-poison the next reload.
 
-### 1. One-shot heal for trip `44a68e13`
+## One-shot legacy backfill
+Edge fn `heal-trip-chronology` (callable batch + lazy single-trip):
+- Lists trips with `itinerary_status IN (ready, generated)` and `fully_persisted=true`.
+- Runs validator; for any trip with critical issues, applies heals + re-persists via `safeUpdateItineraryData('self-heal-chronology-backfill', { allowFrozenWrite: true })`.
+- Add allowlist entry in `frozen-guard.ts`.
+- Lazy trigger in `TripDetail` mount (gated by `metadata.chronology_healed_at` stamp, runs once per trip, same pattern as today's `intents_backfilled_at`).
 
-- Re-sort Day 1 JSON activities by canonical day chronology so Duomo appears before dinner.
-- Rebuild `itinerary_activities` for this trip from the canonical `trips.itinerary_data` JSON.
-- Remove stale normalized rows not present in JSON:
-  - Day 1 phantom 01:44–08:10 sequence
-  - Day 3 post-checkout Brera walk
-- Ensure Day 2 normalized dinner matches the JSON pasta-night repair (`Pasta Night at Trattoria Trippa`), not stale Berton.
+## Observability
+- New SQL view `trips_with_chronology_issues` — counts blocked trips per day. We'll know **before** the customer does.
+- Sentinels: `[CHRONOLOGY_VALIDATOR]`, `[CHRONOLOGY_BLOCKED]`, `[CHRONOLOGY_HEALED]` with issue counts.
 
-### 2. Stop stale table rows from overriding healthy frozen JSON
+## Files
+- NEW `supabase/functions/_shared/chronology-validator.ts` + FE port `src/lib/itinerary/chronologyValidator.ts` (mirror, single source of rules).
+- EDIT `supabase/functions/_shared/persist-itinerary.ts` (Gate 1 + auto-heal loop).
+- EDIT `src/lib/itinerary/itineraryParser.ts` (Gate 2 + event dispatch).
+- EDIT `src/pages/TripDetail.tsx` (Gate 2 listener + Gate 3 hard reject + backfill trigger).
+- EDIT `supabase/functions/_shared/frozen-guard.ts` (allowlist `self-heal-chronology*`).
+- NEW `supabase/functions/heal-trip-chronology/index.ts` (batch + single-trip).
+- NEW migration: `trips_with_chronology_issues` view.
+- Memory entry: `mem://constraints/itinerary/chronology-validator-three-gates`.
 
-- In `TripDetail` sparse rebuild, do **not** set local trip state from per-row/table reconstruction when the trip is frozen/ready and the backend save is blocked.
-- For frozen ready trips, use table rebuild only as diagnostics unless JSON is empty or explicitly user-recovered.
-- Gate the table-vs-JSON chooser so per-row data must pass timing sanity checks before it can ever replace JSON locally.
+## Out of scope
+UI changes, cost/budget logic, regeneration behavior, prompt edits. Pure post-write/pre-display integrity.
 
-### 3. Add a shared timing sanity gate before table rebuild wins
-
-Before any rebuild candidate from `itinerary_activities` can be chosen, reject it if it has:
-
-- Non-bookend activities before 06:00 on Day 2+.
-- Large backwards jumps in stored order, except legitimate late-night wrap after 22:00.
-- Non-logistics activities after checkout/departure on the final day.
-- A candidate that is less chronologically coherent than current JSON.
-
-### 4. Bring frontend timing cascade back to backend parity
-
-- Update `src/utils/itinerary/timingCascade.ts` to use `dayChronoKey` sorting instead of raw minute sorting.
-- Mirror the backend’s orphan late-nightlife / pre-dawn cleanup behavior or delegate those checks to shared frontend helpers before the cascade dry-run.
-- Add regression tests for:
-  - Day 1 `19:00` followed by `16:30` is sorted correctly.
-  - Stale per-row predawn rows cannot win over healthy JSON.
-  - Day 3 post-checkout activity is rejected from rebuild.
-  - Frontend cascade keeps valid late-night 00:xx bookends at the tail but does not treat random 06:00 activities as a valid next morning sequence.
-
-## Acceptance criteria
-
-- Milan trip Day 1 displays in order: check-in → morning/afternoon activities → Duomo → dinner.
-- Milan normalized tables match the JSON, with no phantom predawn rows and no post-checkout Day 3 activity.
-- Reloading the trip cannot temporarily replace healthy JSON with stale `itinerary_activities` rows.
-- New itineraries no longer produce or surface backwards timing jumps like `09:00 → 12:00 → 06:00`.
+## Acceptance
+- Any new trip with predawn non-bookend, backward jump, or post-checkout leisure is auto-healed before persist; if unhealable, write is stamped + logged (never silent).
+- Page-load of any legacy trip with these issues self-heals in memory immediately + persists once.
+- `trips_with_chronology_issues` view returns 0 critical rows after backfill.
+- Milan `44a68e13` remains clean; spot-check 5 most recent trips show no chronology issues.
