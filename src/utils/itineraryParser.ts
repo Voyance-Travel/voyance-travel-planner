@@ -16,6 +16,7 @@ import { ensureHotelReturnBookend, isHotelReturnBookendActivity } from '@/lib/it
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 import { normalizePredawnCascade } from '@/lib/itinerary/normalizePredawnCascade';
 import { assertNoCrossDayBleed } from '@/lib/itinerary/crossDayBleedGuard';
+import { validateChronology } from '@/lib/itinerary/chronologyValidator';
 import { pruneDepartureUntimed } from '@/lib/itinerary/pruneDepartureUntimed';
 
 // Strip non-Latin scripts from AI text artifacts before rendering
@@ -1023,6 +1024,22 @@ export function parseItineraryDays(
     if (deduped !== result[i].activities) {
       result[i] = { ...result[i], activities: deduped as any };
     }
+  }
+
+  // Step 4c: Chronology validator — final read-time sort + predawn-strip
+  // mirror of the persist boundary. Catches manually-inserted / restored /
+  // chat-action-applied days that were persisted out-of-order, so the
+  // customer never sees "9 AM → 12 PM → 6 AM" timelines while waiting for
+  // the next save to re-sort. Pure display heal — never mutates DB; the
+  // next persist boundary will canonicalize permanently.
+  // See mem://constraints/itinerary/chronology-validator-three-gates.
+  try {
+    const v = validateChronology(result, { site: 'parser-step4c' });
+    if (v.healed) {
+      result = v.days as typeof result;
+    }
+  } catch (e) {
+    console.warn('[itineraryParser] chronology validator failed (non-blocking):', e);
   }
 
   // Step 5: Day-count mismatch detection (diagnostic only, skip for partial/in-progress data)
