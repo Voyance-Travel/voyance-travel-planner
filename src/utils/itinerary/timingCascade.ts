@@ -238,11 +238,13 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
   // Recompute transit-card durations from neighbour coords before sorting.
   recomputeTransitCards(input, lockedIds);
 
-  let activities = [...input].sort((a, b) => {
-    const ta = parseTime(a.startTime) ?? 99999;
-    const tb = parseTime(b.startTime) ?? 99999;
-    return ta - tb;
-  });
+  // Wrap-aware sort — keeps a 00:55 late-nightlife hotel-return bookend at
+  // the chronological tail instead of jumping to the top of the day. Mirrors
+  // backend `_shared/timing-cascade.ts`. See
+  // mem://constraints/itinerary/within-day-sort-wrap-aware.
+  let activities = [...input].sort(
+    (a, b) => dayChronoKey(a.startTime) - dayChronoKey(b.startTime)
+  );
 
 
   const cascadeShift = (fromIdx: number, delta: number) => {
