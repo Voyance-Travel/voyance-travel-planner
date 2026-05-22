@@ -1034,8 +1034,6 @@ export function parseItineraryDays(
   // next persist boundary will canonicalize permanently.
   // See mem://constraints/itinerary/chronology-validator-three-gates.
   try {
-    const { validateChronology } = require('@/lib/itinerary/chronologyValidator') as
-      typeof import('@/lib/itinerary/chronologyValidator');
     const v = validateChronology(result, { site: 'parser-step4c' });
     if (v.healed) {
       result = v.days as typeof result;
