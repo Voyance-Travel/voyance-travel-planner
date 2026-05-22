@@ -460,6 +460,82 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     }
   }
 
+  // FALLBACK: If departure time is missing from flight_selection, infer from
+  // the last day's terminal logistics card (airport-transfer / flight / checkout).
+  // Without this §15z `enforceDepartureDayLogistics` and the meal-policy
+  // re-derive silently no-op on legacy / chat-planner trips that never
+  // ingested a return flight — leaves "missing lunch on a departure day"
+  // false positives and post-checkout leisure leaks. Persists back to
+  // `trips.metadata.savedDepartureTime24` so subsequent saves see it.
+  // Plan C of audit 44a68e13. See mem://constraints/itinerary/frozen-after-ready.
+  let departureBackfillSource: string | null = null;
+  if (!savedDepartureTime24 && itineraryDays.length > 0) {
+    const lastDay = itineraryDays[itineraryDays.length - 1];
+    const acts = (lastDay?.activities || []) as any[];
+    // Prefer flight start (most precise), then airport-transfer end, then
+    // checkout end (last resort — gives noon-ish lower bound).
+    const flightCard = acts.find((a) =>
+      ((a?.category || '').toLowerCase() === 'flight') ||
+      /\b(flight|departure)\b/i.test(String(a?.title || ''))
+    );
+    if (flightCard && (flightCard.startTime || flightCard.start_time)) {
+      savedDepartureTime24 = String(flightCard.startTime || flightCard.start_time);
+      departureBackfillSource = 'flight_card';
+    } else {
+      const transferCard = acts.find((a) => {
+        const cat = String(a?.category || '').toLowerCase();
+        if (/^(airport[-_ ]?transfer|transfer[-_ ]?to[-_ ]?airport)$/.test(cat)) return true;
+        return /\bairport\b/i.test(String(a?.title || ''));
+      });
+      if (transferCard && (transferCard.endTime || transferCard.end_time)) {
+        // Transfer ends roughly at flight − buffer; treat transfer end as a
+        // proxy for departure time (downstream §15z buffers from this).
+        savedDepartureTime24 = String(transferCard.endTime || transferCard.end_time);
+        departureBackfillSource = 'airport_transfer_card';
+      } else {
+        const checkoutCard = [...acts].reverse().find((a) => {
+          const cat = String(a?.category || '').toLowerCase();
+          if (cat === 'checkout' || cat === 'check-out') return true;
+          return /\bcheck[-\s]?out\b/i.test(String(a?.title || ''));
+        });
+        if (checkoutCard && (checkoutCard.endTime || checkoutCard.end_time)) {
+          savedDepartureTime24 = String(checkoutCard.endTime || checkoutCard.end_time);
+          departureBackfillSource = 'checkout_card';
+        }
+      }
+    }
+    if (savedDepartureTime24) {
+      console.log(
+        `[save-itinerary] ✈️ Backfilled departure time ${savedDepartureTime24} from ${departureBackfillSource} (Plan C)`,
+      );
+    }
+  }
+
+  // Persist backfilled times to trips.metadata so subsequent saves don't
+  // re-derive from scratch. Fire-and-forget — failure is non-fatal.
+  if (savedArrivalTime24 || savedDepartureTime24) {
+    const meta = (trip.metadata as Record<string, any>) || {};
+    const patch: Record<string, any> = {};
+    if (savedArrivalTime24 && !meta.savedArrivalTime24) patch.savedArrivalTime24 = savedArrivalTime24;
+    if (savedDepartureTime24 && !meta.savedDepartureTime24) {
+      patch.savedDepartureTime24 = savedDepartureTime24;
+      if (departureBackfillSource) {
+        patch.savedDepartureTime24_source = departureBackfillSource;
+      }
+    }
+    if (Object.keys(patch).length > 0) {
+      supabase
+        .from('trips')
+        .update({ metadata: { ...meta, ...patch } })
+        .eq('id', tripId)
+        .then(({ error }: { error: any }) => {
+          if (error) console.warn('[save-itinerary] departure-metadata backfill failed:', error.message);
+          else console.log(`[save-itinerary] [DEPARTURE_META_BACKFILL] ${JSON.stringify(patch)}`);
+        });
+    }
+  }
+
+
   if (totalDays > 0) {
     // Trip-wide blocked-restaurants accumulator (canonical names)
     const { extractRestaurantVenueName: _extractSave } = await import('./generation-utils.ts');
