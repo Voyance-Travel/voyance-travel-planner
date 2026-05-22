@@ -75,11 +75,37 @@ export const USER_SAVE_REASON_PREFIXES: ReadonlyArray<string> = [
   'apply-recommendation',
 ];
 
+/**
+ * Integrity-heal save reasons. Deterministic, idempotent passes that only
+ * mutate provably-bad data flagged by `persist_validation`. Always allowed
+ * through the freeze gate so a known-broken Day-1 pre-dawn cascade or
+ * post-checkout leisure leak can be repaired on the next page-load without
+ * a user edit. Keep this list TINY — every entry must correspond to a
+ * narrow, append-only normalizer with a regression test.
+ *
+ * See mem://constraints/itinerary/frozen-after-ready.
+ */
+export const INTEGRITY_HEAL_SAVE_REASONS: ReadonlyArray<string> = [
+  'self-heal-predawn-cascade',
+  'self-heal-departure-logistics',
+  'self-heal-post-checkout-prune',
+];
+
+export function isIntegrityHealSaveReason(saveReason: string | undefined | null): boolean {
+  if (!saveReason || typeof saveReason !== 'string') return false;
+  const r = saveReason.trim();
+  return INTEGRITY_HEAL_SAVE_REASONS.some((p) => r === p || r.startsWith(p));
+}
+
 export function isUserSaveReason(saveReason: string | undefined | null): boolean {
   if (!saveReason || typeof saveReason !== 'string') return false;
   const r = saveReason.trim();
   if (!r) return false;
-  return USER_SAVE_REASON_PREFIXES.some((p) => r === p || r.startsWith(p));
+  if (USER_SAVE_REASON_PREFIXES.some((p) => r === p || r.startsWith(p))) return true;
+  // Integrity-heal reasons piggyback on the user gate so callers don't need
+  // to thread `allowFrozenWrite: true` through every layer.
+  if (isIntegrityHealSaveReason(r)) return true;
+  return false;
 }
 
 export interface AssertWriteAllowedArgs {
