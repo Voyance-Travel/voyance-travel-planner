@@ -9,6 +9,7 @@
  *
  * Mirrors the server algorithm so client-side auto-repair and the pre-save server pass agree.
  */
+import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 
 export interface CascadeActivity {
   id: string;
