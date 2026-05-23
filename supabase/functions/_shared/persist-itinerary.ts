@@ -312,6 +312,47 @@ export async function persistTripItinerary(
     console.warn(`[${label}] chronology validator failed (non-blocking):`, e);
   }
 
+  // 3a-ter. Per-day overlap-and-buffer cascade. The chronology validator
+  // above catches reverse-sorted / predawn / backward-jump issues but does
+  // NOT detect activity OVERLAPS where Cathedral 11:55–13:10 sits next to
+  // Lunch 12:30–13:30 (both forward-sorted by startTime). enforceTimingAnd-
+  // Buffers cascade-pushes the later card past prevEnd + buffer, recomputes
+  // transit durations, fills floating meals, prunes orphan late-nightlife
+  // bookends — all idempotent + locked-row-exempt. This is the chokepoint
+  // that catches all write paths bypassing action-save-itinerary's STEP 2.9
+  // (fresh-gen Stage 6, chat executor, restore-version, manual upsert).
+  // Sentinel: [PERSIST_CASCADE] day=N repairs=K
+  try {
+    const { enforceTimingAndBuffers } = await import('./timing-cascade.ts');
+    let totalRepairs = 0;
+    let touchedDays = 0;
+    for (const day of days) {
+      if (!day || !Array.isArray(day.activities) || day.activities.length < 2) continue;
+      const lockedIds = new Set<string>(
+        day.activities
+          .filter((a: any) => a?.isLocked || a?.locked || a?.lock_state === 'locked' || a?.userAdded || a?.userEdited || a?.isManual || a?.extracted || a?.pinned)
+          .map((a: any) => String(a.id || ''))
+          .filter(Boolean),
+      );
+      try {
+        const res = enforceTimingAndBuffers(day.activities as any[], { lockedIds });
+        if (res.repairs.length > 0) {
+          day.activities = res.activities as any[];
+          totalRepairs += res.repairs.length;
+          touchedDays++;
+          console.log(`[PERSIST_CASCADE] day=${day.dayNumber ?? '?'} repairs=${res.repairs.length} kinds=${[...new Set(res.repairs.map((r: any) => r.type))].join(',')}`);
+        }
+      } catch (e) {
+        console.warn(`[PERSIST_CASCADE] day=${day.dayNumber ?? '?'} failed (non-blocking):`, e);
+      }
+    }
+    if (touchedDays > 0) {
+      console.log(`[PERSIST_CASCADE_SUMMARY] site=${label} touchedDays=${touchedDays} totalRepairs=${totalRepairs}`);
+    }
+  } catch (e) {
+    console.warn(`[${label}] per-day cascade failed (non-blocking):`, e);
+  }
+
   // 3b. Dining description deterministic safety net — guarantees no dining
   // card persists with an empty `description`. Runs at the single boundary
   // so every write path (final-save, save-itinerary, repair-costs, lock
