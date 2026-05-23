@@ -90,8 +90,32 @@ export function addMinutesToHHMM(timeHHMM: string, deltaMins: number): string {
   return minutesToHHMM(base + deltaMins);
 }
 
+/**
+ * Normalize any time string to "HH:MM" (24h).
+ * Handles:
+ *   - "14:00", "2:00 PM", "9:30 am"
+ *   - ISO 8601 datetimes: "2026-06-04T14:00:00", "2026-06-04T14:00:00Z",
+ *     "2026-06-04T14:00:00+02:00" — the local wall-clock time is extracted
+ *     by regex BEFORE any Date()/toTimeString() fallback (which is TZ-dependent
+ *     inside Deno and silently shifted past results).
+ */
 export function normalizeTo24h(timeStr: string): string | null {
-  const mins = parseTimeToMinutes(timeStr);
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const trimmed = timeStr.trim();
+  if (!trimmed) return null;
+
+  // ISO 8601 — pull HH:MM straight out of the string, ignore offset/Z
+  // so we never depend on the runtime timezone.
+  const iso = trimmed.match(/^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/);
+  if (iso) {
+    const h = parseInt(iso[1], 10);
+    const m = parseInt(iso[2], 10);
+    if (h >= 0 && h < 24 && m >= 0 && m < 60) {
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+  }
+
+  const mins = parseTimeToMinutes(trimmed);
   if (mins === null) return null;
   return minutesToHHMM(mins);
 }
