@@ -338,6 +338,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   const hasEditPermission = collab && (collab.permission === 'edit' || collab.permission === 'admin');
   
   if (!isOwner && !hasEditPermission) {
+    console.error(`[SAVE_TRACE] trace=${saveTraceId} site=exit status=403 reason=unauthorized userId=${userId}`);
     console.error(`[save-itinerary] Unauthorized save attempt by ${userId} for trip ${tripId}`);
     return errorJson("Access denied. You don't have permission to modify this trip.", 403);
   }
