@@ -31,7 +31,7 @@ export interface CascadeActivity {
 }
 
 export interface CascadeRepair {
-  type: 'same_start_fix' | 'overlap_fix' | 'buffer_fix' | 'dropped_past_midnight' | 'bookend_clamped' | 'transit_recomputed' | 'transit_unverified';
+  type: 'same_start_fix' | 'overlap_fix' | 'buffer_fix' | 'dropped_past_midnight' | 'bookend_clamped' | 'transit_recomputed' | 'transit_unverified' | 'transit_duration_clamped';
   activityId: string;
   activityTitle?: string;
   before?: string;
