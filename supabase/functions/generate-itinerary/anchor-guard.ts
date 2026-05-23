@@ -68,13 +68,14 @@ function distributeFloatingAnchors(
   const out: Array<Record<string, any>> = [];
   let dropped = 0;
   for (const anchor of anchors) {
-    // Defense-in-depth: anchors without a startTime AND without a venue identity
-    // (venueName / venue_name / location.name) are soft must-dos. Don't paint
-    // them onto days as locked naked rows — they'd appear with no time, no
-    // description, no address. The generator's USER WISHES Day Brief block
-    // handles these as soft requirements.
-    const anchorVenue = anchor.venueName || (anchor as any).venue_name || (anchor as any).location?.name;
-    if (!anchor.startTime && !anchorVenue) {
+    // TIGHTENED PREDICATE: any anchor lacking an explicit startTime is a soft
+    // wish — the venueName heuristic is unreliable (chip parsing copies title
+    // into venueName, so "Notre-Dame Basilica" satisfies the old guard). Soft
+    // wishes are carried by Day Brief USER WISHES only; never painted as
+    // untimed locked cards (the recurring "thrown on top, no time / no
+    // description" symptom). See
+    // mem://constraints/itinerary/anchor-cards-must-have-time.
+    if (!anchor.startTime) {
       dropped++;
       continue;
     }
@@ -98,10 +99,11 @@ function distributeFloatingAnchors(
     out.push({ ...anchor, dayNumber: best + 1 });
   }
   if (dropped > 0) {
-    console.log(`[ANCHOR_GUARD] floating_dropped count=${dropped} reason=soft_must_do (no startTime, no venueName)`);
+    console.log(`[ANCHOR_GUARD] floating_dropped count=${dropped} reason=no_startTime (soft wish — carried in Day Brief)`);
   }
   return out;
 }
+
 
 export function applyAnchorsWin(
   itineraryDays: any[],
@@ -156,25 +158,21 @@ export function applyAnchorsWin(
       return lockTitle && aTitle && (aTitle.includes(lockTitle) || lockTitle.includes(aTitle));
     });
     if (!existing) {
-      // Soft-wish guard: don't restore a vague pinned anchor (no time AND no
-      // venue identity) as a naked locked card. The Day Brief carries it as a
-      // USER WISH so the generator can pick a real venue + slot + description.
-      // See mem://constraints/itinerary/soft-vs-hard-user-intent.
-      const pinnedVenue = anchor.venueName || (anchor as any).venue_name || (anchor as any).location?.name;
-      if (!anchor.startTime && !pinnedVenue) {
+      // TIGHTENED PREDICATE (mirrors floating distribution): pinned anchors
+      // also require an explicit startTime. The previous venueName-based
+      // bypass let chip must-dos through as untimed locked cards. See
+      // mem://constraints/itinerary/anchor-cards-must-have-time.
+      if (!anchor.startTime) {
         droppedPinnedSoft++;
         continue;
       }
       // Flag for enrichment so description + address backfill runs on this
       // restored card (see mem://constraints/itinerary/anchor-enrichment-allowed).
-      // Without `needsAnchorEnrichment` the row persists as a bare 60-min
-      // locked card with no description, no map link, and no purpose — exactly
-      // the "thrown on top" symptom the user keeps reporting.
       day.activities.push({
         id: `anchor-restore-d${targetDayNum}-${restored}-${Date.now()}`,
         title: anchor.title,
         name: anchor.title,
-        startTime: anchor.startTime || undefined,
+        startTime: anchor.startTime,
         endTime: anchor.endTime || undefined,
         category: anchor.category || 'activity',
         venue_name: anchor.venueName || undefined,
@@ -214,11 +212,35 @@ export function applyAnchorsWin(
     }
   }
   if (droppedPinnedSoft > 0) {
-    console.log(`[ANCHOR_GUARD] pinned_soft_dropped count=${droppedPinnedSoft} reason=no_time_no_venue (handled as USER WISH in Day Brief)`);
+    console.log(`[ANCHOR_GUARD] pinned_soft_dropped count=${droppedPinnedSoft} reason=no_startTime (handled as USER WISH in Day Brief)`);
+  }
+
+  // Cross-day fingerprint dedupe: keep first occurrence (lowest day index,
+  // earliest startTime) of each anchor fingerprint; drop later duplicates.
+  // Closes the recurring "same locked anchor on Day 1 AND Day 2" symptom
+  // when the chain re-runs distribution per leg.
+  let crossDayDropped = 0;
+  const seenFp = new Set<string>();
+  for (const d of days) {
+    if (!Array.isArray(d.activities)) continue;
+    const kept: any[] = [];
+    for (const a of d.activities) {
+      if (!a?.isLocked && !a?.locked) { kept.push(a); continue; }
+      const fp = fingerprint(a);
+      if (!fp || fp === '|') { kept.push(a); continue; }
+      if (seenFp.has(fp)) { crossDayDropped++; continue; }
+      seenFp.add(fp);
+      kept.push(a);
+    }
+    d.activities = kept;
+  }
+  if (crossDayDropped > 0) {
+    console.log(`[ANCHOR_GUARD] cross_day_dedupe dropped=${crossDayDropped}`);
   }
 
   return { days, restored, reaffirmed };
 }
+
 
 /**
  * Harvest anchor-shaped objects from existing itinerary days. Used by the

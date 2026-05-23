@@ -91,7 +91,9 @@ export const INTEGRITY_HEAL_SAVE_REASONS: ReadonlyArray<string> = [
   'self-heal-post-checkout-prune',
   'self-heal-seed-intents',
   'self-heal-chronology',
+  'self-heal-anchor-cleanup',
 ];
+
 
 export function isIntegrityHealSaveReason(saveReason: string | undefined | null): boolean {
   if (!saveReason || typeof saveReason !== 'string') return false;
