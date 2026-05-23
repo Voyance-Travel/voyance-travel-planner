@@ -533,6 +533,8 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
       rawFlightSelection: trip.flight_selection,
       rawHotelSelection: trip.hotel_selection,
       rawFlightIntelligence: trip.flight_intelligence,
+      parseFailed,
+      legPickSource,
     };
   } catch (e) {
     console.error('[FlightHotel] Error:', e);
