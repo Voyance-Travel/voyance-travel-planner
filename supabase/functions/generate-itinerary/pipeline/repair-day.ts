@@ -3838,6 +3838,12 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // Universal Locking honored — locked/user/manual/extracted/pinned rows preserved.
   // Closes the recurring "Florence 16:15 / Barcelona 15:30 / Madrid 21:05" drift.
   if ((isLastDay || (isLastDayInCity && !isTransitionDay)) && !isHotelChange) {
+    console.log(
+      `[DEPARTURE_15Z_RAN] day=${dayNumber} isLastDay=${isLastDay} isLastDayInCity=${isLastDayInCity} ` +
+      `isTransitionDay=${isTransitionDay} isHotelChange=${isHotelChange} ` +
+      `returnDepartureTime24=${returnDepartureTime24 || 'UNKNOWN'} ` +
+      `transferMins=${input.airportTransferMinutes || 45}`,
+    );
     const enforcement = enforceDepartureDayLogistics({
       activities,
       dayNumber,
@@ -3850,6 +3856,16 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
     activities = enforcement.activities;
     repairs.push(...enforcement.repairs);
+    console.log(
+      `[DEPARTURE_15Z_RAN] day=${dayNumber} repairs=${enforcement.repairs.length} ` +
+      `actions=[${enforcement.repairs.map(r => r.action).join(',')}]`,
+    );
+  } else {
+    console.log(
+      `[DEPARTURE_15Z_SKIPPED] day=${dayNumber} isLastDay=${isLastDay} ` +
+      `isLastDayInCity=${isLastDayInCity} isTransitionDay=${isTransitionDay} ` +
+      `isHotelChange=${isHotelChange}`,
+    );
   }
 
   // --- 16. FINAL TIMING & TRANSIT-BUFFER PASS (shared with refresh-day) ---------
@@ -3895,14 +3911,49 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // ── Output consistency pass (title-time mismatch) ──
+  // Now an auto-repair: strip the offending temporal word from titles where the
+  // schedule contradicts it (e.g. "Nightcaps at Ugo" at 14:53 → "at Ugo").
+  // Locked/user/manual/extracted/pinned rows preserved.
+  const TEMPORAL_WORDS_RE = /\b(morning|sunrise|dawn|early|breakfast|brunch|midday|noon|lunch|afternoon|evening|sunset|dusk|dinner|cocktails?|nightcaps?|aperitivos?|aperitifs?|night|nightlife|late.?night|after.?dark)\b/gi;
   const _consistencyIssues = validateDayConsistency({ dayNumber, activities });
+  let _titleTimeRewrites = 0;
   if (_consistencyIssues.length > 0) {
     for (const issue of _consistencyIssues) {
       console.warn(`[consistency] Day ${dayNumber} ${issue.type}: ${issue.detail}. ${issue.suggestion}`);
+      if (issue.type !== 'title_time_mismatch') continue;
+      const idx = activities.findIndex((a: any) => a?.id && a.id === issue.activityId);
+      if (idx < 0) continue;
+      const act: any = activities[idx];
+      if (lockedIds.has(act?.id) || act?.isLocked || act?.userAdded || act?.userEdited
+          || act?.extracted || act?.pinned || act?.isManual) continue;
+      const title = String(act?.title || '');
+      if (!title) continue;
+      // Strip the offending temporal word(s) and tidy whitespace/punctuation.
+      const rewritten = title
+        .replace(TEMPORAL_WORDS_RE, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/^\s*(?:at|in|on)\s+/i, '')
+        .replace(/^[\s\-–—:,]+/, '')
+        .replace(/[\s\-–—:,]+$/, '')
+        .trim();
+      if (rewritten && rewritten.toLowerCase() !== title.toLowerCase()) {
+        act.title = rewritten;
+        _titleTimeRewrites++;
+        repairs.push({
+          code: 'TITLE_TIME_MISMATCH' as any,
+          action: 'rewrote_title_to_drop_temporal_word',
+          before: { title },
+          after: { title: rewritten },
+        } as any);
+        console.log(`[TITLE_TIME_REWRITE] day=${dayNumber} "${title}" → "${rewritten}"`);
+      }
     }
     _dayOut.metadata = _dayOut.metadata || {};
     _dayOut.metadata.quality = _dayOut.metadata.quality || {};
     _dayOut.metadata.quality.consistency_issues = _consistencyIssues;
+    if (_titleTimeRewrites > 0) {
+      _dayOut.metadata.quality.title_time_rewrites = _titleTimeRewrites;
+    }
   }
 
   return {
