@@ -314,14 +314,39 @@ export async function reconcileFulfillment(
   if (intents.length === 0) return 0;
 
   const updates: Array<{ id: string; activityId: string | null }> = [];
+  const fulfilledTripWideTitles = new Set<string>();
   for (const intent of intents) {
     if (intent.status === 'fulfilled') continue; // already done
-    if (intent.day_number == null) continue;     // trip-wide, no single fulfillment
     if (intent.intent_kind === 'avoid' || intent.intent_kind === 'note' || intent.intent_kind === 'constraint') continue;
+
+    const titleLower = intent.title.toLowerCase();
+
+    // Trip-wide intents (day_number=null) used to be skipped, which made them
+    // re-inject on every day via compile-prompt forever — driving the AI to
+    // emit the same anchor multiple times. Now first-match wins: as soon as
+    // any day contains a matching activity, mark fulfilled so subsequent
+    // legs stop seeing the wish. See
+    // mem://constraints/itinerary/anchor-cards-must-have-time.
+    if (intent.day_number == null) {
+      if (fulfilledTripWideTitles.has(titleLower)) continue;
+      let match: any = null;
+      for (const day of daysWithActivities) {
+        match = day.activities.find((a) => {
+          const t = (a.title || a.name || '').toLowerCase();
+          if (!t) return false;
+          return t === titleLower || t.includes(titleLower) || titleLower.includes(t);
+        });
+        if (match) break;
+      }
+      if (match) {
+        updates.push({ id: intent.id, activityId: typeof match.id === 'string' ? match.id : null });
+        fulfilledTripWideTitles.add(titleLower);
+      }
+      continue;
+    }
 
     const day = daysWithActivities.find((d) => d.dayNumber === intent.day_number);
     if (!day) continue;
-    const titleLower = intent.title.toLowerCase();
     const match = day.activities.find((a) => {
       const t = (a.title || a.name || '').toLowerCase();
       if (!t) return false;
@@ -331,6 +356,7 @@ export async function reconcileFulfillment(
       updates.push({ id: intent.id, activityId: typeof match.id === 'string' ? match.id : null });
     }
   }
+
 
   if (updates.length === 0) return 0;
   let written = 0;
