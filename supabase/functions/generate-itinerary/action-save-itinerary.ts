@@ -308,6 +308,12 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   const skipLedgerCheck = params.skipLedgerCheck === true;
   const saveReason = typeof params.saveReason === 'string' ? params.saveReason : 'unspecified';
 
+  const saveTraceId = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10)).slice(0, 8);
+  const _saveT0 = Date.now();
+  const _daysIn = Array.isArray(itinerary?.days) ? itinerary.days.length : 0;
+  console.log(`[SAVE_TRACE] trace=${saveTraceId} tripId=${tripId} reason=${saveReason} skipLedger=${skipLedgerCheck} daysIn=${_daysIn} site=enter`);
+  (params as any).__saveTraceId = saveTraceId;
+
   // Verify trip access
   const { data: trip, error: tripError } = await supabase
     .from('trips')
@@ -316,6 +322,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     .single();
 
   if (tripError || !trip) {
+    console.warn(`[SAVE_TRACE] trace=${saveTraceId} site=exit status=404 reason=trip_not_found`);
     return errorJson("Trip not found", 404);
   }
 
