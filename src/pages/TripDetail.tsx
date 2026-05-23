@@ -1261,6 +1261,70 @@ export default function TripDetail() {
   }, [trip?.id, trip?.itinerary_status, trip?.metadata]);
 
 
+  // ------------------------------------------------------------------
+  // Gate 2 — Chronology read-time heal persistence + lazy legacy backfill.
+  // The parser dispatches `voyance:chronology-healed` whenever its read-time
+  // validator sorted activities or stripped a phantom pre-dawn non-bookend.
+  // We persist the heal once via the integrity-heal allowlist so the next
+  // page load doesn't have to redo it. Also calls `heal-trip-chronology`
+  // batch fn one-shot per trip for any backend-side critical residual.
+  // See mem://constraints/itinerary/chronology-validator-three-gates.
+  // ------------------------------------------------------------------
+  const chronologyHealAttempted = useRef(false);
+  const chronologyBackfillAttempted = useRef(false);
+  useEffect(() => {
+    if (!trip?.id) return;
+    const handler = (e: Event) => {
+      const tripId = trip.id;
+      if (!tripId) return;
+      if (chronologyHealAttempted.current) return;
+      chronologyHealAttempted.current = true;
+      const detail = (e as CustomEvent).detail || {};
+      console.log('[TripDetail] chronology-healed event → persisting', detail);
+      // Re-read current itinerary_data to persist the healed version.
+      try {
+        const itin = (trip.itinerary_data as Record<string, unknown>) || {};
+        safeUpdateItineraryData(tripId, itin, {}, {
+          skipLedgerCheck: true,
+          reason: 'self-heal-chronology',
+        }).catch((err) => {
+          console.warn('[TripDetail] self-heal-chronology persist failed (non-blocking):', err);
+          chronologyHealAttempted.current = false;
+        });
+      } catch (err) {
+        console.warn('[TripDetail] self-heal-chronology threw (non-blocking):', err);
+        chronologyHealAttempted.current = false;
+      }
+    };
+    window.addEventListener('voyance:chronology-healed', handler);
+    return () => window.removeEventListener('voyance:chronology-healed', handler);
+  }, [trip?.id, trip?.itinerary_data]);
+
+  // Lazy one-shot backfill — invokes batch heal for this trip if not stamped.
+  useEffect(() => {
+    if (!trip?.id || chronologyBackfillAttempted.current) return;
+    const meta = (trip.metadata as Record<string, unknown>) || {};
+    if (meta.chronology_healed_at) return;
+    if (trip.itinerary_status !== 'ready' && trip.itinerary_status !== 'generated') return;
+    chronologyBackfillAttempted.current = true;
+    (async () => {
+      try {
+        const { error } = await supabase.functions.invoke('heal-trip-chronology', {
+          body: { tripId: trip.id },
+        });
+        if (error) {
+          console.warn('[TripDetail] heal-trip-chronology failed (non-blocking):', error);
+          chronologyBackfillAttempted.current = false;
+        }
+      } catch (err) {
+        console.warn('[TripDetail] heal-trip-chronology threw (non-blocking):', err);
+        chronologyBackfillAttempted.current = false;
+      }
+    })();
+  }, [trip?.id, trip?.itinerary_status, trip?.metadata]);
+
+
+
   // Auto-trigger generation only when ?generate=true is present
   useEffect(() => {
     if (
