@@ -516,7 +516,46 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
     console.log(`[compile-day-facts] Departure from preferences: ${preferences.departureTime}, latest activity: ${latestActivity}`);
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Day-1 SOFT FALLBACK — when flight_selection was provided but the arrival
+  // string couldn't be parsed (parseFailed=true) we MUST still tell the LLM
+  // not to default Day 1 to 12:00. Without this the prompt's TOP-PRIORITY
+  // arrival block silently renders empty and the model invents lunch-first,
+  // then a post-hoc FlightSyncWarning surfaces a mismatch the system itself
+  // created. Floor at 15:00 — conservative, but better than a generic noon.
+  // ─────────────────────────────────────────────────────────────────────────
+  if (
+    isFirstDay &&
+    !flightContext.arrivalTime24 &&
+    (flightContext as any).parseFailed &&
+    (flightContext as any).rawFlightSelection
+  ) {
+    const SOFT_FLOOR = '15:00';
+    flightContext = {
+      ...flightContext,
+      arrivalTime24: SOFT_FLOOR,
+      earliestFirstActivityTime: SOFT_FLOOR,
+      context:
+        (flightContext.context || '') +
+        `\n\n⚠️ DAY 1 SOFT ARRIVAL FALLBACK — flight_selection was provided but the arrival time could not be parsed. Do NOT plan any non-transport activity before ${SOFT_FLOOR}. Treat Day 1 as a late-arrival day (dinner + light evening only) unless explicitly told otherwise.`,
+    };
+    console.warn(
+      `[compile-day-facts] Day 1 soft-arrival fallback applied (parseFailed) — floor=${SOFT_FLOOR} legPick=${(flightContext as any).legPickSource || 'unknown'}`
+    );
+  }
+
+  // Trace recorder hook — surfaces flight-ingest state in trace_events so the
+  // next "Day 1 wrong" report can be diagnosed in seconds.
+  if (isFirstDay) {
+    try {
+      console.log(
+        `[FLIGHT_INGEST] day=1 tripId=${tripId} shape=${(flightContext as any).rawFlightSelection ? 'present' : 'absent'} legPick=${(flightContext as any).legPickSource || 'n/a'} arrivalTime24=${flightContext.arrivalTime24 || 'undefined'} earliest=${flightContext.earliestFirstActivityTime || 'undefined'} parseFailed=${(flightContext as any).parseFailed === true} constraintWillRender=${Boolean(flightContext.arrivalTime24)}`
+      );
+    } catch (_e) { /* logging only */ }
+  }
+
   console.log(`[compile-day-facts] Day ${dayNumber}/${totalDays}, isFirst=${isFirstDay}, isLast=${isLastDay}, isLastInCity=${resolvedIsLastDayInCity}, nextLeg=${resolvedNextLegTransport}→${resolvedNextLegCity}, locked=${lockedActivities.length}`);
+
 
   // ═══════════════════════════════════════════════════════════════════════
   // TRANSPORT PREFERENCES
