@@ -123,12 +123,22 @@ export async function handleGenerateTripDay(
 ): Promise<Response> {
   const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId, isFirstTrip, generationLogId } = params;
 
+  // Trace ID: lets us follow one day's full lifecycle across hundreds of
+  // interleaved log lines in Supabase edge-function logs. Grep `trace=<id>`.
+  const genTraceId = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10)).slice(0, 8);
+  const _t0 = Date.now();
+  console.log(`[GEN_TRACE] trace=${genTraceId} tripId=${tripId} day=${dayNumber}/${totalDays} dest="${destination ?? ''}" tier=${budgetTier ?? ''} multiCity=${!!isMultiCity} site=enter`);
+
   if (!tripId || !dayNumber || !totalDays) {
+    console.warn(`[GEN_TRACE] trace=${genTraceId} site=exit reason=invalid_input`);
     return new Response(
       JSON.stringify({ error: "Missing required fields for day generation", code: "INVALID_INPUT" }),
       { status: 400, headers: jsonHeaders }
     );
   }
+
+  // Stash on params so deeper stages can log with the same trace id.
+  (params as any).__genTraceId = genTraceId;
 
   // Create timer early so we can finalize in the catch block
   const timer = new GenerationTimer(tripId, supabase);
