@@ -67,6 +67,8 @@ export interface FillDeadGapsOptions {
   lockedIds?: Set<string>;
   /** Disable when in build-myself / manual mode */
   enabled?: boolean;
+  /** For log attribution only — no behavioural use. */
+  dayNumber?: number;
   /**
    * Last-day upper bound (HH:MM minutes-from-midnight).
    * Typically `departureTime − buffer` (180m flight / 120m train) or hotel
