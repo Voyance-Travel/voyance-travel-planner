@@ -18,6 +18,11 @@ export interface AICallInput {
   apiKey: string;
   dayNumber: number;
   maxAttempts?: number;
+  /** Optional flight-recorder trace; if provided, each attempt is logged
+   *  to trip_generation_llm_calls (prompt, response, latency, tokens, error). */
+  trace?: { llm: (args: any) => Promise<void> } | null;
+  /** Purpose tag for the LLM call, e.g. "day-initial-generation". */
+  tracePurpose?: string;
 }
 
 export interface AICallResult {
