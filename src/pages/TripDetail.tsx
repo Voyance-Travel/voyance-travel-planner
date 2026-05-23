@@ -1305,7 +1305,7 @@ export default function TripDetail() {
     if (!trip?.id || chronologyBackfillAttempted.current) return;
     const meta = (trip.metadata as Record<string, unknown>) || {};
     if (meta.chronology_healed_at) return;
-    if (trip.itinerary_status !== 'ready' && trip.itinerary_status !== 'generated') return;
+    if (trip.itinerary_status !== 'ready' && (trip.itinerary_status as string) !== 'generated') return;
     chronologyBackfillAttempted.current = true;
     (async () => {
       try {
