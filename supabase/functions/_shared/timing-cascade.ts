@@ -664,6 +664,7 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
       if (delta > 0) {
         const before = `${next.title} @ ${next.startTime}`;
         cascadeShift(i + 1, delta);
+        console.log(`[PERSIST_CASCADE_DETAIL] reason=same_start delta_min=${delta} moved="${next.title}" from=${minutesToTime(nextStart)} to=${next.startTime} anchor="${curr.title}"`);
         repairs.push({
           type: 'same_start_fix',
           activityId: next.id,
@@ -691,6 +692,7 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
       if (delta > 0) {
         const before = `${next.title} @ ${next.startTime}`;
         cascadeShift(i + 1, delta);
+        console.log(`[PERSIST_CASCADE_DETAIL] reason=overlap delta_min=${delta} moved="${next.title}" from=${minutesToTime(nextStart)} to=${next.startTime} prevEnd=${minutesToTime(currEnd)} prev="${curr.title}" transit=${eitherTransit}`);
         repairs.push({
           type: 'overlap_fix',
           activityId: next.id,
@@ -718,6 +720,7 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
           const transitNote = transit
             ? `${transit.durationMinutes} min ${transit.method} (${transit.distance}) + ${minBuffer} min buffer`
             : `${minBuffer} min buffer`;
+          console.log(`[PERSIST_CASCADE_DETAIL] reason=buffer delta_min=${delta} moved="${next.title}" from=${before.split('@ ')[1]} to=${next.startTime} note="${transitNote}"`);
           repairs.push({
             type: 'buffer_fix',
             activityId: next.id,

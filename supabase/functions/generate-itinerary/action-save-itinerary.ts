@@ -308,6 +308,12 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   const skipLedgerCheck = params.skipLedgerCheck === true;
   const saveReason = typeof params.saveReason === 'string' ? params.saveReason : 'unspecified';
 
+  const saveTraceId = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10)).slice(0, 8);
+  const _saveT0 = Date.now();
+  const _daysIn = Array.isArray(itinerary?.days) ? itinerary.days.length : 0;
+  console.log(`[SAVE_TRACE] trace=${saveTraceId} tripId=${tripId} reason=${saveReason} skipLedger=${skipLedgerCheck} daysIn=${_daysIn} site=enter`);
+  (params as any).__saveTraceId = saveTraceId;
+
   // Verify trip access
   const { data: trip, error: tripError } = await supabase
     .from('trips')
@@ -316,6 +322,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     .single();
 
   if (tripError || !trip) {
+    console.warn(`[SAVE_TRACE] trace=${saveTraceId} site=exit status=404 reason=trip_not_found`);
     return errorJson("Trip not found", 404);
   }
 
@@ -331,6 +338,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   const hasEditPermission = collab && (collab.permission === 'edit' || collab.permission === 'admin');
   
   if (!isOwner && !hasEditPermission) {
+    console.error(`[SAVE_TRACE] trace=${saveTraceId} site=exit status=403 reason=unauthorized userId=${userId}`);
     console.error(`[save-itinerary] Unauthorized save attempt by ${userId} for trip ${tripId}`);
     return errorJson("Access denied. You don't have permission to modify this trip.", 403);
   }
@@ -1493,6 +1501,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   });
 
   if (error) {
+    console.error(`[SAVE_TRACE] trace=${saveTraceId} site=exit status=500 reason=persist_error elapsed_ms=${Date.now() - _saveT0}`);
     console.error("[save-itinerary] Failed:", error);
     return errorJson("Failed to save itinerary", 500);
   }
@@ -1552,6 +1561,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   await triggerNextJourneyLeg(supabase, tripId);
 
   if (!persistVerdict.ok) {
+    console.warn(`[SAVE_TRACE] trace=${saveTraceId} site=exit status=200 verdict=needs_regeneration elapsed_ms=${Date.now() - _saveT0} errs=${persistVerdict.errors?.length || 0} warns=${persistVerdict.warnings?.length || 0} syncSuccess=${syncSuccess}`);
     // Return 200 (not 422) so the browser doesn't log a red "Failed to load
     // resource" line on every page-load self-heal. The body still carries
     // `success: false` + `code: 'NEEDS_REGENERATION'`, which is what every
@@ -1569,6 +1579,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     }, 200);
   }
 
+  console.log(`[SAVE_TRACE] trace=${saveTraceId} site=exit status=200 verdict=ok elapsed_ms=${Date.now() - _saveT0} syncSuccess=${syncSuccess} warns=${persistVerdict.warnings?.length || 0}`);
   return okJson({
     success: true,
     normalized: true,

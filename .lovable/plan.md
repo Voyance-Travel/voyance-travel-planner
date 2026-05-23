@@ -1,74 +1,94 @@
-# What's Still Broken After Anchor-Cleanup Fix
+# Itinerary Generation — Full Observability Pass
 
-I swept the two newest "ready" trips (Milan `44a68e13`, Sao Paulo `db13fe14`). The anchor-duplication bug is gone, but the on-disk data exposes **four new classes of breakage** the pipeline is silently letting through. The chronology view says `0 issues` because it only checks strict reverse-order timestamps — overlaps and misplaced cards slip past.
+Goal: every silent regression we've been guessing at (meal-overlap insertion, §15z misses, dead-gap skips, missing bookends, validation drops, persist-time rewrites) should produce one **attributed, structured log line** so the next bad trip tells us the exact stage to patch.
 
-## 1. Activity overlaps are not being detected at save time (Sao Paulo — severe)
+No behavior change. Pure logging + one already-existing `StageLogger` finally wired up.
+
+## Sentinels to add
+
+All log lines follow the format `[<STAGE_CODE>] tripId=… day=N …key=val` so they're greppable in Supabase edge-function logs.
+
+### 1. Meal-guard / floating-meal insertion (`_shared/post-meal-guard-fill.ts`, `_shared/timing-cascade.ts::assignFloatingMealTimes`)
+- `[MEAL_INSERT_DECISION] day=N slot=lunch picked=12:30 collides_with=<id|title>(11:55-13:10) action=push_to=13:15|keep|skip reason=…`
+- `[MEAL_INSERT_NO_VENUE] day=N slot=… reason=pool_exhausted|cross_city|dietary`
+- `[MEAL_GUARD_SUMMARY] day=N inserted=K skipped=M collisions=C`
+
+### 2. Dead-gap fill (`pipeline/fill-dead-gaps.ts`)
+- `[DEAD_GAP_SCAN] day=N gaps=[{start,end,mins,beforeId,afterId}]`
+- `[DEAD_GAP_DECISION] day=N gap=13:30-16:45 mins=195 decision=fill|skip reason=next_is_freshenup|budget_cap|category_filter|pool_empty|under_threshold`
+- `[DEAD_GAP_SUMMARY] day=N filled=K skipped=M`
+
+### 3. Bookend / hotel-return (`universal-quality-pass.ts::runStep8`, `_shared/bookend-verification.ts`)
+- `[BOOKEND_INVOKE] day=N caller=quality|post-meal|save|persist lastEnd=… isDeparture=… injected=Y/N reason=…`
+- `[BOOKEND_NOT_INVOKED] day=N reason=arrival_unknown|isDeparture|last_end_before_14:00|locked_tail|already_present|<6h_remaining`
+
+### 4. Departure-day §15z (`pipeline/repair-day.ts::enforceDepartureDayLogistics`)
+- Already added `[DEPARTURE_15Z_RAN/SKIPPED]`. Extend with per-action delta:
+- `[DEPARTURE_15Z_ACTION] day=N action=retime_checkout|retime_transfer|prune_post_cutoff target=<id|title> from=… to=… reason=…`
+- `[DEPARTURE_15Z_SUMMARY] day=N flight=… buffer=… checkout_cap=… actions=K`
+
+### 5. Validation-gate drops (`pipeline/validation-gate.ts`)
+- `[VALIDATION_GATE_DROP] day=N code=LOGISTICS_SEQUENCE|OVERLAP|… target=<id|title> severity=critical action=drop|blank|downgrade`
+- `[VALIDATION_GATE_SUMMARY] day=N drops=K blanks=M downgrades=D`
+
+### 6. Persist-cascade (already added `[PERSIST_CASCADE]`)
+- Extend with `[PERSIST_CASCADE_DETAIL] day=N moved=<id> from=12:30 to=13:15 reason=overlap|same_start|buffer`
+
+### 7. Save-time normalize (`action-save-itinerary.ts`)
+- `[SAVE_NORMALIZE] day=N steps=[normalizeDays, predawnCascade, departureNet, postCheckoutPrune, bookendVerify] mutations=K`
+
+### 8. Wire `StageLogger` (already built, currently unused)
+`pipeline/stage-logger.ts` already persists per-stage artifacts to `trips.metadata.pipeline_logs.day_N`. Wire it into `action-generate-trip-day.ts` so every generated day stamps:
+- compile-facts timing + size
+- compile-schema output
+- prompt summary (first 2k chars)
+- raw AI response (first 5k)
+- validation results array
+- repair actions array
+- per-stage timings
+
+This is the single biggest leverage point — once it's on, any future "why did this day look weird" is one DB read away.
+
+### 9. Top-of-pipeline trace ID
+Generate `genTraceId = crypto.randomUUID().slice(0,8)` at the top of `action-generate-trip-day.ts` and prefix every log emitted during that invocation. Same for `action-save-itinerary.ts`. Lets us follow one day's full lifecycle across hundreds of interleaved log lines.
+
+### 10. Console-noise discipline
+- Gate purely informational logs behind `DEBUG_LOGS` env (existing `debugLog` helper in `_shared/debug-log.ts`).
+- All `[STAGE_CODE]`-prefixed sentinels stay on **always** — they're the diagnostic surface.
+
+## Touch list
 
 ```text
-Day 1  Cathedral 11:55–13:10  ⟂  Lunch 12:30–13:30  ⟂  Taxi 13:15–13:50
-Day 2  Bike Tour 10:10–12:40  ⟂  Lunch 12:30–13:30  ⟂  Travel 12:45–13:13
-Day 3  MAM     09:46–11:46    ⟂  Checkout 11:00–11:30
+supabase/functions/_shared/post-meal-guard-fill.ts        — MEAL_INSERT_*
+supabase/functions/_shared/timing-cascade.ts              — PERSIST_CASCADE_DETAIL, MEAL collision in assignFloatingMealTimes
+supabase/functions/_shared/bookend-verification.ts        — BOOKEND_INVOKE/NOT_INVOKED at every call site
+supabase/functions/generate-itinerary/universal-quality-pass.ts  — BOOKEND_INVOKE in runStep8
+supabase/functions/generate-itinerary/pipeline/fill-dead-gaps.ts — DEAD_GAP_*
+supabase/functions/generate-itinerary/pipeline/repair-day.ts     — DEPARTURE_15Z_ACTION/SUMMARY
+supabase/functions/generate-itinerary/pipeline/validation-gate.ts — VALIDATION_GATE_DROP/SUMMARY
+supabase/functions/generate-itinerary/action-generate-trip-day.ts — wire StageLogger + genTraceId
+supabase/functions/generate-itinerary/action-save-itinerary.ts    — SAVE_NORMALIZE + genTraceId
+supabase/functions/_shared/persist-itinerary.ts                   — PERSIST_CASCADE_DETAIL
 ```
 
-Meal-guard is inserting Lunch at a fixed 12:30 slot **on top of** the existing activity, then the cascade walk doesn't push subsequent rows because the inserted meal carries a stale `startTime` that pre-dates the previous row's end. The save-time `enforceTimingAndBuffers` only adjusts forward-ordered pairs; an inserted overlap is invisible to it.
+No new files. No schema migration (StageLogger already writes to `trips.metadata` which is jsonb).
 
-**Fix:** In `assignFloatingMealTimes` (and the meal-guard insertion path), after stamping a time, run a single-pass collision check against the day; if `start < prevEnd`, push to `prevEnd + 5min`. Then re-sort + re-cascade. Add an `OVERLAP` code to `applyValidationGate` that drops or shifts.
+## How we'll use it
 
-## 2. Departure-day logistics §15z is not firing for Milan + Sao Paulo
+Next time a trip surfaces a weird artifact:
+1. Grep edge-function logs for `tripId=<id>` → full chronological trace via `genTraceId`.
+2. Read `trips.metadata.pipeline_logs.day_N` for the AI response + validation + repair history.
+3. Match the artifact to the exact `[STAGE_CODE]` that introduced it.
+4. Patch that stage. No more whack-a-mole.
 
-Milan (flight 11:30):
-```text
-Day 3  Breakfast 08:30  →  Checkout 11:00  →  (nothing)
-```
-Checkout cap should be `min(11:00, 11:30 − 180 buffer − 30 transfer − 60 − 30)` = way before 08:00. Should also have an airport-transfer card ending at 08:30. Neither happened.
+## Out of scope
 
-Sao Paulo (flight 23:05):
-```text
-Day 3  MAM 09:46–11:46  →  Checkout 11:00  →  Travel to Airport 13:02–13:47  →  Flight 23:05
-```
-Transfer ends 9+ hours before flight; §15z should have either removed it (wrong time) or pushed it to ~19:05.
+- No retry/auto-heal logic added — pure visibility.
+- No new validators or repair passes.
+- No frontend changes.
+- No removal of existing logs (we add, don't subtract, until we have a baseline).
 
-**Fix:** Confirm §15z reads `savedDepartureTime24` (Milan has it set, Sao Paulo too), and that it's invoked unconditionally on the last day. Likely regression after the recent anchor-guard rewrite — add a sentinel log `[DEPARTURE_15Z_RAN] flight=… cap=…` so we can see misses on the next trip.
+## Risk
 
-## 3. Title-time mismatch validator not enforced
-
-Milan Day 1: `"Nightcaps at Ugo Cocktail Bar"` scheduled `14:53–15:53`. `validateActivityTitleTime` in `_shared/output-consistency.ts` already detects this exact pattern but its emit isn't wired into `applyValidationGate` as a forced rename or reschedule. Either:
-- Rename strip: drop "Nightcap"/"Sunset" prefix when slot is afternoon, or
-- Reschedule into the matching window via repair-day.
-
-## 4. Day-1 missing breakfast + dead-gap on Day 2 (Milan)
-
-- Day 1 arrival empty → defaulted to <09:30 → breakfast required, but Day 1 has **no breakfast card** (starts with check-in at 08:15 then bike at 09:18).
-- Day 2: Lunch 12:30–13:30 → Freshen-up 16:45 = **3h 15min unfilled active window**. `fill-dead-gaps` should have caught >90min.
-
-**Fix:** `fill-dead-gaps` on Day-N≥2 mid-afternoon window is silently skipping. Likely the "exempt if next card is freshen-up" branch is too greedy. Tighten so freshen-up at 16:45 doesn't excuse a 13:30 leak.
-
-## 5. Day-1 missing hotel-return bookend (both trips)
-
-Milan Day 1 dinner ends 20:15, no return card. Sao Paulo Day 1 nightcap ends 00:52 (wraps past midnight) — should have emitted `late_nightlife_bookend`. `runStep8` and the read-time bookend injector are both missing this. Likely the chained generator's per-day finalization is not running Step 8 on Day 1 when arrival time is unknown.
-
-## Proposed implementation order
-
-1. **Overlap detection at meal-guard insertion + save-time** — biggest user-visible bug.
-2. **§15z sentinel + regression repro** — adds observability before patching.
-3. **`fill-dead-gaps` afternoon-window tightening.**
-4. **Day-1 bookend on arrival-unknown branch.**
-5. **Wire title-time validator into validation gate.**
-
-## Touch list (preview)
-
-- `supabase/functions/_shared/meal-time-assignment.ts` (collision push)
-- `supabase/functions/_shared/timing-cascade.ts` (overlap pass)
-- `supabase/functions/_shared/validation-gate.ts` (OVERLAP + TITLE_TIME codes)
-- `supabase/functions/generate-itinerary/repair-day.ts` (§15z sentinel + Day-1 bookend branch)
-- `supabase/functions/_shared/fill-dead-gaps.ts` (freshen-up exemption tightening)
-- One-shot SQL backfill to re-run §15z + dead-gap fill on the 2 affected trips.
-
-## What I'd want from you before building
-
-Two scoping questions:
-
-1. **Overlap resolution policy** — when an inserted meal collides with an existing activity, should I (a) shift the meal later and cascade everything else, or (b) keep the meal at its canonical slot and shift the sightseeing card earlier? (a) is safer, (b) keeps meals at "believable human" hours.
-2. **Day-1 breakfast** — when arrival time is unknown, current default assumes pre-09:30 (breakfast required). Want me to keep that, or flip to "no breakfast required when arrival unknown"?
-
-Once you answer those I'll build. Or say "go" and I'll pick (a) + keep current breakfast default.
+- Log volume increase: ~20–30 extra lines per day generated, ~50KB extra metadata per trip. Both acceptable; metadata already holds quality traces.
+- `StageLogger.flush()` is a `UPDATE trips SET metadata` — one extra round-trip per day. Wrapped in try/catch (already is) so it can't break generation.
