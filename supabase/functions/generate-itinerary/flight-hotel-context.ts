@@ -3,6 +3,10 @@
  * Extracts flight and hotel data from trip records and formats them
  * as AI prompt context with timing constraints.
  */
+import {
+  pickDestinationArrivalLeg,
+  pickDestinationDepartureLeg,
+} from '../_shared/flight-leg-pick.ts';
 
 // =============================================================================
 // Types
