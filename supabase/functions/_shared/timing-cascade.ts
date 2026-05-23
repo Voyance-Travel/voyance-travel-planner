@@ -31,7 +31,7 @@ export interface CascadeActivity {
 }
 
 export interface CascadeRepair {
-  type: 'same_start_fix' | 'overlap_fix' | 'buffer_fix' | 'dropped_past_midnight' | 'bookend_clamped' | 'transit_recomputed' | 'transit_unverified';
+  type: 'same_start_fix' | 'overlap_fix' | 'buffer_fix' | 'dropped_past_midnight' | 'bookend_clamped' | 'transit_recomputed' | 'transit_unverified' | 'transit_duration_clamped';
   activityId: string;
   activityTitle?: string;
   before?: string;
@@ -488,6 +488,57 @@ export function recomputeTransitCards<T extends CascadeActivity>(
   const repairs: CascadeRepair[] = [];
   let recomputed = 0;
   let unverified = 0;
+  let clamped = 0;
+
+  // ─── Pass 0: hard sanity clamp on absurd durations ──────────────────────────
+  // Any transit/transfer card with durationMinutes > 180 (3h) that is NOT
+  // coord-verified by us and NOT locked/user/booked gets clamped to a
+  // category-aware default. Closes "Travel to Transfer to the Airport — 525 min"
+  // class of bugs where the AI emitted a duration filling a huge gap and no
+  // downstream pass questioned it (coords missing on synthetic transfer cards
+  // makes the coord-based recompute below a no-op).
+  const HARD_DUR_CEILING = 180;
+  for (let i = 0; i < activities.length; i++) {
+    const card = activities[i] as any;
+    if (!isTransitCard(card)) continue;
+    if (isUntouchableByRecompute(card, lockedIds)) continue;
+    const cur = Number(card.durationMinutes ?? card.duration_minutes ?? 0);
+    if (!Number.isFinite(cur) || cur <= HARD_DUR_CEILING) continue;
+    const title = String(card.title || card.name || '').toLowerCase();
+    const sub = String(card.subcategory || '').toLowerCase();
+    const isAirportish = /\bairport|terminal|station\b/.test(title) || sub === 'airport_transfer';
+    const fallback = isAirportish ? 45 : 30;
+    const before = `${card.title} @ ${card.startTime} (${cur} min)`;
+    card.durationMinutes = fallback;
+    card.duration_minutes = fallback;
+    const start = parseTime(card.startTime);
+    if (start !== null) {
+      const newEnd = minutesToTime(start + fallback);
+      card.endTime = newEnd;
+      (card as any).end_time = newEnd;
+    }
+    if (typeof card.title === 'string') {
+      card.title = card.title.replace(/\b\d{1,4}\s*min\b/i, `${fallback} min`);
+    }
+    const meta = (card.metadata = card.metadata || {});
+    meta.transit_unverified = true;
+    meta.transit_clamped_from = cur;
+    clamped++;
+    repairs.push({
+      type: 'transit_duration_clamped',
+      activityId: card.id,
+      activityTitle: card.title,
+      before,
+      after: `${card.title} @ ${card.startTime} (${fallback} min, clamped)`,
+      message: `Clamped implausible transit duration ${cur}min → ${fallback}min on "${card.title}" (no coord verification available).`,
+    });
+  }
+  if (clamped > 0) {
+    try {
+      // eslint-disable-next-line no-console
+      console.log(`[CASCADE] transit_clamped=${clamped} (ceiling=${HARD_DUR_CEILING}m)`);
+    } catch { /* noop */ }
+  }
 
   for (let i = 0; i < activities.length; i++) {
     const card = activities[i];
