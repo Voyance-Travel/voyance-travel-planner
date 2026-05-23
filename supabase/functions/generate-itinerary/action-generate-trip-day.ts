@@ -21,6 +21,8 @@ import { matchesAIStubVenue } from './fix-placeholders.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
 import { stripBookendsForPrompt, isCrossDayPromptNoise } from '../_shared/strip-bookends-for-prompt.ts';
+import { startTrace, noopTrace, type Trace } from '../_shared/trace-recorder.ts';
+import { computeMatchVerdict } from '../_shared/match-verdict.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
