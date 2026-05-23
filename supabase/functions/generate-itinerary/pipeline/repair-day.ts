@@ -5083,6 +5083,10 @@ function repairBookends(
               dur = est.durationMinutes;
               cost = est.costAmount;
               method = est.method;
+            } else if (dur > 180) {
+              const lowered = /airport|terminal/i.test(toName) ? 45 : 30;
+              console.log(`[Repair §4c-merge] Clamped unverified back-to-back transport "${toName}" ${dur}min → ${lowered}min (no coords)`);
+              dur = lowered;
             }
 
             const mergedCard = {
