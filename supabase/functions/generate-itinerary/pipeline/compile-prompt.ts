@@ -1284,15 +1284,28 @@ Include some of the relaxed activities to satisfy companions' preferences.
 ${(() => {
   const arrT = (flightContext as any)?.arrivalTime24;
   const depT = (flightContext as any)?.returnDepartureTime24;
-  if (!arrT && !depT) return '';
+  const hasFlightSel = Boolean((flightContext as any)?.rawFlightSelection);
+  const parseFailed = (flightContext as any)?.parseFailed === true;
+  // Always render the Day-1 block when flight_selection was provided —
+  // an undefined arrivalTime24 used to silently produce an empty block,
+  // letting the LLM default Day 1 to 12:00. That is the exact silent
+  // failure mode behind the "sync flight data" band-aid toast.
+  if (!arrT && !depT && !hasFlightSel) return '';
   let block = 'ARRIVAL/DEPARTURE TIMING (TOP PRIORITY — NEVER VIOLATE):\n';
-  if (arrT && isFirstDay) {
-    const arrMins = parseInt(arrT.split(':')[0], 10) * 60 + parseInt(arrT.split(':')[1] || '0', 10);
-    const earliest = arrMins + 120;
-    const eh = Math.floor(earliest / 60);
-    const em = earliest % 60;
-    block += `- This is DAY 1 (ARRIVAL DAY). Flight lands at ${arrT}. NEVER generate ANY non-transport activity before ${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')} (arrival + 2h for customs/baggage/travel).\n`;
-    block += `- If arrival is after 18:00, only plan dinner and one evening activity.\n`;
+  if (isFirstDay) {
+    if (arrT) {
+      const arrMins = parseInt(arrT.split(':')[0], 10) * 60 + parseInt(arrT.split(':')[1] || '0', 10);
+      const earliest = arrMins + 120;
+      const eh = Math.floor(earliest / 60);
+      const em = earliest % 60;
+      const floorStr = `${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}`;
+      block += `- This is DAY 1 (ARRIVAL DAY). Flight lands at ${arrT}${parseFailed ? ' (CONSERVATIVE FLOOR — original arrival string could not be parsed)' : ''}. NEVER generate ANY non-transport activity before ${floorStr} (arrival + 2h for customs/baggage/travel).\n`;
+      block += `- If arrival is after 18:00, only plan dinner and one evening activity.\n`;
+    } else if (hasFlightSel) {
+      // Last-line defense: flight_selection exists but no arrivalTime24
+      // bubbled through. Force a conservative 15:00 floor.
+      block += `- This is DAY 1 (ARRIVAL DAY). A flight was provided but its arrival time could not be parsed. NEVER generate any non-transport activity before 15:00. Treat as late-arrival: dinner + one light evening activity only.\n`;
+    }
   }
   if (depT && isLastDay) {
     const depMins = parseInt(depT.split(':')[0], 10) * 60 + parseInt(depT.split(':')[1] || '0', 10);
