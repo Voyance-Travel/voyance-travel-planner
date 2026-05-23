@@ -236,11 +236,14 @@ export async function handleGenerateDay(
     _diagTimers.aiCallStart = Date.now();
     let aiResult;
     try {
+      const dayTrace = attachTrace((params as any).__traceId ?? null);
       aiResult = await callAI({
         systemPrompt,
         userPrompt,
         apiKey: LOVABLE_API_KEY,
         dayNumber,
+        trace: dayTrace.enabled ? dayTrace : null,
+        tracePurpose: 'day-initial-generation',
       });
     } catch (err) {
       if (err instanceof AICallError) {
