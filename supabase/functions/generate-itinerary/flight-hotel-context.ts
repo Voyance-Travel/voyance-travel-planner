@@ -3,6 +3,10 @@
  * Extracts flight and hotel data from trip records and formats them
  * as AI prompt context with timing constraints.
  */
+import {
+  pickDestinationArrivalLeg,
+  pickDestinationDepartureLeg,
+} from '../_shared/flight-leg-pick.ts';
 
 // =============================================================================
 // Types
@@ -22,6 +26,12 @@ export interface FlightHotelContextResult {
   rawFlightSelection?: unknown;
   rawHotelSelection?: unknown;
   rawFlightIntelligence?: unknown;
+  /** True when flight_selection was present but arrival could not be parsed
+   *  to a HH:MM 24h value. Downstream uses this to inject a conservative
+   *  soft-fallback rule instead of silently skipping the Day 1 constraint. */
+  parseFailed?: boolean;
+  /** Debug: where the destination-arrival leg was picked from. */
+  legPickSource?: string;
 }
 
 export interface AirportTransferFare {
@@ -90,8 +100,32 @@ export function addMinutesToHHMM(timeHHMM: string, deltaMins: number): string {
   return minutesToHHMM(base + deltaMins);
 }
 
+/**
+ * Normalize any time string to "HH:MM" (24h).
+ * Handles:
+ *   - "14:00", "2:00 PM", "9:30 am"
+ *   - ISO 8601 datetimes: "2026-06-04T14:00:00", "2026-06-04T14:00:00Z",
+ *     "2026-06-04T14:00:00+02:00" — the local wall-clock time is extracted
+ *     by regex BEFORE any Date()/toTimeString() fallback (which is TZ-dependent
+ *     inside Deno and silently shifted past results).
+ */
 export function normalizeTo24h(timeStr: string): string | null {
-  const mins = parseTimeToMinutes(timeStr);
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const trimmed = timeStr.trim();
+  if (!trimmed) return null;
+
+  // ISO 8601 — pull HH:MM straight out of the string, ignore offset/Z
+  // so we never depend on the runtime timezone.
+  const iso = trimmed.match(/^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/);
+  if (iso) {
+    const h = parseInt(iso[1], 10);
+    const m = parseInt(iso[2], 10);
+    if (h >= 0 && h < 24 && m >= 0 && m < 60) {
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+  }
+
+  const mins = parseTimeToMinutes(trimmed);
   if (mins === null) return null;
   return minutesToHHMM(mins);
 }
@@ -198,52 +232,69 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
     let hotelName: string | undefined;
     let hotelAddress: string | undefined;
 
-    // Parse flight information
+    // Parse flight information using the shared leg picker (single source
+    // of truth — mirrors src/utils/normalizeFlightSelection.ts so the edge
+    // function picks the same destination-arrival leg the user saw in Step 2).
     const flightRaw = trip.flight_selection as Record<string, unknown> | null;
-    
+    let legPickSource: string | undefined;
+    let parseFailed = false;
+
     if (flightRaw) {
       const flightInfo: string[] = [];
-      
-      const nestedDeparture = flightRaw.departure as Record<string, unknown> | undefined;
-      const nestedReturn = flightRaw.return as Record<string, unknown> | undefined;
-      
-      const manualArrival = (nestedDeparture?.arrival as Record<string, unknown>)?.time as string | undefined;
-      const searchArrival = nestedDeparture?.arrivalTime as string | undefined;
-      const flatArrival = flightRaw.arrivalTime as string | undefined;
-      const outboundArrival = manualArrival || searchArrival || flatArrival;
-      
-      const manualReturnDep = (nestedReturn?.departure as Record<string, unknown>)?.time as string | undefined;
-      const searchReturnDep = nestedReturn?.departureTime as string | undefined;
-      const flatReturnDep = flightRaw.returnDepartureTime as string | undefined;
-      const returnDeparture = manualReturnDep || searchReturnDep || flatReturnDep;
-      
-      console.log(`[FlightContext] Parsing flight_selection - manual arrival: ${manualArrival}, search arrival: ${searchArrival}, flat arrival: ${flatArrival} → using: ${outboundArrival}`);
-      
-      const departureAirport = flightRaw.departureAirport as string | undefined;
-      const arrivalAirport = flightRaw.arrivalAirport as string | undefined;
-      
+
+      const arrivalPick = pickDestinationArrivalLeg(flightRaw);
+      const departurePick = pickDestinationDepartureLeg(flightRaw);
+      legPickSource = arrivalPick.source;
+
+      const outboundArrival =
+        arrivalPick.rawArrivalString || arrivalPick.leg?.arrivalTime;
+      const returnDeparture =
+        departurePick.rawDepartureString || departurePick.leg?.departureTime;
+
+      const departureAirport =
+        arrivalPick.leg?.departureAirport ||
+        (flightRaw.departureAirport as string | undefined);
+      const arrivalAirport =
+        arrivalPick.leg?.arrivalAirport ||
+        (flightRaw.arrivalAirport as string | undefined);
+
+      console.log(
+        `[FlightContext] Parsing flight_selection - shape=${arrivalPick.shape} legPick=${arrivalPick.source} rawArrival="${outboundArrival ?? ''}" rawReturnDep="${returnDeparture ?? ''}"`
+      );
+
       if (departureAirport && arrivalAirport) {
         flightInfo.push(`✈️ Outbound: ${departureAirport} → ${arrivalAirport}`);
       }
-      
-      const outboundDeparture = (nestedDeparture?.departureTime as string) || (flightRaw.departureTime as string);
-      if (outboundDeparture) {
-        flightInfo.push(`  Departure: ${outboundDeparture}`);
-      }
-      
+
       if (outboundArrival) {
         arrivalTimeStr = outboundArrival;
-        arrivalTime24 = normalizeTo24h(outboundArrival) || (outboundArrival.includes('T') ? normalizeTo24h(new Date(outboundArrival).toTimeString()) || undefined : undefined);
+        arrivalTime24 = normalizeTo24h(outboundArrival) || undefined;
         flightInfo.push(`  Arrival: ${arrivalTimeStr}${arrivalTime24 ? ` (24h: ${arrivalTime24})` : ''}`);
 
         if (arrivalTime24) {
           const ARRIVAL_BUFFER_MINS = 4 * 60;
           earliestFirstActivity = minutesToHHMM((parseTimeToMinutes(arrivalTime24) || 0) + ARRIVAL_BUFFER_MINS);
+        } else {
+          // FAIL LOUD — flight was provided but we couldn't parse a time.
+          // Downstream (compile-day-facts + compile-prompt) reads parseFailed
+          // and injects a conservative Day 1 fallback instead of silently
+          // letting the LLM default to 12:00.
+          parseFailed = true;
+          console.warn(
+            `[FLIGHT_INGEST_PARSE_FAIL] tripId=${tripId} shape=${arrivalPick.shape} legPick=${arrivalPick.source} raw="${outboundArrival}" — Day 1 will use soft fallback`
+          );
         }
 
-        console.log(`[FlightContext] Raw arrival: "${outboundArrival}", arrival24: ${arrivalTime24}, earliest sightseeing: ${earliestFirstActivity}`);
+        console.log(`[FlightContext] Raw arrival: "${outboundArrival}", arrival24: ${arrivalTime24}, earliest sightseeing: ${earliestFirstActivity}, parseFailed=${parseFailed}`);
+      } else if (flightRaw && (flightRaw.departure || (flightRaw as any).legs || flightRaw.arrivalTime)) {
+        // flight_selection is present but no arrival string survived the picker.
+        // Treat as parse-failure so Day 1 gets a soft floor instead of silence.
+        parseFailed = true;
+        console.warn(
+          `[FLIGHT_INGEST_PARSE_FAIL] tripId=${tripId} shape=${arrivalPick.shape} legPick=${arrivalPick.source} raw=undefined — flight_selection present but no arrival time`
+        );
       }
-      
+
       if (returnDeparture) {
         returnDepartureTimeStr = returnDeparture;
         returnDepartureTime24 = normalizeTo24h(returnDeparture) || undefined;
@@ -256,6 +307,7 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
 
         console.log(`[FlightContext] Return raw ${returnDepartureTimeStr}, return24: ${returnDepartureTime24}, latest activity: ${latestLastActivity}`);
       }
+
 
       // Flight intelligence override
       const flightIntel = trip.flight_intelligence as Record<string, unknown> | null;
@@ -481,6 +533,8 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
       rawFlightSelection: trip.flight_selection,
       rawHotelSelection: trip.hotel_selection,
       rawFlightIntelligence: trip.flight_intelligence,
+      parseFailed,
+      legPickSource,
     };
   } catch (e) {
     console.error('[FlightHotel] Error:', e);
