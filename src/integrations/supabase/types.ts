@@ -7709,6 +7709,222 @@ export type Database = {
           },
         ]
       }
+      trip_generation_llm_calls: {
+        Row: {
+          call_purpose: string | null
+          completion_tokens: number | null
+          created_at: string
+          day_number: number | null
+          error: string | null
+          finish_reason: string | null
+          id: string
+          latency_ms: number | null
+          model: string | null
+          prompt_text: string | null
+          prompt_tokens: number | null
+          response_text: string | null
+          retry_count: number | null
+          temperature: number | null
+          trace_id: string
+        }
+        Insert: {
+          call_purpose?: string | null
+          completion_tokens?: number | null
+          created_at?: string
+          day_number?: number | null
+          error?: string | null
+          finish_reason?: string | null
+          id?: string
+          latency_ms?: number | null
+          model?: string | null
+          prompt_text?: string | null
+          prompt_tokens?: number | null
+          response_text?: string | null
+          retry_count?: number | null
+          temperature?: number | null
+          trace_id: string
+        }
+        Update: {
+          call_purpose?: string | null
+          completion_tokens?: number | null
+          created_at?: string
+          day_number?: number | null
+          error?: string | null
+          finish_reason?: string | null
+          id?: string
+          latency_ms?: number | null
+          model?: string | null
+          prompt_text?: string | null
+          prompt_tokens?: number | null
+          response_text?: string | null
+          retry_count?: number | null
+          temperature?: number | null
+          trace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_generation_llm_calls_trace_id_fkey"
+            columns: ["trace_id"]
+            isOneToOne: false
+            referencedRelation: "trip_generation_traces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_generation_mutations: {
+        Row: {
+          activity_external_id: string | null
+          activity_title: string | null
+          after_value: Json | null
+          before_value: Json | null
+          created_at: string
+          day_number: number | null
+          field: string
+          id: string
+          reason: string | null
+          stage: string | null
+          trace_id: string
+        }
+        Insert: {
+          activity_external_id?: string | null
+          activity_title?: string | null
+          after_value?: Json | null
+          before_value?: Json | null
+          created_at?: string
+          day_number?: number | null
+          field: string
+          id?: string
+          reason?: string | null
+          stage?: string | null
+          trace_id: string
+        }
+        Update: {
+          activity_external_id?: string | null
+          activity_title?: string | null
+          after_value?: Json | null
+          before_value?: Json | null
+          created_at?: string
+          day_number?: number | null
+          field?: string
+          id?: string
+          reason?: string | null
+          stage?: string | null
+          trace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_generation_mutations_trace_id_fkey"
+            columns: ["trace_id"]
+            isOneToOne: false
+            referencedRelation: "trip_generation_traces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_generation_stages: {
+        Row: {
+          day_number: number | null
+          duration_ms: number | null
+          ended_at: string | null
+          error: string | null
+          id: string
+          inputs: Json | null
+          notes: string[] | null
+          order_index: number
+          outputs: Json | null
+          stage_name: string
+          started_at: string
+          status: string
+          trace_id: string
+        }
+        Insert: {
+          day_number?: number | null
+          duration_ms?: number | null
+          ended_at?: string | null
+          error?: string | null
+          id?: string
+          inputs?: Json | null
+          notes?: string[] | null
+          order_index?: number
+          outputs?: Json | null
+          stage_name: string
+          started_at?: string
+          status?: string
+          trace_id: string
+        }
+        Update: {
+          day_number?: number | null
+          duration_ms?: number | null
+          ended_at?: string | null
+          error?: string | null
+          id?: string
+          inputs?: Json | null
+          notes?: string[] | null
+          order_index?: number
+          outputs?: Json | null
+          stage_name?: string
+          started_at?: string
+          status?: string
+          trace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_generation_stages_trace_id_fkey"
+            columns: ["trace_id"]
+            isOneToOne: false
+            referencedRelation: "trip_generation_traces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_generation_traces: {
+        Row: {
+          attempt_number: number
+          created_at: string
+          ended_at: string | null
+          final_status: string | null
+          id: string
+          match_verdict: Json | null
+          resolved_profile: Json | null
+          started_at: string
+          total_duration_ms: number | null
+          trigger_source: string | null
+          trip_id: string
+          user_id: string
+          user_request_snapshot: Json | null
+        }
+        Insert: {
+          attempt_number?: number
+          created_at?: string
+          ended_at?: string | null
+          final_status?: string | null
+          id?: string
+          match_verdict?: Json | null
+          resolved_profile?: Json | null
+          started_at?: string
+          total_duration_ms?: number | null
+          trigger_source?: string | null
+          trip_id: string
+          user_id: string
+          user_request_snapshot?: Json | null
+        }
+        Update: {
+          attempt_number?: number
+          created_at?: string
+          ended_at?: string | null
+          final_status?: string | null
+          id?: string
+          match_verdict?: Json | null
+          resolved_profile?: Json | null
+          started_at?: string
+          total_duration_ms?: number | null
+          trigger_source?: string | null
+          trip_id?: string
+          user_id?: string
+          user_request_snapshot?: Json | null
+        }
+        Relationships: []
+      }
       trip_go_back_list: {
         Row: {
           category: string

@@ -21,6 +21,8 @@ import { matchesAIStubVenue } from './fix-placeholders.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
 import { stripBookendsForPrompt, isCrossDayPromptNoise } from '../_shared/strip-bookends-for-prompt.ts';
+import { startTrace, noopTrace, type Trace } from '../_shared/trace-recorder.ts';
+import { computeMatchVerdict } from '../_shared/match-verdict.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -150,14 +152,96 @@ export async function handleGenerateTripDay(
     }
   }
 
+  // ── FLIGHT RECORDER — captures end-to-end trace per day for /admin/trip-trace
+  let trace: Trace = noopTrace();
+  try {
+    const { data: __preTrip } = await supabase
+      .from('trips').select('metadata, flight_selection, hotel_selection, budget_total_cents, currency, travelers, start_date, end_date, destination, destination_country').eq('id', tripId).single();
+    const __preMeta = (__preTrip?.metadata as Record<string, unknown>) || {};
+    let __profile: Record<string, unknown> = {};
+    try {
+      const { data: __prof } = await supabase
+        .from('profiles')
+        .select('primary_archetype_name, secondary_archetype_name, trait_scores, travel_dna_overrides')
+        .eq('user_id', userId).maybeSingle();
+      __profile = __prof || {};
+    } catch { /* best-effort */ }
+    trace = await startTrace({
+      tripId,
+      userId,
+      triggerSource: `generate-trip-day#${dayNumber}/${totalDays}`,
+      attemptNumber: dayNumber,
+      userRequestSnapshot: {
+        destination: __preTrip?.destination ?? destination,
+        destination_country: __preTrip?.destination_country ?? destinationCountry,
+        startDate: __preTrip?.start_date ?? startDate,
+        endDate: __preTrip?.end_date ?? endDate,
+        travelers: __preTrip?.travelers ?? travelers,
+        budgetTier: budgetTier ?? __preMeta?.budget_tier,
+        budgetTotalCents: __preTrip?.budget_total_cents,
+        currency: __preTrip?.currency,
+        pacing: __preMeta?.pacing,
+        interests: __preMeta?.interestCategories,
+        dietary: __preMeta?.dietary || __preMeta?.dietaryPreferences,
+        mustDos: __preMeta?.mustDoActivities || __preMeta?.perDayActivities,
+        anchors: __preMeta?.userAnchors,
+        flightSelection: __preTrip?.flight_selection,
+        hotelSelection: __preTrip?.hotel_selection,
+        dayNumber, totalDays, isMultiCity: !!isMultiCity,
+      },
+      resolvedProfile: __profile,
+    });
+    (params as any).__trace = trace;
+    (params as any).__traceId = trace.id;
+  } catch (e) {
+    console.warn(`[GEN_TRACE] trace=${genTraceId} startTrace failed (non-blocking): ${(e as Error).message}`);
+  }
+
   try {
     const resp = await _handleGenerateTripDayInner(supabase, userId, params, timer);
     console.log(`[GEN_TRACE] trace=${genTraceId} site=exit status=${resp.status} elapsed_ms=${Date.now() - _t0}`);
+    // Score the saved plan against user request + DNA
+    try {
+      if (trace.enabled && (dayNumber === totalDays || resp.status >= 400)) {
+        const { data: __postTrip } = await supabase
+          .from('trips').select('itinerary_data').eq('id', tripId).single();
+        const __days = (((__postTrip?.itinerary_data as any)?.days) || []).map((d: any) => ({
+          dayNumber: d.dayNumber ?? d.day_number,
+          activities: d.activities || [],
+        }));
+        const verdict = computeMatchVerdict({
+          userRequest: {
+            destination: destination,
+            budgetTier: budgetTier,
+            budgetTotalCents: (__postTrip as any)?.budget_total_cents,
+            pacing: ((params as any).__preMeta?.pacing) as string | undefined,
+            interests: ((params as any).__preMeta?.interestCategories) as string[] | undefined,
+            dietary: ((params as any).__preMeta?.dietary) as string[] | undefined,
+            mustDos: ((params as any).__preMeta?.mustDoActivities) as any,
+            anchors: ((params as any).__preMeta?.userAnchors) as any,
+          },
+          profile: {
+            primaryArchetype: ((params as any).__profile?.primary_archetype_name) as string | undefined,
+            secondaryArchetype: ((params as any).__profile?.secondary_archetype_name) as string | undefined,
+            traitScores: ((params as any).__profile?.trait_scores) as Record<string, number> | undefined,
+          },
+          days: __days,
+        });
+        console.log(`[MATCH_VERDICT] trace=${trace.id} score=${verdict.score} mismatches=${verdict.mismatches.length}`);
+        await trace.finalize({ status: resp.status < 400 ? 'ok' : `http_${resp.status}`, matchVerdict: verdict });
+      } else {
+        await trace.finalize({ status: resp.status < 400 ? 'ok' : `http_${resp.status}` });
+      }
+    } catch (e) {
+      console.warn(`[GEN_TRACE] verdict/finalize failed: ${(e as Error).message}`);
+      await trace.finalize({ status: 'finalize_error' }).catch(() => {});
+    }
     return resp;
   } catch (fatalErr) {
     console.error(`[GEN_TRACE] trace=${genTraceId} site=exit status=fatal elapsed_ms=${Date.now() - _t0}`);
     console.error(`[generate-trip-day] FATAL error on day ${dayNumber}:`, fatalErr);
     timer.addError(`day_${dayNumber}_fatal`, String(fatalErr));
+    await trace.finalize({ status: 'fatal_error' }).catch(() => {});
 
     // CRITICAL: Update trip status so it doesn't stay stuck at 'generating'
     try {

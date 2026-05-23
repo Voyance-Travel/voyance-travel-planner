@@ -1,94 +1,116 @@
-# Itinerary Generation — Full Observability Pass
 
-Goal: every silent regression we've been guessing at (meal-overlap insertion, §15z misses, dead-gap skips, missing bookends, validation drops, persist-time rewrites) should produce one **attributed, structured log line** so the next bad trip tells us the exact stage to patch.
+# Trip Generation Flight Recorder
 
-No behavior change. Pure logging + one already-existing `StageLogger` finally wired up.
+Goal: for every generated trip, capture a single inspectable record that answers — *what the user asked for, what each stage did, what the LLM saw, what it returned, what survived validation/repair, what was saved, and did the result match the user's DNA + inputs*.
 
-## Sentinels to add
+Today logs are scattered across `console.log` sentinels in 10+ edge functions. They disappear after Supabase's log retention window and can't be cross-referenced. This plan persists everything to the DB, structured, queryable, and viewable in-app.
 
-All log lines follow the format `[<STAGE_CODE>] tripId=… day=N …key=val` so they're greppable in Supabase edge-function logs.
+## What gets captured (per trip, per day)
 
-### 1. Meal-guard / floating-meal insertion (`_shared/post-meal-guard-fill.ts`, `_shared/timing-cascade.ts::assignFloatingMealTimes`)
-- `[MEAL_INSERT_DECISION] day=N slot=lunch picked=12:30 collides_with=<id|title>(11:55-13:10) action=push_to=13:15|keep|skip reason=…`
-- `[MEAL_INSERT_NO_VENUE] day=N slot=… reason=pool_exhausted|cross_city|dietary`
-- `[MEAL_GUARD_SUMMARY] day=N inserted=K skipped=M collisions=C`
+**Step 1 — User Request (immutable snapshot at generation start)**
+- Raw start-form payload: destination(s), dates, travelers, budget tier + cents, pacing, interests, dietary, must-do chips, anchors, hotel/flight selections
+- Resolved profile: primary/secondary archetype, trait_scores, travel_dna_overrides (Fine-Tune sliders), `firstTimePerCity`, celebration day
+- Computed `meal_policy_at_generation`, generation rules, isFirstTimeVisitor
 
-### 2. Dead-gap fill (`pipeline/fill-dead-gaps.ts`)
-- `[DEAD_GAP_SCAN] day=N gaps=[{start,end,mins,beforeId,afterId}]`
-- `[DEAD_GAP_DECISION] day=N gap=13:30-16:45 mins=195 decision=fill|skip reason=next_is_freshenup|budget_cap|category_filter|pool_empty|under_threshold`
-- `[DEAD_GAP_SUMMARY] day=N filled=K skipped=M`
+**Step 2 — Pipeline Stages (per day, ordered)**
+For each stage record: `stage_name`, `started_at`, `ended_at`, `duration_ms`, `status` (ok/warn/error/skipped), `inputs_summary`, `outputs_summary`, `mutations` (counts), `notes[]`.
 
-### 3. Bookend / hotel-return (`universal-quality-pass.ts::runStep8`, `_shared/bookend-verification.ts`)
-- `[BOOKEND_INVOKE] day=N caller=quality|post-meal|save|persist lastEnd=… isDeparture=… injected=Y/N reason=…`
-- `[BOOKEND_NOT_INVOKED] day=N reason=arrival_unknown|isDeparture|last_end_before_14:00|locked_tail|already_present|<6h_remaining`
+Stages tracked:
+1. `compile-facts` — day truth ledger, intents, prior-day context
+2. `compile-prompt` — final prompt sent to LLM (full text + token count + model + temperature)
+3. `llm-call` — raw LLM response (full JSON), latency, retries, finish_reason
+4. `parse-response` — JSON parse, schema validation
+5. `validate-day` — every validation code raised (MISSING_DESCRIPTION, LOGISTICS_SEQUENCE, etc.)
+6. `repair-day` — every repair action (§1–§16), per-action before/after diff
+7. `validation-gate` — drops/blanks per code
+8. `enrich-day` — venue enrichment, anchor backfill, cross-city filter
+9. `universal-quality-pass` — bookend, meal-guard, fill-dead-gaps decisions
+10. `persist-itinerary` — cascade shifts, regression-block decisions, bookend verification
+11. `cost-table-sync` — activity_costs writes, parity check
+12. `freeze + fully_persisted` — final stamp
 
-### 4. Departure-day §15z (`pipeline/repair-day.ts::enforceDepartureDayLogistics`)
-- Already added `[DEPARTURE_15Z_RAN/SKIPPED]`. Extend with per-action delta:
-- `[DEPARTURE_15Z_ACTION] day=N action=retime_checkout|retime_transfer|prune_post_cutoff target=<id|title> from=… to=… reason=…`
-- `[DEPARTURE_15Z_SUMMARY] day=N flight=… buffer=… checkout_cap=… actions=K`
+**Step 3 — LLM I/O (full fidelity)**
+- Prompt: full system + user messages (current sentinels only log lengths)
+- Response: full JSON before any mutation
+- Stored compressed (gzip) since prompts run 30–80KB
 
-### 5. Validation-gate drops (`pipeline/validation-gate.ts`)
-- `[VALIDATION_GATE_DROP] day=N code=LOGISTICS_SEQUENCE|OVERLAP|… target=<id|title> severity=critical action=drop|blank|downgrade`
-- `[VALIDATION_GATE_SUMMARY] day=N drops=K blanks=M downgrades=D`
+**Step 4 — Mutation Trail**
+For every activity that changes between LLM output and final save: `activity_id`, `field`, `before`, `after`, `mutated_by` (stage name), `reason`. This is the answer to "where did Maison Eric Kayser's description disappear?"
 
-### 6. Persist-cascade (already added `[PERSIST_CASCADE]`)
-- Extend with `[PERSIST_CASCADE_DETAIL] day=N moved=<id> from=12:30 to=13:15 reason=overlap|same_start|buffer`
+**Step 5 — DNA/Input Match Verdict (post-save analyzer)**
+Runs once at end of generation. Scores each saved activity against:
+- Primary/secondary archetype alignment (categorical match + trait_scores cosine)
+- Must-do chip fulfillment (did "Eat at Roscioli" land in the plan? which day? right meal slot?)
+- Anchor fulfillment (every required anchor present with time + description?)
+- Dietary compliance
+- Budget tier match (median per-activity cost vs tier band)
+- Pacing match (activities/day vs requested pacing)
+- Interest coverage (every selected interest represented ≥1x?)
 
-### 7. Save-time normalize (`action-save-itinerary.ts`)
-- `[SAVE_NORMALIZE] day=N steps=[normalizeDays, predawnCascade, departureNet, postCheckoutPrune, bookendVerify] mutations=K`
+Output: `match_score` 0–100 + `mismatches[]` array with `{type, expected, actual, day, activity_id, root_cause_stage}`.
 
-### 8. Wire `StageLogger` (already built, currently unused)
-`pipeline/stage-logger.ts` already persists per-stage artifacts to `trips.metadata.pipeline_logs.day_N`. Wire it into `action-generate-trip-day.ts` so every generated day stamps:
-- compile-facts timing + size
-- compile-schema output
-- prompt summary (first 2k chars)
-- raw AI response (first 5k)
-- validation results array
-- repair actions array
-- per-stage timings
+The root-cause attribution joins back to the mutation trail — e.g. "Roscioli was in LLM output day 2 but stripped by validation-gate DESCRIPTION_GHOST_REFERENCE in repair-day §10b" gives the user a direct pointer to the failing stage.
 
-This is the single biggest leverage point — once it's on, any future "why did this day look weird" is one DB read away.
+## Where it lives
 
-### 9. Top-of-pipeline trace ID
-Generate `genTraceId = crypto.randomUUID().slice(0,8)` at the top of `action-generate-trip-day.ts` and prefix every log emitted during that invocation. Same for `action-save-itinerary.ts`. Lets us follow one day's full lifecycle across hundreds of interleaved log lines.
+**New table `trip_generation_traces`** (one row per trip generation attempt):
+- `id`, `trip_id`, `attempt_number`, `started_at`, `ended_at`, `total_duration_ms`, `final_status`
+- `user_request_snapshot` jsonb
+- `resolved_profile` jsonb
+- `match_verdict` jsonb (score + mismatches)
 
-### 10. Console-noise discipline
-- Gate purely informational logs behind `DEBUG_LOGS` env (existing `debugLog` helper in `_shared/debug-log.ts`).
-- All `[STAGE_CODE]`-prefixed sentinels stay on **always** — they're the diagnostic surface.
+**New table `trip_generation_stages`** (one row per stage per day):
+- `id`, `trace_id`, `day_number`, `stage_name`, `order_index`, `started_at`, `ended_at`, `duration_ms`, `status`, `inputs` jsonb, `outputs` jsonb, `notes` text[], `error` text
 
-## Touch list
+**New table `trip_generation_llm_calls`** (one row per LLM call):
+- `id`, `trace_id`, `day_number`, `model`, `temperature`, `prompt_gz` bytea, `response_gz` bytea, `prompt_tokens`, `completion_tokens`, `latency_ms`, `finish_reason`, `retry_count`
 
-```text
-supabase/functions/_shared/post-meal-guard-fill.ts        — MEAL_INSERT_*
-supabase/functions/_shared/timing-cascade.ts              — PERSIST_CASCADE_DETAIL, MEAL collision in assignFloatingMealTimes
-supabase/functions/_shared/bookend-verification.ts        — BOOKEND_INVOKE/NOT_INVOKED at every call site
-supabase/functions/generate-itinerary/universal-quality-pass.ts  — BOOKEND_INVOKE in runStep8
-supabase/functions/generate-itinerary/pipeline/fill-dead-gaps.ts — DEAD_GAP_*
-supabase/functions/generate-itinerary/pipeline/repair-day.ts     — DEPARTURE_15Z_ACTION/SUMMARY
-supabase/functions/generate-itinerary/pipeline/validation-gate.ts — VALIDATION_GATE_DROP/SUMMARY
-supabase/functions/generate-itinerary/action-generate-trip-day.ts — wire StageLogger + genTraceId
-supabase/functions/generate-itinerary/action-save-itinerary.ts    — SAVE_NORMALIZE + genTraceId
-supabase/functions/_shared/persist-itinerary.ts                   — PERSIST_CASCADE_DETAIL
+**New table `trip_generation_mutations`** (one row per field mutation):
+- `id`, `trace_id`, `day_number`, `activity_external_id`, `field`, `before_value`, `after_value`, `stage`, `reason`
+
+RLS: trip owner + accepted collaborators can read their own traces. Service role writes.
+
+## Wiring (no behavior changes — pure capture)
+
+Single new module `_shared/trace-recorder.ts`:
+```ts
+const trace = startTrace(tripId);
+trace.stage('compile-prompt', { day: 2 }, async () => { ... });
+trace.llm({ prompt, response, model, latency });
+trace.mutation(activityId, 'description', before, after, 'repair-day-10b', 'DESCRIPTION_GHOST_REFERENCE');
+await trace.finalize(matchVerdict);
 ```
 
-No new files. No schema migration (StageLogger already writes to `trips.metadata` which is jsonb).
+Wired at: `action-generate-trip-day`, `generate-itinerary` Stage 6, `action-save-itinerary`, every stage helper. Stages wrap their work in `trace.stage(...)` — adds 1 line per call site, no logic change.
 
-## How we'll use it
+Match verdict analyzer = new `_shared/match-verdict.ts`, runs in `persistTripItinerary` after Phase 6 freeze.
 
-Next time a trip surfaces a weird artifact:
-1. Grep edge-function logs for `tripId=<id>` → full chronological trace via `genTraceId`.
-2. Read `trips.metadata.pipeline_logs.day_N` for the AI response + validation + repair history.
-3. Match the artifact to the exact `[STAGE_CODE]` that introduced it.
-4. Patch that stage. No more whack-a-mole.
+## Viewing it
 
-## Out of scope
+**Admin/debug page `/admin/trip-trace/:tripId`** (gated to trip owner + Voyance staff):
+- Header: user request summary + match score + pass/fail badges per category
+- Day tabs: timeline of stages with duration bars, expandable to inputs/outputs/notes
+- LLM tab: prompt + response side-by-side per day, syntax-highlighted, copy buttons
+- Mutations tab: filterable table — "show me everything that mutated `description` on day 2"
+- Verdict tab: ranked mismatches with deep-links to the responsible stage
 
-- No retry/auto-heal logic added — pure visibility.
-- No new validators or repair passes.
-- No frontend changes.
-- No removal of existing logs (we add, don't subtract, until we have a baseline).
+## Storage / cost guardrails
 
-## Risk
+- LLM prompts/responses gzipped (~5× compression on JSON)
+- Retain full trace for 30 days, then prune `llm_calls` + `mutations` but keep stage summaries + verdict for 1 year
+- Opt-out flag `metadata.trace_disabled` for users who request it
+- Estimated ~150KB/trip compressed
 
-- Log volume increase: ~20–30 extra lines per day generated, ~50KB extra metadata per trip. Both acceptable; metadata already holds quality traces.
-- `StageLogger.flush()` is a `UPDATE trips SET metadata` — one extra round-trip per day. Wrapped in try/catch (already is) so it can't break generation.
+## Out of scope (this plan)
+
+- Real-time streaming of traces to UI during generation (next iteration)
+- Cross-trip aggregate dashboards ("which stage drops the most activities globally") — once we have data
+- Replay/re-run from any stage — needs immutable inputs, design pass first
+
+## Acceptance
+
+After implementation, for any bad trip the user reports, you can answer in <60 seconds:
+1. What they asked for
+2. What the LLM saw and returned for the failing day
+3. Which stage mutated/dropped the broken item
+4. Whether the final plan matches their DNA + inputs, and exactly where it diverged
