@@ -241,6 +241,7 @@ export async function handleGenerateTripDay(
     console.error(`[GEN_TRACE] trace=${genTraceId} site=exit status=fatal elapsed_ms=${Date.now() - _t0}`);
     console.error(`[generate-trip-day] FATAL error on day ${dayNumber}:`, fatalErr);
     timer.addError(`day_${dayNumber}_fatal`, String(fatalErr));
+    await trace.finalize({ status: 'fatal_error' }).catch(() => {});
 
     // CRITICAL: Update trip status so it doesn't stay stuck at 'generating'
     try {
