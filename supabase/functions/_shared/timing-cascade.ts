@@ -720,6 +720,7 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
           const transitNote = transit
             ? `${transit.durationMinutes} min ${transit.method} (${transit.distance}) + ${minBuffer} min buffer`
             : `${minBuffer} min buffer`;
+          console.log(`[PERSIST_CASCADE_DETAIL] reason=buffer delta_min=${delta} moved="${next.title}" from=${before.split('@ ')[1]} to=${next.startTime} note="${transitNote}"`);
           repairs.push({
             type: 'buffer_fix',
             activityId: next.id,
