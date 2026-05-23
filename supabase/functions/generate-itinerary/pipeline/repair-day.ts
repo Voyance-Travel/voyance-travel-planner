@@ -4132,6 +4132,85 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
     }
   }
 
+  // 2b) NO RETURN FLIGHT — drop any AI-emitted airport-transfer rows and the
+  //     orphan "Travel to <transfer>" connector preceding them, then inject a
+  //     single soft prompt card so the user knows we're waiting on flight data.
+  //     Without this, the AI can emit "Transfer to the Airport" referencing an
+  //     untimed placeholder flight, and the upstream consolidation pass merges
+  //     it with a connector inheriting an absurd `durationMinutes` (525-min
+  //     class). Closes the "Travel to Transfer to the Airport — 525 min" leak.
+  if (!hasFlight) {
+    const droppedTransferIds = new Set<string>();
+    const kept: any[] = [];
+    for (const a of activities) {
+      if (a === checkout) { kept.push(a); continue; }
+      if (isLockedRow(a, lockedIds)) { kept.push(a); continue; }
+      if (isAirportTransferRow(a)) {
+        droppedTransferIds.add(String(a?.id || ''));
+        repairs.push({
+          code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+          action: 'dropped_airport_transfer_no_return_flight',
+          before: `${a.title} @ ${a.startTime || '<no-time>'} (${a.durationMinutes || '?'}min)`,
+        } as any);
+        console.log(`[Repair §15z] Dropped airport-transfer day=${dayNumber} "${a.title}" — no return-flight data`);
+        continue;
+      }
+      kept.push(a);
+    }
+    // Sweep orphan "Travel to <X>" / "Walk to airport" connectors whose target
+    // was just dropped, or whose title references airport/transfer.
+    activities = kept.filter((a) => {
+      if (a === checkout) return true;
+      if (isLockedRow(a, lockedIds)) return true;
+      const cat = String(a?.category || '').toLowerCase();
+      const isTransitish = cat === 'transport' || cat === 'transit';
+      if (!isTransitish) return true;
+      const t = String(a?.title || a?.name || '').toLowerCase();
+      const targetsAirport = /airport|terminal|to (?:the )?transfer|transfer to/.test(t);
+      if (targetsAirport) {
+        repairs.push({
+          code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+          action: 'dropped_orphan_airport_connector_no_return_flight',
+          before: `${a.title} @ ${a.startTime || '<no-time>'} (${a.durationMinutes || '?'}min)`,
+        } as any);
+        console.log(`[Repair §15z] Dropped orphan airport connector day=${dayNumber} "${a.title}" — no return-flight data`);
+        return false;
+      }
+      return true;
+    });
+    // Inject a single soft prompt card (no time block) — renders as a banner.
+    const alreadyHasPrompt = activities.some(
+      (a) => String(a?.subcategory || '') === 'return_flight_missing'
+    );
+    if (!alreadyHasPrompt) {
+      const promptCard = {
+        id: `day${dayNumber}-return-flight-prompt-${Date.now()}`,
+        title: 'Add your return flight to plan your departure',
+        name: 'Add your return flight to plan your departure',
+        description:
+          "We'll schedule your airport transfer once a return flight is entered. Tap to add it.",
+        category: 'logistics-placeholder',
+        type: 'logistics-placeholder',
+        subcategory: 'return_flight_missing',
+        startTime: null,
+        endTime: null,
+        durationMinutes: 0,
+        cost: { amount: 0, currency: 'USD' },
+        bookingRequired: false,
+        isLocked: false,
+        source: 'repair-no-return-flight-prompt',
+      };
+      activities.push(promptCard);
+      repairs.push({
+        code: FAILURE_CODES.MISSING_SLOT,
+        action: 'injected_return_flight_prompt',
+      } as any);
+      console.log(`[Repair §15z] Injected return-flight-missing prompt card day=${dayNumber}`);
+    }
+  }
+
+
+
   // 3) Drop any non-logistics, non-locked card at/after the airport-transfer start.
   //    When no flight info, drop non-logistics cards starting after noon.
   //    Also: drop dining cards that END within 90 min of the transfer start —
