@@ -1037,6 +1037,19 @@ export function parseItineraryDays(
     const v = validateChronology(result, { site: 'parser-step4c' });
     if (v.healed) {
       result = v.days as typeof result;
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        try {
+          window.dispatchEvent(
+            new CustomEvent('voyance:chronology-healed', {
+              detail: {
+                sortedDayCount: v.sortedDayCount,
+                droppedCount: v.droppedCount,
+                criticalAfterHeal: v.criticalAfterHeal,
+              },
+            }),
+          );
+        } catch { /* non-blocking */ }
+      }
     }
   } catch (e) {
     console.warn('[itineraryParser] chronology validator failed (non-blocking):', e);

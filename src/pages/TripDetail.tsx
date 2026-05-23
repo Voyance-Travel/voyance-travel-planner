@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { validateChronology } from '@/lib/itinerary/chronologyValidator';
 import { useQueryClient } from '@tanstack/react-query';
 import { getTripCities } from '@/services/tripCitiesService';
 import type { TripCity } from '@/types/tripCity';
@@ -1261,6 +1262,70 @@ export default function TripDetail() {
   }, [trip?.id, trip?.itinerary_status, trip?.metadata]);
 
 
+  // ------------------------------------------------------------------
+  // Gate 2 — Chronology read-time heal persistence + lazy legacy backfill.
+  // The parser dispatches `voyance:chronology-healed` whenever its read-time
+  // validator sorted activities or stripped a phantom pre-dawn non-bookend.
+  // We persist the heal once via the integrity-heal allowlist so the next
+  // page load doesn't have to redo it. Also calls `heal-trip-chronology`
+  // batch fn one-shot per trip for any backend-side critical residual.
+  // See mem://constraints/itinerary/chronology-validator-three-gates.
+  // ------------------------------------------------------------------
+  const chronologyHealAttempted = useRef(false);
+  const chronologyBackfillAttempted = useRef(false);
+  useEffect(() => {
+    if (!trip?.id) return;
+    const handler = (e: Event) => {
+      const tripId = trip.id;
+      if (!tripId) return;
+      if (chronologyHealAttempted.current) return;
+      chronologyHealAttempted.current = true;
+      const detail = (e as CustomEvent).detail || {};
+      console.log('[TripDetail] chronology-healed event → persisting', detail);
+      // Re-read current itinerary_data to persist the healed version.
+      try {
+        const itin = (trip.itinerary_data as Record<string, unknown>) || {};
+        safeUpdateItineraryData(tripId, itin, {}, {
+          skipLedgerCheck: true,
+          reason: 'self-heal-chronology',
+        }).catch((err) => {
+          console.warn('[TripDetail] self-heal-chronology persist failed (non-blocking):', err);
+          chronologyHealAttempted.current = false;
+        });
+      } catch (err) {
+        console.warn('[TripDetail] self-heal-chronology threw (non-blocking):', err);
+        chronologyHealAttempted.current = false;
+      }
+    };
+    window.addEventListener('voyance:chronology-healed', handler);
+    return () => window.removeEventListener('voyance:chronology-healed', handler);
+  }, [trip?.id, trip?.itinerary_data]);
+
+  // Lazy one-shot backfill — invokes batch heal for this trip if not stamped.
+  useEffect(() => {
+    if (!trip?.id || chronologyBackfillAttempted.current) return;
+    const meta = (trip.metadata as Record<string, unknown>) || {};
+    if (meta.chronology_healed_at) return;
+    if (trip.itinerary_status !== 'ready' && (trip.itinerary_status as string) !== 'generated') return;
+    chronologyBackfillAttempted.current = true;
+    (async () => {
+      try {
+        const { error } = await supabase.functions.invoke('heal-trip-chronology', {
+          body: { tripId: trip.id },
+        });
+        if (error) {
+          console.warn('[TripDetail] heal-trip-chronology failed (non-blocking):', error);
+          chronologyBackfillAttempted.current = false;
+        }
+      } catch (err) {
+        console.warn('[TripDetail] heal-trip-chronology threw (non-blocking):', err);
+        chronologyBackfillAttempted.current = false;
+      }
+    })();
+  }, [trip?.id, trip?.itinerary_status, trip?.metadata]);
+
+
+
   // Auto-trigger generation only when ?generate=true is present
   useEffect(() => {
     if (
@@ -1889,12 +1954,25 @@ export default function TripDetail() {
                   const perRowActivities: any[] = dedupeRows(rowsByDayId.get(row.id) || []).map(rowToActivity);
                   const versionActivities: any[] = versionsByDayNumber.get(row.day_number) || [];
 
-                  // Score order:
-                  //   coherence penalty (−100000× defects) — phantom predawn
-                  //     rows and backward jumps disqualify a candidate
-                  //   non-meal-meaningful count (10000×)
-                  //   meal slot coverage (1000×)
-                  //   total card count (1×)
+                  // Gate 3 — Chronology hard-reject. Any candidate whose
+                  // validateChronology returns `criticalAfterHeal=true`
+                  // (predawn non-bookend or backward jump that even the
+                  // auto-heal couldn't fix) is disqualified outright when
+                  // JSON itself passes. Prevents stale phantom-row table
+                  // rebuilds from silently winning a healthy JSON snapshot.
+                  // See mem://constraints/itinerary/chronology-validator-three-gates.
+                  const candidateIsCritical = (acts: any[]): boolean => {
+                    if (!Array.isArray(acts) || acts.length === 0) return false;
+                    try {
+                      const v = validateChronology(
+                        [{ dayNumber: row.day_number, activities: acts }] as any,
+                        { site: 'tripdetail-rebuild-gate' },
+                      );
+                      return v.criticalAfterHeal === true;
+                    } catch { return false; }
+                  };
+                  const jsonCritical = candidateIsCritical(jsonActivities);
+
                   const score = (acts: any[]) => {
                     if (!acts || acts.length === 0) return -1;
                     const meals = acts.filter(isMealActivity).length;
@@ -1903,9 +1981,9 @@ export default function TripDetail() {
                     return nonMeal * 10000 + meals * 1000 + acts.length - defects * 100000;
                   };
                   const jsonScore = score(jsonActivities);
-                  const embeddedScore = score(embeddedActivities);
-                  const perRowScore = score(perRowActivities);
-                  const versionScore = score(versionActivities);
+                  const embeddedScore = candidateIsCritical(embeddedActivities) && !jsonCritical ? -1 : score(embeddedActivities);
+                  const perRowScore = candidateIsCritical(perRowActivities) && !jsonCritical ? -1 : score(perRowActivities);
+                  const versionScore = candidateIsCritical(versionActivities) && !jsonCritical ? -1 : score(versionActivities);
 
                   const best = Math.max(jsonScore, embeddedScore, perRowScore, versionScore);
                   let chosen: any[] = jsonActivities;
@@ -1929,6 +2007,7 @@ export default function TripDetail() {
                       perRowCount: perRowActivities.length,
                       versionCount: versionActivities.length,
                       jsonDefects: coherenceDefects(jsonActivities),
+                      jsonCritical,
                       chosenDefects: coherenceDefects(chosen),
                       chosenSource,
                       jsonNonMeal: countNonMeal(jsonActivities),
