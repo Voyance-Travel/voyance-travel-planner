@@ -22,6 +22,12 @@ export interface FlightHotelContextResult {
   rawFlightSelection?: unknown;
   rawHotelSelection?: unknown;
   rawFlightIntelligence?: unknown;
+  /** True when flight_selection was present but arrival could not be parsed
+   *  to a HH:MM 24h value. Downstream uses this to inject a conservative
+   *  soft-fallback rule instead of silently skipping the Day 1 constraint. */
+  parseFailed?: boolean;
+  /** Debug: where the destination-arrival leg was picked from. */
+  legPickSource?: string;
 }
 
 export interface AirportTransferFare {
