@@ -1953,12 +1953,25 @@ export default function TripDetail() {
                   const perRowActivities: any[] = dedupeRows(rowsByDayId.get(row.id) || []).map(rowToActivity);
                   const versionActivities: any[] = versionsByDayNumber.get(row.day_number) || [];
 
-                  // Score order:
-                  //   coherence penalty (−100000× defects) — phantom predawn
-                  //     rows and backward jumps disqualify a candidate
-                  //   non-meal-meaningful count (10000×)
-                  //   meal slot coverage (1000×)
-                  //   total card count (1×)
+                  // Gate 3 — Chronology hard-reject. Any candidate whose
+                  // validateChronology returns `criticalAfterHeal=true`
+                  // (predawn non-bookend or backward jump that even the
+                  // auto-heal couldn't fix) is disqualified outright when
+                  // JSON itself passes. Prevents stale phantom-row table
+                  // rebuilds from silently winning a healthy JSON snapshot.
+                  // See mem://constraints/itinerary/chronology-validator-three-gates.
+                  const candidateIsCritical = (acts: any[]): boolean => {
+                    if (!Array.isArray(acts) || acts.length === 0) return false;
+                    try {
+                      const v = validateChronology(
+                        [{ dayNumber: row.day_number, activities: acts }] as any,
+                        { site: 'tripdetail-rebuild-gate' },
+                      );
+                      return v.criticalAfterHeal === true;
+                    } catch { return false; }
+                  };
+                  const jsonCritical = candidateIsCritical(jsonActivities);
+
                   const score = (acts: any[]) => {
                     if (!acts || acts.length === 0) return -1;
                     const meals = acts.filter(isMealActivity).length;
@@ -1967,9 +1980,9 @@ export default function TripDetail() {
                     return nonMeal * 10000 + meals * 1000 + acts.length - defects * 100000;
                   };
                   const jsonScore = score(jsonActivities);
-                  const embeddedScore = score(embeddedActivities);
-                  const perRowScore = score(perRowActivities);
-                  const versionScore = score(versionActivities);
+                  const embeddedScore = candidateIsCritical(embeddedActivities) && !jsonCritical ? -1 : score(embeddedActivities);
+                  const perRowScore = candidateIsCritical(perRowActivities) && !jsonCritical ? -1 : score(perRowActivities);
+                  const versionScore = candidateIsCritical(versionActivities) && !jsonCritical ? -1 : score(versionActivities);
 
                   const best = Math.max(jsonScore, embeddedScore, perRowScore, versionScore);
                   let chosen: any[] = jsonActivities;
@@ -1993,6 +2006,7 @@ export default function TripDetail() {
                       perRowCount: perRowActivities.length,
                       versionCount: versionActivities.length,
                       jsonDefects: coherenceDefects(jsonActivities),
+                      jsonCritical,
                       chosenDefects: coherenceDefects(chosen),
                       chosenSource,
                       jsonNonMeal: countNonMeal(jsonActivities),
