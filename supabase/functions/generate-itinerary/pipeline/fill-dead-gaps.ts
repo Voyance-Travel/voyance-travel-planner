@@ -93,12 +93,21 @@ async function fillDeadGapsForWindow(
   opts: FillDeadGapsOptions,
   win: GapWindow,
 ): Promise<FillDeadGapsResult> {
-  if (opts.enabled === false) return { activities: [...activities], inserted: [] };
-  if (opts.isFirstDay) return { activities: [...activities], inserted: [] };
+  const dayN = (opts as any).dayNumber ?? '?';
+  if (opts.enabled === false) {
+    console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_window reason=disabled_manual_mode`);
+    return { activities: [...activities], inserted: [] };
+  }
+  if (opts.isFirstDay) {
+    console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_window reason=first_day`);
+    return { activities: [...activities], inserted: [] };
+  }
   if (opts.isLastDay && (opts.latestUsableMins === undefined || opts.latestUsableMins <= win.fromMins)) {
+    console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_window reason=last_day_no_usable_window latestUsableMins=${opts.latestUsableMins ?? 'null'}`);
     return { activities: [...activities], inserted: [] };
   }
   if (!Array.isArray(activities) || activities.length < 2) {
+    console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_window reason=fewer_than_2_activities count=${activities?.length ?? 0}`);
     return { activities: [...activities], inserted: [] };
   }
 
@@ -116,18 +125,36 @@ async function fillDeadGapsForWindow(
   const lockedIds = opts.lockedIds || new Set<string>();
   let i = 0;
   const MAX_INSERTS = 2;
+  let pairsScanned = 0;
+  let skippedLogistics = 0;
+  let skippedLocked = 0;
+  let skippedNoTime = 0;
+  let skippedUnderGap = 0;
+  let skippedTinyOverlap = 0;
+  let skippedNoFiller = 0;
+  let skippedMaxInserts = 0;
 
-  while (i < work.length - 1 && inserted.length < MAX_INSERTS) {
+  while (i < work.length - 1) {
+    if (inserted.length >= MAX_INSERTS) {
+      skippedMaxInserts++;
+      console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_pair reason=max_inserts_reached i=${i}`);
+      break;
+    }
+    pairsScanned++;
     const curr = work[i];
     const next = work[i + 1];
 
     const currIsLogistics = isLogisticsActivity(curr);
     const nextIsLogistics = isLogisticsActivity(next);
     if (currIsLogistics || (nextIsLogistics && !opts.isLastDay)) {
+      skippedLogistics++;
+      console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_pair reason=logistics_neighbour curr="${curr?.title || ''}" next="${next?.title || ''}" currLogistics=${currIsLogistics} nextLogistics=${nextIsLogistics}`);
       i++;
       continue;
     }
     if (lockedIds.has(next?.id)) {
+      skippedLocked++;
+      console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_pair reason=next_locked next="${next?.title || ''}"`);
       i++;
       continue;
     }
@@ -135,6 +162,8 @@ async function fillDeadGapsForWindow(
     const currEnd = parseTime(curr?.endTime) ?? parseTime(curr?.startTime);
     const nextStart = parseTime(next?.startTime);
     if (currEnd === null || nextStart === null) {
+      skippedNoTime++;
+      console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_pair reason=missing_time curr="${curr?.title || ''}" next="${next?.title || ''}" currEnd=${curr?.endTime ?? 'null'} nextStart=${next?.startTime ?? 'null'}`);
       i++;
       continue;
     }
@@ -144,6 +173,11 @@ async function fillDeadGapsForWindow(
     // Only afternoon supports the thin-finish departure-day threshold.
     const minGap = (opts.isLastDay && win.label === 'afternoon') ? LAST_DAY_MIN_GAP_MIN : MIN_GAP_MIN;
     if (gap < minGap) {
+      skippedUnderGap++;
+      // Only log meaningful gaps (>=30m) to avoid noise from minute-level adjacencies
+      if (gap >= 30) {
+        console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_pair reason=under_threshold gap_min=${gap} threshold_min=${minGap} curr="${curr?.title || ''}"(${curr?.endTime ?? '?'}) next="${next?.title || ''}"(${next?.startTime ?? '?'})`);
+      }
       i++;
       continue;
     }
@@ -151,6 +185,8 @@ async function fillDeadGapsForWindow(
     const overlapStart = Math.max(currEnd, win.fromMins);
     const overlapEnd = Math.min(clampedNextStart, effectiveEnd);
     if (overlapEnd - overlapStart < MIN_USABLE_OVERLAP_MIN) {
+      skippedTinyOverlap++;
+      console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_pair reason=overlap_too_small overlap_min=${overlapEnd - overlapStart} threshold_min=${MIN_USABLE_OVERLAP_MIN} curr="${curr?.title || ''}" next="${next?.title || ''}"`);
       i++;
       continue;
     }
@@ -162,6 +198,7 @@ async function fillDeadGapsForWindow(
     })();
 
     console.log(`[fill-dead-gaps][${win.label}] Detected ${Math.round(gap / 60)}h${gap % 60 ? (gap % 60) + 'm' : ''} gap between "${curr.title}" (${curr.endTime}) and "${next.title}" (${next.startTime})${opts.isLastDay ? ' [last-day, clamped to ' + clampedEndHHMM + ']' : ''} — requesting filler`);
+    console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=request_fill gap_min=${gap} between="${curr.title}"->"${next.title}" effectiveEnd=${clampedEndHHMM}`);
 
     let proposed: any = null;
     try {
@@ -180,10 +217,13 @@ async function fillDeadGapsForWindow(
       }, { source: opts.isLastDay ? `gap-filler-lastday-${win.label}` : `gap-filler-auto-${win.label}` });
     } catch (e) {
       console.warn(`[fill-dead-gaps][${win.label}] proposeGapFiller threw:`, e);
+      console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_pair reason=filler_threw err="${e instanceof Error ? e.message : String(e)}"`);
     }
 
     if (!proposed) {
+      skippedNoFiller++;
       console.log(`[fill-dead-gaps][${win.label}] No filler returned for gap after "${curr.title}" — leaving gap`);
+      console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_pair reason=no_filler_returned curr="${curr.title}"`);
       i++;
       continue;
     }
@@ -191,8 +231,11 @@ async function fillDeadGapsForWindow(
     work.splice(i + 1, 0, proposed);
     inserted.push({ afterId: curr.id, title: proposed.title, gapMinutes: gap });
     console.log(`[fill-dead-gaps][${win.label}] Inserted "${proposed.title}" (${proposed.startTime}-${proposed.endTime}) after "${curr.title}"`);
+    console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=filled inserted="${proposed.title}" at=${proposed.startTime}-${proposed.endTime} gap_min=${gap} category=${proposed.category ?? '?'}`);
     i += 2;
   }
+
+  console.log(`[DEAD_GAP_SUMMARY] day=${dayN} window=${win.label} pairs=${pairsScanned} filled=${inserted.length} skip_logistics=${skippedLogistics} skip_locked=${skippedLocked} skip_no_time=${skippedNoTime} skip_under_gap=${skippedUnderGap} skip_tiny_overlap=${skippedTinyOverlap} skip_no_filler=${skippedNoFiller} skip_max_inserts=${skippedMaxInserts}`);
 
   return { activities: work, inserted };
 }
