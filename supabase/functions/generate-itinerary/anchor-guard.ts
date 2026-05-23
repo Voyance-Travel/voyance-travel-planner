@@ -68,13 +68,14 @@ function distributeFloatingAnchors(
   const out: Array<Record<string, any>> = [];
   let dropped = 0;
   for (const anchor of anchors) {
-    // Defense-in-depth: anchors without a startTime AND without a venue identity
-    // (venueName / venue_name / location.name) are soft must-dos. Don't paint
-    // them onto days as locked naked rows — they'd appear with no time, no
-    // description, no address. The generator's USER WISHES Day Brief block
-    // handles these as soft requirements.
-    const anchorVenue = anchor.venueName || (anchor as any).venue_name || (anchor as any).location?.name;
-    if (!anchor.startTime && !anchorVenue) {
+    // TIGHTENED PREDICATE: any anchor lacking an explicit startTime is a soft
+    // wish — the venueName heuristic is unreliable (chip parsing copies title
+    // into venueName, so "Notre-Dame Basilica" satisfies the old guard). Soft
+    // wishes are carried by Day Brief USER WISHES only; never painted as
+    // untimed locked cards (the recurring "thrown on top, no time / no
+    // description" symptom). See
+    // mem://constraints/itinerary/anchor-cards-must-have-time.
+    if (!anchor.startTime) {
       dropped++;
       continue;
     }
@@ -98,10 +99,11 @@ function distributeFloatingAnchors(
     out.push({ ...anchor, dayNumber: best + 1 });
   }
   if (dropped > 0) {
-    console.log(`[ANCHOR_GUARD] floating_dropped count=${dropped} reason=soft_must_do (no startTime, no venueName)`);
+    console.log(`[ANCHOR_GUARD] floating_dropped count=${dropped} reason=no_startTime (soft wish — carried in Day Brief)`);
   }
   return out;
 }
+
 
 export function applyAnchorsWin(
   itineraryDays: any[],
