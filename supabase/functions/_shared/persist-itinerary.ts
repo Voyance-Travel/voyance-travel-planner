@@ -223,6 +223,37 @@ export async function persistTripItinerary(
     console.warn(`[${label}] duration normalization failed (non-blocking):`, e);
   }
 
+  // 3aa. Untimed-locked drop — final safety net for the recurring "duplicated
+  // untimed user-anchor card" class. Any path (chat executor, manual edit,
+  // legacy persisted JSON) that leaves an isLocked row without startTime AND
+  // without legacy `time` is dropped here. anchor-guard already enforces this
+  // at generation; this is defense-in-depth at the single write boundary.
+  // See mem://constraints/itinerary/anchor-cards-must-have-time.
+  try {
+    let untimedDropped = 0;
+    for (const day of days) {
+      if (!day || !Array.isArray(day.activities)) continue;
+      const kept: any[] = [];
+      for (const a of day.activities) {
+        if (!a) continue;
+        const isLocked = a.isLocked === true || a.locked === true;
+        const hasStart = !!(a.startTime || a.start_time || a.time);
+        if (isLocked && !hasStart) {
+          untimedDropped++;
+          continue;
+        }
+        kept.push(a);
+      }
+      day.activities = kept;
+    }
+    if (untimedDropped > 0) {
+      console.log(`[${label}] [ANCHOR_GUARD] persist_drop_untimed=${untimedDropped}`);
+    }
+  } catch (e) {
+    console.warn(`[${label}] untimed-locked drop failed (non-blocking):`, e);
+  }
+
+
   // 3a. Cross-day bleed guard — single chokepoint that moves an untagged
   // pre-dawn head row on Day N+1 back to Day N's tail when Day N ended late
   // (≥22:00). Closes the residual "Day 1 nightcap → Day 2 starts at 01:33"
