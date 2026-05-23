@@ -232,52 +232,69 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
     let hotelName: string | undefined;
     let hotelAddress: string | undefined;
 
-    // Parse flight information
+    // Parse flight information using the shared leg picker (single source
+    // of truth — mirrors src/utils/normalizeFlightSelection.ts so the edge
+    // function picks the same destination-arrival leg the user saw in Step 2).
     const flightRaw = trip.flight_selection as Record<string, unknown> | null;
-    
+    let legPickSource: string | undefined;
+    let parseFailed = false;
+
     if (flightRaw) {
       const flightInfo: string[] = [];
-      
-      const nestedDeparture = flightRaw.departure as Record<string, unknown> | undefined;
-      const nestedReturn = flightRaw.return as Record<string, unknown> | undefined;
-      
-      const manualArrival = (nestedDeparture?.arrival as Record<string, unknown>)?.time as string | undefined;
-      const searchArrival = nestedDeparture?.arrivalTime as string | undefined;
-      const flatArrival = flightRaw.arrivalTime as string | undefined;
-      const outboundArrival = manualArrival || searchArrival || flatArrival;
-      
-      const manualReturnDep = (nestedReturn?.departure as Record<string, unknown>)?.time as string | undefined;
-      const searchReturnDep = nestedReturn?.departureTime as string | undefined;
-      const flatReturnDep = flightRaw.returnDepartureTime as string | undefined;
-      const returnDeparture = manualReturnDep || searchReturnDep || flatReturnDep;
-      
-      console.log(`[FlightContext] Parsing flight_selection - manual arrival: ${manualArrival}, search arrival: ${searchArrival}, flat arrival: ${flatArrival} → using: ${outboundArrival}`);
-      
-      const departureAirport = flightRaw.departureAirport as string | undefined;
-      const arrivalAirport = flightRaw.arrivalAirport as string | undefined;
-      
+
+      const arrivalPick = pickDestinationArrivalLeg(flightRaw);
+      const departurePick = pickDestinationDepartureLeg(flightRaw);
+      legPickSource = arrivalPick.source;
+
+      const outboundArrival =
+        arrivalPick.rawArrivalString || arrivalPick.leg?.arrivalTime;
+      const returnDeparture =
+        departurePick.rawDepartureString || departurePick.leg?.departureTime;
+
+      const departureAirport =
+        arrivalPick.leg?.departureAirport ||
+        (flightRaw.departureAirport as string | undefined);
+      const arrivalAirport =
+        arrivalPick.leg?.arrivalAirport ||
+        (flightRaw.arrivalAirport as string | undefined);
+
+      console.log(
+        `[FlightContext] Parsing flight_selection - shape=${arrivalPick.shape} legPick=${arrivalPick.source} rawArrival="${outboundArrival ?? ''}" rawReturnDep="${returnDeparture ?? ''}"`
+      );
+
       if (departureAirport && arrivalAirport) {
         flightInfo.push(`✈️ Outbound: ${departureAirport} → ${arrivalAirport}`);
       }
-      
-      const outboundDeparture = (nestedDeparture?.departureTime as string) || (flightRaw.departureTime as string);
-      if (outboundDeparture) {
-        flightInfo.push(`  Departure: ${outboundDeparture}`);
-      }
-      
+
       if (outboundArrival) {
         arrivalTimeStr = outboundArrival;
-        arrivalTime24 = normalizeTo24h(outboundArrival) || (outboundArrival.includes('T') ? normalizeTo24h(new Date(outboundArrival).toTimeString()) || undefined : undefined);
+        arrivalTime24 = normalizeTo24h(outboundArrival) || undefined;
         flightInfo.push(`  Arrival: ${arrivalTimeStr}${arrivalTime24 ? ` (24h: ${arrivalTime24})` : ''}`);
 
         if (arrivalTime24) {
           const ARRIVAL_BUFFER_MINS = 4 * 60;
           earliestFirstActivity = minutesToHHMM((parseTimeToMinutes(arrivalTime24) || 0) + ARRIVAL_BUFFER_MINS);
+        } else {
+          // FAIL LOUD — flight was provided but we couldn't parse a time.
+          // Downstream (compile-day-facts + compile-prompt) reads parseFailed
+          // and injects a conservative Day 1 fallback instead of silently
+          // letting the LLM default to 12:00.
+          parseFailed = true;
+          console.warn(
+            `[FLIGHT_INGEST_PARSE_FAIL] tripId=${tripId} shape=${arrivalPick.shape} legPick=${arrivalPick.source} raw="${outboundArrival}" — Day 1 will use soft fallback`
+          );
         }
 
-        console.log(`[FlightContext] Raw arrival: "${outboundArrival}", arrival24: ${arrivalTime24}, earliest sightseeing: ${earliestFirstActivity}`);
+        console.log(`[FlightContext] Raw arrival: "${outboundArrival}", arrival24: ${arrivalTime24}, earliest sightseeing: ${earliestFirstActivity}, parseFailed=${parseFailed}`);
+      } else if (flightRaw && (flightRaw.departure || (flightRaw as any).legs || flightRaw.arrivalTime)) {
+        // flight_selection is present but no arrival string survived the picker.
+        // Treat as parse-failure so Day 1 gets a soft floor instead of silence.
+        parseFailed = true;
+        console.warn(
+          `[FLIGHT_INGEST_PARSE_FAIL] tripId=${tripId} shape=${arrivalPick.shape} legPick=${arrivalPick.source} raw=undefined — flight_selection present but no arrival time`
+        );
       }
-      
+
       if (returnDeparture) {
         returnDepartureTimeStr = returnDeparture;
         returnDepartureTime24 = normalizeTo24h(returnDeparture) || undefined;
@@ -290,6 +307,7 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
 
         console.log(`[FlightContext] Return raw ${returnDepartureTimeStr}, return24: ${returnDepartureTime24}, latest activity: ${latestLastActivity}`);
       }
+
 
       // Flight intelligence override
       const flightIntel = trip.flight_intelligence as Record<string, unknown> | null;
