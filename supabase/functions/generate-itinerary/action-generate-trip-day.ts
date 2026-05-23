@@ -746,6 +746,7 @@ async function _handleGenerateTripDayInner(
             generationLogId: generationLogId || timer.getLogId(),
             mustDoActivities: params.mustDoActivities || (tripMeta.mustDoActivities as string) || '',
             perDayActivities: params.perDayActivities || (tripMeta.perDayActivities as any[]) || [],
+            __traceId: (params as any).__traceId ?? null,
           }),
         });
       } finally {
