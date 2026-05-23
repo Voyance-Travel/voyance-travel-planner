@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { validateChronology } from '@/lib/itinerary/chronologyValidator';
 import { useQueryClient } from '@tanstack/react-query';
 import { getTripCities } from '@/services/tripCitiesService';
 import type { TripCity } from '@/types/tripCity';
