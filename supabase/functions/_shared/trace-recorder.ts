@@ -269,3 +269,23 @@ export async function startTrace(args: StartTraceArgs): Promise<Trace> {
 export function noopTrace(): Trace {
   return new NoopTrace();
 }
+
+/**
+ * Attach a TraceRecorder to an already-started trace by id.
+ * Use in downstream functions (e.g. action-generate-day) that receive a
+ * trace id via params and want to append llm/stage/mutation rows to it.
+ * Returns NoopTrace if creds missing or id invalid — never throws.
+ */
+export function attachTrace(traceId: string | null | undefined): Trace {
+  if (!traceId || typeof traceId !== 'string' || traceId.length < 8) return new NoopTrace();
+  if (Deno.env.get("TRACE_RECORDER_DISABLED") === "1") return new NoopTrace();
+  const url = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("VITE_SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return new NoopTrace();
+  try {
+    const client = createClient(url, key, { auth: { persistSession: false } });
+    return new TraceRecorder(traceId, client);
+  } catch {
+    return new NoopTrace();
+  }
+}

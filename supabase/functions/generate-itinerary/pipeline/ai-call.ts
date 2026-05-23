@@ -18,6 +18,11 @@ export interface AICallInput {
   apiKey: string;
   dayNumber: number;
   maxAttempts?: number;
+  /** Optional flight-recorder trace; if provided, each attempt is logged
+   *  to trip_generation_llm_calls (prompt, response, latency, tokens, error). */
+  trace?: { llm: (args: any) => Promise<void> } | null;
+  /** Purpose tag for the LLM call, e.g. "day-initial-generation". */
+  tracePurpose?: string;
 }
 
 export interface AICallResult {
@@ -123,57 +128,71 @@ const DAY_ITINERARY_TOOL_SCHEMA = {
  * Throws generic `Error` for exhausted retries.
  */
 export async function callAI(input: AICallInput): Promise<AICallResult> {
-  const { systemPrompt, userPrompt, apiKey, dayNumber, maxAttempts = 5 } = input;
+  const { systemPrompt, userPrompt, apiKey, dayNumber, maxAttempts = 5, trace, tracePurpose } = input;
   let data: any = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    // Fall back to a faster model after 3 failed attempts to reduce provider timeouts
     const model = attempt <= 3 ? "google/gemini-3-flash-preview" : "google/gemini-2.5-flash";
     if (attempt > 3) {
       console.log(`[ai-call] Falling back to ${model} after ${attempt - 1} failures`);
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        tools: [DAY_ITINERARY_TOOL_SCHEMA],
-        tool_choice: { type: "function", function: { name: "create_day_itinerary" } },
-      }),
-    });
+    const t0 = Date.now();
+    let response: Response;
+    try {
+      response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          tools: [DAY_ITINERARY_TOOL_SCHEMA],
+          tool_choice: { type: "function", function: { name: "create_day_itinerary" } },
+        }),
+      });
+    } catch (netErr) {
+      const msg = netErr instanceof Error ? netErr.message : String(netErr);
+      if (trace) {
+        trace.llm({
+          dayNumber, purpose: tracePurpose ?? 'day-generation', model,
+          prompt: `[system]\n${systemPrompt}\n\n[user]\n${userPrompt}`,
+          response: null, latencyMs: Date.now() - t0, retryCount: attempt - 1, error: `network: ${msg}`,
+        }).catch(() => {});
+      }
+      if (attempt < maxAttempts) {
+        const backoff = Math.min(2000 * attempt, 8000);
+        await new Promise((r) => setTimeout(r, backoff));
+        continue;
+      }
+      throw netErr;
+    }
 
     if (!response.ok) {
       const status = response.status;
+      const errorText = await response.text().catch(() => '');
+      if (trace) {
+        trace.llm({
+          dayNumber, purpose: tracePurpose ?? 'day-generation', model,
+          prompt: `[system]\n${systemPrompt}\n\n[user]\n${userPrompt}`,
+          response: errorText, latencyMs: Date.now() - t0, retryCount: attempt - 1, error: `http_${status}`,
+        }).catch(() => {});
+      }
 
-      // Non-retryable: rate limit
       if (status === 429) {
-        throw new AICallError(
-          'Rate limit exceeded',
-          429,
-          'Rate limit exceeded. Please try again in a moment.',
-        );
+        throw new AICallError('Rate limit exceeded', 429, 'Rate limit exceeded. Please try again in a moment.');
       }
-      // Non-retryable: credits exhausted
       if (status === 402) {
-        throw new AICallError(
-          'AI credits exhausted',
-          402,
-          'AI credits exhausted. Please add credits to continue.',
-        );
+        throw new AICallError('AI credits exhausted', 402, 'AI credits exhausted. Please add credits to continue.');
       }
 
-      const errorText = await response.text();
       console.error(`[ai-call] AI gateway error (attempt ${attempt}): ${status}`, errorText);
 
-      // Retry transient 5xx (including 524 provider timeout)
       if (attempt < maxAttempts && status >= 500) {
         const backoff = Math.min(2000 * attempt, 8000);
         console.log(`[ai-call] Retrying in ${backoff}ms (attempt ${attempt}/${maxAttempts})...`);
@@ -186,13 +205,21 @@ export async function callAI(input: AICallInput): Promise<AICallResult> {
 
     data = await response.json();
 
-    // The gateway can sometimes return HTTP 200 with an error payload.
     if ((data as any)?.error) {
       console.error(`[ai-call] AI Gateway error payload (attempt ${attempt}):`, (data as any).error);
       const raw = (data as any).error?.message || 'Internal Server Error';
       const errorCode = (data as any).error?.code;
-      // Treat 500, 524 (provider timeout), and generic errors as transient
       const isTransient = raw === 'Internal Server Error' || raw === 'Provider returned error' || errorCode === 500 || errorCode === 524;
+
+      if (trace) {
+        trace.llm({
+          dayNumber, purpose: tracePurpose ?? 'day-generation', model,
+          prompt: `[system]\n${systemPrompt}\n\n[user]\n${userPrompt}`,
+          response: JSON.stringify((data as any).error), latencyMs: Date.now() - t0,
+          retryCount: attempt - 1, error: `gateway: ${raw}`,
+        }).catch(() => {});
+      }
+
       if (attempt < maxAttempts && isTransient) {
         const backoff = Math.min(2000 * attempt, 8000);
         console.log(`[ai-call] Provider error (code ${errorCode}), retrying in ${backoff}ms (attempt ${attempt}/${maxAttempts})...`);
@@ -209,6 +236,21 @@ export async function callAI(input: AICallInput): Promise<AICallResult> {
 
     // Success
     const usage = data.usage || {};
+    const message = data.choices?.[0]?.message;
+    const toolCall = message?.tool_calls?.[0];
+    const responseSnapshot = toolCall?.function?.arguments ?? message?.content ?? JSON.stringify(data).slice(0, 50_000);
+    if (trace) {
+      trace.llm({
+        dayNumber, purpose: tracePurpose ?? 'day-generation',
+        model: data.model || model,
+        prompt: `[system]\n${systemPrompt}\n\n[user]\n${userPrompt}`,
+        response: typeof responseSnapshot === 'string' ? responseSnapshot : JSON.stringify(responseSnapshot),
+        promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens,
+        latencyMs: Date.now() - t0,
+        finishReason: data.choices?.[0]?.finish_reason,
+        retryCount: attempt - 1,
+      }).catch(() => {});
+    }
     console.log(`[ai-call] ✓ Day ${dayNumber}: model=${data.model || model}, tokens=${usage.prompt_tokens || 0}+${usage.completion_tokens || 0}, attempt=${attempt}`);
     return {
       data,

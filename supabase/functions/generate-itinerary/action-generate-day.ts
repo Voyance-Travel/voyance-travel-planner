@@ -79,6 +79,7 @@ import { compilePrompt, type LockedCard } from './pipeline/compile-prompt.ts';
 import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { persistDay } from './pipeline/persist-day.ts';
 import { callAI, AICallError } from './pipeline/ai-call.ts';
+import { attachTrace } from '../_shared/trace-recorder.ts';
 import { enrichAndValidateHours } from './pipeline/enrich-day.ts';
 import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
 
@@ -235,11 +236,14 @@ export async function handleGenerateDay(
     _diagTimers.aiCallStart = Date.now();
     let aiResult;
     try {
+      const dayTrace = attachTrace((params as any).__traceId ?? null);
       aiResult = await callAI({
         systemPrompt,
         userPrompt,
         apiKey: LOVABLE_API_KEY,
         dayNumber,
+        trace: dayTrace.enabled ? dayTrace : null,
+        tracePurpose: 'day-initial-generation',
       });
     } catch (err) {
       if (err instanceof AICallError) {
