@@ -1500,6 +1500,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   });
 
   if (error) {
+    console.error(`[SAVE_TRACE] trace=${saveTraceId} site=exit status=500 reason=persist_error elapsed_ms=${Date.now() - _saveT0}`);
     console.error("[save-itinerary] Failed:", error);
     return errorJson("Failed to save itinerary", 500);
   }
