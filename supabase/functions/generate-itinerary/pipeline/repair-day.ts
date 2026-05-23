@@ -4998,7 +4998,14 @@ function repairBookends(
             mergedDur = est.durationMinutes;
             mergedCost = est.costAmount;
             mergedMethod = est.method;
+          } else if (mergedDur > 180) {
+            // No coord-verification path — never inherit an absurd AI-emitted
+            // duration. Closes "Travel to Transfer to the Airport — 525 min".
+            const lowered = /airport|terminal/i.test(toName) ? 45 : 30;
+            console.log(`[Repair §4-merge] Clamped unverified merged transport day=${dayNumber} "${toName}" ${mergedDur}min → ${lowered}min (no coords)`);
+            mergedDur = lowered;
           }
+
 
           const merged = {
             ...last,
