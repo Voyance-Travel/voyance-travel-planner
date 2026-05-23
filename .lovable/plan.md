@@ -1,116 +1,45 @@
+## Issue 1 Fix Plan — Day 1 ignores the flight arrival the user already entered
 
-# Trip Generation Flight Recorder
+### Root causes confirmed in the code
+1. **Silent parse skip** in `flight-hotel-context.ts:236` — if `outboundArrival` is an ISO datetime, it falls through to `new Date(...).toTimeString()` (TZ-dependent). If parsing returns `null`, `arrivalTime24` becomes `undefined`.
+2. **Silently skipped prompt block** in `compile-prompt.ts:1284-1306` — the entire ARRIVAL TIMING block renders empty when `arrivalTime24` is undefined. The LLM gets no Day 1 constraint, defaults to 12:00, and a post-hoc `FlightSyncWarning` flags the mismatch the system itself created.
+3. **Wrong leg picked** for multi-leg trips — `flight-hotel-context.ts:210-213` reads only `flightRaw.departure.arrival.time` and never consults `legs[].isDestinationArrival`. The shared `getDestinationArrivalLeg` normalizer in `src/utils/normalizeFlightSelection.ts` already does this correctly — the edge function isn't using it.
+4. **Post-hoc band-aids** (`enforceArrivalTiming`, `Repair injected arrival flight + airport transfer`, `FlightSyncWarning` toast) try to mop up after generation instead of preventing the mistake.
 
-Goal: for every generated trip, capture a single inspectable record that answers — *what the user asked for, what each stage did, what the LLM saw, what it returned, what survived validation/repair, what was saved, and did the result match the user's DNA + inputs*.
+### What to change
 
-Today logs are scattered across `console.log` sentinels in 10+ edge functions. They disappear after Supabase's log retention window and can't be cross-referenced. This plan persists everything to the DB, structured, queryable, and viewable in-app.
+1. **`supabase/functions/_shared/flight-leg-pick.ts`** (new shared helper, edge-fn safe port of `getDestinationArrivalLeg` + `getDestinationDepartureLeg`). Accepts either legacy `{departure, return}` or `{legs[]}` shape, prefers `isDestinationArrival` flag, falls back to the heuristic the frontend already uses. Single source of truth for both surfaces.
 
-## What gets captured (per trip, per day)
+2. **`supabase/functions/generate-itinerary/flight-hotel-context.ts`**
+   - Replace lines 207-220 with one call to the new helper for the outbound leg and one for the return leg.
+   - Harden `normalizeTo24h` (lines 93-97): explicitly handle ISO 8601 (`YYYY-MM-DDTHH:MM…`) by extracting the `HH:MM` portion via regex BEFORE falling back to `Date.toTimeString` (which is TZ-dependent inside Deno).
+   - **Fail loud**: when `outboundArrival` is present but `arrivalTime24` ends up undefined, emit `[FLIGHT_INGEST_PARSE_FAIL] raw="<value>" shape="<legacy|legs>"` and stamp `flightContext.parseFailed = true` so the next step can pick a safe default instead of skipping.
 
-**Step 1 — User Request (immutable snapshot at generation start)**
-- Raw start-form payload: destination(s), dates, travelers, budget tier + cents, pacing, interests, dietary, must-do chips, anchors, hotel/flight selections
-- Resolved profile: primary/secondary archetype, trait_scores, travel_dna_overrides (Fine-Tune sliders), `firstTimePerCity`, celebration day
-- Computed `meal_policy_at_generation`, generation rules, isFirstTimeVisitor
+3. **`supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`** — after building `flightContext` and only when `isFirstDay`, assert that either `arrivalTime24` is set OR `flight_selection` is absent. If `flight_selection` exists but `arrivalTime24` is missing (parse failure), inject a **soft fallback** rule: `Day 1 first non-transport activity at or after 15:00 (flight arrival time was provided but could not be parsed: "<raw>" — be conservative)`. This guarantees Day 1 never starts at 12:00 when a flight was entered.
 
-**Step 2 — Pipeline Stages (per day, ordered)**
-For each stage record: `stage_name`, `started_at`, `ended_at`, `duration_ms`, `status` (ok/warn/error/skipped), `inputs_summary`, `outputs_summary`, `mutations` (counts), `notes[]`.
+4. **`supabase/functions/generate-itinerary/pipeline/compile-prompt.ts:1284-1306`** — change the guard so the ARRIVAL block always renders on Day 1 when `flight_selection` is present, even if `arrivalTime24` is undefined (using the soft-fallback wording from step 3). Today an undefined value silently produces an empty block — that is the exact silent failure mode.
 
-Stages tracked:
-1. `compile-facts` — day truth ledger, intents, prior-day context
-2. `compile-prompt` — final prompt sent to LLM (full text + token count + model + temperature)
-3. `llm-call` — raw LLM response (full JSON), latency, retries, finish_reason
-4. `parse-response` — JSON parse, schema validation
-5. `validate-day` — every validation code raised (MISSING_DESCRIPTION, LOGISTICS_SEQUENCE, etc.)
-6. `repair-day` — every repair action (§1–§16), per-action before/after diff
-7. `validation-gate` — drops/blanks per code
-8. `enrich-day` — venue enrichment, anchor backfill, cross-city filter
-9. `universal-quality-pass` — bookend, meal-guard, fill-dead-gaps decisions
-10. `persist-itinerary` — cascade shifts, regression-block decisions, bookend verification
-11. `cost-table-sync` — activity_costs writes, parity check
-12. `freeze + fully_persisted` — final stamp
+5. **Auto-fix instead of warn (FlightSyncWarning)** — in the post-gen meal-policy reconciliation path that today produces the "sync flight data" toast: when the mismatch is detected on a trip where `flight_selection` was already present at generation time (check `trips.flight_selection IS NOT NULL AND created_at < itinerary_data.generated_at`), fire `regenerate-day` for Day 1 (and last day if departure mismatched) automatically with the now-correct meal policy. Keep the warning visible only in the legitimate case: `flight_selection` was added AFTER generation. This removes the "sync button is a band-aid" UX entirely for the common path.
 
-**Step 3 — LLM I/O (full fidelity)**
-- Prompt: full system + user messages (current sentinels only log lengths)
-- Response: full JSON before any mutation
-- Stored compressed (gzip) since prompts run 30–80KB
+6. **Trace recorder hook** in `compile-day-facts.ts` (uses the recorder added in the earlier turn): record `flight_ingest` stage with `{ raw_flight_selection_shape, raw_arrival_string, parsed_arrivalTime24, earliestFirstActivity, constraint_block_will_render, leg_pick_source, parse_failed }`. So the next time a user reports "Day 1 wrong", we open `trace_events` and see in 5 seconds which gate dropped the data.
 
-**Step 4 — Mutation Trail**
-For every activity that changes between LLM output and final save: `activity_id`, `field`, `before`, `after`, `mutated_by` (stage name), `reason`. This is the answer to "where did Maison Eric Kayser's description disappear?"
+### Files touched
+- `supabase/functions/_shared/flight-leg-pick.ts` (new, ~60 lines)
+- `supabase/functions/generate-itinerary/flight-hotel-context.ts` (replace parser block, harden `normalizeTo24h`)
+- `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts` (assert + soft fallback + trace stage)
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` (always-render Day 1 block)
+- The post-gen warning module that emits `FlightSyncWarning` (promote to auto-regen for the legitimate-data case)
 
-**Step 5 — DNA/Input Match Verdict (post-save analyzer)**
-Runs once at end of generation. Scores each saved activity against:
-- Primary/secondary archetype alignment (categorical match + trait_scores cosine)
-- Must-do chip fulfillment (did "Eat at Roscioli" land in the plan? which day? right meal slot?)
-- Anchor fulfillment (every required anchor present with time + description?)
-- Dietary compliance
-- Budget tier match (median per-activity cost vs tier band)
-- Pacing match (activities/day vs requested pacing)
-- Interest coverage (every selected interest represented ≥1x?)
+### Acceptance criteria
+- New trip, manual arrival `14:00`: trace shows `parsed_arrivalTime24="14:00"`, `constraint_block_will_render=true`, Day 1 first activity ≥ 16:00, **no sync toast**.
+- Same with ISO arrival `2026-06-04T14:00:00`: same trace, same Day 1 behavior.
+- Multi-leg trip with `isDestinationArrival` on leg 2: leg 2's arrival is used; trace shows `leg_pick_source="isDestinationArrival_flag"`.
+- Corrupt arrival string (parse fails): trace shows `parse_failed=true`, prompt block still renders with soft 15:00 floor, no Day 1 at 12:00.
+- Pre-existing trip where flight was added AFTER generation: the toast still appears (legitimate signal — user did add data later).
 
-Output: `match_score` 0–100 + `mismatches[]` array with `{type, expected, actual, day, activity_id, root_cause_stage}`.
+### Out of scope
+- Issue 2 (525-min airport transfer on departure day) — separate plan.
+- Changing the persisted shape of `trips.flight_selection`.
+- Multi-city leg-handoff logic beyond first-leg arrival.
 
-The root-cause attribution joins back to the mutation trail — e.g. "Roscioli was in LLM output day 2 but stripped by validation-gate DESCRIPTION_GHOST_REFERENCE in repair-day §10b" gives the user a direct pointer to the failing stage.
-
-## Where it lives
-
-**New table `trip_generation_traces`** (one row per trip generation attempt):
-- `id`, `trip_id`, `attempt_number`, `started_at`, `ended_at`, `total_duration_ms`, `final_status`
-- `user_request_snapshot` jsonb
-- `resolved_profile` jsonb
-- `match_verdict` jsonb (score + mismatches)
-
-**New table `trip_generation_stages`** (one row per stage per day):
-- `id`, `trace_id`, `day_number`, `stage_name`, `order_index`, `started_at`, `ended_at`, `duration_ms`, `status`, `inputs` jsonb, `outputs` jsonb, `notes` text[], `error` text
-
-**New table `trip_generation_llm_calls`** (one row per LLM call):
-- `id`, `trace_id`, `day_number`, `model`, `temperature`, `prompt_gz` bytea, `response_gz` bytea, `prompt_tokens`, `completion_tokens`, `latency_ms`, `finish_reason`, `retry_count`
-
-**New table `trip_generation_mutations`** (one row per field mutation):
-- `id`, `trace_id`, `day_number`, `activity_external_id`, `field`, `before_value`, `after_value`, `stage`, `reason`
-
-RLS: trip owner + accepted collaborators can read their own traces. Service role writes.
-
-## Wiring (no behavior changes — pure capture)
-
-Single new module `_shared/trace-recorder.ts`:
-```ts
-const trace = startTrace(tripId);
-trace.stage('compile-prompt', { day: 2 }, async () => { ... });
-trace.llm({ prompt, response, model, latency });
-trace.mutation(activityId, 'description', before, after, 'repair-day-10b', 'DESCRIPTION_GHOST_REFERENCE');
-await trace.finalize(matchVerdict);
-```
-
-Wired at: `action-generate-trip-day`, `generate-itinerary` Stage 6, `action-save-itinerary`, every stage helper. Stages wrap their work in `trace.stage(...)` — adds 1 line per call site, no logic change.
-
-Match verdict analyzer = new `_shared/match-verdict.ts`, runs in `persistTripItinerary` after Phase 6 freeze.
-
-## Viewing it
-
-**Admin/debug page `/admin/trip-trace/:tripId`** (gated to trip owner + Voyance staff):
-- Header: user request summary + match score + pass/fail badges per category
-- Day tabs: timeline of stages with duration bars, expandable to inputs/outputs/notes
-- LLM tab: prompt + response side-by-side per day, syntax-highlighted, copy buttons
-- Mutations tab: filterable table — "show me everything that mutated `description` on day 2"
-- Verdict tab: ranked mismatches with deep-links to the responsible stage
-
-## Storage / cost guardrails
-
-- LLM prompts/responses gzipped (~5× compression on JSON)
-- Retain full trace for 30 days, then prune `llm_calls` + `mutations` but keep stage summaries + verdict for 1 year
-- Opt-out flag `metadata.trace_disabled` for users who request it
-- Estimated ~150KB/trip compressed
-
-## Out of scope (this plan)
-
-- Real-time streaming of traces to UI during generation (next iteration)
-- Cross-trip aggregate dashboards ("which stage drops the most activities globally") — once we have data
-- Replay/re-run from any stage — needs immutable inputs, design pass first
-
-## Acceptance
-
-After implementation, for any bad trip the user reports, you can answer in <60 seconds:
-1. What they asked for
-2. What the LLM saw and returned for the failing day
-3. Which stage mutated/dropped the broken item
-4. Whether the final plan matches their DNA + inputs, and exactly where it diverged
+No DB migration. All changes are edge-function + one tiny shared helper.
