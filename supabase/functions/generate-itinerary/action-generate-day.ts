@@ -79,6 +79,7 @@ import { compilePrompt, type LockedCard } from './pipeline/compile-prompt.ts';
 import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { persistDay } from './pipeline/persist-day.ts';
 import { callAI, AICallError } from './pipeline/ai-call.ts';
+import { attachTrace } from '../_shared/trace-recorder.ts';
 import { enrichAndValidateHours } from './pipeline/enrich-day.ts';
 import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
 
