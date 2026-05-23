@@ -151,8 +151,11 @@ export async function handleGenerateTripDay(
   }
 
   try {
-    return await _handleGenerateTripDayInner(supabase, userId, params, timer);
+    const resp = await _handleGenerateTripDayInner(supabase, userId, params, timer);
+    console.log(`[GEN_TRACE] trace=${genTraceId} site=exit status=${resp.status} elapsed_ms=${Date.now() - _t0}`);
+    return resp;
   } catch (fatalErr) {
+    console.error(`[GEN_TRACE] trace=${genTraceId} site=exit status=fatal elapsed_ms=${Date.now() - _t0}`);
     console.error(`[generate-trip-day] FATAL error on day ${dayNumber}:`, fatalErr);
     timer.addError(`day_${dayNumber}_fatal`, String(fatalErr));
 
