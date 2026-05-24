@@ -31,7 +31,9 @@ export type PersistValidationCode =
   | 'OVERLONG_ACTIVITY'
   | 'WRAP_GAP_OVER_3H'
   | 'CURRENCY_MISMATCH'
-  | 'EMPTY_DAY';
+  | 'EMPTY_DAY'
+  | 'DEPARTURE_DAY_LIGHT'
+  | 'ARRIVAL_DAY_LIGHT';
 
 export type PersistValidationSeverity = 'error' | 'warning';
 
