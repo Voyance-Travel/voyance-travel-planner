@@ -15,6 +15,7 @@ import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validatio
 import { pruneOrphanTransits } from '../_shared/orphan-transit.ts';
 import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField, enforceMichelinPriceFloor, enforceTicketedAttractionPricing, enforceBarNightcapPriceCap, enforceCasualVenuePriceCap, enforceVenueTypePriceCap, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS } from './sanitization.ts';
 import { StageLogger } from './pipeline/stage-logger.ts';
+import { appendGenerationTrace } from '../_shared/generation-trace.ts';
 import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { applyAnchorsWin } from './anchor-guard.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
@@ -690,6 +691,15 @@ async function _handleGenerateTripDayInner(
 
   // ── STAGE LOGGER: track pipeline artifacts for this day ──
   const stageLogger = new StageLogger(supabase, tripId, dayNumber);
+
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip-day',
+    phase: 'day_started',
+    status: 'ok',
+    dayNumber,
+    expectedTotalDays: totalDays,
+  });
+
 
   const MAX_RETRIES = 4;
   let dayResult: any = null;
