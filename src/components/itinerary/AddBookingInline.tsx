@@ -34,6 +34,7 @@ import { patchItineraryWithFlight } from '@/services/flightItineraryPatch';
 import { cn } from '@/lib/utils';
 import { FlightImportModal } from './FlightImportModal';
 import { FindMyHotelsDrawer } from './FindMyHotelsDrawer';
+import { autoTagLegs, legButtonVisibility } from '@/utils/autoTagFlightLegs';
 import { 
   type HotelBooking, 
   findOverlappingHotel, 
@@ -245,7 +246,7 @@ export function AddFlightInline({
     setIsSaving(true);
 
     try {
-      const legObjs = legs.map((leg, i) => ({
+      const rawLegObjs = legs.map((leg, i) => ({
         legOrder: i + 1,
         airline: leg.airline || 'Unknown',
         flightNumber: leg.flightNumber || '',
@@ -270,6 +271,10 @@ export function AddFlightInline({
         isDestinationArrival: leg.isDestinationArrival || undefined,
         isDestinationDeparture: leg.isDestinationDeparture || undefined,
       }));
+
+      // Auto-stamp destination arrival/departure flags from leg direction.
+      // Never overrides flags the user already set manually.
+      const legObjs = autoTagLegs(rawLegObjs);
 
       // Find the destination arrival leg for backward-compat "departure" (outbound) field
       const destArrivalLeg = legObjs.find(l => l.isDestinationArrival) || legObjs[0];
@@ -546,51 +551,59 @@ export function AddFlightInline({
                       </div>
                     </div>
 
-                    {/* Destination arrival marker - only show for multi-leg trips */}
-                    {legs.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          // Toggle: set this leg as destination arrival, clear others
-                          setLegs(prev => prev.map((l, i) => ({
-                            ...l,
-                            isDestinationArrival: i === idx ? !l.isDestinationArrival : false,
-                          })));
-                        }}
-                        className={cn(
-                          "w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs transition-colors",
-                          leg.isDestinationArrival
-                            ? "bg-primary/10 text-primary font-medium"
-                            : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
-                        )}
-                      >
-                        <MapPin className={cn("h-3.5 w-3.5", leg.isDestinationArrival && "text-primary")} />
-                        {leg.isDestinationArrival ? 'This is my destination arrival' : 'Mark as destination arrival'}
-                      </button>
-                    )}
+                    {/* Destination arrival/departure markers — only shown when ambiguous.
+                        Round-trip outbound/return is auto-tagged by direction; we hide the
+                        button that can't logically apply to that leg. */}
+                    {(() => {
+                      const { showArrival, showDeparture } = legButtonVisibility(idx, legs.length);
+                      return (
+                        <>
+                          {legs.length > 1 && showArrival && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Toggle: set this leg as destination arrival, clear others
+                                setLegs(prev => prev.map((l, i) => ({
+                                  ...l,
+                                  isDestinationArrival: i === idx ? !l.isDestinationArrival : false,
+                                })));
+                              }}
+                              className={cn(
+                                "w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs transition-colors",
+                                leg.isDestinationArrival
+                                  ? "bg-primary/10 text-primary font-medium"
+                                  : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                              )}
+                            >
+                              <MapPin className={cn("h-3.5 w-3.5", leg.isDestinationArrival && "text-primary")} />
+                              {leg.isDestinationArrival ? 'This is my destination arrival' : 'Mark as destination arrival'}
+                            </button>
+                          )}
 
-                    {/* Destination departure marker - only show for multi-leg trips */}
-                    {legs.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          // Toggle: set this leg as destination departure, clear others
-                          setLegs(prev => prev.map((l, i) => ({
-                            ...l,
-                            isDestinationDeparture: i === idx ? !l.isDestinationDeparture : false,
-                          })));
-                        }}
-                        className={cn(
-                          "w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs transition-colors",
-                          leg.isDestinationDeparture
-                            ? "bg-accent/10 text-accent font-medium"
-                            : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
-                        )}
-                      >
-                        <Plane className={cn("h-3.5 w-3.5", leg.isDestinationDeparture && "text-accent")} />
-                        {leg.isDestinationDeparture ? 'This is my destination departure' : 'Mark as destination departure'}
-                      </button>
-                    )}
+                          {legs.length > 1 && showDeparture && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Toggle: set this leg as destination departure, clear others
+                                setLegs(prev => prev.map((l, i) => ({
+                                  ...l,
+                                  isDestinationDeparture: i === idx ? !l.isDestinationDeparture : false,
+                                })));
+                              }}
+                              className={cn(
+                                "w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs transition-colors",
+                                leg.isDestinationDeparture
+                                  ? "bg-accent/10 text-accent font-medium"
+                                  : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                              )}
+                            >
+                              <Plane className={cn("h-3.5 w-3.5", leg.isDestinationDeparture && "text-accent")} />
+                              {leg.isDestinationDeparture ? 'This is my destination departure' : 'Mark as destination departure'}
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
 
                     {/* More details */}
                     <div className="grid grid-cols-2 gap-3">

@@ -5,6 +5,8 @@
  * into a consistent legs[] array. All consumers should use this utility.
  */
 
+import { autoTagLegs } from './autoTagFlightLegs';
+
 export interface FlightLeg {
   legOrder: number;
   airline: string;
@@ -137,10 +139,14 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
 
   if (legs.length === 0) return null;
 
+  // Auto-tag destination arrival/departure for any leg that lacks the flag.
+  // Safe to run on every read — never overwrites existing flags.
+  const tagged = autoTagLegs(legs);
+
   return {
-    legs,
+    legs: tagged,
     isManualEntry: data.isManualEntry as boolean | undefined,
-    totalPrice: legs.reduce((sum, l) => sum + (l.price || 0), 0),
+    totalPrice: tagged.reduce((sum, l) => sum + (l.price || 0), 0),
   };
 }
 
@@ -148,7 +154,8 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
  * Build the legacy-compatible flight_selection object from legs[].
  * This ensures backward compatibility with all existing consumers.
  */
-export function buildFlightSelectionFromLegs(legs: FlightLeg[], isManualEntry = true): Record<string, unknown> {
+export function buildFlightSelectionFromLegs(legsIn: FlightLeg[], isManualEntry = true): Record<string, unknown> {
+  const legs = autoTagLegs(legsIn);
   const result: Record<string, unknown> = {
     legs,
     isManualEntry,

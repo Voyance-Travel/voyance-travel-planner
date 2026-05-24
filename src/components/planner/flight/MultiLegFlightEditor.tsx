@@ -48,6 +48,7 @@ import { format } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
 import type { TripDestination } from '@/types/multiCity';
+import { autoTagLegs } from '@/utils/autoTagFlightLegs';
 
 export type LegTransportType = 'flight' | 'train' | 'bus' | 'car' | 'ferry';
 
@@ -564,7 +565,8 @@ export default function MultiLegFlightEditor({
       }
 
       if (changed) {
-        const emittedLegs = uniqueMeaningfulLegs(next.map((s) => s.flight));
+        const destIata = destinations[destinations.length - 1]?.airportCode || null;
+        const emittedLegs = autoTagLegs(uniqueMeaningfulLegs(next.map((s) => s.flight)), { destinationIata: destIata });
         const sig = emittedLegs.map(l => [l.airline,l.flightNumber,l.departureAirport,l.arrivalAirport,l.departureTime,l.arrivalTime,l.departureDate,l.price,l.isDestinationArrival,l.isDestinationDeparture].join('|')).join('||');
         if (sig !== lastEmittedSignature.current) {
           lastEmittedSignature.current = sig;
@@ -578,12 +580,13 @@ export default function MultiLegFlightEditor({
 
   // Sync changes to parent — emit all legs (including non-flight) so data isn't lost
   const syncToParent = useCallback((updatedSlots: FlightLegSlot[]) => {
-    const allLegs = uniqueMeaningfulLegs(updatedSlots.map(s => s.flight));
+    const destIata = destinations[destinations.length - 1]?.airportCode || null;
+    const allLegs = autoTagLegs(uniqueMeaningfulLegs(updatedSlots.map(s => s.flight)), { destinationIata: destIata });
     const sig = allLegs.map(l => [l.airline,l.flightNumber,l.departureAirport,l.arrivalAirport,l.departureTime,l.arrivalTime,l.departureDate,l.price,l.isDestinationArrival,l.isDestinationDeparture].join('|')).join('||');
     if (sig === lastEmittedSignature.current) return;
     lastEmittedSignature.current = sig;
     onLegsChangeRef.current(allLegs);
-  }, []);
+  }, [destinations]);
 
   const updateSlotFlight = useCallback((slotId: string, patch: Partial<ManualFlightEntry>) => {
     setSlots(prev => {

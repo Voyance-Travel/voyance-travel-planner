@@ -28,6 +28,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { safeFormatDate } from '@/utils/dateUtils';
+import { legButtonVisibility } from '@/utils/autoTagFlightLegs';
 
 export interface FlightLegDisplay {
   airline?: string;
@@ -234,37 +235,47 @@ function SortableFlightCard({
               </div>
             )}
 
-            {/* Mark buttons — only for multi-leg trips in edit mode */}
-            {totalLegs > 1 && isEditable && (
-              <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-border/50 flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => onMarkLeg(idx, 'isDestinationArrival')}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
-                    isMarkedArrival
-                      ? "bg-primary/10 border-primary/30 text-primary font-medium"
-                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+            {/* Mark buttons — only for multi-leg trips in edit mode.
+                Hide the button that can't logically apply to this leg
+                (outbound never "departs from destination"; return never "arrives"). */}
+            {totalLegs > 1 && isEditable && (() => {
+              const { showArrival, showDeparture } = legButtonVisibility(idx, totalLegs);
+              if (!showArrival && !showDeparture) return null;
+              return (
+                <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-border/50 flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                  {showArrival && (
+                    <button
+                      type="button"
+                      onClick={() => onMarkLeg(idx, 'isDestinationArrival')}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
+                        isMarkedArrival
+                          ? "bg-primary/10 border-primary/30 text-primary font-medium"
+                          : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <MapPin className={cn("h-3 w-3", isMarkedArrival && "text-primary")} />
+                      {isMarkedArrival ? '✓ Arrives at destination' : 'Mark as destination arrival'}
+                    </button>
                   )}
-                >
-                  <MapPin className={cn("h-3 w-3", isMarkedArrival && "text-primary")} />
-                  {isMarkedArrival ? '✓ Arrives at destination' : 'Mark as destination arrival'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onMarkLeg(idx, 'isDestinationDeparture')}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
-                    isMarkedDeparture
-                      ? "bg-accent/10 border-accent/30 text-accent font-medium"
-                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                  {showDeparture && (
+                    <button
+                      type="button"
+                      onClick={() => onMarkLeg(idx, 'isDestinationDeparture')}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
+                        isMarkedDeparture
+                          ? "bg-accent/10 border-accent/30 text-accent font-medium"
+                          : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <Plane className="h-3 w-3" />
+                      {isMarkedDeparture ? '✓ Departs from destination' : 'Mark as departure from destination'}
+                    </button>
                   )}
-                >
-                  <Plane className="h-3 w-3" />
-                  {isMarkedDeparture ? '✓ Departs from destination' : 'Mark as departure from destination'}
-                </button>
-              </div>
-            )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
