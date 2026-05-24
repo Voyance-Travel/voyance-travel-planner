@@ -486,10 +486,14 @@ export async function persistTripItinerary(
     await runBookendVerification(days, {
       destination: options.destination ?? null,
       label,
+      // Pass canonical total so Day 1 of an N>1 trip is never auto-stamped
+      // as departure when the JSON briefly carries only Day 1 (Bangkok).
+      expectedTotalDays: canonicalTotalDays,
     });
   } catch (e) {
     console.warn(`[${label}] bookend verification failed (non-blocking):`, e);
   }
+
 
   // 4. Regression guard — fetch the on-disk version and refuse to overwrite a
   //    healthy `days` array with a materially worse one. The completeness
