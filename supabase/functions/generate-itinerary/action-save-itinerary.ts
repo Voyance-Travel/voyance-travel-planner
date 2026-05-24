@@ -309,6 +309,18 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   const skipLedgerCheck = params.skipLedgerCheck === true;
   const saveReason = typeof params.saveReason === 'string' ? params.saveReason : 'unspecified';
 
+  // FIRST-LINE TRACE — fires before access/frozen checks so every save attempt
+  // lands in the trip row, even if 403/409 short-circuits below.
+  if (tripId) {
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'save-itinerary',
+      phase: 'persist_gate_checked',
+      status: 'ok',
+      jsonDayCount: Array.isArray(itinerary?.days) ? itinerary.days.length : 0,
+      extra: { saveReason, skipLedgerCheck, site: 'entry' },
+    }).catch(() => {});
+  }
+
   const saveTraceId = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10)).slice(0, 8);
   const _saveT0 = Date.now();
   const _daysIn = Array.isArray(itinerary?.days) ? itinerary.days.length : 0;
