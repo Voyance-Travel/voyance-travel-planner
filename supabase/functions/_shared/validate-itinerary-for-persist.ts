@@ -193,13 +193,33 @@ export function validateItineraryForPersist(
     const acts: any[] = Array.isArray(day.activities) ? day.activities : [];
 
     // EMPTY_DAY — no real activities at all.
+    // EXEMPTION: a last day with checkout + (transfer or flight) is a legit
+    // departure-only day — the AI did the right thing per the departure rules.
+    // Same logic for a Day-1 with flight + (transfer or check-in) and a late
+    // arrival. Downgrade to a non-blocking warning so the trip doesn't get
+    // collapsed to `partial` for shipping a correctly-shaped logistics day.
     if (acts.filter(isRealActivity).length === 0) {
+      if (isLastDay && hasDepartureLogistics(acts)) {
+        push({
+          code: 'DEPARTURE_DAY_LIGHT', severity: 'warning', dayNumber,
+          detail: 'Departure day is logistics-only (checkout + transfer/flight). No real activities by design.',
+        });
+        continue;
+      }
+      if (isFirstDay && hasArrivalLogistics(acts)) {
+        push({
+          code: 'ARRIVAL_DAY_LIGHT', severity: 'warning', dayNumber,
+          detail: 'Arrival day is logistics-only (flight + transfer/check-in). No real activities by design.',
+        });
+        continue;
+      }
       push({
         code: 'EMPTY_DAY', severity: 'error', dayNumber,
         detail: 'Day has no real activities (logistics/hotel-only).',
       });
       continue;
     }
+
 
     // MISSING_REQUIRED_MEAL — derive policy + check
     let policy: { requiredMeals: RequiredMeal[] };
