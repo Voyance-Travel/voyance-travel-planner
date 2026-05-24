@@ -202,6 +202,7 @@ export async function safeUpdateItineraryData(
         itinerary: merged,
         extraUpdate: { ...extraFields, updated_at: new Date().toISOString() },
         ...(options.skipLedgerCheck ? { skipLedgerCheck: true, saveReason: options.reason || 'safeUpdateItineraryData-skipLedger' } : {}),
+        ...(options.allowFrozenWrite ? { allowFrozenWrite: true } : {}),
       },
     });
 
