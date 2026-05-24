@@ -246,7 +246,7 @@ export function AddFlightInline({
     setIsSaving(true);
 
     try {
-      const legObjs = legs.map((leg, i) => ({
+      const rawLegObjs = legs.map((leg, i) => ({
         legOrder: i + 1,
         airline: leg.airline || 'Unknown',
         flightNumber: leg.flightNumber || '',
@@ -271,6 +271,10 @@ export function AddFlightInline({
         isDestinationArrival: leg.isDestinationArrival || undefined,
         isDestinationDeparture: leg.isDestinationDeparture || undefined,
       }));
+
+      // Auto-stamp destination arrival/departure flags from leg direction.
+      // Never overrides flags the user already set manually.
+      const legObjs = autoTagLegs(rawLegObjs);
 
       // Find the destination arrival leg for backward-compat "departure" (outbound) field
       const destArrivalLeg = legObjs.find(l => l.isDestinationArrival) || legObjs[0];
