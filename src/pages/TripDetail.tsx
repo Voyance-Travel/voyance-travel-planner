@@ -1567,8 +1567,27 @@ export default function TripDetail() {
         // Self-heal: detect corrupted ready+partial state
         // If itinerary_status is 'ready' but day count < expected, trigger stalled/resume
         // Also correct inflated metadata.generation_total_days from canonical dates
-        // AND rebuild itinerary_data.days from itinerary_days if JSON is truncated
-        if (tripData.itinerary_status === 'ready' || (tripData.itinerary_status as string) === 'generated') {
+        // AND rebuild itinerary_data.days from itinerary_days if JSON is truncated.
+        //
+        // Recovery gate widened (2026-05-24 Bangkok/Dubai class): also rebuild when
+        // status='partial' / 'failed' / stale 'generating' but the normalized
+        // itinerary_days + itinerary_activities tables already hold a complete
+        // generation. Root cause = generate-itinerary 504'd after writing rows
+        // but before flipping status + populating itinerary_data.days. Without
+        // this path the user stares at "Loading your itinerary…" forever.
+        const __status = (tripData.itinerary_status as string) || '';
+        const __jsonDayCountQuick = ((tripData.itinerary_data as any)?.days?.length) || 0;
+        const isReadyStatus = __status === 'ready' || __status === 'generated';
+        // Recover from partial/failed when tables look complete enough to surface.
+        const isRecoverableSemiTerminal =
+          (__status === 'partial' || __status === 'failed') && itineraryDaysDbCount > 0;
+        // Recover from stale 'generating' too: JSON empty but normalized tables
+        // already hold rows (504-after-write pattern).
+        const isStaleGenerating =
+          (__status === 'generating' || __status === 'queued') &&
+          __jsonDayCountQuick === 0 &&
+          itineraryDaysDbCount > 0;
+        if (isReadyStatus || isRecoverableSemiTerminal || isStaleGenerating) {
           const itinData = tripData.itinerary_data as { days?: unknown[]; [key: string]: unknown } | null;
           const jsonDayCount = itinData?.days?.length ?? 0;
           const actualDays = Math.max(jsonDayCount, itineraryDaysDbCount);
@@ -1600,11 +1619,15 @@ export default function TripDetail() {
           // Triggers on either:
           //  (a) day-count drift (table has more days than JSON), OR
           //  (b) per-day activity-count drift (any JSON day has materially
-          //      fewer cards than the corresponding table row — >40% gap).
+          //      fewer cards than the corresponding table row — >40% gap), OR
+          //  (c) JSON is empty/missing while normalized tables have rows
+          //      (504-after-write / partial-without-json pattern — Dubai 2026-05-24).
           // Never overwrites a populated JSON day with an empty table-backed day.
           // mem://constraints/itinerary/health-cascade-preview (sparse-JSON resync trigger)
           const dayCountDrift = jsonDayCount > 0 && itineraryDaysDbCount > jsonDayCount;
-          let perDayDriftSuspected = false;
+          const jsonEmptyButTablesExist = jsonDayCount === 0 && itineraryDaysDbCount > 0;
+          let perDayDriftSuspected = jsonEmptyButTablesExist; // force rebuild branch
+
           if (jsonDayCount > 0 && itineraryDaysDbCount === jsonDayCount && tripId) {
             try {
               const { data: rows } = await supabase
