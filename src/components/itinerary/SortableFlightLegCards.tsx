@@ -28,6 +28,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { safeFormatDate } from '@/utils/dateUtils';
+import { legButtonVisibility } from '@/utils/autoTagFlightLegs';
 
 export interface FlightLegDisplay {
   airline?: string;
