@@ -34,6 +34,7 @@ import { useCredits } from '@/hooks/useCredits';
 import { formatCredits } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
+import { recoverGenerationFromTables } from '@/services/generationRecovery';
 
 /** Fire-and-forget refund with retries — works even if component unmounts */
 async function issueRefund(
@@ -151,6 +152,19 @@ export function ItineraryGenerator({
 
   const fetchCompletedDaysFromBackend = useCallback(async (): Promise<GeneratedDay[]> => {
     if (!tripId) return [];
+
+    try {
+      const recovered = await recoverGenerationFromTables(tripId, {
+        persist: true,
+        promoteReady: true,
+        reason: 'self-heal-generator-fetch-complete',
+      });
+      if (recovered.status === 'ready' && recovered.days.length > 0) {
+        return recovered.days as GeneratedDay[];
+      }
+    } catch (recoveryErr) {
+      console.warn('[ItineraryGenerator] table recovery before fetch failed:', recoveryErr);
+    }
 
     let expectedTotalDays = 0;
 
@@ -371,79 +385,24 @@ export function ItineraryGenerator({
   const recoveryInFlightRef = useRef(false);
 
   const recoverFromDatabase = useCallback(async () => {
-    const [tripResult, dayResult] = await Promise.all([
-      supabase
-        .from('trips')
-        .select('itinerary_status, itinerary_data, metadata, start_date, end_date')
-        .eq('id', tripId)
-        .maybeSingle(),
-      supabase
-        .from('itinerary_days')
-        .select('id', { count: 'exact', head: true })
-        .eq('trip_id', tripId),
-    ]);
+    const recovered = await recoverGenerationFromTables(tripId, {
+      persist: true,
+      promoteReady: true,
+      reason: 'self-heal-generator-recovery',
+    });
 
-    const itineraryData = (tripResult.data?.itinerary_data as { days?: GeneratedDay[] } | null) ?? null;
-    const existingDays = itineraryData?.days ?? [];
-    const dayCount = dayResult.count ?? 0;
-    const actualDays = Math.max(existingDays.length, dayCount);
-
-    // Compute expected total days from metadata or date range
-    const tripMeta = (tripResult.data?.metadata as Record<string, unknown>) || {};
-    const metaTotalDays = (tripMeta.generation_total_days as number) || 0;
-    let expectedTotalDays = metaTotalDays;
-    if (expectedTotalDays <= 0 && tripResult.data?.start_date && tripResult.data?.end_date) {
-      try {
-        expectedTotalDays = differenceInCalendarDays(
-          parseLocalDate(tripResult.data.end_date),
-          parseLocalDate(tripResult.data.start_date)
-        ) + 1;
-      } catch { expectedTotalDays = 0; }
-    }
-
-    if (existingDays.length > 0) {
-      // STRUCTURAL CHECK: Require at least one real activity per day
-      // Shell days (theme/title only, no activities) should NOT be treated as complete
-      const daysWithActivities = existingDays.filter(
-        (d: any) => Array.isArray(d.activities) && d.activities.length > 0
-      ).length;
-      const isShellOnly = daysWithActivities === 0;
-
-      if (isShellOnly) {
-        console.warn(`[ItineraryGenerator] Shell-only itinerary detected: ${existingDays.length} days but 0 have activities. Treating as incomplete.`);
-        setHasStarted(true);
-        setPrePhase('preparing');
-        setServerGenActive(true);
-        setShowRetryButton(false);
-        return 'in_progress' as const;
-      }
-
-      // Only treat as truly ready if ALL expected days are present AND have activities
-      const isComplete = expectedTotalDays > 0
-        ? (actualDays >= expectedTotalDays && daysWithActivities >= expectedTotalDays)
-        : daysWithActivities > 0; // Fallback: at least some days have real content
-
-      if (isComplete) {
-        setGenerationIssueSince(null);
-        setShowRetryButton(false);
-        setPrePhase(null);
-        setServerGenActive(false);
-        setHasStarted(false);
-        onComplete(existingDays, undefined, gateResultRef.current?.isFirstTrip);
-        return 'ready' as const;
-      }
-
-      // Partial data exists — do NOT finalize. Keep polling/stalled state.
-      console.log(`[ItineraryGenerator] Partial recovery: ${actualDays}/${expectedTotalDays} days. Staying in_progress.`);
-      setHasStarted(true);
-      setPrePhase('preparing');
-      setServerGenActive(true);
+    if (recovered.status === 'ready') {
+      setGenerationIssueSince(null);
       setShowRetryButton(false);
-      return 'in_progress' as const;
+      setPrePhase(null);
+      setServerGenActive(false);
+      setHasStarted(false);
+      onComplete(recovered.days as GeneratedDay[], undefined, gateResultRef.current?.isFirstTrip);
+      return 'ready' as const;
     }
 
-    const status = String(tripResult.data?.itinerary_status || '').toLowerCase();
-    if (dayCount > 0 || status === 'generating' || status === 'queued' || status === 'ready' || status === 'generated') {
+    if (recovered.status === 'partial' || recovered.status === 'in_progress') {
+      console.log(`[ItineraryGenerator] Recovery in progress: ${recovered.realDayCount}/${recovered.expectedTotalDays} real days from tables.`);
       setHasStarted(true);
       setPrePhase('preparing');
       setServerGenActive(true);

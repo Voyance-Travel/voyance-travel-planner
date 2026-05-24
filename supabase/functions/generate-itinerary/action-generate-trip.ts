@@ -40,6 +40,86 @@ export async function handleGenerateTrip(
   userId: string,
   params: Record<string, any>,
 ): Promise<Response> {
+  const { tripId, destination, startDate, endDate, requestedDays } = params;
+  if (!tripId || !destination || !startDate || !endDate) {
+    return new Response(
+      JSON.stringify({ error: "Missing required fields", code: "INVALID_INPUT" }),
+      { status: 400, headers: jsonHeaders }
+    );
+  }
+
+  const tripAccessResult = await verifyTripAccess(supabase, tripId, userId, true);
+  if (!tripAccessResult.allowed) {
+    return new Response(
+      JSON.stringify({ error: tripAccessResult.reason || "Access denied", code: "FORBIDDEN" }),
+      { status: 403, headers: jsonHeaders }
+    );
+  }
+
+  const sDate = new Date(startDate);
+  const eDate = new Date(endDate);
+  const dateTotalDays = Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const totalDays = requestedDays && requestedDays > 0 ? requestedDays : dateTotalDays;
+  const generationRunId = crypto.randomUUID();
+
+  try {
+    const { data: currentTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+    const existingMeta = (currentTrip?.metadata as Record<string, unknown>) || {};
+    await supabase.from('trips').update({
+      itinerary_status: 'generating',
+      metadata: {
+        ...existingMeta,
+        generation_started_at: new Date().toISOString(),
+        generation_total_days: totalDays,
+        generation_completed_days: 0,
+        generation_error: null,
+        generation_heartbeat: new Date().toISOString(),
+        generation_run_id: generationRunId,
+        chain_broken_at_day: null,
+        chain_error: null,
+        fully_persisted: false,
+      },
+    }).eq('id', tripId);
+  } catch (initErr) {
+    console.warn('[generate-trip] quick-launch metadata init failed (continuing):', initErr);
+  }
+
+  const background = handleGenerateTripBackground(supabase, userId, {
+    ...params,
+    requestedDays: totalDays,
+    __backgroundLaunch: true,
+    __generationRunId: generationRunId,
+  }).catch(async (err) => {
+    console.error('[generate-trip] background launch failed:', err);
+    try {
+      const { data: failTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+      const failMeta = (failTrip?.metadata as Record<string, unknown>) || {};
+      await supabase.from('trips').update({
+        itinerary_status: 'failed',
+        metadata: {
+          ...failMeta,
+          generation_error: String(err).slice(0, 500),
+          chain_error_at: new Date().toISOString(),
+          generation_heartbeat: new Date().toISOString(),
+        },
+      }).eq('id', tripId);
+    } catch (markErr) {
+      console.error('[generate-trip] failed to mark background launch failure:', markErr);
+    }
+  });
+  EdgeRuntime.waitUntil(background);
+
+  return new Response(
+    JSON.stringify({ success: true, status: 'generating', totalDays }),
+    { headers: jsonHeaders }
+  );
+}
+
+async function handleGenerateTripBackground(
+  supabase: any,
+  userId: string,
+  params: Record<string, any>,
+): Promise<Response> {
   const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays, resumeFromDay, isFirstTrip } = params;
 
   if (!tripId || !destination || !startDate || !endDate) {
