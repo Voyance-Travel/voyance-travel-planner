@@ -762,6 +762,18 @@ export async function persistTripItinerary(
   const { error } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
   if (error) {
     console.error(`[${label}] trips.update failed:`, error);
+  } else {
+    // Reconcile metadata.failed_day_numbers against the activities table
+    // so stale entries don't pin the UI in "incomplete generation" mode
+    // (Bangkok pattern: meta said [3,4] failed but tables had 11/3 rows).
+    // Non-blocking — never fails the persist.
+    try {
+      const { reconcileFailedDays } = await import('./reconcile-failed-days.ts');
+      await reconcileFailedDays(supabase, tripId, { label });
+    } catch (e) {
+      console.warn(`[${label}] reconcileFailedDays failed (non-blocking):`, e);
+    }
   }
   return { error, regressionBlocked, mealOnlyBlocked };
+
 }
