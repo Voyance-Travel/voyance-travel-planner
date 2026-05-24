@@ -137,6 +137,9 @@ export interface PersistResult {
   frozenBlocked?: boolean;
   /** True when the MEAL-ONLY guard blocked the JSONB write. */
   mealOnlyBlocked?: boolean;
+  /** True when the strict day-count floor blocked the write (incoming day
+   *  count was less than max(prior_json, itinerary_days_table)). */
+  dayCountShrinkBlocked?: boolean;
 }
 
 /** Capped-size ring buffer of rejected attempts written under
@@ -187,6 +190,84 @@ export async function persistTripItinerary(
     console.warn(`[${label}] frozen-guard probe failed (non-blocking, allowing write):`, e);
   }
 
+  // ── DAY-COUNT FLOOR (strict, defense-in-depth) ──────────────────
+  // Refuse to persist a `days` array with FEWER entries than
+  // max(prior_json.days.length, count(itinerary_days table)). This is the
+  // single backend boundary that catches the Bangkok / "1 of 4 days
+  // generated" class: an upstream chain or chat write that emits a
+  // single-day payload would otherwise silently land in JSON, after which
+  // the bookend validator misclassifies Day 1 as departure and the
+  // hotel-nights label collapses to "1 night". The regression-guard below
+  // compares meaningful counts; this guard explicitly compares day counts
+  // and runs even when meaningful counts look fine. Opt-out via
+  // `allowRegression: true` (the same flag that powers user-initiated
+  // resets / day-removal flows).
+  let dayCountShrinkBlocked = false;
+  let dayCountFloorMeta: { incoming: number; priorJson: number; tableRows: number; priorMax: number } | null = null;
+  try {
+    if (!options.allowRegression && Array.isArray(days) && days.length > 0) {
+      const { data: priorRow } = await supabase
+        .from('trips').select('itinerary_data').eq('id', tripId).maybeSingle();
+      const priorJsonDays = Array.isArray((priorRow?.itinerary_data as any)?.days)
+        ? ((priorRow!.itinerary_data as any).days as any[])
+        : [];
+      const { count: tableRows } = await supabase
+        .from('itinerary_days')
+        .select('id', { count: 'exact', head: true })
+        .eq('trip_id', tripId);
+      const priorMax = Math.max(priorJsonDays.length, tableRows || 0);
+      if (priorMax > 0 && days.length < priorMax) {
+        dayCountShrinkBlocked = true;
+        dayCountFloorMeta = {
+          incoming: days.length,
+          priorJson: priorJsonDays.length,
+          tableRows: tableRows || 0,
+          priorMax,
+        };
+        console.warn(
+          `[${label}] [PERSIST_DAY_COUNT_SHRINK_BLOCKED] incoming=${days.length} ` +
+          `priorMax=${priorMax} (json=${priorJsonDays.length}, table=${tableRows || 0}). ` +
+          `Keeping previous itinerary_data; applying extraUpdate only.`,
+        );
+      }
+    }
+  } catch (e) {
+    console.warn(`[${label}] day-count-floor probe failed (non-blocking, allowing write):`, e);
+  }
+  if (dayCountShrinkBlocked) {
+    const extra = options.extraUpdate || {};
+    const updatePayload: Record<string, any> = { ...extra };
+    delete updatePayload.itinerary_data;
+    // Stamp a rejected_attempts entry for postmortem.
+    try {
+      const { data: priorRow } = await supabase
+        .from('trips').select('metadata').eq('id', tripId).maybeSingle();
+      const priorMeta = (priorRow?.metadata as Record<string, any>) || {};
+      const existingRejected = Array.isArray(priorMeta.rejected_attempts) ? priorMeta.rejected_attempts : [];
+      const callerMetadata = (extra.metadata && typeof extra.metadata === 'object')
+        ? extra.metadata as Record<string, any>
+        : {};
+      const rejected = [
+        ...existingRejected,
+        {
+          at: new Date().toISOString(),
+          label,
+          reason: 'day_count_shrink',
+          ...dayCountFloorMeta,
+        },
+      ].slice(-MAX_REJECTED_ATTEMPTS);
+      updatePayload.metadata = { ...priorMeta, ...callerMetadata, rejected_attempts: rejected };
+    } catch (_e) { /* best effort */ }
+    if (Object.keys(updatePayload).length > 0) {
+      const { error } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
+      if (error) {
+        console.warn(`[${label}] [PERSIST_DAY_COUNT_SHRINK_BLOCKED] extraUpdate write failed:`, error);
+        return { error, dayCountShrinkBlocked: true };
+      }
+    }
+    return { error: null, dayCountShrinkBlocked: true };
+  }
+
 
   // 1. Strip prompt artifacts from titles (mutates in place).
   try {
@@ -197,6 +278,7 @@ export async function persistTripItinerary(
   } catch (e) {
     console.warn(`[${label}] strip prompt artifacts failed (non-blocking):`, e);
   }
+
 
   // 2. Persist-day contract (skip on lock/user-edit paths).
   if (!options.skipContract) {

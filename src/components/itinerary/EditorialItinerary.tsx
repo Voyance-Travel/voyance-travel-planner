@@ -7757,7 +7757,7 @@ export function EditorialItinerary({
                     <p className="text-xs text-muted-foreground">
                       {allHotels && allHotels.length > 0
                         ? `${allHotels.length} ${allHotels.length === 1 ? 'city' : 'cities'}`
-                        : hotelSelection?.name ? `${hotelSelection.nights || Math.max(1, days.length - 1)} nights` : 'Where you\'ll stay'}
+                        : hotelSelection?.name ? `${hotelSelection.nights || Math.max(1, expectedTotalDays - 1)} nights` : 'Where you\'ll stay'}
                     </p>
                   </div>
                 </div>
@@ -8115,7 +8115,7 @@ export function EditorialItinerary({
                     </div>
                     {hotelSelection.pricePerNight && days.length > 1 && (
                       <div className="text-sm text-muted-foreground">
-                        ${hotelSelection.pricePerNight}/night × {Math.max(1, days.length - 1)} nights = <strong className="text-foreground">${(hotelSelection.pricePerNight * Math.max(1, days.length - 1)).toLocaleString()}</strong>
+                        ${hotelSelection.pricePerNight}/night × {Math.max(1, expectedTotalDays - 1)} nights = <strong className="text-foreground">${(hotelSelection.pricePerNight * Math.max(1, expectedTotalDays - 1)).toLocaleString()}</strong>
                       </div>
                     )}
                     
