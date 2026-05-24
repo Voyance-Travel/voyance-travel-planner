@@ -101,6 +101,29 @@ function isLogistics(a: any): boolean {
   return false;
 }
 
+const CHECKOUT_RE = /\bcheck[- ]?out\b/i;
+const TRANSFER_RE = /\b(airport|transfer\s+to\s+the?\s+airport|transfer\s+to\s+airport|departure\s+transfer)\b/i;
+const FLIGHT_RE = /\b(flight|departure\s+flight|board(?:ing)?)\b/i;
+
+function hasDepartureLogistics(acts: any[]): boolean {
+  // A day with checkout + (transfer or flight) is a legit departure day —
+  // the AI did the right thing per the departure-day rules.
+  const hasCheckout = acts.some(a => CHECKOUT_RE.test(String(a?.title || a?.name || '')) || String(a?.category || '').toLowerCase() === 'accommodation' && CHECKOUT_RE.test(String(a?.title || '')));
+  const hasTransfer = acts.some(a => TRANSFER_RE.test(String(a?.title || a?.name || '')) || String(a?.category || '').toLowerCase() === 'transfer');
+  const hasFlight = acts.some(a => FLIGHT_RE.test(String(a?.title || a?.name || '')) || String(a?.category || '').toLowerCase() === 'flight');
+  return hasCheckout && (hasTransfer || hasFlight);
+}
+
+function hasArrivalLogistics(acts: any[]): boolean {
+  // A Day-1 with flight + (transfer or check-in) is a legit late-arrival day.
+  const ARR_FLIGHT_RE = /\b(arrival|arrive|land(?:ing)?|flight)\b/i;
+  const CHECKIN_RE = /\bcheck[- ]?in\b/i;
+  const hasFlight = acts.some(a => ARR_FLIGHT_RE.test(String(a?.title || a?.name || '')));
+  const hasCheckin = acts.some(a => CHECKIN_RE.test(String(a?.title || a?.name || '')));
+  const hasTransfer = acts.some(a => TRANSFER_RE.test(String(a?.title || a?.name || '')));
+  return hasFlight && (hasTransfer || hasCheckin);
+}
+
 function isRealActivity(a: any): boolean {
   if (!a) return false;
   if (isLogistics(a)) return false;
