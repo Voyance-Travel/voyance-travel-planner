@@ -15,7 +15,7 @@ import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validatio
 import { pruneOrphanTransits } from '../_shared/orphan-transit.ts';
 import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField, enforceMichelinPriceFloor, enforceTicketedAttractionPricing, enforceBarNightcapPriceCap, enforceCasualVenuePriceCap, enforceVenueTypePriceCap, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS } from './sanitization.ts';
 import { StageLogger } from './pipeline/stage-logger.ts';
-import { appendGenerationTrace } from '../_shared/generation-trace.ts';
+import { appendGenerationTrace, writeGenerationHealth } from '../_shared/generation-trace.ts';
 import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { applyAnchorsWin } from './anchor-guard.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
