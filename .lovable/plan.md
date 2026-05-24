@@ -1,75 +1,86 @@
-# Auto-tag flight legs by direction
+# Bangkok-trip generation-collapse fix
 
-## Problem
+All four reported symptoms cascade from one upstream bug: `trips.itinerary_data.days` was shrunk to 1 day even though `itinerary_days` + `itinerary_activities` tables hold all 4 days. Everything downstream (header count, hotel-nights label, departure-day classifier, return-flight injection) reads from JSON, so a single corrupt write poisons the entire trip render.
 
-On the flight editor / inline booking add screen, every leg shows **both** buttons:
-- "Mark as destination arrival"
-- "Mark as departure from destination"
+## Root cause
 
-The system already knows which leg is outbound and which is return — that context is in `legType` (in `MultiLegFlightEditor`) and in the leg order + airport codes vs the trip's destination IATA everywhere else. We're asking the user to declare something the data already implies.
+DB state for trip `53636a0c-…`:
 
-Downstream code (`getFirstLegArrivalTime`, `pickDestinationArrivalLeg`, Day 1 timing) prefers the explicit `isDestinationArrival` / `isDestinationDeparture` flag and falls back to "leg 0" / "last leg" heuristics when it's missing. The fallback is fragile — multi-leg trips with a layover land on the wrong leg, and the new Issue 1 fix for Day 1 arrival reads cleaner when the flag is actually set.
+```text
+itinerary_data.days        = 1   ← what the UI reads
+itinerary_days table       = 4
+itinerary_activities       = 9 / 11 / 11 / 3 across days 1–4
+metadata.failed_day_numbers= [3, 4]   ← stale, tables show those days have data
+metadata.itinerary_frozen_at = null   ← not frozen
+```
 
-## Fix
+Edge logs from the session:
+```
+[save-itinerary] 🛡️ SHRINK BLOCKED: incoming=1, canonical=4 (json=1, table=4).
+```
+The shrink-block guard caught the latest 1-day write, but an **earlier** 1-day write had already landed in JSON. The guard compares `incoming` to `max(json, table)` — once JSON itself is 1, any subsequent 1-day write looks "equal" and isn't blocked, only saved by the table count tiebreak.
 
-Auto-stamp the flags whenever they can be unambiguously inferred, and hide the irrelevant button on legs where it can't apply. User can still toggle to override (layovers, codeshares, weird routings).
+The 1-day JSON then makes the bookend validator treat Day 1 as both arrival (`dayMode: midday_arrival`) **and** the last day, stamping `isDepartureDay: true` and injecting the return-flight transfer there. Hotel-nights count is derived from `days.length`, so it reads "1 nights".
 
-### 1. Shared inference helper — `src/utils/normalizeFlightSelection.ts`
+## Plan
 
-Add `autoTagLegs(legs, tripDestinationIata?)` that returns the same array with flags stamped:
+### 1. Block JSON day-count regression at the persist boundary (primary fix)
 
-- **Single destination round-trip (2 legs, no inter-city):**
-  - If neither leg has `isDestinationArrival`, mark leg 0.
-  - If neither leg has `isDestinationDeparture`, mark the last leg.
-- **Single leg (one-way):**
-  - Mark `isDestinationArrival=true`.
-- **3+ legs (with destination IATA available):**
-  - Mark the leg whose `arrival.airport === tripDestinationIata` as arrival.
-  - Mark the leg whose `departure.airport === tripDestinationIata` (and is the latest such leg) as departure.
-  - If destination IATA missing or no match, fall back to second-to-last for arrival, last for departure (current heuristic).
-- **Never overwrite a user-set flag** — only fill blanks.
-- Ensure mutual exclusivity per category (only one arrival flag, only one departure flag).
+In `safeUpdateItineraryData` / `persistTripItinerary` (the no-regression guard cited in Core memory), add a **strict day-count floor**:
 
-### 2. Wire auto-tag at the data boundaries
+- Compute `priorMaxDays = max(prior_json.days.length, count(itinerary_days table))`.
+- If `incoming.days.length < priorMaxDays` AND caller did not pass `allowRegression:true` → block the write, stamp `metadata.rejected_attempts` with `reason: 'day_count_shrink'`, return success-without-write (mirrors existing shrink-block).
+- Lower the "tiebreak" wording so JSON-only equality cannot mask a regression when the table is larger.
 
-Run `autoTagLegs` once at these write sites so the stamped flags persist:
+Sentinel: `[PERSIST_DAY_COUNT_SHRINK_BLOCKED] incoming=N prior=M`.
 
-- `src/components/planner/flight/MultiLegFlightEditor.tsx` — in the `emittedLegs` build path (~line 568) before `onLegsChange` fires. Pass `destinations[destinations.length-1].airportCode` as the destination IATA hint. Also use `legType` ('outbound' → arrival, 'return' → departure) as a stronger signal than airport matching.
-- `src/components/itinerary/AddBookingInline.tsx` — in the save path that builds `legObjs` (~line 270) before persisting.
-- `src/utils/normalizeFlightSelection.ts::buildFlightSelectionFromLegs` — call `autoTagLegs` on input legs as last-mile safety net.
+### 2. Strengthen the page-load self-heal so an already-corrupt trip recovers
 
-### 3. Hide the irrelevant button per leg
+`TripDetail.tsx` already has the `dayCountDrift` rebuild path (line ~1606). It exists but didn't recover this trip — needs three small hardenings:
 
-Match the pattern `MultiLegFlightEditor` already uses (lines 884 / 900). Apply to:
+- **Always allow rebuild when `tableDays > jsonDays` even if `jsonDays === 0` is false but JSON is "thin"** (1 day vs 4). Today the guard is correct; verify the rebuild candidate isn't being disqualified by the chronology / regression gates because the candidate's day count is *higher* than current. Pass `allowRegression: true` only on `self-heal-recovery-rebuild-sparse-json`, never on normal saves.
+- After successful rebuild, recompute `metadata.failed_day_numbers` against table activity counts (any day with ≥3 rows → drop from failed list). Stamp `[FAILED_DAYS_RECONCILED]`.
+- Fire one heal pass on mount even when `fully_persisted` is still `false` (currently we skip while polling), as long as `tableDays > jsonDays`.
 
-- `src/components/itinerary/AddBookingInline.tsx` (lines 555–593) — for round-trips, hide "Mark as destination arrival" on the return leg (leg 1 of 2) and hide "Mark as departure from destination" on the outbound (leg 0 of 2). For one-way single leg, hide "departure from destination". For 3+ legs leave both visible (real ambiguity).
-- `src/components/itinerary/SortableFlightLegCards.tsx` (lines 240–260) — same rule, using leg index + total leg count.
+### 3. Bookend / departure-day classifier guard
 
-The button row should also show "Auto-detected" subtle label when the flag was stamped by `autoTagLegs` rather than the user (use a new optional `autoTagged?: boolean` field on the leg, set transiently in component state — does not need to persist).
+In `_shared/bookend-validator` and `enforceDepartureDayLogistics`, refuse to stamp `isDepartureDay: true` on a day whose `dayNumber=1` when:
 
-### 4. One-shot heal on read
+- `metadata.generation_total_days > 1` OR
+- `itinerary_days` table count > 1 OR
+- there exists a later day in `itinerary_data.days`.
 
-`normalizeFlightSelection` already runs on read at every consumer. Add an `autoTag: true` option (default true) that runs `autoTagLegs` on the returned legs so existing persisted trips with no flags benefit immediately on next render — no migration needed.
+This is a belt-and-braces guard so even if JSON ever collapses again, Day 1 never gets the return-flight injection.
 
-## Files touched
+Sentinel: `[BOOKEND_DEPARTURE_GUARD] dayNumber=1 totalDays>1 → skipped`.
 
-- `src/utils/normalizeFlightSelection.ts` — add `autoTagLegs` + wire into `normalize` + `buildFlightSelectionFromLegs`.
-- `src/components/planner/flight/MultiLegFlightEditor.tsx` — call `autoTagLegs` before emit.
-- `src/components/itinerary/AddBookingInline.tsx` — call `autoTagLegs` on save + conditional button visibility.
-- `src/components/itinerary/SortableFlightLegCards.tsx` — conditional button visibility.
-- `src/utils/__tests__/autoTagLegs.test.ts` (new) — covers: 1 leg, 2 legs (round-trip), 3 legs with layover (CDG matches), 4 legs multi-city, user-set flag preserved.
+### 4. Hotel-nights label uses canonical dates, not JSON days
 
-## Acceptance criteria
+In the Flight/Hotel summary component (the one rendering "1 nights"), derive nights from `trip.end_date − trip.start_date` (or hotel check-out − check-in when split-stay), never from `itinerary_data.days.length`. JSON day count is a render artifact; hotel nights is a contract.
 
-- ATL → CDG / CDG → ATL round-trip: outbound shows "Destination arrival ✓" automatically; return shows "Departure from destination ✓" automatically. No manual click required.
-- Outbound leg only shows the arrival button; return leg only shows the departure button.
-- User can still click to clear/move the flag (toggle behavior preserved).
-- Multi-city ATL → CDG → FCO → ATL with FCO as final destination: arrival auto-marks on the FCO-arriving leg, departure auto-marks on the FCO-departing leg.
-- Existing trips with neither flag set render correctly on next load without a save.
-- `getFirstLegArrivalTime` / `pickDestinationArrivalLeg` hit the `isDestinationArrival_flag` source instead of the heuristic fallback.
+### 5. Re-trigger missing days for this trip (one-shot, opt-in)
+
+Add a small dev-only utility route (or RPC) the user can hit once: `heal-trip-from-tables` — rebuilds `itinerary_data.days` from `itinerary_days` + `itinerary_activities` for a given `tripId`, resets `failed_day_numbers`, re-runs the read-time bookend, and persists with `saveReason: 'one-shot-rebuild-from-tables'`. Surface in the trip header as an admin button gated on `meta.day_count_drift_detected`.
+
+No DB migration needed; we already have all the data in the tables.
+
+### 6. Files touched (preview)
+
+- `supabase/functions/_shared/persist-itinerary.ts` (day-count floor)
+- `src/lib/itinerary/safeUpdateItineraryData.ts` (regression option plumbing)
+- `src/pages/TripDetail.tsx` (rebuild trigger + failed-days reconcile)
+- `supabase/functions/_shared/bookend-validator.ts` and `pipeline/repair-day.ts §15z` (Day-1-can't-be-departure guard)
+- Flight/Hotel summary component (`AddBookingInline.tsx` or sibling) — nights from dates
+- New `supabase/functions/heal-trip-from-tables/index.ts` (one-shot RPC)
+- Tests: `persist-day-count-shrink.test.ts`, `bookend-day1-departure-guard.test.ts`, `TripDetail.dayCountDrift.test.tsx`
+
+## Acceptance
+
+- Refreshing trip `53636a0c-…` rebuilds JSON to 4 days, drops Day-1 return flight, renders "3 nights" in the hotel summary, and clears `failed_day_numbers` to `[]`.
+- New trips: any save attempt with fewer JSON days than `max(prior_json, table)` is silently rejected with a structured log; tests cover the regression.
+- A 4-day trip whose JSON briefly shrinks to 1 always recovers on next page load.
 
 ## Out of scope
 
-- Server-side backfill of persisted `flight_selection` rows (handled lazily on next save via the read-time autotag).
-- Changing how the AI itinerary reads flight timing (Issue 1 already shipped — this just feeds it cleaner data).
-- Smart layover detection beyond airport-code match against trip destination IATA.
+- Untagged flight-direction labels — already fixed in the prior Paris ticket via `autoTagLegs`. Will verify it's wired into the Flights tab for this trip; if missing, fold into this PR with a one-line wiring change, otherwise no action.
+- Original "why did the chain emit a 1-day JSON write" forensics — the day-count floor (step 1) makes the source irrelevant; investigating which caller did it would delay the fix and isn't needed to stop the bleed.
