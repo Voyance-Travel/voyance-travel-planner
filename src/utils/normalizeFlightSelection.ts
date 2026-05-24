@@ -5,6 +5,8 @@
  * into a consistent legs[] array. All consumers should use this utility.
  */
 
+import { autoTagLegs } from './autoTagFlightLegs';
+
 export interface FlightLeg {
   legOrder: number;
   airline: string;
