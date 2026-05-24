@@ -165,7 +165,7 @@ export async function recoverGenerationFromTables(
   }
 
   if (complete && options.promoteReady) {
-    const promotedMeta = {
+    const promotedMeta: Record<string, any> = {
       ...meta,
       failed_day_numbers: [],
       generation_completed_days: expectedTotalDays,
