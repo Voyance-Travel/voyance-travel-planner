@@ -2145,12 +2145,7 @@ export default function TripDetail() {
             setGenerationStalled(true);
           }
 
-            // Do NOT auto-fire generate-trip on page load. The LLM produces different
-            // content each call and a silent regen overwrites the user's existing
-            // itinerary with entirely different restaurants/activities/themes (Dublin
-            // bug, 2026-05-14). The user must explicitly opt in.
-            setGenerationStalled(true);
-          }
+
 
           // ── SELF-HEAL: Detect days that are unplanned ("empty" or missing entirely) ──
           // Only fires when generation has not finished cleanly. A trip that is
