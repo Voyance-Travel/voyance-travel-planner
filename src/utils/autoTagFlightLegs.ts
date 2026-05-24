@@ -39,10 +39,11 @@ function getDepartureAirport(leg: LegLike): string {
 export function autoTagLegs<T extends LegLike>(
   legsIn: T[] | null | undefined,
   opts: AutoTagOptions = {},
-): T[] {
-  if (!Array.isArray(legsIn) || legsIn.length === 0) return (legsIn ?? []) as T[];
+): Array<T & { isDestinationArrival?: boolean; isDestinationDeparture?: boolean }> {
+  type Tagged = T & { isDestinationArrival?: boolean; isDestinationDeparture?: boolean };
+  if (!Array.isArray(legsIn) || legsIn.length === 0) return (legsIn ?? []) as Tagged[];
   // Shallow clone so we never mutate caller arrays
-  const legs = legsIn.map((l) => ({ ...l })) as T[];
+  const legs = legsIn.map((l) => ({ ...l })) as Tagged[];
 
   const anyArrivalSet = legs.some((l) => l?.isDestinationArrival === true);
   const anyDepartureSet = legs.some((l) => l?.isDestinationDeparture === true);
