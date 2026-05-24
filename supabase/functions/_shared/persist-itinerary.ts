@@ -137,6 +137,9 @@ export interface PersistResult {
   frozenBlocked?: boolean;
   /** True when the MEAL-ONLY guard blocked the JSONB write. */
   mealOnlyBlocked?: boolean;
+  /** True when the strict day-count floor blocked the write (incoming day
+   *  count was less than max(prior_json, itinerary_days_table)). */
+  dayCountShrinkBlocked?: boolean;
 }
 
 /** Capped-size ring buffer of rejected attempts written under
