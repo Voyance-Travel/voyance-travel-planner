@@ -1,55 +1,56 @@
 /**
  * trip-total-days helper — Bangkok-class regression guard.
  *
- * Verifies the canonical "how many days is this trip?" answer always
- * takes max across (date span, table count, generation_total_days, json
- * length) so a temporary JSON shrink can never silently rewrite trip
- * duration.
+ * Locks the canonical "how many days is this trip?" answer so a temporary
+ * JSON `days` shrink can never silently rewrite trip duration in the
+ * header chip, hotel nights label, departure-day classifier, or bookend
+ * injector.
  */
-import { describe, it, expect } from 'vitest';
+import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import { dateSpanDays, totalDays } from '../trip-total-days.ts';
 
-describe('trip-total-days', () => {
-  describe('dateSpanDays', () => {
-    it('inclusive span: Aug 10 → Aug 13 is 4 days', () => {
-      expect(dateSpanDays({ start_date: '2025-08-10', end_date: '2025-08-13' })).toBe(4);
-    });
-    it('1-day trip', () => {
-      expect(dateSpanDays({ start_date: '2025-08-10', end_date: '2025-08-10' })).toBe(1);
-    });
-    it('missing dates → 0', () => {
-      expect(dateSpanDays({})).toBe(0);
-      expect(dateSpanDays(null)).toBe(0);
-    });
-    it('inverted dates → 0 (defensive, never negative)', () => {
-      expect(dateSpanDays({ start_date: '2025-08-13', end_date: '2025-08-10' })).toBe(0);
-    });
-  });
+Deno.test('dateSpanDays: inclusive span Aug 10 → Aug 13 is 4 days', () => {
+  assertEquals(dateSpanDays({ start_date: '2025-08-10', end_date: '2025-08-13' }), 4);
+});
 
-  describe('totalDays', () => {
-    it('date span wins over short json (Bangkok pattern)', () => {
-      expect(totalDays({
-        trip: { start_date: '2025-08-10', end_date: '2025-08-13' },
-        itineraryDaysTableCount: 4,
-        generationTotalDays: 4,
-        jsonDaysLength: 1,
-      })).toBe(4);
-    });
-    it('table count wins when dates missing', () => {
-      expect(totalDays({ itineraryDaysTableCount: 4, jsonDaysLength: 1 })).toBe(4);
-    });
-    it('json length used only as last fallback', () => {
-      expect(totalDays({ jsonDaysLength: 3 })).toBe(3);
-    });
-    it('returns >= 1 even when every source is zero/missing', () => {
-      expect(totalDays({})).toBe(1);
-    });
-    it('ignores non-finite / negative values', () => {
-      expect(totalDays({
-        jsonDaysLength: -5,
-        itineraryDaysTableCount: NaN as any,
-        generationTotalDays: 4,
-      })).toBe(4);
-    });
-  });
+Deno.test('dateSpanDays: 1-day trip', () => {
+  assertEquals(dateSpanDays({ start_date: '2025-08-10', end_date: '2025-08-10' }), 1);
+});
+
+Deno.test('dateSpanDays: missing dates → 0', () => {
+  assertEquals(dateSpanDays({}), 0);
+  assertEquals(dateSpanDays(null), 0);
+});
+
+Deno.test('dateSpanDays: inverted dates → 0 (defensive)', () => {
+  assertEquals(dateSpanDays({ start_date: '2025-08-13', end_date: '2025-08-10' }), 0);
+});
+
+Deno.test('totalDays: date span wins over short json (Bangkok pattern)', () => {
+  assertEquals(totalDays({
+    trip: { start_date: '2025-08-10', end_date: '2025-08-13' },
+    itineraryDaysTableCount: 4,
+    generationTotalDays: 4,
+    jsonDaysLength: 1,
+  }), 4);
+});
+
+Deno.test('totalDays: table count wins when dates missing', () => {
+  assertEquals(totalDays({ itineraryDaysTableCount: 4, jsonDaysLength: 1 }), 4);
+});
+
+Deno.test('totalDays: json length used as last fallback', () => {
+  assertEquals(totalDays({ jsonDaysLength: 3 }), 3);
+});
+
+Deno.test('totalDays: returns >= 1 even when every source is missing', () => {
+  assertEquals(totalDays({}), 1);
+});
+
+Deno.test('totalDays: ignores non-finite / negative values', () => {
+  assertEquals(totalDays({
+    jsonDaysLength: -5,
+    itineraryDaysTableCount: NaN as unknown as number,
+    generationTotalDays: 4,
+  }), 4);
 });
