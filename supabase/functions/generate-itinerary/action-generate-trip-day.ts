@@ -3616,6 +3616,26 @@ async function _handleGenerateTripDayInner(
       },
     });
 
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'generate-trip-day',
+      phase: 'chain_finalized',
+      status: isComplete ? 'ok' : 'warn',
+      dayNumber,
+      expectedTotalDays: totalDays,
+      jsonDayCount: updatedDays.length,
+      activityCount: meaningfulActivityCount,
+      extra: {
+        finalStatus,
+        isComplete,
+        emptyDays: emptyDaysList.join(',') || null,
+      },
+      errorMessage: isComplete ? undefined : (
+        !hasEnoughMeaningful
+          ? `Bare itinerary: only ${meaningfulActivityCount} real activities for ${totalDays} days`
+          : `Shell days: ${emptyDaysList.join(', ')}`
+      ),
+    });
+
     // Record final day timing with category breakdown and finalize performance log
     const dayGenTotal = Date.now() - dayGenStart;
     const dayCategories: Record<string, number> = {};
