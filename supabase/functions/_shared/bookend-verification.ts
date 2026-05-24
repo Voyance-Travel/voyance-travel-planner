@@ -173,12 +173,26 @@ export async function runBookendVerification(
     : days.length;
   let departureDayIdx = -1;
   if (days.length >= expectedTotalDays) {
-    departureDayIdx = tailLast && isDepartureTerminal(tailLast) ? lastIdx : lastIdx;
+    // Only the LAST calendar day can be the departure day — and only when
+    // either the trip is genuinely 1 day long OR its tail is a real
+    // departure terminal (flight / airport transfer). Prior version
+    // returned `lastIdx` in both ternary branches (dead-code bug) which
+    // forced every short JSON to mark its tail as departure regardless of
+    // content. See mem://constraints/itinerary/no-regression-overwrite.
+    if (days.length === 1 || (tailLast && isDepartureTerminal(tailLast))) {
+      departureDayIdx = lastIdx;
+    } else {
+      console.log(
+        `[${label}] [BOOKEND_DEPARTURE_GUARD] last day has no departure terminal; not marking as departure ` +
+        `(days.length=${days.length}, lastTitle="${String(tailLast?.title || tailLast?.name || '')}")`,
+      );
+    }
   } else {
     console.log(
       `[${label}] [BOOKEND_DEPARTURE_GUARD] suppressed: days.length=${days.length} < expectedTotalDays=${expectedTotalDays}`,
     );
   }
+
   const hotelName = extractHotelName(days, opts.destination);
 
 

@@ -3892,7 +3892,11 @@ export function EditorialItinerary({
   // `usePayableItems`, and the `activity_costs` row written by
   // `syncHotelToLedger` MUST agree. All three call `computeHotelCostUsd` so a
   // change to the math propagates everywhere at once.
-  const hotelCost = computeHotelCostUsd(allHotels as any, hotelSelection as any, days.length);
+  // Use canonical trip duration (date span) not `days.length` — a JSON write
+  // that briefly shrinks `days` (Bangkok pattern) must NOT collapse the hotel
+  // total to "1 night". See mem://constraints/itinerary/no-regression-overwrite.
+  const hotelCost = computeHotelCostUsd(allHotels as any, hotelSelection as any, expectedTotalDays);
+
   
   // Use financial snapshot as the SOLE source of truth for trip total.
   // While the snapshot is loading we render 0 (the header shows "Calculating…"
