@@ -1,72 +1,111 @@
-## Goal
-Stop initial itinerary generation from failing into stuck/spinner/empty-trip states. The fix should make generation durable across 504s/timeouts, recover table-complete trips automatically, and prevent users from paying for missing days.
+## Answer
 
-## What I found
-- The app still does expensive pre-chain work inside the initial `generate-trip` request before it returns. That can itself hit the edge-function timeout and produce a 504 before the self-chain is reliably launched.
-- The “server-side generation” pattern is only partial: `generate-trip` synchronously computes context/restaurant pools, then calls `generate-trip-day`. It does not use `EdgeRuntime.waitUntil`, so the initial request is not a true quick-ack background handoff.
-- `generate-trip-day` can write normalized day/activity rows while `trips.itinerary_data.days` stays empty or stale if a later step times out. Current recovery is split across `ItineraryGenerator`, `TripDetail`, and the poller, so different screens disagree.
-- `useGenerationPoller` still treats `partial` as terminal even when normalized tables may prove all expected days exist with real activities.
-- `ItineraryGenerator.recoverFromDatabase()` counts `itinerary_days`, but does not reconstruct from `itinerary_activities`; it mostly waits if JSON is empty.
-- There is still legacy client-driven per-day generation code in `useItineraryGeneration`; even if not primary, it is a risk path for mobile/background suspension.
+We did add some logs, but not the right kind for this failure. The current logs are mostly console logs and per-day `pipeline_logs`; they show that AI calls happened, but they do not give a durable, end-to-end chain trace of why a paid trip moved from “building” to “partial.” For the Dubai trip, the only useful durable clue is `PERSIST_GATE` saying `MISSING_REQUIRED_MEAL` and `EMPTY_DAY`, while the database tables actually contain all 4 days.
 
 ## Plan
 
-### 1. Make `generate-trip` a quick durable launcher
-- Move the heavy pre-chain context work out of the initial HTTP response path.
-- In `handleGenerateTrip`, do only:
-  - auth/access/frozen checks
-  - canonical total-day calculation
-  - generation metadata initialization
-  - stale table cleanup for fresh generation
-  - launch background work via `EdgeRuntime.waitUntil(...)`
-  - return a fast success response (`status: generating`) to the client
-- The background continuation will perform current pre-chain enrichment, then invoke day 1.
-- If the background launch fails, mark the trip `failed` with explicit metadata instead of leaving it stuck.
+### 1. Add durable trip-level chain logging
 
-### 2. Add a single generation recovery service on the frontend
-- Create one shared helper that rebuilds canonical `itinerary_data.days` from:
-  - `itinerary_days`
-  - `itinerary_activities`
-  - existing `trips.itinerary_data` as a merge source only
-- Validate before promoting:
-  - expected total days from trip dates/metadata/table count
-  - every expected day exists
-  - every day has real activities
-  - shell rows do not count
-- Return a structured result: `ready`, `in_progress`, `partial`, or `missing`.
+Create a small shared helper for generation trace events that writes to `trips.metadata.generation_trace` as a ring buffer.
 
-### 3. Use the shared recovery service everywhere
-- Replace `ItineraryGenerator.recoverFromDatabase()` ad hoc logic with the shared helper.
-- Update poller `onReady` path so table-complete/JSON-empty trips are rebuilt and passed to `onComplete` instead of spinning.
-- Update `TripDetail` self-heal to use the same helper so refresh behaves exactly like the generator screen.
+Each event will include:
 
-### 4. Fix poller completion semantics
-- Add a “recoverable complete” branch before `partial`/`failed` terminal states:
-  - if normalized tables have all expected days and each has real activities, trigger recovery/ready instead of showing partial/stalled.
-- Keep shell-row protection so empty day shells never masquerade as complete.
-- Clamp progress to finite 0–100 so animation never receives undefined/NaN.
+- `at`
+- `tripId`
+- `action`
+- `dayNumber` when applicable
+- `phase`
+- `status`
+- `durationMs`
+- `expectedTotalDays`
+- `jsonDayCount`
+- `tableDayCount`
+- `activityCount`
+- `errorCode` / `errorMessage` when applicable
 
-### 5. Harden `generate-trip-day` finalization
-- On final day, derive success from canonical table/day activity coverage, not only in-memory JSON.
-- When all expected table days are populated, run a final JSON rebuild/persist pass and stamp:
-  - `itinerary_status='ready'`
-  - `metadata.fully_persisted=true`
-  - `metadata.generation_completed_days=totalDays`
-  - clear stale `failed_day_numbers`, `generation_error`, and `chain_error`
-- If only some days exist, mark `partial` and refund only truly missing/failed days.
+This is the key change: even if edge logs vanish or `waitUntil` output is dropped, the trip row itself will explain what happened.
 
-### 6. Remove or quarantine legacy client-driven generation risk
-- Ensure initial generation only calls `startServerGeneration`.
-- Leave legacy `generateItineraryProgressive` available only for explicit non-initial/manual paths if needed, or gate it so it cannot be used for initial paid generation.
+### 2. Instrument every generation boundary
 
-### 7. Add regression coverage
-- Table-complete + JSON-empty + status partial → rebuilds all days and promotes ready.
-- Table shell rows + no activities → does not promote ready.
-- Initial `generate-trip` returns quickly and does not wait on pre-chain enrichment.
-- Poller handles `partial` + complete normalized tables as recoverable complete.
-- Progress/circle inputs remain finite with undefined/NaN progress.
+Add trace writes in:
+
+- `action-generate-trip.ts`
+  - launcher received
+  - metadata initialized
+  - background job started
+  - day chain dispatched
+  - background failed
+- `action-generate-trip-day.ts`
+  - day started
+  - AI response received
+  - day validation outcome
+  - day persisted to normalized tables
+  - JSON persist attempted
+  - chain-to-next-day attempted/succeeded/failed
+  - finalization started/completed
+- `action-save-itinerary.ts`
+  - persist gate checked
+  - every blocking error persisted with `{dayNumber, code, message}`
+  - status chosen: `ready`, `partial`, or `failed`
+- `persist-itinerary.ts`
+  - regression blocked
+  - frozen-write blocked
+  - successful JSON write with counts
+
+### 3. Add a generation health snapshot on every completion/partial/failure
+
+When generation ends or marks partial/failed, persist a compact snapshot:
+
+```text
+generation_health: {
+  expectedTotalDays,
+  jsonDays,
+  jsonRealDays,
+  tableDays,
+  tableRealDays,
+  activityRows,
+  failedDayNumbers,
+  persistGateCodes,
+  lastGoodPhase,
+  finalStatus
+}
+```
+
+This gives us a single DB field that says whether the issue is:
+
+- AI did not generate the day
+- table write failed
+- JSON write failed
+- validation gate blocked
+- finalization/ready promotion failed
+- client/poller failed to recognize complete tables
+
+### 4. Fix the known recovery gap exposed by these logs
+
+For `partial` or `failed` trips, if normalized tables contain all expected days with real activities, run the existing `recoverGenerationFromTables({ persist: true, promoteReady: true })` path automatically from TripDetail/poller.
+
+This is not auto-regeneration. It only rebuilds JSON from already-written database rows, so it respects the “no silent regen on page load” rule.
+
+### 5. Add a one-shot backfill for currently broken trips
+
+Run a safe recovery migration/function for trips where:
+
+- status is `partial` or `failed`
+- expected day count is known
+- `itinerary_days` has all expected days
+- `itinerary_activities` has real rows for those days
+
+This should repair the Dubai trip and the other recent “generated but showing partial/empty” trips without charging or regenerating.
+
+### 6. Add tests that prove logging and recovery work
+
+Add regression coverage for:
+
+- `PERSIST_GATE` writes detailed trace entries, not only console output
+- table-complete + JSON-missing + `partial` promotes to `ready`
+- background launcher records failure in metadata if `waitUntil` continuation throws
+- final status snapshot differentiates JSON failure from AI-generation failure
 
 ## Expected outcome
-- A 504 from a long-running step no longer strands the user on “itinerary is done” or “plan from scratch.”
-- If day/activity rows were written, the itinerary self-recovers into the full expected day count.
-- If generation genuinely cannot produce all paid days, the app marks it partial/failed clearly and refunds missing days instead of silently charging for an unusable trip.
+
+If this happens again, the trip row will tell us exactly which phase failed and why. More importantly, if all paid days were already written to normalized tables, the app will recover the full itinerary instead of presenting one day out of four.
