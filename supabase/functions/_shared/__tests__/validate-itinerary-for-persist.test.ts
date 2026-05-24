@@ -110,3 +110,44 @@ Deno.test('flags EMPTY_DAY when only logistics present', () => {
   const v = validateItineraryForPersist(days);
   assert(v.errors.some(e => e.code === 'EMPTY_DAY'));
 });
+
+Deno.test('exempts legit DEPARTURE day with checkout + transfer + flight (Rome pattern)', () => {
+  const days = [
+    fullDay(1, [
+      dining('b', 'Breakfast at X', '08:30', '09:30', 'Pastry shop.'),
+      dining('l', 'Lunch at Y', '13:00', '14:00', 'Trattoria.'),
+      dining('d', 'Dinner at Z', '19:30', '21:00', 'Roman classics — book ahead.'),
+    ]),
+    fullDay(2, [
+      activity('co', 'Checkout from Hotel de Russie', '10:00', '10:30', { category: 'accommodation' }),
+      activity('xfer', 'Transfer to the Airport', '11:00', '12:00', { category: 'transfer' }),
+      activity('fl', 'Departure Flight', '14:00', '17:00', { category: 'flight' }),
+    ]),
+  ];
+  const v = validateItineraryForPersist(days, { destination: 'Rome, Italy', departureTime24: '14:00' });
+  // No EMPTY_DAY error → trip is NOT collapsed to partial.
+  assert(!v.errors.some(e => e.code === 'EMPTY_DAY'), 'should not flag EMPTY_DAY on legit departure');
+  // Still surfaced as a non-blocking warning so UI can show a badge.
+  assert(v.warnings.some(w => w.code === 'DEPARTURE_DAY_LIGHT'));
+});
+
+Deno.test('still flags EMPTY_DAY mid-trip even if logistics present', () => {
+  const days = [
+    fullDay(1, [
+      dining('b', 'Breakfast at X', '08:30', '09:30', 'Pastry shop.'),
+      dining('l', 'Lunch at Y', '13:00', '14:00', 'Trattoria.'),
+      dining('d', 'Dinner at Z', '19:30', '21:00', 'Roman classics — book ahead.'),
+    ]),
+    fullDay(2, [
+      activity('t', 'Transfer to airport', '11:00', '12:00', { category: 'transfer' }),
+    ]),
+    fullDay(3, [
+      dining('b', 'Breakfast', '08:30', '09:30', 'Local.'),
+      dining('l', 'Lunch', '13:00', '14:00', 'Local.'),
+      dining('d', 'Dinner', '19:30', '21:00', 'Local — book ahead.'),
+    ]),
+  ];
+  const v = validateItineraryForPersist(days);
+  // Mid-trip Day 2 with only a transfer = real bug, must still flag EMPTY_DAY.
+  assert(v.errors.some(e => e.code === 'EMPTY_DAY' && e.dayNumber === 2));
+});

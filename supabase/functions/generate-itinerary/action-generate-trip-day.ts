@@ -15,7 +15,7 @@ import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validatio
 import { pruneOrphanTransits } from '../_shared/orphan-transit.ts';
 import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField, enforceMichelinPriceFloor, enforceTicketedAttractionPricing, enforceBarNightcapPriceCap, enforceCasualVenuePriceCap, enforceVenueTypePriceCap, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS } from './sanitization.ts';
 import { StageLogger } from './pipeline/stage-logger.ts';
-import { appendGenerationTrace } from '../_shared/generation-trace.ts';
+import { appendGenerationTrace, writeGenerationHealth } from '../_shared/generation-trace.ts';
 import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { applyAnchorsWin } from './anchor-guard.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
@@ -125,6 +125,19 @@ export async function handleGenerateTripDay(
   params: Record<string, any>,
 ): Promise<Response> {
   const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId, isFirstTrip, generationLogId } = params;
+
+  // FIRST-LINE TRACE — fires before validation/timer/trace setup so the
+  // trip row records every day-handler entry, even on 400 early-returns.
+  if (tripId) {
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'generate-trip-day',
+      phase: 'day_started',
+      status: 'ok',
+      dayNumber: Number(dayNumber) || undefined,
+      expectedTotalDays: Number(totalDays) || undefined,
+      extra: { handler: 'outer', runId: generationRunId || null },
+    }).catch(() => {});
+  }
 
   // Trace ID: lets us follow one day's full lifecycle across hundreds of
   // interleaved log lines in Supabase edge-function logs. Grep `trace=<id>`.
@@ -3765,6 +3778,40 @@ async function _handleGenerateTripDayInner(
     }
 
     await triggerNextJourneyLeg(supabase, tripId);
+
+    // ── GENERATION HEALTH SNAPSHOT (terminal state) ──
+    // One row, one snapshot — answers "what did this trip end up looking like?"
+    // from the DB alone. Differentiates AI-failure vs. table-write-failure vs.
+    // validation-gate-blocked vs. ready.
+    try {
+      const realDays = (updatedDays as any[]).filter(
+        (d) => Array.isArray(d?.activities) && d.activities.some((a: any) => {
+          const c = String(a?.category || '').toLowerCase();
+          return c && !['transit', 'transport', 'transportation', 'flight', 'logistics', 'transfer', 'accommodation', 'hotel', 'lodging'].includes(c);
+        }),
+      ).length;
+      const persistGateCodes = Array.from(new Set(
+        (finalPersistValidation?.errors || []).map((e: any) => String(e.code)),
+      )) as string[];
+      const { count: tableDays } = await supabase
+        .from('itinerary_days').select('id', { count: 'exact', head: true }).eq('trip_id', tripId);
+      const { count: activityRows } = await supabase
+        .from('itinerary_activities').select('id', { count: 'exact', head: true }).eq('trip_id', tripId);
+      await writeGenerationHealth(supabase, tripId, {
+        finalStatus,
+        expectedTotalDays: totalDays,
+        jsonDays: updatedDays.length,
+        jsonRealDays: realDays,
+        tableDays: tableDays || 0,
+        tableRealDays: tableDays || 0,
+        activityRows: activityRows || 0,
+        failedDayNumbers: Array.isArray(emptyDaysList) ? emptyDaysList : [],
+        persistGateCodes,
+        lastGoodPhase: 'chain_finalized',
+      });
+    } catch (healthErr) {
+      console.warn('[generate-trip-day] writeGenerationHealth failed (non-blocking):', healthErr);
+    }
 
     console.log(`[generate-trip-day] 📤 Returning completion response for trip ${tripId} (day ${dayNumber}/${totalDays}). If client disconnected, data is already saved.`);
     return new Response(

@@ -42,6 +42,18 @@ export async function handleGenerateTrip(
   params: Record<string, any>,
 ): Promise<Response> {
   const { tripId, destination, startDate, endDate, requestedDays } = params;
+
+  // FIRST-LINE TRACE — fires before validation/access checks so the trip row
+  // always records that the launcher was hit, even if we 400/403 below.
+  if (tripId) {
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'generate-trip',
+      phase: 'launcher_received',
+      status: 'ok',
+      extra: { userId: userId?.slice(0, 8) || null, hasParams: true },
+    }).catch(() => {});
+  }
+
   if (!tripId || !destination || !startDate || !endDate) {
     return new Response(
       JSON.stringify({ error: "Missing required fields", code: "INVALID_INPUT" }),
@@ -63,13 +75,16 @@ export async function handleGenerateTrip(
   const totalDays = requestedDays && requestedDays > 0 ? requestedDays : dateTotalDays;
   const generationRunId = crypto.randomUUID();
 
+  // Second trace — now we know totalDays + runId.
   await appendGenerationTrace(supabase, tripId, {
     action: 'generate-trip',
     phase: 'launcher_received',
     status: 'ok',
     expectedTotalDays: totalDays,
-    extra: { runId: generationRunId },
-  });
+    extra: { runId: generationRunId, validated: true },
+  }).catch(() => {});
+
+
 
   try {
     const { data: currentTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
