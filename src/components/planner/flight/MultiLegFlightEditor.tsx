@@ -48,6 +48,7 @@ import { format } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
 import type { TripDestination } from '@/types/multiCity';
+import { autoTagLegs } from '@/utils/autoTagFlightLegs';
 
 export type LegTransportType = 'flight' | 'train' | 'bus' | 'car' | 'ferry';
 
