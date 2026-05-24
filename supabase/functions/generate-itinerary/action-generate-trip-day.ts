@@ -126,6 +126,19 @@ export async function handleGenerateTripDay(
 ): Promise<Response> {
   const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId, isFirstTrip, generationLogId } = params;
 
+  // FIRST-LINE TRACE — fires before validation/timer/trace setup so the
+  // trip row records every day-handler entry, even on 400 early-returns.
+  if (tripId) {
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'generate-trip-day',
+      phase: 'day_started',
+      status: 'ok',
+      dayNumber: Number(dayNumber) || undefined,
+      expectedTotalDays: Number(totalDays) || undefined,
+      extra: { handler: 'outer', runId: generationRunId || null },
+    }).catch(() => {});
+  }
+
   // Trace ID: lets us follow one day's full lifecycle across hundreds of
   // interleaved log lines in Supabase edge-function logs. Grep `trace=<id>`.
   const genTraceId = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10)).slice(0, 8);
