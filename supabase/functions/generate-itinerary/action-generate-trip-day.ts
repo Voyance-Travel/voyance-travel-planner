@@ -3801,6 +3801,16 @@ async function _handleGenerateTripDayInner(
       },
     });
 
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'generate-trip-day',
+      phase: 'day_persisted_json',
+      status: 'ok',
+      dayNumber,
+      expectedTotalDays: totalDays,
+      activityCount: dayResult?.activities?.length || 0,
+      durationMs: Date.now() - dayGenStart,
+    });
+
     // Record day timing with category breakdown
     const dayGenTotal = Date.now() - dayGenStart;
     const dayCats: Record<string, number> = {};
@@ -3896,6 +3906,14 @@ async function _handleGenerateTripDayInner(
             generation_heartbeat: new Date().toISOString(),
           },
         }).eq('id', tripId);
+
+        await appendGenerationTrace(supabase, tripId, {
+          action: 'generate-trip-day',
+          phase: 'day_chain_failed',
+          status: 'fail',
+          dayNumber,
+          errorMessage: `Chain to day ${dayNumber + 1} failed after ${maxRetries} attempts`,
+        });
       } catch (metaErr) {
         console.error('[generate-trip-day] Failed to update chain failure metadata:', metaErr);
       }
