@@ -75,6 +75,17 @@ export async function handleGenerateTrip(
   const totalDays = requestedDays && requestedDays > 0 ? requestedDays : dateTotalDays;
   const generationRunId = crypto.randomUUID();
 
+  // Second trace — now we know totalDays + runId.
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_received',
+    status: 'ok',
+    expectedTotalDays: totalDays,
+    extra: { runId: generationRunId, validated: true },
+  }).catch(() => {});
+
+
+
   try {
     const { data: currentTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
     const existingMeta = (currentTrip?.metadata as Record<string, unknown>) || {};
