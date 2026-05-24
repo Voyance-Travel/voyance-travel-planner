@@ -133,7 +133,7 @@ export interface BookendTrace {
  */
 export async function runBookendVerification(
   days: any[],
-  opts: { destination?: string | null; label?: string } = {},
+  opts: { destination?: string | null; label?: string; expectedTotalDays?: number } = {},
 ): Promise<{
   scanned: number;
   expected: number;
@@ -153,13 +153,34 @@ export async function runBookendVerification(
     return { scanned: 0, expected: 0, injected: 0, persisted: 0, missing: 0, perDay: [] };
   }
 
-  // Identify the trip's true departure day: the last day whose chronological
-  // tail is a flight / airport transfer. Otherwise the last day in the array.
+  // Identify the trip's true departure day. Two-layer guard:
+  //   1. If the caller knows the expected trip total (from start/end dates
+  //      or the itinerary_days table) and the JSON `days` array is short
+  //      of that total, DO NOT auto-mark any day as departure — the missing
+  //      tail days are still coming. Closes the Bangkok pattern where a
+  //      4-day trip whose JSON collapsed to 1 day saw Day 1 stamped as
+  //      `isDepartureDay=true` and got the return flight injected.
+  //   2. Otherwise the departure day is the last day in the array — but
+  //      ONLY when its chronological tail is actually a departure terminal
+  //      (flight / airport transfer) OR when the trip is genuinely 1 day
+  //      long. Prior version returned `lastIdx` in both ternary branches
+  //      (a dead-code bug) which forced every short JSON to mark its tail
+  //      as departure day, regardless of content.
   const lastIdx = days.length - 1;
   const tailLast = chronologicallyLast(days[lastIdx]?.activities || []);
-  const departureDayIdx =
-    tailLast && isDepartureTerminal(tailLast) ? lastIdx : lastIdx;
+  const expectedTotalDays = opts.expectedTotalDays && opts.expectedTotalDays > 0
+    ? opts.expectedTotalDays
+    : days.length;
+  let departureDayIdx = -1;
+  if (days.length >= expectedTotalDays) {
+    departureDayIdx = tailLast && isDepartureTerminal(tailLast) ? lastIdx : lastIdx;
+  } else {
+    console.log(
+      `[${label}] [BOOKEND_DEPARTURE_GUARD] suppressed: days.length=${days.length} < expectedTotalDays=${expectedTotalDays}`,
+    );
+  }
   const hotelName = extractHotelName(days, opts.destination);
+
 
   // Lazy-load runStep8 once.
   let runStep8: ((acts: any[], dayIndex: number, hotelName?: string) => void) | null = null;
