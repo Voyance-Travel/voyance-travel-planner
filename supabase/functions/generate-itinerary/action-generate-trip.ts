@@ -12,6 +12,7 @@
 
 import { corsHeaders, type ActionContext, verifyTripAccess } from './action-types.ts';
 import { GenerationTimer } from './generation-timer.ts';
+import { appendGenerationTrace } from '../_shared/generation-trace.ts';
 import { harvestAnchorsFromDays } from './anchor-guard.ts';
 import { resolvePrimaryArchetype, resolveSecondaryArchetype } from '../_shared/dna-resolve.ts';
 
@@ -62,6 +63,14 @@ export async function handleGenerateTrip(
   const totalDays = requestedDays && requestedDays > 0 ? requestedDays : dateTotalDays;
   const generationRunId = crypto.randomUUID();
 
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_received',
+    status: 'ok',
+    expectedTotalDays: totalDays,
+    extra: { runId: generationRunId },
+  });
+
   try {
     const { data: currentTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
     const existingMeta = (currentTrip?.metadata as Record<string, unknown>) || {};
@@ -80,8 +89,20 @@ export async function handleGenerateTrip(
         fully_persisted: false,
       },
     }).eq('id', tripId);
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'generate-trip',
+      phase: 'launcher_metadata_init',
+      status: 'ok',
+      expectedTotalDays: totalDays,
+    });
   } catch (initErr) {
     console.warn('[generate-trip] quick-launch metadata init failed (continuing):', initErr);
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'generate-trip',
+      phase: 'launcher_metadata_init',
+      status: 'fail',
+      errorMessage: initErr,
+    });
   }
 
   const background = handleGenerateTripBackground(supabase, userId, {
@@ -91,6 +112,12 @@ export async function handleGenerateTrip(
     __generationRunId: generationRunId,
   }).catch(async (err) => {
     console.error('[generate-trip] background launch failed:', err);
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'generate-trip',
+      phase: 'launcher_background_failed',
+      status: 'fail',
+      errorMessage: err,
+    });
     try {
       const { data: failTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
       const failMeta = (failTrip?.metadata as Record<string, unknown>) || {};
@@ -108,6 +135,13 @@ export async function handleGenerateTrip(
     }
   });
   EdgeRuntime.waitUntil(background);
+
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_background_started',
+    status: 'ok',
+    expectedTotalDays: totalDays,
+  });
 
   return new Response(
     JSON.stringify({ success: true, status: 'generating', totalDays }),

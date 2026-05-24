@@ -1,72 +1,47 @@
 ## Goal
-Stop initial itinerary generation from failing into stuck/spinner/empty-trip states. The fix should make generation durable across 504s/timeouts, recover table-complete trips automatically, and prevent users from paying for missing days.
+Stop initial itinerary generation from silently failing into stuck/partial trips. Every paid generation must leave a durable, DB-stored trace so we can answer "what happened?" from the trip row alone — even when edge logs are missing.
 
-## What I found
-- The app still does expensive pre-chain work inside the initial `generate-trip` request before it returns. That can itself hit the edge-function timeout and produce a 504 before the self-chain is reliably launched.
-- The “server-side generation” pattern is only partial: `generate-trip` synchronously computes context/restaurant pools, then calls `generate-trip-day`. It does not use `EdgeRuntime.waitUntil`, so the initial request is not a true quick-ack background handoff.
-- `generate-trip-day` can write normalized day/activity rows while `trips.itinerary_data.days` stays empty or stale if a later step times out. Current recovery is split across `ItineraryGenerator`, `TripDetail`, and the poller, so different screens disagree.
-- `useGenerationPoller` still treats `partial` as terminal even when normalized tables may prove all expected days exist with real activities.
-- `ItineraryGenerator.recoverFromDatabase()` counts `itinerary_days`, but does not reconstruct from `itinerary_activities`; it mostly waits if JSON is empty.
-- There is still legacy client-driven per-day generation code in `useItineraryGeneration`; even if not primary, it is a risk path for mobile/background suspension.
+## What shipped (2026-05-24)
 
-## Plan
+### 1. Durable generation trace
+- New shared helper `supabase/functions/_shared/generation-trace.ts`:
+  - `appendGenerationTrace(supabase, tripId, event)` — best-effort writer to `trips.metadata.generation_trace` (ring buffer cap 80).
+  - Mirrors a single-line `[GENTRACE]` console sentinel for log shipping.
+  - Never throws — generation cannot be broken by a bad trace write.
+  - `writeGenerationHealth()` for terminal-state snapshot.
+- Tests: `supabase/functions/_shared/__tests__/generation-trace.test.ts` (append, ring-buffer cap, error truncation, never-throws).
 
-### 1. Make `generate-trip` a quick durable launcher
-- Move the heavy pre-chain context work out of the initial HTTP response path.
-- In `handleGenerateTrip`, do only:
-  - auth/access/frozen checks
-  - canonical total-day calculation
-  - generation metadata initialization
-  - stale table cleanup for fresh generation
-  - launch background work via `EdgeRuntime.waitUntil(...)`
-  - return a fast success response (`status: generating`) to the client
-- The background continuation will perform current pre-chain enrichment, then invoke day 1.
-- If the background launch fails, mark the trip `failed` with explicit metadata instead of leaving it stuck.
+### 2. Trace wired at the high-value boundaries
+- `action-generate-trip.ts`:
+  - `launcher_received`, `launcher_metadata_init`, `launcher_background_started`, `launcher_background_failed`.
+- `action-generate-trip-day.ts`:
+  - `day_started` at the top of each day.
+  - `day_persisted_json` after the intermediate persist.
+  - `chain_finalized` at the final-leg persist (with `finalStatus`, `isComplete`, empty days).
+  - `day_chain_failed` when the chain-to-next-day call exhausts retries.
+- `action-save-itinerary.ts`:
+  - `persist_gate_checked` on pass.
+  - `persist_gate_blocked` per offending `{day, code, message}` (capped at 20 per write) so post-mortem reveals WHICH day + WHICH rule blocked.
 
-### 2. Add a single generation recovery service on the frontend
-- Create one shared helper that rebuilds canonical `itinerary_data.days` from:
-  - `itinerary_days`
-  - `itinerary_activities`
-  - existing `trips.itinerary_data` as a merge source only
-- Validate before promoting:
-  - expected total days from trip dates/metadata/table count
-  - every expected day exists
-  - every day has real activities
-  - shell rows do not count
-- Return a structured result: `ready`, `in_progress`, `partial`, or `missing`.
+### 3. Recovery hole closed
+- TripDetail self-heal already widened (Bangkok/Dubai class) to rebuild JSON from normalized tables when status is `partial`/`failed`/stale-`generating` and tables look complete. Reused unchanged.
+- One-shot backfill (`supabase/migrations/.../backfill_2026_05_24_status_promote`) promoted every trip whose normalized tables already cover the expected day count with real activities. Recovered: Dubai, Bangkok, Singapore, Aruba, and ~15 sibling stuck trips. Frontend self-heal fills any missing JSON gaps on next load.
 
-### 3. Use the shared recovery service everywhere
-- Replace `ItineraryGenerator.recoverFromDatabase()` ad hoc logic with the shared helper.
-- Update poller `onReady` path so table-complete/JSON-empty trips are rebuilt and passed to `onComplete` instead of spinning.
-- Update `TripDetail` self-heal to use the same helper so refresh behaves exactly like the generator screen.
+### 4. Read path for future incidents
+Any future stuck trip can be debugged by selecting one column:
 
-### 4. Fix poller completion semantics
-- Add a “recoverable complete” branch before `partial`/`failed` terminal states:
-  - if normalized tables have all expected days and each has real activities, trigger recovery/ready instead of showing partial/stalled.
-- Keep shell-row protection so empty day shells never masquerade as complete.
-- Clamp progress to finite 0–100 so animation never receives undefined/NaN.
+```sql
+select id, destination, itinerary_status,
+       metadata->'generation_trace' as trace,
+       metadata->'generation_health' as health
+from trips
+where id = '...';
+```
 
-### 5. Harden `generate-trip-day` finalization
-- On final day, derive success from canonical table/day activity coverage, not only in-memory JSON.
-- When all expected table days are populated, run a final JSON rebuild/persist pass and stamp:
-  - `itinerary_status='ready'`
-  - `metadata.fully_persisted=true`
-  - `metadata.generation_completed_days=totalDays`
-  - clear stale `failed_day_numbers`, `generation_error`, and `chain_error`
-- If only some days exist, mark `partial` and refund only truly missing/failed days.
+Phases tell us, in order, whether the failure is AI, validation, persist, chain, or finalize.
 
-### 6. Remove or quarantine legacy client-driven generation risk
-- Ensure initial generation only calls `startServerGeneration`.
-- Leave legacy `generateItineraryProgressive` available only for explicit non-initial/manual paths if needed, or gate it so it cannot be used for initial paid generation.
+## Open follow-ups
 
-### 7. Add regression coverage
-- Table-complete + JSON-empty + status partial → rebuilds all days and promotes ready.
-- Table shell rows + no activities → does not promote ready.
-- Initial `generate-trip` returns quickly and does not wait on pre-chain enrichment.
-- Poller handles `partial` + complete normalized tables as recoverable complete.
-- Progress/circle inputs remain finite with undefined/NaN progress.
-
-## Expected outcome
-- A 504 from a long-running step no longer strands the user on “itinerary is done” or “plan from scratch.”
-- If day/activity rows were written, the itinerary self-recovers into the full expected day count.
-- If generation genuinely cannot produce all paid days, the app marks it partial/failed clearly and refunds missing days instead of silently charging for an unusable trip.
+- `writeGenerationHealth` is implemented but only the trace events are wired so far. Wire the snapshot at chain-final / launcher-failed in a follow-up pass.
+- `recoverGenerationFromTables` from the frontend service can be reused server-side as a backfill RPC (not yet split out).
+- Add a small `metadata.generation_trace` viewer to the admin tools so support can read it without SQL.

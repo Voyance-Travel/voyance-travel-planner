@@ -14,6 +14,7 @@ import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { normalizePredawnCascade } from '../_shared/predawn-cascade-normalize.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
 import { validateItineraryForPersist } from '../_shared/validate-itinerary-for-persist.ts';
+import { appendGenerationTrace } from '../_shared/generation-trace.ts';
 import { validateDayThemes } from '../_shared/output-consistency.ts';
 import { scrubActivity, addOps, formatOps, EMPTY_OPS, type ScrubOps } from '../_shared/scrub-activity.ts';
 import { buildDayScheduleSummary } from '../_shared/prompt-leak-scrub.ts';
@@ -1442,6 +1443,24 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       `[PERSIST_GATE] tripId=${tripId} errors=${persistVerdict.errors.length} ` +
       `warnings=${persistVerdict.warnings.length} codes=[${[...new Set(persistVerdict.errors.map(e => e.code))].join(',')}]`,
     );
+    // Per-error trace lines so post-mortem can see WHICH day + WHICH rule blocked.
+    for (const err of persistVerdict.errors.slice(0, 20)) {
+      await appendGenerationTrace(supabase, tripId, {
+        action: 'save-itinerary',
+        phase: 'persist_gate_blocked',
+        status: 'fail',
+        dayNumber: (err as any).dayNumber,
+        errorCode: err.code,
+        errorMessage: (err as any).message || (err as any).detail,
+      });
+    }
+  } else {
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'save-itinerary',
+      phase: 'persist_gate_checked',
+      status: 'ok',
+      jsonDayCount: ((itinerary as any)?.days || []).length,
+    });
   }
 
   const persistValidationStamp = {
