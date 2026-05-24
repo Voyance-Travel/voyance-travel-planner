@@ -2081,8 +2081,51 @@ export default function TripDetail() {
                     {
                       skipLedgerCheck: true,
                       reason,
+                      allowFrozenWrite: true,
                     },
                   );
+
+                  // ── Status promotion (Bangkok/Dubai recovery) ───────────
+                  // If we rebuilt from tables AND every expected day now has
+                  // real activities, promote a partial/failed/stale-generating
+                  // trip to 'ready' and clear stale failure metadata so the
+                  // poller can exit and the UI stops spinning.
+                  try {
+                    const realDayCount = rebuiltDays.filter(
+                      (d: any) => Array.isArray(d.activities) && d.activities.length > 0,
+                    ).length;
+                    const wasUnsettled =
+                      __status === 'partial' || __status === 'failed' ||
+                      __status === 'generating' || __status === 'queued';
+                    if (wasUnsettled && expectedTotal > 0 && realDayCount >= expectedTotal) {
+                      console.log(
+                        `[TripDetail] Self-heal: promoting status '${__status}' → 'ready' (rebuilt ${realDayCount}/${expectedTotal} days)`,
+                      );
+                      const promotedMeta = {
+                        ...meta,
+                        failed_day_numbers: [],
+                        generation_completed_days: expectedTotal,
+                        generation_total_days: expectedTotal,
+                        fully_persisted: true,
+                        fully_persisted_at: new Date().toISOString(),
+                        recovered_from_tables_at: new Date().toISOString(),
+                      };
+                      delete (promotedMeta as any).generation_error;
+                      delete (promotedMeta as any).chain_error;
+                      delete (promotedMeta as any).chain_broken_at_day;
+                      await supabase
+                        .from('trips')
+                        .update({ itinerary_status: 'ready' as any, metadata: promotedMeta as any })
+                        .eq('id', tripId);
+                      tripData = {
+                        ...tripData,
+                        itinerary_status: 'ready' as any,
+                        metadata: promotedMeta as any,
+                      } as any;
+                    }
+                  } catch (promoteErr) {
+                    console.warn('[TripDetail] Self-heal status promotion failed (non-blocking):', promoteErr);
+                  }
 
                   const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
                   setTrip(healedTripData);
@@ -2095,6 +2138,13 @@ export default function TripDetail() {
 
           if (expectedTotal > 0 && actualDays > 0 && actualDays < expectedTotal) {
             console.warn(`[TripDetail] Self-heal: trip marked ready but only ${actualDays}/${expectedTotal} days. NOT auto-resuming — user must click Regenerate. Setting stalled UI.`);
+            // Do NOT auto-fire generate-trip on page load. The LLM produces different
+            // content each call and a silent regen overwrites the user's existing
+            // itinerary with entirely different restaurants/activities/themes (Dublin
+            // bug, 2026-05-14). The user must explicitly opt in.
+            setGenerationStalled(true);
+          }
+
             // Do NOT auto-fire generate-trip on page load. The LLM produces different
             // content each call and a silent regen overwrites the user's existing
             // itinerary with entirely different restaurants/activities/themes (Dublin
