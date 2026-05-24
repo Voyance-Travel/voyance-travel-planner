@@ -203,30 +203,43 @@ export async function persistTripItinerary(
   // `allowRegression: true` (the same flag that powers user-initiated
   // resets / day-removal flows).
   let dayCountShrinkBlocked = false;
-  let dayCountFloorMeta: { incoming: number; priorJson: number; tableRows: number; priorMax: number } | null = null;
+  let dayCountFloorMeta:
+    | { incoming: number; priorJson: number; tableRows: number; dateSpan: number; generationTotalDays: number; priorMax: number }
+    | null = null;
+  // canonicalTotalDays — computed once here and reused for the bookend
+  // verification step below so its `expectedTotalDays` guard sees the same
+  // truth (trip dates + table count + metadata, not just JSON length).
+  let canonicalTotalDays = Math.max(1, days.length);
   try {
-    if (!options.allowRegression && Array.isArray(days) && days.length > 0) {
+    const { resolveTripTotalDays } = await import('./trip-total-days.ts');
+    if (Array.isArray(days)) {
       const { data: priorRow } = await supabase
         .from('trips').select('itinerary_data').eq('id', tripId).maybeSingle();
       const priorJsonDays = Array.isArray((priorRow?.itinerary_data as any)?.days)
         ? ((priorRow!.itinerary_data as any).days as any[])
         : [];
-      const { count: tableRows } = await supabase
-        .from('itinerary_days')
-        .select('id', { count: 'exact', head: true })
-        .eq('trip_id', tripId);
-      const priorMax = Math.max(priorJsonDays.length, tableRows || 0);
-      if (priorMax > 0 && days.length < priorMax) {
+      const { total, sources } = await resolveTripTotalDays(supabase, tripId, days.length);
+      canonicalTotalDays = total;
+      const priorMax = Math.max(
+        priorJsonDays.length,
+        sources.itineraryDaysTableCount,
+        sources.dateSpan,
+        sources.generationTotalDays,
+      );
+      if (!options.allowRegression && days.length > 0 && priorMax > 0 && days.length < priorMax) {
         dayCountShrinkBlocked = true;
         dayCountFloorMeta = {
           incoming: days.length,
           priorJson: priorJsonDays.length,
-          tableRows: tableRows || 0,
+          tableRows: sources.itineraryDaysTableCount,
+          dateSpan: sources.dateSpan,
+          generationTotalDays: sources.generationTotalDays,
           priorMax,
         };
         console.warn(
           `[${label}] [PERSIST_DAY_COUNT_SHRINK_BLOCKED] incoming=${days.length} ` +
-          `priorMax=${priorMax} (json=${priorJsonDays.length}, table=${tableRows || 0}). ` +
+          `priorMax=${priorMax} (json=${priorJsonDays.length}, table=${sources.itineraryDaysTableCount}, ` +
+          `dateSpan=${sources.dateSpan}, genTotal=${sources.generationTotalDays}). ` +
           `Keeping previous itinerary_data; applying extraUpdate only.`,
         );
       }
@@ -234,6 +247,7 @@ export async function persistTripItinerary(
   } catch (e) {
     console.warn(`[${label}] day-count-floor probe failed (non-blocking, allowing write):`, e);
   }
+
   if (dayCountShrinkBlocked) {
     const extra = options.extraUpdate || {};
     const updatePayload: Record<string, any> = { ...extra };
