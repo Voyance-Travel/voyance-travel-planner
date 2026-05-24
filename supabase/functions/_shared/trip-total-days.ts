@@ -58,7 +58,15 @@ export async function resolveTripTotalDays(
   supabase: any,
   tripId: string,
   jsonDaysLength: number,
-): Promise<{ total: number; sources: Required<Omit<TotalDaysSources, 'trip'>> & { dateSpan: number } }> {
+): Promise<{
+  total: number;
+  sources: {
+    dateSpan: number;
+    itineraryDaysTableCount: number;
+    generationTotalDays: number;
+    jsonDaysLength: number;
+  };
+}> {
   let dateSpan = 0;
   let tableCount = 0;
   let generationTotalDays = 0;
@@ -80,7 +88,9 @@ export async function resolveTripTotalDays(
       .from('itinerary_days')
       .select('id', { count: 'exact', head: true })
       .eq('trip_id', tripId);
-    if (Number.isFinite(count) && (count as number) > 0) tableCount = count as number;
+    if (typeof count === 'number' && Number.isFinite(count) && count > 0) {
+      tableCount = count;
+    }
   } catch (_e) { /* non-blocking */ }
   const total = Math.max(
     1,
@@ -99,3 +109,4 @@ export async function resolveTripTotalDays(
     },
   };
 }
+
