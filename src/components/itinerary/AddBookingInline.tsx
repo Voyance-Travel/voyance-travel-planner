@@ -34,6 +34,7 @@ import { patchItineraryWithFlight } from '@/services/flightItineraryPatch';
 import { cn } from '@/lib/utils';
 import { FlightImportModal } from './FlightImportModal';
 import { FindMyHotelsDrawer } from './FindMyHotelsDrawer';
+import { autoTagLegs, legButtonVisibility } from '@/utils/autoTagFlightLegs';
 import { 
   type HotelBooking, 
   findOverlappingHotel, 
