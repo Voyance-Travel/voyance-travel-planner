@@ -3779,6 +3779,40 @@ async function _handleGenerateTripDayInner(
 
     await triggerNextJourneyLeg(supabase, tripId);
 
+    // ── GENERATION HEALTH SNAPSHOT (terminal state) ──
+    // One row, one snapshot — answers "what did this trip end up looking like?"
+    // from the DB alone. Differentiates AI-failure vs. table-write-failure vs.
+    // validation-gate-blocked vs. ready.
+    try {
+      const realDays = (updatedDays as any[]).filter(
+        (d) => Array.isArray(d?.activities) && d.activities.some((a: any) => {
+          const c = String(a?.category || '').toLowerCase();
+          return c && !['transit', 'transport', 'transportation', 'flight', 'logistics', 'transfer', 'accommodation', 'hotel', 'lodging'].includes(c);
+        }),
+      ).length;
+      const persistGateCodes = Array.from(new Set(
+        (finalPersistValidation?.errors || []).map((e: any) => String(e.code)),
+      )) as string[];
+      const { count: tableDays } = await supabase
+        .from('itinerary_days').select('id', { count: 'exact', head: true }).eq('trip_id', tripId);
+      const { count: activityRows } = await supabase
+        .from('itinerary_activities').select('id', { count: 'exact', head: true }).eq('trip_id', tripId);
+      await writeGenerationHealth(supabase, tripId, {
+        finalStatus,
+        expectedTotalDays: totalDays,
+        jsonDays: updatedDays.length,
+        jsonRealDays: realDays,
+        tableDays: tableDays || 0,
+        tableRealDays: tableDays || 0,
+        activityRows: activityRows || 0,
+        failedDayNumbers: Array.isArray(emptyDaysList) ? emptyDaysList : [],
+        persistGateCodes,
+        lastGoodPhase: 'chain_finalized',
+      });
+    } catch (healthErr) {
+      console.warn('[generate-trip-day] writeGenerationHealth failed (non-blocking):', healthErr);
+    }
+
     console.log(`[generate-trip-day] 📤 Returning completion response for trip ${tripId} (day ${dayNumber}/${totalDays}). If client disconnected, data is already saved.`);
     return new Response(
       JSON.stringify({ status: 'complete', dayNumber, totalDays }),
