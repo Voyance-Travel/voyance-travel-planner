@@ -8,12 +8,19 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { hasCompleteGenerationTables } from '@/services/generationRecovery';
 
 /** Stale threshold: if no heartbeat for 5 minutes, generation is considered dead */
 const STALE_THRESHOLD_MS = 5 * 60 * 1000;
 
 /** Stall threshold for itinerary_days: if no new day in 5 minutes */
 const DAY_STALL_THRESHOLD_MS = 5 * 60 * 1000;
+
+const clampProgress = (value: unknown): number => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
+};
 
 export interface GeneratedDaySummary {
   day_number: number;
@@ -160,7 +167,11 @@ export function useGenerationPoller({
       const rawCompletedDays = Math.max(metaCompletedDays, dayCount);
       const completedDays = Math.max(rawCompletedDays, completedDaysHWM.current);
       completedDaysHWM.current = completedDays;
-      const progress = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
+      const progress = clampProgress(totalDays > 0 ? (completedDays / totalDays) * 100 : 0);
+
+      const tablesComplete = totalDays > 0 && dayCount >= totalDays
+        ? await hasCompleteGenerationTables(tripId, totalDays).catch(() => false)
+        : false;
 
       // Check for completion — backend uses 'ready', some docs say 'generated'.
       // Honest "Saved" gate: don't fire onReady while backend has explicitly
@@ -172,6 +183,17 @@ export function useGenerationPoller({
       if ((itineraryStatus === 'ready' || itineraryStatus === 'generated') && !enrichmentInFlight) {
         stalledFiredRef.current = false;
         setState({ status: 'ready', completedDays: totalDays || completedDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
+        if (!onReadyCalledRef.current) {
+          onReadyCalledRef.current = true;
+          onReadyRef.current?.();
+        }
+        return;
+      }
+
+      if (tablesComplete && !enrichmentInFlight) {
+        console.log('[useGenerationPoller] Normalized tables complete — treating as recoverable ready');
+        stalledFiredRef.current = false;
+        setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
         if (!onReadyCalledRef.current) {
           onReadyCalledRef.current = true;
           onReadyRef.current?.();
@@ -215,6 +237,17 @@ export function useGenerationPoller({
 
         // Also check itinerary_days table — but ONLY if they have real activities
         // Shell rows (activities: []) must NOT be treated as ready
+        if (tablesComplete) {
+          console.log('[useGenerationPoller] Status is "failed" but normalized tables are complete — treating as ready');
+          stalledFiredRef.current = false;
+          setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
+          if (!onReadyCalledRef.current) {
+            onReadyCalledRef.current = true;
+            onReadyRef.current?.();
+          }
+          return;
+        }
+
         if (totalDays > 0 && dayCount >= totalDays) {
           const daysWithRealActivities = partialDays.filter(
             (d: any) => d && Array.isArray(d.activities) && d.activities.length > 0
@@ -253,6 +286,16 @@ export function useGenerationPoller({
       }
 
       if (itineraryStatus === 'partial') {
+        if (tablesComplete) {
+          console.log('[useGenerationPoller] Status is "partial" but normalized tables are complete — treating as ready');
+          stalledFiredRef.current = false;
+          setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
+          if (!onReadyCalledRef.current) {
+            onReadyCalledRef.current = true;
+            onReadyRef.current?.();
+          }
+          return;
+        }
         stalledFiredRef.current = false;
         const genError = (meta.generation_error as string) || 'Generation paused';
         setState({ status: 'partial', completedDays, totalDays, progress, error: genError, partialDays, generatedDaysList: daysList, currentCity });
