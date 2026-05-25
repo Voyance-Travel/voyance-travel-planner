@@ -229,6 +229,14 @@ async function handleGenerateTripBackground(
     console.warn('[generate-trip] Frozen-guard probe failed (continuing):', frozenErr);
   }
 
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_frozen_guard_passed',
+    status: 'ok',
+  }).catch(() => {});
+
+
+
   // ── PERFORMANCE TIMER ──
   // Clean up stale in_progress log rows before creating a new one
   try {
