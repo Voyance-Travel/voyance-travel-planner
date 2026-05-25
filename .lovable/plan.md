@@ -1,79 +1,65 @@
-## What the evidence shows
+## What is failing
 
-**Do I know what the issue is? Yes.** This is not a browser console issue and it is not Day 1 “just taking a while.” The durable trace and backend logs show the day generator never starts.
+This is not a normal Day 1 content failure. The current database state for the Mexico City trip shows:
 
-Current trip evidence for `e4217b97-34b6-4de4-a842-2200db6f5f73`:
-- Backend is healthy.
-- Trip is still `generating`, `generation_completed_days = 0`.
-- Durable trace stops at `launcher_frozen_guard_passed`.
-- There is **no** `launcher_pre_chain_setup_complete`, **no** `launcher_day_1_invoke_queued`, and **no** `generate-trip-day day_started`.
-- `generation_logs`, `trip_generation_traces`, and `trip_generation_stages` have no rows for this run.
-- Edge logs say: `already generating ... skipping duplicate` immediately after the launcher starts.
+- `itinerary_status = not_started`
+- `itinerary_data.days = 0`
+- `itinerary_days rows = 0`
+- `generation_logs rows = 0`
+- `metadata.generation_trace = []`
+- repeated client-side `generation_stalled: day 0/4` entries
 
-## Root cause
+That means the backend Day 1 worker is not currently failing inside Step 3 or validation. The app is showing “Crafting Day 1” while no active generation run exists anymore. Earlier attempts likely died before or around launcher/pre-chain startup, then the trip was reset to `not_started`; the current UI path does not recover cleanly from that state.
 
-The launcher now does a quick metadata write before starting the background chain:
+## Likely root cause
 
-```text
-generate-trip request
-  → sets trip.itinerary_status = generating
-  → starts handleGenerateTripBackground via waitUntil
-  → background passes frozen guard
-  → background duplicate guard sees status = generating + fresh heartbeat
-  → background incorrectly treats its own launch as a duplicate
-  → returns before invoking generate-trip-day
-```
+The last hardening moved pre-chain setup into the initial `generate-trip` request so it runs synchronously before the browser receives a response. That makes the launch path fragile: if the initial request is slow, times out, is interrupted, or the client unmounts, the user can sit on Day 1 with no durable Day 1 worker trace.
 
-So the UI is accurately stuck on “Crafting Day 1” because the trip was marked `generating`, but the self-chain never actually queued Day 1.
+Also, the frontend mobile/server-chain path only polls while its own `loading` state is true. It does not reliably reconcile the actual trip status after a reset to `not_started`, so the UI can continue looking like generation is active even when the backend says nothing is running.
 
 ## Plan
 
-1. **Fix the self-duplicate guard**
-   - In `action-generate-trip.ts`, make the background runner recognize its own launcher run.
-   - Reuse `params.__generationRunId` inside `handleGenerateTripBackground` instead of generating a new unrelated run id.
-   - If `params.__backgroundLaunch === true` and the trip metadata `generation_run_id` matches, the duplicate guard must continue instead of returning `already_generating`.
-   - Keep duplicate protection for real second browser clicks / stale tab retries.
+1. **Restore a fast launcher response**
+   - Make `generate-trip` write durable metadata immediately and return quickly again.
+   - Move heavy pre-chain enrichment behind a guarded background step, but with hard time caps and a guaranteed failure marker if it cannot queue Day 1.
+   - Do not let restaurant pool generation or enrichment block the browser request.
 
-2. **Make the logging answer this instantly next time**
-   - Add a durable trace entry when the duplicate guard skips a run, e.g. `launcher_duplicate_skipped` with reason, heartbeat age, and run id match/mismatch.
-   - Add/keep trace boundaries around:
-     - `launcher_frozen_guard_passed`
-     - duplicate guard result
-     - `launcher_pre_chain_setup_complete`
+2. **Make Day 1 queueing durable and observable**
+   - Add/ensure trace phases for:
+     - `launcher_received`
+     - `launcher_metadata_init`
+     - `launcher_prechain_background_started`
+     - `launcher_enrichment_started`
+     - `launcher_enrichment_completed` or `launcher_enrichment_timeout`
      - `launcher_day_1_invoke_queued`
      - `launcher_day_1_invoke_returned`
-   - Update the `TracePhase` union in `_shared/generation-trace.ts` so these phases are first-class, not ad-hoc strings.
+     - `day_started`
+   - If Day 1 is not queued, mark the trip `failed` with a clear `generation_error` instead of leaving a spinner.
 
-3. **Add regression coverage**
-   - Add a focused test for the launcher path showing:
-     - quick metadata init sets status to `generating`
-     - the matching background launch is allowed through
-     - a mismatched/fresh duplicate is still skipped
-   - This locks the exact failure mode so future hardening does not reintroduce the Day 1 stall.
+3. **Add a watchdog safety net**
+   - If a trip is `generating` with `generation_completed_days = 0` and no `day_started` trace after a short threshold, automatically mark it `failed`/retryable with a precise launcher timeout reason.
+   - This prevents “Crafting Day 1” from lasting hours.
 
-4. **Unstick this affected trip after the code fix**
-   - Reset this trip from stale `generating` back to `not_started` or requeue it cleanly.
-   - Preserve the existing committed credit proof so there is no double charge.
-   - Clear stale heartbeat/start markers and generation error fields.
+4. **Fix frontend recovery from stale/not-started state**
+   - In the server-chain polling path, if the backend is `not_started` or has no heartbeat/trace after launch, stop the spinner and show an actionable retry error.
+   - Surface backend `generation_error`/`chain_error` instead of a generic endless loading state.
+   - Avoid showing “Crafting Day 1” when the backend says there is no active run.
 
-5. **Verify with data, not guessing**
-   - Trigger generation once.
-   - Confirm durable trace reaches at least:
-     - `launcher_pre_chain_setup_complete`
+5. **Reset and verify the affected trip**
+   - Reset the Mexico City trip cleanly without double-charging.
+   - Trigger one generation and confirm in data that it reaches:
      - `launcher_day_1_invoke_queued`
-     - `generate-trip-day / day_started`
-   - Confirm `generation_completed_days` advances from `0`.
-   - If Day 1 then fails inside the hardened Step 3/persist layer, it will show in `trip_generation_stages` and `generation_trace` instead of leaving the user staring at a spinner.
+     - `launcher_day_1_invoke_returned`
+     - `day_started`
+     - `generation_completed_days >= 1`
 
-## User-facing behavior after this
+6. **Regression coverage**
+   - Add focused tests for:
+     - launch returns quickly after metadata init
+     - own-background duplicate bypass still works
+     - Day 1 queue failure marks the trip failed
+     - frontend does not spin forever when backend returns to `not_started`
 
-- The app should no longer sit indefinitely on “Crafting Day 1 of 4” when the launcher silently skipped itself.
-- If generation cannot start, the trip should move to a retryable failed/not-started state with a visible backend reason instead of appearing active forever.
+## Expected result
 
-<presentation-actions>
-  <presentation-open-history>View History</presentation-open-history>
-</presentation-actions>
-
-<presentation-actions>
-<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
-</presentation-actions>
+After this, Day 1 either starts and leaves a durable trace within minutes, or the user gets a real retryable failure state. No more silent multi-hour “Crafting Day 1” waits.
