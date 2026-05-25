@@ -472,6 +472,12 @@ async function handleGenerateTripBackground(
   if (!isResume) {
    console.log('[generate-trip] Computing generation_context enrichment...');
     timer.startPhase('pre_chain_enrichment');
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'generate-trip',
+      phase: 'launcher_enrichment_started',
+      status: 'ok',
+      expectedTotalDays: totalDays,
+    }).catch(() => {});
     const enrichmentContext: Record<string, unknown> = {};
     
     try {
@@ -968,6 +974,13 @@ Return ONLY valid JSON array, no markdown:
       }
       
       console.log(`[generate-trip] Enrichment context computed with ${Object.keys(enrichmentContext).length} fields`);
+      await appendGenerationTrace(supabase, tripId, {
+        action: 'generate-trip',
+        phase: 'launcher_enrichment_completed',
+        status: 'ok',
+        expectedTotalDays: totalDays,
+        extra: { fieldCount: Object.keys(enrichmentContext).length },
+      }).catch(() => {});
       timer.endPhase('pre_chain_enrichment');
     } catch (enrichErr) {
       console.warn('[generate-trip] Enrichment context computation failed (non-blocking):', enrichErr);
