@@ -97,8 +97,14 @@ function isLockedLike(a: any): boolean {
   return false;
 }
 
+const ANCHOR_IMMOVABLE_RE = /^(arrival-flight|airport-transfer)$/i;
+
 function isDepartureLogistics(a: any): boolean {
   if (!a) return false;
+  const anchor = String(a?.anchorSource || '').toLowerCase();
+  if (ANCHOR_IMMOVABLE_RE.test(anchor)) return true;
+  const src = String(a?.source || '').toLowerCase();
+  if (src === 'repair-arrival-flight' || src === 'repair-airport-transfer') return true;
   const cat = String(a?.category || '').toLowerCase();
   if (DEPARTURE_LOGISTICS_RE.test(cat)) return true;
   const tags = a?.tags;
@@ -111,6 +117,7 @@ function isDepartureLogistics(a: any): boolean {
   if (/\b(airport|flight|check[-\s]?out)\b/.test(title)) return true;
   return false;
 }
+
 
 function isInPredawnWindow(a: any): boolean {
   const m = pickStartMin(a);
