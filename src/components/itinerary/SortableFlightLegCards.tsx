@@ -187,7 +187,11 @@ function SortableFlightCard({
               <div className="text-center min-w-[60px]">
                 <p className="text-base sm:text-xl font-semibold tracking-tight">{leg.arrival?.time || '--:--'}</p>
                 <p className={`text-xs font-medium text-${accentColor}`}>{getAirportDisplay(leg.arrival?.airport || '')}</p>
+                {leg.arrival?.estimated && leg.arrival?.time && (
+                  <p className="text-[10px] text-muted-foreground italic mt-0.5" title="Estimated from outbound flight duration">est.</p>
+                )}
               </div>
+
             </div>
 
             {/* Price row */}
