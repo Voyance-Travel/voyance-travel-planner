@@ -92,3 +92,57 @@ Deno.test('skips short days with <3 activities', () => {
   const r = enforceDayTitleCoherence(day, { city: 'Paris' });
   assert(!r.changed);
 });
+
+Deno.test('headline wins over food vibe when 3 meals + sightseeing anchor (no neighborhoods)', () => {
+  const day = {
+    dayNumber: 1,
+    title: '',
+    activities: [
+      { title: 'Breakfast: Coromandel', category: 'dining' },
+      { title: 'Colosseum Exploration', category: 'sightseeing' },
+      { title: 'Lunch: Forno Campo de Fiori', category: 'dining' },
+      { title: 'Wander Trastevere', category: 'cultural' },
+      { title: 'Dinner: Roscioli', category: 'dining' },
+    ],
+  };
+  const r = enforceDayTitleCoherence(day, { city: 'Rome' });
+  assert(r.changed);
+  assert(/colosseum/i.test(r.newTitle), `expected headline title, got "${r.newTitle}"`);
+  assert(!/culinary/i.test(r.newTitle));
+});
+
+Deno.test('three full days produce three distinct titles when no neighborhoods', () => {
+  const mk = (n: number, headline: string, cat: string) => ({
+    dayNumber: n,
+    title: '',
+    activities: [
+      { title: `Breakfast ${n}`, category: 'dining' },
+      { title: headline, category: cat },
+      { title: `Lunch ${n}`, category: 'dining' },
+      { title: `Dinner ${n}`, category: 'dining' },
+    ],
+  });
+  const d1 = mk(1, 'Colosseum Exploration', 'sightseeing');
+  const d2 = mk(2, 'Vatican Museums', 'cultural');
+  const d3 = mk(3, 'Pizzarium Bonci', 'shopping');
+  enforceDayTitleCoherence(d1, { city: 'Rome' });
+  enforceDayTitleCoherence(d2, { city: 'Rome' });
+  enforceDayTitleCoherence(d3, { city: 'Rome' });
+  const titles = [d1.title, d2.title, d3.title];
+  const unique = new Set(titles);
+  assertEquals(unique.size, 3, `expected 3 distinct titles, got ${JSON.stringify(titles)}`);
+});
+
+Deno.test('multi-token stored title is trusted when no neighborhood signal', () => {
+  const day = {
+    dayNumber: 2,
+    title: 'Vatican Masterpieces & Kinetic Roman Streets',
+    activities: [
+      { title: 'Breakfast: Pasticceria 5 Lune', category: 'dining' },
+      { title: 'Lunch: Da Enzo al 29', category: 'dining' },
+      { title: 'Dinner: Trattoria Da Cesare', category: 'dining' },
+    ],
+  };
+  const r = enforceDayTitleCoherence(day, { city: 'Rome' });
+  assert(!r.changed, `expected stored title preserved, got "${r.newTitle}"`);
+});
