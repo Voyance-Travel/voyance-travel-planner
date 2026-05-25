@@ -596,7 +596,8 @@ export function scheduleMustDos(
 function findBestDay(
   priority: MustDoPriority,
   dayAssignments: Map<number, MustDoPriority[]>,
-  totalDays: number
+  totalDays: number,
+  opts: { relaxArrivalDeparture?: boolean; loadCap?: number } = {}
 ): { success: boolean; day?: number; backupDay?: number; rationale?: string; reason?: string } {
   const minDay = priority.minDay ?? 1;
   const maxDay = priority.maxDay ?? totalDays;
