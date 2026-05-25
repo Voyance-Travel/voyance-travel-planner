@@ -142,17 +142,6 @@ export interface ScheduleSanityResult {
   issues: ScheduleSanityIssue[];
 }
 
-const DEFAULT_RESULT: ScheduleSanityResult = {
-  predawnMealsRepaired: 0,
-  predawnNonLockedDropped: 0,
-  invalidEndBeforeStartRepaired: 0,
-  duplicateHotelReturnsRemoved: 0,
-  fieldDriftRepaired: 0,
-  arrivalSequenceRepaired: 0,
-  landmarkAfterDarkFlagged: 0,
-  adjacentHotelTransitDropped: 0,
-  issues: [],
-};
 
 function newResult(): ScheduleSanityResult {
   return {
