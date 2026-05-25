@@ -1371,6 +1371,75 @@ const DESC_SKIP_CATS_LOWER = new Set([
 
 const BOOKEND_TITLE_RE = /(check[\s-]?in|check[\s-]?out|return to (?:hotel|your hotel)|freshen up|drop bags|store luggage|hotel bookend|head to (?:airport|station|terminal)|airport security|board (?:flight|train))/i;
 
+// =============================================================================
+// LANDMARK_AFTER_DARK — daylight sightseeing scheduled too late
+// Rome trip d18b2e8a: Colosseum at 21:30. Daylight landmarks must be 08:00–17:30,
+// never after 20:00. Repair-day handles the swap; validator gives telemetry.
+// =============================================================================
+
+const LANDMARK_CATS = new Set([
+  'sightseeing', 'sights', 'landmark', 'monument', 'attraction',
+  'museum', 'gallery', 'cultural', 'culture', 'historic', 'historical',
+  'religious', 'church', 'temple', 'shrine', 'palace', 'castle',
+]);
+
+const LANDMARK_TITLE_RE = /\b(colosseum|pantheon|trevi|vatican|st\.?\s*peter|sistine|forum|palatine|acropolis|parthenon|eiffel|louvre|notre[\s-]dame|sagrada|alhambra|prado|uffizi|duomo|st\.?\s*mark|piazza san marco|big ben|tower bridge|buckingham|westminster|brandenburg|reichstag|hagia sophia|topkapi|blue mosque|taj mahal|forbidden city|great wall|tian'?anmen|kinkaku|fushimi|kiyomizu|sensoji|meiji shrine|todai|himeji|cn tower|empire state|statue of liberty|times square|central park|brooklyn bridge|golden gate|alcatraz|hollywood sign|space needle|gateway arch|lincoln memorial|washington monument|capitol)\b/i;
+
+function parseHHMM(t: any): number | null {
+  if (!t || typeof t !== 'string') return null;
+  const m = t.match(/^(\d{1,2}):(\d{2})(?:\s*(am|pm))?$/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  const ap = m[3]?.toLowerCase();
+  if (ap === 'pm' && h < 12) h += 12;
+  if (ap === 'am' && h === 12) h = 0;
+  if (h > 23 || mm > 59) return null;
+  return h * 60 + mm;
+}
+
+function isLandmarkSightseeing(act: any): boolean {
+  if (!act || typeof act !== 'object') return false;
+  // Skip locked / user-touched
+  if (act.isLocked || act.userAdded || act.userEdited || act.extracted || act.pinned || act.isManual) return false;
+  // Skip dining / drinks / nightlife (legit late-night categories)
+  const cat = String(act.category || '').toLowerCase();
+  if (cat.includes('dining') || cat.includes('restaurant') || cat.includes('food') ||
+      cat.includes('nightlife') || cat.includes('bar') || cat.includes('drinks') ||
+      cat.includes('entertainment') || cat.includes('show') || cat.includes('concert') ||
+      cat.includes('transport') || cat.includes('transit') || cat.includes('logistics') ||
+      cat.includes('accommodation') || cat.includes('hotel')) return false;
+  const title = String(act.title || act.name || '');
+  if (BOOKEND_TITLE_RE.test(title)) return false;
+  // Match by category OR title regex
+  if (LANDMARK_CATS.has(cat)) return true;
+  if (LANDMARK_TITLE_RE.test(title)) return true;
+  return false;
+}
+
+function checkLandmarkAfterDark(activities: any[], results: ValidationResult[]): void {
+  if (!Array.isArray(activities)) return;
+  for (let i = 0; i < activities.length; i++) {
+    const a = activities[i];
+    if (!isLandmarkSightseeing(a)) continue;
+    const start = parseHHMM(a.startTime || a.start_time || a.time);
+    if (start === null) continue;
+    // Daylight window: 08:00–17:30. After 20:00 = critical, 17:30–20:00 = warning.
+    if (start >= 20 * 60) {
+      results.push({
+        code: FAILURE_CODES.LANDMARK_AFTER_DARK,
+        severity: 'error',
+        message: `Landmark "${a.title || a.name}" scheduled at ${a.startTime} — daylight sights must be 08:00–17:30, never after 20:00`,
+        activityIndex: i,
+        field: 'startTime',
+        autoRepairable: true,
+      });
+    }
+  }
+}
+
+
+
 function isRestaurantActivity(act: any): boolean {
   if (!act || typeof act !== 'object') return false;
   const cat = String(act.category || '').toLowerCase();
