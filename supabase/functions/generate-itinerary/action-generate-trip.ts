@@ -917,6 +917,7 @@ Return ONLY valid JSON array, no markdown:
                   'Authorization': `Bearer ${LOVABLE_API_KEY}`,
                   'Content-Type': 'application/json',
                 },
+                signal: AbortSignal.timeout(30_000),
                 body: JSON.stringify({
                   model: 'google/gemini-2.5-flash',
                   messages: [
@@ -951,7 +952,8 @@ Return ONLY valid JSON array, no markdown:
                 console.warn(`[generate-trip] Restaurant pool for "${city}": AI call failed ${resp.status}: ${errText.slice(0, 100)}`);
               }
             } catch (aiErr) {
-              console.warn(`[generate-trip] Restaurant pool for "${city}": AI call error:`, aiErr);
+                const isTimeout = aiErr instanceof DOMException && aiErr.name === 'TimeoutError';
+                console.warn(`[generate-trip] Restaurant pool for "${city}": AI call ${isTimeout ? 'timed out' : 'error'}:`, aiErr);
             }
           });
           
