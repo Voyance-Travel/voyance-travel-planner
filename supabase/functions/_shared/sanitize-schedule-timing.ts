@@ -288,6 +288,14 @@ export function sanitizeDaySchedule(
       setStart(a, newStart);
       setEnd(a, fmtHM(newStartMin + dur));
       out.predawnMealsRepaired++;
+      out.issues.push({
+        code: 'INVALID_PREDAWN_MEAL',
+        dayNumber: dayN,
+        activityId: a.id,
+        title: a.title || a.name,
+        detail: `${kind || 'meal'} was scheduled in pre-dawn window; moved to ${newStart}.`,
+        repaired: true,
+      });
       console.log(`[SCHEDULE_SANITY] day=${day} action=predawn_meal_repaired title="${a.title || a.name || ''}" newStart=${newStart}`);
       survivors.push(a);
       continue;
@@ -296,6 +304,14 @@ export function sanitizeDaySchedule(
     if (isSightseeing(a)) {
       // Drop pre-dawn sightseeing — there's no safe automatic time to use.
       out.predawnNonLockedDropped++;
+      out.issues.push({
+        code: 'INVALID_TIME_WRAP',
+        dayNumber: dayN,
+        activityId: a.id,
+        title: a.title || a.name,
+        detail: 'Sightseeing started pre-dawn with no late-nightlife signal; dropped.',
+        repaired: true,
+      });
       console.log(`[SCHEDULE_SANITY] day=${day} action=predawn_sightseeing_dropped title="${a.title || a.name || ''}"`);
       continue;
     }
