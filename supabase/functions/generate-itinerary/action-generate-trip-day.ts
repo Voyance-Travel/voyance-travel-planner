@@ -3616,11 +3616,32 @@ async function _handleGenerateTripDayInner(
     // warnings on a trip that actually has all 9 meal cards).
     let finalPersistValidation: any = null;
     try {
-      const { validateItineraryForPersist } = await import('../_shared/validate-itinerary-for-persist.ts');
-      const verdict = validateItineraryForPersist(
+      // Run the canonical schedule-sanity pass FIRST so persist_validation
+      // describes the post-repair plan (not stale 00:00-dinner / arrival-out-
+      // of-order data). Mirrors action-save-itinerary STEP 2.96.
+      let sanityIssues: any[] = [];
+      try {
+        const { sanitizeSchedule } = await import('../_shared/sanitize-schedule-timing.ts');
+        const r = sanitizeSchedule((partialItinerary as any)?.days || [], {
+          site: 'generate-trip-day:final',
+          arrivalTime24: savedArrTime24Hoisted || null,
+          departureTime24: savedDepTime24Hoisted || null,
+        });
+        sanityIssues = r.counters.issues;
+        if (r.touchedDays > 0 && Array.isArray((partialItinerary as any)?.days)) {
+          (partialItinerary as any).days = r.days;
+        }
+      } catch (sErr) {
+        console.warn('[generate-trip-day:final] schedule sanity pass failed (non-blocking):', sErr);
+      }
+      const { validateItineraryForPersist, mergeScheduleSanityIssues } = await import('../_shared/validate-itinerary-for-persist.ts');
+      let verdict = validateItineraryForPersist(
         Array.isArray((partialItinerary as any)?.days) ? (partialItinerary as any).days : [],
-        { destination: destination ?? null },
+        { destination: destination ?? null, arrivalTime24: savedArrTime24Hoisted || undefined, departureTime24: savedDepTime24Hoisted || undefined },
       );
+      if (sanityIssues.length > 0) {
+        verdict = mergeScheduleSanityIssues(verdict, sanityIssues);
+      }
       finalPersistValidation = {
         checked_at: new Date().toISOString(),
         ok: verdict.ok,
