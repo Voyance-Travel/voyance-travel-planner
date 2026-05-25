@@ -359,6 +359,14 @@ export function sanitizeDaySchedule(
       drop.add(i);
     }
     if (drop.size > 0) {
+      // MUST-DO ANCHOR DROP TELEMETRY — surface root cause for the
+      // CDMX `e4217b97…` class where injected anchors silently vanished.
+      for (const i of drop) {
+        const a = activities[i] as any;
+        if (a && (a.source === 'must-do-injection' || a.anchorSource === 'must_do')) {
+          console.warn(`[MUST_DO_ANCHOR_DROPPED] day=${dayN} venue="${a.title || a.name || ''}" reason=duplicate_hotel_return site=sanitizeSchedule:dup_hotel_returns id=${a.id || 'n/a'}`);
+        }
+      }
       const next = activities.filter((_, i) => !drop.has(i));
       activities.length = 0;
       activities.push(...next);
