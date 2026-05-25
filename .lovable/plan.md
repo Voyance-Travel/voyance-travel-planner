@@ -1,87 +1,77 @@
-## Current state
-
-Verified against DB for `d18b2e8a…`:
-- `mustDoActivities` = 4 items (Colosseum, Pantheon, Trevi, Vatican) ✓
-- `trip_day_intents` = **0 rows** (seeding never ran for this trip — it was generated before the fix shipped)
-- `intent_seed_audit` / `must_do_coverage` = NULL
-
-Already shipped in prior turns:
-1. Relax-pass scheduling (Day 1/N allowed, 600m cap) — `must-do-priorities.ts`
-2. URGENT BACKLOG prompt injection — `compile-prompt.ts`
-3. Always-on seeding + `intent_seed_audit` stamp — `intent-normalizers.ts`, `day-intents-store.ts`
-4. Daylight directive (08:00–17:30) in prompt
-
-**Still missing** (the user-visible Rome bug is unfixed because no regen has run):
-- Post-gen coverage assertion
-- `LANDMARK_AFTER_DARK` validator
-- One-shot backfill for this trip
-- Tests
-
 ## Plan
 
-### A. One-shot backfill for trip `d18b2e8a…` (immediate user-visible fix)
+### What I verified
+- The current code already contains several proposed defenses: relax-pass scheduling, urgent backlog prompt injection, always-on must-do seeding, intent seed audit, `LANDMARK_AFTER_DARK`, and `assertMustDoCoverage`.
+- The affected Rome trip is still broken in persisted data:
+  - `trip_day_intents` now has the 4 must-do rows.
+  - `metadata.must_do_coverage` is still missing.
+  - `metadata.generation_health` is still missing.
+  - Day 1 still has `Arrival Flight` at 06:40–08:40 and Colosseum at 21:30–23:45.
+  - Days 2–3 still contain mostly dining and no Vatican/Pantheon/Trevi.
+- The remaining gap is not just prompt injection: the final coverage assertion logs/stamps coverage but does not feed `MUST_DO_UNCOVERED` into `generation_health.persistGateCodes`, and there is no deterministic repair path for missing must-dos or late landmarks.
 
-Two steps in sequence:
+### Implementation steps
 
-1. **SQL migration**: seed the 4 missing `trip_day_intents` rows (`day_number=NULL`, `priority='must'`, `status='pending'`, source=`'backfill-mustdo-coverage'`) so any future re-run knows about them.
-2. **Edge call**: invoke `backfill-trip-intents` then trigger a targeted day-regen for Days 1–3 using existing `action-generate-trip-day` with `forceMustDoInjection: true`. Day 1 keeps Colosseum but moves it to a daylight slot; Day 2 gets Vatican Museums + St. Peter's; Day 3 gets Pantheon + Trevi.
+1. **Tighten must-do scheduling with real travel-day clocks**
+   - Extend `scheduleMustDos` / `findBestDay` to accept arrival/departure timing context.
+   - Relax arrival/departure only when there is an actual usable window, rather than blindly allowing Day 1/Day N.
+   - Keep the 600-minute relax cap, but make the rationale explicit in logs.
 
-If the targeted regen path is risky to wire from a one-shot, fall back to **deterministic in-place repair**: directly rewrite Days 1–3 in `itinerary_data` via `safeUpdateItineraryData('self-heal-mustdo-coverage')` — Colosseum 14:30–17:30 Day 1, Vatican 09:00–13:00 Day 2, Pantheon 10:00–11:00 + Trevi 11:15–11:45 Day 3, then run `enforceTimingAndBuffers` server-side.
+2. **Make uncovered must-dos visible in every relevant day prompt**
+   - Keep the existing urgent backlog block.
+   - Add active, unfulfilled `trip_day_intents` must-do rows into the backlog, not only `scheduled.unschedulable`.
+   - Suppress only on true tight departure days.
+   - Ensure the daylight rule appears for all injected landmark must-dos, not just unschedulable ones.
 
-### B. Post-generation coverage assertion (prevent recurrence)
+3. **Finish post-generation coverage enforcement**
+   - Move/adjust coverage assertion so it runs before final `writeGenerationHealth`.
+   - Add `MUST_DO_UNCOVERED` into `generation_health.persistGateCodes` when coverage is missing.
+   - Append a generation trace event with missing/scheduled counts.
+   - Stamp `metadata.must_do_coverage` every terminal generation, including zero-missing success.
 
-`supabase/functions/_shared/assert-must-do-coverage.ts` (new):
-- Input: `allDays`, `mustDos[]`, fuzzy-match by venue name + alias list (Vatican ↔ St. Peter's / Vatican Museums).
-- Output: `{ missing, scheduled }`.
+4. **Add deterministic repair for late landmarks**
+   - In `repair-day.ts`, handle `LANDMARK_AFTER_DARK` by moving the landmark into a daylight slot where possible.
+   - Prefer swapping with the latest non-meal afternoon cultural/leisure block.
+   - Never move locked/manual/user activities.
+   - Re-run timing/buffer cascade afterward.
 
-Wire into `action-generate-trip-day.ts` final-day branch (after Phase 5, before Phase 6 freeze):
-- Stamp `metadata.must_do_coverage`.
-- Append `MUST_DO_UNCOVERED` to `generation_health.persistGateCodes`.
-- If `missing.length > 0` AND `!metadata.must_do_repair_attempted`: stamp `must_do_repair_attempted=true` and enqueue ONE repair leg targeting the lightest non-departure day with `forceMustDoInjection: missing[0..1]`. No loop possible.
+5. **Add a single missing-must-do repair attempt**
+   - If final coverage has missing must-dos and `metadata.must_do_repair_attempted` is not set, perform one deterministic repair pass on the lightest non-departure day.
+   - Insert fixed landmark cards using known/resolved venue data when available.
+   - Mark `metadata.must_do_repair_attempted` to prevent loops.
+   - If repair still fails, leave the trip as generated but visibly flagged via coverage + health metadata.
 
-### C. `LANDMARK_AFTER_DARK` validator
+6. **Repair Rome trip `d18b2e8a…` in place**
+   - Use a data update, not a schema migration.
+   - Fix Day 1 arrival flight back to the real landing window and move Colosseum to daylight.
+   - Inject:
+     - Day 2 morning: Vatican Museums / St. Peter’s Basilica block.
+     - Day 3 morning: Pantheon + Trevi Fountain.
+   - Remove/replace conflicting food-only filler where necessary.
+   - Recompute table rows and cost rows through the existing save/sync path where possible, preserving locks and existing trip metadata.
+   - Stamp `metadata.must_do_coverage`, `generation_health`, and a trace entry explaining the self-heal.
 
-In `validate-day.ts`:
-- Detect activity where (category in {sightseeing, landmark, museum, monument} OR title matches `LANDMARK_VENUE_RE`) AND `startTime >= 20:00`.
-- Emit code `LANDMARK_AFTER_DARK` (warning).
-- `repair-day.ts` consumer: swap with the latest-starting non-meal afternoon activity (12:00–17:00) on the same day; if no swap candidate, log only.
+7. **Tests**
+   - Add/update tests for:
+     - short-trip relax-pass with 4 must-dos;
+     - urgent backlog from unfulfilled trip-wide intents;
+     - coverage assertion feeding `MUST_DO_UNCOVERED` into health metadata;
+     - `LANDMARK_AFTER_DARK` daylight repair;
+     - intent seeding audit for array `mustDoActivities` plus `perDayActivities`.
 
-### D. Tests
+### Files to touch
+- `supabase/functions/generate-itinerary/must-do-priorities.ts`
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
+- `supabase/functions/generate-itinerary/pipeline/validate-day.ts`
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+- `supabase/functions/_shared/assert-must-do-coverage.ts`
+- `supabase/functions/_shared/day-intents-store.ts`
+- `supabase/functions/_shared/intent-normalizers.ts`
+- Matching tests
+- One data backfill/update for trip `d18b2e8a…`
 
-- `must-do-priorities.test.ts` — 4-day Rome-shape trip, 4 long must-dos → all scheduled (relax pass places one on Day 1 afternoon).
-- `compile-prompt.test.ts` — uncovered must-do appears in subsequent day prompts.
-- `validate-day.test.ts` — Colosseum at 21:30 → `LANDMARK_AFTER_DARK`.
-- `assert-must-do-coverage.test.ts` — Vatican alias matching; missing detection.
-- `day-intents-store.test.ts` — audit object returned; mustDoActivities seeded even when perDayActivities present.
-
-### E. Memory
-
-Append a Core entry: **Must-Do Coverage Contract** — every `mustDoActivities` venue MUST appear in at least one day; enforced by relax-pass scheduler + URGENT BACKLOG prompt + post-gen coverage assertion + one-shot repair leg gated by `must_do_repair_attempted`.
-
-## Files touched
-
-```
-NEW  supabase/functions/_shared/assert-must-do-coverage.ts
-NEW  supabase/functions/_shared/__tests__/assert-must-do-coverage.test.ts
-NEW  supabase/migrations/<ts>_backfill_rome_mustdo_intents.sql
-EDIT supabase/functions/generate-itinerary/action-generate-trip-day.ts  (wire assertion + repair gate)
-EDIT supabase/functions/generate-itinerary/pipeline/validate-day.ts     (LANDMARK_AFTER_DARK)
-EDIT supabase/functions/generate-itinerary/pipeline/repair-day.ts       (landmark swap handler)
-EDIT supabase/functions/generate-itinerary/must-do-priorities.test.ts
-EDIT supabase/functions/generate-itinerary/pipeline/compile-prompt.test.ts
-EDIT supabase/functions/generate-itinerary/pipeline/validate-day.test.ts
-EDIT supabase/functions/_shared/__tests__/day-intents-store.test.ts
-EDIT mem://index.md  (Core entry)
-NEW  mem://constraints/itinerary/must-do-coverage-contract.md
-```
-
-## Out of scope
-
-- Re-architecting must-do scoring (preferred-time inference, cross-day clustering).
-- Auto-retrying more than one repair leg.
-
-## Question for you
-
-For step **A**, do you want me to:
-- **(i)** trigger an actual regen of Days 1–3 via the generation pipeline (safer for content quality, may take 30–60s, costs LLM tokens), or
-- **(ii)** deterministic in-place rewrite using known venue data (instant, free, but content blurbs will be templated)?
+### Out of scope
+- Rebuilding the entire must-do scorer.
+- Multi-retry regeneration loops.
+- Changing user credit policy or charging for this self-heal.

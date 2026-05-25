@@ -1531,6 +1531,87 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 5c. LANDMARK_AFTER_DARK: swap evening landmark into daylight slot ---
+  // Daylight sightseeing landmarks (Colosseum / Pantheon / Vatican …) scheduled
+  // ≥20:00 are moved to a daylight slot. Strategy: if any non-locked, non-meal,
+  // non-bookend culture/leisure activity sits in 13:00–17:00 we swap their
+  // startTime/endTime; otherwise we just retime the landmark to 14:30 and let
+  // `enforceTimingAndBuffers` cascade neighbours.
+  if (byCode.has(FAILURE_CODES.LANDMARK_AFTER_DARK)) {
+    const landmarkResults = byCode.get(FAILURE_CODES.LANDMARK_AFTER_DARK) || [];
+    const NON_SWAP_CATS = /^(dining|restaurant|food|nightlife|bar|drinks|transport|transit|logistics|accommodation|hotel|stay|flight)$/i;
+    const BOOKEND_RE = /(check[\s-]?in|check[\s-]?out|return to (?:hotel|your hotel)|freshen up|drop bags|store luggage|head to (?:airport|station|terminal)|airport security)/i;
+    const isSwapCandidate = (a: any): boolean => {
+      if (!a || lockedIds.has(a.id)) return false;
+      if (a.userAdded || a.userEdited || a.extracted || a.pinned || a.isManual) return false;
+      const cat = String(a.category || a.type || '').toLowerCase();
+      if (NON_SWAP_CATS.test(cat)) return false;
+      const title = String(a.title || a.name || '');
+      if (BOOKEND_RE.test(title)) return false;
+      const startMin = parseTimeToMinutes(a.startTime || '') ?? -1;
+      return startMin >= 13 * 60 && startMin <= 17 * 60;
+    };
+
+    for (const vr of landmarkResults) {
+      const idx = vr.activityIndex;
+      if (idx === undefined || idx >= activities.length) continue;
+      const landmark = activities[idx];
+      if (!landmark || lockedIds.has(landmark.id)) continue;
+
+      let swapIdx = -1;
+      let swapStart = -1;
+      for (let j = 0; j < activities.length; j++) {
+        if (j === idx) continue;
+        if (!isSwapCandidate(activities[j])) continue;
+        const s = parseTimeToMinutes(activities[j].startTime || '') ?? -1;
+        if (s > swapStart) { swapStart = s; swapIdx = j; }
+      }
+
+      const oldStart = landmark.startTime;
+      const oldEnd = landmark.endTime;
+      if (swapIdx !== -1) {
+        const partner = activities[swapIdx];
+        const pStart = partner.startTime;
+        const pEnd = partner.endTime;
+        partner.startTime = oldStart; partner.start_time = oldStart;
+        partner.endTime = oldEnd; partner.end_time = oldEnd;
+        landmark.startTime = pStart; landmark.start_time = pStart;
+        landmark.endTime = pEnd; landmark.end_time = pEnd;
+        repairs.push({
+          code: FAILURE_CODES.LANDMARK_AFTER_DARK,
+          activityIndex: idx,
+          action: 'swapped_landmark_with_daylight_activity',
+          before: `${landmark.title} @ ${oldStart}`,
+          after: `${landmark.title} @ ${landmark.startTime} (swapped with "${partner.title}")`,
+        });
+        console.log(`[Repair] LANDMARK_AFTER_DARK: swapped "${landmark.title}" ${oldStart} ↔ "${partner.title}" ${pStart}`);
+      } else {
+        const startMin = parseTimeToMinutes(oldStart || '') ?? 14 * 60 + 30;
+        const endMin = parseTimeToMinutes(oldEnd || '') ?? (startMin + 120);
+        const dur = Math.max(60, Math.min(360, endMin - startMin));
+        const newStart = 14 * 60 + 30;
+        const newEnd = newStart + dur;
+        const fmt = (mm: number) => `${String(Math.floor(mm / 60)).padStart(2, '0')}:${String(mm % 60).padStart(2, '0')}`;
+        landmark.startTime = fmt(newStart); landmark.start_time = landmark.startTime;
+        landmark.endTime = fmt(newEnd); landmark.end_time = landmark.endTime;
+        repairs.push({
+          code: FAILURE_CODES.LANDMARK_AFTER_DARK,
+          activityIndex: idx,
+          action: 'retimed_landmark_to_daylight',
+          before: `${landmark.title} @ ${oldStart}`,
+          after: `${landmark.title} @ ${landmark.startTime}`,
+        });
+        console.log(`[Repair] LANDMARK_AFTER_DARK: retimed "${landmark.title}" ${oldStart} → ${landmark.startTime}`);
+      }
+    }
+
+    activities.sort((a: any, b: any) => {
+      const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+      const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+      return ta - tb;
+    });
+  }
+
   // --- 6. LOGISTICS_SEQUENCE (departure day) ---
   // Force-run on every departure day, not only when validation flagged it.
   // Validation can miss subtle cases (no security card, late checkout) but

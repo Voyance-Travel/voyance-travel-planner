@@ -3764,6 +3764,15 @@ async function _handleGenerateTripDayInner(
           mustDoCoverage = assertMustDoCoverage(partialItinerary?.days || [], mustDos);
           if (mustDoCoverage.missing.length > 0) {
             console.warn(`[generate-trip-day] MUST_DO_UNCOVERED trip=${tripId} missing=${JSON.stringify(mustDoCoverage.missing)} scheduled=${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
+            await appendGenerationTrace(supabase, tripId, {
+              action: 'generate-trip-day',
+              phase: 'persist_gate_checked',
+              status: 'warn',
+              dayNumber,
+              expectedTotalDays: totalDays,
+              errorCode: 'MUST_DO_UNCOVERED',
+              errorMessage: `missing=${mustDoCoverage.missing.join('|')} scheduled=${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`,
+            });
           } else {
             console.log(`[generate-trip-day] must-do coverage OK: ${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
           }
@@ -3771,6 +3780,7 @@ async function _handleGenerateTripDayInner(
       } catch (covErr) {
         console.warn('[generate-trip-day] must-do coverage assertion failed (non-blocking):', covErr);
       }
+
     }
 
     // ── PHASE 6: FREEZE STAMP + fully_persisted=true ────────────────
@@ -3824,6 +3834,9 @@ async function _handleGenerateTripDayInner(
       const persistGateCodes = Array.from(new Set(
         (finalPersistValidation?.errors || []).map((e: any) => String(e.code)),
       )) as string[];
+      if (mustDoCoverage && mustDoCoverage.missing.length > 0 && !persistGateCodes.includes('MUST_DO_UNCOVERED')) {
+        persistGateCodes.push('MUST_DO_UNCOVERED');
+      }
       const { count: tableDays } = await supabase
         .from('itinerary_days').select('id', { count: 'exact', head: true }).eq('trip_id', tripId);
       const { count: activityRows } = await supabase
@@ -3833,6 +3846,7 @@ async function _handleGenerateTripDayInner(
         expectedTotalDays: totalDays,
         jsonDays: updatedDays.length,
         jsonRealDays: realDays,
+
         tableDays: tableDays || 0,
         tableRealDays: tableDays || 0,
         activityRows: activityRows || 0,
