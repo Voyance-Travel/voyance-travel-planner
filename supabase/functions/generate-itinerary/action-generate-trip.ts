@@ -277,7 +277,13 @@ async function handleGenerateTripBackground(
 
   const timer = new GenerationTimer(tripId, supabase);
 
-  // Guard: prevent double generation if already in progress (not a resume)
+  // Guard: prevent double generation if already in progress (not a resume).
+  // CRITICAL: skip this guard when this invocation is the background-launch
+  // continuation of our OWN outer-launcher run. The outer launcher (above)
+  // stamps `itinerary_status='generating'` + fresh heartbeat + a runId BEFORE
+  // calling handleGenerateTripBackground via waitUntil. Without the run-id
+  // match here, the background sees its own fresh stamp and treats itself as
+  // a duplicate — leaving the trip stuck on "Crafting Day 1" forever.
   if (!resumeFromDay) {
     const { data: statusCheck } = await supabase.from('trips').select('itinerary_status, metadata').eq('id', tripId).single();
     if (statusCheck?.itinerary_status === 'generating') {
@@ -285,15 +291,34 @@ async function handleGenerateTripBackground(
       const heartbeat = meta.generation_heartbeat ? new Date(meta.generation_heartbeat as string) : null;
       const staleThreshold = 5 * 60 * 1000; // 5 minutes
       const isStale = !heartbeat || (Date.now() - heartbeat.getTime() > staleThreshold);
-      
-      if (!isStale) {
-        console.log(`[generate-trip] Trip ${tripId} already generating (heartbeat ${heartbeat?.toISOString()}), skipping duplicate`);
+      const metaRunId = (meta.generation_run_id as string | undefined) || null;
+      const ourRunId = (params.__generationRunId as string | undefined) || null;
+      const isOwnBackgroundLaunch = params.__backgroundLaunch === true && !!ourRunId && metaRunId === ourRunId;
+
+      if (isOwnBackgroundLaunch) {
+        console.log(`[generate-trip] Background-launch continuation for runId=${ourRunId} — bypassing duplicate guard`);
+        await appendGenerationTrace(supabase, tripId, {
+          action: 'generate-trip',
+          phase: 'launcher_background_started',
+          status: 'ok',
+          extra: { duplicateGuardBypass: true, runId: ourRunId.slice(0, 8) },
+        }).catch(() => {});
+      } else if (!isStale) {
+        console.log(`[generate-trip] Trip ${tripId} already generating (heartbeat ${heartbeat?.toISOString()}, metaRun=${metaRunId?.slice(0,8) ?? 'none'}, ourRun=${ourRunId?.slice(0,8) ?? 'none'}, bg=${!!params.__backgroundLaunch}), skipping duplicate`);
+        await appendGenerationTrace(supabase, tripId, {
+          action: 'generate-trip',
+          phase: 'launcher_duplicate_skipped',
+          status: 'warn',
+          errorCode: 'DUPLICATE_SKIPPED',
+          errorMessage: `heartbeat=${heartbeat?.toISOString() ?? 'none'} metaRun=${metaRunId?.slice(0,8) ?? 'none'} ourRun=${ourRunId?.slice(0,8) ?? 'none'} bg=${!!params.__backgroundLaunch}`,
+        }).catch(() => {});
         return new Response(
           JSON.stringify({ success: true, status: 'already_generating', totalDays: (meta.generation_total_days as number) || 0 }),
           { headers: jsonHeaders }
         );
+      } else {
+        console.log(`[generate-trip] Trip ${tripId} has stale generation (heartbeat ${heartbeat?.toISOString()}), restarting`);
       }
-      console.log(`[generate-trip] Trip ${tripId} has stale generation (heartbeat ${heartbeat?.toISOString()}), restarting`);
     }
   }
 
@@ -340,7 +365,8 @@ async function handleGenerateTripBackground(
   const existingMeta = (currentTrip?.metadata as Record<string, unknown>) || {};
   const isResume = resumeFromDay && resumeFromDay > 1;
   
-  const generationRunId = crypto.randomUUID();
+  const generationRunId = (params.__generationRunId as string | undefined) || crypto.randomUUID();
+
   
   const updatePayload: Record<string, unknown> = {
     itinerary_status: 'generating',
