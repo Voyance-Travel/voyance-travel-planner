@@ -10,59 +10,115 @@
  *
  * Closes the Rome `d18b2e8a…` class of bug where 3 of 4 user-selected
  * landmarks (Pantheon, Trevi, Vatican) silently dropped from the itinerary.
+ *
+ * IMPORTANT — Whole-word matching + restricted haystack:
+ *  - The previous version did substring `includes` against
+ *    `[title, name, venue, location.name, location.address, description]`.
+ *    That let "Travel to …" match "Trevi" and let any narrative description
+ *    referencing a landmark falsely mark it scheduled. Result: the Rome trip
+ *    showed `missing=[]` while Days 2–3 had no Pantheon/Trevi/Vatican.
+ *  - We now require `\b<matcher>\b` boundaries AND only consider the venue
+ *    identity fields: `title | name | venue | location.name`. Descriptions
+ *    and addresses are ignored.
  */
 
 export interface CoverageResult {
   missing: string[];
   scheduled: string[];
+  /** Per-venue trace: which activity satisfied each canonical key. */
+  matchedActivityIds?: Record<string, string | null>;
   total: number;
 }
 
 // Canonical aliases — landmarks the AI/user might phrase multiple ways.
-// Each entry: canonical → list of substring matchers (lowercase).
+// Each entry: canonical → list of matcher tokens (lowercase). Matchers are
+// applied with `\b…\b` word boundaries against the activity venue/title.
 const ALIAS_MAP: Record<string, string[]> = {
-  vatican: ['vatican', 'st. peter', 'st peter', 'sistine', "saint peter's"],
+  vatican: ['vatican', 'st peter', "st peter's", 'saint peter', 'sistine'],
+  'st peter\'s basilica': ['st peter', "st peter's", 'saint peter', 'basilica di san pietro'],
+  'vatican museums': ['vatican museum', 'vatican museums', 'musei vaticani'],
   colosseum: ['colosseum', 'colosseo'],
   pantheon: ['pantheon'],
-  'trevi fountain': ['trevi'],
+  'trevi fountain': ['trevi fountain', 'fontana di trevi', 'trevi'],
   'roman forum': ['roman forum', 'forum romanum', 'foro romano', 'palatine'],
-  louvre: ['louvre'],
-  'eiffel tower': ['eiffel'],
-  'notre dame': ['notre-dame', 'notre dame'],
+  louvre: ['louvre', 'musee du louvre', 'musée du louvre'],
+  'eiffel tower': ['eiffel tower', 'eiffel', 'tour eiffel'],
+  'notre dame': ['notre dame', 'notre-dame'],
   'sagrada familia': ['sagrada familia', 'sagrada família'],
   acropolis: ['acropolis', 'parthenon'],
 };
 
 function normalize(s: string): string {
-  return String(s || '').toLowerCase().normalize('NFKD').replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    // Drop diacritics
+    .replace(/[\u0300-\u036f]/g, '')
+    // Drop punctuation we don't want to match across (keep word chars + spaces)
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Escape a token for safe use in a RegExp. */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
- * Return the canonical key for a must-do venue, or the normalized name itself.
+ * Build matchers for a must-do venue:
+ *  - if any alias-map key/matcher matches the venue text, use that group's
+ *    matchers PLUS the canonical key;
+ *  - otherwise fall back to the venue's normalized name (and its first 3 words)
+ *    so unknown venues still self-match.
  */
 function canonicalize(venue: string): { canonical: string; matchers: string[] } {
   const norm = normalize(venue);
   for (const [canonical, matchers] of Object.entries(ALIAS_MAP)) {
     for (const m of matchers) {
-      if (norm.includes(m)) return { canonical, matchers };
+      if (norm.includes(m)) {
+        const set = new Set<string>([canonical, ...matchers]);
+        return { canonical, matchers: Array.from(set).filter(Boolean) };
+      }
     }
   }
-  // Fall back: match by the venue's own normalized name (first 3 words for fuzziness)
-  const words = norm.split(' ').slice(0, 3).join(' ');
-  return { canonical: norm, matchers: [norm, words].filter(Boolean) };
+  const words = norm.split(' ').filter(Boolean);
+  const head = words.slice(0, 3).join(' ');
+  return {
+    canonical: norm,
+    matchers: Array.from(new Set([norm, head].filter(Boolean))),
+  };
 }
 
 /**
- * Check whether an activity's title/name/venue matches any of the matchers.
+ * Whole-word match: matcher must appear bounded by non-word chars (or
+ * start/end of string). Prevents "Trevi" matching "Travel to …" and
+ * "Pantheon" matching "pantheonic vibes".
+ */
+function matchesWord(haystack: string, matcher: string): boolean {
+  if (!haystack || !matcher) return false;
+  // Allow multi-word matchers (e.g. "st peter") — escape, then anchor with \b.
+  // For a matcher that ends in punctuation-stripped form, both ends are word chars.
+  const re = new RegExp(`(?:^|\\W)${escapeRe(matcher)}(?:\\W|$)`, 'i');
+  return re.test(haystack);
+}
+
+/**
+ * Check whether an activity's identity fields match any matcher.
+ *
+ * Restricted haystack: title | name | venue | location.name. We DO NOT
+ * search description / location.address — those frequently mention a
+ * landmark in narrative prose without scheduling it (e.g. "near the
+ * Pantheon, …"), which was the source of the Rome false-positive.
  */
 function activityMatches(act: any, matchers: string[]): boolean {
   if (!act || typeof act !== 'object') return false;
   const haystack = normalize(
-    [act.title, act.name, act.venue, act.location?.name, act.location?.address, act.description]
+    [act.title, act.name, act.venue, act.venue_name, act.location?.name]
       .filter(Boolean)
       .join(' | ')
   );
-  return matchers.some(m => m && haystack.includes(m));
+  return matchers.some(m => matchesWord(haystack, m));
 }
 
 /**
@@ -74,9 +130,10 @@ export function assertMustDoCoverage(
 ): CoverageResult {
   const missing: string[] = [];
   const scheduled: string[] = [];
+  const matchedActivityIds: Record<string, string | null> = {};
 
   if (!Array.isArray(mustDos) || mustDos.length === 0) {
-    return { missing, scheduled, total: 0 };
+    return { missing, scheduled, total: 0, matchedActivityIds };
   }
 
   // Flatten all activities across all days
@@ -90,16 +147,18 @@ export function assertMustDoCoverage(
   for (const venue of mustDos) {
     if (!venue || typeof venue !== 'string') continue;
     const { matchers } = canonicalize(venue);
-    const found = allActivities.some(a => activityMatches(a, matchers));
-    if (found) {
+    const hit = allActivities.find(a => activityMatches(a, matchers));
+    if (hit) {
       scheduled.push(venue);
+      matchedActivityIds[venue] = typeof hit.id === 'string' ? hit.id : null;
     } else {
       missing.push(venue);
+      matchedActivityIds[venue] = null;
     }
   }
 
-  return { missing, scheduled, total: mustDos.length };
+  return { missing, scheduled, total: mustDos.length, matchedActivityIds };
 }
 
 // Re-export for tests
-export const __test__ = { canonicalize, activityMatches, normalize };
+export const __test__ = { canonicalize, activityMatches, normalize, matchesWord };
