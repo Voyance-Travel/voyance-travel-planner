@@ -88,6 +88,29 @@ import { JourneyUpNext } from '@/components/trips/JourneyUpNext';
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
 
+function extractFunctionErrorCode(error: unknown, data?: unknown): string | null {
+  const directCode = (data as any)?.code;
+  if (typeof directCode === 'string') return directCode;
+  try {
+    const ctx = (error as any)?.context;
+    const body = typeof ctx?.body === 'string' ? JSON.parse(ctx.body) : ctx?.body;
+    return typeof body?.code === 'string' ? body.code : null;
+  } catch {
+    return null;
+  }
+}
+
+function getFunctionErrorMessage(error: unknown, data?: unknown, fallback = 'Generation failed') {
+  const directMessage = (data as any)?.error;
+  if (typeof directMessage === 'string') return directMessage;
+  try {
+    const ctx = (error as any)?.context;
+    const body = typeof ctx?.body === 'string' ? JSON.parse(ctx.body) : ctx?.body;
+    if (typeof body?.error === 'string') return body.error;
+  } catch { /* use fallback */ }
+  return (error as Error)?.message || fallback;
+}
+
 interface ItineraryDay {
   dayNumber: number;
   date: string;
