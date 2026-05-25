@@ -56,16 +56,50 @@ const AFTER_DARK_OK = new Set<string>([
   'eiffel tower',
   'tour eiffel',
   'sagrada familia', // illuminated
+  'zocalo', 'zócalo', 'plaza de la constitución', // CDMX main square — illuminated
 ]);
+
+/**
+ * Long-haul / half-day excursions requiring a contiguous multi-hour block.
+ * These landmarks are typically outside the city center and MUST NOT be
+ * crammed into morning-arrival or last-day-departure windows.
+ *
+ * Lowercase matcher → required minimum contiguous free block (minutes).
+ */
+const LONG_HAUL_LANDMARKS: Array<{ match: string; minBlock: number }> = [
+  { match: 'teotihuacan', minBlock: 360 },  // CDMX — 50km out, ~6h round trip
+  { match: 'teotihuacán', minBlock: 360 },
+  { match: 'versailles', minBlock: 300 },
+  { match: 'pompeii', minBlock: 300 },
+  { match: 'herculaneum', minBlock: 270 },
+  { match: 'petra', minBlock: 300 },
+  { match: 'machu picchu', minBlock: 480 },
+  { match: 'giza', minBlock: 300 },
+  { match: 'angkor wat', minBlock: 360 },
+  { match: 'great wall', minBlock: 360 },
+  { match: 'ephesus', minBlock: 300 },
+  { match: 'chichen itza', minBlock: 360 },
+  { match: 'chichén itzá', minBlock: 360 },
+];
+
+function longHaulMinBlock(title: string): number | null {
+  const t = title.toLowerCase();
+  for (const { match, minBlock } of LONG_HAUL_LANDMARKS) {
+    if (t.includes(match)) return minBlock;
+  }
+  return null;
+}
 
 // Default duration per venue keyword.
 function defaultDuration(title: string): number {
+  const longHaul = longHaulMinBlock(title);
+  if (longHaul !== null) return longHaul;
   const t = title.toLowerCase();
   if (/vatican|louvre|prado|uffizi|met museum|sistine/.test(t)) return 210; // long museum block
   if (/museum|gallery/.test(t)) return 120;
   if (/cathedral|basilica|duomo|sagrada|notre dame/.test(t)) return 75;
-  if (/fountain|piazza|square|bridge|stairs|steps|tower|monument/.test(t)) return 45;
-  if (/colosseum|forum|acropolis|alhambra|pompeii/.test(t)) return 150;
+  if (/fountain|piazza|square|bridge|stairs|steps|tower|monument|zocalo|zócalo/.test(t)) return 45;
+  if (/colosseum|forum|acropolis|alhambra/.test(t)) return 150;
   return 90;
 }
 
