@@ -964,6 +964,13 @@ Return ONLY valid JSON array, no markdown:
   
   await supabase.from('trips').update(updatePayload).eq('id', tripId);
 
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_pre_chain_setup_complete',
+    status: 'ok',
+    expectedTotalDays: totalDays,
+  }).catch(() => {});
+
   // Determine starting day (for resume support)
   const effectiveStartDay = resumeFromDay && resumeFromDay > 1 ? resumeFromDay : 1;
 
@@ -972,6 +979,7 @@ Return ONLY valid JSON array, no markdown:
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   timer.endPhase('pre_chain_setup');
   await timer.updateProgress('Launching day generation', 5);
+
 
   const initialChainBody = JSON.stringify({
     action: 'generate-trip-day',
