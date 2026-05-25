@@ -88,6 +88,29 @@ import { JourneyUpNext } from '@/components/trips/JourneyUpNext';
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
 
+function extractFunctionErrorCode(error: unknown, data?: unknown): string | null {
+  const directCode = (data as any)?.code;
+  if (typeof directCode === 'string') return directCode;
+  try {
+    const ctx = (error as any)?.context;
+    const body = typeof ctx?.body === 'string' ? JSON.parse(ctx.body) : ctx?.body;
+    return typeof body?.code === 'string' ? body.code : null;
+  } catch {
+    return null;
+  }
+}
+
+function getFunctionErrorMessage(error: unknown, data?: unknown, fallback = 'Generation failed') {
+  const directMessage = (data as any)?.error;
+  if (typeof directMessage === 'string') return directMessage;
+  try {
+    const ctx = (error as any)?.context;
+    const body = typeof ctx?.body === 'string' ? JSON.parse(ctx.body) : ctx?.body;
+    if (typeof body?.error === 'string') return body.error;
+  } catch { /* use fallback */ }
+  return (error as Error)?.message || fallback;
+}
+
 interface ItineraryDay {
   dayNumber: number;
   date: string;
@@ -580,7 +603,7 @@ export default function TripDetail() {
       if (refreshed) setTrip(refreshed);
 
       // Call generate-trip which will resume from completedDays+1 (or day 1 after a hard fail)
-      const { error } = await supabase.functions.invoke('generate-itinerary', {
+      const { data, error } = await supabase.functions.invoke('generate-itinerary', {
         body: {
           action: 'generate-trip',
           tripId,
@@ -608,7 +631,26 @@ export default function TripDetail() {
         },
       });
 
-      if (error) throw error;
+      if (error || (data as any)?.success === false) {
+        const code = extractFunctionErrorCode(error, data);
+        if (code === 'GENERATION_NOT_AUTHORIZED') {
+          await supabase.from('trips').update({
+            itinerary_status: 'not_started',
+            metadata: {
+              ...meta,
+              generation_total_days: totalDays,
+              generation_error: null,
+              generation_heartbeat: null,
+              generation_started_at: null,
+              generation_failed_on_day: null,
+              chain_error: null,
+              authorization_retry_blocked_at: new Date().toISOString(),
+            },
+          }).eq('id', tripId);
+          queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+        }
+        throw new Error(getFunctionErrorMessage(error, data, 'Failed to launch generation'));
+      }
       toast.success('Resuming generation…');
     } catch (err) {
       console.error('[Resume] Failed:', err);
@@ -621,7 +663,7 @@ export default function TripDetail() {
       resumeInFlightRef.current = false;
       setResumingGeneration(false);
     }
-  }, [tripId]);
+  }, [tripId, queryClient]);
   // =========================================================================
   // HOTEL ENRICHMENT: Auto-enrich if missing address/website/photos
   // =========================================================================
@@ -1168,20 +1210,7 @@ export default function TripDetail() {
           .single();
         if (!fullTrip) return;
 
-        // Mark generating before invoking so the poller engages immediately
-        await supabase.from('trips').update({
-          itinerary_status: 'generating',
-          metadata: {
-            ...(meta as Record<string, unknown>),
-            generation_started_at: new Date().toISOString(),
-            generation_heartbeat: new Date().toISOString(),
-            generation_total_days: 0, // backend will normalize
-            self_heal_reason: 'not_started_chat_planner',
-            self_heal_at: new Date().toISOString(),
-          },
-        }).eq('id', trip.id);
-
-        const { error: invokeErr } = await supabase.functions.invoke('generate-itinerary', {
+        const { data: invokeData, error: invokeErr } = await supabase.functions.invoke('generate-itinerary', {
           body: {
             action: 'generate-trip',
             tripId: trip.id,
@@ -1198,9 +1227,24 @@ export default function TripDetail() {
           },
         });
 
-        if (invokeErr) {
-          console.error('[TripDetail] not_started self-heal invoke failed:', invokeErr);
+        if (invokeErr || (invokeData as any)?.success === false) {
+          console.error('[TripDetail] not_started self-heal invoke failed:', invokeErr ?? invokeData);
           notStartedHealAttempted.current = false;
+          const code = extractFunctionErrorCode(invokeErr, invokeData);
+          if (code === 'GENERATION_NOT_AUTHORIZED') {
+            await supabase.from('trips').update({
+              itinerary_status: 'not_started',
+              metadata: {
+                ...(meta as Record<string, unknown>),
+                generation_started_at: null,
+                generation_heartbeat: null,
+                generation_error: null,
+                chain_error: null,
+                self_heal_authorization_blocked_at: new Date().toISOString(),
+              },
+            }).eq('id', trip.id);
+            queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+          }
           return;
         }
 
