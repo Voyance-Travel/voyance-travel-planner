@@ -3892,6 +3892,9 @@ async function _handleGenerateTripDayInner(
       if (mustDoCoverage && mustDoCoverage.missing.length > 0 && !persistGateCodes.includes('MUST_DO_UNCOVERED')) {
         persistGateCodes.push('MUST_DO_UNCOVERED');
       }
+      if (mustDoInjection && mustDoInjection.unscheduled.length > 0 && !persistGateCodes.includes('MUST_DO_INJECTION_FAILED')) {
+        persistGateCodes.push('MUST_DO_INJECTION_FAILED');
+      }
       const { count: tableDays } = await supabase
         .from('itinerary_days').select('id', { count: 'exact', head: true }).eq('trip_id', tripId);
       const { count: activityRows } = await supabase
