@@ -58,3 +58,33 @@ describe('getDisplayDayTitle', () => {
     expect(getDisplayDayTitle(day, 'Paris')).toBe('Arrival');
   });
 });
+
+  it('headline beats food vibe when 3 meals + sightseeing (no neighborhoods)', () => {
+    const day = {
+      dayNumber: 1,
+      title: '',
+      activities: [
+        { title: 'Breakfast: Coromandel', category: 'dining' },
+        { title: 'Colosseum Exploration', category: 'sightseeing' },
+        { title: 'Lunch: Forno', category: 'dining' },
+        { title: 'Dinner: Roscioli', category: 'dining' },
+      ],
+    };
+    const out = getDisplayDayTitle(day, 'Rome');
+    expect(out.toLowerCase()).toContain('colosseum');
+    expect(out.toLowerCase()).not.toContain('culinary');
+  });
+
+  it('trusts multi-token stored title when no neighborhood signal', () => {
+    const day = {
+      dayNumber: 2,
+      title: 'Vatican Masterpieces & Kinetic Roman Streets',
+      activities: [
+        { title: 'Breakfast: Pasticceria 5 Lune', category: 'dining' },
+        { title: 'Lunch: Da Enzo al 29', category: 'dining' },
+        { title: 'Dinner: Trattoria Da Cesare', category: 'dining' },
+      ],
+    };
+    expect(getDisplayDayTitle(day, 'Rome')).toBe('Vatican Masterpieces & Kinetic Roman Streets');
+  });
+});
