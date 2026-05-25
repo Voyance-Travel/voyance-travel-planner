@@ -816,6 +816,8 @@ export function ItineraryGenerator({
 
   const handleRetry = () => {
     reset();
+    setServerGenActive(false);
+    setPrePhase(null);
     handleGenerate();
   };
 
