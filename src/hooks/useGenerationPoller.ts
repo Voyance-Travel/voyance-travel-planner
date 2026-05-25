@@ -447,9 +447,11 @@ export function useGenerationPoller({
       onReadyCalledRef.current = false;
       lastFailedErrorRef.current = null;
       completedDaysHWM.current = 0;
+      enabledAtRef.current = null;
       return;
     }
 
+    if (!enabledAtRef.current) enabledAtRef.current = Date.now();
     setState(prev => ({ ...prev, status: 'polling' }));
 
     // Initial poll — immediate
