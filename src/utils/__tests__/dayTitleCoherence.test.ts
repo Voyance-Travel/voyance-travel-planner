@@ -57,7 +57,6 @@ describe('getDisplayDayTitle', () => {
     // < 3 non-logistics activities → returns existing title
     expect(getDisplayDayTitle(day, 'Paris')).toBe('Arrival');
   });
-});
 
   it('headline beats food vibe when 3 meals + sightseeing (no neighborhoods)', () => {
     const day = {
