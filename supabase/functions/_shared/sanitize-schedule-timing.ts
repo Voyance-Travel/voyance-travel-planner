@@ -114,12 +114,32 @@ function isLateNightlifeTagged(a: any): boolean {
   return false;
 }
 
+export type ScheduleSanityCode =
+  | 'INVALID_PREDAWN_MEAL'
+  | 'ARRIVAL_SEQUENCE_INVALID'
+  | 'DUPLICATE_HOTEL_RETURN'
+  | 'LANDMARK_AFTER_DARK'
+  | 'INVALID_TIME_WRAP';
+
+export interface ScheduleSanityIssue {
+  code: ScheduleSanityCode;
+  dayNumber: number;
+  activityId?: string;
+  title?: string;
+  detail: string;
+  repaired: boolean;
+}
+
 export interface ScheduleSanityResult {
   predawnMealsRepaired: number;
   predawnNonLockedDropped: number;
   invalidEndBeforeStartRepaired: number;
   duplicateHotelReturnsRemoved: number;
   fieldDriftRepaired: number;
+  arrivalSequenceRepaired: number;
+  landmarkAfterDarkFlagged: number;
+  adjacentHotelTransitDropped: number;
+  issues: ScheduleSanityIssue[];
 }
 
 const DEFAULT_RESULT: ScheduleSanityResult = {
@@ -128,7 +148,25 @@ const DEFAULT_RESULT: ScheduleSanityResult = {
   invalidEndBeforeStartRepaired: 0,
   duplicateHotelReturnsRemoved: 0,
   fieldDriftRepaired: 0,
+  arrivalSequenceRepaired: 0,
+  landmarkAfterDarkFlagged: 0,
+  adjacentHotelTransitDropped: 0,
+  issues: [],
 };
+
+function newResult(): ScheduleSanityResult {
+  return {
+    predawnMealsRepaired: 0,
+    predawnNonLockedDropped: 0,
+    invalidEndBeforeStartRepaired: 0,
+    duplicateHotelReturnsRemoved: 0,
+    fieldDriftRepaired: 0,
+    arrivalSequenceRepaired: 0,
+    landmarkAfterDarkFlagged: 0,
+    adjacentHotelTransitDropped: 0,
+    issues: [],
+  };
+}
 
 function setStart(a: any, hhmm: string) {
   a.startTime = hhmm;
@@ -146,6 +184,27 @@ function fmtHM(min: number): string {
   return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }
 
+// Daylight-sensitive categories that cannot start after dark.
+// Outdoor landmarks like fountains/squares stay safe after dark, so they are
+// NOT in this list — they're handled via the late-cap heuristic instead.
+const INDOOR_DAYLIGHT_CATS = new Set([
+  'museum', 'gallery', 'exhibit', 'exhibition',
+]);
+const INDOOR_DAYLIGHT_TITLE_RE = /\b(museum|gallery|chapel|cathedral|vatican|sistine|palace tour|botanical garden)\b/i;
+const LATE_CAP_MIN = 17 * 60; // 17:00 — after this, daylight venues become suspect
+const HARD_LATE_CAP_MIN = 19 * 60; // 19:00 — almost certainly closed/dark
+
+export interface ScheduleSanityContext {
+  /** First day's arrival clock (HH:MM 24h). Used by arrival-sequence repair. */
+  arrivalTime24?: string | null;
+  /** Last day's departure clock (HH:MM 24h). Reserved for future use. */
+  departureTime24?: string | null;
+  /** True if this is Day 1 (arrival day) — controls arrival-sequence pass. */
+  isFirstDay?: boolean;
+  /** True if this is the last day — controls future departure-sequence pass. */
+  isLastDay?: boolean;
+}
+
 /**
  * Run the per-day sanity pass. Mutates `activities` in place.
  *
@@ -155,11 +214,12 @@ function fmtHM(min: number): string {
  */
 export function sanitizeDaySchedule(
   activities: any[],
-  opts: { dayNumber?: number } = {},
+  opts: { dayNumber?: number } & ScheduleSanityContext = {},
 ): ScheduleSanityResult {
-  const out: ScheduleSanityResult = { ...DEFAULT_RESULT };
+  const out: ScheduleSanityResult = newResult();
   if (!Array.isArray(activities) || activities.length === 0) return out;
   const day = opts.dayNumber ?? '?';
+  const dayN = typeof opts.dayNumber === 'number' ? opts.dayNumber : 0;
 
   // ─── Pass 1: reconcile field drift between startTime/start_time/time ───
   // When startTime/start_time/time disagree (e.g. Rome Day 1 dinner has
