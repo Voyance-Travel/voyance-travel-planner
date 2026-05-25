@@ -1,58 +1,73 @@
-## Finish deferred must-do coverage work
+## Plan
 
-Ship the three deferred items from the approved plan so the Rome `d18b2e8a…` class of bug is closed deterministically, not just unfrozen-and-hope.
+### What I verified
 
-### 1. Deterministic missing-must-do injection (§5/6)
+- A first version of `sanitize-schedule-timing.ts` already exists and is wired into `persist-itinerary.ts`, but it is still too narrow: it fixes predawn meals, alias drift, bad wraps, and duplicate hotel returns only.
+- The Rome JSON is partially healed, but still invalid: Day 1 has dinner before the arrival flight, Colosseum at 21:30, and two terminal hotel returns.
+- The normalized tables are worse than JSON and stale: they still contain `Dinner: Roscioli` at `00:00–01:15`, luggage drop before arrival flight, and extra hotel-bound rows. This confirms the core bug is not just generation — it is also JSON/table sync drift.
+- Metadata is still incomplete: `must_do_coverage` exists, but `generation_health` is missing and `schedule_sanity_trace` is empty.
 
-In `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (final pass) and the chain-finalization step in `action-generate-trip-day.ts`:
+### Implementation steps
 
-- After `assertMustDoCoverage` runs on the full trip, take `missing[]` and run a new `injectMissingMustDos(trip, missing)` helper.
-- For each uncovered must-do, pick a target day + slot using the clock-gated scheduler (§7 below), build a real activity card (title from canonical alias, category=sightseeing/landmark, anchorSource='must_do', locked=true, needsAnchorEnrichment=true so `enrich-day` backfills address/description/coords).
-- Re-run `assertMustDoCoverage` on the mutated trip. Only then stamp `metadata.must_do_repair_attempted = { at, injected: [...ids], stillMissing: [...] }`. **Validate-then-stamp** — never fire-and-forget.
-- If injection fails (no eligible slot), leave `stillMissing` populated and surface a `MUST_DO_INJECTION_FAILED` entry in `metadata.generation_health.persistGateCodes` so the UI/health panel can flag it instead of silently shipping a gap.
+1. **Harden the existing canonical timing pass**
+   - Extend `supabase/functions/_shared/sanitize-schedule-timing.ts` rather than creating a parallel helper.
+   - Add context-aware rules for:
+     - Day 1 arrival sequence: arrival flight/arrival logistics before luggage drop/check-in before first real activity.
+     - Day 1 real activities cannot start before `arrival + buffer`.
+     - Meal windows: breakfast morning, lunch midday, dinner evening; no `00:00` dinner.
+     - Daylight-sensitive landmarks/museums/sightseeing cannot start after the cutoff unless tagged as nightlife-safe.
+     - Duplicate terminal hotel returns collapse to one final bookend, and adjacent hotel-bound transit stubs are removed.
+     - Invalid `endTime < startTime` is repaired only when safe, otherwise dropped.
+   - Return structured counters and validation codes, not just console logs.
 
-### 2. Clock-gated `scheduleMustDos` (§7)
+2. **Run timing cleanup before validation and table sync**
+   - In `action-save-itinerary.ts`, run the timing pass before `validateItineraryForPersist`, so `metadata.persist_validation` describes the final repaired plan, not stale pre-repair data.
+   - In `action-generate-trip-day.ts`, run it before final `persist_validation`, before `persistTripItinerary`, and before table sync/cost sync.
+   - Keep the existing `persist-itinerary.ts` call as the final chokepoint for chat/manual/self-heal paths.
+   - In `action-sync-tables.ts`, run the timing pass on the JSON being mirrored so normalized rows cannot preserve stale impossible times.
 
-New helper `_shared/schedule-must-dos.ts`:
+3. **Promote severe timing problems into health metadata**
+   - Extend `validate-itinerary-for-persist.ts` with hard timing codes:
+     - `INVALID_PREDAWN_MEAL`
+     - `ARRIVAL_SEQUENCE_INVALID`
+     - `DUPLICATE_HOTEL_RETURN`
+     - `LANDMARK_AFTER_DARK`
+     - `INVALID_TIME_WRAP`
+   - Include day/activity samples in `metadata.persist_validation` and `metadata.generation_health.persistGateCodes`.
+   - Ensure terminal generation writes `generation_health` after final JSON/table sync checks.
 
-- Inputs: trip days, arrival flight clock (Day 1), departure flight clock (Day N), per-day existing activities, must-do venue metadata (preferredTime, dawn/dusk eligibility from `LANDMARK_AFTER_DARK` map).
-- Output per must-do: `{ dayNumber, startTime, endTime, slotReason }`.
-- Rules:
-  - Day 1 eligibility: `arrival + buffer + luggage-drop` before any landmark.
-  - Day N eligibility: must end ≥ `departure − buffer − transfer − 60min`.
-  - Landmark-after-dark venues (Trevi, Colosseum exterior, etc.) may take evening slots; daylight-only (Vatican Museums, Pantheon interior) get 09:00–16:00 windows.
-  - Prefer the day with the lowest existing landmark count to avoid clustering.
-  - Skip slots that collide with locked/user/manual rows; fall through to next eligible day.
+4. **Make JSON/table drift detectable**
+   - Add a lightweight post-sync verifier that compares JSON activity title/start/end order against `itinerary_activities` for the same trip.
+   - If drift remains, stamp `JSON_TABLE_TIME_DRIFT` in generation health and do not mark the trip fully persisted.
+   - If sync succeeds, stamp `fully_persisted=true` only after JSON and normalized tables agree.
 
-Used by §1 injector and reused by the existing must-do seeding path in `action-generate-trip-day.ts` so generation and repair agree on slot logic.
+5. **Repair the Rome trip in place**
+   - Apply a one-time data update for trip `d18b2e8a-310e-42c8-a7aa-aac61076a234`.
+   - Rewrite Day 1 into believable order: arrival/logistics first, no midnight dinner, no late-night Colosseum, one terminal hotel return.
+   - Keep/restore Vatican, Pantheon, Trevi, and Colosseum in valid windows.
+   - Re-sync `itinerary_days` and `itinerary_activities` from repaired JSON.
+   - Restamp `must_do_coverage`, `persist_validation`, `generation_health`, and `fully_persisted=true` only after JSON/table parity passes.
 
-### 3. Rome `d18b2e8a…` deterministic data rewrite (§8)
+6. **Add regression tests**
+   - `00:00` dinner is repaired to dinner window.
+   - Arrival flight cannot appear after luggage drop or the first real activity.
+   - Duplicate hotel returns collapse to one terminal card.
+   - Landmark/museum after dark is moved or flagged.
+   - Sync tables mirrors repaired JSON times and order.
+   - Rome fixture has Colosseum, Vatican, Pantheon, and Trevi covered with no nonsensical timing.
 
-One-shot SQL + JSONB patch migration (no waiting for user "Resume"):
+### Files to edit
 
-- Day 1: keep arrival flight + luggage drop; move Colosseum to 14:30–17:00; drop the 21:30 stub.
-- Day 2: insert Vatican block 09:00–13:00 (St. Peter's + Vatican Museums as two adjacent locked anchors).
-- Day 3: insert Pantheon 10:30–11:30 and Trevi Fountain 17:30–18:15 (after-dark eligible).
-- Mirror writes to `itinerary_activities` so JSON ↔ table parity holds.
-- Re-run `assertMustDoCoverage` post-write; stamp fresh `must_do_coverage = { missing: [], at: now() }`, set `fully_persisted = true`, leave `itinerary_frozen_at` null so the next user edit re-validates.
-
-### Files
-
-- new: `supabase/functions/_shared/schedule-must-dos.ts` + `.test.ts`
-- new: `supabase/functions/_shared/inject-missing-must-dos.ts` + `.test.ts`
-- edit: `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (wire injector as last step before persist)
-- edit: `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (wire injector in chain-finalization; use shared scheduler for seeding)
-- edit: `supabase/functions/_shared/assert-must-do-coverage.ts` (export `injected` trace shape; emit `MUST_DO_INJECTION_FAILED` health code)
-- new memory: `mem://constraints/itinerary/must-do-deterministic-injection`
-- new migration: Rome `d18b2e8a…` deterministic rewrite + activity_costs re-sync
+- `supabase/functions/_shared/sanitize-schedule-timing.ts`
+- `supabase/functions/_shared/validate-itinerary-for-persist.ts`
+- `supabase/functions/_shared/persist-itinerary.ts`
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts`
+- `supabase/functions/generate-itinerary/action-sync-tables.ts`
+- Existing matching tests plus a Rome fixture/regression test
 
 ### Out of scope
 
-- Re-architecting the must-do scorer / preferred-time inference beyond the simple alias + after-dark map.
-- Charging credits for the self-heal injection pass.
-- Multi-retry regeneration loops (single injection attempt + health-code surfacing instead).
-
-### Validation
-
-- New tests: scheduler picks Day-1 post-arrival slot; Day-N respects departure buffer; daylight-only venue rejected from evening; injector idempotent on re-run.
-- Manual: post-migration query confirms Rome trip has all 4 must-dos with realistic times and `must_do_coverage.missing=[]`.
+- Rebuilding the full itinerary scorer.
+- Charging credits for this self-heal.
+- Multi-retry regeneration loops.
