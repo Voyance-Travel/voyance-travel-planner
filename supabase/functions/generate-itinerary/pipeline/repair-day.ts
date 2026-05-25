@@ -992,7 +992,10 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           location: { name: arrivalAirportName, address: '' },
           cost: { amount: 0, currency: 'USD' },
           bookingRequired: false,
-          isLocked: false,
+          isLocked: true,
+          locked: true,
+          lock_state: 'locked',
+          anchorSource: 'arrival-flight',
           durationMinutes: 120,
           source: 'repair-arrival-flight',
         };
@@ -1013,19 +1016,41 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           fromLocation: { name: arrivalAirportName, address: '' },
           cost: { amount: 0, currency: 'USD' },
           bookingRequired: false,
-          isLocked: false,
+          isLocked: true,
+          locked: true,
+          lock_state: 'locked',
+          anchorSource: 'airport-transfer',
           durationMinutes: transferMinutes,
           source: 'repair-airport-transfer',
         };
+
+        // Nudge any non-locked, non-anchor, pre-existing activity that would
+        // collide with the inbound flight/transfer block (e.g. AI-emitted
+        // "Luggage Drop at 06:15" before a 04:30 landing) to start at least
+        // 15m AFTER the transfer ends. Closes the recurring "Luggage Drop
+        // before the plane landed" out-of-order class.
+        const earliestPostArrivalMin = transferEndMins + 15;
+        for (const a of activities) {
+          if (!a) continue;
+          if (lockedIds.has(a.id)) continue;
+          if (a.anchorSource === 'arrival-flight' || a.anchorSource === 'airport-transfer') continue;
+          const aStart = parseTimeToMinutes(a.startTime || '') ?? null;
+          const aEnd = parseTimeToMinutes(a.endTime || '') ?? null;
+          if (aStart === null || aStart >= earliestPostArrivalMin) continue;
+          const shift = earliestPostArrivalMin - aStart;
+          a.startTime = minutesToHHMM(aStart + shift);
+          if (aEnd !== null) a.endTime = minutesToHHMM(aEnd + shift);
+        }
 
         activities.unshift(transferCard);
         activities.unshift(flightCard);
         repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_arrival_flight' });
         repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_airport_transfer' });
-        console.log(`[Repair] Injected arrival flight + airport transfer on Day 1`);
+        console.log(`[Repair] Injected arrival flight + airport transfer on Day 1 (locked, anchored)`);
       }
     }
   }
+
 
   // --- 4. DUPLICATE_CONCEPT: strip trip-wide duplicates ---
   if (byCode.has(FAILURE_CODES.DUPLICATE_CONCEPT)) {
