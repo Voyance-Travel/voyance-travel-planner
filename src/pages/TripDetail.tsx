@@ -603,7 +603,7 @@ export default function TripDetail() {
       if (refreshed) setTrip(refreshed);
 
       // Call generate-trip which will resume from completedDays+1 (or day 1 after a hard fail)
-      const { error } = await supabase.functions.invoke('generate-itinerary', {
+      const { data, error } = await supabase.functions.invoke('generate-itinerary', {
         body: {
           action: 'generate-trip',
           tripId,
@@ -631,7 +631,26 @@ export default function TripDetail() {
         },
       });
 
-      if (error) throw error;
+      if (error || (data as any)?.success === false) {
+        const code = extractFunctionErrorCode(error, data);
+        if (code === 'GENERATION_NOT_AUTHORIZED') {
+          await supabase.from('trips').update({
+            itinerary_status: 'not_started',
+            metadata: {
+              ...meta,
+              generation_total_days: totalDays,
+              generation_error: null,
+              generation_heartbeat: null,
+              generation_started_at: null,
+              generation_failed_on_day: null,
+              chain_error: null,
+              authorization_retry_blocked_at: new Date().toISOString(),
+            },
+          }).eq('id', tripId);
+          queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+        }
+        throw new Error(getFunctionErrorMessage(error, data, 'Failed to launch generation'));
+      }
       toast.success('Resuming generation…');
     } catch (err) {
       console.error('[Resume] Failed:', err);
