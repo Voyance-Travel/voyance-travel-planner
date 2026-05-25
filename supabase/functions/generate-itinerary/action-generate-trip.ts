@@ -307,7 +307,7 @@ async function handleGenerateTripBackground(
         console.log(`[generate-trip] Trip ${tripId} already generating (heartbeat ${heartbeat?.toISOString()}, metaRun=${metaRunId?.slice(0,8) ?? 'none'}, ourRun=${ourRunId?.slice(0,8) ?? 'none'}, bg=${!!params.__backgroundLaunch}), skipping duplicate`);
         await appendGenerationTrace(supabase, tripId, {
           action: 'generate-trip',
-          phase: 'launcher_background_failed',
+          phase: 'launcher_duplicate_skipped',
           status: 'warn',
           errorCode: 'DUPLICATE_SKIPPED',
           errorMessage: `heartbeat=${heartbeat?.toISOString() ?? 'none'} metaRun=${metaRunId?.slice(0,8) ?? 'none'} ourRun=${ourRunId?.slice(0,8) ?? 'none'} bg=${!!params.__backgroundLaunch}`,
