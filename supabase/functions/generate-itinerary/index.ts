@@ -225,10 +225,55 @@ serve(async (req) => {
           .maybeSingle(),
       ]);
 
-      const charge = chargeRes.data;
+      let charge = chargeRes.data;
       const totalCredits =
         (balanceRes.data?.purchased_credits ?? 0) + (balanceRes.data?.free_credits ?? 0);
       const tier = tierRes.data?.tier ?? 'free';
+
+      // Durable retry proof: a trip-generation charge can outlive the short
+      // pending-charge window when the launcher is killed before Day 1. For
+      // unfinished trips only, accept the committed ledger row as proof so a
+      // retry/resume does not require a second charge.
+      if (!charge && action === 'generate-trip') {
+        const { data: tripProofState } = await supabase
+          .from('trips')
+          .select('itinerary_status, itinerary_data, metadata')
+          .eq('id', tripId)
+          .maybeSingle();
+        const tripMeta = (tripProofState?.metadata as Record<string, unknown>) || {};
+        const days = ((tripProofState?.itinerary_data as any)?.days || []) as unknown[];
+        const isUnfinishedTrip =
+          !['ready', 'generated'].includes(String(tripProofState?.itinerary_status || '')) &&
+          days.length === 0 &&
+          tripMeta.fully_persisted !== true;
+
+        if (isUnfinishedTrip) {
+          const { data: ledgerProof } = await supabase
+            .from('credit_ledger')
+            .select('id, action_type, created_at, metadata')
+            .eq('user_id', authResult.userId)
+            .eq('trip_id', tripId)
+            .in('action_type', allowedSpendActions)
+            .eq('transaction_type', 'spend')
+            .lt('credits_delta', 0)
+            .filter('metadata->>status', 'eq', 'committed')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (ledgerProof) {
+            charge = {
+              id: ledgerProof.id,
+              status: 'ledger_committed',
+              action: ledgerProof.action_type,
+              created_at: ledgerProof.created_at,
+            } as any;
+            console.log(
+              `[generate-itinerary] Durable proof-of-charge OK via committed ledger=${ledgerProof.id} action=${ledgerProof.action_type}`
+            );
+          }
+        }
+      }
 
       if (!charge) {
         console.warn(
