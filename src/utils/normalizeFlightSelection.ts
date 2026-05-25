@@ -20,7 +20,10 @@ export interface FlightLeg {
     airport: string;
     time: string;
     date?: string;
+    /** True when arrival.time was computed from outbound duration, not user-entered. */
+    estimated?: boolean;
   };
+
   price: number;
   cabin: string;
   seatNumber?: string;
