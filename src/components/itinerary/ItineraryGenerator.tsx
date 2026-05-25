@@ -1272,6 +1272,15 @@ export function ItineraryGenerator({
           isMultiCity={isMultiCity}
           tripCities={tripCitiesData?.map(c => ({ city_name: c.city_name, generation_status: c.generation_status })) || []}
         />
+        {poller.isFailed && (
+          <div className="mx-auto mt-6 max-w-lg rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-center">
+            <p className="text-sm font-medium text-destructive">{poller.error || 'Generation did not start. Please try again.'}</p>
+            <Button onClick={handleRetry} className="mt-3 gap-2" size="sm">
+              <RefreshCw className="h-4 w-4" />
+              Try again
+            </Button>
+          </div>
+        )}
         <div className="flex justify-center mt-6">
           <Button
             variant="ghost"
