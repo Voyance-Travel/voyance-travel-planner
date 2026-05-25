@@ -702,12 +702,12 @@ function findBestDay(
         rationale: `ALL-DAY EVENT assigned to Day ${bestDay} (day dedicated to this event)`,
       };
     }
-    if (lowestLoad + (priority.estimatedDuration || 120) <= 480) {
+    if (lowestLoad + (priority.estimatedDuration || 120) <= loadCap) {
       return {
         success: true,
         day: bestDay,
         backupDay,
-        rationale: `Assigned to Day ${bestDay} (lowest load: ${lowestLoad} min)`,
+        rationale: `Assigned to Day ${bestDay} (lowest load: ${lowestLoad} min, cap ${loadCap})`,
       };
     }
   }
