@@ -229,6 +229,14 @@ async function handleGenerateTripBackground(
     console.warn('[generate-trip] Frozen-guard probe failed (continuing):', frozenErr);
   }
 
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_frozen_guard_passed',
+    status: 'ok',
+  }).catch(() => {});
+
+
+
   // ── PERFORMANCE TIMER ──
   // Clean up stale in_progress log rows before creating a new one
   try {
@@ -956,6 +964,13 @@ Return ONLY valid JSON array, no markdown:
   
   await supabase.from('trips').update(updatePayload).eq('id', tripId);
 
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_pre_chain_setup_complete',
+    status: 'ok',
+    expectedTotalDays: totalDays,
+  }).catch(() => {});
+
   // Determine starting day (for resume support)
   const effectiveStartDay = resumeFromDay && resumeFromDay > 1 ? resumeFromDay : 1;
 
@@ -964,6 +979,7 @@ Return ONLY valid JSON array, no markdown:
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   timer.endPhase('pre_chain_setup');
   await timer.updateProgress('Launching day generation', 5);
+
 
   const initialChainBody = JSON.stringify({
     action: 'generate-trip-day',
@@ -986,7 +1002,16 @@ Return ONLY valid JSON array, no markdown:
     generationLogId: timer.getLogId(),
   });
 
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_day_1_invoke_queued',
+    status: 'ok',
+    dayNumber: effectiveStartDay,
+    expectedTotalDays: totalDays,
+  }).catch(() => {});
+
   // Retry loop with exponential backoff for intermittent 403 errors
+
   const maxRetries = 3;
   let chainOk = false;
   let lastChainStatus: number | null = null;
@@ -1017,7 +1042,16 @@ Return ONLY valid JSON array, no markdown:
     }
   }
 
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_day_1_invoke_returned',
+    status: chainOk ? 'ok' : 'fail',
+    dayNumber: effectiveStartDay,
+    extra: { chainOk, lastChainStatus, lastChainBodyPreview: lastChainBody.slice(0, 200) },
+  }).catch(() => {});
+
   if (!chainOk) {
+
     // Don't leave the trip stuck in `generating`. Surface the failure so the
     // UI can show an actionable error and the user can retry.
     try {
