@@ -112,7 +112,12 @@ function deriveTitle(day: Day, city: string): string {
     return c !== 'dining';
   }) || acts[0];
   const headlineName = (headline?.title || headline?.name || '').replace(/\s*-\s*.+$/, '').trim();
+  const headlineIsNonDining = !!headline && (() => {
+    const c = (headline.category || headline.type || '').toLowerCase();
+    return c !== 'dining' && c !== '';
+  })();
 
+  // 1. Strong neighborhood signal
   if (topHood && topHood.count >= 2 && headlineName) {
     return `${topHood.value} & ${headlineName}`;
   }
@@ -120,11 +125,27 @@ function deriveTitle(day: Day, city: string): string {
     return `${topHood.value} in ${city}`;
   }
 
+  // 2. Prefer a non-dining headline over a generic vibe label.
+  //    Every full day has 3 meals, so categoryVibe('food') would otherwise
+  //    collapse every day to "Culinary Day in {city}".
+  if (headlineIsNonDining && headlineName) {
+    return `${headlineName} in ${city}`;
+  }
+
+  // 3. Fall back to vibe label only when nothing more specific exists
   const vibe = categoryVibe(acts);
   if (vibe) return vibeLabel(vibe, city);
 
   if (headlineName) return `${headlineName} in ${city}`;
   return `Day ${day.dayNumber ?? ''} in ${city}`.trim();
+}
+
+function hasNeighborhoodSignal(day: Day): boolean {
+  const acts = (day.activities || []).filter((a) => !isLogistics(a));
+  return acts.some((a) => {
+    const h = getNeighborhood(a);
+    return !!h && h.trim().length > 1;
+  });
 }
 
 function isCoherent(title: string, day: Day): boolean {
@@ -156,6 +177,15 @@ function isCoherent(title: string, day: Day): boolean {
   for (const t of titleTokens) {
     if (signalTokens.has(t)) return true;
   }
+
+  // Low-signal trust: when no neighborhood data exists on any activity,
+  // a multi-token stored title is almost always richer than the derived
+  // fallback (which collapses to "Culinary Day in {city}" via the
+  // 3-meals food vibe). Trust the stored title in that case.
+  if (!hasNeighborhoodSignal(day) && titleTokens.size >= 2) {
+    return true;
+  }
+
   return false;
 }
 
