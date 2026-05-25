@@ -33,7 +33,13 @@ export type PersistValidationCode =
   | 'CURRENCY_MISMATCH'
   | 'EMPTY_DAY'
   | 'DEPARTURE_DAY_LIGHT'
-  | 'ARRIVAL_DAY_LIGHT';
+  | 'ARRIVAL_DAY_LIGHT'
+  | 'INVALID_PREDAWN_MEAL'
+  | 'ARRIVAL_SEQUENCE_INVALID'
+  | 'DUPLICATE_HOTEL_RETURN'
+  | 'LANDMARK_AFTER_DARK'
+  | 'INVALID_TIME_WRAP'
+  | 'JSON_TABLE_TIME_DRIFT';
 
 export type PersistValidationSeverity = 'error' | 'warning';
 
