@@ -3814,11 +3814,14 @@ async function _handleGenerateTripDayInner(
     //   1) one-time legacy backfill (gated by trips.last_cost_repair_at), or
     //   2) the explicit "Repair pricing" user action in the UI.
 
-    // ── MUST-DO COVERAGE ASSERTION (Rome d18b2e8a class) ────────────
-    // Verify every user-selected must-do venue appears in at least one day.
-    // Stamps metadata.must_do_coverage + generation_health.persistGateCodes.
-    // See supabase/functions/_shared/assert-must-do-coverage.ts.
-    let mustDoCoverage: { missing: string[]; scheduled: string[]; total: number } | null = null;
+    // ── MUST-DO COVERAGE ASSERTION (Rome d18b2e8a / CDMX e4217b97 class) ─
+    // CRITICAL: Read coverage from the DB row JUST WRITTEN, not the in-memory
+    // `partialItinerary` — `persistTripItinerary` + `action-sync-tables` can
+    // silently drop injected anchor cards on collision (cascade/chronology/
+    // sanitizeSchedule). The in-memory copy holds the injected rows; only the
+    // DB row reflects what users actually see. Coverage MUST mirror DB.
+    let mustDoCoverage: { missing: string[]; scheduled: string[]; total: number; matchedActivityIds?: Record<string, string | null> } | null = null;
+    let dbDaysForCoverage: any[] = (partialItinerary?.days || []) as any[];
     if (finalStatus === 'ready' && isComplete) {
       try {
         const { assertMustDoCoverage } = await import('../_shared/assert-must-do-coverage.ts');
@@ -3826,7 +3829,86 @@ async function _handleGenerateTripDayInner(
           ? (meta as any).mustDoActivities.filter((v: any) => typeof v === 'string')
           : [];
         if (mustDos.length > 0) {
-          mustDoCoverage = assertMustDoCoverage(partialItinerary?.days || [], mustDos);
+          // Re-fetch the post-persist JSON so coverage reads what's on disk.
+          try {
+            const { data: freshRow } = await supabase
+              .from('trips')
+              .select('itinerary_data')
+              .eq('id', tripId)
+              .single();
+            const freshDays = (freshRow?.itinerary_data as any)?.days;
+            if (Array.isArray(freshDays) && freshDays.length > 0) {
+              dbDaysForCoverage = freshDays;
+            } else {
+              console.warn('[generate-trip-day] coverage DB re-fetch returned no days; falling back to in-memory');
+            }
+          } catch (refetchErr) {
+            console.warn('[generate-trip-day] coverage DB re-fetch failed (non-fatal):', refetchErr);
+          }
+
+          mustDoCoverage = assertMustDoCoverage(dbDaysForCoverage, mustDos);
+
+          // ── B. RETRY ONCE ON POST-PERSIST DROP ────────────────────────
+          // If injector already ran AND venues it claimed to inject are now
+          // missing from DB, re-inject against DB-fetched days and re-persist.
+          if (
+            mustDoCoverage.missing.length > 0 &&
+            mustDoInjection &&
+            mustDoInjection.injected.length > 0
+          ) {
+            const droppedByPipeline = mustDoCoverage.missing.filter(v =>
+              mustDoInjection!.injected.some(inj => inj.venue === v)
+            );
+            if (droppedByPipeline.length > 0) {
+              console.warn(
+                `[MUST_DO_DROPPED_BY_PIPELINE] trip=${tripId} venues=${JSON.stringify(droppedByPipeline)} droppedBetween=inject→persist`
+              );
+              try {
+                const { injectMissingMustDos: _reInject } = await import('../_shared/inject-missing-must-dos.ts');
+                const retryResult = _reInject(
+                  dbDaysForCoverage,
+                  mustDoCoverage.missing,
+                  {
+                    arrivalTime24: savedArrTime24Hoisted || null,
+                    departureTime24: savedDepTime24Hoisted || null,
+                    arrivalBufferMins: 120,
+                    departureBufferMins: 180,
+                    transferMinsToAirport: 60,
+                  },
+                );
+                console.warn(
+                  `[MUST_DO_INJECT_RETRY] trip=${tripId} injected=${retryResult.injected.length} unscheduled=${retryResult.unscheduled.length}`
+                );
+                if (retryResult.injected.length > 0) {
+                  const { persistTripItinerary: _persistRetry } = await import('../_shared/persist-itinerary.ts');
+                  await _persistRetry(
+                    supabase,
+                    tripId,
+                    { ...(partialItinerary as any), days: dbDaysForCoverage },
+                    {
+                      destination: destination ?? null,
+                      label: 'must-do-retry',
+                      allowFrozenWrite: true,
+                    } as any,
+                  );
+                  // Re-read coverage after retry-persist.
+                  const { data: postRetryRow } = await supabase
+                    .from('trips')
+                    .select('itinerary_data')
+                    .eq('id', tripId)
+                    .single();
+                  const postRetryDays = (postRetryRow?.itinerary_data as any)?.days;
+                  if (Array.isArray(postRetryDays)) {
+                    dbDaysForCoverage = postRetryDays;
+                    mustDoCoverage = assertMustDoCoverage(postRetryDays, mustDos);
+                  }
+                }
+              } catch (retryErr) {
+                console.warn('[MUST_DO_INJECT_RETRY] failed (non-fatal):', retryErr);
+              }
+            }
+          }
+
           if (mustDoCoverage.missing.length > 0) {
             console.warn(`[generate-trip-day] MUST_DO_UNCOVERED trip=${tripId} missing=${JSON.stringify(mustDoCoverage.missing)} scheduled=${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
             await appendGenerationTrace(supabase, tripId, {
@@ -3839,7 +3921,7 @@ async function _handleGenerateTripDayInner(
               errorMessage: `missing=${mustDoCoverage.missing.join('|')} scheduled=${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`,
             });
           } else {
-            console.log(`[generate-trip-day] must-do coverage OK: ${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
+            console.log(`[generate-trip-day] must-do coverage OK (DB-sourced): ${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
           }
         }
       } catch (covErr) {

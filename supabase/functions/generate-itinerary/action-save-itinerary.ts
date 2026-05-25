@@ -1313,7 +1313,22 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           ? tmd.mustDoActivities.filter((v: any) => typeof v === 'string')
           : [];
         if (mustDos.length > 0) {
-          const coverage = assertMustDoCoverage(itineraryDays, mustDos);
+          // Read coverage from the DB row JUST written, not the in-memory
+          // pre-persist days — persist-itinerary / sync-tables can drop
+          // injected must-do anchors on cascade/chronology collision.
+          // See plan: must-do coverage from DB source of truth.
+          let coverageDays: any[] = itineraryDays;
+          try {
+            const { data: freshRow } = await supabase
+              .from('trips').select('itinerary_data').eq('id', tripId).single();
+            const freshDays = (freshRow?.itinerary_data as any)?.days;
+            if (Array.isArray(freshDays) && freshDays.length > 0) {
+              coverageDays = freshDays;
+            }
+          } catch (refetchErr) {
+            console.warn('[save-itinerary] coverage DB re-fetch failed (non-fatal):', refetchErr);
+          }
+          const coverage = assertMustDoCoverage(coverageDays, mustDos);
           const nextMeta = {
             ...tmd,
             must_do_coverage: { ...coverage, at: new Date().toISOString() },
@@ -1324,7 +1339,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           if (coverage.missing.length > 0) {
             console.warn(`[save-itinerary] MUST_DO_UNCOVERED trip=${tripId} missing=${JSON.stringify(coverage.missing)} scheduled=${coverage.scheduled.length}/${coverage.total}`);
           } else {
-            console.log(`[save-itinerary] must-do coverage OK ${coverage.scheduled.length}/${coverage.total}`);
+            console.log(`[save-itinerary] must-do coverage OK (DB-sourced) ${coverage.scheduled.length}/${coverage.total}`);
           }
         }
       } catch (covErr) {

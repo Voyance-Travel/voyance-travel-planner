@@ -155,6 +155,21 @@ export async function persistTripItinerary(
   const label = options.label || 'persist-itinerary';
   const days = Array.isArray(itinerary?.days) ? itinerary.days : [];
 
+  // ── MUST-DO ANCHOR ENTRY SNAPSHOT ───────────────────────────────
+  // Snapshot incoming must-do anchors so we can attribute any drop that
+  // happens inside the persist pipeline (sanitize / cascade / cross-day
+  // bleed / regression guard). Closes the silent-drop diagnostic gap
+  // behind the CDMX `e4217b97…` Teotihuacan + Zócalo class.
+  const mustDoAnchorEntrySet = new Set<string>();
+  for (const d of days) {
+    for (const a of (Array.isArray(d?.activities) ? d.activities : [])) {
+      if (a && (a.source === 'must-do-injection' || a.anchorSource === 'must_do')) {
+        const k = `${d?.dayNumber ?? '?'}::${a.id ?? a.title ?? a.name ?? ''}`;
+        mustDoAnchorEntrySet.add(k);
+      }
+    }
+  }
+
   // ── FROZEN GATE (single backend chokepoint) ─────────────────────
   // Once the trip is frozen, page-load / background / refresh-time writers
   // MUST NOT touch `itinerary_data`. We still apply `extraUpdate` so callers

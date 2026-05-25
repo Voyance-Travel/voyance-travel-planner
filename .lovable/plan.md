@@ -1,65 +1,66 @@
-## What is failing
+# Must-Do Coverage: Mexico City "Teotihuacan + Zócalo missing" — same class as Rome
 
-This is not a normal Day 1 content failure. The current database state for the Mexico City trip shows:
+## Root cause (verified against trip `e4217b97…`)
 
-- `itinerary_status = not_started`
-- `itinerary_data.days = 0`
-- `itinerary_days rows = 0`
-- `generation_logs rows = 0`
-- `metadata.generation_trace = []`
-- repeated client-side `generation_stalled: day 0/4` entries
+The DB-stamped `metadata.must_do_coverage` for this trip says:
+```
+missing: []
+matchedActivityIds: {
+  "Teotihuacan Pyramids": "must-do-d1-0-1779750866846",
+  "Zócalo (Plaza de la Constitución)": "must-do-d1-1-1779750866846",
+  ...
+}
+```
+But `trips.itinerary_data` contains **zero** activities with IDs starting `must-do-`. The injected anchor cards never made it to the persisted JSON. The coverage assertion lied because it read the in-memory `partialItinerary.days` (which the injector mutated) instead of the bytes actually written to disk.
 
-That means the backend Day 1 worker is not currently failing inside Step 3 or validation. The app is showing “Crafting Day 1” while no active generation run exists anymore. Earlier attempts likely died before or around launcher/pre-chain startup, then the trip was reset to `not_started`; the current UI path does not recover cleanly from that state.
+Three independent failures are stacking:
 
-## Likely root cause
+1. **Coverage check reads the wrong source.** `action-generate-trip-day.ts` line 3829 calls `assertMustDoCoverage(partialItinerary?.days, mustDos)` AFTER `persistTripItinerary`, `action-sync-tables`, and the schedule-sanity pass have all run. Those passes can (and do) drop injected anchors via chronology repair, sanitizeSchedule overlap removal, or the no-regression overwrite guard — and the in-memory array is never re-synced from the post-persist DB row.
 
-The last hardening moved pre-chain setup into the initial `generate-trip` request so it runs synchronously before the browser receives a response. That makes the launch path fragile: if the initial request is slow, times out, is interrupted, or the client unmounts, the user can sit on Day 1 with no durable Day 1 worker trace.
+2. **Scheduler is duration-blind for half-day excursions.** `defaultDuration` in `_shared/schedule-must-dos.ts` returns 90 min for "Teotihuacan Pyramids". Teotihuacan is a ~6-hour round-trip from CDMX (50km out of city). The scheduler picked Day 1 (morning arrival), wedged a 90-min block into a window already overlapping luggage-drop / Roma-Norte walk, and the downstream cascade silently won the collision.
 
-Also, the frontend mobile/server-chain path only polls while its own `loading` state is true. It does not reliably reconcile the actual trip status after a reset to `not_started`, so the UI can continue looking like generation is active even when the backend says nothing is running.
+3. **Anchor drops are silent.** Whichever pass strips the collided `must-do-` card (cascade / chronology / sanitizeSchedule) emits no telemetry tying the dropped row back to a must-do venue. Coverage shows green and the user sees a missing landmark.
 
-## Plan
+This is the same shape as the Rome `d18b2e8a…` trip (3 of 4 landmarks missing).
 
-1. **Restore a fast launcher response**
-   - Make `generate-trip` write durable metadata immediately and return quickly again.
-   - Move heavy pre-chain enrichment behind a guarded background step, but with hard time caps and a guaranteed failure marker if it cannot queue Day 1.
-   - Do not let restaurant pool generation or enrichment block the browser request.
+## Fix
 
-2. **Make Day 1 queueing durable and observable**
-   - Add/ensure trace phases for:
-     - `launcher_received`
-     - `launcher_metadata_init`
-     - `launcher_prechain_background_started`
-     - `launcher_enrichment_started`
-     - `launcher_enrichment_completed` or `launcher_enrichment_timeout`
-     - `launcher_day_1_invoke_queued`
-     - `launcher_day_1_invoke_returned`
-     - `day_started`
-   - If Day 1 is not queued, mark the trip `failed` with a clear `generation_error` instead of leaving a spinner.
+### A. Coverage must read DB, not memory  *(highest signal)*
+- In `action-generate-trip-day.ts`, after Phase 5 (`action-sync-tables`) and `writeActivityCostsFromItinerary`, re-fetch `trips.itinerary_data` from DB and pass that into `assertMustDoCoverage` — never `partialItinerary.days`.
+- Mirror the same change in `action-save-itinerary.ts`.
+- If post-DB coverage shows `missing.length > 0`:
+  - Stamp `metadata.must_do_coverage` honestly (don't whitewash).
+  - Append `MUST_DO_UNCOVERED` to `metadata.generation_health.persistGateCodes`.
+  - Emit `[MUST_DO_DROPPED_BY_PIPELINE] trip=… venue=… injectedId=… droppedBetween=inject→persist` so we can attribute future drops.
 
-3. **Add a watchdog safety net**
-   - If a trip is `generating` with `generation_completed_days = 0` and no `day_started` trace after a short threshold, automatically mark it `failed`/retryable with a precise launcher timeout reason.
-   - This prevents “Crafting Day 1” from lasting hours.
+### B. Re-inject + retry once if DB coverage drops post-persist
+- If injection ran and DB-read coverage still shows the same venues missing, run `injectMissingMustDos` a second time against the DB-fetched days, then re-persist via `persistTripItinerary({ allowFrozenWrite:true, label:'must-do-retry' })`.
+- Cap at one retry to avoid loops; on second failure, fall through to (C).
 
-4. **Fix frontend recovery from stale/not-started state**
-   - In the server-chain polling path, if the backend is `not_started` or has no heartbeat/trace after launch, stop the spinner and show an actionable retry error.
-   - Surface backend `generation_error`/`chain_error` instead of a generic endless loading state.
-   - Avoid showing “Crafting Day 1” when the backend says there is no active run.
+### C. Scheduler duration awareness for long-haul landmarks
+- Extend `_shared/schedule-must-dos.ts`:
+  - Add `LONG_HAUL_LANDMARKS` set with min-duration overrides (Teotihuacan 360min, Versailles 300, Pompeii 300, Petra 300, Machu Picchu 480, Giza Pyramids 300, etc.).
+  - Reject candidate days where the contiguous free window < `minBlockMinutes`.
+  - Reject Day 1 morning-arrival and Day N departure for `minBlockMinutes ≥ 240`.
+- When the scheduler can't place a long-haul landmark on any day, return it in `unscheduled` cleanly — the coverage gate then surfaces `MUST_DO_UNCOVERED` to the user instead of silently dropping.
 
-5. **Reset and verify the affected trip**
-   - Reset the Mexico City trip cleanly without double-charging.
-   - Trigger one generation and confirm in data that it reaches:
-     - `launcher_day_1_invoke_queued`
-     - `launcher_day_1_invoke_returned`
-     - `day_started`
-     - `generation_completed_days >= 1`
+### D. Frontend surfacing
+- `TripHealthPanel` already reads `persistGateCodes`; add a user-visible warning row when `MUST_DO_UNCOVERED` is present: *"Teotihuacan Pyramids couldn't fit into your schedule — open the Assistant to add it."* (read-only — no auto-fix).
 
-6. **Regression coverage**
-   - Add focused tests for:
-     - launch returns quickly after metadata init
-     - own-background duplicate bypass still works
-     - Day 1 queue failure marks the trip failed
-     - frontend does not spin forever when backend returns to `not_started`
+### E. Attribution telemetry inside persist pipeline
+- In `persist-itinerary.ts` and `_shared/sanitize-schedule-timing.ts`, when a row with `source === 'must-do-injection'` or `anchorSource === 'must_do'` is filtered/dropped, log `[MUST_DO_ANCHOR_DROPPED] reason=… site=…` so we can locate the exact pass causing drops in future regressions.
+
+### F. Memory + test coverage
+- Update `mem://constraints/itinerary/must-do-deterministic-injection` (or create it if missing) to document: coverage must be DB-sourced post-persist; long-haul landmarks have hard min-duration gates; injection retries once on post-persist loss.
+- Add Deno tests:
+  - `assert-must-do-coverage.test.ts`: scheduler stamps `missing` truthfully when injected card is absent from passed-in days (simulating post-persist drop).
+  - `schedule-must-dos.test.ts`: Teotihuacan rejects Day 1 morning-arrival and any day without a 360-min contiguous free block.
+
+## Out of scope
+- Re-architecting the persist-pipeline drop-on-collision behavior (orthogonal — covered by the existing No-Regression-Overwrite Guard).
+- Adding new must-do landmarks beyond the long-haul registry needed to close this bug class.
+- Auto-rebuilding a day around a long-haul anchor (treat as future work — for now we surface, not auto-fix).
 
 ## Expected result
-
-After this, Day 1 either starts and leaves a durable trace within minutes, or the user gets a real retryable failure state. No more silent multi-hour “Crafting Day 1” waits.
+- Mexico City trip after a re-run shows either Teotihuacan + Zócalo persisted in `itinerary_data` (most common), or `MUST_DO_UNCOVERED` warning visible in the UI with the two venues named.
+- No more whitewashed `must_do_coverage` rows where `matchedActivityIds` point at IDs that don't exist in the saved itinerary.
