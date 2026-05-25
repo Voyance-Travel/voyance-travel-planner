@@ -35,7 +35,7 @@ export interface FlightLegDisplay {
   airlineCode?: string;
   flightNumber?: string;
   departure?: { airport?: string; time?: string; date?: string };
-  arrival?: { airport?: string; time?: string; date?: string };
+  arrival?: { airport?: string; time?: string; date?: string; estimated?: boolean };
   duration?: string;
   price?: number;
   cabinClass?: string;
