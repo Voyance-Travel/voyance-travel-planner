@@ -1210,20 +1210,7 @@ export default function TripDetail() {
           .single();
         if (!fullTrip) return;
 
-        // Mark generating before invoking so the poller engages immediately
-        await supabase.from('trips').update({
-          itinerary_status: 'generating',
-          metadata: {
-            ...(meta as Record<string, unknown>),
-            generation_started_at: new Date().toISOString(),
-            generation_heartbeat: new Date().toISOString(),
-            generation_total_days: 0, // backend will normalize
-            self_heal_reason: 'not_started_chat_planner',
-            self_heal_at: new Date().toISOString(),
-          },
-        }).eq('id', trip.id);
-
-        const { error: invokeErr } = await supabase.functions.invoke('generate-itinerary', {
+        const { data: invokeData, error: invokeErr } = await supabase.functions.invoke('generate-itinerary', {
           body: {
             action: 'generate-trip',
             tripId: trip.id,
@@ -1240,9 +1227,24 @@ export default function TripDetail() {
           },
         });
 
-        if (invokeErr) {
-          console.error('[TripDetail] not_started self-heal invoke failed:', invokeErr);
+        if (invokeErr || (invokeData as any)?.success === false) {
+          console.error('[TripDetail] not_started self-heal invoke failed:', invokeErr ?? invokeData);
           notStartedHealAttempted.current = false;
+          const code = extractFunctionErrorCode(invokeErr, invokeData);
+          if (code === 'GENERATION_NOT_AUTHORIZED') {
+            await supabase.from('trips').update({
+              itinerary_status: 'not_started',
+              metadata: {
+                ...(meta as Record<string, unknown>),
+                generation_started_at: null,
+                generation_heartbeat: null,
+                generation_error: null,
+                chain_error: null,
+                self_heal_authorization_blocked_at: new Date().toISOString(),
+              },
+            }).eq('id', trip.id);
+            queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+          }
           return;
         }
 
