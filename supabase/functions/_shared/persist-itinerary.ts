@@ -765,7 +765,7 @@ export async function persistTripItinerary(
     const callerMetaSuccess = (extra.metadata && typeof extra.metadata === 'object')
       ? extra.metadata as Record<string, any>
       : null;
-    if (callerMetaSuccess || chronologyTrace) {
+    if (callerMetaSuccess || chronologyTrace || scheduleSanityTrace) {
       let priorMeta = oldMetadata;
       if (!priorMeta) {
         try {
@@ -778,12 +778,16 @@ export async function persistTripItinerary(
         ...(priorMeta || {}),
         ...(callerMetaSuccess || {}),
       };
-      if (chronologyTrace) {
+      if (chronologyTrace || scheduleSanityTrace) {
         const priorQuality = (merged.quality && typeof merged.quality === 'object') ? merged.quality : {};
-        merged.quality = { ...priorQuality, chronology_trace: chronologyTrace };
+        merged.quality = {
+          ...priorQuality,
+          ...(chronologyTrace ? { chronology_trace: chronologyTrace } : {}),
+          ...(scheduleSanityTrace ? { schedule_sanity_trace: scheduleSanityTrace } : {}),
+        };
       }
       updatePayload.metadata = merged;
-      console.log(`[persist-itinerary] meta-merge (success) tripId=${tripId} priorMustDo=${!!(priorMeta as any)?.mustDoActivities} newMustDo=${!!callerMetaSuccess?.mustDoActivities} chronologyTrace=${chronologyTrace ? `pre=${chronologyTrace.issues_pre}/post=${chronologyTrace.issues_post}` : 'none'}`);
+      console.log(`[persist-itinerary] meta-merge (success) tripId=${tripId} priorMustDo=${!!(priorMeta as any)?.mustDoActivities} newMustDo=${!!callerMetaSuccess?.mustDoActivities} chronologyTrace=${chronologyTrace ? `pre=${chronologyTrace.issues_pre}/post=${chronologyTrace.issues_post}` : 'none'} sanityTrace=${scheduleSanityTrace ? 'yes' : 'none'}`);
     }
   }
 
