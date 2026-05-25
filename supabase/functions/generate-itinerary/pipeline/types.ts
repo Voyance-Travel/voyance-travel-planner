@@ -68,6 +68,12 @@ export const FAILURE_CODES = {
   // Same-day venue uniqueness + name/description coherence (Monaco Pâtisserie Riviera bug)
   DUPLICATE_VENUE_SAME_DAY:    'DUPLICATE_VENUE_SAME_DAY',
   VENUE_DESCRIPTION_MISMATCH:  'VENUE_DESCRIPTION_MISMATCH',
+
+  // Landmark sightseeing scheduled after dark (Rome Colosseum 21:30 bug)
+  LANDMARK_AFTER_DARK:         'LANDMARK_AFTER_DARK',
+
+  // Must-do coverage gap (post-generation assertion)
+  MUST_DO_UNCOVERED:           'MUST_DO_UNCOVERED',
 } as const;
 
 export type FailureCode = typeof FAILURE_CODES[keyof typeof FAILURE_CODES];

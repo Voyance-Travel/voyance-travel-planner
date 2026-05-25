@@ -3749,6 +3749,30 @@ async function _handleGenerateTripDayInner(
     //   1) one-time legacy backfill (gated by trips.last_cost_repair_at), or
     //   2) the explicit "Repair pricing" user action in the UI.
 
+    // ── MUST-DO COVERAGE ASSERTION (Rome d18b2e8a class) ────────────
+    // Verify every user-selected must-do venue appears in at least one day.
+    // Stamps metadata.must_do_coverage + generation_health.persistGateCodes.
+    // See supabase/functions/_shared/assert-must-do-coverage.ts.
+    let mustDoCoverage: { missing: string[]; scheduled: string[]; total: number } | null = null;
+    if (finalStatus === 'ready' && isComplete) {
+      try {
+        const { assertMustDoCoverage } = await import('../_shared/assert-must-do-coverage.ts');
+        const mustDos = Array.isArray((meta as any)?.mustDoActivities)
+          ? (meta as any).mustDoActivities.filter((v: any) => typeof v === 'string')
+          : [];
+        if (mustDos.length > 0) {
+          mustDoCoverage = assertMustDoCoverage(partialItinerary?.days || [], mustDos);
+          if (mustDoCoverage.missing.length > 0) {
+            console.warn(`[generate-trip-day] MUST_DO_UNCOVERED trip=${tripId} missing=${JSON.stringify(mustDoCoverage.missing)} scheduled=${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
+          } else {
+            console.log(`[generate-trip-day] must-do coverage OK: ${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
+          }
+        }
+      } catch (covErr) {
+        console.warn('[generate-trip-day] must-do coverage assertion failed (non-blocking):', covErr);
+      }
+    }
+
     // ── PHASE 6: FREEZE STAMP + fully_persisted=true ────────────────
     // Only after table-sync + activity_costs succeed do we declare the
     // trip fully saved. See mem://constraints/itinerary/saved-badge-honesty
@@ -3761,12 +3785,18 @@ async function _handleGenerateTripDayInner(
           .eq('id', tripId)
           .single();
         const latestMeta = (latestRow?.metadata as Record<string, any>) || {};
-        const finalMeta = {
+        const finalMeta: Record<string, any> = {
           ...latestMeta,
           itinerary_frozen_at: latestMeta.itinerary_frozen_at || new Date().toISOString(),
           fully_persisted: true,
           fully_persisted_at: new Date().toISOString(),
         };
+        if (mustDoCoverage) {
+          finalMeta.must_do_coverage = {
+            ...mustDoCoverage,
+            at: new Date().toISOString(),
+          };
+        }
         await supabase
           .from('trips')
           .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
@@ -3776,6 +3806,7 @@ async function _handleGenerateTripDayInner(
         console.warn('[generate-trip-day] Phase 6 freeze stamp failed (non-blocking):', freezeErr);
       }
     }
+
 
     await triggerNextJourneyLeg(supabase, tripId);
 
