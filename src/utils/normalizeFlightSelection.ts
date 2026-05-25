@@ -20,7 +20,10 @@ export interface FlightLeg {
     airport: string;
     time: string;
     date?: string;
+    /** True when arrival.time was computed from outbound duration, not user-entered. */
+    estimated?: boolean;
   };
+
   price: number;
   cabin: string;
   seatNumber?: string;
@@ -139,6 +142,11 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
 
   if (legs.length === 0) return null;
 
+  // Estimate missing return-arrival time from outbound flight duration.
+  // The trip setup form only collects outbound dep/arr + return dep, so leg 2's
+  // arrival is otherwise empty and renders as "--:--".
+  estimateReturnArrival(legs);
+
   // Auto-tag destination arrival/departure for any leg that lacks the flag.
   // Safe to run on every read — never overwrites existing flags.
   const tagged = autoTagLegs(legs);
@@ -149,6 +157,69 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
     totalPrice: tagged.reduce((sum, l) => sum + (l.price || 0), 0),
   };
 }
+
+/**
+ * Parse a `YYYY-MM-DD` date plus `HH:MM` time into a UTC Date.
+ * Returns null on any malformed input — never falls back to `new Date(str)`,
+ * which is locale/timezone-dependent (see project date-parsing guidance).
+ */
+function parseDateTimeUTC(dateStr?: string, timeStr?: string): Date | null {
+  if (!dateStr || !timeStr) return null;
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  const tm = /^(\d{1,2}):(\d{2})$/.exec(timeStr);
+  if (!dm || !tm) return null;
+  const y = +dm[1], mo = +dm[2], d = +dm[3];
+  const h = +tm[1], mi = +tm[2];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59) return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d, h, mi));
+  if (dt.getUTCDate() !== d || dt.getUTCMonth() !== mo - 1) return null;
+  return dt;
+}
+
+function fmtDateUTC(dt: Date): string {
+  const y = dt.getUTCFullYear();
+  const mo = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(dt.getUTCDate()).padStart(2, '0');
+  return `${y}-${mo}-${d}`;
+}
+function fmtTimeUTC(dt: Date): string {
+  return `${String(dt.getUTCHours()).padStart(2, '0')}:${String(dt.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+/**
+ * If exactly two legs exist and the return leg has a departure time/date but no
+ * arrival time, compute the return arrival from the outbound flight duration.
+ * Same-airport round-trip assumption (true for ~all user-entered setup-form
+ * flights). Marks the result as `estimated: true` so the UI can show "est.".
+ * Idempotent: no-op when arrival.time is already populated.
+ */
+export function estimateReturnArrival(legs: FlightLeg[]): void {
+  if (!Array.isArray(legs) || legs.length !== 2) return;
+  const outbound = legs[0];
+  const ret = legs[1];
+  if (!outbound || !ret) return;
+  if (ret.arrival?.time) return; // already populated, do not overwrite
+
+  const outDep = parseDateTimeUTC(outbound.departure?.date, outbound.departure?.time);
+  const outArr = parseDateTimeUTC(outbound.arrival?.date || outbound.departure?.date, outbound.arrival?.time);
+  if (!outDep || !outArr) return;
+
+  const durationMin = (outArr.getTime() - outDep.getTime()) / 60000;
+  if (!Number.isFinite(durationMin) || durationMin <= 0 || durationMin > 20 * 60) return;
+
+  const retDep = parseDateTimeUTC(ret.departure?.date, ret.departure?.time);
+  if (!retDep) return;
+
+  const arrAt = new Date(retDep.getTime() + durationMin * 60000);
+  ret.arrival = {
+    ...(ret.arrival || { airport: '', time: '' }),
+    airport: ret.arrival?.airport || '',
+    time: fmtTimeUTC(arrAt),
+    date: fmtDateUTC(arrAt),
+    estimated: true,
+  };
+}
+
 
 /**
  * Build the legacy-compatible flight_selection object from legs[].
