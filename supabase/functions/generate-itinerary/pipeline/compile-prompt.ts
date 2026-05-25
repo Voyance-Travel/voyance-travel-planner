@@ -631,6 +631,24 @@ RULES FOR USER-SPECIFIED ACTIVITIES:
         }
         mustDoPrompt += 'Keep today\'s schedule compatible with the overall trip plan.\n';
       }
+
+      // URGENT BACKLOG — must-dos the scheduler couldn't place. If we're not
+      // on the departure day, ask the model to fit at least one of these
+      // today. Without this block, unschedulable items vanish silently.
+      const isDepartureDay = dayNumber === totalDays;
+      if (!isDepartureDay && Array.isArray(scheduled.unschedulable) && scheduled.unschedulable.length > 0) {
+        mustDoPrompt += `\n\n## ⚠️ UNCOVERED MUST-DOS — schedule today if at all possible\nThese user-chosen venues did NOT fit the auto-scheduler. If today has any open window (morning, midday, or late afternoon), FIT AT LEAST ONE here today rather than dropping it from the trip:\n`;
+        for (const u of scheduled.unschedulable) {
+          const r = findResolved(u.priority.title);
+          if (r?.resolved) {
+            const desc = r.resolved.description ? ` — ${r.resolved.description.slice(0, 160)}` : '';
+            mustDoPrompt += `- ${u.priority.title}\n    • VENUE: ${r.resolved.name}\n    • ADDRESS: ${r.resolved.address}${desc}\n`;
+          } else {
+            mustDoPrompt += `- ${u.priority.title}\n`;
+          }
+        }
+        mustDoPrompt += `Use the EXACT venue name + address above when present. Do NOT substitute. Daylight landmarks (Colosseum, Pantheon, Vatican, Trevi, etc.) MUST be scheduled between 08:00 and 17:30 — never after 20:00.\n`;
+      }
     } else {
       mustDoPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has researched these specific venues. Include as many as possible in the itinerary:\n"${mustDoActivitiesRaw.trim()}"\n`;
     }

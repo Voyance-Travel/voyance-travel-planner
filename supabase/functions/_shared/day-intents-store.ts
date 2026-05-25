@@ -249,50 +249,82 @@ export function groupIntentsByDay(rows: DayIntentRow[]): Map<number, DayIntentRo
  *
  * Returns number of rows actually written.
  */
+export interface SeedAudit {
+  /** Total intent objects produced by all normalizers before upsert. */
+  generated: number;
+  /** Rows actually written by upsert (post-dedupe). */
+  written: number;
+  /** Per-source counts of generated intents (for diagnosis). */
+  bySource: Record<string, number>;
+  /** Non-fatal error message if anything threw. */
+  error?: string;
+}
+
 export async function seedDayIntentsFromMetadata(
   supabase: SupabaseClient,
   trip: { id: string; user_id?: string | null; metadata?: Record<string, unknown> | null; start_date?: string | null },
   totalDays: number,
   userId?: string | null,
-): Promise<number> {
-  if (!trip || !trip.id) return 0;
+): Promise<SeedAudit> {
+  const audit: SeedAudit = { generated: 0, written: 0, bySource: {} };
+  if (!trip || !trip.id) return audit;
   try {
     const { intentsFromChatPlannerExtraction, intentsFromFineTuneNotes, intentsFromUserAnchors } =
       await import('./intent-normalizers.ts');
     const md = (trip.metadata || {}) as Record<string, any>;
     const seedIntents: DayIntentInput[] = [];
 
-    seedIntents.push(...intentsFromChatPlannerExtraction({
-      mustDoActivities: typeof md.mustDoActivities === 'string'
-        ? md.mustDoActivities
-        : Array.isArray(md.mustDoActivities) ? md.mustDoActivities.join('\n') : undefined,
+    const mustDoRaw = typeof md.mustDoActivities === 'string'
+      ? md.mustDoActivities
+      : Array.isArray(md.mustDoActivities) ? md.mustDoActivities.join('\n') : undefined;
+
+    const chatPlannerIntents = intentsFromChatPlannerExtraction({
+      mustDoActivities: mustDoRaw,
       perDayActivities: Array.isArray(md.perDayActivities) ? md.perDayActivities : undefined,
       userConstraints: Array.isArray(md.userConstraints) ? md.userConstraints : undefined,
       tripStartDate: trip.start_date || undefined,
       totalDays,
-    }));
+    });
+    seedIntents.push(...chatPlannerIntents);
+    audit.bySource.chat_planner = chatPlannerIntents.length;
 
     if (typeof md.additionalNotes === 'string' && md.additionalNotes.trim()) {
-      seedIntents.push(...intentsFromFineTuneNotes({
+      const noteIntents = intentsFromFineTuneNotes({
         notes: md.additionalNotes,
         tripStartDate: trip.start_date || undefined,
         totalDays,
-      }));
+      });
+      seedIntents.push(...noteIntents);
+      audit.bySource.fine_tune = noteIntents.length;
     }
 
     if (Array.isArray(md.userAnchors)) {
-      seedIntents.push(...intentsFromUserAnchors(md.userAnchors));
+      const anchorIntents = intentsFromUserAnchors(md.userAnchors);
+      seedIntents.push(...anchorIntents);
+      audit.bySource.user_anchors = anchorIntents.length;
     }
 
-    if (seedIntents.length === 0) return 0;
-    const written = await upsertDayIntents(supabase, trip.id, userId || trip.user_id || null, seedIntents);
-    if (written > 0) {
-      console.log(`[day-intents-store] seeded ${written}/${seedIntents.length} rows for trip ${trip.id}`);
+    audit.generated = seedIntents.length;
+    if (seedIntents.length === 0) {
+      console.log(`[day-intents-store] seed audit trip=${trip.id} generated=0 (no metadata sources)`);
+      return audit;
     }
-    return written;
+    audit.written = await upsertDayIntents(supabase, trip.id, userId || trip.user_id || null, seedIntents);
+    console.log(`[day-intents-store] seed audit trip=${trip.id} generated=${audit.generated} written=${audit.written} bySource=${JSON.stringify(audit.bySource)}`);
+
+    // Best-effort stamp so we can diagnose future stuck trips without re-running.
+    try {
+      const priorMeta = (trip.metadata || {}) as Record<string, unknown>;
+      await supabase.from('trips').update({
+        metadata: { ...priorMeta, intent_seed_audit: { ...audit, at: new Date().toISOString() } },
+      }).eq('id', trip.id);
+    } catch (_stampErr) { /* non-blocking */ }
+
+    return audit;
   } catch (e) {
+    audit.error = String(e);
     console.warn('[day-intents-store] seedDayIntentsFromMetadata failed (non-blocking):', String(e));
-    return 0;
+    return audit;
   }
 }
 

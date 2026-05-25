@@ -96,7 +96,8 @@ Deno.serve(async (req) => {
         ? (trip.itinerary_data as any).days
         : [];
       const totalDays = days.length || 1;
-      seeded = await seedDayIntentsFromMetadata(svc, trip as any, totalDays, trip.user_id);
+      const audit = await seedDayIntentsFromMetadata(svc, trip as any, totalDays, trip.user_id);
+      seeded = audit.written;
 
       // Mark fulfilled intents by scanning persisted activities
       if (seeded > 0 && days.length > 0) {

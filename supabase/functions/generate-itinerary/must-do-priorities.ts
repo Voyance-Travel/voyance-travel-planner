@@ -536,9 +536,10 @@ export function scheduleMustDos(
     return (b.estimatedDuration || 120) - (a.estimatedDuration || 120);
   });
   
-  // Schedule each priority
+  // Schedule each priority (first pass — strict: arrival/departure excluded
+  // for >180min activities; lowestLoad cap = 480)
   for (const priority of sorted) {
-    const result = findBestDay(priority, dayAssignments, totalDays);
+    const result = findBestDay(priority, dayAssignments, totalDays, { relaxArrivalDeparture: false, loadCap: 480 });
     
     if (result.success) {
       scheduled.push({
@@ -552,17 +553,35 @@ export function scheduleMustDos(
       
       dayAssignments.get(result.day!)!.push(priority);
     } else {
-      // For 'must' priorities, this is a failure
-      if (priority.priority === 'must') {
-        unschedulable.push({
-          priority,
-          reason: result.reason || 'No available day',
-        });
-      }
-      // For 'nice' priorities, we just skip
+      unschedulable.push({ priority, reason: result.reason || 'No available day' });
     }
   }
-  
+
+  // RELAX PASS — re-attempt any unschedulable must-do with arrival/departure
+  // days re-enabled and load cap raised to 600. Closes the recurring "trip
+  // has 4 days with 2 'full' (Days 2–3); only 2 of 4 must-dos fit" pattern.
+  // Trip-day arrival (Day 1) post-luggage-drop and pre-flight Day-N still
+  // have several hours of usable window.
+  if (unschedulable.length > 0) {
+    const retryQueue = unschedulable.splice(0, unschedulable.length);
+    for (const { priority } of retryQueue) {
+      const result = findBestDay(priority, dayAssignments, totalDays, { relaxArrivalDeparture: true, loadCap: 600 });
+      if (result.success) {
+        scheduled.push({
+          priority,
+          assignedDay: result.day!,
+          assignedTime: getTimeForPreference(priority.preferredTime),
+          rationale: `${result.rationale!} [relax-pass]`,
+          hasBackup: false,
+        });
+        dayAssignments.get(result.day!)!.push(priority);
+        console.log(`[MustDo] RELAX_PASS scheduled "${priority.title}" on Day ${result.day}`);
+      } else if (priority.priority === 'must') {
+        unschedulable.push({ priority, reason: result.reason || 'No available day (after relax pass)' });
+      }
+    }
+  }
+
   // Build prompt section
   const promptSection = buildMustDoPrompt(scheduled, unschedulable, dayAssignments);
   
@@ -577,7 +596,8 @@ export function scheduleMustDos(
 function findBestDay(
   priority: MustDoPriority,
   dayAssignments: Map<number, MustDoPriority[]>,
-  totalDays: number
+  totalDays: number,
+  opts: { relaxArrivalDeparture?: boolean; loadCap?: number } = {}
 ): { success: boolean; day?: number; backupDay?: number; rationale?: string; reason?: string } {
   const minDay = priority.minDay ?? 1;
   const maxDay = priority.maxDay ?? totalDays;
@@ -624,9 +644,13 @@ function findBestDay(
   let lowestLoad = Infinity;
   let backupDay: number | undefined;
   
+  const loadCap = opts.loadCap ?? 480;
+  const relaxArrivalDeparture = !!opts.relaxArrivalDeparture;
+
   for (let d = minDay; d <= maxDay; d++) {
-    // Skip first and last day for long activities (travel days) — BUT respect user's explicit day preference
-    if ((d === 1 || d === totalDays) && (priority.estimatedDuration || 120) > 180) {
+    // Skip first and last day for long activities (travel days) — BUT respect user's explicit day preference.
+    // Relax pass re-enables arrival/departure days (post-arrival window on Day 1, pre-flight window on Day N still usable).
+    if (!relaxArrivalDeparture && (d === 1 || d === totalDays) && (priority.estimatedDuration || 120) > 180) {
       if (!priority.preferredDay || priority.preferredDay !== d) {
         continue;
       }
@@ -678,12 +702,12 @@ function findBestDay(
         rationale: `ALL-DAY EVENT assigned to Day ${bestDay} (day dedicated to this event)`,
       };
     }
-    if (lowestLoad + (priority.estimatedDuration || 120) <= 480) {
+    if (lowestLoad + (priority.estimatedDuration || 120) <= loadCap) {
       return {
         success: true,
         day: bestDay,
         backupDay,
-        rationale: `Assigned to Day ${bestDay} (lowest load: ${lowestLoad} min)`,
+        rationale: `Assigned to Day ${bestDay} (lowest load: ${lowestLoad} min, cap ${loadCap})`,
       };
     }
   }
