@@ -365,7 +365,8 @@ async function handleGenerateTripBackground(
   const existingMeta = (currentTrip?.metadata as Record<string, unknown>) || {};
   const isResume = resumeFromDay && resumeFromDay > 1;
   
-  const generationRunId = crypto.randomUUID();
+  const generationRunId = (params.__generationRunId as string | undefined) || crypto.randomUUID();
+
   
   const updatePayload: Record<string, unknown> = {
     itinerary_status: 'generating',
