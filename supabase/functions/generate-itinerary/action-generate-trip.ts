@@ -132,39 +132,104 @@ export async function handleGenerateTrip(
     phase: 'launcher_background_started',
     status: 'ok',
     expectedTotalDays: totalDays,
-    extra: { mode: 'sync_prechain', runId: generationRunId.slice(0, 8) },
+    extra: { mode: 'async_waituntil', runId: generationRunId.slice(0, 8) },
   });
 
-  try {
-    return await handleGenerateTripBackground(supabase, userId, launchParams);
-  } catch (err) {
-    console.error('[generate-trip] background launch failed:', err);
-    await appendGenerationTrace(supabase, tripId, {
-      action: 'generate-trip',
-      phase: 'launcher_background_failed',
-      status: 'fail',
-      errorMessage: err,
-    });
+  // ── ASYNC BACKGROUND LAUNCH ──────────────────────────────────────────
+  // Return to the browser IMMEDIATELY. The heavy pre-chain enrichment +
+  // Day-1 invoke runs via EdgeRuntime.waitUntil. The old synchronous
+  // path (await handleGenerateTripBackground) made the initial request
+  // sit on the wire for 30s+, and any client disconnect / network blip
+  // could kill the function before Day 1 was queued — leaving "Crafting
+  // Day 1" forever.
+  const runBackground = async () => {
     try {
-      const { data: failTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
-      const failMeta = (failTrip?.metadata as Record<string, unknown>) || {};
+      await handleGenerateTripBackground(supabase, userId, launchParams);
+    } catch (err) {
+      console.error('[generate-trip] background launch failed:', err);
+      await appendGenerationTrace(supabase, tripId, {
+        action: 'generate-trip',
+        phase: 'launcher_background_failed',
+        status: 'fail',
+        errorMessage: err,
+      }).catch(() => {});
+      try {
+        const { data: failTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+        const failMeta = (failTrip?.metadata as Record<string, unknown>) || {};
+        await supabase.from('trips').update({
+          itinerary_status: 'failed',
+          metadata: {
+            ...failMeta,
+            generation_error: String(err).slice(0, 500),
+            chain_error_at: new Date().toISOString(),
+            generation_heartbeat: new Date().toISOString(),
+          },
+        }).eq('id', tripId);
+      } catch (markErr) {
+        console.error('[generate-trip] failed to mark background launch failure:', markErr);
+      }
+    }
+  };
+
+  // ── WATCHDOG ─────────────────────────────────────────────────────────
+  // 90s after launch, if the trip is still `generating` with no
+  // `day_started` trace and zero completed days, mark it failed with a
+  // precise launcher-timeout reason so "Crafting Day 1" cannot last
+  // hours silently.
+  const runWatchdog = async () => {
+    await new Promise((r) => setTimeout(r, 90_000));
+    try {
+      const { data: t } = await supabase
+        .from('trips')
+        .select('itinerary_status, metadata')
+        .eq('id', tripId)
+        .maybeSingle();
+      if (!t) return;
+      const m = (t.metadata as Record<string, any>) || {};
+      if (m.generation_run_id !== generationRunId) return;
+      if (t.itinerary_status !== 'generating') return;
+      const completed = (m.generation_completed_days as number) || 0;
+      if (completed > 0) return;
+      const traceArr = Array.isArray(m.generation_trace) ? m.generation_trace : [];
+      const dayStarted = traceArr.some((e: any) => e?.phase === 'day_started');
+      if (dayStarted) return;
+
+      console.warn(`[generate-trip] WATCHDOG: trip ${tripId} stuck on Day 1 after 90s — marking failed`);
+      await appendGenerationTrace(supabase, tripId, {
+        action: 'generate-trip',
+        phase: 'launcher_background_failed',
+        status: 'fail',
+        errorCode: 'LAUNCHER_TIMEOUT',
+        errorMessage: 'Day 1 did not start within 90s of launch',
+      }).catch(() => {});
       await supabase.from('trips').update({
         itinerary_status: 'failed',
         metadata: {
-          ...failMeta,
-          generation_error: String(err).slice(0, 500),
+          ...m,
+          generation_error: 'Generation could not start (launcher timed out). Please try again.',
+          generation_error_code: 'LAUNCHER_TIMEOUT',
           chain_error_at: new Date().toISOString(),
-          generation_heartbeat: new Date().toISOString(),
         },
       }).eq('id', tripId);
-    } catch (markErr) {
-      console.error('[generate-trip] failed to mark background launch failure:', markErr);
+    } catch (wdErr) {
+      console.error('[generate-trip] watchdog error (non-fatal):', wdErr);
     }
-    return new Response(
-      JSON.stringify({ success: false, status: 'failed', error: 'Generation could not be started. Please try again.', code: 'LAUNCHER_FAILED' }),
-      { status: 500, headers: jsonHeaders }
-    );
+  };
+
+  try {
+    // @ts-ignore — EdgeRuntime is provided by Supabase Deno runtime
+    EdgeRuntime.waitUntil(runBackground());
+    // @ts-ignore
+    EdgeRuntime.waitUntil(runWatchdog());
+  } catch {
+    runBackground().catch((e) => console.error('[generate-trip] inline background error:', e));
+    runWatchdog().catch(() => {});
   }
+
+  return new Response(
+    JSON.stringify({ success: true, status: 'generating', totalDays }),
+    { headers: jsonHeaders }
+  );
 }
 
 async function handleGenerateTripBackground(
