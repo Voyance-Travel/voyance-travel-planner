@@ -423,15 +423,24 @@ export function getEffectiveMinBuffer(from: CascadeActivity, to: CascadeActivity
 // ─── Structural detection (cards we'd rather not push) ────────────────────────
 
 const STRUCTURAL_CATS = new Set(['accommodation', 'hotel', 'stay']);
-const STRUCTURAL_KW = ['checkout', 'check-out', 'check out', 'departure flight', 'flight departure', 'airport security'];
+const STRUCTURAL_KW = ['checkout', 'check-out', 'check out', 'departure flight', 'flight departure', 'airport security', 'arrival flight'];
+const ANCHOR_IMMOVABLE_RE = /^(arrival-flight|airport-transfer)$/i;
+
+function isAnchorImmovable(act: any): boolean {
+  if (!act) return false;
+  const a = String(act.anchorSource || '').toLowerCase();
+  return ANCHOR_IMMOVABLE_RE.test(a);
+}
 
 function isStructural(act: CascadeActivity, lockedIds: Set<string>): boolean {
   if (lockedIds.has(act.id)) return true;
+  if (isAnchorImmovable(act)) return true;
   const cat = (act.category || '').toLowerCase();
   const title = (act.title || '').toLowerCase();
   if (STRUCTURAL_CATS.has(cat)) return true;
   return STRUCTURAL_KW.some(kw => title.includes(kw));
 }
+
 
 // End-of-day bookend cards exempt from the past-midnight cutoff.
 function isEndOfDayBookend(act: CascadeActivity): boolean {
@@ -664,6 +673,7 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
     for (let j = fromIdx; j < activities.length; j++) {
       const act = activities[j];
       if (lockedIds.has(act.id)) continue;
+      if (isAnchorImmovable(act)) continue;
       const currentShift = cumulativeShiftById.get(act.id) ?? 0;
       const allowedDelta = Math.max(0, MAX_CUMULATIVE_SHIFT - currentShift);
       const applyDelta = Math.min(delta, allowedDelta);
@@ -687,6 +697,7 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
       cumulativeShiftById.set(act.id, currentShift + applyDelta);
     }
   };
+
 
   // Resolve same-start, overlap, and buffer-too-tight in a single forward pass.
   // Re-evaluate each pair after a shift because cascading subsequent activities

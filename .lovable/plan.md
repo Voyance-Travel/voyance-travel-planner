@@ -1,72 +1,70 @@
-# Selected Attractions Ignored — Diagnosis & Fix Plan
+# Fix: "Arrival Flight" misscheduled hours after actual landing
 
 ## Symptom
+Rome trip `d18b2e8a…`, Day 1:
+- Saved arrival = **04:30 AM** (`metadata.savedArrivalTime24 = "04:30"`)
+- Card on the itinerary: **Arrival Flight 06:40–08:40**, sitting *after* Luggage Drop 06:15–06:35.
 
-Rome trip `d18b2e8a…` — user chose **Colosseum, Pantheon, Trevi Fountain, Vatican City**. Only Colosseum surfaced (Day 1 at 21:30 — way too late). Pantheon, Trevi, and Vatican are absent from all 3 full days. Days 2–3 are all-food.
+Should be a flight that **lands at 04:30** (e.g. 02:30–04:30), followed by transfer/luggage drop ≥ 04:30.
 
-## What the DB shows
-
-- `metadata.mustDoActivities` is correctly stored as a 4-item array.
-- `trip_day_intents` rows for this trip: **0** — `seedDayIntentsFromMetadata` either never ran in this server-chain leg, or `intentsFromChatPlannerExtraction` returned 0 entries (mustDoActivities is forwarded as an Array but the joiner expects a string in some branches).
-- `metadata.generation_trace` / `generation_health` are NULL despite the visibility work shipped earlier — those columns were written by code paths that didn't reach this trip's pipeline.
-
-## Root causes (compounding)
-
-1. **`findBestDay` excludes arrival/departure days for >180 min activities.** Trip is 4 days; Day 1 is arrival, Day 4 is departure. That leaves **only Days 2–3** as candidates for big-ticket must-dos (Vatican ≈ 240 min, Colosseum ≈ 180). After a couple of must-dos get assigned to one day, the `lowestLoad + duration ≤ 480` cap rejects the rest as `unschedulable` (silent — only `priority:'must'` go into `unschedulable`; others are dropped without trace).
-2. **Day-prompt only mentions the must-dos assigned to that day** (`dayItems`). Other-day items are listed as "for awareness — do NOT schedule today." So if scheduling already kicked Vatican/Trevi to `unschedulable` or to a day where the AI ignored them, no day's prompt re-asks for them.
-3. **No post-generation coverage validator.** Nothing checks "every must-do venue listed in metadata appears in at least one day's activities." The `validate-day` checks dedup and concept duplication, never coverage.
-4. **`trip_day_intents` was never seeded for this trip.** Without intent rows, the soft "USER WISHES" fallback that subsequent days rely on never fires either. The seeding call at `action-generate-trip-day.ts:397` is wrapped in a try/catch that warns and continues silently — combined with the array-vs-string handling in `intentsFromChatPlannerExtraction` (which only fires when `!perDayActivities`), this can produce 0 written rows with no surfaced error.
-5. **Colosseum at 21:30** is itself a downstream symptom — the AI emitted Colosseum in Day 1's response but cascaded transit + meals pushed it to the only remaining slot. No assertion that landmark sightseeing should be daylight.
-
-## Fix Plan
-
-### 1. Schedule across all days for short-trip arrival/departure exceptions
-- In `must-do-priorities.ts::findBestDay`, when `unschedulable.length > 0` after the first pass, run a **second relax pass** that allows Day 1 (post-arrival, given a positive afternoon window) and Day N (pre-departure, given a non-tight flight) — gated on the trip's actual arrival/departure clock, not duration alone.
-- Treat `lowestLoad + duration ≤ 600` (10h) for the relax pass instead of 480.
-
-### 2. Inject ALL unscheduled must-dos into EVERY remaining day's prompt as "URGENT BACKLOG"
-- In `compile-prompt.ts` (around line 597), when `mustDoEventItems.length` is 0 for `dayNumber` but `scheduled.unschedulable.length > 0` (or any must-do is not yet fulfilled per `trip_day_intents`), append a `## ⚠️ UNCOVERED MUST-DOS — schedule today if at all possible` block listing the venues with resolved address/description. Suppress on departure-day prompt (Day N == totalDays).
-
-### 3. Post-generation must-do coverage assertion
-- Add `assertMustDoCoverage(allDaysSoFar, mustDos)` invoked from `action-generate-trip-day.ts` after the final day persists (Phase 5+ before freeze). For every must-do venue with **0 matching activities** across the trip:
-  - Stamp `metadata.must_do_coverage = { missing: [...], scheduled: [...] }`.
-  - Surface in `generation_health.persistGateCodes` as `MUST_DO_UNCOVERED`.
-  - Optional follow-up: enqueue a single repair leg that re-runs the lightest day with a forced injection (mirror existing `repairDay` pattern, gated by `metadata.must_do_repair_attempted` to avoid loops).
-
-### 4. Fix silent seeding gap so `trip_day_intents` always carries must-dos
-- In `_shared/intent-normalizers.ts::intentsFromChatPlannerExtraction`, **always** process `mustDoActivities` (drop the `!perDayActivities.length` gate). Per-day rows still win via the unique index; this guarantees trip-wide must-dos are written even when chat-planner extracted `perDayActivities`.
-- In `_shared/day-intents-store.ts::seedDayIntentsFromMetadata`, return a structured result `{ written, skipped, errors }` and log it; have the caller stamp `metadata.intent_seed_audit` so future stuck trips show what happened.
-
-### 5. Landmark daylight constraint
-- In the per-day prompt (`compile-prompt.ts`), when a sightseeing must-do is injected, add a one-liner: *"Schedule sightseeing landmarks between 08:00 and 17:30 — never after 20:00."* Add a validator entry `LANDMARK_AFTER_DARK` in `validate-day.ts` that downgrades any matching sightseeing activity to a warning and triggers a repair swap.
-
-### 6. Backfill this Rome trip
-- One-shot edge call to repair Days 2 and 3:
-  - Day 2: inject Vatican Museums (morning, 09:00–12:30) + St. Peter's Basilica (13:30–15:00).
-  - Day 3: inject Pantheon (10:00–11:00) + Trevi Fountain quick-stop (11:30–12:00) + Roman Forum/Palatine if room.
-- Move Day 1 Colosseum from 21:30 to ~15:00 (replace the food-only Trastevere wander overlap).
-- Run `enforceTimingAndBuffers` + persist via `safeUpdateItineraryData('self-heal-mustdo-coverage')`.
-
-### 7. Tests
-- `must-do-priorities.test.ts` — 4-day trip, 4 long must-dos → all scheduled (3 across full days, 1 relaxed onto Day 1 afternoon).
-- `compile-prompt.test.ts` — uncovered must-do appears in subsequent day prompts.
-- `validate-day.test.ts` — landmark scheduled at 21:30 flagged `LANDMARK_AFTER_DARK`.
-- `day-intents-store.test.ts` — `seedDayIntentsFromMetadata` returns audit object; mustDoActivities seeded even when perDayActivities present.
-
-## Files to touch
-
+## Root cause
+`pipeline/repair-day.ts` §3b creates the arrival-flight card correctly:
 ```
-supabase/functions/generate-itinerary/must-do-priorities.ts
-supabase/functions/generate-itinerary/pipeline/compile-prompt.ts
-supabase/functions/generate-itinerary/pipeline/validate-day.ts
-supabase/functions/generate-itinerary/action-generate-trip-day.ts
-supabase/functions/_shared/intent-normalizers.ts
-supabase/functions/_shared/day-intents-store.ts
-+ matching .test.ts files
-+ one-shot SQL migration backfilling trip d18b2e8a…
+flightEndMins   = arrivalMins         // 04:30
+flightStartMins = arrivalMins − 120   // 02:30
+source: 'repair-arrival-flight'
+isLocked: false
 ```
+But three downstream passes then move it:
+
+1. **Dawn guard** (§ above 3b) explicitly exempts `cat=flight` on Day 1 — OK.
+2. **`normalizePredawnCascade`** (`_shared/predawn-cascade-normalize.ts`, wired at save + parse + lazy heal) detects the leading `[00:00, 05:00)` block and shifts the whole cluster forward — flight card is **not** in its exemption list (only `bookend-source` + departure-logistics are exempt). This is what drags the flight to 06:40.
+3. **`enforceTimingAndBuffers`** then re-sorts and adds buffers, producing the post-LuggageDrop ordering.
+
+Net effect: a hard logistical anchor (actual flight landing time) is treated as a "stray pre-dawn LLM emission" and rebased.
+
+## Fix (server-side only, no UI change)
+
+### 1. Make the arrival-flight card a hard anchor
+`supabase/functions/generate-itinerary/pipeline/repair-day.ts` §3b — when building `flightCard`:
+- `isLocked: true`
+- `anchorSource: 'arrival-flight'`
+- Keep `source: 'repair-arrival-flight'` (already used by exemption checks elsewhere).
+- Same hardening for the paired `Transfer to {hotel}` card: `isLocked: true`, `anchorSource: 'airport-transfer'`, `source: 'repair-airport-transfer'`.
+
+### 2. Exempt arrival flight + airport transfer from `normalizePredawnCascade`
+`_shared/predawn-cascade-normalize.ts` and FE mirror `src/lib/itinerary/normalizePredawnCascade.ts`:
+- Add to the skip predicate: `source ∈ {'repair-arrival-flight','repair-airport-transfer'}` OR `anchorSource ∈ {'arrival-flight','airport-transfer'}` OR `(category='flight' && dayNumber===1)`.
+- Sentinel log: `[PREDAWN_CASCADE_NORMALIZE] skipped arrival_anchor count=N`.
+
+### 3. Exempt arrival flight from `enforceTimingAndBuffers` shift
+`_shared/timing-cascade.ts`:
+- Treat `anchorSource ∈ {'arrival-flight','airport-transfer'}` the same as `isLocked` for the cascade walk (already exempts locked, but `isLocked` had been false historically — step 1 fixes that; this step is defense-in-depth in case future regen unsets it).
+
+### 4. Guarantee post-arrival ordering
+After §3b in `repair-day.ts`, run a small reorder: any non-locked, non-arrival, non-airport-transfer activity whose `startTime < arrivalFlightEndTime + transferMinutes + 15` gets nudged to `arrivalFlightEndTime + transferMinutes + 15`. Closes the "Luggage Drop at 06:15 before the 04:30 landing" wrong-order class.
+
+### 5. Tests
+- `repair-day.test.ts`: arrival flight at 04:30 lands at 02:30–04:30, isLocked=true, anchorSource set; downstream `normalizePredawnCascade` leaves it alone; luggage drop pushed to ≥ 05:15.
+- `predawn-cascade-normalize.test.ts`: new fixture with `source:'repair-arrival-flight' startTime:02:30` — assert untouched, sentinel logs `skipped arrival_anchor count=1`.
+
+### 6. Backfill for the Rome trip (`d18b2e8a…`)
+One-shot migration updating both `itinerary_days.activities` JSON for Day 1 and the mirrored `trips.itinerary_data.days[0]`:
+- Rewrite the "Arrival Flight" card to `startTime:'02:30', endTime:'04:30', isLocked:true, anchorSource:'arrival-flight'`.
+- Move `Luggage Drop at Hotel de Russie` to `startTime:'05:15', endTime:'05:35'` (or wherever it next fits given the transfer card).
+- Re-sort Day 1 activities by `startTime`.
+- Stamp `metadata.repairs.arrival_flight_anchored_at`.
+
+## Files to edit
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (steps 1, 4)
+- `supabase/functions/_shared/predawn-cascade-normalize.ts` (step 2)
+- `src/lib/itinerary/normalizePredawnCascade.ts` (step 2, FE mirror)
+- `supabase/functions/_shared/timing-cascade.ts` (step 3)
+- `supabase/functions/generate-itinerary/pipeline/repair-day.test.ts` (step 5)
+- `supabase/functions/_shared/__tests__/predawn-cascade-normalize.test.ts` (step 5)
+- New migration `supabase/migrations/<ts>_anchor_arrival_flight_rome.sql` (step 6)
 
 ## Out of scope
-
-- Re-architecting must-do scoring (preferredTime inference, cross-day clustering).
-- Rebuilding the day-prompt around a fresh "uncovered set" rather than per-day `dayItems` — appended as a follow-up if coverage gaps persist after the relax pass + backlog injection.
+- Visual changes to the card.
+- Generator-side prompt changes (LLM doesn't author the arrival card; repair-day does).
+- Departure flight (separate code path; same hardening could come later but not requested).
