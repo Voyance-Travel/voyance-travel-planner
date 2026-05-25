@@ -1297,6 +1297,40 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         console.warn('[save-itinerary] reconcileFulfillment failed (non-blocking):', rfErr);
       }
 
+      // ── MUST-DO COVERAGE RESTAMP ─────────────────────────────────────────
+      // Whenever the itinerary is rewritten, refresh `metadata.must_do_coverage`
+      // so we never carry a stale "missing=[]" stamp from a prior generation
+      // (root cause of Rome `d18b2e8a…` reporting green while Days 2–3 had
+      // no Pantheon/Trevi/Vatican). The matcher itself is tightened — whole-
+      // word match + identity-fields-only haystack. See
+      // supabase/functions/_shared/assert-must-do-coverage.ts.
+      try {
+        const { assertMustDoCoverage } = await import('../_shared/assert-must-do-coverage.ts');
+        const { data: tripMetaRow } = await supabase
+          .from('trips').select('metadata').eq('id', tripId).single();
+        const tmd = (tripMetaRow?.metadata as Record<string, any>) || {};
+        const mustDos = Array.isArray(tmd.mustDoActivities)
+          ? tmd.mustDoActivities.filter((v: any) => typeof v === 'string')
+          : [];
+        if (mustDos.length > 0) {
+          const coverage = assertMustDoCoverage(itineraryDays, mustDos);
+          const nextMeta = {
+            ...tmd,
+            must_do_coverage: { ...coverage, at: new Date().toISOString() },
+          };
+          await supabase.from('trips')
+            .update({ metadata: nextMeta })
+            .eq('id', tripId);
+          if (coverage.missing.length > 0) {
+            console.warn(`[save-itinerary] MUST_DO_UNCOVERED trip=${tripId} missing=${JSON.stringify(coverage.missing)} scheduled=${coverage.scheduled.length}/${coverage.total}`);
+          } else {
+            console.log(`[save-itinerary] must-do coverage OK ${coverage.scheduled.length}/${coverage.total}`);
+          }
+        }
+      } catch (covErr) {
+        console.warn('[save-itinerary] must-do coverage restamp failed (non-blocking):', covErr);
+      }
+
       // ── PRESENTATION GATE ──
       // Trip is "ready to present" iff every must/avoid intent is either
       // fulfilled (matched in the day) OR has had a placeholder restored.
