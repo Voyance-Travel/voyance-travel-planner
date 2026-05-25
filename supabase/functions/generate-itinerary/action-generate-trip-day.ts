@@ -3834,6 +3834,9 @@ async function _handleGenerateTripDayInner(
       const persistGateCodes = Array.from(new Set(
         (finalPersistValidation?.errors || []).map((e: any) => String(e.code)),
       )) as string[];
+      if (mustDoCoverage && mustDoCoverage.missing.length > 0 && !persistGateCodes.includes('MUST_DO_UNCOVERED')) {
+        persistGateCodes.push('MUST_DO_UNCOVERED');
+      }
       const { count: tableDays } = await supabase
         .from('itinerary_days').select('id', { count: 'exact', head: true }).eq('trip_id', tripId);
       const { count: activityRows } = await supabase
@@ -3843,6 +3846,7 @@ async function _handleGenerateTripDayInner(
         expectedTotalDays: totalDays,
         jsonDays: updatedDays.length,
         jsonRealDays: realDays,
+
         tableDays: tableDays || 0,
         tableRealDays: tableDays || 0,
         activityRows: activityRows || 0,
