@@ -377,6 +377,34 @@ export async function persistTripItinerary(
     console.warn(`[${label}] cross-day bleed guard failed (non-blocking):`, e);
   }
 
+  // 3a-bis-PRE. Schedule timing sanity — single canonical pass that catches
+  // pre-dawn meals/sightseeing on non-locked rows, field drift between
+  // startTime / start_time / time and endTime / end_time, endTime < startTime
+  // that isn't a legit wrap, and duplicate terminal hotel-return bookends.
+  // Locked / user / manual / extracted / pinned / booked rows are NEVER
+  // mutated. Runs BEFORE the chronology validator so chronology only sees
+  // already-sane times. See mem://constraints/itinerary (Rome Day 1 class).
+  let scheduleSanityTrace: Record<string, any> | null = null;
+  try {
+    const { sanitizeSchedule } = await import('./sanitize-schedule-timing.ts');
+    const r = sanitizeSchedule(days, { site: label });
+    const total =
+      r.counters.predawnMealsRepaired +
+      r.counters.predawnNonLockedDropped +
+      r.counters.invalidEndBeforeStartRepaired +
+      r.counters.duplicateHotelReturnsRemoved +
+      r.counters.fieldDriftRepaired;
+    if (total > 0) {
+      scheduleSanityTrace = {
+        at: new Date().toISOString(),
+        touched_days: r.touchedDays,
+        ...r.counters,
+      };
+    }
+  } catch (e) {
+    console.warn(`[${label}] schedule sanity pass failed (non-blocking):`, e);
+  }
+
   // 3a-bis. Chronology validator — sorts each day's activities by
   // wrap-aware dayChronoKey and drops any leftover predawn non-bookend
   // rows on Day N>=2 that earlier passes missed. This is the chokepoint
