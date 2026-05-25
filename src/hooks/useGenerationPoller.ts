@@ -100,6 +100,10 @@ export function useGenerationPoller({
   const consecutiveErrorsRef = useRef(0);
   // Dedupe guard: only fire onFailed once per unique error message
   const lastFailedErrorRef = useRef<string | null>(null);
+  // Launcher watchdog: if polling is active but the backend never moves the
+  // trip out of not_started, the generate-trip call likely never reached the
+  // function (or was rejected before trace). Do not spin forever.
+  const enabledAtRef = useRef<number | null>(null);
 
   const poll = useCallback(async () => {
     if (!tripId) return;
@@ -299,6 +303,27 @@ export function useGenerationPoller({
         stalledFiredRef.current = false;
         const genError = (meta.generation_error as string) || 'Generation paused';
         setState({ status: 'partial', completedDays, totalDays, progress, error: genError, partialDays, generatedDaysList: daysList, currentCity });
+        return;
+      }
+
+      if (itineraryStatus === 'not_started') {
+        const enabledAt = enabledAtRef.current || Date.now();
+        const elapsed = Date.now() - enabledAt;
+        const hasLaunchTrace = Array.isArray((meta as any).generation_trace)
+          && (meta as any).generation_trace.some((e: any) => String(e?.phase || '').startsWith('launcher_') || e?.phase === 'day_started');
+
+        if (elapsed > 15_000 && completedDays === 0 && dayCount === 0 && !hasLaunchTrace) {
+          const genError = (meta.generation_error as string)
+            || 'Generation did not start. Please try again.';
+          setState({ status: 'failed', completedDays: 0, totalDays, progress: 0, error: genError, partialDays, generatedDaysList: daysList, currentCity });
+          if (lastFailedErrorRef.current !== genError) {
+            lastFailedErrorRef.current = genError;
+            onFailedRef.current?.(genError);
+          }
+          return;
+        }
+
+        setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
         return;
       }
 
