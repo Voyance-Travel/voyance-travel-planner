@@ -114,21 +114,48 @@ function isLateNightlifeTagged(a: any): boolean {
   return false;
 }
 
+export type ScheduleSanityCode =
+  | 'INVALID_PREDAWN_MEAL'
+  | 'ARRIVAL_SEQUENCE_INVALID'
+  | 'DUPLICATE_HOTEL_RETURN'
+  | 'LANDMARK_AFTER_DARK'
+  | 'INVALID_TIME_WRAP';
+
+export interface ScheduleSanityIssue {
+  code: ScheduleSanityCode;
+  dayNumber: number;
+  activityId?: string;
+  title?: string;
+  detail: string;
+  repaired: boolean;
+}
+
 export interface ScheduleSanityResult {
   predawnMealsRepaired: number;
   predawnNonLockedDropped: number;
   invalidEndBeforeStartRepaired: number;
   duplicateHotelReturnsRemoved: number;
   fieldDriftRepaired: number;
+  arrivalSequenceRepaired: number;
+  landmarkAfterDarkFlagged: number;
+  adjacentHotelTransitDropped: number;
+  issues: ScheduleSanityIssue[];
 }
 
-const DEFAULT_RESULT: ScheduleSanityResult = {
-  predawnMealsRepaired: 0,
-  predawnNonLockedDropped: 0,
-  invalidEndBeforeStartRepaired: 0,
-  duplicateHotelReturnsRemoved: 0,
-  fieldDriftRepaired: 0,
-};
+
+function newResult(): ScheduleSanityResult {
+  return {
+    predawnMealsRepaired: 0,
+    predawnNonLockedDropped: 0,
+    invalidEndBeforeStartRepaired: 0,
+    duplicateHotelReturnsRemoved: 0,
+    fieldDriftRepaired: 0,
+    arrivalSequenceRepaired: 0,
+    landmarkAfterDarkFlagged: 0,
+    adjacentHotelTransitDropped: 0,
+    issues: [],
+  };
+}
 
 function setStart(a: any, hhmm: string) {
   a.startTime = hhmm;
@@ -146,6 +173,27 @@ function fmtHM(min: number): string {
   return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }
 
+// Daylight-sensitive categories that cannot start after dark.
+// Outdoor landmarks like fountains/squares stay safe after dark, so they are
+// NOT in this list — they're handled via the late-cap heuristic instead.
+const INDOOR_DAYLIGHT_CATS = new Set([
+  'museum', 'gallery', 'exhibit', 'exhibition',
+]);
+const INDOOR_DAYLIGHT_TITLE_RE = /\b(museum|gallery|chapel|cathedral|vatican|sistine|palace tour|botanical garden)\b/i;
+const LATE_CAP_MIN = 17 * 60; // 17:00 — after this, daylight venues become suspect
+const HARD_LATE_CAP_MIN = 19 * 60; // 19:00 — almost certainly closed/dark
+
+export interface ScheduleSanityContext {
+  /** First day's arrival clock (HH:MM 24h). Used by arrival-sequence repair. */
+  arrivalTime24?: string | null;
+  /** Last day's departure clock (HH:MM 24h). Reserved for future use. */
+  departureTime24?: string | null;
+  /** True if this is Day 1 (arrival day) — controls arrival-sequence pass. */
+  isFirstDay?: boolean;
+  /** True if this is the last day — controls future departure-sequence pass. */
+  isLastDay?: boolean;
+}
+
 /**
  * Run the per-day sanity pass. Mutates `activities` in place.
  *
@@ -155,11 +203,12 @@ function fmtHM(min: number): string {
  */
 export function sanitizeDaySchedule(
   activities: any[],
-  opts: { dayNumber?: number } = {},
+  opts: { dayNumber?: number } & ScheduleSanityContext = {},
 ): ScheduleSanityResult {
-  const out: ScheduleSanityResult = { ...DEFAULT_RESULT };
+  const out: ScheduleSanityResult = newResult();
   if (!Array.isArray(activities) || activities.length === 0) return out;
   const day = opts.dayNumber ?? '?';
+  const dayN = typeof opts.dayNumber === 'number' ? opts.dayNumber : 0;
 
   // ─── Pass 1: reconcile field drift between startTime/start_time/time ───
   // When startTime/start_time/time disagree (e.g. Rome Day 1 dinner has
@@ -228,6 +277,14 @@ export function sanitizeDaySchedule(
       setStart(a, newStart);
       setEnd(a, fmtHM(newStartMin + dur));
       out.predawnMealsRepaired++;
+      out.issues.push({
+        code: 'INVALID_PREDAWN_MEAL',
+        dayNumber: dayN,
+        activityId: a.id,
+        title: a.title || a.name,
+        detail: `${kind || 'meal'} was scheduled in pre-dawn window; moved to ${newStart}.`,
+        repaired: true,
+      });
       console.log(`[SCHEDULE_SANITY] day=${day} action=predawn_meal_repaired title="${a.title || a.name || ''}" newStart=${newStart}`);
       survivors.push(a);
       continue;
@@ -236,6 +293,14 @@ export function sanitizeDaySchedule(
     if (isSightseeing(a)) {
       // Drop pre-dawn sightseeing — there's no safe automatic time to use.
       out.predawnNonLockedDropped++;
+      out.issues.push({
+        code: 'INVALID_TIME_WRAP',
+        dayNumber: dayN,
+        activityId: a.id,
+        title: a.title || a.name,
+        detail: 'Sightseeing started pre-dawn with no late-nightlife signal; dropped.',
+        repaired: true,
+      });
       console.log(`[SCHEDULE_SANITY] day=${day} action=predawn_sightseeing_dropped title="${a.title || a.name || ''}"`);
       continue;
     }
@@ -267,6 +332,14 @@ export function sanitizeDaySchedule(
     }
     setEnd(a, fmtHM(s + dur));
     out.invalidEndBeforeStartRepaired++;
+    out.issues.push({
+      code: 'INVALID_TIME_WRAP',
+      dayNumber: dayN,
+      activityId: a.id,
+      title: a.title || a.name,
+      detail: `endTime < startTime; repaired endTime to ${fmtHM(s + dur)}.`,
+      repaired: true,
+    });
     console.log(`[SCHEDULE_SANITY] day=${day} action=end_before_start_repaired title="${a.title || a.name || ''}" newEnd=${fmtHM(s + dur)}`);
   }
 
@@ -290,8 +363,144 @@ export function sanitizeDaySchedule(
       activities.length = 0;
       activities.push(...next);
       out.duplicateHotelReturnsRemoved += drop.size;
+      out.issues.push({
+        code: 'DUPLICATE_HOTEL_RETURN',
+        dayNumber: dayN,
+        detail: `Dropped ${drop.size} duplicate hotel-return bookend(s); kept the terminal one.`,
+        repaired: true,
+      });
       console.log(`[SCHEDULE_SANITY] day=${day} action=dup_hotel_returns_removed count=${drop.size}`);
     }
+  }
+
+  // ─── Pass 4b: drop adjacent "Travel to <hotel>" transit stubs near a
+  // terminal hotel return. Rome Day 1 had a 23:50 transport to the same
+  // hotel as the 23:59 terminal return — pure noise.
+  {
+    const terminalIdx = (() => {
+      for (let i = activities.length - 1; i >= 0; i--) {
+        if (isHotelReturnBookend(activities[i]) && !isMidwayAccom(activities[i])) return i;
+      }
+      return -1;
+    })();
+    if (terminalIdx > 0) {
+      const tStart = pickStart(activities[terminalIdx]);
+      const drop = new Set<number>();
+      for (let i = 0; i < terminalIdx; i++) {
+        const a = activities[i];
+        if (!a || isLocked(a)) continue;
+        const cat = String(a.category || '').toLowerCase();
+        const title = String(a.title || a.name || '');
+        const isHotelTransit =
+          (cat === 'transport' || cat === 'transit' || cat === 'transportation') &&
+          /\b(travel to|walk to|taxi to|transfer to)\b/i.test(title) &&
+          (HOTEL_RETURN_RE.test(title) || /\b(hotel|riad|resort|hostel|airbnb|accommodation)\b/i.test(title));
+        if (!isHotelTransit) continue;
+        const s = pickStart(a);
+        if (s === null || tStart === null) continue;
+        // Within 90 min before the terminal return.
+        if (tStart - s <= 90 && tStart - s >= 0) drop.add(i);
+      }
+      if (drop.size > 0) {
+        const next = activities.filter((_, i) => !drop.has(i));
+        activities.length = 0;
+        activities.push(...next);
+        out.adjacentHotelTransitDropped += drop.size;
+        console.log(`[SCHEDULE_SANITY] day=${day} action=adjacent_hotel_transit_dropped count=${drop.size}`);
+      }
+    }
+  }
+
+  // ─── Pass 5: arrival-sequence ordering (Day 1 only) ────────────────────
+  // Rome Day 1 had luggage-drop at 05:30 BEFORE arrival flight at 02:30 in
+  // normalized tables, and even worse — Roscioli dinner at 00:00 before any
+  // arrival logistics in JSON. Anchor on the arrival flight: any luggage
+  // drop / check-in / first real activity that starts before the flight ends
+  // is invalid. Repair by shifting the offender behind flight end + 60min
+  // buffer (or by flagging only when locked).
+  if (opts.isFirstDay) {
+    const FLIGHT_TITLE_RE = /\b(arrival|arriving|arrives|landing|lands|flight)\b/i;
+    const flightIdx = activities.findIndex((a) => {
+      const cat = String(a?.category || '').toLowerCase();
+      const title = String(a?.title || a?.name || '');
+      return cat === 'flight' || /\barrival\s+flight\b/i.test(title) || (FLIGHT_TITLE_RE.test(title) && /\barrival|arrive\b/i.test(title));
+    });
+    const flight = flightIdx >= 0 ? activities[flightIdx] : null;
+    const flightEnd = flight ? pickEnd(flight) : null;
+    const arrCtxMin = parseHM(opts.arrivalTime24 || undefined);
+    // Anchor min — flightEnd if present, else arrivalTime + 60min.
+    const anchorEnd = flightEnd ?? (arrCtxMin !== null ? arrCtxMin + 60 : null);
+    if (anchorEnd !== null) {
+      for (let i = 0; i < activities.length; i++) {
+        const a = activities[i];
+        if (!a) continue;
+        if (i === flightIdx) continue;
+        if (isLogistics(a) && i < flightIdx) {
+          // Logistics that aren't arrival flight but precede arrival flight is the bug pattern.
+          // Skip cleaning locked rows — surface only.
+        }
+        const s = pickStart(a);
+        if (s === null) continue;
+        if (s >= anchorEnd) continue;
+        // Activity starts before arrival anchor.
+        if (isLocked(a)) {
+          out.issues.push({
+            code: 'ARRIVAL_SEQUENCE_INVALID',
+            dayNumber: dayN,
+            activityId: a.id,
+            title: a.title || a.name,
+            detail: `Starts at ${fmtHM(s)} before arrival anchor ${fmtHM(anchorEnd)}.`,
+            repaired: false,
+          });
+          continue;
+        }
+        // Compute shifted slot: anchor + 60min buffer + 15min spacing per offender index.
+        const e = pickEnd(a);
+        const dur = (e !== null && e > s) ? (e - s) : 60;
+        const isLuggage = /\b(luggage drop|bag drop|check[-\s]?in)\b/i.test(String(a.title || a.name || ''));
+        const newStart = anchorEnd + (isLuggage ? 60 : 90);
+        setStart(a, fmtHM(newStart));
+        setEnd(a, fmtHM(newStart + Math.min(180, dur)));
+        out.arrivalSequenceRepaired++;
+        out.issues.push({
+          code: 'ARRIVAL_SEQUENCE_INVALID',
+          dayNumber: dayN,
+          activityId: a.id,
+          title: a.title || a.name,
+          detail: `Started at ${fmtHM(s)} before arrival anchor ${fmtHM(anchorEnd)}; moved to ${fmtHM(newStart)}.`,
+          repaired: true,
+        });
+        console.log(`[SCHEDULE_SANITY] day=${day} action=arrival_sequence_repaired title="${a.title || a.name || ''}" newStart=${fmtHM(newStart)}`);
+      }
+    }
+  }
+
+  // ─── Pass 6: indoor-daylight landmark after dark (flag only) ───────────
+  // Colosseum exterior at 21:30 is fine; Vatican Museums at 21:30 is not.
+  // Auto-moving has too high a risk of clobbering legitimate ticket-time
+  // anchors, so this pass FLAGS the issue and lets the validator surface it.
+  for (const a of activities) {
+    if (!a || typeof a !== 'object') continue;
+    if (isLocked(a)) continue;
+    const cat = String(a.category || '').toLowerCase();
+    const title = String(a.title || a.name || '');
+    const isDaylightVenue =
+      INDOOR_DAYLIGHT_CATS.has(cat) || INDOOR_DAYLIGHT_TITLE_RE.test(title);
+    if (!isDaylightVenue) continue;
+    const s = pickStart(a);
+    if (s === null) continue;
+    if (s < LATE_CAP_MIN) continue;
+    const sev = s >= HARD_LATE_CAP_MIN ? 'hard' : 'soft';
+    out.landmarkAfterDarkFlagged++;
+    out.issues.push({
+      code: 'LANDMARK_AFTER_DARK',
+      dayNumber: dayN,
+      activityId: a.id,
+      title: a.title || a.name,
+      detail: `Indoor daylight venue starts at ${fmtHM(s)} (${sev === 'hard' ? 'after closing' : 'after late-day cap'}).`,
+      repaired: false,
+    });
+    console.log(`[SCHEDULE_SANITY] day=${day} action=landmark_after_dark_flagged title="${title}" start=${fmtHM(s)} sev=${sev}`);
   }
 
   return out;
@@ -302,22 +511,35 @@ export function sanitizeDaySchedule(
  */
 export function sanitizeSchedule(
   days: readonly any[] | null | undefined,
-  opts: { site?: string } = {},
+  opts: { site?: string; arrivalTime24?: string | null; departureTime24?: string | null } = {},
 ): { days: any[]; counters: ScheduleSanityResult; touchedDays: number } {
-  const counters: ScheduleSanityResult = { ...DEFAULT_RESULT };
+  const counters: ScheduleSanityResult = newResult();
   const list = Array.isArray(days) ? [...days] : [];
+  const totalDays = list.length;
   let touched = 0;
   for (let i = 0; i < list.length; i++) {
     const day = list[i];
     if (!day || !Array.isArray(day.activities)) continue;
     const before = JSON.stringify(day.activities);
     const dayNumber = day.dayNumber ?? i + 1;
-    const r = sanitizeDaySchedule(day.activities, { dayNumber });
+    const isFirstDay = dayNumber === 1;
+    const isLastDay = dayNumber === totalDays;
+    const r = sanitizeDaySchedule(day.activities, {
+      dayNumber,
+      isFirstDay,
+      isLastDay,
+      arrivalTime24: isFirstDay ? opts.arrivalTime24 ?? null : null,
+      departureTime24: isLastDay ? opts.departureTime24 ?? null : null,
+    });
     counters.predawnMealsRepaired += r.predawnMealsRepaired;
     counters.predawnNonLockedDropped += r.predawnNonLockedDropped;
     counters.invalidEndBeforeStartRepaired += r.invalidEndBeforeStartRepaired;
     counters.duplicateHotelReturnsRemoved += r.duplicateHotelReturnsRemoved;
     counters.fieldDriftRepaired += r.fieldDriftRepaired;
+    counters.arrivalSequenceRepaired += r.arrivalSequenceRepaired;
+    counters.landmarkAfterDarkFlagged += r.landmarkAfterDarkFlagged;
+    counters.adjacentHotelTransitDropped += r.adjacentHotelTransitDropped;
+    counters.issues.push(...r.issues);
     if (JSON.stringify(day.activities) !== before) touched++;
   }
   const total =
@@ -325,13 +547,18 @@ export function sanitizeSchedule(
     counters.predawnNonLockedDropped +
     counters.invalidEndBeforeStartRepaired +
     counters.duplicateHotelReturnsRemoved +
-    counters.fieldDriftRepaired;
-  if (total > 0) {
+    counters.fieldDriftRepaired +
+    counters.arrivalSequenceRepaired +
+    counters.landmarkAfterDarkFlagged +
+    counters.adjacentHotelTransitDropped;
+  if (total > 0 || counters.issues.length > 0) {
     console.log(
       `[SCHEDULE_SANITY_SUMMARY] site=${opts.site || 'unknown'} touchedDays=${touched} ` +
       `predawnMeals=${counters.predawnMealsRepaired} predawnDropped=${counters.predawnNonLockedDropped} ` +
       `endBeforeStart=${counters.invalidEndBeforeStartRepaired} dupReturns=${counters.duplicateHotelReturnsRemoved} ` +
-      `fieldDrift=${counters.fieldDriftRepaired}`,
+      `fieldDrift=${counters.fieldDriftRepaired} arrivalSeq=${counters.arrivalSequenceRepaired} ` +
+      `landmarkAfterDark=${counters.landmarkAfterDarkFlagged} adjHotelTransit=${counters.adjacentHotelTransitDropped} ` +
+      `issues=${counters.issues.length}`,
     );
   }
   return { days: list, counters, touchedDays: touched };

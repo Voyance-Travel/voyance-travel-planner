@@ -33,7 +33,13 @@ export type PersistValidationCode =
   | 'CURRENCY_MISMATCH'
   | 'EMPTY_DAY'
   | 'DEPARTURE_DAY_LIGHT'
-  | 'ARRIVAL_DAY_LIGHT';
+  | 'ARRIVAL_DAY_LIGHT'
+  | 'INVALID_PREDAWN_MEAL'
+  | 'ARRIVAL_SEQUENCE_INVALID'
+  | 'DUPLICATE_HOTEL_RETURN'
+  | 'LANDMARK_AFTER_DARK'
+  | 'INVALID_TIME_WRAP'
+  | 'JSON_TABLE_TIME_DRIFT';
 
 export type PersistValidationSeverity = 'error' | 'warning';
 
@@ -348,5 +354,57 @@ export function validateItineraryForPersist(
 
   const errors = issues.filter(i => i.severity === 'error');
   const warnings = issues.filter(i => i.severity === 'warning');
+  return { ok: errors.length === 0, errors, warnings };
+}
+
+/**
+ * Severity policy for codes produced by sanitize-schedule-timing. Most repair
+ * counters are surfaced as warnings (the row was already fixed in place); the
+ * UNREPAIRED arrival-sequence + landmark-after-dark cases stay as errors so
+ * the persist gate flips `ok=false` and the UI banner appears.
+ */
+const SANITY_CODE_SEVERITY: Record<string, PersistValidationSeverity> = {
+  INVALID_PREDAWN_MEAL: 'warning',
+  ARRIVAL_SEQUENCE_INVALID: 'error',
+  DUPLICATE_HOTEL_RETURN: 'warning',
+  LANDMARK_AFTER_DARK: 'warning',
+  INVALID_TIME_WRAP: 'warning',
+  JSON_TABLE_TIME_DRIFT: 'error',
+};
+
+export interface ScheduleSanityIssueInput {
+  code: string;
+  dayNumber: number;
+  activityId?: string;
+  title?: string;
+  detail: string;
+  repaired?: boolean;
+}
+
+/**
+ * Fold sanity-pass issues into an existing persist verdict. Repaired issues
+ * are downgraded to warnings; the rest follow `SANITY_CODE_SEVERITY`.
+ */
+export function mergeScheduleSanityIssues(
+  verdict: PersistVerdict,
+  sanityIssues: ScheduleSanityIssueInput[],
+): PersistVerdict {
+  if (!Array.isArray(sanityIssues) || sanityIssues.length === 0) return verdict;
+  const errors = [...verdict.errors];
+  const warnings = [...verdict.warnings];
+  for (const issue of sanityIssues) {
+    const code = issue.code as PersistValidationCode;
+    const declared = SANITY_CODE_SEVERITY[issue.code] ?? 'warning';
+    // Repaired issues are informational only — never block.
+    const sev: PersistValidationSeverity = issue.repaired ? 'warning' : declared;
+    const entry: PersistValidationIssue = {
+      code,
+      severity: sev,
+      dayNumber: issue.dayNumber,
+      activityId: issue.activityId,
+      detail: issue.detail,
+    };
+    if (sev === 'error') errors.push(entry); else warnings.push(entry);
+  }
   return { ok: errors.length === 0, errors, warnings };
 }
