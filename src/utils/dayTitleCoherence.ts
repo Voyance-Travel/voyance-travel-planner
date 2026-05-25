@@ -107,15 +107,31 @@ function deriveTitle(day: DayLike, city: string): string {
     return c !== 'dining';
   }) || acts[0];
   const headlineName = (headline?.title || headline?.name || '').replace(/\s*-\s*.+$/, '').trim();
+  const headlineIsNonDining = !!headline && (() => {
+    const c = (headline.category || headline.type || '').toLowerCase();
+    return c !== 'dining' && c !== '';
+  })();
 
   if (topHood && topHood.count >= 2 && headlineName) return `${topHood.value} & ${headlineName}`;
   if (topHood && topHood.count >= 2) return `${topHood.value} in ${city}`;
+
+  // Prefer non-dining headline over generic vibe label so 3-meals/day
+  // doesn't collapse every day to "Culinary Day in {city}".
+  if (headlineIsNonDining && headlineName) return `${headlineName} in ${city}`;
 
   const vibe = categoryVibe(acts);
   if (vibe) return vibeLabel(vibe, city);
 
   if (headlineName) return `${headlineName} in ${city}`;
   return `Day ${day.dayNumber ?? ''} in ${city}`.trim();
+}
+
+function hasNeighborhoodSignal(day: DayLike): boolean {
+  const acts = (day.activities || []).filter((a) => !isLogistics(a));
+  return acts.some((a) => {
+    const h = getNeighborhood(a);
+    return !!h && h.trim().length > 1;
+  });
 }
 
 function isCoherent(title: string, day: DayLike): boolean {
@@ -146,6 +162,13 @@ function isCoherent(title: string, day: DayLike): boolean {
   for (const t of titleTokens) {
     if (signalTokens.has(t)) return true;
   }
+
+  // Low-signal trust: no neighborhood metadata + multi-token stored title
+  // → trust stored. Prevents render-time collapse to "Culinary Day in X".
+  if (!hasNeighborhoodSignal(day) && titleTokens.size >= 2) {
+    return true;
+  }
+
   return false;
 }
 
