@@ -410,6 +410,12 @@ export function sanitizeDaySchedule(
         if (tStart - s <= 90 && tStart - s >= 0) drop.add(i);
       }
       if (drop.size > 0) {
+        for (const i of drop) {
+          const a = activities[i] as any;
+          if (a && (a.source === 'must-do-injection' || a.anchorSource === 'must_do')) {
+            console.warn(`[MUST_DO_ANCHOR_DROPPED] day=${dayN} venue="${a.title || a.name || ''}" reason=adjacent_hotel_transit site=sanitizeSchedule:adjacent_hotel_transit id=${a.id || 'n/a'}`);
+          }
+        }
         const next = activities.filter((_, i) => !drop.has(i));
         activities.length = 0;
         activities.push(...next);
