@@ -1474,16 +1474,42 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // same boundary contract.
   const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
 
+  // ── STEP 2.96: SCHEDULE SANITY PASS (pre-validation chokepoint) ──
+  // Runs BEFORE validateItineraryForPersist so persist_validation describes
+  // the final repaired plan, not stale pre-repair data. Catches the Rome
+  // Day 1 class: 00:00 dinner, arrival sequence reversed, duplicate hotel
+  // returns, indoor-daylight landmarks after dark, adjacent hotel-transit
+  // stubs. See mem://constraints/itinerary/schedule-sanity-persist-chokepoint.
+  let preValidationSanityIssues: any[] = [];
+  try {
+    const { sanitizeSchedule } = await import('../_shared/sanitize-schedule-timing.ts');
+    const r = sanitizeSchedule((itinerary as any).days || [], {
+      site: 'save-itinerary',
+      arrivalTime24: savedArrivalTime24 ?? null,
+      departureTime24: savedDepartureTime24 ?? null,
+    });
+    preValidationSanityIssues = r.counters.issues;
+    if (r.touchedDays > 0) {
+      (itinerary as any).days = r.days;
+    }
+  } catch (sanityErr) {
+    console.warn('[save-itinerary] schedule sanity pass failed (non-blocking):', sanityErr);
+  }
+
   // ── PERSIST VALIDATION GATE (LOCK 3) ─────────────────────────────
   // Run the dry-run gate BEFORE persist so we can stamp metadata in the
   // same write. The trip still persists (so the user keeps their work),
   // but a 422 is returned with the per-day issues for the UI banner.
   // See .lovable/plan.md (Stage 1).
-  const persistVerdict = validateItineraryForPersist((itinerary as any).days || [], {
+  let persistVerdict = validateItineraryForPersist((itinerary as any).days || [], {
     destination: (currentTrip as any)?.destination ?? null,
     arrivalTime24: savedArrivalTime24,
     departureTime24: savedDepartureTime24,
   });
+  if (preValidationSanityIssues.length > 0) {
+    const { mergeScheduleSanityIssues } = await import('../_shared/validate-itinerary-for-persist.ts');
+    persistVerdict = mergeScheduleSanityIssues(persistVerdict, preValidationSanityIssues);
+  }
   if (!persistVerdict.ok) {
     console.warn(
       `[PERSIST_GATE] tripId=${tripId} errors=${persistVerdict.errors.length} ` +
