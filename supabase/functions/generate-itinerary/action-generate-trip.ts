@@ -1042,7 +1042,16 @@ Return ONLY valid JSON array, no markdown:
     }
   }
 
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_day_1_invoke_returned',
+    status: chainOk ? 'ok' : 'fail',
+    dayNumber: effectiveStartDay,
+    extra: { chainOk, lastChainStatus, lastChainBodyPreview: lastChainBody.slice(0, 200) },
+  }).catch(() => {});
+
   if (!chainOk) {
+
     // Don't leave the trip stuck in `generating`. Surface the failure so the
     // UI can show an actionable error and the user can retry.
     try {
