@@ -120,12 +120,24 @@ export async function handleGenerateTrip(
     });
   }
 
-  const background = handleGenerateTripBackground(supabase, userId, {
+  const launchParams = {
     ...params,
     requestedDays: totalDays,
     __backgroundLaunch: true,
     __generationRunId: generationRunId,
-  }).catch(async (err) => {
+  };
+
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_background_started',
+    status: 'ok',
+    expectedTotalDays: totalDays,
+    extra: { mode: 'sync_prechain', runId: generationRunId.slice(0, 8) },
+  });
+
+  try {
+    return await handleGenerateTripBackground(supabase, userId, launchParams);
+  } catch (err) {
     console.error('[generate-trip] background launch failed:', err);
     await appendGenerationTrace(supabase, tripId, {
       action: 'generate-trip',
@@ -148,20 +160,11 @@ export async function handleGenerateTrip(
     } catch (markErr) {
       console.error('[generate-trip] failed to mark background launch failure:', markErr);
     }
-  });
-  EdgeRuntime.waitUntil(background);
-
-  await appendGenerationTrace(supabase, tripId, {
-    action: 'generate-trip',
-    phase: 'launcher_background_started',
-    status: 'ok',
-    expectedTotalDays: totalDays,
-  });
-
-  return new Response(
-    JSON.stringify({ success: true, status: 'generating', totalDays }),
-    { headers: jsonHeaders }
-  );
+    return new Response(
+      JSON.stringify({ success: false, status: 'failed', error: 'Generation could not be started. Please try again.', code: 'LAUNCHER_FAILED' }),
+      { status: 500, headers: jsonHeaders }
+    );
+  }
 }
 
 async function handleGenerateTripBackground(
@@ -322,6 +325,16 @@ async function handleGenerateTripBackground(
     }
   }
 
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_duplicate_guard_passed',
+    status: 'ok',
+    extra: {
+      bg: params.__backgroundLaunch === true,
+      runId: ((params.__generationRunId as string | undefined) || '').slice(0, 8) || null,
+    },
+  }).catch(() => {});
+
   // Calculate total days from canonical date span (inclusive end date).
   const sDate = new Date(startDate);
   const eDate = new Date(endDate);
@@ -357,6 +370,13 @@ async function handleGenerateTripBackground(
   // Initialize performance timer
   const totalDaysForTimer = totalDays; // Will be set after calculation
   await timer.init(destination, totalDays, travelers || 1);
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_timer_initialized',
+    status: timer.getLogId() ? 'ok' : 'warn',
+    expectedTotalDays: totalDays,
+    extra: { logId: timer.getLogId() || null },
+  }).catch(() => {});
   console.log(`[generate-trip] Timer logId: ${timer.getLogId() || 'FAILED'}`);
   timer.startPhase('pre_chain_setup');
 
@@ -452,6 +472,12 @@ async function handleGenerateTripBackground(
   if (!isResume) {
    console.log('[generate-trip] Computing generation_context enrichment...');
     timer.startPhase('pre_chain_enrichment');
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'generate-trip',
+      phase: 'launcher_enrichment_started',
+      status: 'ok',
+      expectedTotalDays: totalDays,
+    }).catch(() => {});
     const enrichmentContext: Record<string, unknown> = {};
     
     try {
@@ -891,6 +917,7 @@ Return ONLY valid JSON array, no markdown:
                   'Authorization': `Bearer ${LOVABLE_API_KEY}`,
                   'Content-Type': 'application/json',
                 },
+                signal: AbortSignal.timeout(30_000),
                 body: JSON.stringify({
                   model: 'google/gemini-2.5-flash',
                   messages: [
@@ -925,7 +952,8 @@ Return ONLY valid JSON array, no markdown:
                 console.warn(`[generate-trip] Restaurant pool for "${city}": AI call failed ${resp.status}: ${errText.slice(0, 100)}`);
               }
             } catch (aiErr) {
-              console.warn(`[generate-trip] Restaurant pool for "${city}": AI call error:`, aiErr);
+                const isTimeout = aiErr instanceof DOMException && aiErr.name === 'TimeoutError';
+                console.warn(`[generate-trip] Restaurant pool for "${city}": AI call ${isTimeout ? 'timed out' : 'error'}:`, aiErr);
             }
           });
           
@@ -948,6 +976,13 @@ Return ONLY valid JSON array, no markdown:
       }
       
       console.log(`[generate-trip] Enrichment context computed with ${Object.keys(enrichmentContext).length} fields`);
+      await appendGenerationTrace(supabase, tripId, {
+        action: 'generate-trip',
+        phase: 'launcher_enrichment_completed',
+        status: 'ok',
+        expectedTotalDays: totalDays,
+        extra: { fieldCount: Object.keys(enrichmentContext).length },
+      }).catch(() => {});
       timer.endPhase('pre_chain_enrichment');
     } catch (enrichErr) {
       console.warn('[generate-trip] Enrichment context computation failed (non-blocking):', enrichErr);
@@ -1036,76 +1071,70 @@ Return ONLY valid JSON array, no markdown:
     expectedTotalDays: totalDays,
   }).catch(() => {});
 
-  // Retry loop with exponential backoff for intermittent 403 errors
-
-  const maxRetries = 3;
-  let chainOk = false;
-  let lastChainStatus: number | null = null;
-  let lastChainBody = '';
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch(generateUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${serviceKey}`,
-        },
-        body: initialChainBody,
-      });
-      if (response.ok) { chainOk = true; break; }
-      lastChainStatus = response.status;
-      lastChainBody = await response.text().catch(() => '(no body)');
-      console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} returned ${response.status}: ${lastChainBody.slice(0, 200)}`);
-      if (response.status >= 400 && response.status < 500) {
-        console.error(`[generate-trip] Client error ${response.status} — not retrying`);
-        break;
+  // Start Day 1 in a separate function invocation, but do not wait for the
+  // full Day 1 LLM run before responding to the browser. The old launcher put
+  // all pre-chain work inside waitUntil and the platform could kill it with no
+  // durable error; this keeps pre-chain synchronous and only offloads the
+  // already-queued day invocation.
+  const launchDayOne = async () => {
+    const maxRetries = 3;
+    let chainOk = false;
+    let lastChainStatus: number | null = null;
+    let lastChainBody = '';
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(generateUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${serviceKey}`,
+          },
+          body: initialChainBody,
+        });
+        if (response.ok) { chainOk = true; break; }
+        lastChainStatus = response.status;
+        lastChainBody = await response.text().catch(() => '(no body)');
+        console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} returned ${response.status}: ${lastChainBody.slice(0, 200)}`);
+        if (response.status >= 400 && response.status < 500) {
+          console.error(`[generate-trip] Client error ${response.status} — not retrying`);
+          break;
+        }
+      } catch (err) {
+        console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} error:`, err);
       }
-    } catch (err) {
-      console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} error:`, err);
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+      }
     }
-    if (attempt < maxRetries) {
-      await new Promise(r => setTimeout(r, 2000 * attempt));
+
+    await appendGenerationTrace(supabase, tripId, {
+      action: 'generate-trip',
+      phase: 'launcher_day_1_invoke_returned',
+      status: chainOk ? 'ok' : 'fail',
+      dayNumber: effectiveStartDay,
+      extra: { chainOk, lastChainStatus, lastChainBodyPreview: lastChainBody.slice(0, 200) },
+    }).catch(() => {});
+
+    if (!chainOk) {
+      try {
+        const { data: failTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+        const failMeta = (failTrip?.metadata as Record<string, unknown>) || {};
+        await supabase.from('trips').update({
+          itinerary_status: 'failed',
+          metadata: {
+            ...failMeta,
+            generation_error: `Initial chain failed (status=${lastChainStatus ?? 'network'})`,
+            chain_error: lastChainBody.slice(0, 500),
+            chain_error_at: new Date().toISOString(),
+          },
+        }).eq('id', tripId);
+      } catch (markErr) {
+        console.error('[generate-trip] Failed to mark trip as failed after chain error:', markErr);
+      }
     }
-  }
+  };
 
-  await appendGenerationTrace(supabase, tripId, {
-    action: 'generate-trip',
-    phase: 'launcher_day_1_invoke_returned',
-    status: chainOk ? 'ok' : 'fail',
-    dayNumber: effectiveStartDay,
-    extra: { chainOk, lastChainStatus, lastChainBodyPreview: lastChainBody.slice(0, 200) },
-  }).catch(() => {});
-
-  if (!chainOk) {
-
-    // Don't leave the trip stuck in `generating`. Surface the failure so the
-    // UI can show an actionable error and the user can retry.
-    try {
-      const { data: failTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
-      const failMeta = (failTrip?.metadata as Record<string, unknown>) || {};
-      await supabase.from('trips').update({
-        itinerary_status: 'failed',
-        metadata: {
-          ...failMeta,
-          generation_error: `Initial chain failed (status=${lastChainStatus ?? 'network'})`,
-          chain_error: lastChainBody.slice(0, 500),
-          chain_error_at: new Date().toISOString(),
-        },
-      }).eq('id', tripId);
-    } catch (markErr) {
-      console.error('[generate-trip] Failed to mark trip as failed after chain error:', markErr);
-    }
-    return new Response(
-      JSON.stringify({
-        success: false,
-        status: 'failed',
-        error: 'Itinerary generation could not be started. Please try again.',
-        code: 'CHAIN_LAUNCH_FAILED',
-        details: { status: lastChainStatus },
-      }),
-      { status: 502, headers: jsonHeaders }
-    );
-  }
+  EdgeRuntime.waitUntil(launchDayOne());
 
   // Return immediately — generation continues server-side via self-chaining
   return new Response(
