@@ -3764,6 +3764,15 @@ async function _handleGenerateTripDayInner(
           mustDoCoverage = assertMustDoCoverage(partialItinerary?.days || [], mustDos);
           if (mustDoCoverage.missing.length > 0) {
             console.warn(`[generate-trip-day] MUST_DO_UNCOVERED trip=${tripId} missing=${JSON.stringify(mustDoCoverage.missing)} scheduled=${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
+            await appendGenerationTrace(supabase, tripId, {
+              action: 'generate-trip-day',
+              phase: 'persist_gate_checked',
+              status: 'warn',
+              dayNumber,
+              expectedTotalDays: totalDays,
+              errorCode: 'MUST_DO_UNCOVERED',
+              errorMessage: `missing=${mustDoCoverage.missing.join('|')} scheduled=${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`,
+            });
           } else {
             console.log(`[generate-trip-day] must-do coverage OK: ${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
           }
@@ -3771,6 +3780,7 @@ async function _handleGenerateTripDayInner(
       } catch (covErr) {
         console.warn('[generate-trip-day] must-do coverage assertion failed (non-blocking):', covErr);
       }
+
     }
 
     // ── PHASE 6: FREEZE STAMP + fully_persisted=true ────────────────
