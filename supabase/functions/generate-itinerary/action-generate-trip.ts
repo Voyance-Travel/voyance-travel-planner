@@ -325,6 +325,16 @@ async function handleGenerateTripBackground(
     }
   }
 
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_duplicate_guard_passed',
+    status: 'ok',
+    extra: {
+      bg: params.__backgroundLaunch === true,
+      runId: ((params.__generationRunId as string | undefined) || '').slice(0, 8) || null,
+    },
+  }).catch(() => {});
+
   // Calculate total days from canonical date span (inclusive end date).
   const sDate = new Date(startDate);
   const eDate = new Date(endDate);
@@ -360,6 +370,13 @@ async function handleGenerateTripBackground(
   // Initialize performance timer
   const totalDaysForTimer = totalDays; // Will be set after calculation
   await timer.init(destination, totalDays, travelers || 1);
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_timer_initialized',
+    status: timer.getLogId() ? 'ok' : 'warn',
+    expectedTotalDays: totalDays,
+    extra: { logId: timer.getLogId() || null },
+  }).catch(() => {});
   console.log(`[generate-trip] Timer logId: ${timer.getLogId() || 'FAILED'}`);
   timer.startPhase('pre_chain_setup');
 
