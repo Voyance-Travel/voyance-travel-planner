@@ -3570,6 +3570,58 @@ async function _handleGenerateTripDayInner(
   let mustDoInjection: { attempted: string[]; injected: any[]; unscheduled: string[] } | null = null;
   if (dayNumber >= totalDays && isComplete && Array.isArray(partialItinerary?.days)) {
     try {
+      // ── JSON FALLBACK for arrival/departure clocks ──
+      // If the flight selection never carried explicit times (chat-planner
+      // trips, multi-city legs, etc.), recover them from the existing
+      // arrival-flight / airport-transfer cards already on disk so the
+      // scheduler knows about Day-1 morning arrival and Day-N evening
+      // departure. Without this Teotihuacan / Zócalo land inside the
+      // arrival window and get collapsed by sanitizeSchedule.
+      try {
+        if (!savedArrTime24Hoisted && Array.isArray(partialItinerary.days)) {
+          const day1 = partialItinerary.days.find((d: any) => Number(d?.dayNumber) === 1);
+          const arrCard = Array.isArray(day1?.activities)
+            ? day1.activities.find((a: any) => {
+                const id = String(a?.id || '');
+                const cat = String(a?.category || '').toLowerCase();
+                const title = String(a?.title || a?.name || '').toLowerCase();
+                return /day1-arrival-flight|arrival-flight/.test(id)
+                  || /arrival.flight|arrival-flight/.test(cat)
+                  || /^arrival flight\b/.test(title);
+              })
+            : null;
+          const end = arrCard?.endTime || arrCard?.end_time;
+          if (end && typeof end === 'string' && /^\d{1,2}:\d{2}$/.test(end)) {
+            savedArrTime24Hoisted = _normalizeTo24h(end) || end;
+            console.log(`[MUST_DO_INJECT] recovered arrival clock from Day 1 JSON: ${savedArrTime24Hoisted}`);
+          }
+        }
+        if (!savedDepTime24Hoisted && Array.isArray(partialItinerary.days)) {
+          const lastDay = partialItinerary.days[partialItinerary.days.length - 1];
+          const depCard = Array.isArray(lastDay?.activities)
+            ? lastDay.activities.find((a: any) => {
+                const id = String(a?.id || '');
+                const cat = String(a?.category || '').toLowerCase();
+                const title = String(a?.title || a?.name || '').toLowerCase();
+                return /airport_transfer|transfer-to-airport|departure-flight/.test(id)
+                  || /airport.transfer|transfer.airport|departure.flight/.test(cat)
+                  || /\b(travel|transfer)\b.*\bairport\b/.test(title)
+                  || /^departure flight\b/.test(title);
+              })
+            : null;
+          const start = depCard?.startTime || depCard?.start_time;
+          if (start && typeof start === 'string' && /^\d{1,2}:\d{2}$/.test(start)) {
+            // Departure transfer typically starts buffer minutes before the flight.
+            // Use the transfer's start as a proxy clock — scheduler treats this as
+            // a hard "no schedule past" boundary.
+            savedDepTime24Hoisted = _normalizeTo24h(start) || start;
+            console.log(`[MUST_DO_INJECT] recovered departure clock from Day N JSON: ${savedDepTime24Hoisted}`);
+          }
+        }
+      } catch (clockRecoverErr) {
+        console.warn('[MUST_DO_INJECT] clock-recovery from JSON failed (non-fatal):', clockRecoverErr);
+      }
+
       const { assertMustDoCoverage } = await import('../_shared/assert-must-do-coverage.ts');
       const { injectMissingMustDos } = await import('../_shared/inject-missing-must-dos.ts');
       const mustDos = Array.isArray((meta as any)?.mustDoActivities)
@@ -3590,7 +3642,7 @@ async function _handleGenerateTripDayInner(
             },
           );
           console.warn(
-            `[MUST_DO_INJECT] trip=${tripId} attempted=${mustDoInjection.attempted.length} injected=${mustDoInjection.injected.length} unscheduled=${mustDoInjection.unscheduled.length}`,
+            `[MUST_DO_INJECT] trip=${tripId} attempted=${mustDoInjection.attempted.length} injected=${mustDoInjection.injected.length} unscheduled=${mustDoInjection.unscheduled.length} arrClock=${savedArrTime24Hoisted || 'none'} depClock=${savedDepTime24Hoisted || 'none'}`,
           );
           for (const inj of mustDoInjection.injected) {
             console.log(`[MUST_DO_INJECT]   + day=${inj.dayNumber} ${inj.startTime}-${inj.endTime} "${inj.venue}" (${inj.slotReason})`);
