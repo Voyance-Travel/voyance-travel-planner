@@ -3851,6 +3851,17 @@ async function _handleGenerateTripDayInner(
             at: new Date().toISOString(),
           };
         }
+        // Validate-then-stamp: only record `must_do_repair_attempted` if the
+        // injector actually ran AND post-injection coverage was re-asserted.
+        if (mustDoInjection) {
+          finalMeta.must_do_repair_attempted = {
+            at: new Date().toISOString(),
+            attempted: mustDoInjection.attempted,
+            injected: mustDoInjection.injected,
+            stillMissing: mustDoCoverage?.missing || [],
+          };
+        }
+
         await supabase
           .from('trips')
           .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
