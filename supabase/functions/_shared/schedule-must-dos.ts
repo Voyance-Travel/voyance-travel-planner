@@ -230,15 +230,16 @@ export function scheduleMustDos(
     const title = venue;
     const dur = defaultDuration(title);
     const afterDark = isAfterDarkOk(title);
-    // Daylight ceiling 17:00 unless after-dark-safe (then 21:00).
-    const venueCeiling = afterDark ? 21 * 60 : 17 * 60;
-
     // Long-haul excursions (Teotihuacan, Versailles, etc.) require a
     // contiguous multi-hour block AND must skip morning-arrival Day 1 and
     // last-day departure when a flight clock is set. Crammed into a tight
     // window the downstream cascade silently strips them.
     const longHaul = longHaulMinBlock(title);
     const requireLongHaul = longHaul !== null;
+    // Daylight ceiling 17:00 unless after-dark-safe (then 21:00). Long-haul
+    // excursions ALWAYS use the 17:00 daylight ceiling — they need light +
+    // the full block (e.g. Teotihuacan is 50 km out, no nighttime access).
+    const venueCeiling = requireLongHaul ? 17 * 60 : (afterDark ? 21 * 60 : 17 * 60);
 
     const candidates = [...eligible]
       .filter(d => {
@@ -257,7 +258,12 @@ export function scheduleMustDos(
     let picked: MustDoSlot | null = null;
     for (const d of candidates) {
       const winEnd = Math.min(d.latestEnd, venueCeiling);
-      const start = firstFreeSlot(d.busy, dur, d.earliestStart, winEnd);
+      // For long-haul: treat ALL busy windows as locked (don't optimistically
+      // assume cascade can shuffle a 6-hour block around an existing block).
+      const busyForSlot = requireLongHaul
+        ? d.busy.map(b => ({ ...b, locked: true }))
+        : d.busy;
+      const start = firstFreeSlot(busyForSlot, dur, d.earliestStart, winEnd);
       if (start === null) continue;
       picked = {
         venue,

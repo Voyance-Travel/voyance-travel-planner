@@ -997,15 +997,20 @@ async function _handleGenerateTripDayInner(
   const _isLastDay = dayNumber >= totalDays;
 
   const { normalizeTo24h: _normalizeTo24h } = await import('./flight-hotel-context.ts');
-  const _arrTime24Raw = _isFirstDay
-    ? (_flightSel.arrivalTime24
-      || _flightSel.arrivalTime
-      || _flightSel.outbound?.arrivalTime
-      || _nestedDep?.arrival?.time
-      || _flightSel.legs?.[0]?.arrival?.time
-      || undefined)
-    : undefined;
-  const savedArrTime24Hoisted = _arrTime24Raw ? _normalizeTo24h(_arrTime24Raw) : undefined;
+  // Compute arrival/departure clocks UNCONDITIONALLY (not gated by _isFirstDay/_isLastDay).
+  // The chain-finalization passes (must-do injector, sanitizeSchedule, persist-validation)
+  // run on the LAST day's leg and need BOTH Day-1 arrival + Day-N departure clocks at the
+  // same time. Without this, Day-1 morning arrivals don't push back must-do injection
+  // (Mexico City Teotihuacan was slotted 10:00–11:30 on top of a 10:00 arrival flight,
+  // then dropped by sanitizeSchedule collisions). Downstream callers already gate by
+  // _isFirstDay/_isLastDay where applicable.
+  const _arrTime24Raw = _flightSel.arrivalTime24
+    || _flightSel.arrivalTime
+    || _flightSel.outbound?.arrivalTime
+    || _nestedDep?.arrival?.time
+    || _flightSel.legs?.[0]?.arrival?.time
+    || undefined;
+  let savedArrTime24Hoisted = _arrTime24Raw ? _normalizeTo24h(_arrTime24Raw) : undefined;
 
   // Multi-city fallback: pull departure time from trip_cities transport_details for last day
   let _multiCityDepTime: string | undefined;
@@ -1031,16 +1036,14 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  const _depTime24Raw = _isLastDay
-    ? (_flightSel.returnDepartureTime24
-      || _flightSel.returnDepartureTime
-      || _nestedRet?.departure?.time
-      || _nestedRet?.departureTime
-      || (Array.isArray(_flightSel.legs) && _flightSel.legs.length > 0 ? _flightSel.legs[_flightSel.legs.length - 1]?.departure?.time : undefined)
-      || _multiCityDepTime
-      || undefined)
-    : undefined;
-  const savedDepTime24Hoisted = _depTime24Raw ? _normalizeTo24h(_depTime24Raw) : undefined;
+  const _depTime24Raw = _flightSel.returnDepartureTime24
+    || _flightSel.returnDepartureTime
+    || _nestedRet?.departure?.time
+    || _nestedRet?.departureTime
+    || (Array.isArray(_flightSel.legs) && _flightSel.legs.length > 0 ? _flightSel.legs[_flightSel.legs.length - 1]?.departure?.time : undefined)
+    || _multiCityDepTime
+    || undefined;
+  let savedDepTime24Hoisted = _depTime24Raw ? _normalizeTo24h(_depTime24Raw) : undefined;
 
   // Detect departure transport type (train vs flight) for buffer sizing
   const departureTransportType: string | undefined = _isLastDay
@@ -3567,6 +3570,58 @@ async function _handleGenerateTripDayInner(
   let mustDoInjection: { attempted: string[]; injected: any[]; unscheduled: string[] } | null = null;
   if (dayNumber >= totalDays && isComplete && Array.isArray(partialItinerary?.days)) {
     try {
+      // ── JSON FALLBACK for arrival/departure clocks ──
+      // If the flight selection never carried explicit times (chat-planner
+      // trips, multi-city legs, etc.), recover them from the existing
+      // arrival-flight / airport-transfer cards already on disk so the
+      // scheduler knows about Day-1 morning arrival and Day-N evening
+      // departure. Without this Teotihuacan / Zócalo land inside the
+      // arrival window and get collapsed by sanitizeSchedule.
+      try {
+        if (!savedArrTime24Hoisted && Array.isArray(partialItinerary.days)) {
+          const day1 = partialItinerary.days.find((d: any) => Number(d?.dayNumber) === 1);
+          const arrCard = Array.isArray(day1?.activities)
+            ? day1.activities.find((a: any) => {
+                const id = String(a?.id || '');
+                const cat = String(a?.category || '').toLowerCase();
+                const title = String(a?.title || a?.name || '').toLowerCase();
+                return /day1-arrival-flight|arrival-flight/.test(id)
+                  || /arrival.flight|arrival-flight/.test(cat)
+                  || /^arrival flight\b/.test(title);
+              })
+            : null;
+          const end = arrCard?.endTime || arrCard?.end_time;
+          if (end && typeof end === 'string' && /^\d{1,2}:\d{2}$/.test(end)) {
+            savedArrTime24Hoisted = _normalizeTo24h(end) || end;
+            console.log(`[MUST_DO_INJECT] recovered arrival clock from Day 1 JSON: ${savedArrTime24Hoisted}`);
+          }
+        }
+        if (!savedDepTime24Hoisted && Array.isArray(partialItinerary.days)) {
+          const lastDay = partialItinerary.days[partialItinerary.days.length - 1];
+          const depCard = Array.isArray(lastDay?.activities)
+            ? lastDay.activities.find((a: any) => {
+                const id = String(a?.id || '');
+                const cat = String(a?.category || '').toLowerCase();
+                const title = String(a?.title || a?.name || '').toLowerCase();
+                return /airport_transfer|transfer-to-airport|departure-flight/.test(id)
+                  || /airport.transfer|transfer.airport|departure.flight/.test(cat)
+                  || /\b(travel|transfer)\b.*\bairport\b/.test(title)
+                  || /^departure flight\b/.test(title);
+              })
+            : null;
+          const start = depCard?.startTime || depCard?.start_time;
+          if (start && typeof start === 'string' && /^\d{1,2}:\d{2}$/.test(start)) {
+            // Departure transfer typically starts buffer minutes before the flight.
+            // Use the transfer's start as a proxy clock — scheduler treats this as
+            // a hard "no schedule past" boundary.
+            savedDepTime24Hoisted = _normalizeTo24h(start) || start;
+            console.log(`[MUST_DO_INJECT] recovered departure clock from Day N JSON: ${savedDepTime24Hoisted}`);
+          }
+        }
+      } catch (clockRecoverErr) {
+        console.warn('[MUST_DO_INJECT] clock-recovery from JSON failed (non-fatal):', clockRecoverErr);
+      }
+
       const { assertMustDoCoverage } = await import('../_shared/assert-must-do-coverage.ts');
       const { injectMissingMustDos } = await import('../_shared/inject-missing-must-dos.ts');
       const mustDos = Array.isArray((meta as any)?.mustDoActivities)
@@ -3587,7 +3642,7 @@ async function _handleGenerateTripDayInner(
             },
           );
           console.warn(
-            `[MUST_DO_INJECT] trip=${tripId} attempted=${mustDoInjection.attempted.length} injected=${mustDoInjection.injected.length} unscheduled=${mustDoInjection.unscheduled.length}`,
+            `[MUST_DO_INJECT] trip=${tripId} attempted=${mustDoInjection.attempted.length} injected=${mustDoInjection.injected.length} unscheduled=${mustDoInjection.unscheduled.length} arrClock=${savedArrTime24Hoisted || 'none'} depClock=${savedDepTime24Hoisted || 'none'}`,
           );
           for (const inj of mustDoInjection.injected) {
             console.log(`[MUST_DO_INJECT]   + day=${inj.dayNumber} ${inj.startTime}-${inj.endTime} "${inj.venue}" (${inj.slotReason})`);
@@ -3909,6 +3964,52 @@ async function _handleGenerateTripDayInner(
             }
           }
 
+          // ── C. SURVIVAL CHECK ──────────────────────────────────────────
+          // Coverage matches by title/venue text, so if a later pass (cascade,
+          // chronology, sync-tables) dropped an injected `must-do-*` card,
+          // the matcher can still find the venue if the title sneaks back in
+          // elsewhere — OR fail silently. Guarantee: for every venue whose
+          // matched activity id starts with `must-do-`, verify that id is
+          // actually present in the re-fetched DB days. If not, demote to
+          // missing so persist_gate fires + metadata.must_do_coverage is honest.
+          if (mustDoCoverage && mustDoCoverage.matchedActivityIds) {
+            const presentIds = new Set<string>();
+            for (const d of dbDaysForCoverage) {
+              if (!Array.isArray(d?.activities)) continue;
+              for (const a of d.activities) {
+                if (typeof a?.id === 'string') presentIds.add(a.id);
+              }
+            }
+            const droppedVenues: string[] = [];
+            for (const [venue, id] of Object.entries(mustDoCoverage.matchedActivityIds)) {
+              if (typeof id === 'string' && id.startsWith('must-do-') && !presentIds.has(id)) {
+                droppedVenues.push(venue);
+                console.warn(`[MUST_DO_DROPPED_POST_COVERAGE] trip=${tripId} venue="${venue}" injectedId=${id}`);
+              }
+            }
+            if (droppedVenues.length > 0) {
+              const stillScheduled = mustDoCoverage.scheduled.filter(v => !droppedVenues.includes(v));
+              mustDoCoverage = {
+                ...mustDoCoverage,
+                missing: Array.from(new Set([...mustDoCoverage.missing, ...droppedVenues])),
+                scheduled: stillScheduled,
+              };
+              // Mirror the demotion into mustDoInjection so the downstream
+              // persistGateCodes loop (declared later in this function) sees
+              // the survival drop and adds MUST_DO_INJECTION_FAILED.
+              if (mustDoInjection) {
+                const stillInjected = mustDoInjection.injected.filter(
+                  (inj: any) => !droppedVenues.includes(inj?.venue),
+                );
+                mustDoInjection = {
+                  ...mustDoInjection,
+                  injected: stillInjected,
+                  unscheduled: Array.from(new Set([...mustDoInjection.unscheduled, ...droppedVenues])),
+                };
+              }
+            }
+          }
+
           if (mustDoCoverage.missing.length > 0) {
             console.warn(`[generate-trip-day] MUST_DO_UNCOVERED trip=${tripId} missing=${JSON.stringify(mustDoCoverage.missing)} scheduled=${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
             await appendGenerationTrace(supabase, tripId, {
@@ -3921,7 +4022,7 @@ async function _handleGenerateTripDayInner(
               errorMessage: `missing=${mustDoCoverage.missing.join('|')} scheduled=${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`,
             });
           } else {
-            console.log(`[generate-trip-day] must-do coverage OK (DB-sourced): ${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
+            console.log(`[generate-trip-day] must-do coverage OK (DB-sourced, survival-checked): ${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
           }
         }
       } catch (covErr) {

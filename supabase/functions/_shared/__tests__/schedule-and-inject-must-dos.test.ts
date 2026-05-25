@@ -103,4 +103,90 @@ Deno.test("injector: unscheduled when no day has eligible window", () => {
   const res = injectMissingMustDos(days, ["Pantheon"], {});
   assertEquals(res.injected.length, 0);
   assertEquals(res.unscheduled, ["Pantheon"]);
+  assertEquals(res.injected.length, 0);
+  assertEquals(res.unscheduled, ["Pantheon"]);
 });
+
+Deno.test("scheduler: Teotihuacan rejected from Day 1 morning-arrival, lands on Day 2/3", () => {
+  // Mexico City reproduction: arrival 10:00 Day 1, departure 13:00 Day 4.
+  // Teotihuacan is long-haul (360min) — MUST NOT land on Day 1 or Day 4.
+  const slots = scheduleMustDos(
+    [
+      "Teotihuacan Pyramids",
+      "Zócalo (Plaza de la Constitución)",
+      "Palacio de Bellas Artes",
+      "Frida Kahlo Museum (Casa Azul)",
+    ],
+    {
+      days: [
+        {
+          dayNumber: 1,
+          activities: [
+            { startTime: "08:00", endTime: "10:00", isLocked: true, category: "arrival-flight", id: "day1-arrival-flight-x" },
+            { startTime: "11:30", endTime: "11:55", isLocked: true, category: "hotel-return" },
+            { startTime: "12:15", endTime: "12:35", isLocked: true, category: "logistics" },
+          ],
+        },
+        { dayNumber: 2, activities: [] },
+        { dayNumber: 3, activities: [] },
+        {
+          dayNumber: 4,
+          activities: [
+            { startTime: "07:45", endTime: "08:15", isLocked: true, category: "hotel-checkout", id: "hotel_checkout" },
+            { startTime: "10:20", endTime: "11:05", isLocked: true, category: "airport-transfer", id: "airport_transfer" },
+          ],
+        },
+      ],
+      arrivalTime24: "10:00",
+      departureTime24: "13:00",
+      arrivalBufferMins: 120,
+      departureBufferMins: 180,
+      transferMinsToAirport: 60,
+    },
+  );
+
+  const teo = slots[0]!;
+  const zocalo = slots[1]!;
+
+  // Teotihuacan must land on Day 2 or 3 (long-haul, not Day 1 morning-arrival or Day 4 departure)
+  assertEquals(teo !== null, true, "Teotihuacan should be scheduled");
+  if (teo.dayNumber === 1 || teo.dayNumber === 4) {
+    throw new Error(`Teotihuacan landed on Day ${teo.dayNumber}, should be Day 2 or 3`);
+  }
+  // And it should use the full long-haul block (360 min)
+  assertEquals(teo.durationMinutes, 360, "Teotihuacan should reserve full 360-min block");
+
+  // Zócalo (Day 1 OK with arrival buffer): if Day 1, must start ≥ 12:00 (10:00 + 120m)
+  assertEquals(zocalo !== null, true, "Zócalo should be scheduled");
+  if (zocalo.dayNumber === 1) {
+    const [h, m] = zocalo.startTime.split(":").map(Number);
+    if (h * 60 + m < 12 * 60) {
+      throw new Error(`Zócalo on Day 1 started at ${zocalo.startTime}, should be ≥ 12:00 (arrival+buffer)`);
+    }
+  }
+});
+
+Deno.test("scheduler: long-haul ignores after-dark ceiling", () => {
+  // Verify Teotihuacan never gets pushed into a 17:00–21:00 evening window
+  // even though Day 2 has no other landmarks.
+  const slots = scheduleMustDos(
+    ["Teotihuacan Pyramids"],
+    {
+      days: [
+        { dayNumber: 1, activities: [] },
+        {
+          dayNumber: 2,
+          // Block morning 09:00–16:00 → only 16:00+ free
+          activities: [
+            { startTime: "09:00", endTime: "16:00", isLocked: true, category: "sightseeing" },
+          ],
+        },
+      ],
+    },
+  );
+  // Day 2 winEnd clamps to 17:00 (long-haul ceiling); 16:00–17:00 = 60min < 360
+  // → should fall back to Day 1, NOT take an evening slot on Day 2.
+  const s = slots[0]!;
+  assertEquals(s.dayNumber, 1, "Long-haul should fall back to free Day 1, not evening slot");
+});
+
