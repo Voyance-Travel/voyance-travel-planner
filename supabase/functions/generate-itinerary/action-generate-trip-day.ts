@@ -997,15 +997,20 @@ async function _handleGenerateTripDayInner(
   const _isLastDay = dayNumber >= totalDays;
 
   const { normalizeTo24h: _normalizeTo24h } = await import('./flight-hotel-context.ts');
-  const _arrTime24Raw = _isFirstDay
-    ? (_flightSel.arrivalTime24
-      || _flightSel.arrivalTime
-      || _flightSel.outbound?.arrivalTime
-      || _nestedDep?.arrival?.time
-      || _flightSel.legs?.[0]?.arrival?.time
-      || undefined)
-    : undefined;
-  const savedArrTime24Hoisted = _arrTime24Raw ? _normalizeTo24h(_arrTime24Raw) : undefined;
+  // Compute arrival/departure clocks UNCONDITIONALLY (not gated by _isFirstDay/_isLastDay).
+  // The chain-finalization passes (must-do injector, sanitizeSchedule, persist-validation)
+  // run on the LAST day's leg and need BOTH Day-1 arrival + Day-N departure clocks at the
+  // same time. Without this, Day-1 morning arrivals don't push back must-do injection
+  // (Mexico City Teotihuacan was slotted 10:00–11:30 on top of a 10:00 arrival flight,
+  // then dropped by sanitizeSchedule collisions). Downstream callers already gate by
+  // _isFirstDay/_isLastDay where applicable.
+  const _arrTime24Raw = _flightSel.arrivalTime24
+    || _flightSel.arrivalTime
+    || _flightSel.outbound?.arrivalTime
+    || _nestedDep?.arrival?.time
+    || _flightSel.legs?.[0]?.arrival?.time
+    || undefined;
+  let savedArrTime24Hoisted = _arrTime24Raw ? _normalizeTo24h(_arrTime24Raw) : undefined;
 
   // Multi-city fallback: pull departure time from trip_cities transport_details for last day
   let _multiCityDepTime: string | undefined;
@@ -1031,16 +1036,14 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  const _depTime24Raw = _isLastDay
-    ? (_flightSel.returnDepartureTime24
-      || _flightSel.returnDepartureTime
-      || _nestedRet?.departure?.time
-      || _nestedRet?.departureTime
-      || (Array.isArray(_flightSel.legs) && _flightSel.legs.length > 0 ? _flightSel.legs[_flightSel.legs.length - 1]?.departure?.time : undefined)
-      || _multiCityDepTime
-      || undefined)
-    : undefined;
-  const savedDepTime24Hoisted = _depTime24Raw ? _normalizeTo24h(_depTime24Raw) : undefined;
+  const _depTime24Raw = _flightSel.returnDepartureTime24
+    || _flightSel.returnDepartureTime
+    || _nestedRet?.departure?.time
+    || _nestedRet?.departureTime
+    || (Array.isArray(_flightSel.legs) && _flightSel.legs.length > 0 ? _flightSel.legs[_flightSel.legs.length - 1]?.departure?.time : undefined)
+    || _multiCityDepTime
+    || undefined;
+  let savedDepTime24Hoisted = _depTime24Raw ? _normalizeTo24h(_depTime24Raw) : undefined;
 
   // Detect departure transport type (train vs flight) for buffer sizing
   const departureTransportType: string | undefined = _isLastDay
