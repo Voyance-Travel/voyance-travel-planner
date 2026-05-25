@@ -644,9 +644,13 @@ function findBestDay(
   let lowestLoad = Infinity;
   let backupDay: number | undefined;
   
+  const loadCap = opts.loadCap ?? 480;
+  const relaxArrivalDeparture = !!opts.relaxArrivalDeparture;
+
   for (let d = minDay; d <= maxDay; d++) {
-    // Skip first and last day for long activities (travel days) — BUT respect user's explicit day preference
-    if ((d === 1 || d === totalDays) && (priority.estimatedDuration || 120) > 180) {
+    // Skip first and last day for long activities (travel days) — BUT respect user's explicit day preference.
+    // Relax pass re-enables arrival/departure days (post-arrival window on Day 1, pre-flight window on Day N still usable).
+    if (!relaxArrivalDeparture && (d === 1 || d === totalDays) && (priority.estimatedDuration || 120) > 180) {
       if (!priority.preferredDay || priority.preferredDay !== d) {
         continue;
       }
