@@ -663,7 +663,7 @@ export default function TripDetail() {
       resumeInFlightRef.current = false;
       setResumingGeneration(false);
     }
-  }, [tripId]);
+  }, [tripId, queryClient]);
   // =========================================================================
   // HOTEL ENRICHMENT: Auto-enrich if missing address/website/photos
   // =========================================================================
