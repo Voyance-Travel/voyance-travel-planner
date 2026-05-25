@@ -3994,8 +3994,18 @@ async function _handleGenerateTripDayInner(
                 missing: Array.from(new Set([...mustDoCoverage.missing, ...droppedVenues])),
                 scheduled: stillScheduled,
               };
-              if (!persistGateCodes.includes('MUST_DO_INJECTION_FAILED')) {
-                persistGateCodes.push('MUST_DO_INJECTION_FAILED');
+              // Mirror the demotion into mustDoInjection so the downstream
+              // persistGateCodes loop (declared later in this function) sees
+              // the survival drop and adds MUST_DO_INJECTION_FAILED.
+              if (mustDoInjection) {
+                const stillInjected = mustDoInjection.injected.filter(
+                  (inj: any) => !droppedVenues.includes(inj?.venue),
+                );
+                mustDoInjection = {
+                  ...mustDoInjection,
+                  injected: stillInjected,
+                  unscheduled: Array.from(new Set([...mustDoInjection.unscheduled, ...droppedVenues])),
+                };
               }
             }
           }
