@@ -120,12 +120,24 @@ export async function handleGenerateTrip(
     });
   }
 
-  const background = handleGenerateTripBackground(supabase, userId, {
+  const launchParams = {
     ...params,
     requestedDays: totalDays,
     __backgroundLaunch: true,
     __generationRunId: generationRunId,
-  }).catch(async (err) => {
+  };
+
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_background_started',
+    status: 'ok',
+    expectedTotalDays: totalDays,
+    extra: { mode: 'sync_prechain', runId: generationRunId.slice(0, 8) },
+  });
+
+  try {
+    return await handleGenerateTripBackground(supabase, userId, launchParams);
+  } catch (err) {
     console.error('[generate-trip] background launch failed:', err);
     await appendGenerationTrace(supabase, tripId, {
       action: 'generate-trip',
@@ -148,20 +160,11 @@ export async function handleGenerateTrip(
     } catch (markErr) {
       console.error('[generate-trip] failed to mark background launch failure:', markErr);
     }
-  });
-  EdgeRuntime.waitUntil(background);
-
-  await appendGenerationTrace(supabase, tripId, {
-    action: 'generate-trip',
-    phase: 'launcher_background_started',
-    status: 'ok',
-    expectedTotalDays: totalDays,
-  });
-
-  return new Response(
-    JSON.stringify({ success: true, status: 'generating', totalDays }),
-    { headers: jsonHeaders }
-  );
+    return new Response(
+      JSON.stringify({ success: false, status: 'failed', error: 'Generation could not be started. Please try again.', code: 'LAUNCHER_FAILED' }),
+      { status: 500, headers: jsonHeaders }
+    );
+  }
 }
 
 async function handleGenerateTripBackground(
