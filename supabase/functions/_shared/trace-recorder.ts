@@ -289,3 +289,48 @@ export function attachTrace(traceId: string | null | undefined): Trace {
     return new NoopTrace();
   }
 }
+
+/**
+ * withStage — uniform "wrap a step" helper used by pipeline call sites.
+ *
+ * Encourages every stage to record:
+ *   - name + dayNumber
+ *   - inputs (small summary, not the full payload)
+ *   - outputs (counts, codes, IDs touched — never the full payload)
+ *   - notes[] (one-line human breadcrumbs)
+ *   - error if it threw
+ *
+ * Use over `trace.stage(...)` directly so the call-site shape stays
+ * consistent and "no log written" is itself a detectable gap.
+ *
+ * Example:
+ *   await withStage(trace, "validate_day", { dayNumber }, async (ctx) => {
+ *     const r = validateDay(day);
+ *     ctx.outputs = { codes: r.codes, count: r.codes.length };
+ *     ctx.notes.push(`flagged ${r.codes.length} validator codes`);
+ *     return r;
+ *   });
+ */
+export interface StageCtx {
+  inputs?: AnyJson;
+  outputs?: AnyJson;
+  notes: string[];
+  status?: "ok" | "warn" | "error" | "skipped";
+}
+
+export async function withStage<T>(
+  trace: Trace,
+  name: string,
+  base: { dayNumber?: number; inputs?: AnyJson },
+  fn: (ctx: StageCtx) => Promise<T> | T,
+): Promise<T> {
+  const ctx: StageCtx = { inputs: base.inputs, notes: [] };
+  return await trace.stage(name, {
+    dayNumber: base.dayNumber,
+    inputs: base.inputs,
+    // outputs/notes are captured AFTER fn runs — pass a getter via closure.
+    get outputs() { return ctx.outputs; },
+    get notes() { return ctx.notes.length ? ctx.notes : undefined; },
+    get status() { return ctx.status; },
+  } as StageArgs, async () => fn(ctx));
+}
