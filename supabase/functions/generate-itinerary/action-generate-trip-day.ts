@@ -3964,6 +3964,42 @@ async function _handleGenerateTripDayInner(
             }
           }
 
+          // ── C. SURVIVAL CHECK ──────────────────────────────────────────
+          // Coverage matches by title/venue text, so if a later pass (cascade,
+          // chronology, sync-tables) dropped an injected `must-do-*` card,
+          // the matcher can still find the venue if the title sneaks back in
+          // elsewhere — OR fail silently. Guarantee: for every venue whose
+          // matched activity id starts with `must-do-`, verify that id is
+          // actually present in the re-fetched DB days. If not, demote to
+          // missing so persist_gate fires + metadata.must_do_coverage is honest.
+          if (mustDoCoverage && mustDoCoverage.matchedActivityIds) {
+            const presentIds = new Set<string>();
+            for (const d of dbDaysForCoverage) {
+              if (!Array.isArray(d?.activities)) continue;
+              for (const a of d.activities) {
+                if (typeof a?.id === 'string') presentIds.add(a.id);
+              }
+            }
+            const droppedVenues: string[] = [];
+            for (const [venue, id] of Object.entries(mustDoCoverage.matchedActivityIds)) {
+              if (typeof id === 'string' && id.startsWith('must-do-') && !presentIds.has(id)) {
+                droppedVenues.push(venue);
+                console.warn(`[MUST_DO_DROPPED_POST_COVERAGE] trip=${tripId} venue="${venue}" injectedId=${id}`);
+              }
+            }
+            if (droppedVenues.length > 0) {
+              const stillScheduled = mustDoCoverage.scheduled.filter(v => !droppedVenues.includes(v));
+              mustDoCoverage = {
+                ...mustDoCoverage,
+                missing: Array.from(new Set([...mustDoCoverage.missing, ...droppedVenues])),
+                scheduled: stillScheduled,
+              };
+              if (!persistGateCodes.includes('MUST_DO_INJECTION_FAILED')) {
+                persistGateCodes.push('MUST_DO_INJECTION_FAILED');
+              }
+            }
+          }
+
           if (mustDoCoverage.missing.length > 0) {
             console.warn(`[generate-trip-day] MUST_DO_UNCOVERED trip=${tripId} missing=${JSON.stringify(mustDoCoverage.missing)} scheduled=${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
             await appendGenerationTrace(supabase, tripId, {
@@ -3976,7 +4012,7 @@ async function _handleGenerateTripDayInner(
               errorMessage: `missing=${mustDoCoverage.missing.join('|')} scheduled=${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`,
             });
           } else {
-            console.log(`[generate-trip-day] must-do coverage OK (DB-sourced): ${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
+            console.log(`[generate-trip-day] must-do coverage OK (DB-sourced, survival-checked): ${mustDoCoverage.scheduled.length}/${mustDoCoverage.total}`);
           }
         }
       } catch (covErr) {
