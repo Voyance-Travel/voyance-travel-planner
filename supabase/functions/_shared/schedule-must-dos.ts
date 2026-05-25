@@ -219,6 +219,10 @@ export function scheduleMustDos(
   input: ScheduleInput,
 ): Array<MustDoSlot | null> {
   const eligible = buildEligibleDays(input);
+  const days = Array.isArray(input.days) ? input.days : [];
+  const lastDayNumber = days.length > 0 ? Math.max(...days.map(d => Number(d.dayNumber) || 0)) : 0;
+  const hasArrivalClock = parseHHMM(input.arrivalTime24 || null) !== null;
+  const hasDepartureClock = parseHHMM(input.departureTime24 || null) !== null;
   const out: Array<MustDoSlot | null> = [];
 
   for (const venue of missing) {
@@ -229,9 +233,26 @@ export function scheduleMustDos(
     // Daylight ceiling 17:00 unless after-dark-safe (then 21:00).
     const venueCeiling = afterDark ? 21 * 60 : 17 * 60;
 
-    const candidates = [...eligible].sort((a, b) =>
-      a.existingLandmarkCount - b.existingLandmarkCount || a.dayNumber - b.dayNumber
-    );
+    // Long-haul excursions (Teotihuacan, Versailles, etc.) require a
+    // contiguous multi-hour block AND must skip morning-arrival Day 1 and
+    // last-day departure when a flight clock is set. Crammed into a tight
+    // window the downstream cascade silently strips them.
+    const longHaul = longHaulMinBlock(title);
+    const requireLongHaul = longHaul !== null;
+
+    const candidates = [...eligible]
+      .filter(d => {
+        if (!requireLongHaul) return true;
+        // Reject Day 1 if there's an arrival clock (morning-arrival hurts feasibility).
+        if (d.dayNumber === 1 && hasArrivalClock) return false;
+        // Reject last day if there's a departure clock.
+        if (d.dayNumber === lastDayNumber && hasDepartureClock) return false;
+        // Require the contiguous free window to be at least longHaul minutes.
+        return (d.latestEnd - d.earliestStart) >= longHaul!;
+      })
+      .sort((a, b) =>
+        a.existingLandmarkCount - b.existingLandmarkCount || a.dayNumber - b.dayNumber
+      );
 
     let picked: MustDoSlot | null = null;
     for (const d of candidates) {
@@ -245,7 +266,7 @@ export function scheduleMustDos(
         startTime: fmtHHMM(start),
         endTime: fmtHHMM(start + dur),
         durationMinutes: dur,
-        slotReason: `day=${d.dayNumber} existingLandmarks=${d.existingLandmarkCount} afterDarkOk=${afterDark}`,
+        slotReason: `day=${d.dayNumber} existingLandmarks=${d.existingLandmarkCount} afterDarkOk=${afterDark}${requireLongHaul ? ` longHaul=${longHaul}m` : ''}`,
         afterDarkOk: afterDark,
       };
       // Reserve so the next must-do doesn't pick the same slot.
@@ -259,4 +280,4 @@ export function scheduleMustDos(
   return out;
 }
 
-export const __test__ = { defaultDuration, isAfterDarkOk, parseHHMM, fmtHHMM, firstFreeSlot, buildEligibleDays };
+export const __test__ = { defaultDuration, isAfterDarkOk, parseHHMM, fmtHHMM, firstFreeSlot, buildEligibleDays, longHaulMinBlock };
