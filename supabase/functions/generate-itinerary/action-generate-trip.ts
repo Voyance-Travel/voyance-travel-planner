@@ -1002,7 +1002,16 @@ Return ONLY valid JSON array, no markdown:
     generationLogId: timer.getLogId(),
   });
 
+  await appendGenerationTrace(supabase, tripId, {
+    action: 'generate-trip',
+    phase: 'launcher_day_1_invoke_queued',
+    status: 'ok',
+    dayNumber: effectiveStartDay,
+    expectedTotalDays: totalDays,
+  }).catch(() => {});
+
   // Retry loop with exponential backoff for intermittent 403 errors
+
   const maxRetries = 3;
   let chainOk = false;
   let lastChainStatus: number | null = null;
