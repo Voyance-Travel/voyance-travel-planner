@@ -185,6 +185,9 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkSameDayDuplicateVenues(activities, results);
   checkVenueDescriptionCoherence(activities, results);
 
+  // --- LANDMARK_AFTER_DARK (Rome Colosseum 21:30 bug) ---
+  checkLandmarkAfterDark(activities, results);
+
   // --- DESCRIPTION COVERAGE (intermittent blank blurbs after phantom-ref scrub) ---
   checkActivityDescriptions(activities, results);
 
