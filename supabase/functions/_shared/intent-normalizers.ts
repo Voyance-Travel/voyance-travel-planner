@@ -300,9 +300,13 @@ export function intentsFromChatPlannerExtraction(args: ChatExtractedInput): DayI
     });
   }
 
-  // 3c. mustDoActivities — fallback comma-separated string. Only used if
-  // perDayActivities didn't already cover it.
-  if (args.mustDoActivities && (!args.perDayActivities || args.perDayActivities.length === 0)) {
+  // 3c. mustDoActivities — comma- or newline-separated string of explicit
+  // user-chosen venues/landmarks. ALWAYS processed (the unique index dedupes
+  // against per-day rows; trip-wide entries have `day_number=null` so they
+  // can't collide). Previously gated on `!perDayActivities.length`, which
+  // silently dropped explicit start-form must-dos whenever the chat planner
+  // also produced day-level rows. See must-do-coverage plan §4.
+  if (args.mustDoActivities) {
     const items = splitMustDoString(args.mustDoActivities);
     for (const item of items) {
       const kind = inferKindFromText(item.title);
