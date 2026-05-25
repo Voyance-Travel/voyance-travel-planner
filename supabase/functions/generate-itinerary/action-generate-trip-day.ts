@@ -3558,6 +3558,50 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // ── MUST-DO DETERMINISTIC INJECTION (pre-persist) ────────────────
+  // After all repair passes, before the final persist: if any user-selected
+  // must-do venue is uncovered, inject it as a locked anchor card at a
+  // clock-gated slot. Cards land in JSON + itinerary_activities +
+  // activity_costs naturally because the persist + cost writer fire below.
+  // See mem://constraints/itinerary/must-do-deterministic-injection.
+  let mustDoInjection: { attempted: string[]; injected: any[]; unscheduled: string[] } | null = null;
+  if (dayNumber >= totalDays && isComplete && Array.isArray(partialItinerary?.days)) {
+    try {
+      const { assertMustDoCoverage } = await import('../_shared/assert-must-do-coverage.ts');
+      const { injectMissingMustDos } = await import('../_shared/inject-missing-must-dos.ts');
+      const mustDos = Array.isArray((meta as any)?.mustDoActivities)
+        ? (meta as any).mustDoActivities.filter((v: any) => typeof v === 'string')
+        : [];
+      if (mustDos.length > 0) {
+        const preCoverage = assertMustDoCoverage(partialItinerary.days, mustDos);
+        if (preCoverage.missing.length > 0) {
+          mustDoInjection = injectMissingMustDos(
+            partialItinerary.days,
+            preCoverage.missing,
+            {
+              arrivalTime24: savedArrTime24Hoisted || null,
+              departureTime24: savedDepTime24Hoisted || null,
+              arrivalBufferMins: 120,
+              departureBufferMins: 180,
+              transferMinsToAirport: 60,
+            },
+          );
+          console.warn(
+            `[MUST_DO_INJECT] trip=${tripId} attempted=${mustDoInjection.attempted.length} injected=${mustDoInjection.injected.length} unscheduled=${mustDoInjection.unscheduled.length}`,
+          );
+          for (const inj of mustDoInjection.injected) {
+            console.log(`[MUST_DO_INJECT]   + day=${inj.dayNumber} ${inj.startTime}-${inj.endTime} "${inj.venue}" (${inj.slotReason})`);
+          }
+          for (const u of mustDoInjection.unscheduled) {
+            console.warn(`[MUST_DO_INJECT]   ! UNSCHEDULED "${u}" — no eligible slot`);
+          }
+        }
+      }
+    } catch (injErr) {
+      console.warn('[generate-trip-day] must-do injection failed (non-blocking):', injErr);
+    }
+  }
+
   if (dayNumber >= totalDays) {
     // All days complete — but only mark ready if all days have real activities
     const finalStatus = isComplete ? 'ready' : 'partial';
@@ -3807,6 +3851,17 @@ async function _handleGenerateTripDayInner(
             at: new Date().toISOString(),
           };
         }
+        // Validate-then-stamp: only record `must_do_repair_attempted` if the
+        // injector actually ran AND post-injection coverage was re-asserted.
+        if (mustDoInjection) {
+          finalMeta.must_do_repair_attempted = {
+            at: new Date().toISOString(),
+            attempted: mustDoInjection.attempted,
+            injected: mustDoInjection.injected,
+            stillMissing: mustDoCoverage?.missing || [],
+          };
+        }
+
         await supabase
           .from('trips')
           .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
@@ -3836,6 +3891,9 @@ async function _handleGenerateTripDayInner(
       )) as string[];
       if (mustDoCoverage && mustDoCoverage.missing.length > 0 && !persistGateCodes.includes('MUST_DO_UNCOVERED')) {
         persistGateCodes.push('MUST_DO_UNCOVERED');
+      }
+      if (mustDoInjection && mustDoInjection.unscheduled.length > 0 && !persistGateCodes.includes('MUST_DO_INJECTION_FAILED')) {
+        persistGateCodes.push('MUST_DO_INJECTION_FAILED');
       }
       const { count: tableDays } = await supabase
         .from('itinerary_days').select('id', { count: 'exact', head: true }).eq('trip_id', tripId);
