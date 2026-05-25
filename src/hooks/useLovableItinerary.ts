@@ -346,6 +346,14 @@ export function useLovableItinerary(tripId: string | null, options: UseLovableIt
           const errMsg = (pMeta.generation_error as string) || (pMeta.chain_error as string) || 'Generation failed';
           throw new Error(errMsg);
         }
+
+        // If backend reverted to `not_started` (watchdog-cleared or manual reset)
+        // AFTER our launch, stop spinning and surface a retryable error.
+        if (pollRow.itinerary_status === 'not_started' && Date.now() - pollStart > 15_000) {
+          const errMsg = (pMeta.generation_error as string)
+            || 'Generation did not start. Please try again.';
+          throw new Error(errMsg);
+        }
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
