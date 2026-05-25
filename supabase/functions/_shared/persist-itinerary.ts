@@ -405,6 +405,37 @@ export async function persistTripItinerary(
     console.warn(`[${label}] schedule sanity pass failed (non-blocking):`, e);
   }
 
+  // 3a-bis-PRE-AUDIT. Canonical READ-ONLY timing auditor — same function
+  // used by the read-time `audit-trip-timing` edge fn so legacy bad trips
+  // and fresh writes surface the same violation codes. Never mutates.
+  // Result is persisted at metadata.quality.audit_summary so the dashboard
+  // can group by code without re-running.
+  let auditSummary: Record<string, any> | null = null;
+  try {
+    const { auditTimingViolations } = await import('./audit-timing.ts');
+    const result = auditTimingViolations(days, {
+      arrivalTime24: (callerMetaSuccess as any)?.savedArrivalTime24 ?? null,
+      departureTime24: (callerMetaSuccess as any)?.savedDepartureTime24 ?? null,
+    });
+    if (result.violations.length > 0) {
+      auditSummary = {
+        at: result.ranAt,
+        counts_by_code: result.countsByCode,
+        violations_count: result.violations.length,
+        // Cap to first 50 to keep metadata blob small.
+        violations: result.violations.slice(0, 50),
+      };
+      console.log(
+        `[${label}] [AUDIT_TIMING] violations=${result.violations.length} ` +
+        Object.entries(result.countsByCode)
+          .filter(([, n]) => (n as number) > 0)
+          .map(([k, n]) => `${k}=${n}`).join(' '),
+      );
+    }
+  } catch (e) {
+    console.warn(`[${label}] audit-timing pass failed (non-blocking):`, e);
+  }
+
   // 3a-bis. Chronology validator — sorts each day's activities by
   // wrap-aware dayChronoKey and drops any leftover predawn non-bookend
   // rows on Day N>=2 that earlier passes missed. This is the chokepoint
@@ -778,16 +809,17 @@ export async function persistTripItinerary(
         ...(priorMeta || {}),
         ...(callerMetaSuccess || {}),
       };
-      if (chronologyTrace || scheduleSanityTrace) {
+      if (chronologyTrace || scheduleSanityTrace || auditSummary) {
         const priorQuality = (merged.quality && typeof merged.quality === 'object') ? merged.quality : {};
         merged.quality = {
           ...priorQuality,
           ...(chronologyTrace ? { chronology_trace: chronologyTrace } : {}),
           ...(scheduleSanityTrace ? { schedule_sanity_trace: scheduleSanityTrace } : {}),
+          ...(auditSummary ? { audit_summary: auditSummary } : {}),
         };
       }
       updatePayload.metadata = merged;
-      console.log(`[persist-itinerary] meta-merge (success) tripId=${tripId} priorMustDo=${!!(priorMeta as any)?.mustDoActivities} newMustDo=${!!callerMetaSuccess?.mustDoActivities} chronologyTrace=${chronologyTrace ? `pre=${chronologyTrace.issues_pre}/post=${chronologyTrace.issues_post}` : 'none'} sanityTrace=${scheduleSanityTrace ? 'yes' : 'none'}`);
+      console.log(`[persist-itinerary] meta-merge (success) tripId=${tripId} priorMustDo=${!!(priorMeta as any)?.mustDoActivities} newMustDo=${!!callerMetaSuccess?.mustDoActivities} chronologyTrace=${chronologyTrace ? `pre=${chronologyTrace.issues_pre}/post=${chronologyTrace.issues_post}` : 'none'} sanityTrace=${scheduleSanityTrace ? 'yes' : 'none'} auditSummary=${auditSummary ? `v=${auditSummary.violations_count}` : 'none'}`);
     }
   }
 
