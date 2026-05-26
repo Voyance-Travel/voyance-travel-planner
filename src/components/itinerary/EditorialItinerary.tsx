@@ -912,7 +912,7 @@ function inferCostBasis(category: string, title: string): CostBasis {
   return 'per_person';
 }
 
-function getActivityCostInfo(
+function getActivityCostInfoImpl(
   activity: EditorialActivity,
   travelers: number = 1,
   budgetTier: string = 'moderate',
@@ -1121,6 +1121,54 @@ function getActivityCostInfo(
     basis: finalBasis,
   };
 }
+
+// Debug-only: gate per-activity card price resolution log behind
+// localStorage.VOYANCE_PRICE_DEBUG === '1'. Reports the inputs (ledger, JSON cost,
+// normalized price fields) alongside the final card amount/basis so we can see
+// exactly which path produced each visible card price. One log line per
+// (tripId, activityId) per session.
+const __CARD_PRICE_LOGGED = new Set<string>();
+function __cardPriceDebugEnabled(): boolean {
+  try {
+    return typeof window !== 'undefined' && window.localStorage?.getItem('VOYANCE_PRICE_DEBUG') === '1';
+  } catch { return false; }
+}
+function getActivityCostInfo(
+  activity: EditorialActivity,
+  travelers: number = 1,
+  budgetTier: string = 'moderate',
+  destinationCity?: string,
+  destinationCountry?: string,
+  isManualMode: boolean = false
+): CostInfo {
+  const info = getActivityCostInfoImpl(activity, travelers, budgetTier, destinationCity, destinationCountry, isManualMode);
+  if (__cardPriceDebugEnabled()) {
+    const a: any = activity;
+    const id = String(a.id ?? '');
+    const key = id || a.title || Math.random().toString(36);
+    if (!__CARD_PRICE_LOGGED.has(key)) {
+      __CARD_PRICE_LOGGED.add(key);
+      const ledger = getLedgerOverride(id);
+      // eslint-disable-next-line no-console
+      console.info('[CARD_PRICE_RESOLVE]', {
+        activityId: id,
+        title: a.title,
+        day: a.dayNumber ?? a.day_number,
+        category: a.category,
+        ledger: ledger ? { perPersonUsd: ledger.perPersonUsd, source: ledger.source } : null,
+        jsonCost: { amount: a.cost?.amount, perPerson: a.cost?.perPerson, basis: a.cost?.basis, source: a.cost?.source },
+        normalizedPriceFields: { price_per_person: a.price_per_person, estimated_price_per_person: a.estimated_price_per_person, price: a.price },
+        finalCardAmount: info.amount,
+        finalCardBasis: info.basis,
+        isEstimated: info.isEstimated,
+        travelers,
+      });
+    }
+  }
+  return info;
+}
+
+
 
 /** Short label for cost basis — always "/pp" for multi-guest trips for consistency */
 function basisLabel(basis: CostBasis, travelers: number): string {
