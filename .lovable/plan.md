@@ -1,41 +1,62 @@
-# Fix flight display bugs
 
-Two small frontend display bugs in the itinerary header. Both are presentation-layer only; no backend/itinerary data changes.
+## Goal
 
-## Bug 1 — Return flight arrival shows `--:--`
+Confirm whether card prices and Budget tab line items still disagree on a fresh load of the Buenos Aires trip (`094d7ca4…`), and pinpoint *which* layer is lying — without changing any user-facing behavior yet.
 
-### Root cause
-`EditorialItinerary.tsx` builds `allFlightLegs` (lines 3704-3719) by reading `flightSelection.legs` directly. It **bypasses** `normalizeFlightSelection()`, so the `estimateReturnArrival()` helper that fills in a missing return-arrival time from outbound duration never runs.
+## Why this comes first
 
-Confirmed in DB for Buenos Aires trip `094d7ca4…`: `legs[1].arrival.time = ""` — exactly what the user sees as `--:--`. The trip setup form does not collect a return arrival time, so the leg is always blank without estimation.
+The DB is internally consistent on every surface I can read server-side:
 
-### Fix
-Route `allFlightLegs` through `normalizeFlightSelection(flightSelection)` and read `.legs` from the result. The normalizer already:
-- runs `estimateReturnArrival()` (outbound duration + return departure → return arrival, marked `estimated: true`)
-- runs `autoTagLegs()` for destination flags
-- handles both `legs[]` and legacy `{departure, return}` shapes
+- `activity_costs` ledger, JSON `cost.amount`, JSON `cost.perPerson` — all agree row-for-row.
+- The card render path in `EditorialItinerary.tsx` (L1003–1028) already short-circuits to `getLedgerOverride(activityId)` and returns `perPersonUsd` straight from the ledger, with a `warnOnceLedgerOverride` console warning if JSON ≠ ledger by ≥$1.
+- The Budget tab reads from the same `useTripFinancialSnapshot` → `resolveCanonicalCostRows` → ledger pipeline.
 
-`SortableFlightLegCards` already renders an "est." pill when `arrival.estimated` is true (lines 190-192), so no UI change needed.
+So if a fresh hard-refresh still shows the mismatch you screenshotted ($35/pp bike, "Free" Caminito, $60 Lo de Jesús), one of three things is true and we don't yet know which:
 
-### Files
-- `src/components/itinerary/EditorialItinerary.tsx` — replace the `allFlightLegs` useMemo body with a single `normalizeFlightSelection(flightSelection)?.legs ?? []`, preserving the `seat/cabinClass` field-name normalization.
+1. **Card path drift** — `getLedgerOverride` returns nothing for those IDs (ledger map keyed by a different id shape than the JSON activity), so the card falls through to `costAmount`, `normalizedPrice`, or `estimateCostSync` and produces a different number than the ledger.
+2. **Budget path drift** — the Budget tab groups/aggregates by category and applies a transform (e.g. dining bucket rolls up to $60 from a different row) that doesn't match what the card resolves to.
+3. **Stale snapshot vs. fresh JSON** — `useTripFinancialSnapshot` returns a cached/orphaned row set that pre-dates the last persist, while the card reads the fresh JSON; OR vice versa.
 
-## Bug 2 — Day 1 "Flight times don't match your itinerary" false alarm
+Each has a different fix. We need a signal, not a guess.
 
-### Root cause
-`FlightSyncWarning` (EditorialItinerary.tsx ~line 9753) compares `flightArrivalTime` (e.g. 15:00) against `day1FirstActivity.startTime`. When the first activity is the auto-injected Arrival Flight card (`repair-arrival-flight`, repair-day.ts:984), that card's `startTime` is `arrival − 120 min` (block start) and its `endTime` is the actual arrival time. So the comparison is "flight lands 15:00 vs activity at 13:00" — always misaligned by 2h, always triggers the amber banner, even on a freshly-generated itinerary where nothing is wrong.
+## Plan
 
-### Fix
-In `FlightSyncWarning`, when the first activity is the arrival-flight anchor (category `flight`/`transport` AND `anchorSource === 'arrival-flight'` OR title matches `arrival flight|landing`), compare `flightArrivalTime` against the activity's **`endTime`** (the landing moment) instead of `startTime`. For all other first-activity types, keep the existing `startTime` comparison.
+### 1. Add per-activity reconciliation logging (read-only)
 
-Also tighten the alignment tolerance: treat ±5 min as aligned (unchanged), and skip the warning entirely if the card carries `anchorSource: 'arrival-flight'` AND its `endTime` equals flight arrival time (the deterministic cascade already keeps these in sync).
+In `src/components/itinerary/EditorialItinerary.tsx`, extend the existing `warnOnceLedgerOverride` block (L1014) to **always** emit a single structured `console.info('[CARD_PRICE_RESOLVE]', {...})` per activity per session, with:
 
-### Files
-- `src/components/itinerary/EditorialItinerary.tsx` — update `FlightSyncWarning` to pick the right time field based on whether the first activity is the arrival-flight anchor.
+```
+{ tripId, activityId, title, day,
+  ledger: { perPerson, total, source } | null,
+  jsonCost: { amount, perPerson, basis, source },
+  normalizedPriceFields: { price_per_person, estimated_price_per_person, price },
+  estimateFallback: boolean,
+  finalCardAmount: number,
+  finalCardBasis: CostBasis }
+```
 
-## Verification
-- Buenos Aires trip: open header → return leg now shows estimated arrival (e.g. `15:00 est.`) instead of `--:--`.
-- Rome / Mexico City / Buenos Aires: amber "Flight times don't match" banner no longer appears on freshly generated itineraries where the arrival-flight card's endTime matches the flight's arrival time. Banner still fires correctly if user later swaps in a real first activity that genuinely starts before flight arrival.
+Gate it behind `localStorage.VOYANCE_PRICE_DEBUG === '1'` so it only fires when we ask for it.
 
-## Out of scope
-No edge function changes. No itinerary data writes. No changes to `normalizeFlightSelection.ts` itself (already correct).
+### 2. Add matching log in the Budget tab
+
+In whichever component renders the per-item rows in the Budget tab (`BudgetTab.tsx` / `useTripFinancialSnapshot`), emit a parallel `[BUDGET_ROW_RESOLVE]` with `{ tripId, activityId, title, day, ledgerRow, displayedAmount, displayedBucket }`, behind the same flag.
+
+### 3. Reproduce against the live Buenos Aires trip
+
+You hard-refresh `/trip/094d7ca4-cd2c-4bd1-bad1-f0630874f8ba` with the flag on; paste the resulting `[CARD_PRICE_RESOLVE]` and `[BUDGET_ROW_RESOLVE]` lines for Urban Art Bike, Caminito, Arrival Flight, and the contested dinner. That tells us deterministically which path is producing each visible number.
+
+### 4. Then fix the actual leak
+
+Based on the logs, write the targeted patch in a follow-up plan (e.g. fix id-shape mismatch in `getLedgerOverride`, fix Budget bucket aggregation, force snapshot invalidation on `TRIP_PERSISTED_EVENT`, etc.). No speculative changes in this PR.
+
+## Files touched (instrumentation only)
+
+- `src/components/itinerary/EditorialItinerary.tsx` (extend the existing ledger-override warn block).
+- `src/components/trip/BudgetTab.tsx` and/or `src/hooks/useTripFinancialSnapshot.ts` (one new console.info site).
+
+## Not in scope
+
+- No price logic changes, no migrations, no ledger backfill.
+- Not touching the must-do coverage or flight-display work from the prior turns.
+
+After you approve, I'll wire the instrumentation, you flip `localStorage.VOYANCE_PRICE_DEBUG='1'` and refresh, then paste the logs back here and we cut a targeted fix.
