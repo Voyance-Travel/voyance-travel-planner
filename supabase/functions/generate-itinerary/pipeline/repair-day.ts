@@ -962,31 +962,100 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 3b. ARRIVAL FLIGHT + AIRPORT TRANSFER (Day 1 only) ---
+  // Authoritative: arrivalTime24 is resolved upstream from flight_selection
+  // (flight-hotel-context.ts / pickDestinationArrivalLeg). Two paths:
+  //   - RECONCILE: LLM emitted its own "Arrival Flight" card at a bogus time
+  //     (e.g. Istanbul 03:05 vs real 15:00). Overwrite times, lock it, push
+  //     to index 0, and inject transfer if missing.
+  //   - INJECT: no arrival card exists. Build both flight + transfer fresh.
+  // Both paths run the same collision sweep so non-locked activities never
+  // overlap the inbound block.
   if (isFirstDay && arrivalTime24 && !isHotelChange) {
     const arrivalAirportName = input.arrivalAirport || 'the Airport';
     const transferMinutes = input.airportTransferMinutes || 45;
+    const arrivalMins = parseTimeToMinutes(arrivalTime24);
 
-    const hasArrivalFlight = activities.some((a: any) => {
-      const t = (a.title || '').toLowerCase();
-      const cat = (a.category || '').toLowerCase();
-      return (cat === 'flight' || cat === 'transport') && (
-        t.includes('arrival flight') || t.includes('landing') ||
-        (t.includes('arrive') && t.includes('flight'))
-      );
-    });
+    if (arrivalMins !== null) {
+      const flightEndMins = arrivalMins;
+      const flightStartMins = Math.max(0, arrivalMins - 120);
+      const transferStartMins = flightEndMins + 30;
+      const transferEndMins = transferStartMins + transferMinutes;
+      const transferHotelName = hotelName || 'Your Hotel';
 
-    if (!hasArrivalFlight) {
-      const arrivalMins = parseTimeToMinutes(arrivalTime24);
-      if (arrivalMins !== null) {
-        const flightEndMins = arrivalMins;
-        const flightStartMins = Math.max(0, arrivalMins - 120);
-        const flightCard = {
+      // Detect existing LLM-emitted arrival flight card
+      const existingFlightIdx = activities.findIndex((a: any) => {
+        if (!a) return false;
+        const t = (a.title || '').toLowerCase();
+        const cat = (a.category || '').toLowerCase();
+        return (cat === 'flight' || cat === 'transport') && (
+          t.includes('arrival flight') || t.includes('landing') ||
+          (t.includes('arrive') && t.includes('flight'))
+        );
+      });
+
+      const existingTransferIdx = activities.findIndex((a: any) => {
+        if (!a) return false;
+        if (a.anchorSource === 'airport-transfer') return true;
+        const t = (a.title || '').toLowerCase();
+        const cat = (a.category || '').toLowerCase();
+        return (cat === 'transport' || cat === 'logistics') &&
+          (t.includes('transfer to') || t.includes('travel to') || t.includes('airport pickup'));
+      });
+
+      const newFlightStart = minutesToHHMM(flightStartMins);
+      const newFlightEnd = minutesToHHMM(flightEndMins);
+
+      if (existingFlightIdx >= 0) {
+        // ── RECONCILE: existing card → overwrite to authoritative time + lock
+        const card: any = activities[existingFlightIdx];
+        const wasStart = card.startTime;
+        const wasEnd = card.endTime;
+        card.title = 'Arrival Flight';
+        card.name = 'Arrival Flight';
+        if (!card.description || /^\s*$/.test(String(card.description))) {
+          card.description = `Arrive at ${arrivalAirportName}.`;
+        }
+        card.startTime = newFlightStart;
+        card.start_time = newFlightStart;
+        card.endTime = newFlightEnd;
+        card.end_time = newFlightEnd;
+        card.time = newFlightStart;
+        card.category = 'flight';
+        card.type = 'flight';
+        card.location = card.location && typeof card.location === 'object'
+          ? { ...card.location, name: card.location.name || arrivalAirportName }
+          : { name: arrivalAirportName, address: '' };
+        card.cost = card.cost ?? { amount: 0, currency: 'USD' };
+        card.bookingRequired = false;
+        card.isLocked = true;
+        card.locked = true;
+        card.lock_state = 'locked';
+        card.anchorSource = 'arrival-flight';
+        card.durationMinutes = 120;
+        card.source = 'repair-arrival-flight-reconciled';
+        // Move to index 0
+        if (existingFlightIdx !== 0) {
+          activities.splice(existingFlightIdx, 1);
+          activities.unshift(card);
+        }
+        // Sync locked id set so collision sweep treats it as anchor
+        if (card.id) lockedIds.add(card.id);
+        repairs.push({
+          code: FAILURE_CODES.MISSING_SLOT,
+          action: 'reconciled_arrival_flight',
+          before: `${wasStart}-${wasEnd}`,
+          after: `${newFlightStart}-${newFlightEnd}`,
+        });
+        console.log(`[Repair §3b] Reconciled LLM arrival flight: was=${wasStart}-${wasEnd} now=${newFlightStart}-${newFlightEnd} (authoritative ${arrivalTime24})`);
+      } else {
+        // ── INJECT: no arrival card → build fresh
+        const flightCard: any = {
           id: `day${dayNumber}-arrival-flight-${Date.now()}`,
           title: 'Arrival Flight',
           name: 'Arrival Flight',
           description: `Arrive at ${arrivalAirportName}.`,
-          startTime: minutesToHHMM(flightStartMins),
-          endTime: minutesToHHMM(flightEndMins),
+          startTime: newFlightStart,
+          endTime: newFlightEnd,
           category: 'flight',
           type: 'flight',
           location: { name: arrivalAirportName, address: '' },
@@ -999,11 +1068,15 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           durationMinutes: 120,
           source: 'repair-arrival-flight',
         };
+        activities.unshift(flightCard);
+        if (flightCard.id) lockedIds.add(flightCard.id);
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_arrival_flight' });
+        console.log(`[Repair §3b] Injected arrival flight on Day 1 at ${newFlightStart}-${newFlightEnd} (authoritative ${arrivalTime24})`);
+      }
 
-        const transferStartMins = flightEndMins + 30;
-        const transferEndMins = transferStartMins + transferMinutes;
-        const transferHotelName = hotelName || 'Your Hotel';
-        const transferCard = {
+      // ── Transfer: inject if missing (anchored adjacent to flight)
+      if (existingTransferIdx < 0) {
+        const transferCard: any = {
           id: `day${dayNumber}-airport-transfer-${Date.now()}`,
           title: `Transfer to ${transferHotelName}`,
           name: `Transfer to ${transferHotelName}`,
@@ -1023,30 +1096,27 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           durationMinutes: transferMinutes,
           source: 'repair-airport-transfer',
         };
-
-        // Nudge any non-locked, non-anchor, pre-existing activity that would
-        // collide with the inbound flight/transfer block (e.g. AI-emitted
-        // "Luggage Drop at 06:15" before a 04:30 landing) to start at least
-        // 15m AFTER the transfer ends. Closes the recurring "Luggage Drop
-        // before the plane landed" out-of-order class.
-        const earliestPostArrivalMin = transferEndMins + 15;
-        for (const a of activities) {
-          if (!a) continue;
-          if (lockedIds.has(a.id)) continue;
-          if (a.anchorSource === 'arrival-flight' || a.anchorSource === 'airport-transfer') continue;
-          const aStart = parseTimeToMinutes(a.startTime || '') ?? null;
-          const aEnd = parseTimeToMinutes(a.endTime || '') ?? null;
-          if (aStart === null || aStart >= earliestPostArrivalMin) continue;
-          const shift = earliestPostArrivalMin - aStart;
-          a.startTime = minutesToHHMM(aStart + shift);
-          if (aEnd !== null) a.endTime = minutesToHHMM(aEnd + shift);
-        }
-
-        activities.unshift(transferCard);
-        activities.unshift(flightCard);
-        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_arrival_flight' });
+        // Insert directly after the flight card (now at index 0)
+        activities.splice(1, 0, transferCard);
+        if (transferCard.id) lockedIds.add(transferCard.id);
         repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_airport_transfer' });
-        console.log(`[Repair] Injected arrival flight + airport transfer on Day 1 (locked, anchored)`);
+      }
+
+      // ── Collision sweep: nudge any non-locked, non-anchor activity that
+      // would collide with the inbound block to start ≥ transferEnd + 15m.
+      // Closes "Luggage Drop 06:15 before 04:30 landing" out-of-order class
+      // AND the reconcile path's "AI dinner 19:00 with new flight 13:00–15:00".
+      const earliestPostArrivalMin = transferEndMins + 15;
+      for (const a of activities) {
+        if (!a) continue;
+        if (lockedIds.has(a.id)) continue;
+        if (a.anchorSource === 'arrival-flight' || a.anchorSource === 'airport-transfer') continue;
+        const aStart = parseTimeToMinutes(a.startTime || '') ?? null;
+        const aEnd = parseTimeToMinutes(a.endTime || '') ?? null;
+        if (aStart === null || aStart >= earliestPostArrivalMin) continue;
+        const shift = earliestPostArrivalMin - aStart;
+        a.startTime = minutesToHHMM(aStart + shift);
+        if (aEnd !== null) a.endTime = minutesToHHMM(aEnd + shift);
       }
     }
   }

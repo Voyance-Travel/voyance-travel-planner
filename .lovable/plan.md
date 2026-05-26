@@ -1,81 +1,73 @@
-## Why this has been hard
+## Problem
 
-There are multiple “must-do” paths, and they do not all enforce the same contract:
+Worst-case Istanbul: real flight arrives **15:00** (per `flight_selection.departure.arrival.time`), but Day 1 shows **Arrival Flight 03:05–05:05**, `isLocked:false`, and dinner stamped 19:00 on top of an empty afternoon.
 
-1. **Prompt-time scheduler** (`generate-itinerary/must-do-priorities.ts`) assigns selected attractions to days for the AI prompt using a load-based day picker. This can say “include 4 things,” but it does not guarantee they survive in the final saved schedule.
-2. **Final deterministic injector** (`_shared/schedule-must-dos.ts` + `inject-missing-must-dos.ts`) runs near the end and is stricter about real time windows, overlap, arrival/departure clocks, and daylight ceilings.
-3. **Coverage checker** (`assert-must-do-coverage.ts`) now honestly detects missing attractions, but the generation flow still treats that as **warn/non-blocking**, so a trip can finish “ready” with `MUST_DO_UNCOVERED` or `MUST_DO_INJECTION_FAILED` buried in metadata.
+## Root cause
 
-So yes: the system can now *find* the issue, but it still doesn’t *block or repair hard enough*. The recurring “2–3 of 4 appear” pattern is usually the 3rd/4th item failing the stricter final slot search after meals, logistics, arrival/departure buffers, and committed activity windows are already on the calendar.
+`pipeline/repair-day.ts` §3b (lines 964–1052) only injects the arrival-flight + airport-transfer anchors when **no** arrival-flight card already exists:
 
-## Root cause to fix
+```ts
+const hasArrivalFlight = activities.some((a: any) => {
+  const t = (a.title || '').toLowerCase();
+  const cat = (a.category || '').toLowerCase();
+  return (cat === 'flight' || cat === 'transport') && (
+    t.includes('arrival flight') || t.includes('landing') ||
+    (t.includes('arrive') && t.includes('flight'))
+  );
+});
+if (!hasArrivalFlight) { /* inject locked anchors at authoritative time */ }
+```
 
-The prompt scheduler and final injector are split-brain:
+When the LLM hallucinates its own "Arrival Flight" card (any bogus time, unlocked), this check short-circuits — repair never overrides the time, never locks it, and never adds the transfer. Downstream cascades happily place real activities (dinner 19:00, must-do museum) without respect for the real landing clock. Affects Rome, Mexico City, Buenos Aires, Istanbul.
 
-- Prompt scheduler may distribute 4 selected attractions across the trip.
-- AI may omit one or convert it into neighborhood/transport prose.
-- Final injector tries to add missing ones, but if it can’t find a clean non-overlapping window, it marks them unscheduled.
-- The trip still becomes ready because these failures are metadata warnings, not a presentation-blocking repair path.
+## Fix
 
-## Implementation plan
+Add a **reconciliation branch** in repair-day §3b that runs whenever `isFirstDay && arrivalTime24` is known, regardless of whether the LLM already emitted an arrival card. Single source of truth = `arrivalTime24` resolved upstream by `flight-hotel-context.ts` / `action-generate-trip-day.ts`.
 
-### 1. Normalize selected attractions into one authoritative list
+### Reconciliation contract
 
-Add a shared helper that extracts `metadata.mustDoActivities` into clean venue names for both string and array inputs.
+When a matching arrival-flight card exists:
+1. Overwrite `startTime = arrivalTime24 - 120m`, `endTime = arrivalTime24`, `durationMinutes = 120`.
+2. Stamp `isLocked = true, locked = true, lock_state = 'locked', anchorSource = 'arrival-flight', source = 'repair-arrival-flight-reconciled'`.
+3. Normalize `title`/`name` to `'Arrival Flight'`, set `category = 'flight'`, fill `location.name = arrivalAirport`.
+4. Push the existing card to **index 0** of the day.
+5. If no airport-transfer anchor exists, inject one immediately after (existing transfer block — extracted into a small helper for reuse).
+6. Re-run the existing "nudge colliding non-locked, non-anchor activities to start ≥ `transferEnd + 15m`" sweep so dinner/check-in/must-do cards shift forward, not overlap.
+7. Push a repair entry: `{ code: MISSING_SLOT, action: 'reconciled_arrival_flight', detail: { wasStart, wasEnd, newStart: arrivalTime24-120m, newEnd: arrivalTime24 } }`.
+8. `console.log('[Repair] Reconciled LLM arrival flight: was=… now=… (authoritative)')`.
 
-Use it in:
+When no card exists, the current inject branch keeps running unchanged.
 
-- `action-generate-trip-day.ts` pre-persist injection
-- final DB-sourced coverage assertion
-- `action-save-itinerary.ts` coverage restamp
+### Refactor
 
-This prevents array-vs-string drift and makes Rome / Mexico City / Buenos Aires / Istanbul use the same selected-attractions list everywhere.
+Extract a shared helper `applyArrivalFlightAnchor(activities, arrivalTime24, opts)` inside `repair-day.ts` that handles both "inject" and "reconcile" paths so the time math + lockdown + collision sweep live in one place.
 
-### 2. Replace prompt-time day assignment with the deterministic scheduler contract
+### Telemetry
 
-In `compile-prompt.ts`, stop relying only on the legacy `must-do-priorities.ts` load scheduler for selected landmarks.
+- Add `[Repair §3b]` sentinel logs distinguishing `injected` vs `reconciled` vs `no_arrival_clock`.
+- `metadata.quality.arrival_flight_reconciled = { day, wasStart, newStart }` (bounded ring buffer of 3) so we can read-time audit how often LLM cards drift.
 
-Use the shared deterministic scheduler’s day/time output when building the “MANDATORY” prompt block, so the model sees the same feasible slots that the final injector will later enforce.
+## Tests
 
-Keep the existing event parser for true all-day / half-day events, but landmark chips should follow the shared scheduler.
+Add `supabase/functions/_shared/__tests__/arrival-flight-reconcile.test.ts` covering:
 
-### 3. Make final uncovered must-dos presentation-blocking
+1. **Istanbul fixture** — `arrivalTime24='15:00'`, LLM emits `Arrival Flight 03:05–05:05 isLocked:false` → after repair: 13:00–15:00, isLocked:true, anchorSource set; subsequent dinner at 19:00 preserved.
+2. **Mexico City** — arrival 10:00, LLM emits flight 22:00–23:00 → reconciled to 08:00–10:00; transfer injected.
+3. **Rome** — arrival 14:00, no LLM card → existing inject path still passes (regression).
+4. **Buenos Aires** — arrival 06:30, LLM emits flight 10:00; existing dinner 19:00 not shifted (already after transferEnd+15m).
+5. **Collision sweep** — LLM emits flight 03:05 + luggage drop 06:15; after reconciliation to 13:00–15:00 with 45m transfer, luggage drop moves to ≥ 16:00.
+6. **No `arrivalTime24`** — neither branch runs, repair returns unchanged.
 
-In `action-generate-trip-day.ts`, if final DB-sourced `must_do_coverage.missing.length > 0` after retry:
+Extend `arrival-flight-anchor.test.ts` with one reconcile case for documentation parity.
 
-- keep the trip persisted, but do **not** silently present it as clean
-- stamp `generation_health.persistGateCodes` with `MUST_DO_UNCOVERED` / `MUST_DO_INJECTION_FAILED`
-- expose this as a repair-needed state rather than “ready with missing selected attractions”
+## Files
 
-This changes the failure from “user discovers missing attractions manually” to “system knows the selected attractions didn’t fit and flags it.”
+- **Edit**: `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — refactor §3b into helper + add reconcile branch (~80 LOC delta).
+- **Create**: `supabase/functions/_shared/__tests__/arrival-flight-reconcile.test.ts`.
+- **Edit**: `mem://constraints/itinerary/...` — add new memory `arrival-flight-reconciliation` (single source of truth contract) and update Core index.
 
-### 4. Add a last-chance displacement repair for selected attractions
+## What this does NOT touch
 
-If the deterministic injector cannot place a selected attraction:
-
-- try displacing a non-locked, non-meal, AI-generated filler activity from the least disruptive day
-- preserve locked/manual/extracted/pinned activities
-- never violate departure logistics, meal rules, or hotel/freshen-up rules
-- re-run coverage after displacement
-
-This is the key practical fix for “we selected 4, only 2 fit”: selected attractions outrank generic filler, so a filler card should be removed before a user-selected attraction is dropped.
-
-### 5. Add regression tests for the recurring cities
-
-Add tests covering:
-
-- **Rome:** Pantheon, Trevi, Vatican, Colosseum all survive or missing is blocking
-- **Mexico City:** Teotihuacan long-haul does not land on arrival/departure day; Zócalo/Bellas Artes/Casa Azul still fit
-- **Buenos Aires:** neighborhood/transport cards do not satisfy venue selections; final scheduler does not double-book
-- **Istanbul:** mosque/bazaar/palace-style selections preserve daylight windows and do not get treated as vague neighborhood coverage
-
-Also add one test where the 3rd/4th selected attraction only fits after displacing a generic filler activity.
-
-### 6. Update memory
-
-Update `mem://constraints/itinerary/must-do-coverage-injection` with:
-
-- single authoritative selected-attractions extraction
-- prompt scheduler must mirror final injector
-- uncovered selected attractions are not allowed to be silent “ready” success
-- user-selected attractions outrank AI filler activities
+- `flight-hotel-context.ts` / `pickDestinationArrivalLeg` — Istanbul DB confirms upstream returns the correct `15:00`. No parser change.
+- LLM prompt — fix is post-hoc reconciliation so the contract survives any future prompt drift.
+- Last-day departure logic — separate (existing §15z handles departure-side cap).
