@@ -1,29 +1,41 @@
-## Plan: stop selected attractions from being falsely marked covered
+# Fix flight display bugs
 
-### What I found
-- The Buenos Aires trip does contain injected cards for **Recoleta Cemetery** and **San Telmo Market** in stored JSON, but they overlap other activities/meals and can be hidden or made unusable in the visible schedule.
-- The current must-do coverage check is too optimistic: it marks an attraction as scheduled when the text exists in JSON, even if the matched card is a **transport row**, a **neighborhood walk**, or an **overlapping injected card** that does not survive as a believable visible activity.
-- Example: **Teatro Colón** was counted via `Travel to Teatro Colón` instead of the actual visit card. That same weakness can let “Recoleta neighborhood walk” satisfy “Recoleta Cemetery” class requests.
+Two small frontend display bugs in the itinerary header. Both are presentation-layer only; no backend/itinerary data changes.
 
-### Fixes to implement
-1. **Harden must-do coverage matching**
-   - Update `assert-must-do-coverage.ts` so transport/logistics/accommodation rows cannot satisfy a selected attraction.
-   - Require stronger matching for venue-like selections: `Recoleta Cemetery` should not match generic `Recoleta Neighborhood Walk`.
-   - Add explicit Buenos Aires aliases for `Teatro Colón`, `Recoleta Cemetery`, `Caminito`, and `San Telmo Market`.
+## Bug 1 — Return flight arrival shows `--:--`
 
-2. **Treat conflicting injected must-dos as not covered**
-   - Add a post-coverage visibility/schedule viability check: if a matched must-do card overlaps another real non-transit activity or meal, demote it back to `missing` instead of stamping `missing=[]`.
-   - This will force the existing retry/failure path to surface the problem honestly rather than silently claiming coverage.
+### Root cause
+`EditorialItinerary.tsx` builds `allFlightLegs` (lines 3704-3719) by reading `flightSelection.legs` directly. It **bypasses** `normalizeFlightSelection()`, so the `estimateReturnArrival()` helper that fills in a missing return-arrival time from outbound duration never runs.
 
-3. **Prevent new injected must-dos from landing on top of real activities**
-   - Tighten `schedule-must-dos.ts` so must-do injections treat dining and real activity blocks as hard busy windows, not only locked rows.
-   - Keep transport flexible, but don’t place selected attractions over meals or already scheduled experiences.
+Confirmed in DB for Buenos Aires trip `094d7ca4…`: `legs[1].arrival.time = ""` — exactly what the user sees as `--:--`. The trip setup form does not collect a return arrival time, so the leg is always blank without estimation.
 
-4. **Add regression tests**
-   - Coverage test: `Recoleta Neighborhood Walk` must not satisfy `Recoleta Cemetery`.
-   - Coverage test: `Travel to Teatro Colón` must not satisfy `Teatro Colón`; the actual visit card must.
-   - Scheduler test: Recoleta Cemetery + San Telmo Market should not overlap breakfast/lunch/activity blocks.
-   - Buenos Aires reproduction test using the current 4 selected attractions.
+### Fix
+Route `allFlightLegs` through `normalizeFlightSelection(flightSelection)` and read `.legs` from the result. The normalizer already:
+- runs `estimateReturnArrival()` (outbound duration + return departure → return arrival, marked `estimated: true`)
+- runs `autoTagLegs()` for destination flags
+- handles both `legs[]` and legacy `{departure, return}` shapes
 
-### Expected result
-Future Rome/Mexico City/Buenos Aires-style trips either schedule all selected attractions as real visible cards in valid slots, or clearly report the remaining missing attractions instead of falsely showing full coverage.
+`SortableFlightLegCards` already renders an "est." pill when `arrival.estimated` is true (lines 190-192), so no UI change needed.
+
+### Files
+- `src/components/itinerary/EditorialItinerary.tsx` — replace the `allFlightLegs` useMemo body with a single `normalizeFlightSelection(flightSelection)?.legs ?? []`, preserving the `seat/cabinClass` field-name normalization.
+
+## Bug 2 — Day 1 "Flight times don't match your itinerary" false alarm
+
+### Root cause
+`FlightSyncWarning` (EditorialItinerary.tsx ~line 9753) compares `flightArrivalTime` (e.g. 15:00) against `day1FirstActivity.startTime`. When the first activity is the auto-injected Arrival Flight card (`repair-arrival-flight`, repair-day.ts:984), that card's `startTime` is `arrival − 120 min` (block start) and its `endTime` is the actual arrival time. So the comparison is "flight lands 15:00 vs activity at 13:00" — always misaligned by 2h, always triggers the amber banner, even on a freshly-generated itinerary where nothing is wrong.
+
+### Fix
+In `FlightSyncWarning`, when the first activity is the arrival-flight anchor (category `flight`/`transport` AND `anchorSource === 'arrival-flight'` OR title matches `arrival flight|landing`), compare `flightArrivalTime` against the activity's **`endTime`** (the landing moment) instead of `startTime`. For all other first-activity types, keep the existing `startTime` comparison.
+
+Also tighten the alignment tolerance: treat ±5 min as aligned (unchanged), and skip the warning entirely if the card carries `anchorSource: 'arrival-flight'` AND its `endTime` equals flight arrival time (the deterministic cascade already keeps these in sync).
+
+### Files
+- `src/components/itinerary/EditorialItinerary.tsx` — update `FlightSyncWarning` to pick the right time field based on whether the first activity is the arrival-flight anchor.
+
+## Verification
+- Buenos Aires trip: open header → return leg now shows estimated arrival (e.g. `15:00 est.`) instead of `--:--`.
+- Rome / Mexico City / Buenos Aires: amber "Flight times don't match" banner no longer appears on freshly generated itineraries where the arrival-flight card's endTime matches the flight's arrival time. Banner still fires correctly if user later swaps in a real first activity that genuinely starts before flight arrival.
+
+## Out of scope
+No edge function changes. No itinerary data writes. No changes to `normalizeFlightSelection.ts` itself (already correct).
