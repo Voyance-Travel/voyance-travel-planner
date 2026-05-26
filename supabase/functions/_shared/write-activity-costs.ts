@@ -379,6 +379,9 @@ export async function writeActivityCostsFromItinerary(
       if (dayTotal > dailyCap * tolerance) {
         const scaleFactor = (dailyCap * 1.1) / dayTotal;
         for (const row of rows) {
+          // Skip user/imported/booked rows — their price is authoritative and
+          // must never be silently scaled down by the budget-cap pass.
+          if (USER_AUTHORED_BASES.has(String((row as any).source || ''))) continue;
           const original = row.cost_per_person_usd as number;
           let scaled = original * scaleFactor;
           if (scaled >= 5) scaled = Math.round(scaled / 5) * 5;
@@ -388,6 +391,7 @@ export async function writeActivityCostsFromItinerary(
         }
       }
     }
+
   }
 
   if (costRows.length === 0) {
