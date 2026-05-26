@@ -34,21 +34,21 @@ Deno.test("overlap: avoids breakfast block (no explicit lock flag)", () => {
   assert(s.startTime >= '10:00', `expected ≥10:00, got ${s.startTime}`);
 });
 
-Deno.test("overlap: avoids midday museum block", () => {
-  // Existing museum 11:00-13:00; new must-do (90m) should land at 13:00.
+Deno.test("overlap: avoids morning museum block — lands after", () => {
+  // Museum 09:00-12:00 blocks the morning. Pantheon (90m) should land at 12:00.
   const slots = scheduleMustDos(
     ["Pantheon"],
     {
       days: [{
         dayNumber: 1,
         activities: [
-          { id: 'm', title: 'Galleria Borghese', category: 'museum', startTime: '11:00', endTime: '13:00' },
+          { id: 'm', title: 'Galleria Borghese', category: 'museum', startTime: '09:00', endTime: '12:00' },
         ],
       }],
     },
   );
   const s = slots[0]!;
-  assertEquals(s.startTime, '13:00');
+  assertEquals(s.startTime, '12:00');
 });
 
 Deno.test("overlap: museum-class venue still respects 17:00 ceiling", () => {
