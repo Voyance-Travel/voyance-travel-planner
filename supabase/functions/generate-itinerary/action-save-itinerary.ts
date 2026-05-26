@@ -1306,12 +1306,11 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       // supabase/functions/_shared/assert-must-do-coverage.ts.
       try {
         const { assertMustDoCoverage } = await import('../_shared/assert-must-do-coverage.ts');
+        const { extractMustDoVenues } = await import('../_shared/extract-must-dos.ts');
         const { data: tripMetaRow } = await supabase
           .from('trips').select('metadata').eq('id', tripId).single();
         const tmd = (tripMetaRow?.metadata as Record<string, any>) || {};
-        const mustDos = Array.isArray(tmd.mustDoActivities)
-          ? tmd.mustDoActivities.filter((v: any) => typeof v === 'string')
-          : [];
+        const mustDos = extractMustDoVenues(tmd);
         if (mustDos.length > 0) {
           // Read coverage from the DB row JUST written, not the in-memory
           // pre-persist days — persist-itinerary / sync-tables can drop
