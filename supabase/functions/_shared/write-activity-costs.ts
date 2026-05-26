@@ -82,7 +82,54 @@ const categoryMap: Record<string, string> = {
   sightseeing: 'activity', experience: 'activity', entertainment: 'activity',
   nightlife: 'nightlife', bar: 'nightlife', club: 'nightlife',
   shopping: 'shopping', market: 'shopping',
+  // Logistics categories — preserved as-is so flight/hotel rows aren't
+  // misclassified as 'activity' (closes "Arrival Flight" → category=activity bug).
+  flight: 'flight', flights: 'flight',
+  hotel: 'hotel', accommodation: 'hotel', stay: 'hotel',
 };
+
+const USER_AUTHORED_BASES = new Set(['user', 'user_override', 'imported', 'booked']);
+const PRESERVE_CATEGORY_SET = new Set(['flight', 'hotel']);
+
+/**
+ * Extract the per-person USD price the AI / repair pipeline emitted on this
+ * activity. Returns null when no usable price is on the JSON. Order mirrors
+ * the card-side reader (`getActivityCostInfo` in EditorialItinerary.tsx) so
+ * ledger writes match what the card already chose to display.
+ */
+function extractJsonPerPersonUsd(act: any, travelers: number): { amount: number; basis: string; source: string } | null {
+  if (!act) return null;
+  const t = Math.max(1, travelers || 1);
+  const costObj = act.cost && typeof act.cost === 'object' ? act.cost : null;
+  const rawAmount = costObj && typeof costObj.amount === 'number' && !isNaN(costObj.amount) ? costObj.amount : undefined;
+  const basis = String(costObj?.basis || '').toLowerCase();
+  const sourceRaw = String(costObj?.source || '').toLowerCase();
+
+  // Explicit per-person basis
+  if (rawAmount !== undefined && rawAmount > 0 && basis === 'per_person') {
+    return { amount: rawAmount, basis: 'per_person', source: USER_AUTHORED_BASES.has(sourceRaw) ? sourceRaw : (sourceRaw || 'json') };
+  }
+  // Group/flat total — divide back to per-person
+  if (rawAmount !== undefined && rawAmount > 0 && (basis === 'flat' || basis === 'group' || basis === 'total')) {
+    return { amount: rawAmount / t, basis: 'flat', source: USER_AUTHORED_BASES.has(sourceRaw) ? sourceRaw : (sourceRaw || 'json') };
+  }
+  // Normalised root-level price fields
+  const pp = typeof act.price_per_person === 'number' ? act.price_per_person : undefined;
+  if (pp !== undefined && pp > 0) {
+    return { amount: pp, basis: 'per_person', source: 'json' };
+  }
+  const epp = typeof act.estimated_price_per_person === 'number' ? act.estimated_price_per_person : undefined;
+  if (epp !== undefined && epp > 0) {
+    return { amount: epp, basis: 'per_person', source: 'json' };
+  }
+  // Legacy AI rows: bare cost.amount with no basis — every downstream reader
+  // (card via getLedgerOverride, snapshot, payments) already treats this as
+  // per-person, so the writer must too.
+  if (rawAmount !== undefined && rawAmount > 0) {
+    return { amount: rawAmount, basis: 'per_person', source: USER_AUTHORED_BASES.has(sourceRaw) ? sourceRaw : (sourceRaw || 'json') };
+  }
+  return null;
+}
 
 export async function writeActivityCostsFromItinerary(
   supabase: any,
