@@ -211,7 +211,7 @@ export function estimateReturnArrival(legs: FlightLeg[]): void {
   }
 
   const durationMin = (outArr.getTime() - outDep.getTime()) / 60000;
-  if (!Number.isFinite(durationMin) || durationMin <= 0 || durationMin > 20 * 60) return;
+  if (!Number.isFinite(durationMin) || durationMin <= 0 || durationMin > 24 * 60) return;
 
   const retDep = parseDateTimeUTC(ret.departure?.date, ret.departure?.time);
   if (!retDep) return;
