@@ -3879,6 +3879,7 @@ async function _handleGenerateTripDayInner(
     if (finalStatus === 'ready' && isComplete) {
       try {
         const { extractMustDoVenues } = await import('../_shared/extract-must-dos.ts');
+        const { assertMustDoCoverage } = await import('../_shared/assert-must-do-coverage.ts');
         const mustDos = extractMustDoVenues(meta);
         if (mustDos.length > 0) {
           // Re-fetch the post-persist JSON so coverage reads what's on disk.
