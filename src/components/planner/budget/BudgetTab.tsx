@@ -189,6 +189,23 @@ function PayableCostsList({ items, formatCurrency, categoryColors, categoryIcons
     });
   };
 
+  // Debug-only: log per-row resolution behind localStorage.VOYANCE_PRICE_DEBUG === '1'.
+  // Pair with [CARD_PRICE_RESOLVE] from EditorialItinerary to compare card vs budget for the same activity.
+  try {
+    if (typeof window !== 'undefined' && window.localStorage?.getItem('VOYANCE_PRICE_DEBUG') === '1') {
+      // eslint-disable-next-line no-console
+      console.info('[BUDGET_ROW_RESOLVE]', items.map(i => ({
+        itemId: i.id,
+        name: i.name,
+        type: i.type,
+        day: i.dayNumber,
+        amountCents: i.amountCents,
+        amountUsd: i.amountCents / 100,
+        subItemCount: i.subItems?.length || 0,
+      })));
+    }
+  } catch { /* noop */ }
+
   return (
     <div className="space-y-2">
       {displayed.map((item) => {
