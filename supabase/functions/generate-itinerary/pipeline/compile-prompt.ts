@@ -413,15 +413,19 @@ export async function compilePrompt(
     metadata = (tripMeta?.metadata as Record<string, unknown> | null) || null;
   }
 
-  const requestMustDoText = Array.isArray(paramMustDoActivities)
-    ? paramMustDoActivities.join('\n')
-    : (typeof paramMustDoActivities === 'string' ? paramMustDoActivities : '');
-
-  const mustDoActivitiesRaw = requestMustDoText || (() => {
-    const raw = metadata?.mustDoActivities;
-    return Array.isArray(raw) ? raw.join('\n') : (raw as string || '');
-  })();
-  console.log(`[compile-prompt] mustDoActivitiesRaw len=${mustDoActivitiesRaw.length} source=${requestMustDoText ? 'request' : 'metadata'} day=${dayNumber}`);
+  // Normalize via the single source of truth used by the final injector +
+  // coverage checker so prompt-time and persist-time see the same venue
+  // list (no array-vs-string drift, no "Day N:" prefix leakage, no time
+  // tokens, no flight/hotel keywords). See plan §1.
+  const requestVenues = Array.isArray(paramMustDoActivities)
+    ? extractMustDoVenues({ mustDoActivities: paramMustDoActivities })
+    : (typeof paramMustDoActivities === 'string' && paramMustDoActivities.trim()
+        ? extractMustDoVenues({ mustDoActivities: paramMustDoActivities })
+        : []);
+  const metaVenues = extractMustDoVenues(metadata || {});
+  const effectiveVenues = requestVenues.length > 0 ? requestVenues : metaVenues;
+  const mustDoActivitiesRaw = effectiveVenues.join('\n');
+  console.log(`[compile-prompt] mustDoActivitiesRaw venues=${effectiveVenues.length} source=${requestVenues.length > 0 ? 'request' : 'metadata'} day=${dayNumber}`);
 
   const interestCategories = (
     Array.isArray(paramInterestCategories) && paramInterestCategories.length > 0
