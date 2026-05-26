@@ -9779,16 +9779,36 @@ function FlightSyncWarning({ flightArrivalTime, day1FirstActivity, onSyncDay1, i
   };
   
   const flightMins = parseTimeToMinutes(flightArrivalTime);
-  const activityMins = parseTimeToMinutes(day1FirstActivity?.startTime || '');
-  
+
+  // When the first activity IS the auto-injected arrival-flight anchor, its
+  // startTime is `arrival − 120 min` (block start) and its endTime is the
+  // actual landing time. Comparing flightArrivalTime against startTime always
+  // produces a 2h "mismatch" and a false amber banner. Compare against endTime
+  // for the arrival-flight card; against startTime for everything else.
+  const firstAct = day1FirstActivity as any;
+  const anchorSource = (firstAct?.anchorSource || firstAct?.source || '').toLowerCase();
+  const titleLc = (firstAct?.title || '').toLowerCase();
+  const isArrivalFlightAnchor =
+    anchorSource === 'arrival-flight' ||
+    anchorSource === 'repair-arrival-flight' ||
+    anchorSource === 'injected-arrival-flight' ||
+    /\barrival flight\b|\blanding\b/.test(titleLc);
+
+  const activityTimeField = isArrivalFlightAnchor
+    ? (firstAct?.endTime || firstAct?.end_time || '')
+    : (firstAct?.startTime || '');
+  const activityMins = parseTimeToMinutes(activityTimeField);
+
   // If no flight time or first activity, don't show warning
   if (flightMins === null || activityMins === null) return null;
-  
+
   // Check if Day 1's first activity is "Arrival" type - if so, compare times
-  const isArrivalActivity = day1FirstActivity?.title?.toLowerCase().includes('arrival') ||
+  const isArrivalActivity = isArrivalFlightAnchor ||
+    day1FirstActivity?.title?.toLowerCase().includes('arrival') ||
     day1FirstActivity?.category === 'transport';
-  
+
   if (!isArrivalActivity) return null;
+
   
   // Calculate the EXPECTED earliest activity time (arrival + customs/transit buffer)
   const FLIGHT_BUFFER_MINS = 105; // 1h customs + 45m transit — same as cascadeTransportToItinerary
