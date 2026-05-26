@@ -46,7 +46,27 @@ const ALIAS_MAP: Record<string, string[]> = {
   'notre dame': ['notre dame', 'notre-dame'],
   'sagrada familia': ['sagrada familia', 'sagrada família'],
   acropolis: ['acropolis', 'parthenon'],
+  // Buenos Aires
+  'teatro colon': ['teatro colon', 'teatro colón', 'colon theatre', 'colon theater'],
+  'recoleta cemetery': ['recoleta cemetery', 'cementerio de la recoleta', 'cementerio recoleta'],
+  caminito: ['caminito', 'caminito street', 'la boca caminito'],
+  'san telmo market': ['san telmo market', 'mercado de san telmo', 'feria de san telmo', 'san telmo feria'],
 };
+
+/**
+ * Categories whose rows can NEVER satisfy a venue-level must-do.
+ * A "Travel to Teatro Colón" transport row mentions the venue but doesn't
+ * schedule a visit; same for hotel returns, airport transfers, etc.
+ */
+const NON_QUALIFYING_CATEGORY_RE =
+  /\b(transport|transit|transfer|logistics|airport|flight|accommodation|hotel.?return|hotel.?checkout|checkout|return|bookend)\b/i;
+
+/**
+ * Title prefixes that indicate the card is travelling TO the venue, not
+ * spending time at it. Block "Travel to X" / "Walk to X" / "Transfer to X"
+ * from satisfying an X must-do.
+ */
+const TRAVEL_PREFIX_RE = /^\s*(?:travel|walk|drive|ride|transfer|head|go|getting|en\s+route|on\s+the\s+way)\s+(?:to|towards?|over\s+to|back\s+to)\b/i;
 
 function normalize(s: string): string {
   return String(s || '')
