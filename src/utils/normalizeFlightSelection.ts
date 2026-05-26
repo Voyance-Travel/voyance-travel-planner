@@ -58,17 +58,28 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
 
   const data = raw as Record<string, unknown>;
 
+  // Shared exit: run estimateReturnArrival + autoTagLegs and wrap.
+  // BOTH the new-format and legacy branches must go through this — otherwise
+  // legs[]-shaped inputs (what the setup form writes today) skip the estimator
+  // and the return leg renders as "--:--".
+  const finalize = (legs: FlightLeg[]): NormalizedFlightSelection | null => {
+    if (legs.length === 0) return null;
+    estimateReturnArrival(legs);
+    const tagged = autoTagLegs(legs);
+    return {
+      legs: tagged,
+      isManualEntry: data.isManualEntry as boolean | undefined,
+      totalPrice: tagged.reduce((sum, l) => sum + (l.price || 0), 0),
+    };
+  };
+
   // New format: already has legs[]
   if (Array.isArray(data.legs) && data.legs.length > 0) {
     const legs = (data.legs as FlightLeg[]).map((leg, i) => ({
       ...leg,
       legOrder: leg.legOrder ?? i + 1,
     }));
-    return {
-      legs,
-      isManualEntry: data.isManualEntry as boolean | undefined,
-      totalPrice: legs.reduce((sum, l) => sum + (l.price || 0), 0),
-    };
+    return finalize(legs);
   }
 
   // Legacy format: { departure: {...}, return: {...} }
@@ -140,22 +151,7 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
     });
   }
 
-  if (legs.length === 0) return null;
-
-  // Estimate missing return-arrival time from outbound flight duration.
-  // The trip setup form only collects outbound dep/arr + return dep, so leg 2's
-  // arrival is otherwise empty and renders as "--:--".
-  estimateReturnArrival(legs);
-
-  // Auto-tag destination arrival/departure for any leg that lacks the flag.
-  // Safe to run on every read — never overwrites existing flags.
-  const tagged = autoTagLegs(legs);
-
-  return {
-    legs: tagged,
-    isManualEntry: data.isManualEntry as boolean | undefined,
-    totalPrice: tagged.reduce((sum, l) => sum + (l.price || 0), 0),
-  };
+  return finalize(legs);
 }
 
 /**
