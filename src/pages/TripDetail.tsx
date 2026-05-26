@@ -4257,6 +4257,7 @@ export default function TripDetail() {
                       refreshingDayNumber={refreshingDayNumber}
                       refreshResultsByDay={refreshResultsByDay}
                       tripFlightSelection={trip.flight_selection}
+                      mustDoCoverage={(trip?.metadata as any)?.must_do_coverage ?? null}
                       className=""
                       onAction={(action, ctx) => {
                         if (action === 'add_flights') {
