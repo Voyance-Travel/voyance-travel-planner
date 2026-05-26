@@ -90,6 +90,8 @@ Deno.test("BA: full reproduction — 4 selected, partial coverage honestly repor
     ]),
     ['Teatro Colón', 'Recoleta Cemetery', 'Caminito', 'San Telmo Market']
   );
-  assertEquals(r.scheduled.sort(), ['Caminito', 'Teatro Colón'].sort());
-  assertEquals(r.missing.sort(), ['Recoleta Cemetery', 'San Telmo Market'].sort());
+  // Recoleta 09:00–10:30 overlaps bike 07:10–09:25 by 25m / 90m = 27% → still scheduled.
+  // San Telmo 10:30–12:00 overlaps breakfast 10:35–11:20 by 45m / 90m = 50% → demoted.
+  assertEquals(r.scheduled.sort(), ['Caminito', 'Recoleta Cemetery', 'Teatro Colón'].sort());
+  assertEquals(r.missing.sort(), ['San Telmo Market'].sort());
 });
