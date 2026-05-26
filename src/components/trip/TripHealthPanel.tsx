@@ -741,6 +741,7 @@ export function TripHealthPanel({
   refreshingDayNumber = null,
   refreshResultsByDay,
   tripFlightSelection,
+  mustDoCoverage,
   className,
   onAction,
 }: TripHealthPanelProps) {
