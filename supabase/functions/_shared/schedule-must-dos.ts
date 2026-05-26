@@ -129,6 +129,23 @@ function isAfterDarkOk(title: string): boolean {
 
 interface BusyWindow { start: number; end: number; locked: boolean }
 
+// Categories that, while not marked `locked`, represent committed time
+// blocks (real activities the cascade can't silently push out of the way).
+// Must-do injection treats these as hard busy so an injected attraction
+// doesn't land on top of breakfast / a museum / an excursion.
+const COMMITTED_CATEGORY_RE = /\b(dining|food|restaurant|breakfast|brunch|lunch|dinner|cafe|sight|landmark|monument|museum|gallery|cultural|historic|religious|church|palace|castle|tour|excursion|activity|experience|entertainment|wellness|spa|show|performance|nightlife|shopping)\b/i;
+const TRANSIT_CATEGORY_RE = /\b(transport|transit|transfer|logistics|airport|flight|walk|drive)\b/i;
+
+function isCommittedBlock(a: any): boolean {
+  if (!a) return false;
+  const cat = String(a.category || '').toLowerCase();
+  if (TRANSIT_CATEGORY_RE.test(cat)) return false;
+  if (COMMITTED_CATEGORY_RE.test(cat)) return true;
+  // Title-based heuristic: meals + tours embedded in misclassified rows.
+  const title = String(a.title || a.name || '').toLowerCase();
+  return /\b(breakfast|brunch|lunch|dinner|tour|visit|museum|market|cemetery)\b/.test(title);
+}
+
 function busyWindows(activities: any[]): BusyWindow[] {
   if (!Array.isArray(activities)) return [];
   const out: BusyWindow[] = [];
@@ -136,7 +153,10 @@ function busyWindows(activities: any[]): BusyWindow[] {
     const s = parseHHMM(a?.startTime || a?.start_time || a?.time);
     const e = parseHHMM(a?.endTime || a?.end_time);
     if (s === null || e === null || e <= s) continue;
-    const locked = !!(a?.isLocked || a?.locked || a?.userAdded || a?.userEdited || a?.extracted || a?.pinned || a?.isManual);
+    const explicitLock = !!(a?.isLocked || a?.locked || a?.userAdded || a?.userEdited || a?.extracted || a?.pinned || a?.isManual);
+    // Treat committed real-activity blocks as locked for must-do injection
+    // purposes — otherwise we drop an attraction on top of breakfast.
+    const locked = explicitLock || isCommittedBlock(a);
     out.push({ start: s, end: e, locked });
   }
   return out;

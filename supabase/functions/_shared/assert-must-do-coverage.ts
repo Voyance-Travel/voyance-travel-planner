@@ -46,7 +46,27 @@ const ALIAS_MAP: Record<string, string[]> = {
   'notre dame': ['notre dame', 'notre-dame'],
   'sagrada familia': ['sagrada familia', 'sagrada família'],
   acropolis: ['acropolis', 'parthenon'],
+  // Buenos Aires
+  'teatro colon': ['teatro colon', 'teatro colón', 'colon theatre', 'colon theater'],
+  'recoleta cemetery': ['recoleta cemetery', 'cementerio de la recoleta', 'cementerio recoleta'],
+  caminito: ['caminito', 'caminito street', 'la boca caminito'],
+  'san telmo market': ['san telmo market', 'mercado de san telmo', 'feria de san telmo', 'san telmo feria'],
 };
+
+/**
+ * Categories whose rows can NEVER satisfy a venue-level must-do.
+ * A "Travel to Teatro Colón" transport row mentions the venue but doesn't
+ * schedule a visit; same for hotel returns, airport transfers, etc.
+ */
+const NON_QUALIFYING_CATEGORY_RE =
+  /\b(transport|transit|transfer|logistics|airport|flight|accommodation|hotel.?return|hotel.?checkout|checkout|return|bookend)\b/i;
+
+/**
+ * Title prefixes that indicate the card is travelling TO the venue, not
+ * spending time at it. Block "Travel to X" / "Walk to X" / "Transfer to X"
+ * from satisfying an X must-do.
+ */
+const TRAVEL_PREFIX_RE = /^\s*(?:travel|walk|drive|ride|transfer|head|go|getting|en\s+route|on\s+the\s+way)\s+(?:to|towards?|over\s+to|back\s+to)\b/i;
 
 function normalize(s: string): string {
   return String(s || '')
@@ -104,21 +124,82 @@ function matchesWord(haystack: string, matcher: string): boolean {
 }
 
 /**
+ * Activities whose category or title make them ineligible as a must-do
+ * "visit". Transport rows mention the venue but represent travel TO it.
+ * Hotel-return / checkout / flight rows also frequently embed the name.
+ */
+function isNonQualifyingActivity(act: any): boolean {
+  if (!act || typeof act !== 'object') return false;
+  const cat = String(act.category || '').toLowerCase();
+  if (NON_QUALIFYING_CATEGORY_RE.test(cat)) return true;
+  const title = String(act.title || act.name || '');
+  if (TRAVEL_PREFIX_RE.test(title)) return true;
+  const src = String(act.source || '').toLowerCase();
+  if (/bookend|hotel.?return|hotel.?checkout/.test(src)) return true;
+  return false;
+}
+
+/**
  * Check whether an activity's identity fields match any matcher.
  *
  * Restricted haystack: title | name | venue | location.name. We DO NOT
  * search description / location.address — those frequently mention a
  * landmark in narrative prose without scheduling it (e.g. "near the
  * Pantheon, …"), which was the source of the Rome false-positive.
+ *
+ * Non-qualifying categories ("transport", "Travel to …") are filtered
+ * upstream by the caller.
  */
 function activityMatches(act: any, matchers: string[]): boolean {
   if (!act || typeof act !== 'object') return false;
+  if (isNonQualifyingActivity(act)) return false;
   const haystack = normalize(
     [act.title, act.name, act.venue, act.venue_name, act.location?.name]
       .filter(Boolean)
       .join(' | ')
   );
   return matchers.some(m => matchesWord(haystack, m));
+}
+
+interface ActivityWithDay { act: any; dayNumber: number }
+
+function parseHHMM(t: any): number | null {
+  if (typeof t !== 'string') return null;
+  const m = t.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  if (Number.isNaN(h) || Number.isNaN(mm)) return null;
+  return h * 60 + mm;
+}
+
+/**
+ * A matched must-do card is considered "viable" only if it doesn't
+ * substantially overlap another real (non-transit, non-bookend) activity
+ * on the same day. Overlapping injected cards visually disappear behind
+ * the row that was already there — the user perceives them as missing.
+ */
+function isVenueViableOnDay(
+  matched: any,
+  dayNumber: number,
+  allWithDay: ActivityWithDay[],
+): boolean {
+  const start = parseHHMM(matched.startTime ?? matched.start_time ?? matched.time);
+  const end = parseHHMM(matched.endTime ?? matched.end_time);
+  if (start === null || end === null || end <= start) return true; // can't judge
+  for (const { act, dayNumber: dn } of allWithDay) {
+    if (dn !== dayNumber) continue;
+    if (act === matched) continue;
+    if (isNonQualifyingActivity(act)) continue;
+    const s2 = parseHHMM(act.startTime ?? act.start_time ?? act.time);
+    const e2 = parseHHMM(act.endTime ?? act.end_time);
+    if (s2 === null || e2 === null || e2 <= s2) continue;
+    const overlap = Math.max(0, Math.min(end, e2) - Math.max(start, s2));
+    const matchedDur = end - start;
+    // Substantial overlap = ≥50% of the matched card's duration AND ≥20 min.
+    if (overlap >= 20 && overlap >= matchedDur * 0.5) return false;
+  }
+  return true;
 }
 
 /**
@@ -136,24 +217,42 @@ export function assertMustDoCoverage(
     return { missing, scheduled, total: 0, matchedActivityIds };
   }
 
-  // Flatten all activities across all days
-  const allActivities: any[] = [];
+  // Flatten all activities across all days, tagged with their dayNumber so
+  // we can detect overlaps within the matched card's day.
+  const allWithDay: ActivityWithDay[] = [];
   for (const day of Array.isArray(allDays) ? allDays : []) {
+    const dn = Number(day?.dayNumber) || 0;
     if (Array.isArray(day?.activities)) {
-      allActivities.push(...day.activities);
+      for (const act of day.activities) allWithDay.push({ act, dayNumber: dn });
     }
   }
 
   for (const venue of mustDos) {
     if (!venue || typeof venue !== 'string') continue;
     const { matchers } = canonicalize(venue);
-    const hit = allActivities.find(a => activityMatches(a, matchers));
+    // Find the BEST candidate: prefer viable (non-overlapping) matches.
+    let viable: ActivityWithDay | null = null;
+    let anyHit: ActivityWithDay | null = null;
+    for (const entry of allWithDay) {
+      if (!activityMatches(entry.act, matchers)) continue;
+      if (!anyHit) anyHit = entry;
+      if (isVenueViableOnDay(entry.act, entry.dayNumber, allWithDay)) {
+        viable = entry;
+        break;
+      }
+    }
+    const hit = viable || null;
     if (hit) {
       scheduled.push(venue);
-      matchedActivityIds[venue] = typeof hit.id === 'string' ? hit.id : null;
+      matchedActivityIds[venue] = typeof hit.act.id === 'string' ? hit.act.id : null;
     } else {
       missing.push(venue);
       matchedActivityIds[venue] = null;
+      if (anyHit) {
+        console.warn(
+          `[MUST_DO_OVERLAP_DEMOTE] venue="${venue}" matched day=${anyHit.dayNumber} title="${anyHit.act?.title || anyHit.act?.name}" overlaps a real activity → marking missing`,
+        );
+      }
     }
   }
 
@@ -161,4 +260,4 @@ export function assertMustDoCoverage(
 }
 
 // Re-export for tests
-export const __test__ = { canonicalize, activityMatches, normalize, matchesWord };
+export const __test__ = { canonicalize, activityMatches, normalize, matchesWord, isNonQualifyingActivity, isVenueViableOnDay };
