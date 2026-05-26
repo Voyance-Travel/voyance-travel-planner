@@ -82,6 +82,9 @@ const TRAVEL_PREFIX_RE = /^\s*(?:travel|walk|drive|ride|transfer|head|go|getting
 function normalize(s: string): string {
   return String(s || '')
     .toLowerCase()
+    // Turkish dotless ı / capital İ don't decompose under NFKD — fold to 'i'
+    // so "Topkapı Sarayı" matches the alias 'topkapi'.
+    .replace(/[\u0131\u0130]/g, 'i')
     .normalize('NFKD')
     // Drop diacritics
     .replace(/[\u0300-\u036f]/g, '')
