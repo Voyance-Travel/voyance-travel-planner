@@ -187,6 +187,7 @@ import { resolveDropTarget } from './budgetDropResolver';
 import { resolveLiveActivity } from './activityRemoveResolver';
 import { mergeNeedToKnowInfo } from './needToKnow';
 import { classifyItineraryCompleteness } from '@/utils/itineraryCompleteness';
+import { normalizeFlightSelection } from '@/utils/normalizeFlightSelection';
 
 // =============================================================================
 // BOARDING PASS VIEW BUTTON (inline helper)
