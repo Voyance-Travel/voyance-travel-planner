@@ -197,8 +197,18 @@ export function estimateReturnArrival(legs: FlightLeg[]): void {
   if (ret.arrival?.time) return; // already populated, do not overwrite
 
   const outDep = parseDateTimeUTC(outbound.departure?.date, outbound.departure?.time);
-  const outArr = parseDateTimeUTC(outbound.arrival?.date || outbound.departure?.date, outbound.arrival?.time);
+  let outArr = parseDateTimeUTC(outbound.arrival?.date || outbound.departure?.date, outbound.arrival?.time);
   if (!outDep || !outArr) return;
+
+  // Overnight inference: when the outbound has no explicit arrival.date and
+  // the arrival time is at/before the departure time on the same fallback day,
+  // treat the arrival as the next calendar day. Form-entered flights like
+  // Dubai (08:00 → 06:00, no arr date) and Buenos Aires (08:00 → 09:00, no arr
+  // date — actually overnight) would otherwise compute a negative or bogus
+  // 1h duration and skip the return-arrival fill.
+  if (!outbound.arrival?.date && outArr.getTime() <= outDep.getTime()) {
+    outArr = new Date(outArr.getTime() + 24 * 60 * 60 * 1000);
+  }
 
   const durationMin = (outArr.getTime() - outDep.getTime()) / 60000;
   if (!Number.isFinite(durationMin) || durationMin <= 0 || durationMin > 20 * 60) return;
