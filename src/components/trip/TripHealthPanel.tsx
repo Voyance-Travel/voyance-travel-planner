@@ -68,6 +68,8 @@ export interface TripHealthPanelProps {
   refreshResultsByDay?: Record<number, { errorCount: number; warningCount: number }>;
   /** Optional flight selection for arrival/departure-band dayMode fallback */
   tripFlightSelection?: any;
+  /** Backend-stamped must-do coverage from trips.metadata.must_do_coverage */
+  mustDoCoverage?: { missing?: string[]; scheduled?: string[]; total?: number } | null;
   className?: string;
   onAction?: (action: string, context?: { dayNumber?: number; field?: 'flights' | 'hotel' }) => void;
 }
