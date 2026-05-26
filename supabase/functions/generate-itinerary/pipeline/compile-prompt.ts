@@ -37,6 +37,7 @@ import {
   getBlockedTimeRange,
   type ScheduledMustDo,
 } from '../must-do-priorities.ts';
+import { extractMustDoVenues } from '../../_shared/extract-must-dos.ts';
 import { formatGenerationRules } from '../budget-constraints.ts';
 import {
   analyzePreBookedCommitments,
