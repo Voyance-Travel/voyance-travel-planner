@@ -912,7 +912,7 @@ function inferCostBasis(category: string, title: string): CostBasis {
   return 'per_person';
 }
 
-function getActivityCostInfo(
+function getActivityCostInfoImpl(
   activity: EditorialActivity,
   travelers: number = 1,
   budgetTier: string = 'moderate',
