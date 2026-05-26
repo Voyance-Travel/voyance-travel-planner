@@ -3710,6 +3710,15 @@ export function EditorialItinerary({
       seat: (leg.seat as string) || (leg.seatNumber as string) || undefined,
       cabinClass: (leg.cabinClass as string) || (leg.cabin as string) || undefined,
     });
+    // Route through normalizeFlightSelection so estimateReturnArrival fills
+    // in missing return-leg arrival time (form doesn't collect it) and
+    // autoTagLegs sets destination flags. Without this, the return leg
+    // renders as "--:--".
+    const normalized = normalizeFlightSelection(flightSelection as unknown);
+    if (normalized && normalized.legs.length > 0) {
+      return normalized.legs.map(l => normalizeLeg(l as unknown as Record<string, unknown>));
+    }
+    // Fallback for shapes the normalizer doesn't recognize (defensive).
     if (flightSelection.legs && flightSelection.legs.length > 0) {
       return flightSelection.legs.map(l => normalizeLeg(l as unknown as Record<string, unknown>));
     }
@@ -3718,6 +3727,7 @@ export function EditorialItinerary({
     if (flightSelection.return) result.push(normalizeLeg(flightSelection.return as unknown as Record<string, unknown>));
     return result;
   }, [flightSelection]);
+
 
   // Find the leg that actually arrives at the destination (user-marked or heuristic)
   const destinationArrivalLeg: FlightLegDisplay | undefined = useMemo(() => {
