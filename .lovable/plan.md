@@ -1,75 +1,44 @@
+# Fix: Return flight arrival shows --:--
 
-## Budget tab prices don't match itinerary — root cause + fix
+## Root cause
 
-### Diagnosis (Istanbul trip `3c2da103-fb9a-47ef-a51e-d26be4680ac7`, 2 travelers)
+Two compounding bugs in `src/utils/normalizeFlightSelection.ts`:
 
-| Activity | JSON `cost.amount` | Ledger `cost_per_person_usd` | Card shows | Budget line |
-|---|---|---|---|---|
-| Dinner: Nicole Restaurant | $60 | **$30** (forced to city-mid reference) | $30/pp | $60 |
-| Arrival Flight | $20 | **$10** (also miscategorised as `activity`) | $10/pp | $20 |
+1. **New-format early return skips the estimator.** The branch that handles `{ legs: [...] }` (which is what the setup form writes today, and what's persisted for all four affected trips — Dubai, Mexico City, Buenos Aires, Istanbul) returns immediately after mapping `legOrder`. It never calls `estimateReturnArrival` or `autoTagLegs`. Only the legacy `{ departure, return }` branch ran them. Verified by running the normalizer against the persisted `flight_selection` for `99c9d333…` (Dubai) and `3c2da103…` (Istanbul) — both come back with `legs[1].arrival.time = ""`.
 
-Two compounding bugs:
+2. **Estimator can't infer overnight outbound.** For Dubai the outbound is `dep 08:00 → arr 06:00` with no `arrival.date`. The estimator falls back to `departure.date` for both endpoints, computes a negative duration, and aborts — so even after fix #1 the Dubai return would still be blank. Buenos Aires (`08:00 → 09:00`) computes a bogus 1h duration for the same reason; it'd populate but with the wrong time.
 
-1. **Writer drops the AI/JSON price.** `supabase/functions/_shared/write-activity-costs.ts` walks every activity but never reads `act.cost.amount`, `act.price_per_person`, `act.cost.basis`, or `act.cost.source`. It always picks a value from the `cost_reference` table for the city/category/subcategory (or hardcoded $15/$20/$10 fallbacks) and stores that as `cost_per_person_usd`. Whenever the AI emitted a believable price, it's silently replaced by the city-mid reference, so the ledger no longer matches the JSON cost the card was originally meant to show.
-2. **Card vs Budget render in different units.** Card path (`getActivityCostInfo` → `getLedgerOverride`) renders ledger value as `"$30/pp"`. Budget tab path (`usePayableItems` → `resolveCanonicalCostRows.rowTotalCents`) renders `cost_per_person_usd × num_travelers = "$60"`. Mathematically consistent, but the labels look like different prices and the user calls it a mismatch.
+## Fix
 
-The combination is what made it confusing in BA and Istanbul: the per-person ledger price is also half the AI-emitted JSON price, so even a unit-aware user reads it as "Budget says $60 but card says $30, twice the discrepancy."
+Frontend only. Single file: `src/utils/normalizeFlightSelection.ts`.
 
-### Fix
+### 1. Hoist post-processing to a shared exit
 
-#### 1. Honor JSON cost in the writer (root cause)
+Extract the `estimateReturnArrival(legs) → autoTagLegs(legs) → return wrapped` tail into a helper and call it from **both** the new-format branch and the legacy branch. Net effect: `legs[]`-shaped inputs go through the same enrichment as legacy-shaped inputs.
 
-Edit `supabase/functions/_shared/write-activity-costs.ts`:
+### 2. Infer overnight outbound in `estimateReturnArrival`
 
-- Before the `cost_reference` lookup, read an explicit per-person price from the activity in this order:
-  1. `act.cost.amount` when `act.cost.basis === 'per_person'`
-  2. `act.cost.amount / max(num_travelers, 1)` when `basis === 'flat'` (group total)
-  3. `act.price_per_person`
-  4. `act.estimated_price_per_person`
-  5. `act.cost.amount` (legacy AI rows without explicit basis — treat as per-person; this is what every other reader assumes)
-- When `act.cost.source` ∈ `{user, user_override, imported, booked}`, write that price through unchanged and set `source = act.cost.source`, `confidence = 'high'`, skip the budget-cap scaling (already done elsewhere via `basis=user/booked` exemption).
-- Otherwise (AI-emitted): use the JSON price when it's ≥ the existing per-category sanity floor (`category-price-bounds.ts`); if it's below the floor, fall back to the reference value (existing behaviour). Tag `source = 'json'` so the existing daily-cap scaler and floor-repair can still intervene.
-- Keep the explicit free/walking/unverified branches above as-is.
-- Fix the flight category drift: when `act.category` is `flight` or `arrival/return flight` titles, always store `category = 'flight'` regardless of `categoryMap`.
+When the outbound's `arrival.date` is missing and the parsed arrival datetime is `≤` the departure datetime, treat the arrival as next-day before computing duration. Keep the existing `0 < durationMin ≤ 20h` sanity cap. Idempotent and bounded; matches how `getDestinationArrivalLeg` consumers already interpret a flight that "wraps past midnight".
 
-This single change makes the ledger faithfully record what the AI emitted, which restores the contract assumed by every downstream consumer (`getLedgerOverride`, snapshot, payments, budget coach).
+### 3. Regression tests
 
-#### 2. Render Budget line items in the same units as the cards
+Extend `src/utils/__tests__/normalizeFlightSelection.estimateReturnArrival.test.ts`:
 
-Edit `src/components/planner/budget/BudgetTab.tsx` (line-item list only, totals are correct):
+- Dubai fixture (`08:00 → 06:00` outbound, no arr date) — return leg populates with `estimated: true`, arrival time ≈ `dep + (22h)`.
+- Istanbul fixture (verbatim persisted payload, new-format `legs[]`) — return leg `arrival.time` = `17:00`, `estimated: true`.
+- Mexico City fixture — return leg arrival populates.
+- Buenos Aires fixture (`08:00 → 09:00`, no arr date) — return leg uses overnight inference (≈25h), not the bogus 1h.
+- Idempotency: a second `normalizeFlightSelection` call on already-normalized output doesn't overwrite the populated time and keeps `estimated: true`.
 
-- When `travelers > 1`, show each line as `"$30/pp × 2 = $60"` (or per-person primary + group total muted on a second row, to mirror the card tooltip pattern). Keep the bucket subtotals and grand total in group-total cents — they already match `useTripFinancialSnapshot`.
-- Reuse `basisLabel(...)` so wording stays identical to cards.
-- Flat-rate categories (hotel, flight, manual entries) stay as totals — they don't carry a per-person basis.
+## Out of scope
 
-This eliminates the "unit mismatch" reading even for trips that haven't been re-synced.
+- No DB backfill needed: the normalizer runs at every read site (`EditorialItinerary.allFlightLegs`, `getDestinationArrivalLeg`, `getLastLegDepartureTime`). Once the helper runs in the new-format branch, all four affected trips display correctly on next render.
+- No edge function / backend change. The persisted `flight_selection` shape stays as-is; estimated arrival is a display-time concern (consistent with the existing `estimated: true` marker the UI already renders as "est.").
+- No change to `FlightSyncWarning`, anchor compare, cascade logic, or `buildFlightSelectionFromLegs`.
 
-#### 3. One-shot backfill for already-persisted trips
+## Files
 
-Add a small server-side helper that, for every trip with `metadata.fully_persisted = true` and at least one `activity_costs` row tagged `source IN ('reference','fallback')`, recomputes from the JSON itinerary using the new writer logic and updates rows where the JSON price exceeds the stored ledger value by ≥ $5. Skip locked/user/booked rows. Run once via a one-off migration trigger (mirrors the `sync-trip-cost-table` lazy backfill in `useTripFinancialSnapshot`).
+- **edited** `src/utils/normalizeFlightSelection.ts` — single shared exit + overnight inference.
+- **edited** `src/utils/__tests__/normalizeFlightSelection.estimateReturnArrival.test.ts` — 4 fixture tests + idempotency.
 
-### Tests
-
-- `supabase/functions/_shared/__tests__/write-activity-costs.honors-json.test.ts`
-  - AI emits `cost.amount=60, basis='per_person'` → ledger writes `cost_per_person_usd=60, source='json'`.
-  - AI emits `cost.amount=120, basis='flat'`, 2 travelers → ledger writes `cost_per_person_usd=60`.
-  - `cost.source='user'` → ledger preserves user value, bypasses cap scaling.
-  - AI emits $8 dinner (below floor) → ledger falls back to reference value (existing floor behavior).
-  - Flight category preserved as `category='flight'`.
-- `src/components/planner/budget/__tests__/budgetLineItemUnits.test.tsx`
-  - 2 travelers, `cost_per_person_usd=30` → line renders `$30/pp × 2 = $60` (or visual equivalent).
-  - 1 traveler → line renders `$60` (no `/pp` suffix).
-
-### Files
-
-- Edit `supabase/functions/_shared/write-activity-costs.ts`
-- Edit `src/components/planner/budget/BudgetTab.tsx`
-- Add `supabase/functions/_shared/__tests__/write-activity-costs.honors-json.test.ts`
-- Add `src/components/planner/budget/__tests__/budgetLineItemUnits.test.tsx`
-- Add `supabase/migrations/<ts>_backfill_activity_costs_from_json.sql` (one-shot edge-fn trigger or RPC)
-- Update `mem://constraints/finance/ledger-is-card-source-of-truth` with the writer-honors-JSON sub-rule.
-
-### Out of scope
-
-- The header `Trip Total` already matches via `useDisplayedTripTotal`; no change needed.
-- The card-side `getLedgerOverride` keeps its current logic — once the writer is honest, the card and ledger naturally agree.
+After approval, I'll also update the existing memory entry `mem://constraints/itinerary/flight-display-normalize-and-anchor-compare` to note the new-format-branch coverage so this doesn't regress.
