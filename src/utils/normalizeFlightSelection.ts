@@ -58,17 +58,28 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
 
   const data = raw as Record<string, unknown>;
 
+  // Shared exit: run estimateReturnArrival + autoTagLegs and wrap.
+  // BOTH the new-format and legacy branches must go through this — otherwise
+  // legs[]-shaped inputs (what the setup form writes today) skip the estimator
+  // and the return leg renders as "--:--".
+  const finalize = (legs: FlightLeg[]): NormalizedFlightSelection | null => {
+    if (legs.length === 0) return null;
+    estimateReturnArrival(legs);
+    const tagged = autoTagLegs(legs);
+    return {
+      legs: tagged,
+      isManualEntry: data.isManualEntry as boolean | undefined,
+      totalPrice: tagged.reduce((sum, l) => sum + (l.price || 0), 0),
+    };
+  };
+
   // New format: already has legs[]
   if (Array.isArray(data.legs) && data.legs.length > 0) {
     const legs = (data.legs as FlightLeg[]).map((leg, i) => ({
       ...leg,
       legOrder: leg.legOrder ?? i + 1,
     }));
-    return {
-      legs,
-      isManualEntry: data.isManualEntry as boolean | undefined,
-      totalPrice: legs.reduce((sum, l) => sum + (l.price || 0), 0),
-    };
+    return finalize(legs);
   }
 
   // Legacy format: { departure: {...}, return: {...} }
@@ -140,22 +151,7 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
     });
   }
 
-  if (legs.length === 0) return null;
-
-  // Estimate missing return-arrival time from outbound flight duration.
-  // The trip setup form only collects outbound dep/arr + return dep, so leg 2's
-  // arrival is otherwise empty and renders as "--:--".
-  estimateReturnArrival(legs);
-
-  // Auto-tag destination arrival/departure for any leg that lacks the flag.
-  // Safe to run on every read — never overwrites existing flags.
-  const tagged = autoTagLegs(legs);
-
-  return {
-    legs: tagged,
-    isManualEntry: data.isManualEntry as boolean | undefined,
-    totalPrice: tagged.reduce((sum, l) => sum + (l.price || 0), 0),
-  };
+  return finalize(legs);
 }
 
 /**
@@ -201,11 +197,21 @@ export function estimateReturnArrival(legs: FlightLeg[]): void {
   if (ret.arrival?.time) return; // already populated, do not overwrite
 
   const outDep = parseDateTimeUTC(outbound.departure?.date, outbound.departure?.time);
-  const outArr = parseDateTimeUTC(outbound.arrival?.date || outbound.departure?.date, outbound.arrival?.time);
+  let outArr = parseDateTimeUTC(outbound.arrival?.date || outbound.departure?.date, outbound.arrival?.time);
   if (!outDep || !outArr) return;
 
+  // Overnight inference: when the outbound has no explicit arrival.date and
+  // the arrival time is at/before the departure time on the same fallback day,
+  // treat the arrival as the next calendar day. Form-entered flights like
+  // Dubai (08:00 → 06:00, no arr date) and Buenos Aires (08:00 → 09:00, no arr
+  // date — actually overnight) would otherwise compute a negative or bogus
+  // 1h duration and skip the return-arrival fill.
+  if (!outbound.arrival?.date && outArr.getTime() <= outDep.getTime()) {
+    outArr = new Date(outArr.getTime() + 24 * 60 * 60 * 1000);
+  }
+
   const durationMin = (outArr.getTime() - outDep.getTime()) / 60000;
-  if (!Number.isFinite(durationMin) || durationMin <= 0 || durationMin > 20 * 60) return;
+  if (!Number.isFinite(durationMin) || durationMin <= 0 || durationMin > 24 * 60) return;
 
   const retDep = parseDateTimeUTC(ret.departure?.date, ret.departure?.time);
   if (!retDep) return;
