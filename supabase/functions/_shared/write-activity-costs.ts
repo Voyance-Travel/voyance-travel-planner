@@ -82,7 +82,54 @@ const categoryMap: Record<string, string> = {
   sightseeing: 'activity', experience: 'activity', entertainment: 'activity',
   nightlife: 'nightlife', bar: 'nightlife', club: 'nightlife',
   shopping: 'shopping', market: 'shopping',
+  // Logistics categories — preserved as-is so flight/hotel rows aren't
+  // misclassified as 'activity' (closes "Arrival Flight" → category=activity bug).
+  flight: 'flight', flights: 'flight',
+  hotel: 'hotel', accommodation: 'hotel', stay: 'hotel',
 };
+
+const USER_AUTHORED_BASES = new Set(['user', 'user_override', 'imported', 'booked']);
+const PRESERVE_CATEGORY_SET = new Set(['flight', 'hotel']);
+
+/**
+ * Extract the per-person USD price the AI / repair pipeline emitted on this
+ * activity. Returns null when no usable price is on the JSON. Order mirrors
+ * the card-side reader (`getActivityCostInfo` in EditorialItinerary.tsx) so
+ * ledger writes match what the card already chose to display.
+ */
+function extractJsonPerPersonUsd(act: any, travelers: number): { amount: number; basis: string; source: string } | null {
+  if (!act) return null;
+  const t = Math.max(1, travelers || 1);
+  const costObj = act.cost && typeof act.cost === 'object' ? act.cost : null;
+  const rawAmount = costObj && typeof costObj.amount === 'number' && !isNaN(costObj.amount) ? costObj.amount : undefined;
+  const basis = String(costObj?.basis || '').toLowerCase();
+  const sourceRaw = String(costObj?.source || '').toLowerCase();
+
+  // Explicit per-person basis
+  if (rawAmount !== undefined && rawAmount > 0 && basis === 'per_person') {
+    return { amount: rawAmount, basis: 'per_person', source: USER_AUTHORED_BASES.has(sourceRaw) ? sourceRaw : (sourceRaw || 'json') };
+  }
+  // Group/flat total — divide back to per-person
+  if (rawAmount !== undefined && rawAmount > 0 && (basis === 'flat' || basis === 'group' || basis === 'total')) {
+    return { amount: rawAmount / t, basis: 'flat', source: USER_AUTHORED_BASES.has(sourceRaw) ? sourceRaw : (sourceRaw || 'json') };
+  }
+  // Normalised root-level price fields
+  const pp = typeof act.price_per_person === 'number' ? act.price_per_person : undefined;
+  if (pp !== undefined && pp > 0) {
+    return { amount: pp, basis: 'per_person', source: 'json' };
+  }
+  const epp = typeof act.estimated_price_per_person === 'number' ? act.estimated_price_per_person : undefined;
+  if (epp !== undefined && epp > 0) {
+    return { amount: epp, basis: 'per_person', source: 'json' };
+  }
+  // Legacy AI rows: bare cost.amount with no basis — every downstream reader
+  // (card via getLedgerOverride, snapshot, payments) already treats this as
+  // per-person, so the writer must too.
+  if (rawAmount !== undefined && rawAmount > 0) {
+    return { amount: rawAmount, basis: 'per_person', source: USER_AUTHORED_BASES.has(sourceRaw) ? sourceRaw : (sourceRaw || 'json') };
+  }
+  return null;
+}
 
 export async function writeActivityCostsFromItinerary(
   supabase: any,
@@ -213,7 +260,34 @@ export async function writeActivityCostsFromItinerary(
         continue;
       }
 
-      // cost_reference lookup
+      // STEP 1: Honor the per-person USD price the AI/repair pipeline already
+      // wrote onto this activity. This makes the ledger faithfully record what
+      // the card was meant to show; otherwise we silently overwrite a $60
+      // dinner with a $30 city-tier reference and the card vs Budget tab
+      // diverge by exactly that factor. User/imported/booked rows are written
+      // through verbatim and bypass the daily-cap scaler.
+      const jsonPrice = extractJsonPerPersonUsd(act, context.travelers || 1);
+      const isUserAuthored = jsonPrice ? USER_AUTHORED_BASES.has(jsonPrice.source) : false;
+
+      // For logistics categories (flight/hotel) we never consult cost_reference
+      // — those rows are written by separate logistics-sync paths. If the JSON
+      // carries a number, store it; otherwise leave as $0 so logistics-sync
+      // can fill in later.
+      if (PRESERVE_CATEGORY_SET.has(mappedCategory)) {
+        costRows.push({
+          trip_id: tripId,
+          activity_id: act.id,
+          day_number: day.dayNumber || 1,
+          cost_per_person_usd: Math.min(jsonPrice?.amount ?? 0, 5000),
+          num_travelers: context.travelers || 1,
+          category: mappedCategory,
+          source: jsonPrice ? jsonPrice.source : 'logistics-placeholder',
+          confidence: jsonPrice ? 'high' : 'low',
+        });
+        continue;
+      }
+
+      // cost_reference lookup (used as fallback when JSON has no price)
       const subcategory = inferSubcategory(titleLower, mappedCategory);
       let ref: any = null;
       if (subcategory) ref = refMap.get(`${cityKey}|${mappedCategory}|${subcategory}`);
@@ -224,9 +298,34 @@ export async function writeActivityCostsFromItinerary(
       let costPerPerson: number;
       let costRefId: string | null = null;
       let source = 'reference';
-      let confidence = 'medium';
+      let confidence: string = 'medium';
+      let skipCapScaling = false;
 
-      if (ref) {
+      if (jsonPrice && jsonPrice.amount > 0) {
+        // AI/repair-emitted price wins. Reference acts as a sanity floor only
+        // when the JSON price is implausibly low for the category.
+        const refMidForFloor = ref
+          ? (() => {
+              switch (budgetTier) {
+                case 'budget': case 'saver': return Number(ref.cost_low_usd) || 0;
+                case 'premium': case 'luxury': return Number(ref.cost_high_usd) || 0;
+                default: return Number(ref.cost_mid_usd) || 0;
+              }
+            })()
+          : 0;
+        const floor = refMidForFloor > 0 ? refMidForFloor * 0.4 : 0;
+        if (!isUserAuthored && floor > 0 && jsonPrice.amount < floor) {
+          costPerPerson = refMidForFloor;
+          costRefId = ref?.id || null;
+          source = 'reference';
+          confidence = ref?.confidence || 'medium';
+        } else {
+          costPerPerson = jsonPrice.amount;
+          source = jsonPrice.source; // 'json' | 'user' | 'imported' | 'booked' | 'user_override'
+          confidence = isUserAuthored ? 'high' : 'high';
+          if (isUserAuthored) skipCapScaling = true;
+        }
+      } else if (ref) {
         costRefId = ref.id;
         switch (budgetTier) {
           case 'budget': case 'saver': costPerPerson = Number(ref.cost_low_usd); break;
@@ -244,8 +343,9 @@ export async function writeActivityCostsFromItinerary(
         confidence = 'low';
       }
 
-      // Round to nearest $5 (except amounts < $5)
-      if (costPerPerson >= 5) {
+      // Round to nearest $5 (except amounts < $5). Skip rounding for
+      // user-authored prices — those are exact and must round-trip.
+      if (!isUserAuthored && costPerPerson >= 5) {
         costPerPerson = Math.round(costPerPerson / 5) * 5;
       }
 
@@ -259,6 +359,7 @@ export async function writeActivityCostsFromItinerary(
         source,
         confidence,
         cost_reference_id: costRefId,
+        ...(skipCapScaling ? { notes: '[user-authored — cap-exempt]' } : {}),
       });
     }
   }
@@ -278,6 +379,9 @@ export async function writeActivityCostsFromItinerary(
       if (dayTotal > dailyCap * tolerance) {
         const scaleFactor = (dailyCap * 1.1) / dayTotal;
         for (const row of rows) {
+          // Skip user/imported/booked rows — their price is authoritative and
+          // must never be silently scaled down by the budget-cap pass.
+          if (USER_AUTHORED_BASES.has(String((row as any).source || ''))) continue;
           const original = row.cost_per_person_usd as number;
           let scaled = original * scaleFactor;
           if (scaled >= 5) scaled = Math.round(scaled / 5) * 5;
@@ -287,6 +391,7 @@ export async function writeActivityCostsFromItinerary(
         }
       }
     }
+
   }
 
   if (costRows.length === 0) {
