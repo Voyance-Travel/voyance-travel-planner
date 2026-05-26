@@ -51,6 +51,17 @@ const ALIAS_MAP: Record<string, string[]> = {
   'recoleta cemetery': ['recoleta cemetery', 'cementerio de la recoleta', 'cementerio recoleta'],
   caminito: ['caminito', 'caminito street', 'la boca caminito'],
   'san telmo market': ['san telmo market', 'mercado de san telmo', 'feria de san telmo', 'san telmo feria'],
+  // Mexico City
+  teotihuacan: ['teotihuacan', 'teotihuacán', 'pyramids of teotihuacan', 'piramides de teotihuacan'],
+  zocalo: ['zocalo', 'zócalo', 'plaza de la constitucion', 'plaza de la constitución'],
+  'palacio de bellas artes': ['bellas artes', 'palacio de bellas artes', 'palace of fine arts'],
+  'casa azul': ['casa azul', 'frida kahlo museum', 'museo frida kahlo'],
+  // Istanbul
+  'hagia sophia': ['hagia sophia', 'ayasofya', 'aya sofya'],
+  'blue mosque': ['blue mosque', 'sultan ahmed mosque', 'sultanahmet camii'],
+  'topkapi palace': ['topkapi', 'topkapı', 'topkapi palace', 'topkapı sarayı'],
+  'grand bazaar': ['grand bazaar', 'kapali carsi', 'kapalı çarşı'],
+  'basilica cistern': ['basilica cistern', 'yerebatan', 'yerebatan sarnici', 'yerebatan sarnıcı'],
 };
 
 /**
@@ -71,6 +82,9 @@ const TRAVEL_PREFIX_RE = /^\s*(?:travel|walk|drive|ride|transfer|head|go|getting
 function normalize(s: string): string {
   return String(s || '')
     .toLowerCase()
+    // Turkish dotless ı / capital İ don't decompose under NFKD — fold to 'i'
+    // so "Topkapı Sarayı" matches the alias 'topkapi'.
+    .replace(/[\u0131\u0130]/g, 'i')
     .normalize('NFKD')
     // Drop diacritics
     .replace(/[\u0300-\u036f]/g, '')
