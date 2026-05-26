@@ -838,6 +838,21 @@ export function TripHealthPanel({
       return (recheck.errorCount + recheck.warningCount) > 0;
     });
 
+    // Surface backend-stamped missing must-dos (selected attractions that
+    // the deterministic injector + displacement pass could not place).
+    // Single warning issue listing the missing venue names so the user
+    // can see WHICH selections were dropped, not just "something failed".
+    const missingMustDos = (mustDoCoverage?.missing ?? []).filter(Boolean);
+    if (missingMustDos.length > 0) {
+      const list = missingMustDos.slice(0, 4).join(', ');
+      const more = missingMustDos.length > 4 ? ` +${missingMustDos.length - 4} more` : '';
+      issues.push({
+        id: `must-do-uncovered-${missingMustDos.join('|').toLowerCase()}`,
+        severity: 'warning',
+        message: `Selected attractions missing: ${list}${more}. No clean slot fit after meals, logistics, and locked activities.`,
+      });
+    }
+
     // Compute completion %
     const completionFactors = [
       planned / Math.max(totalDaysExpected, 1),
