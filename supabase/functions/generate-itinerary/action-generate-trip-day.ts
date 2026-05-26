@@ -3878,10 +3878,8 @@ async function _handleGenerateTripDayInner(
     let dbDaysForCoverage: any[] = (partialItinerary?.days || []) as any[];
     if (finalStatus === 'ready' && isComplete) {
       try {
-        const { assertMustDoCoverage } = await import('../_shared/assert-must-do-coverage.ts');
-        const mustDos = Array.isArray((meta as any)?.mustDoActivities)
-          ? (meta as any).mustDoActivities.filter((v: any) => typeof v === 'string')
-          : [];
+        const { extractMustDoVenues } = await import('../_shared/extract-must-dos.ts');
+        const mustDos = extractMustDoVenues(meta);
         if (mustDos.length > 0) {
           // Re-fetch the post-persist JSON so coverage reads what's on disk.
           try {
