@@ -808,6 +808,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       manualFlightDelta: data.manualFlightDelta,
       effectiveHotelCents,
       effectiveFlightCents,
+      excludedHotelCents,
+      excludedFlightCents,
       buckets: data.buckets,
       bucketsSumCents:
         data.buckets.essentials + data.buckets.food + data.buckets.activities +
