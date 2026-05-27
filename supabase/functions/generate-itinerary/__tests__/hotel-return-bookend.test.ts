@@ -144,6 +144,31 @@ Deno.test('runStep8: chronological-last detection — array-tail is mid-day card
   assertEquals(lastTitle(acts).startsWith('Return to'), true);
 });
 
+Deno.test('runStep8: late-evening check-in at hotel (≥20:00) is terminal — no duplicate bookend (Barcelona Day 1 arrival regression)', () => {
+  // Day 1 late arrival: flight lands 20:00, transfer + check-in lands at the
+  // hotel at 22:25–22:55. Check-in IS the terminal accommodation event; the
+  // synthetic "Return to Your Hotel" bookend that previously appended at
+  // 22:55–23:20 was redundant and nonsensical.
+  const acts = [
+    mkAct({ title: 'Arrival Flight', startTime: '20:00', endTime: '20:45', category: 'flight' }),
+    mkAct({ title: 'Transfer to Hotel Arts Barcelona', startTime: '20:45', endTime: '21:30', category: 'transport' }),
+    mkAct({ title: 'Check in at Hotel Arts Barcelona', startTime: '22:25', endTime: '22:55', category: 'accommodation' }),
+  ];
+  runStep8(acts, 0, 'Hotel Arts Barcelona');
+  assertEquals(acts.length, 3);
+  assertEquals(lastTitle(acts), 'Check in at Hotel Arts Barcelona');
+});
+
+Deno.test('runStep8: afternoon check-in (15:00) is NOT terminal — bookend still required (regression guard)', () => {
+  const acts = [
+    mkAct({ title: 'Check-in at Hotel X', startTime: '15:00', endTime: '15:30', category: 'accommodation' }),
+    mkAct({ title: 'Dinner at Trattoria', startTime: '19:30', endTime: '21:00', category: 'dining' }),
+  ];
+  runStep8(acts, 0, 'Hotel X');
+  // Dinner ends at 21:00 → bookend appended after dinner.
+  assertEquals(acts.length, 3);
+  assertEquals(lastTitle(acts).startsWith('Return to'), true);
+
 Deno.test('predawn strip: untagged accommodation card at 00:30 still removed (regression guard)', () => {
   const acts = [
     mkAct({ title: 'Return to Hotel', startTime: '00:30', endTime: '01:00', category: 'accommodation' }),
