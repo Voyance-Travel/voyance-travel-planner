@@ -3611,7 +3611,7 @@ export default function TripDetail() {
               onActivitySkip={handleActivitySkip}
             />
             </ErrorBoundary>
-          ) : isServerGenerating || generationStalled ? (
+          ) : isServerGenerating || isFinalizing || generationStalled ? (
             /* Server-side generation in progress or stalled — use GenerationPhases for
                consistent animation + progress display (airplane/globe animation) */
             <div className="space-y-6">
