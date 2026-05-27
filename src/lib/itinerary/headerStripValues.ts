@@ -87,6 +87,11 @@ export function computeHeaderStripValues(input: HeaderStripInputs): HeaderStripV
   const reserveAdjustUsd = Math.max(0, displayedTripTotalUsd - daysGroupUsd - hotelChipUsd - flightChipUsd);
   const showReserve = reserveAdjustUsd > 0.5;
 
+  const excludedHotelUsd = Math.max(0, Number.isFinite(input.excludedHotelUsd) ? (input.excludedHotelUsd as number) : 0);
+  const excludedFlightUsd = Math.max(0, Number.isFinite(input.excludedFlightUsd) ? (input.excludedFlightUsd as number) : 0);
+  const excludedTotalUsd = excludedHotelUsd + excludedFlightUsd;
+  const hasExcludedLogistics = excludedTotalUsd > 0.5;
+
   return {
     chipSumUsd,
     displayedTripTotalUsd,
@@ -94,5 +99,9 @@ export function computeHeaderStripValues(input: HeaderStripInputs): HeaderStripV
     showReserve,
     snapshotUnderChips,
     snapshotOverChips,
+    excludedHotelUsd,
+    excludedFlightUsd,
+    excludedTotalUsd,
+    hasExcludedLogistics,
   };
 }
