@@ -1,81 +1,47 @@
-# Day 1 — "Walk to Hotel · 3 hr 52 min" airport-to-hotel transfer fix
+# Suppress redundant hotel-return after late check-in
+
+## Problem
+
+Day 1 ends like this:
+
+```
+22:25–22:55  Check in at Hotel Arts Barcelona     (accommodation)
+22:55–23:20  Return to Your Hotel                 (synthetic bookend)
+```
+
+The bookend is meant to gracefully close the day at the hotel. When the day's last activity is already a hotel check-in (or any other "we are at the hotel for the night" event) happening in the evening, adding a second hotel card immediately after is nonsensical.
 
 ## Root cause
 
-After Day-1 arrival-flight reconcile (§3b), the code looks for an existing airport→hotel transfer card before injecting a fresh locked one. The detector only matches titles that contain `transfer to`, `travel to`, or `airport pickup`:
+`runStep8` in `supabase/functions/generate-itinerary/universal-quality-pass.ts` and `ensureHotelReturnBookend` in `src/lib/itinerary/ensureHotelReturnBookend.ts` both classify `check-in / settle-in / luggage-drop / freshen-up` strictly as **midday accommodation rituals** (`MIDDAY_ACCOM_RE`) and never let them satisfy the bookend. That rule was added to fix Bruges "Freshen Up at The Notary 17:45" — but it overshoots when the check-in is genuinely the terminal evening event (late arrival flights).
 
-```
-supabase/functions/generate-itinerary/pipeline/repair-day.ts:1003-1010
-const existingTransferIdx = activities.findIndex((a: any) => {
-  ...
-  return (cat === 'transport' || cat === 'logistics') &&
-    (t.includes('transfer to') || t.includes('travel to') || t.includes('airport pickup'));
-});
-```
+## Fix
 
-When the AI emits the connector as `Walk to Hotel Arts Barcelona` (or `Taxi to …`, `Metro to …`, `Ride to …`), none of those substrings match → `existingTransferIdx = -1` → §3b injects a *fresh* locked `Transfer to Hotel Arts Barcelona (45 min)` at index 1 while leaving the AI's original card in place. That AI card carries the LLM's raw walking estimate (≈18.5 km BCN → Barceloneta = `ceil(18500/80) = 232 min = 3 h 52 m`) and is what the user sees on Day 1.
+Treat a late-evening hotel **check-in** as a valid terminal accommodation card — same as "Return to Hotel" — so the synthetic bookend is skipped.
 
-The downstream safety nets don't catch it in this slot:
+### 1. `supabase/functions/generate-itinerary/universal-quality-pass.ts` — `runStep8`
 
-- `recomputeTransitCards` (timing-cascade Pass 1, the >180-min hard ceiling clamp) skips when there's no chronological non-transit *prev* neighbour — the arrival-flight card is itself transit/flight category, so the orphan walk between two transit/flight cards never reaches the prev/next coord lookup and bails (`if (!prev || !next) continue;` at line 579).
-- `WALK_OVER_THRESHOLD` in validate-day catches it only when the card is still marked `method=walk` AND `transportation` is populated; AI-emitted free-text connectors with no `transportation` block slip past the title-fallback in some shapes (no day-1 anchoring hint).
+In the `alreadyReturn` computation, add a third branch:
 
-## Fix (scoped — Day-1 arrival transfer only)
+- Detect "check-in / checkin / settle in / drop bags / luggage drop / bag drop" at the trip's hotel.
+- If that card's `startTime` ≥ 20:00 (configurable threshold; matches the late-arrival window) **and** its category is `STAY`/`ACCOMMODATION` (or its title contains the hotel name), set `alreadyReturn = true` with `reason=late_evening_checkin`.
+- Log via the existing `[BOOKEND_TRACE]` sentinel.
 
-### 1. Broaden `existingTransferIdx` detector in §3b
+### 2. `src/lib/itinerary/ensureHotelReturnBookend.ts` — read-time mirror
 
-`supabase/functions/generate-itinerary/pipeline/repair-day.ts` (~L1003).
+Apply the same exception in `isTerminalHotelCard` (and the helper that gates the synthetic injection): a `MIDDAY_ACCOM_RE`-matching card whose start ≥ 20:00 AND category is `STAY`/`ACCOMMODATION` counts as terminal. This keeps FE display consistent with BE persistence and prevents post-load reinjection.
 
-Match the AI's free-form airport→hotel connector when it sits adjacent to the arrival-flight slot, regardless of verb. Concretely, also treat as the airport transfer any card where:
+### 3. Tests
 
-- index is within the first 3 positions of `activities`, AND
-- category is `transport` / `logistics` / `transit` / `transfer`, AND
-- title matches `/^(walk|stroll|taxi|cab|uber|lyft|rideshare|ride|metro|train|bus|tram|shuttle|drive|transit|transfer|travel)\b.*\bto\b/i`, AND
-- the destination token in the title resolves to the hotel (case-insensitive substring match against `hotelName`, or `to (?:the )?hotel`, or `to your hotel`).
+- Extend `supabase/functions/generate-itinerary/__tests__/hotel-return-bookend.test.ts`:
+  - Day with terminal "Check in at Hotel Arts Barcelona 22:25–22:55" → no bookend injected (`reason=late_evening_checkin`).
+  - Day with midday "Freshen Up at The Notary 17:45–19:30" still injects bookend (regression guard).
+  - Day with afternoon "Check-in at Hotel X 15:00" followed by dinner → bookend still fires after dinner (check-in isn't terminal).
 
-When matched, run the existing RECONCILE branch (already at L1015-1056 for the flight; mirror it for the transfer): rewrite title to `Transfer to ${transferHotelName}`, set `startTime/endTime` to `transferStartMins/transferEndMins`, `durationMinutes = transferMinutes`, `category='transport'`, `anchorSource='airport-transfer'`, `subcategory='airport_transfer'`, lock it, set `source='repair-airport-transfer-reconciled'`, add to `lockedIds`, and move it to index 1 (right after the flight card). Drop any *other* card in the first 3 slots that also matches the transit-to-hotel pattern (dedupe).
+### 4. No DB migration
 
-Push a repair: `{ code: MISSING_SLOT, action: 'reconciled_airport_transfer', before: '${wasTitle} @ ${wasStart}-${wasEnd} (${wasDur}min)', after: '${newTitle} @ ${transferStart}-${transferEnd} (${transferMinutes}min)' }`.
-
-Log: `[Repair §3b] Reconciled LLM airport→hotel transfer "${wasTitle}" → "Transfer to ${transferHotelName}" (${transferMinutes}min)`.
-
-### 2. Belt-and-braces in §15b WALK_OVER_THRESHOLD
-
-`supabase/functions/generate-itinerary/pipeline/repair-day.ts` (~L3919). Today: `if (act?.subcategory === 'airport_transfer') continue;` (skip locked transfer).
-
-Add the *inverse* guard so a walk card on Day 1, index < 3, with a hotel-name destination AND no prior non-transit neighbour, is treated as the airport transfer: rewrite method/duration/cost via `pickTransitFallback(null, 45, hotelName)` and mark `subcategory='airport_transfer'`. This catches any future detector miss without needing another round trip.
-
-### 3. Cascade-clamp Day-1 hotel-transit case
-
-`supabase/functions/_shared/timing-cascade.ts` — `isAirportish` regex (~L526). Extend with hotel-on-arrival heuristic: when the card is in the first 2 indices of Day 1 (caller passes `dayNumber`) AND the title matches `\bto\b.*\b(hotel|inn|resort|hostel|residence|apartments?)\b` OR includes the trip's hotel name, also treat as `airportish` (45-min fallback) instead of the generic intra-city 25-min fallback. Threads `dayNumber` + optional `hotelName` through `recomputeTransitCards` (additive; default to current behaviour when absent).
-
-### 4. One-shot heal for already-persisted trips
-
-New migration: for `itinerary_activities` where `day_number = 1` AND title regex matches `^(walk|stroll|taxi|…|travel)\b.*\bto\b` AND `duration_minutes > 90` AND there exists a sibling activity on the same day with `source IN ('repair-arrival-flight','repair-arrival-flight-reconciled','injected-arrival-flight')`:
-
-- If a sibling row with `source LIKE 'repair-airport-transfer%'` exists on the same day → DELETE the long-walk row (it's the dupe).
-- Otherwise → UPDATE the row: rewrite title to `Transfer to <hotel>`, set `start_time = arrival flight end_time`, `end_time = start_time + interval '45 min'`, `duration_minutes = 45`, `category='transport'`, lock, stamp `metadata.quality.airport_transfer_heal_v1 = true`.
-
-Idempotent (skip when `metadata.quality.airport_transfer_heal_v1 = true`).
-
-### 5. Tests
-
-- Extend `supabase/functions/_shared/__tests__/arrival-flight-reconcile.test.ts`:
-  - Day-1 input has `Arrival Flight 20:00–20:45` + `Walk to Hotel Arts Barcelona (232 min)` at index 1 → after §3b: index 1 is `Transfer to Hotel Arts Barcelona`, 20:45–21:30, locked, `subcategory='airport_transfer'`; no second transit-to-hotel card remains in the first 3 slots.
-  - Same input but `Taxi to Hotel Arts Barcelona` → reconciled (verifies regex covers non-walk verbs).
-  - Negative: a `Walk to Picasso Museum` card on Day 1 index 2 is NOT reconciled.
-- New `supabase/functions/_shared/__tests__/timing-cascade-day1-hotel.test.ts`: 232-min walk to "Hotel Arts Barcelona" on Day 1 with no coords → clamp pass uses 45-min fallback.
-
-## Files touched
-
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (§3b detector + reconcile branch; §15b inverse guard)
-- `supabase/functions/_shared/timing-cascade.ts` (signature: add optional `dayNumber`/`hotelName` to `recomputeTransitCards`)
-- `supabase/functions/_shared/__tests__/arrival-flight-reconcile.test.ts` (extend)
-- `supabase/functions/_shared/__tests__/timing-cascade-day1-hotel.test.ts` (new)
-- One SQL migration (one-shot heal, idempotent)
+The §3b arrival-flight reconcile from prior turns will heal new trips on save. For already-persisted trips, the next save (any edit) re-runs `runStep8` via `enforceTimingAndBuffers` and the read-time guard hides the ghost immediately on next load. No one-shot SQL needed.
 
 ## Out of scope
 
-- Replacing `pickTransitFallback`'s 45-min default with a real Google-Directions lookup for the airport→hotel leg. The 45-min taxi default is the current product convention (matches `input.airportTransferMinutes || 45`); switching to a live distance lookup is a separate, larger change.
-- Changing the v2 arrival-flight convention (already shipped in the prior turn).
-- Display-layer tweaks to `TransitModePicker` / `TransitGapIndicator`.
+- The underlying "check-in at 22:25" is itself a symptom of the prior walk-to-hotel cascade (already addressed). This plan is specifically about removing the duplicate bookend regardless of why check-in lands late.

@@ -67,17 +67,21 @@ function isTerminalAlready(a: any): boolean {
   if (!a) return false;
   const cat = String(a.category || '').toUpperCase();
   const title = String(a.title || a.name || '');
-  // Freshen-up / bag-drop / check-in cards are midday rituals, not terminal
-  // end-of-day bookends — even if the title says "Return to ...".
-  if (MIDDAY_ACCOM_RE.test(title)) return false;
   // True return / checkout titles always count.
   if (TRUE_RETURN_RE.test(title) || CHECKOUT_RE.test(title)) return true;
+  // Late-evening hotel check-in / settle-in / bag-drop IS the terminal
+  // accommodation event (late arrival flights). Suppress duplicate bookend
+  // when the card starts ≥ 20:00 and is a STAY/ACCOMMODATION card.
+  if (MIDDAY_ACCOM_RE.test(title)) {
+    const startMins = parseTime(a.startTime || a.start_time || a.time);
+    if (startMins !== null && startMins >= 20 * 60 && (cat === 'STAY' || cat === 'ACCOMMODATION')) {
+      return true;
+    }
+    return false;
+  }
   // STAY / ACCOMMODATION cards count, except midday rituals (freshen-up,
   // bag drop, check-in) — same exclusion as runStep8.
-  if (cat === 'STAY' || cat === 'ACCOMMODATION') {
-    if (MIDDAY_ACCOM_RE.test(title) && !TRUE_RETURN_RE.test(title)) return false;
-    return true;
-  }
+  if (cat === 'STAY' || cat === 'ACCOMMODATION') return true;
   return false;
 }
 
