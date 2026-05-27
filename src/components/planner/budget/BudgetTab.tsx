@@ -52,6 +52,7 @@ import type { BudgetCategory } from '@/services/tripBudgetService';
 import { getCityBudgetBreakdown } from '@/services/tripBudgetService';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
+import { useDisplayedTripTotal } from '@/hooks/useDisplayedTripTotal';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { rateDisclosure, formatMoneyFromUsdCents } from '@/lib/currency';
 import { assessBudgetFit, formatMultiplier } from '@/lib/budget-realism';
