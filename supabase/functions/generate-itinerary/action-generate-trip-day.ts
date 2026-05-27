@@ -3841,6 +3841,23 @@ async function _handleGenerateTripDayInner(
             : {}),
           // Mark in-flight enrichment so UI shows Reconciling and arms beforeunload.
           ...(finalStatus === 'ready' ? { fully_persisted: false } : {}),
+          // Stamp must_do_coverage on partial trips too so the UI banner can
+          // surface "X selected places couldn't fit" without waiting for the
+          // ready-only Phase 6 stamp that never runs on partial. See plan §3.
+          ...((() => {
+            const mustDosForStamp = (() => { try { return extractMustDoVenues(meta); } catch { return [] as string[]; } })();
+            if (!Array.isArray(mustDosForStamp) || mustDosForStamp.length === 0) return {};
+            if (mustDosStillMissing.length === 0) return {};
+            return {
+              must_do_coverage: {
+                missing: mustDosStillMissing,
+                total: mustDosForStamp.length,
+                scheduled: mustDosForStamp.filter((v) => !mustDosStillMissing.includes(v)),
+                at: new Date().toISOString(),
+                reason: 'partial_chain_finalized',
+              },
+            };
+          })()),
         },
       },
     });
