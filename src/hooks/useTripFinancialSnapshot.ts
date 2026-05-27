@@ -782,6 +782,14 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     const effectiveFlightCents = data.includeFlight
       ? Math.max(0, data.committedFlightCents + data.manualFlightDelta)
       : 0;
+    // Surface what the toggle is HIDING so the header can label the headline
+    // as "activities only" + show a muted "(excluded)" chip for the missing cost.
+    const excludedHotelCents = data.includeHotel
+      ? 0
+      : Math.max(0, data.committedHotelCents + data.manualHotelDelta);
+    const excludedFlightCents = data.includeFlight
+      ? 0
+      : Math.max(0, data.committedFlightCents + data.manualFlightDelta);
 
     return {
       tripTotalCents: data.tripTotalCents,
