@@ -307,6 +307,45 @@ export async function safeUpdateItineraryData(
       const { dispatchTripPersisted } = await import('@/lib/itinerary/resyncItineraryFromDb');
       dispatchTripPersisted({ tripId, prevDays: nextDays, source: options.reason || 'safeUpdateItineraryData' });
     } catch { /* non-fatal */ }
+
+    // Drift telemetry — re-read the canonical row and compare against the
+    // payload we *attempted* to save. If the server reshaped it (timing
+    // cascade rewrote times, meal-guard injected a row, scrub stripped a
+    // field, bookend was clamped), log one structured warn so future
+    // refresh-divergence reports surface as a single line instead of a
+    // tab-by-tab number mismatch hunt.
+    try {
+      const { data: after } = await supabase
+        .from('trips')
+        .select('itinerary_data, itinerary_status, metadata, itinerary_version')
+        .eq('id', tripId)
+        .maybeSingle();
+      const canonicalDays = ((after?.itinerary_data as any)?.days ?? []) as any[];
+      const attemptedFp = itineraryFingerprint({ days: prunedDays } as any);
+      const canonicalFp = itineraryFingerprint({ days: canonicalDays } as any);
+      if (attemptedFp !== canonicalFp) {
+        const sum = (arr: any[]) => arr.reduce((acc, d) => {
+          const s = summarizeDay(d?.activities);
+          acc.acts += s.count; acc.meals += s.meals; return acc;
+        }, { acts: 0, meals: 0 });
+        const a = sum(prunedDays);
+        const c = sum(canonicalDays);
+        const meta = ((after as any)?.metadata as Record<string, any>) || {};
+        console.warn(
+          '[PERSIST_DRIFT]',
+          JSON.stringify({
+            tripId,
+            reason: options.reason || 'unspecified',
+            frozen: !!meta?.itinerary_frozen_at,
+            status: (after as any)?.itinerary_status || null,
+            version: (after as any)?.itinerary_version ?? null,
+            attempted: { days: prunedDays.length, ...a, fp: attemptedFp },
+            canonical: { days: canonicalDays.length, ...c, fp: canonicalFp },
+          }),
+        );
+      }
+    } catch { /* non-fatal */ }
+
     return { error: null };
   } catch (err) {
     console.error('[safeUpdateItineraryData] failed:', err);
