@@ -131,7 +131,7 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
   // accommodation event (late arrival flights). Suppress the duplicate bookend.
   // Gated on start ≥ 20:00 AND STAY/ACCOMMODATION category (or hotel-name match
   // in title) so an off-hotel "Check-in for tomorrow's tour 20:00" doesn't qualify.
-  const lastStartMinsForCheckin = parseTimeAmPm(String(startRaw)) ?? -1;
+  const lastStartMinsForCheckin = parseTimeAmPm(String(lastActivity?.start_time || lastActivity?.startTime || '')) ?? -1;
   const titleMentionsHotel = hotelName ? new RegExp(`\\b${hotelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 40)}\\b`, 'i').test(lastTitle) : false;
   const isLateEveningCheckin =
     titleIsMiddayAccom &&
