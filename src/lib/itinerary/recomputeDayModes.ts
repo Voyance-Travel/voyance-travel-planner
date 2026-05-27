@@ -14,62 +14,31 @@
  */
 
 import { deriveMealPolicy } from './deriveMealPolicy';
+import { getFirstLegArrivalTime, getLastLegDepartureTime, getDestinationArrivalLeg } from '@/utils/normalizeFlightSelection';
+import { normalizeTimeTo24h } from '@/utils/timeFormat';
 
 interface Leg {
   airline?: string;
   flightNumber?: string;
-  departure?: { time?: string; airport?: string };
-  arrival?: { time?: string; airport?: string };
+  departure?: { time?: string; airport?: string; date?: string };
+  arrival?: { time?: string; airport?: string; date?: string };
   isDestinationArrival?: boolean;
   isDestinationDeparture?: boolean;
 }
 
 interface FlightSelection {
   legs?: Leg[];
-  departure?: { arrival?: { time?: string } };
-  return?: { departure?: { time?: string } };
-}
-
-function to24h(t: string | undefined | null): string | undefined {
-  if (!t) return undefined;
-  const s = String(t).trim().toUpperCase();
-  const m24 = s.match(/^(\d{1,2}):(\d{2})/);
-  const m12 = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
-  if (m12) {
-    let h = parseInt(m12[1]);
-    const mm = m12[2];
-    if (m12[3] === 'PM' && h !== 12) h += 12;
-    if (m12[3] === 'AM' && h === 12) h = 0;
-    return `${String(h).padStart(2, '0')}:${mm}`;
-  }
-  if (m24) {
-    return `${String(parseInt(m24[1])).padStart(2, '0')}:${m24[2]}`;
-  }
-  return undefined;
+  departure?: { arrival?: { time?: string; date?: string } };
+  return?: { departure?: { time?: string; date?: string } };
 }
 
 export function extractArrivalDeparture24(
   flightSelection: FlightSelection | null | undefined
 ): { arrivalTime24?: string; departureTime24?: string } {
   if (!flightSelection) return {};
-  const legs = Array.isArray(flightSelection.legs) ? flightSelection.legs : [];
 
-  let arrivalLeg: Leg | undefined;
-  let departureLeg: Leg | undefined;
-
-  if (legs.length > 0) {
-    arrivalLeg = legs.find((l) => l.isDestinationArrival) || legs[0];
-    if (legs.length >= 2) {
-      departureLeg = legs.find((l) => l.isDestinationDeparture) || legs[legs.length - 1];
-    }
-  }
-
-  const arrivalTime24 =
-    to24h(arrivalLeg?.arrival?.time) ||
-    to24h(flightSelection.departure?.arrival?.time);
-  const departureTime24 =
-    to24h(departureLeg?.departure?.time) ||
-    to24h(flightSelection.return?.departure?.time);
+  const arrivalTime24 = normalizeTimeTo24h(getFirstLegArrivalTime(flightSelection));
+  const departureTime24 = normalizeTimeTo24h(getLastLegDepartureTime(flightSelection));
 
   return { arrivalTime24, departureTime24 };
 }
@@ -89,26 +58,47 @@ export function recomputeDayModes(
   }
 
   const { arrivalTime24, departureTime24 } = extractArrivalDeparture24(flightSelection);
+  
+  // Cross-day flight detection:
+  // If the destination-arrival leg's arrival date is later than its departure date,
+  // then the arrival day for meal purposes might be Day 2.
+  const arrivalLeg = getDestinationArrivalLeg(flightSelection);
+  const depDate = arrivalLeg?.departure?.date?.substring(0, 10);
+  const arrDate = arrivalLeg?.arrival?.date?.substring(0, 10);
+  const isCrossDayArrival = depDate && arrDate && arrDate > depDate;
+
   const totalDays = days.length;
   const changedDayNumbers: number[] = [];
 
   const updatedDays = days.map((day, i) => {
     const dayNumber = day?.dayNumber || i + 1;
-    const isFirstDay = dayNumber === 1;
+    
+    // Arrival Day Logic:
+    // Usually Day 1. But if cross-day flight, Day 2 is the arrival day.
+    const isArrivalDay = isCrossDayArrival ? dayNumber === 2 : dayNumber === 1;
     const isLastDay = dayNumber === totalDays;
 
-    // Only Day 1 and last day are affected by flight times; mid-trip days
+    // Only arrival day and last day are affected by flight times; mid-trip days
     // remain untouched (transition/full-day-event flags are out of scope here).
-    if (!isFirstDay && !isLastDay) return day;
+    if (!isArrivalDay && !isLastDay) {
+      // If this was previously marked as an arrival day but shouldn't be anymore,
+      // we might need to revert it to full_exploration.
+      const prevMode = day?.metadata?.quality?.dayMode;
+      if (prevMode && prevMode !== 'full_exploration' && !day?.metadata?.quality?.dayMode_locked) {
+        // Fall through to recompute
+      } else {
+        return day;
+      }
+    }
 
     if (day?.metadata?.quality?.dayMode_locked === true) return day;
 
     const policy = deriveMealPolicy({
       dayNumber,
       totalDays,
-      isFirstDay,
+      isFirstDay: isArrivalDay,
       isLastDay,
-      arrivalTime24: isFirstDay ? arrivalTime24 : undefined,
+      arrivalTime24: isArrivalDay ? arrivalTime24 : undefined,
       departureTime24: isLastDay ? departureTime24 : undefined,
     });
 
