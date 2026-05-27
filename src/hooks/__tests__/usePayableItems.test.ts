@@ -197,3 +197,59 @@ describe('usePayableItems — orphan-rescue dedupe', () => {
     expect(diningTotal).toBe(3000);
   });
 });
+
+describe('usePayableItems — placeholder transit & flight visibility', () => {
+  it('emits a synthetic $0 transit group when only placeholder transit exists, so the Local Transit bucket card stays visible', () => {
+    const days = [
+      {
+        dayNumber: 1,
+        activities: [
+          { id: 'a1', title: 'Transfer to Airport', category: 'transport' },
+        ],
+      },
+    ];
+    const { result } = renderHook(() =>
+      usePayableItems({
+        days,
+        flightSelection: null,
+        hotelSelection: null,
+        travelers: 2,
+        payments: [],
+        activityCosts: [
+          { activity_id: 'a1', day_number: 1, category: 'transport', cost_per_person_usd: 4, num_travelers: 2 } as any,
+        ],
+        paymentsLoaded: true,
+      }),
+    );
+    const transit = result.current.items.find(i => i.groupKind === 'transit' && i.dayNumber === 1);
+    expect(transit).toBeTruthy();
+    expect(transit?.amountCents).toBe(0);
+    expect(transit?.subItems?.[0].name).toMatch(/Estimated walking/i);
+  });
+
+  it('does NOT emit a payable item for a "Departure Flight" placeholder card on a non-zero day', () => {
+    const days = [
+      {
+        dayNumber: 3,
+        activities: [
+          { id: 'f1', title: 'Departure Flight', category: 'flight' },
+        ],
+      },
+    ];
+    const { result } = renderHook(() =>
+      usePayableItems({
+        days,
+        flightSelection: null,
+        hotelSelection: null,
+        travelers: 1,
+        payments: [],
+        activityCosts: [
+          { activity_id: 'f1', day_number: 3, category: 'flight', cost_per_person_usd: 50, num_travelers: 1 } as any,
+        ],
+        paymentsLoaded: true,
+      }),
+    );
+    const flightStub = result.current.items.find(i => i.name === 'Departure Flight');
+    expect(flightStub).toBeUndefined();
+  });
+});
