@@ -3686,6 +3686,7 @@ async function _handleGenerateTripDayInner(
   // real activities. Also computes `mustDosStillMissing`, which feeds the
   // hard persist gate below.
   let mustDosStillMissing: string[] = [];
+  let mustDosTotalForStamp = 0;
   if (dayNumber >= totalDays && Array.isArray(partialItinerary?.days)) {
     try {
       const NON_MEANINGFUL_CATS_RECOMP = new Set([
@@ -3735,6 +3736,7 @@ async function _handleGenerateTripDayInner(
       const { extractMustDoVenues: _extract } = await import('../_shared/extract-must-dos.ts');
       const { assertMustDoCoverage: _assert } = await import('../_shared/assert-must-do-coverage.ts');
       const mustDosForGate = _extract(meta);
+      mustDosTotalForStamp = mustDosForGate.length;
       if (mustDosForGate.length > 0) {
         const cov = _assert(partialItinerary.days, mustDosForGate);
         mustDosStillMissing = cov.missing;
