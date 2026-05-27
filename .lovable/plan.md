@@ -1,84 +1,75 @@
 
 
-## You're right — this is a real bug, not a stale browser
+## Why you're right
 
-The reason your hard refresh "fixed" Day 1 of the Faro trip:
+The Faro Day 1 12:05 → 15:15 gap is **190 minutes** — `detectGapsForDay` (`src/components/trip/TripHealthPanel.tsx:621`) flags ≥180 min and `computeDeadGaps` (`src/components/itinerary/TransitGapIndicator.tsx:169`) defaults to ≥180 min in a 09:00–18:00 window. Both exist but only surface as:
 
-- The **database is clean** (I queried it — no 12:30 AM Ilha Deserta exists in either `trips.itinerary_data` or `itinerary_activities`).
-- The browser was showing a **mid-generation snapshot** that the backend later replaced. The frontend kept the early render in memory and never swapped it out, because rendering is gated on the wrong signal.
+1. An **amber "Fill the gap" banner** above the day (editable mode only — `EditorialItinerary.tsx:10940`), or
+2. A **health-panel warning** ("Day 1 has 3h gap before Vila Adentro Alleys").
 
-So we're rendering Itinerary #1 (corrupt, in-flight), the backend produces Itinerary #2 (clean, finalized), but the user sees #1 until they manually reload. That's the bug.
+Both push the user to *plan more*. Neither acknowledges that a quiet afternoon between two activities is **normal and good**. The result: the warning fires but no inline visual cue exists in the day timeline itself, so the gap looks like an oversight.
 
-## Why this happens today
+## Fix — acknowledge gaps inline, drop the alarm
 
-We already have the right backend contract (the **Frozen After Ready** rule):
+Treat unscheduled time as a first-class part of the day, not a defect.
+
+### 1) New inline "Free time" marker (visible, calm, never blocking)
+
+Render a soft, low-chrome marker **between two consecutive activities** when:
+- gap ≥ 90 min (configurable `FREE_TIME_MIN`), AND
+- both activities are non-logistics (`isLogisticsActivity` reused), AND
+- the existing transit row covers ≤ 30% of the gap (so a 3-min walk inside a 3h window still triggers; a 90-min transfer inside a 100-min gap does not).
+
+Visual: a slim full-width row that lives next to the existing `TransitGapIndicator`, e.g.
 
 ```text
-Backend writes itinerary  →  itinerary_status = 'generated'
-                          →  metadata.fully_persisted = false        ← Phase 1-3 done
-                          →  enrichment + costs + cities run         ← Phase 4-5
-                          →  metadata.fully_persisted = true         ← Phase 6 (final)
-                          →  metadata.itinerary_frozen_at = <now>    ← canonical
+┌──────────────────────────────────────────────┐
+│  ☕  Free time · ~3h · 12:05 – 15:15          │
+│      Rest, wander, or grab a coffee.         │
+│      [+ Add something]   [Keep it open]      │
+└──────────────────────────────────────────────┘
 ```
 
-And `TripDetail` already computes the right boolean:
+Behavior:
+- "Keep it open" dismisses for this trip/day (stored in `localStorage` keyed by `tripId:dayNumber:beforeId`); next reload still shows the marker (it's the day's true state) but in a smaller, single-line form.
+- "+ Add something" reuses the existing `onAddActivity(beforeIndex)` flow.
+- Copy varies by gap size: 60–119 min → "Short break", 120–239 min → "Free time", ≥ 240 min → "Long open block".
 
-```ts
-// src/pages/TripDetail.tsx (already there, just unused for gating)
-const fullyPersisted = meta?.fully_persisted === true;
-const shouldGuard    = isServerGenerating
-                    || (isReadyish && !fullyPersisted && !!trip.itinerary_data);
-```
+Implementation: new component `src/components/itinerary/FreeTimeMarker.tsx`; computed via a new exported `computeOpenWindows(activities, transitMap)` in `TransitGapIndicator.tsx` (shares filters with `computeDeadGaps`, returns one entry per qualifying gap with `{beforeIndex, fromTime, toTime, minutes, transitMinutes}`). Insertion point: inside `DraggableActivityList renderItem` between consecutive items, just like `TransitGapIndicator` is rendered today.
 
-But `shouldGuard` is **only wired to the `beforeunload` warning**. The actual render switch at line 3591 still uses `isServerGenerating || generationStalled` — which flips to `false` the instant the first `itinerary_data.days` array lands, even though Phase 4-6 is still rewriting it. So the partial snapshot gets mounted in `EditorialItinerary`, and the later DB rewrite only reaches the screen via `TRIP_PERSISTED_EVENT` (which fires on edits, not on the silent backend Phase-6 flip).
+### 2) Downgrade the health-panel "3h gap" warning
 
-## The fix — one extra gate, no architectural change
+`detectGapsForDay` keeps detecting, but:
+- **Severity** changes from `warning` → `info` for gaps already covered by an inline `FreeTimeMarker` (computed the same way; identity = `(dayNumber, beforeIndex)`).
+- **Copy** changes from "Day 1 has 3h gap before X" → "Day 1 has ~3h of open time between Y and X — shown inline."
+- **Fix label** changes from `Fill Gap` → `View` (scrolls to the marker) or hidden entirely when severity is `info`.
+- The "1 activity has no travel buffer" warning stays (that's a different signal: too-tight transit, not too-loose).
 
-Treat "ready-but-not-fully-persisted" as **still generating** for display purposes. The backend already polls this state. We just stop showing the unfinished plan.
+This keeps the health score honest (a 6h empty hole is still surfaced; a normal post-lunch break is not) without yelling at the user.
 
-### Changes
+### 3) "Fill the gap" amber banner stays, but only for ≥240 min
 
-1. **`src/pages/TripDetail.tsx`** — introduce a single derived boolean `isFinalizing`:
-   ```ts
-   const fullyPersisted = (trip?.metadata as any)?.fully_persisted === true;
-   const status         = trip?.itinerary_status as string | undefined;
-   const isReadyish     = status === 'ready' || status === 'generated';
-   const isFinalizing   = isReadyish && !fullyPersisted && hasCompletedItineraryData;
-   ```
-   Then change the render branch (≈ line 3591) from:
-   ```ts
-   ) : isServerGenerating || generationStalled ? (
-   ```
-   to:
-   ```ts
-   ) : isServerGenerating || isFinalizing || generationStalled ? (
-   ```
-   and pass `isFinalizing` to `GenerationPhases` so the message reads "Finalizing your itinerary…" instead of "Generating Day N…". `useGenerationPoller` keeps polling on `fully_persisted=false`, fires `onReady` once it flips, and the canonical DB read swaps in the finalized plan in one atomic state update.
+The top-of-day `DeadGapBanner` (`EditorialItinerary.tsx:10940`) currently triggers at the same 180-min threshold as the inline marker, which double-flags the same gap. Raise its threshold to 240 min by passing `{ minMinutes: 240 }` to `computeDeadGaps` in that one call site. Below 4 hours, the inline marker alone is enough.
 
-2. **`src/pages/TripDetail.tsx` `voyance:trip-loaded` dispatch (line 433)** — gate on `!isFinalizing` too, so `PersistIssuesListener` doesn't surface mid-finalize self-heal warnings as user-visible toasts.
+## Files changed
 
-3. **`src/hooks/useGenerationPoller.ts`** — already polls on `fully_persisted === false`. Confirm it dispatches `TRIP_PERSISTED_EVENT` on the flip (it does via the existing onReady path); no change needed beyond a guard that we only treat the trip as truly ready when both `isReadyish && fullyPersisted`.
-
-4. **Legacy trips** (no `fully_persisted` field at all) — `isReadyish && !fullyPersisted` would falsely block them forever. Add a one-line escape: treat the absence of `fully_persisted` as `true` when `itinerary_frozen_at` is set OR the trip was created before the Phase-6 stamp shipped (`created_at < 2026-04-01`). One-liner, no migration needed.
-
-5. **No backend change.** The contract is already correct. The leak was purely the FE rendering an unfinalized snapshot.
-
-### What the user will see instead
-
-- **Before:** itinerary shows up at ~6s with a corrupted Day-1, hangs there forever until manual refresh.
-- **After:** the generation/finalize spinner stays up an extra few seconds (≈ Phase 4-6 duration, typically 5-15s) and the **first** itinerary the user ever sees is the finalized one. No need to know what a hard refresh is.
-
-## Verification
-
-- E2E: extend `e2e/itinerary-content.spec.ts` "every non-departure day ends with hotel return" to also assert that `[data-testid="day-card"]` doesn't render until `body[data-trip-finalized="true"]` (added by TripDetail when `fullyPersisted === true`). This catches any future regression of showing pre-finalize snapshots.
-- Manual: re-generate the Faro trip end-to-end; the spinner should remain visible past the first itinerary write and only release once `metadata.fully_persisted=true` lands. No 12:30 AM Ilha Deserta should ever be visible.
+- `src/components/itinerary/TransitGapIndicator.tsx` — export `computeOpenWindows`; no behavior change to `computeDeadGaps` (still 180 default).
+- `src/components/itinerary/FreeTimeMarker.tsx` — new ~80-line component.
+- `src/components/itinerary/EditorialItinerary.tsx` — render `<FreeTimeMarker>` between activities; raise top-banner threshold to 240 min.
+- `src/components/trip/TripHealthPanel.tsx` — `detectGapsForDay` returns `severity: 'info'` + softer copy when the gap qualifies as a `FreeTimeMarker` window.
+- Tests:
+  - `src/components/itinerary/__tests__/computeOpenWindows.test.ts` — new (3 cases: 95-min short break, 190-min free time, 5h long-open).
+  - `src/components/trip/__tests__/TripHealthPanel.detectGapsForDay.test.ts` — add case: 190-min gap returns `severity: 'info'` + "shown inline" copy.
 
 ## What this plan deliberately does NOT do
 
-- No changes to the generation pipeline, `runStep8`, parser, bookend guards, or anything that produced the original corrupted Itinerary #1. That backend logic is already self-correcting; the only failure was showing the user the intermediate state.
-- No new persistence layer or staging table. We're just consuming the existing `fully_persisted` flag.
-- No auto-refresh / auto-resume. The Frozen-After-Ready and No-Regression guards still protect against the Dublin-2026-05-14 silent-overwrite class of bug.
+- **No auto-insertion** of a fabricated "Coffee at a nearby cafe" activity. The marker is a label, not a generated card.
+- **No backend changes.** Generator does not need to know about free-time; it's a render-time acknowledgment.
+- **No change to the density protocol or the per-day meal/activity minimums.** A day with 3h of free time AND 3 paid + 2 free activities is still healthy.
+- **No removal of the gap detector.** It still feeds the health panel — just at info severity for normal-sized gaps.
 
-## Memory update on apply
+## Verification
 
-Add a memory entry under `mem://constraints/itinerary/no-pre-finalize-render` so this gate is enforced for every future render-path refactor.
+- Open Faro trip, Day 1: an inline "Free time · ~3h · 12:05 – 15:15" marker appears between Faro Cathedral and Vila Adentro Alleys. The health panel still mentions the window but at info severity with "shown inline" copy. No more amber "Fill the gap" banner (190 min is below the new 240-min threshold).
+- Open any trip with a 5h+ hole: both the inline marker AND the amber top-banner appear (long blocks still get an actionable nudge).
+- Run added unit tests.

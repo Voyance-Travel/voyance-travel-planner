@@ -205,6 +205,80 @@ export function computeDeadGaps(
   return out;
 }
 
+/**
+ * Open Window — calmer sibling of DeadGap. Flags every meaningful unscheduled
+ * stretch between two non-logistics activities, categorized so the UI can
+ * render an honest "Free time" marker inline.
+ *
+ * `category`:
+ *   short  → 60–119 min   ("Short break")
+ *   free   → 120–239 min  ("Free time")
+ *   long   → ≥ 240 min    ("Long open block")
+ *
+ * Planned transit time between the two activities is netted out: if the
+ * existing transit row eats most of the gap (≥70%), no marker fires.
+ */
+export interface OpenWindow extends DeadGap {
+  category: 'short' | 'free' | 'long';
+  transitMinutes: number;
+}
+
+const OPEN_WINDOW_MIN = 60;
+
+export function computeOpenWindows(
+  activities: Array<any>,
+  options: { minMinutes?: number } = {},
+): OpenWindow[] {
+  const minMinutes = options.minMinutes ?? OPEN_WINDOW_MIN;
+  if (!activities || activities.length < 2) return [];
+
+  const out: OpenWindow[] = [];
+  for (let i = 0; i < activities.length - 1; i++) {
+    const a = activities[i];
+    const b = activities[i + 1];
+    if (isTransitCategory(a?.category) || isTransitCategory(b?.category)) continue;
+    if (isLogisticsActivity(a) || isLogisticsActivity(b)) continue;
+
+    const aEnd = parseTimeToMinutes(a?.endTime);
+    const bStart = parseTimeToMinutes(b?.startTime || a?.time);
+    if (aEnd === null || bStart === null) continue;
+    const gap = bStart - aEnd;
+    if (gap < minMinutes) continue;
+
+    // Net out planned transit time from the previous activity's
+    // transportation.duration so a 90-min ferry inside a 100-min gap
+    // is not flagged as free time.
+    let transitMinutes = 0;
+    const dur = a?.transportation?.duration || '';
+    if (typeof dur === 'string') {
+      const m = dur.toLowerCase();
+      const h = m.match(/([\d.]+)\s*(?:hours?|hrs?|h\b)/);
+      const min = m.match(/([\d.]+)\s*(?:minutes?|mins?|m\b)/);
+      if (h) transitMinutes += parseFloat(h[1]) * 60;
+      if (min) transitMinutes += parseFloat(min[1]);
+    }
+    if (transitMinutes >= gap * 0.7) continue;
+
+    const free = gap - transitMinutes;
+    if (free < minMinutes) continue;
+
+    const category: OpenWindow['category'] =
+      free >= 240 ? 'long' : free >= 120 ? 'free' : 'short';
+
+    out.push({
+      beforeIndex: i,
+      minutes: free,
+      fromTime: a.endTime,
+      toTime: b.startTime || b.time,
+      fromTitle: a.title || '',
+      toTitle: b.title || '',
+      category,
+      transitMinutes,
+    });
+  }
+  return out;
+}
+
 function formatGap(mins: number): string {
   const h = Math.floor(mins / 60);
   const m = mins % 60;

@@ -160,7 +160,8 @@ import { GuideBookmarkButton } from '@/components/guides/GuideBookmarkButton';
 import { TransitBadge } from './TransitBadge';
 import { TripDateEditor as TripDateEditorInline } from '@/components/trip/TripDateEditor';
 import { MobileTripOverview } from '@/components/trip/MobileTripOverview';
-import { TransitGapIndicator, computeGapMinutes, computeDeadGaps, formatDeadGap } from './TransitGapIndicator';
+import { TransitGapIndicator, computeGapMinutes, computeDeadGaps, computeOpenWindows, formatDeadGap } from './TransitGapIndicator';
+import { FreeTimeMarker } from './FreeTimeMarker';
 import { DayRouteMap } from './DayRouteMap';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { useActionCap } from '@/hooks/useActionCap';
@@ -10941,7 +10942,7 @@ function DayCard({
                 if (dayIsPreview || isCleanPreview) return null;
                 if (!isEditable) return null;
                 if (!onAddActivity) return null;
-                const gaps = computeDeadGaps(day.activities || []);
+                const gaps = computeDeadGaps(day.activities || [], { minMinutes: 240 });
                 if (gaps.length === 0) return null;
                 const gap = gaps.sort((a, b) => b.minutes - a.minutes)[0];
                 const beforeAct = day.activities[gap.beforeIndex];
@@ -11236,6 +11237,23 @@ function DayCard({
                         } : undefined}
                       />
                     )}
+                    {/* Free time marker — calm acknowledgment of unscheduled stretches */}
+                    {!isLastActivity && !dayIsPreview && !isCleanPreview && (() => {
+                      const ow = computeOpenWindows(
+                        [activityToRender, nextActivity].filter(Boolean) as any[],
+                      );
+                      if (ow.length === 0) return null;
+                      return (
+                        <FreeTimeMarker
+                          window={ow[0]}
+                          tripId={tripId}
+                          dayNumber={day.dayNumber}
+                          beforeActivityId={activityToRender.id}
+                          isEditable={isEditable}
+                          onAdd={isEditable && onAddActivity ? () => onAddActivity(activityIndex) : undefined}
+                        />
+                      );
+                    })()}
                     {/* Inline Add Activity button between activities */}
                     {isEditable && !isLastActivity && !isCleanPreview && (
                       <div className="flex justify-center sm:justify-start sm:pl-[12.5rem] py-1 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
