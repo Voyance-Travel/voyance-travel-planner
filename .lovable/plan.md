@@ -1,47 +1,85 @@
-# Suppress redundant hotel-return after late check-in
 
-## Problem
+## What the user is seeing
 
-Day 1 ends like this:
+- Trip `96d47894…` (Barcelona) has `budget_include_hotel = false` (the Start form defaults `includeHotelInBudget || false`).
+- `activity_costs` Day 0 has a real `hotel` row at $250 (Hotel Arts Barcelona, written by `logistics-sync`); the other rows sum to ~$22.50, which rounds to "$23".
+- `useTripFinancialSnapshot` honors the toggle (`if (cat === 'hotel' && !includeHotel) continue`) and intentionally returns `effectiveHotelCents = 0` + `tripTotalCents ≈ $23`. `useDisplayedTripTotal` → `computeHeaderStripValues` then renders the headline as $23 with no hotel chip.
+- The math is doing what the documented Budget Visibility Policy says — **but the UI gives the user zero signal** that a known $250 cost was deliberately excluded. The headline reads as "your whole trip = $23" while the Payments tab still surfaces "Hotel Arts Barcelona — $250" elsewhere, which is the disconnect the user is calling out.
 
+## Goal
+
+Keep the toggle-driven math exactly as-is. Make the exclusion **visible and self-explanatory** in the itinerary header so the $23 number is never read in isolation. Presentation-only change — no snapshot / resolver / DB edits.
+
+## Approach
+
+When the hotel (or flight) toggle is OFF **and** the snapshot knows a real cost exists for that category, the header should:
+
+1. Tag the headline so it's not mistaken for the full trip cost.
+2. Render a muted, strikethrough-style "excluded" chip in the equation row so users can see what's been opted out and how much it's worth.
+
+Both signals come from data the snapshot already exposes (`includeHotel`, `includeFlight`, `canonicalHotelCents`, `canonicalFlightCents`, `manualHotelDelta`, `manualFlightDelta`). No new queries.
+
+## Changes
+
+### 1. `src/hooks/useTripFinancialSnapshot.ts` (tiny additive)
+
+Expose two convenience fields on the returned snapshot:
+
+- `excludedHotelCents: number` — `includeHotel === false ? max(0, canonicalHotelCents + manualHotelDelta) : 0`
+- `excludedFlightCents: number` — symmetric
+
+These are derived, not stored. They tell the UI "this much real cost is being hidden by the toggle." Default fallback in the snapshot's initial/empty state is `0`.
+
+### 2. `src/lib/itinerary/headerStripValues.ts`
+
+Extend `HeaderStripInputs` / `HeaderStripValues` with:
+
+- `excludedHotelUsd`, `excludedFlightUsd` (inputs, default 0)
+- `excludedTotalUsd` (output = sum of the above, ≥ 0)
+- `hasExcludedLogistics` (output boolean, true when > $0.50)
+
+`displayedTripTotalUsd` math is **not changed** — toggle policy still wins. Only adds the new fields. Existing tests stay green; add one new case for the excluded-hotel branch.
+
+### 3. `src/hooks/useDisplayedTripTotal.ts`
+
+Pass the new excluded values through to `computeHeaderStripValues` and re-export them on `DisplayedTripTotal` so any future consumer (PaymentsTab badge, etc.) can use the same numbers.
+
+### 4. `src/components/itinerary/EditorialItinerary.tsx` — header row (around L6255–6450)
+
+Two presentational tweaks:
+
+**a. Headline label (Row 1, line ~6259)** — when `hasExcludedLogistics` is true, change the small "Trip Total" caption next to the number to read **"Trip Total · activities only"** (muted suffix). Tooltip on the suffix: "Hotel $250 and/or Flight $X are excluded by your budget settings. Toggle them on under Budget to include."
+
+**b. Equation row (around L6418–6436)** — after the existing `= Trip Total $X` segment, append a muted, strikethrough chip per excluded category when the cost is known:
+
+```text
+Days $23  =  Trip Total $23     ·  Hotel $250 (excluded)
 ```
-22:25–22:55  Check in at Hotel Arts Barcelona     (accommodation)
-22:55–23:20  Return to Your Hotel                 (synthetic bookend)
-```
 
-The bookend is meant to gracefully close the day at the hotel. When the day's last activity is already a hotel check-in (or any other "we are at the hotel for the night" event) happening in the evening, adding a second hotel card immediately after is nonsensical.
+Visual treatment:
+- Wrapper: `text-muted-foreground/60 line-through decoration-muted-foreground/40`
+- Separator: `·` (not `+`) so it's clearly outside the equation
+- Click target opens the Budget tab (existing `onTabChange?.('budget')` plumbing in the file)
+- Suppressed entirely when `hasExcludedLogistics` is false → zero impact on trips with toggles on
 
-## Root cause
+### 5. Tests
 
-`runStep8` in `supabase/functions/generate-itinerary/universal-quality-pass.ts` and `ensureHotelReturnBookend` in `src/lib/itinerary/ensureHotelReturnBookend.ts` both classify `check-in / settle-in / luggage-drop / freshen-up` strictly as **midday accommodation rituals** (`MIDDAY_ACCOM_RE`) and never let them satisfy the bookend. That rule was added to fix Bruges "Freshen Up at The Notary 17:45" — but it overshoots when the check-in is genuinely the terminal evening event (late arrival flights).
+- `src/lib/itinerary/__tests__/headerStripValues.test.ts` — add cases: hotel-only excluded, flight-only excluded, both excluded, neither (regression).
+- Component-level smoke isn't needed — purely cosmetic surface that mirrors the strip values.
 
-## Fix
+## What stays the same
 
-Treat a late-evening hotel **check-in** as a valid terminal accommodation card — same as "Return to Hotel" — so the synthetic bookend is skipped.
+- Toggle policy: hotel/flight rows still excluded from `tripTotalCents` when the toggle is off.
+- PaymentsTab numbers, BudgetTab numbers, day badges — none affected.
+- No DB writes, no migrations, no edge functions.
+- No new snapshot fetches; the data is already in memory.
 
-### 1. `supabase/functions/generate-itinerary/universal-quality-pass.ts` — `runStep8`
+## Verification
 
-In the `alreadyReturn` computation, add a third branch:
+Manual on the Barcelona trip (`96d47894…`):
+- Header headline reads "Trip Total · activities only  $23"
+- Equation row ends with "· ~~Hotel $250~~ (excluded)" muted text
+- Hover/click suffix or chip → tooltip / opens Budget tab
 
-- Detect "check-in / checkin / settle in / drop bags / luggage drop / bag drop" at the trip's hotel.
-- If that card's `startTime` ≥ 20:00 (configurable threshold; matches the late-arrival window) **and** its category is `STAY`/`ACCOMMODATION` (or its title contains the hotel name), set `alreadyReturn = true` with `reason=late_evening_checkin`.
-- Log via the existing `[BOOKEND_TRACE]` sentinel.
+If the user flips `Include Hotel in Budget` ON: headline reverts to plain "Trip Total", strikethrough chip disappears, $23 becomes $273 via the existing snapshot path.
 
-### 2. `src/lib/itinerary/ensureHotelReturnBookend.ts` — read-time mirror
-
-Apply the same exception in `isTerminalHotelCard` (and the helper that gates the synthetic injection): a `MIDDAY_ACCOM_RE`-matching card whose start ≥ 20:00 AND category is `STAY`/`ACCOMMODATION` counts as terminal. This keeps FE display consistent with BE persistence and prevents post-load reinjection.
-
-### 3. Tests
-
-- Extend `supabase/functions/generate-itinerary/__tests__/hotel-return-bookend.test.ts`:
-  - Day with terminal "Check in at Hotel Arts Barcelona 22:25–22:55" → no bookend injected (`reason=late_evening_checkin`).
-  - Day with midday "Freshen Up at The Notary 17:45–19:30" still injects bookend (regression guard).
-  - Day with afternoon "Check-in at Hotel X 15:00" followed by dinner → bookend still fires after dinner (check-in isn't terminal).
-
-### 4. No DB migration
-
-The §3b arrival-flight reconcile from prior turns will heal new trips on save. For already-persisted trips, the next save (any edit) re-runs `runStep8` via `enforceTimingAndBuffers` and the read-time guard hides the ghost immediately on next load. No one-shot SQL needed.
-
-## Out of scope
-
-- The underlying "check-in at 22:25" is itself a symptom of the prior walk-to-hotel cascade (already addressed). This plan is specifically about removing the duplicate bookend regardless of why check-in lands late.
