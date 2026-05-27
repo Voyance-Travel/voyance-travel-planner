@@ -1595,114 +1595,77 @@ CRITICAL GEOGRAPHIC RULE: Every restaurant and venue MUST be physically located 
       if (t && dn) priorList.push({ title: t, dayNumber: dn });
     }
 
-    // ── EXTRA INTENTS — soft user requests from structured `trip_day_intents` ──
-    // PRIMARY source: rows in `trip_day_intents` (seeded by prepareContext from
-    // all four entry points and by the assistant chat). FALLBACK: re-parse the
-    // metadata blobs the legacy way. The blob fallback exists only for trips
-    // generated before the structured table was introduced.
+    // ── EXTRA INTENTS — canonical preference-spine merge ──
+    // ALL sources are merged into one deduped list. Structured `trip_day_intents`
+    // rows win ties (they carry fulfillment state), but legacy metadata
+    // (additionalNotes / mustDoActivities / perDayActivities / userIntents)
+    // is ALWAYS merged in, not gated on "structured table empty". A partial
+    // seed must never silently mask Step 3 preferences — that was the root
+    // cause of "we keep losing user preferences".
+    //
+    // See mem://constraints/itinerary/canonical-preference-spine.
     const extraIntents: Array<Record<string, any>> = [...softLockedDemoted];
     const tripWideNotes: string[] = [];
-    let usedStructuredIntents = false;
+    let preferenceTraceEntry: any = null;
     try {
-      if (tripId) {
-        const { fetchActiveDayIntents } = await import('../../_shared/day-intents-store.ts');
-        const rows = await fetchActiveDayIntents(supabase, tripId);
-        for (const r of rows) {
-          // Trip-wide rows (no day_number): notes/constraints feed userConstraints;
-          // actionable wishes (dining/activity/event/etc.) are surfaced as soft
-          // USER WISHES on every generating day so the AI picks a believable slot
-          // for them on at least one day. Once fulfilled (status='fulfilled'),
-          // they stop re-injecting on later days in the chain. Closes "Add your
-          // own must-dos is ignored" — trip-wide custom must-dos were silently
-          // dropped here before.
-          if (r.day_number == null) {
-            if (r.intent_kind === 'note' || r.intent_kind === 'constraint') {
-              tripWideNotes.push(r.title);
-              continue;
-            }
-            if (r.status === 'fulfilled' && r.locked !== true) continue;
-            if (r.priority === 'avoid') continue;
-            extraIntents.push({
-              title: r.title,
-              startTime: r.start_time || undefined,
-              endTime: r.end_time || undefined,
-              kind: r.intent_kind,
-              source: r.source_entry_point,
-              priority: r.priority === 'must' ? 'must' : 'should',
-              raw: r.raw_text || r.title,
-              locked: !!r.locked,
-              lockedSource: r.locked_source || undefined,
-              tripWide: true,
-            });
-            continue;
-          }
-          if (r.day_number !== dayNumber) continue;
-          if (r.status === 'fulfilled' && r.locked !== true) continue; // already done, don't re-inject
-          extraIntents.push({
-            title: r.title,
-            startTime: r.start_time || undefined,
-            endTime: r.end_time || undefined,
-            kind: r.intent_kind,
-            source: r.source_entry_point,
-            priority: r.priority === 'avoid' ? 'avoid' : (r.priority === 'must' ? 'must' : 'should'),
-            raw: r.raw_text || r.title,
-            locked: !!r.locked,
-            lockedSource: r.locked_source || undefined,
-          });
-        }
-        if (rows.length > 0) usedStructuredIntents = true;
-      }
-    } catch (structErr) {
-      console.warn('[compile-prompt] Structured intent fetch failed (non-blocking):', structErr);
-    }
-
-    // FALLBACK: legacy blob parsing — only if the structured table was empty.
-    if (!usedStructuredIntents) {
+      const { mergePreferenceSources, intentsForPromptDay, buildPreferenceTraceEntry } =
+        await import('../../_shared/preference-spine.ts');
+      let structuredRows: any[] = [];
       try {
-        const fineTuneText = (metadata?.additionalNotes as string) || '';
-        if (fineTuneText.trim()) {
-          const parsed = parseFineTuneIntoDailyIntents({
-            notes: fineTuneText,
-            tripStartDate: (preferences?.startDate as string) || (date ? String(date).split('T')[0] : undefined),
-            totalDays: totalDays || undefined,
-          });
-          for (const p of parsed.perDay) {
-            if (p.dayNumber === dayNumber) {
-              extraIntents.push({
-                title: p.title,
-                startTime: p.startTime,
-                kind: p.kind,
-                source: 'fine_tune',
-                priority: p.priority,
-                raw: p.raw,
-              });
-            }
-          }
-          for (const w of parsed.tripWide) tripWideNotes.push(w);
+        if (tripId) {
+          const { fetchActiveDayIntents } = await import('../../_shared/day-intents-store.ts');
+          structuredRows = await fetchActiveDayIntents(supabase, tripId);
         }
-      } catch (parseErr) {
-        console.warn('[compile-prompt] Fine-tune parse failed (non-blocking):', parseErr);
+      } catch (structErr) {
+        console.warn('[compile-prompt] Structured intent fetch failed (non-blocking):', structErr);
       }
 
-      try {
-        const recordedIntents = Array.isArray((metadata as any)?.userIntents)
+      const merged = mergePreferenceSources({
+        structuredRows,
+        additionalNotes: (metadata?.additionalNotes as string) || '',
+        recordedIntents: Array.isArray((metadata as any)?.userIntents)
           ? ((metadata as any).userIntents as Array<Record<string, any>>)
-          : [];
-        for (const ri of recordedIntents) {
-          if (Number(ri.dayNumber) !== dayNumber) continue;
-          if (!ri.title || typeof ri.title !== 'string') continue;
-          extraIntents.push({
-            title: ri.title,
-            startTime: ri.startTime,
-            kind: ri.kind || 'activity',
-            source: ri.source || 'assistant',
-            priority: ri.priority === 'must' ? 'must' : 'should',
-            raw: ri.raw || ri.title,
-          });
-        }
-      } catch (intentErr) {
-        console.warn('[compile-prompt] Recorded intents read failed (non-blocking):', intentErr);
+          : [],
+        mustDoActivities: (metadata as any)?.mustDoActivities,
+        perDayActivities: Array.isArray((metadata as any)?.perDayActivities)
+          ? ((metadata as any).perDayActivities as Array<{ dayNumber: number; activities: string }>)
+          : undefined,
+        tripStartDate: (preferences?.startDate as string)
+          || (date ? String(date).split('T')[0] : undefined),
+        totalDays: totalDays || undefined,
+      });
+
+      for (const w of merged.tripWideNotes) {
+        if (!tripWideNotes.includes(w)) tripWideNotes.push(w);
       }
+
+      const forDay = intentsForPromptDay(merged.intents, dayNumber);
+      for (const i of forDay) {
+        extraIntents.push({
+          title: i.title,
+          startTime: i.startTime,
+          endTime: i.endTime,
+          kind: i.kind,
+          source: i.source,
+          priority: i.priority,
+          raw: i.raw,
+          locked: i.locked,
+          lockedSource: i.lockedSource,
+          tripWide: i.tripWide,
+        });
+      }
+
+      preferenceTraceEntry = buildPreferenceTraceEntry(
+        `compile-prompt:day-${dayNumber}`,
+        merged,
+        forDay.length,
+      );
+      console.log(
+        `[PREFERENCE_SPINE] day=${dayNumber} total=${merged.intents.length} ` +
+        `promptForDay=${forDay.length} bySource=${JSON.stringify(merged.counts)}`,
+      );
+    } catch (mergeErr) {
+      console.warn('[compile-prompt] preference-spine merge failed (non-blocking):', mergeErr);
     }
 
     // ── FORWARD STATE — peek ahead 1–2 days to avoid vibe clashes ──
