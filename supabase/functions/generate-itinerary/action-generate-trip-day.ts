@@ -3738,10 +3738,12 @@ async function _handleGenerateTripDayInner(
       if (mustDosForGate.length > 0) {
         const cov = _assert(partialItinerary.days, mustDosForGate);
         mustDosStillMissing = cov.missing;
-        if (cov.missing.length === mustDosForGate.length && isComplete) {
-          // 100% miss on selected places — never call this `ready`.
+        if (cov.missing.length > 0 && isComplete) {
+          // ANY missing user-selected place blocks `ready`. Better a `partial`
+          // the user can recover from than a polished shell trip that ignored
+          // their selections. See plan §3 (hard contract upgrade).
           console.warn(
-            `[MUST_DO_HARD_GATE] trip=${tripId} ALL ${cov.missing.length} selected places uncovered after injection — forcing finalStatus=partial`,
+            `[MUST_DO_HARD_GATE] trip=${tripId} ${cov.missing.length}/${mustDosForGate.length} selected places uncovered after injection — forcing finalStatus=partial`,
           );
           isComplete = false;
         }
