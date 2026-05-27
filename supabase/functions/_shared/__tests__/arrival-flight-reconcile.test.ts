@@ -124,3 +124,63 @@ Deno.test("§3b v2 land-start convention: Barcelona — 20:00 landing → card 2
   assertEquals(transfer.startTime, "20:45", "transfer starts when on-ground window ends");
   assert(repairs.some((r: any) => r.action === "injected_arrival_flight"));
 });
+
+Deno.test("§3b reconcile: Barcelona — LLM 'Walk to Hotel Arts Barcelona (232min)' reconciled to airport transfer", () => {
+  const acts: any[] = [
+    {
+      id: "walk-stub",
+      title: "Walk to Hotel Arts Barcelona",
+      category: "transport",
+      startTime: "20:00",
+      endTime: "23:52",
+      durationMinutes: 232,
+    },
+  ];
+  const { day, repairs } = repairDay(baseInput({
+    day: { dayNumber: 1, date: "2027-06-01", activities: acts },
+    arrivalTime24: "20:00",
+    arrivalAirport: "BCN",
+    hotelName: "Hotel Arts Barcelona",
+  }));
+  const transfers = (day.activities as any[]).filter((a) => a.anchorSource === "airport-transfer");
+  assertEquals(transfers.length, 1, "exactly one airport-transfer card after reconcile + dedupe");
+  const transfer = transfers[0];
+  assertEquals(transfer.title, "Transfer to Hotel Arts Barcelona");
+  assertEquals(transfer.startTime, "20:45");
+  assertEquals(transfer.endTime, "21:30");
+  assertEquals(transfer.durationMinutes, 45);
+  assertEquals(transfer.isLocked, true);
+  assertEquals(transfer.subcategory, "airport_transfer");
+  assertEquals(transfer.source, "repair-airport-transfer-reconciled");
+  assert(repairs.some((r: any) => r.action === "reconciled_airport_transfer"));
+  assert(!repairs.some((r: any) => r.action === "injected_airport_transfer"));
+});
+
+Deno.test("§3b reconcile: 'Taxi to <hotel>' also reconciled (non-walk verb)", () => {
+  const acts: any[] = [
+    { id: "taxi-stub", title: "Taxi to Hotel Arts Barcelona", category: "transport", startTime: "20:00", endTime: "20:30", durationMinutes: 30 },
+  ];
+  const { day, repairs } = repairDay(baseInput({
+    day: { dayNumber: 1, date: "2027-06-01", activities: acts },
+    arrivalTime24: "20:00", arrivalAirport: "BCN", hotelName: "Hotel Arts Barcelona",
+  }));
+  const transfers = (day.activities as any[]).filter((a) => a.anchorSource === "airport-transfer");
+  assertEquals(transfers.length, 1);
+  assertEquals(transfers[0].title, "Transfer to Hotel Arts Barcelona");
+  assert(repairs.some((r: any) => r.action === "reconciled_airport_transfer"));
+});
+
+Deno.test("§3b reconcile NOT triggered for unrelated transit ('Walk to Picasso Museum' stays)", () => {
+  const acts: any[] = [
+    { id: "museum-walk", title: "Walk to Picasso Museum", category: "transport", startTime: "11:00", endTime: "11:20", durationMinutes: 20 },
+  ];
+  const { day, repairs } = repairDay(baseInput({
+    day: { dayNumber: 1, date: "2027-06-01", activities: acts },
+    arrivalTime24: "08:00", arrivalAirport: "BCN", hotelName: "Hotel Arts Barcelona",
+  }));
+  const museumWalk = (day.activities as any[]).find((a) => a.id === "museum-walk");
+  assert(museumWalk);
+  assertEquals(museumWalk.title, "Walk to Picasso Museum");
+  assert(repairs.some((r: any) => r.action === "injected_airport_transfer"));
+  assert(!repairs.some((r: any) => r.action === "reconciled_airport_transfer"));
+});

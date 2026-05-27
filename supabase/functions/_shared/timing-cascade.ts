@@ -524,7 +524,11 @@ export function recomputeTransitCards<T extends CascadeActivity>(
     const desc = String(card.description || '').toLowerCase();
     const sub = String(card.subcategory || '').toLowerCase();
     const isAirportish = /\b(airport|terminal|station|ferry|train\s*to|bus\s*to|intercity|long[-\s]?distance)\b/.test(title + ' ' + desc)
-      || sub === 'airport_transfer';
+      || sub === 'airport_transfer'
+      // Hotel-bound transit > 75 min is functionally an airport→hotel transfer
+      // (nobody walks/strolls 1h+ to a hotel). Treat as airportish so the
+      // fallback is the 45-min taxi default, not the 25-min intra-city walk.
+      || /\bto\b.*\b(hotel|inn|resort|hostel|residence|apartments?)\b/i.test(title + ' ' + desc);
     const overHard = cur > HARD_DUR_CEILING;
     const overIntra = !isAirportish && cur > INTRA_CITY_CEILING;
     if (!overHard && !overIntra) continue;
