@@ -340,16 +340,27 @@ export async function prepareContext(supabase: any, tripId: string, userId?: str
     flightDetails: (trip.metadata?.flightDetails as string) || undefined,
   };
 
-  // ─── SEED `trip_day_intents` FROM METADATA BLOBS (idempotent) ───
+  // ─── SEED `trip_day_intents` FROM METADATA BLOBS (idempotent + BLOCKING) ───
   // The four entry points (chat-planner, fine-tune notes, manual paste/anchors,
   // assistant chat) historically wrote to `trip.metadata`. We mirror those
   // into the structured `trip_day_intents` table so the rest of the pipeline
   // (compile-prompt, day-ledger, day-brief checker) relies on ONE source of
   // truth — per-day, per-source rows. Idempotent via unique-index dedupe.
+  //
+  // Canonical-preference-spine: Stage 1 of a fresh generation uses the
+  // BLOCKING variant. If metadata indicates preferences exist but seed writes
+  // 0 rows (DB error, RLS, partial write), throw instead of silently shipping
+  // a generic itinerary that ignores the user's Step 3 preferences.
   try {
-    const { seedDayIntentsFromMetadata } = await import('../_shared/day-intents-store.ts');
-    await seedDayIntentsFromMetadata(supabase, trip as any, totalDays, userId || null);
+    const { seedDayIntentsOrThrow } = await import('../_shared/day-intents-store.ts');
+    const audit = await seedDayIntentsOrThrow(supabase, trip as any, totalDays, userId || null);
+    console.log('[PREFERENCE_SPINE] seed (Stage 1, blocking)', JSON.stringify({ tripId: trip.id, generated: audit.generated, written: audit.written }));
   } catch (seedErr) {
+    const isBlock = seedErr && (seedErr as Error).name === 'PreferenceSeedingFailedError';
+    if (isBlock) {
+      console.error('[PREFERENCE_SPINE] FATAL seed failure in Stage 1', String(seedErr));
+      throw seedErr;
+    }
     console.warn('[Stage 1] trip_day_intents seeding failed (non-blocking):', seedErr);
   }
 

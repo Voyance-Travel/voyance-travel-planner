@@ -390,17 +390,28 @@ async function _handleGenerateTripDayInner(
   // ─── SEED `trip_day_intents` (idempotent) ───
   // Server-chain path skips prepareContext but still needs structured intent
   // rows so the Day Brief surfaces user must-dos. Unique index dedupes across
-  // re-runs and across days. Closes "Add your own must-dos is ignored" —
-  // trip-wide custom must-dos were never seeded for the server-chain path.
+  // re-runs and across days. Day 1 of a fresh chain uses the BLOCKING variant
+  // (canonical-preference-spine): if metadata preferences exist but seed
+  // writes 0 rows, fail loud instead of silently shipping a generic itinerary.
+  // Subsequent days fall back to non-blocking — their rows already exist.
   try {
-    const { seedDayIntentsFromMetadata } = await import('../_shared/day-intents-store.ts');
-    await seedDayIntentsFromMetadata(
-      supabase,
-      { id: tripId, user_id: userId, metadata: tripCheck?.metadata as any, start_date: startDate } as any,
-      totalDays || 1,
-      userId || null,
-    );
+    const { seedDayIntentsOrThrow, seedDayIntentsFromMetadata, PreferenceSeedingFailedError } = await import('../_shared/day-intents-store.ts');
+    const tripArg = { id: tripId, user_id: userId, metadata: tripCheck?.metadata as any, start_date: startDate } as any;
+    if (Number(dayNumber) === 1) {
+      const audit = await seedDayIntentsOrThrow(supabase, tripArg, totalDays || 1, userId || null);
+      console.log('[PREFERENCE_SPINE] seed (day 1, blocking)', JSON.stringify({ tripId, generated: audit.generated, written: audit.written }));
+    } else {
+      await seedDayIntentsFromMetadata(supabase, tripArg, totalDays || 1, userId || null);
+    }
   } catch (seedErr) {
+    const isBlock = seedErr && (seedErr as Error).name === 'PreferenceSeedingFailedError';
+    if (isBlock) {
+      console.error('[PREFERENCE_SPINE] FATAL seed failure on day 1', String(seedErr));
+      return new Response(
+        JSON.stringify({ error: 'preference_seeding_failed', message: String((seedErr as Error).message), tripId }),
+        { status: 500, headers: jsonHeaders }
+      );
+    }
     console.warn('[generate-trip-day] trip_day_intents seeding failed (non-blocking):', seedErr);
   }
 
