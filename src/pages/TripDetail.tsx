@@ -466,7 +466,7 @@ export default function TripDetail() {
 
   const generationPoller = useGenerationPoller({
     tripId: tripId || null,
-    enabled: isServerGenerating,
+    enabled: isServerGenerating || isFinalizing,
     interval: 3000,
     resumeInFlight: resumeInFlightRef.current || resumingGeneration,
     onReady: async () => {
