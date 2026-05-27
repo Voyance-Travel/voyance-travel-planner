@@ -1,42 +1,41 @@
-## Plan: stop generating visible dead gaps and collisions
+Do I know what the issue is? Yes — the likely root is not the browser refresh itself. A hard refresh exposes that some itinerary writes are still bypassing the canonical save/persist pipeline, so the UI can show one in-memory version while the database, normalized tables, costs, and metadata settle to another version.
 
-### Goal
-Make the generation pipeline treat the inline gap warnings as pre-publish failures, not just UI annotations. The user should receive the repaired itinerary on first load, without needing a refresh or manually noticing/filling gaps.
+The concrete risky path I found is `saveItineraryOptimistic`: when an itinerary version is cached, it calls the `optimistic_update_itinerary` RPC directly. That RPC writes `trips.itinerary_data` raw, bypassing the backend save contract, frozen guard, timing/schedule cleanup, table sync, activity-cost sync, metadata merge, and `TRIP_PERSISTED_EVENT` resync. This is exactly the kind of deep-seated path that makes “it looked fixed until hard refresh” recur.
 
-### What I found
-- The generation gap filler explicitly skips `isFirstDay`, which explains the Day 1 lunch-to-dinner 5h30m dead window.
-- Gap filling runs before several late mutation stages: final meal guard, hotel-return injection, validation gate, orphan-transit cleanup, and the persist-time timing cascade.
-- The persist-time cascade can fix overlaps like breakfast ending 09:15 vs Cathedral starting 09:00, but because it runs at the persist boundary, no final gap-fill pass runs after it. That means the system can fix one timing bug while silently creating or preserving a large open block.
-- Transit recomputation has a sanity clamp only above 180 minutes, so a misleading 109-minute intra-Faro leg can survive even though it is implausible for a local island ferry-to-Old-Town transition.
+Plan:
 
-### Implementation steps
-1. **Replace the “skip first day” gap-fill rule with a usable-window rule**
-   - Allow Day 1 gap fill after the arrival/brunch/lunch-start window is satisfied.
-   - Still avoid filling arrival logistics, hotel check-in, freshen-up, and user-locked items.
-   - This directly targets the 13:30 → 19:00 Day 1 gap.
+1. Remove the raw optimistic itinerary write path
+   - Refactor `src/services/itineraryOptimisticUpdate.ts` so every itinerary save goes through `safeUpdateItineraryData` / `generate-itinerary` `save-itinerary`.
+   - Keep conflict detection, but stop using `optimistic_update_itinerary` to write `itinerary_data` directly.
+   - After save, force canonical DB resync so the current screen matches what a hard refresh will show.
 
-2. **Add a final pre-persist schedule gate**
-   - After all late generation mutations, run one deterministic sequence:
-     1. timing cascade / overlap repair
-     2. orphan transit cleanup
-     3. morning/afternoon/evening gap fill
-     4. timing cascade again on inserted cards
-     5. final gap audit
-   - If a non-departure day still has an unexplained ≥240-minute active-day gap, mark generation as needing repair instead of presenting it as clean.
+2. Make user-initiated patchers use the same boundary
+   - Update flight/hotel itinerary patchers and “keep mine” conflict save paths to call the safe persistence path with explicit user reasons.
+   - Ensure these still pass `allowFrozenWrite` only when the user directly changed flight/hotel/itinerary data.
 
-3. **Make the persist boundary return the repaired itinerary, not the pre-repair one**
-   - Ensure the object saved by `persistTripItinerary` after cascade repairs is the same object passed forward to the UI state/poller response.
-   - This prevents the “first itinerary shown, repaired itinerary appears only after hard refresh” class of bugs.
+3. Stop page-load effects from changing frozen itineraries
+   - Audit TripDetail mount-time writers, especially day-mode backfill and table/JSON recovery.
+   - Convert harmless page-load backfills to metadata-only or read-time derivation.
+   - Only allow frozen-trip self-heal writes for narrow, proven corruption cases; otherwise log and leave canonical DB JSON untouched.
 
-4. **Tighten intra-city transit sanity for impossible local legs**
-   - Add a local-route cap for non-airport, non-intercity transit cards: if the route is inside one city and not explicitly long-distance/ferry excursion, clamp/mark unverified above a reasonable ceiling.
-   - Add a special water-crossing allowance so real ferry legs can be 15–45 minutes, but not 109 minutes unless coordinates or route data prove it.
+4. Strengthen the guardrail test suite
+   - Extend the existing “no raw itinerary writes” test to flag RPC writes like `optimistic_update_itinerary`, not just `.update({ itinerary_data })`.
+   - Add tests that `saveItineraryOptimistic`, hotel patch, flight patch, conflict “keep mine”, and page-load backfills cannot bypass `safeUpdateItineraryData`.
+   - Add a hard-refresh invariant test: after a save, the local rendered itinerary must be sourced from the same canonical payload that a fresh DB read returns.
 
-5. **Add regression tests with the exact failures**
-   - Day 1 Faro lunch 13:30 → dinner 19:00 must be filled or explicitly marked as intentional free time by generation.
-   - Day 1 breakfast 08:30–09:15 vs Cathedral 09:00 must be repaired before persist/UI response.
-   - Day 2 Chapel of Bones 16:54 → dinner 20:14 must be filled or blocked as unclean.
-   - Ilha Deserta → Old Town 109-minute transit must be clamped/flagged unless verified.
+5. Add focused telemetry for the next repro
+   - Add one structured warning when any save returns a canonical DB payload different from the attempted local payload.
+   - Include save reason, frozen status, version, day/activity counts, meal counts, and whether activity-cost/table sync ran.
+   - This gives us one place to diagnose future refresh drift instead of chasing tab-by-tab symptoms.
 
-### Expected result
-Generated itineraries can still include honest free time, but large unexplained windows and direct timing collisions will be repaired or blocked before the itinerary is shown as ready.
+Expected result:
+- The app should no longer show a pre-refresh itinerary/total that differs from post-refresh because there will be one persistence chokepoint and one canonical resync path.
+- Any remaining difference after refresh should become a logged contract violation with a single trace, not another invisible side effect.
+
+<presentation-actions>
+  <presentation-open-history>View History</presentation-open-history>
+</presentation-actions>
+
+<presentation-actions>
+<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
+</presentation-actions>

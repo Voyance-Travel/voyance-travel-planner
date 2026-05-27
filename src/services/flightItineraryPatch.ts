@@ -175,9 +175,13 @@ export async function patchItineraryWithFlight(
 
     if (!patched) return false;
 
-    // Use optimistic update for version safety
+    // Route through the canonical save boundary; the optimistic helper now
+    // performs conflict detection but never raw-writes itinerary_data.
     await fetchAndCacheVersion(tripId);
-    const result = await saveItineraryOptimistic(tripId, { ...itineraryData, days });
+    const result = await saveItineraryOptimistic(tripId, { ...itineraryData, days }, {
+      allowFrozenWrite: true,
+      reason: 'user-flight-patch',
+    });
 
     if (!result.success) {
       console.error('[FlightPatch] Optimistic update failed:', result.error);

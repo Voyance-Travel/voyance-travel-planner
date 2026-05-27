@@ -15,6 +15,17 @@ export interface OptimisticUpdateResult {
   actualVersion?: number;
 }
 
+export interface SaveItineraryOptimisticOptions {
+  /** Caller tag threaded to the canonical save boundary for audit/debugging. */
+  reason?: string;
+  /** User-initiated writes may pass through the frozen-trip gate. */
+  allowFrozenWrite?: boolean;
+  /** Page-load/self-heal writes must skip destructive ledger reconciliation. */
+  skipLedgerCheck?: boolean;
+  /** Bypass cached-version conflict check after the user explicitly chose to keep their changes. */
+  force?: boolean;
+}
+
 /**
  * In-memory version tracker per trip.
  * Updated on fetch and on successful saves.
@@ -67,59 +78,41 @@ export async function fetchAndCacheVersion(tripId: string): Promise<number> {
  */
 export async function saveItineraryOptimistic(
   tripId: string,
-  itineraryData: Record<string, unknown>
+  itineraryData: Record<string, unknown>,
+  options: SaveItineraryOptimisticOptions = {},
 ): Promise<OptimisticUpdateResult> {
   const expectedVersion = versionCache.get(tripId);
 
-  // If we have no cached version, fall back to direct update
-  // (backwards-compatible for edge functions / non-collaborative scenarios)
-  if (expectedVersion === undefined) {
-    // Route through safeUpdateItineraryData → save-itinerary edge action so
-    // prompt-artifact strip, persist-day contract, and cross-city sweep all
-    // run. Raw .update was a confirmed intermittent leak path.
-    const { safeUpdateItineraryData } = await import('./safeUpdateItineraryData');
-    const safeRes = await safeUpdateItineraryData(tripId, itineraryData as any, {}, { allowFrozenWrite: true, reason: 'optimistic-update' });
-
-    if (safeRes?.error) {
-      console.error('[OptimisticUpdate] Fallback update failed:', safeRes.error);
-      const msg = (safeRes.error as any)?.message ?? String(safeRes.error);
-      return { success: false, error: msg };
+  // Preserve the collaborator conflict prompt without ever writing itinerary_data
+  // through the legacy optimistic_update_itinerary RPC. That RPC bypassed the
+  // save-itinerary edge action, persistTripItinerary, frozen guard, table sync,
+  // activity-cost sync, and post-save canonical resync — the root class behind
+  // pre-refresh vs post-refresh divergence. See hard-refresh plan.
+  if (expectedVersion !== undefined && !options.force) {
+    const currentVersion = await fetchAndCacheVersion(tripId);
+    if (currentVersion !== expectedVersion) {
+      return {
+        success: false,
+        error: 'version_conflict',
+        expectedVersion,
+        actualVersion: currentVersion,
+      };
     }
-
-    // Refresh the version cache after the boundary write
-    fetchAndCacheVersion(tripId).catch(() => {});
-    return { success: true };
   }
 
-  // Use the atomic RPC
-  const { data, error } = await supabase.rpc('optimistic_update_itinerary', {
-    p_trip_id: tripId,
-    p_expected_version: expectedVersion,
-    p_itinerary_data: itineraryData as any,
+  const { safeUpdateItineraryData } = await import('./safeUpdateItineraryData');
+  const safeRes = await safeUpdateItineraryData(tripId, itineraryData as any, {}, {
+    allowFrozenWrite: options.allowFrozenWrite ?? true,
+    skipLedgerCheck: options.skipLedgerCheck,
+    reason: options.reason || 'optimistic-update',
   });
 
-  if (error) {
-    console.error('[OptimisticUpdate] RPC error:', error);
-    return { success: false, error: error.message };
+  if (safeRes?.error) {
+    console.error('[OptimisticUpdate] Canonical save failed:', safeRes.error);
+    const msg = (safeRes.error as any)?.message ?? String(safeRes.error);
+    return { success: false, error: msg };
   }
 
-  const result = data as unknown as {
-    success: boolean;
-    new_version?: number;
-    error?: string;
-    expected_version?: number;
-    actual_version?: number;
-  };
-
-  if (result.success && result.new_version) {
-    versionCache.set(tripId, result.new_version);
-    return { success: true, newVersion: result.new_version };
-  }
-
-  return {
-    success: false,
-    error: result.error as OptimisticUpdateResult['error'],
-    expectedVersion: result.expected_version,
-    actualVersion: result.actual_version,
-  };
+  const newVersion = await fetchAndCacheVersion(tripId).catch(() => expectedVersion ?? 1);
+  return { success: true, newVersion };
 }
