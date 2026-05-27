@@ -1105,39 +1105,35 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       const tripStartFromDb = (tripCountryRow as any)?.start_date || tripStartDate;
       const prefs = (tripCountryRow as any)?.preferences as Record<string, any> | null;
 
-      // ── STRUCTURED DAY INTENTS (preferred source) ──
-      // Read normalized rows from `trip_day_intents` and group by day. Falls
-      // back to legacy metadata blobs if the table is empty for this trip.
-      let intentsByDay = new Map<number, Array<Record<string, any>>>();
+      // ── CANONICAL PREFERENCE-SPINE MERGE ──
+      // Same module used by compile-prompt. Always merges structured rows +
+      // metadata blobs; never gates one source on the other being empty.
+      // See mem://constraints/itinerary/canonical-preference-spine.
+      let mergedIntents: any[] = [];
       let tripWideFromTable: string[] = [];
       try {
-        const { fetchActiveDayIntents, groupIntentsByDay } = await import('../_shared/day-intents-store.ts');
-        const rows = await fetchActiveDayIntents(supabase, tripId);
-        const grouped = groupIntentsByDay(rows);
-        for (const [dn, list] of grouped.entries()) {
-          if (dn === 0) {
-            tripWideFromTable = list.map((r) => r.title);
-          } else {
-            intentsByDay.set(dn, list as Array<Record<string, any>>);
-          }
-        }
+        const { fetchActiveDayIntents } = await import('../_shared/day-intents-store.ts');
+        const { mergePreferenceSources } = await import('../_shared/preference-spine.ts');
+        const structuredRows = tripId ? await fetchActiveDayIntents(supabase, tripId) : [];
+        const merge = mergePreferenceSources({
+          structuredRows: structuredRows as any,
+          additionalNotes: additionalNotes || '',
+          recordedIntents,
+          mustDoActivities: (tripMeta as any)?.mustDoActivities,
+          perDayActivities: Array.isArray((tripMeta as any)?.perDayActivities)
+            ? ((tripMeta as any).perDayActivities as Array<{ dayNumber: number; activities: string }>)
+            : undefined,
+          tripStartDate: tripStartFromDb,
+          totalDays: itineraryDays.length,
+        });
+        mergedIntents = merge.intents;
+        tripWideFromTable = merge.tripWideNotes;
+        console.log(
+          `[save-itinerary] PREFERENCE_SPINE total=${merge.intents.length} ` +
+          `tripWideNotes=${merge.tripWideNotes.length} bySource=${JSON.stringify(merge.counts)}`,
+        );
       } catch (e) {
-        console.warn('[save-itinerary] day-intents fetch failed (non-blocking):', e);
-      }
-
-      // Parse fine-tune notes once for the whole trip (legacy fallback)
-      let parsedFineTune: { perDay: Array<Record<string, any>>; tripWide: string[] } = { perDay: [], tripWide: [] };
-      try {
-        if (additionalNotes.trim()) {
-          const { parseFineTuneIntoDailyIntents } = await import('../_shared/parse-fine-tune-intents.ts');
-          parsedFineTune = parseFineTuneIntoDailyIntents({
-            notes: additionalNotes,
-            tripStartDate: tripStartFromDb,
-            totalDays: itineraryDays.length,
-          });
-        }
-      } catch (e) {
-        console.warn('[save-itinerary] Fine-tune parse failed (non-blocking):', e);
+        console.warn('[save-itinerary] preference-spine merge failed (non-blocking):', e);
       }
 
       // Build prior-day activity list once (titles only, with their dayNumber)
@@ -1155,9 +1151,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         const dn = (d.dayNumber as number) || 0;
         const dayAnchors = userAnchors.filter((a) => Number(a.dayNumber) === dn);
 
-        // Soft intents for THIS day. Prefer the structured `trip_day_intents`
-        // rows (one per user-stated wish) when present; fall back to legacy
-        // metadata blobs otherwise.
+        // Pull merged intents for this day (per-day + trip-wide actionable wishes).
         const extraIntents: Array<{
           title: string;
           startTime?: string;
@@ -1167,45 +1161,21 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           priority?: 'must' | 'should';
           raw?: string;
         }> = [];
-        const structuredForDay = intentsByDay.get(dn) || [];
-        if (structuredForDay.length > 0) {
-          for (const r of structuredForDay) {
-            if (r.locked) continue; // locked rows already covered by anchors
-            extraIntents.push({
-              title: r.title,
-              startTime: r.start_time || undefined,
-              endTime: r.end_time || undefined,
-              kind: r.intent_kind || 'activity',
-              source: r.source_entry_point || 'system',
-              priority: r.priority === 'must' ? 'must' : (r.priority === 'avoid' ? 'must' : 'should'),
-              raw: r.raw_text || r.title,
-            });
-          }
-        } else {
-          for (const p of parsedFineTune.perDay) {
-            if (Number(p.dayNumber) !== dn) continue;
-            extraIntents.push({
-              title: p.title,
-              startTime: p.startTime,
-              kind: p.kind,
-              source: 'fine_tune',
-              priority: p.priority,
-              raw: p.raw,
-            });
-          }
-          for (const ri of recordedIntents) {
-            if (Number(ri.dayNumber) !== dn) continue;
-            if (!ri.title || typeof ri.title !== 'string') continue;
-            extraIntents.push({
-              title: ri.title,
-              startTime: ri.startTime,
-              kind: ri.kind || 'activity',
-              source: ri.source || 'assistant',
-              priority: ri.priority === 'must' ? 'must' : 'should',
-              raw: ri.raw || ri.title,
-            });
-          }
+        for (const i of mergedIntents) {
+          if (i.locked) continue; // locked rows already covered by anchors
+          if (i.priority === 'avoid') continue;
+          if (i.dayNumber != null && i.dayNumber !== dn) continue;
+          extraIntents.push({
+            title: i.title,
+            startTime: i.startTime,
+            endTime: i.endTime,
+            kind: i.kind,
+            source: i.source,
+            priority: i.priority === 'must' ? 'must' : 'should',
+            raw: i.raw,
+          });
         }
+
 
         const priorOnly = allActivities.filter((p) => p.dayNumber < dn);
         const forwardOnly = allActivities.filter((p) => p.dayNumber > dn && p.dayNumber <= dn + 2);
