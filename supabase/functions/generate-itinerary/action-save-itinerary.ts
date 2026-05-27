@@ -1280,19 +1280,20 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         let totalFulfilled = 0;
         let totalMissed = 0;
         const missedByDay: Array<{ day: number; missed: string[] }> = [];
+        const softIntents = mergedIntents.filter((i: any) => !i.locked && i.priority !== 'avoid');
         for (const d of itineraryDays) {
           const dn = (d.dayNumber as number) || 0;
           if (!dn) continue;
-          const dayIntents = mergedIntents.filter((i: any) =>
-            !i.locked && i.priority !== 'avoid' && (i.dayNumber == null || i.dayNumber === dn)
-          );
-          if (dayIntents.length === 0) continue;
-          const result = matchDayIntents(dayIntents as any, (d.activities || []) as any);
-          totalExpected += dayIntents.length;
-          totalFulfilled += result.fulfilled.length;
-          if (result.missed.length > 0) {
-            totalMissed += result.missed.length;
-            missedByDay.push({ day: dn, missed: result.missed.map((m: any) => m.title || m.raw || '').filter(Boolean).slice(0, 6) });
+          const summary = matchDayIntents(softIntents as any, dn, (d.activities || []) as any);
+          if (summary.totalIntents === 0) continue;
+          totalExpected += summary.totalIntents;
+          totalFulfilled += summary.fulfilledCount;
+          totalMissed += summary.missedCount;
+          if (summary.missedCount > 0) {
+            missedByDay.push({
+              day: dn,
+              missed: summary.details.filter((x) => !x.fulfilled).map((x) => x.title).slice(0, 6),
+            });
           }
         }
         console.log(
