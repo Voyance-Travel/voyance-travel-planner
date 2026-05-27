@@ -3846,20 +3846,15 @@ async function _handleGenerateTripDayInner(
           // Stamp must_do_coverage on partial trips too so the UI banner can
           // surface "X selected places couldn't fit" without waiting for the
           // ready-only Phase 6 stamp that never runs on partial. See plan §3.
-          ...((() => {
-            const mustDosForStamp = (() => { try { return extractMustDoVenues(meta); } catch { return [] as string[]; } })();
-            if (!Array.isArray(mustDosForStamp) || mustDosForStamp.length === 0) return {};
-            if (mustDosStillMissing.length === 0) return {};
-            return {
-              must_do_coverage: {
-                missing: mustDosStillMissing,
-                total: mustDosForStamp.length,
-                scheduled: mustDosForStamp.filter((v) => !mustDosStillMissing.includes(v)),
-                at: new Date().toISOString(),
-                reason: 'partial_chain_finalized',
-              },
-            };
-          })()),
+          ...(mustDosTotalForStamp > 0 && mustDosStillMissing.length > 0 ? {
+            must_do_coverage: {
+              missing: mustDosStillMissing,
+              total: mustDosTotalForStamp,
+              scheduled: Math.max(0, mustDosTotalForStamp - mustDosStillMissing.length),
+              at: new Date().toISOString(),
+              reason: 'partial_chain_finalized',
+            },
+          } : {}),
         },
       },
     });
