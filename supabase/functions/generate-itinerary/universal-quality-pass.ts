@@ -127,11 +127,23 @@ export function runStep8(result: any[], dayIndex: number, hotelName?: string): v
   const MIDDAY_ACCOM_RE = /\b(?:freshen[-\s]?up|luggage\s+drop|bag\s+drop|settle\s+in|check[-\s]?in|drop\s+(?:bags|luggage))\b/i;
   const titleIsTrueReturn = TRUE_RETURN_RE.test(lastTitle) || CHECKOUT_RE.test(lastTitle);
   const titleIsMiddayAccom = MIDDAY_ACCOM_RE.test(lastTitle) && !titleIsTrueReturn;
+  // Late-evening check-in / settle-in / bag-drop at the hotel IS the terminal
+  // accommodation event (late arrival flights). Suppress the duplicate bookend.
+  // Gated on start ≥ 20:00 AND STAY/ACCOMMODATION category (or hotel-name match
+  // in title) so an off-hotel "Check-in for tomorrow's tour 20:00" doesn't qualify.
+  const lastStartMinsForCheckin = parseTimeAmPm(String(startRaw)) ?? -1;
+  const titleMentionsHotel = hotelName ? new RegExp(`\\b${hotelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 40)}\\b`, 'i').test(lastTitle) : false;
+  const isLateEveningCheckin =
+    titleIsMiddayAccom &&
+    lastStartMinsForCheckin >= 20 * 60 &&
+    (lastCat === 'STAY' || lastCat === 'ACCOMMODATION' || titleMentionsHotel);
   const alreadyReturn =
     titleIsTrueReturn ||
+    isLateEveningCheckin ||
     ((lastCat === 'STAY' || lastCat === 'ACCOMMODATION') && !titleIsMiddayAccom);
   if (alreadyReturn) {
-    console.log(`[BOOKEND_TRACE] day=${dayIndex + 1} site=emit action=skipped source=n/a reason=alreadyReturn lastTitle="${lastTitle}" lastCat=${lastCat}`);
+    const reason = titleIsTrueReturn ? 'alreadyReturn' : (isLateEveningCheckin ? 'late_evening_checkin' : 'alreadyReturn');
+    console.log(`[BOOKEND_TRACE] day=${dayIndex + 1} site=emit action=skipped source=n/a reason=${reason} lastTitle="${lastTitle}" lastCat=${lastCat}`);
     return;
   }
   // Skip logistics tails (airport/station transfers)
