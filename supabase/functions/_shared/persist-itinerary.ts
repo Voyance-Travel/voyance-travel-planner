@@ -19,6 +19,7 @@
  */
 
 import { enforceContractOnDays } from './persist-day-contract.ts';
+import { appendTimingLifecycleTrace } from './timing-spine.ts';
 
 // IMPORTANT: keep two separate regexes — a non-global one for `.test()` and a
 // global one for `.replace()`. Sharing a single `/g` regex across `.test()`
@@ -797,6 +798,16 @@ export async function persistTripItinerary(
     delete updatePayload.itinerary_data; // belt-and-suspenders
   } else {
     updatePayload.itinerary_data = itinerary;
+    // ── TIMING LIFECYCLE TRACE (Step 6) ─────────────────────────────
+    // Stamp a `persist` stage snapshot on every day. Ring-buffered to
+    // last MAX_TIMING_TRACE_STAGES entries; never blocks the write.
+    try {
+      for (const d of days) {
+        appendTimingLifecycleTrace(d, `persist:${label}`);
+      }
+    } catch (e) {
+      console.warn(`[${label}] timing-trace stamp failed (non-blocking):`, e);
+    }
     // ── Metadata merge (success branch) ─────────────────────────────
     // Postgres jsonb columns are full-replace on UPDATE. Without this
     // merge, every save overwrote the entire `metadata` column with
