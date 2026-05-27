@@ -19,6 +19,7 @@
  */
 
 import { enforceContractOnDays } from './persist-day-contract.ts';
+import { appendTimingLifecycleTrace } from './timing-spine.ts';
 
 // IMPORTANT: keep two separate regexes — a non-global one for `.test()` and a
 // global one for `.replace()`. Sharing a single `/g` regex across `.test()`
