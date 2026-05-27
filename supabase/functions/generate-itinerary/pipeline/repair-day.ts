@@ -1000,14 +1000,40 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         );
       });
 
-      const existingTransferIdx = activities.findIndex((a: any) => {
+      // Broaden detection: any transit-titled card in the first 3 slots whose
+      // destination resolves to the hotel is the airport→hotel transfer,
+      // regardless of verb ("Walk to / Taxi to / Metro to / Ride to <hotel>").
+      // Closes recurring "Walk to Hotel Arts Barcelona · 3h52m" leak where
+      // the AI's free-form connector kept its raw 18km walk estimate and
+      // §3b injected a *second* locked transfer card alongside it.
+      const TRANSIT_VERB_RE = /^\s*(walk|stroll|walking|taxi|cab|uber|lyft|rideshare|ride|metro|train|bus|tram|shuttle|drive|driving|transit|transfer|travel)\b.*\bto\b/i;
+      const hotelNeedle = (hotelName || '').toLowerCase().trim();
+      const matchesHotelDestination = (title: string): boolean => {
+        const t = title.toLowerCase();
+        if (/\bto\s+(?:the\s+|your\s+)?(?:hotel|inn|resort|hostel|residence|apartments?|lodging)\b/.test(t)) return true;
+        if (hotelNeedle && hotelNeedle.length >= 4 && t.includes(hotelNeedle)) return true;
+        return false;
+      };
+      const isAirportTransferCard = (a: any, idx: number): boolean => {
         if (!a) return false;
         if (a.anchorSource === 'airport-transfer') return true;
-        const t = (a.title || '').toLowerCase();
+        const t = (a.title || '').toString();
         const cat = (a.category || '').toLowerCase();
-        return (cat === 'transport' || cat === 'logistics') &&
-          (t.includes('transfer to') || t.includes('travel to') || t.includes('airport pickup'));
-      });
+        const tl = t.toLowerCase();
+        // Legacy explicit matches anywhere in the day
+        if ((cat === 'transport' || cat === 'logistics' || cat === 'transit' || cat === 'transfer') &&
+            (tl.includes('transfer to') || tl.includes('travel to') || tl.includes('airport pickup'))) {
+          return true;
+        }
+        // Free-form transit-to-hotel card in the first 3 slots
+        if (idx < 3 &&
+            (cat === 'transport' || cat === 'logistics' || cat === 'transit' || cat === 'transfer') &&
+            TRANSIT_VERB_RE.test(t) && matchesHotelDestination(t)) {
+          return true;
+        }
+        return false;
+      };
+      const existingTransferIdx = activities.findIndex((a: any, idx: number) => isAirportTransferCard(a, idx));
 
       const newFlightStart = minutesToHHMM(flightStartMins);
       const newFlightEnd = minutesToHHMM(flightEndMins);
