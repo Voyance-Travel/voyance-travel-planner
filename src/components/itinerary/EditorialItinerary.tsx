@@ -9829,24 +9829,21 @@ function FlightSyncWarning({ flightArrivalTime, day1FirstActivity, onSyncDay1, i
   
   const flightMins = parseTimeToMinutes(flightArrivalTime);
 
-  // When the first activity IS the auto-injected arrival-flight anchor, its
-  // startTime is `arrival − 120 min` (block start) and its endTime is the
-  // actual landing time. Comparing flightArrivalTime against startTime always
-  // produces a 2h "mismatch" and a false amber banner. Compare against endTime
-  // for the arrival-flight card; against startTime for everything else.
+  // Convention v2 (2026-05-27): the "Arrival Flight" anchor's startTime IS
+  // the landing moment (was: endTime under the old "120-min in-flight window"
+  // convention). Always compare flight arrival against the card's startTime.
   const firstAct = day1FirstActivity as any;
+  const activityTimeField = firstAct?.startTime || firstAct?.start_time || '';
+  const activityMins = parseTimeToMinutes(activityTimeField);
+
   const anchorSource = (firstAct?.anchorSource || firstAct?.source || '').toLowerCase();
   const titleLc = (firstAct?.title || '').toLowerCase();
   const isArrivalFlightAnchor =
     anchorSource === 'arrival-flight' ||
     anchorSource === 'repair-arrival-flight' ||
+    anchorSource === 'repair-arrival-flight-reconciled' ||
     anchorSource === 'injected-arrival-flight' ||
     /\barrival flight\b|\blanding\b/.test(titleLc);
-
-  const activityTimeField = isArrivalFlightAnchor
-    ? (firstAct?.endTime || firstAct?.end_time || '')
-    : (firstAct?.startTime || '');
-  const activityMins = parseTimeToMinutes(activityTimeField);
 
   // If no flight time or first activity, don't show warning
   if (flightMins === null || activityMins === null) return null;
