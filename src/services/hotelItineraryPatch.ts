@@ -151,7 +151,10 @@ export async function patchItineraryWithHotel(
     if (!patched) return false;
 
     await fetchAndCacheVersion(tripId);
-    const result = await saveItineraryOptimistic(tripId, { ...itineraryData, days });
+    const result = await saveItineraryOptimistic(tripId, { ...itineraryData, days }, {
+      allowFrozenWrite: true,
+      reason: 'user-hotel-patch',
+    });
 
     if (!result.success) {
       console.error('[HotelPatch] Optimistic update failed:', result.error);
@@ -239,7 +242,10 @@ export async function patchItineraryWithMultipleHotels(
     if (!patched) return false;
 
     await fetchAndCacheVersion(tripId);
-    const result = await saveItineraryOptimistic(tripId, { ...itineraryData, days });
+    const result = await saveItineraryOptimistic(tripId, { ...itineraryData, days }, {
+      allowFrozenWrite: true,
+      reason: 'user-hotel-patch-multiple',
+    });
 
     if (!result.success) {
       console.error('[HotelPatch] Multi-hotel optimistic update failed:', result.error);
