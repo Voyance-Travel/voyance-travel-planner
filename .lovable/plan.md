@@ -1,63 +1,54 @@
-## Goal
+# Wrong-City Hero Image — Madrid photo on Barcelona trip
 
-Close the remaining two Payments-tab discrepancies the user flagged:
+## What's actually happening
 
-1. **$8 phantom** — header says $1,088, line items add to $1,080. The missing $8 is transit cost folded into the canonical snapshot but not surfaced as a breakdown item.
-2. **"Departure Flight" $50** — listed as a bookable activity in Payments while the Day 3 itinerary card says "Free".
+Trip `66b74263…` (destination: Barcelona) has `metadata.hero_image` pointing at `site-images/photo-1539037116277-4db20889f2d4` — which is **Madrid's** canonical hero in the `destinations` table. The other two Barcelona trips correctly persist `destination-images/destination/barcelona-1.jpg`.
 
-Both are surface-level UI/data attribution bugs, not architecture bugs — the header/snapshot fix landed earlier. We just need the breakdown and the flight placeholder to tell the same story.
+So one trip's hero was once written with Madrid's URL (likely a stale write before destination was edited, or an earlier canonical bug) and the **seeded tier** in `useTripHeroImage` happily returns it forever because the only guard on seeded URLs is `isUntrustedHeroUrl` — which checks host + people-content slugs, **not** whether the photo's city matches the trip's destination.
 
-## Root cause
+The canonical row for `Barcelona` in `destinations.hero_image_url` is `photo-1583422409516-2895a77efed6`. That's a separate question (it may also be wrong — needs visual QA) but it's not what's rendering for this user; the persisted trip metadata short-circuits the resolver at tier 1.
 
-### Issue 1 — `$8` transit phantom
-`usePayableItems` (`src/hooks/usePayableItems.ts` ~L369–L381) drops transit rows whose title looks like a placeholder departure transfer or an unconfirmed intra-city taxi, **but** `resolveCanonicalCostRows` (the source for the headline + `financialSnapshot.buckets.transit`) does not apply the same skips. Net effect:
-- Snapshot total includes those cents.
-- Payable list excludes them, so `transitItems.length === 0`.
-- The "Local Transit" bucket card is gated on `items.length > 0` (PaymentsTab.tsx ~L1490), so it never renders — even though `buckets.transit > 0`.
+## Fix — two layers + one-time purge
 
-Result: bucket sum < headline by the dropped cents (the $8).
+### 1. Cross-city guard at the seeded/canonical tier (`src/hooks/useTripHeroImage.ts`)
 
-### Issue 2 — "Departure Flight" $50
-Activity card on Day 3 displays $0/"Free" because it matches the "placeholder departure transfer / unverified transit" content rule (Core memory: *Placeholder Departure Transfer* / *Unconfirmed Transit Leg* → stays $0 in `activity_costs`). But the row in `activity_costs` for this specific trip was written **before** that guard, or its title slipped past the regex (e.g. literal "Departure Flight" instead of a transfer keyword), so it sits at $50. `usePayableItems` then turns every non-transit row into `type:'activity'` and it surfaces as a $50 bookable item.
+Today `detectCrossCityMention` only runs on the API tier's `alt` text. Extend it to the **seeded** and **canonical** tiers using a URL→city map we already have visibility into:
 
-## Fix
+- Build a small `urlCityHint(url)` helper that extracts the photo-id slug from `site-images/photo-XXXX…` and looks up which destination row's `hero_image_url`/`stock_image_url` points at that exact slug. If the hinted city ≠ the trip's destination city, treat the URL as broken (advance past tier).
+- Wire it into `isBrokenSeededUrl(url, destination)` and into the `canonicalUrl` validation in the canonical effect (line ~148) and the seeded short-circuit (line ~252).
+- Sentinel: `console.warn('[useTripHeroImage] cross-city hero blocked dest="…" hintedCity="…" url=…')`.
 
-### 1. Single source for transit visibility (`src/hooks/usePayableItems.ts`)
+This is implemented client-side as a one-shot lookup on mount (cached in module scope so it doesn't re-query per render). For the steady-state case where the destinations row matches, it's a no-op.
 
-When a transit row is skipped by `isPlaceholderDepartureTransferTitle` or `isUnconfirmedIntraCityTaxi`:
-- Continue skipping from the per-row sub-items list **and** from the per-day grouped totalCents, so it doesn't show as a billable line.
-- But **emit a single $0 informational "Local transit (estimated)" group row** for that day so:
-  - `transitItems.length > 0` → the bucket card renders.
-  - The card header total reads `financialSnapshot.buckets.transit` (already authoritative, $8).
-  - Inside, render a single muted sub-item: "Estimated walking / short transit — not bookable" with `amountCents: 0` and no Pay button.
+### 2. Persistence write-back gate (same file, write-back effect ~L297)
 
-This keeps the headline source of truth intact (canonical snapshot) and makes the bucket card visibly reconcile to it. No backend changes; no new RPCs.
+Before the `update({ metadata.hero_image })` fires, re-run the same cross-city check on the URL we're about to write. If it fails, skip the write. Closes the loop so future canonical/db_curated drift can't repoison metadata.
 
-### 2. Strip placeholder "Departure Flight" cost (two layers)
+### 3. One-shot SQL purge for already-poisoned trips
 
-**Frontend (`src/hooks/usePayableItems.ts`)**: extend the placeholder check at the per-row branch (~L399) to also detect placeholder departure-flight rows (category `flight` with title matching `/^(departure|return)\s+flight\b/i` AND no booked-cost source AND no flight number). When matched: skip emitting a payable item (the canonical day-0 flight chip is the only legitimate flight row).
+Clear `metadata.hero_image` from any trip where the persisted URL's photo-id slug belongs to a different destination than `trips.destination`. Conservative — only clears confirmed mismatches; the resolver will repopulate on next view.
 
-**Backend (`supabase/functions/_shared/write-activity-costs.ts`)**: mirror the same rule — when scanning the itinerary for cost rows, if the activity is a placeholder departure flight card (matching the same regex + no booked basis), write `cost_per_person_usd: 0` with `source: 'placeholder_departure_flight'`. This prevents the row from leaking into `buckets.activities` on future writes and is consistent with the existing "Placeholder Departure Transfer" rule already in core memory.
+```text
+UPDATE trips t
+SET metadata = t.metadata - 'hero_image'
+WHERE EXISTS (
+  SELECT 1 FROM destinations d
+  WHERE (t.metadata->>'hero_image') LIKE '%' || split_part(d.hero_image_url, '/', -1) || '%'
+    AND lower(d.city) <> lower(split_part(t.destination, ',', 1))
+);
+```
 
-No migration / no one-shot backfill required — next save through `safeUpdateItineraryData` → `writeActivityCostsFromItinerary` will normalize the row.
+### 4. Memory entry
 
-### 3. Memory
+Add `mem://constraints/visual/hero-cross-city-guard` — the resolver MUST cross-check the photo's city hint against the trip's destination at every tier (seeded, canonical, db_curated, storage), not just the API tier's alt text.
 
-Add one constraint:
-- `mem://constraints/finance/transit-bucket-visibility-mirrors-snapshot` — if `buckets.transit > 0` the Local Transit card MUST render, even when all underlying rows are placeholder/unconfirmed (synthetic $0 sub-item is OK). And expand the existing *Placeholder Departure Transfer* note to mention "Departure/Return Flight" placeholder titles fall under the same $0 rule.
+## What this does NOT touch
 
-## Out of scope
-
-- No changes to the canonical resolver, snapshot hook, or header equation — those already match (user confirmed the green "Matches itinerary" check).
-- No new tables, RLS changes, or migrations.
-- No changes to the itinerary card UI; "Free" continues to render correctly.
+- The canonical row for Barcelona itself (`photo-1583422409516-…`) — visual QA is a separate ticket. If it's also wrong, the admin curation flow + curated_images vote_score handles it; the guard here ensures it at least can't leak onto a non-Barcelona trip.
+- Other tiers (curated storage map, gradient) — those are already city-keyed by slug at lookup time and can't cross-leak.
 
 ## Verification
 
-1. Re-load the user's Faro trip; confirm:
-   - "Local Transit" card now visible with header $8 and an inactive "Estimated walking / short transit" sub-item.
-   - "Departure Flight" no longer in Activities bucket; Activities total drops to $150 (3 × $50).
-   - Bucket sum: $520 + $360 + $150 + $8 + reserve = $1,088 → matches headline.
-2. Add a unit test in `src/hooks/__tests__/usePayableItems.test.ts`:
-   - Given a transit row with placeholder title and $8 cents, payable items emit a `groupKind:'transit'` row with `amountCents:0` and bucket card renders.
-   - Given an activity row `category:'flight'` titled "Departure Flight" with no flight number, no payable item is emitted.
+- Reload trip `66b74263…` → hero falls through to `destination-images/destination/barcelona-1.jpg` (storage tier).
+- Re-query `SELECT id, metadata->>'hero_image' FROM trips WHERE destination='Barcelona'` → all three rows match Barcelona's canonical or storage hero.
+- Unit test in `src/hooks/__tests__/useTripHeroImage.test.ts`: seeded URL = Madrid's photo-id + destination = "Barcelona" → resolver advances to next tier, write-back skipped.

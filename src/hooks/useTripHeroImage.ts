@@ -20,6 +20,7 @@ import { getHeroImageByName, getDestinationCanonicalImage } from '@/services/des
 import { supabase } from '@/integrations/supabase/client';
 import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
 import { detectCrossCityMention } from '@/lib/crossCityFilter';
+import { isCrossCityHero } from '@/lib/heroCrossCityGuard';
 import { DESTINATION_STORAGE_IMAGES } from '@/data/destinationStorageImages';
 
 /**
@@ -124,6 +125,41 @@ export function useTripHeroImage({
   const [apiFailed, setApiFailed] = useState(false);
   const [apiAttribution, setApiAttribution] = useState<UseTripHeroImageResult['attribution']>(undefined);
   const [isLoading, setIsLoading] = useState(false);
+  // Cross-city guard (closes "Madrid photo on Barcelona trip"). We resolve the
+  // photo-id → city hint asynchronously and treat the URL as broken if it
+  // points at a different city than the trip's destination.
+  const [seededCrossCity, setSeededCrossCity] = useState(false);
+  const [canonicalCrossCity, setCanonicalCrossCity] = useState(false);
+
+  useEffect(() => {
+    if (!seededHeroUrl || !destination) { setSeededCrossCity(false); return; }
+    let cancelled = false;
+    isCrossCityHero(seededHeroUrl, destination).then((bad) => {
+      if (cancelled) return;
+      if (bad) {
+        console.warn(
+          `[useTripHeroImage] cross-city seeded hero blocked dest="${destination}" url=${seededHeroUrl}`,
+        );
+        setSeededCrossCity(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [seededHeroUrl, destination]);
+
+  useEffect(() => {
+    if (!canonicalUrl || !destination) { setCanonicalCrossCity(false); return; }
+    let cancelled = false;
+    isCrossCityHero(canonicalUrl, destination).then((bad) => {
+      if (cancelled) return;
+      if (bad) {
+        console.warn(
+          `[useTripHeroImage] cross-city canonical hero blocked dest="${destination}" url=${canonicalUrl}`,
+        );
+        setCanonicalCrossCity(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [canonicalUrl, destination]);
 
   const curatedImages = getCuratedImages(destination);
   const hasCurated = hasCuratedImages(destination);
@@ -133,9 +169,8 @@ export function useTripHeroImage({
 
   // Fetch canonical destination hero image (shared across all views)
   useEffect(() => {
-    const shouldFetch =
-      (!seededHeroUrl || seededFailed) &&
-      !canonicalFetched;
+    const seededDone = !seededHeroUrl || seededFailed || seededCrossCity;
+    const shouldFetch = seededDone && !canonicalFetched;
 
     if (!shouldFetch || !destination) return;
 
@@ -152,14 +187,15 @@ export function useTripHeroImage({
       });
 
     return () => { cancelled = true; };
-  }, [destination, seededHeroUrl, seededFailed, canonicalFetched]);
+  }, [destination, seededHeroUrl, seededFailed, seededCrossCity, canonicalFetched]);
 
   // Fetch DB curated image when canonical+curated+storage are exhausted
   useEffect(() => {
-    const canonicalDone = canonicalFetched && (!canonicalUrl || canonicalFailed);
+    const seededDone = !seededHeroUrl || seededFailed || seededCrossCity;
+    const canonicalDone = canonicalFetched && (!canonicalUrl || canonicalFailed || canonicalCrossCity);
     const storageDone = !storageUrl || storageFailed;
     const shouldFetch =
-      (!seededHeroUrl || seededFailed) &&
+      seededDone &&
       canonicalDone &&
       !hasCurated &&
       storageDone &&
@@ -182,14 +218,15 @@ export function useTripHeroImage({
       });
 
     return () => { cancelled = true; };
-  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, canonicalFetched, canonicalUrl]);
+  }, [destination, seededHeroUrl, seededFailed, seededCrossCity, hasCurated, dbCuratedFetched, canonicalFetched, canonicalUrl, canonicalCrossCity, storageUrl, storageFailed]);
 
   // Fetch from API once all earlier tiers are exhausted
   useEffect(() => {
-    const canonicalDone = canonicalFetched && (!canonicalUrl || canonicalFailed);
+    const seededDone = !seededHeroUrl || seededFailed || seededCrossCity;
+    const canonicalDone = canonicalFetched && (!canonicalUrl || canonicalFailed || canonicalCrossCity);
     const storageDone = !storageUrl || storageFailed;
     const shouldFetch =
-      (!seededHeroUrl || seededFailed) &&
+      seededDone &&
       canonicalDone &&
       !hasCurated &&
       storageDone &&
@@ -205,10 +242,6 @@ export function useTripHeroImage({
       .then((result) => {
         if (cancelled) return;
         setApiFetched(true);
-        // Cross-city geo guard — defense in depth so a stale curated row
-        // mentioning the wrong city in the same country (Casablanca →
-        // Chefchaouen, Casablanca trip; Montreal alpine-lake class) never
-        // renders. We treat it as apiFailed so the chain falls to gradient.
         const xcity = result?.alt
           ? detectCrossCityMention(result.alt, destination)
           : null;
@@ -243,7 +276,7 @@ export function useTripHeroImage({
     return () => {
       cancelled = true;
     };
-  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, dbCuratedUrl, apiFetched, canonicalFetched, canonicalUrl, canonicalFailed, storageUrl, storageFailed]);
+  }, [destination, seededHeroUrl, seededFailed, seededCrossCity, hasCurated, dbCuratedFetched, dbCuratedUrl, apiFetched, canonicalFetched, canonicalUrl, canonicalFailed, canonicalCrossCity, storageUrl, storageFailed]);
 
   // Determine current image URL based on fallback chain
   const getImageUrl = (): { url: string; source: UseTripHeroImageResult['source'] } => {
