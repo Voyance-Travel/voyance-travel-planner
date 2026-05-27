@@ -1,41 +1,36 @@
-Do I know what the issue is? Yes — the likely root is not the browser refresh itself. A hard refresh exposes that some itinerary writes are still bypassing the canonical save/persist pipeline, so the UI can show one in-memory version while the database, normalized tables, costs, and metadata settle to another version.
+## Finish the hard-refresh divergence fix
 
-The concrete risky path I found is `saveItineraryOptimistic`: when an itinerary version is cached, it calls the `optimistic_update_itinerary` RPC directly. That RPC writes `trips.itinerary_data` raw, bypassing the backend save contract, frozen guard, timing/schedule cleanup, table sync, activity-cost sync, metadata merge, and `TRIP_PERSISTED_EVENT` resync. This is exactly the kind of deep-seated path that makes “it looked fixed until hard refresh” recur.
+Two tasks remain from the prior pass. Both are needed to actually close the class of bugs, not just `saveItineraryOptimistic`.
 
-Plan:
+### 1. Harden remaining refresh-divergence writers
 
-1. Remove the raw optimistic itinerary write path
-   - Refactor `src/services/itineraryOptimisticUpdate.ts` so every itinerary save goes through `safeUpdateItineraryData` / `generate-itinerary` `save-itinerary`.
-   - Keep conflict detection, but stop using `optimistic_update_itinerary` to write `itinerary_data` directly.
-   - After save, force canonical DB resync so the current screen matches what a hard refresh will show.
+Audit and route every remaining client-side itinerary mutation through `safeUpdateItineraryData` so the server runs the full persist pipeline (timing cascade, table sync, activity-cost sync, metadata merge, freeze stamp) and the post-save canonical resync runs.
 
-2. Make user-initiated patchers use the same boundary
-   - Update flight/hotel itinerary patchers and “keep mine” conflict save paths to call the safe persistence path with explicit user reasons.
-   - Ensure these still pass `allowFrozenWrite` only when the user directly changed flight/hotel/itinerary data.
+- `src/services/itineraryActionExecutor.ts` — verify every `updateTripItinerary` path returns the canonical save result; no raw RPC fallback for chat-driven rewrite/swap/regenerate/pacing/filter.
+- `src/pages/TripDetail.tsx` — audit mount-time effects that can write `itinerary_data`:
+  - keep the 5 allow-listed `generate-trip` invocation sites (locked by `TripDetail.no-silent-regen.test.ts`)
+  - keep the documented self-heal sites (chronology, predawn-cascade, sparse-rebuild, version-restore, empty-day placeholder) — they already pass `skipLedgerCheck:true` + `self-heal-*` reason
+  - flag any other on-mount write that mutates `days`/times/costs without a user gesture, convert to read-time derivation or metadata-only
+- `src/services/safeUpdateItineraryData.ts` — after a successful save, always re-read canonical `trips.itinerary_data` and dispatch `TRIP_PERSISTED_EVENT` so in-memory state matches what a hard refresh will show. If the canonical payload differs from the attempted payload, emit a structured `[PERSIST_DRIFT]` warn (save reason, frozen status, version, day/activity/meal counts, whether cost+table sync ran).
 
-3. Stop page-load effects from changing frozen itineraries
-   - Audit TripDetail mount-time writers, especially day-mode backfill and table/JSON recovery.
-   - Convert harmless page-load backfills to metadata-only or read-time derivation.
-   - Only allow frozen-trip self-heal writes for narrow, proven corruption cases; otherwise log and leave canonical DB JSON untouched.
+### 2. Regression guard tests
 
-4. Strengthen the guardrail test suite
-   - Extend the existing “no raw itinerary writes” test to flag RPC writes like `optimistic_update_itinerary`, not just `.update({ itinerary_data })`.
-   - Add tests that `saveItineraryOptimistic`, hotel patch, flight patch, conflict “keep mine”, and page-load backfills cannot bypass `safeUpdateItineraryData`.
-   - Add a hard-refresh invariant test: after a save, the local rendered itinerary must be sourced from the same canonical payload that a fresh DB read returns.
+Extend `src/services/__tests__/no-raw-itinerary-writes.test.ts` (and add a new sibling) to lock the contract so this class can't silently come back:
 
-5. Add focused telemetry for the next repro
-   - Add one structured warning when any save returns a canonical DB payload different from the attempted local payload.
-   - Include save reason, frozen status, version, day/activity counts, meal counts, and whether activity-cost/table sync ran.
-   - This gives us one place to diagnose future refresh drift instead of chasing tab-by-tab symptoms.
+- Fail if any `src/` file other than the allow-list calls `optimistic_update_itinerary` RPC.
+- Fail if `saveItineraryOptimistic`, `patchItineraryWithFlight`, `patchItineraryWithHotel`, or any conflict "keep mine" path stops calling `safeUpdateItineraryData`.
+- New `hard-refresh-invariant.test.ts`: after a simulated `saveItineraryOptimistic`, the locally-rendered itinerary payload MUST equal the canonical payload returned by the post-save resync (asserts the new drift-detection branch fires and the resync dispatch wires up).
 
-Expected result:
-- The app should no longer show a pre-refresh itinerary/total that differs from post-refresh because there will be one persistence chokepoint and one canonical resync path.
-- Any remaining difference after refresh should become a logged contract violation with a single trace, not another invisible side effect.
+### Expected result
 
-<presentation-actions>
-  <presentation-open-history>View History</presentation-open-history>
-</presentation-actions>
+- One persistence chokepoint for every client-side write.
+- One canonical resync after every save, so pre-refresh == post-refresh on Itinerary header, Payments tab, and Budget tab.
+- Any future regression surfaces as a single `[PERSIST_DRIFT]` log line with enough context to diagnose, not as another silent tab-by-tab number mismatch.
 
-<presentation-actions>
-<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
-</presentation-actions>
+### Files to change
+
+- `src/services/safeUpdateItineraryData.ts`
+- `src/services/itineraryActionExecutor.ts`
+- `src/pages/TripDetail.tsx` (audit only — edits only if a non-allow-listed mount writer is found)
+- `src/services/__tests__/no-raw-itinerary-writes.test.ts`
+- `src/services/__tests__/hard-refresh-invariant.test.ts` (new)

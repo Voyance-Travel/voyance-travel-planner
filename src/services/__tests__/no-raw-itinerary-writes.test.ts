@@ -73,4 +73,49 @@ describe('client never writes trips.itinerary_data raw', () => {
     const stripped = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     expect(RAW_WRITE_RE.test(stripped)).toBe(false);
   });
+
+  it('no src/ file invokes the legacy optimistic_update_itinerary RPC', () => {
+    // The RPC writes trips.itinerary_data raw and was the documented
+    // pre-/post-refresh divergence root cause. The only acceptable mentions
+    // are comments inside itineraryOptimisticUpdate.ts that explain *why*
+    // we no longer call it. An actual `.rpc('optimistic_update_itinerary'…)`
+    // call would silently bypass the canonical save pipeline and must fail
+    // this test.
+    const offenders: string[] = [];
+    const RPC_CALL_RE = /\.rpc\(\s*['"]optimistic_update_itinerary['"]/;
+    for (const file of walk(SRC_ROOT)) {
+      const src = readFileSync(file, 'utf8');
+      const stripped = src
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1');
+      if (RPC_CALL_RE.test(stripped)) {
+        offenders.push(file.replace(SRC_ROOT, 'src'));
+      }
+    }
+    expect(
+      offenders,
+      `Legacy optimistic_update_itinerary RPC call detected. Route through safeUpdateItineraryData:\n  ${offenders.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
+  it('flight + hotel patchers and optimistic save route through safeUpdateItineraryData', () => {
+    const filesThatMustRouteCanonically = [
+      join(SRC_ROOT, 'services', 'itineraryOptimisticUpdate.ts'),
+      join(SRC_ROOT, 'services', 'flightItineraryPatch.ts'),
+      join(SRC_ROOT, 'services', 'hotelItineraryPatch.ts'),
+    ];
+    for (const file of filesThatMustRouteCanonically) {
+      const src = readFileSync(file, 'utf8');
+      expect(
+        /safeUpdateItineraryData|saveItineraryOptimistic/.test(src),
+        `${file.replace(SRC_ROOT, 'src')} must route through safeUpdateItineraryData (or saveItineraryOptimistic which itself routes there).`,
+      ).toBe(true);
+    }
+  });
+
+  it('safeUpdateItineraryData emits PERSIST_DRIFT telemetry on canonical mismatch', () => {
+    const src = readFileSync(join(SRC_ROOT, 'services', 'safeUpdateItineraryData.ts'), 'utf8');
+    expect(src).toMatch(/\[PERSIST_DRIFT\]/);
+    expect(src).toMatch(/itineraryFingerprint/);
+  });
 });

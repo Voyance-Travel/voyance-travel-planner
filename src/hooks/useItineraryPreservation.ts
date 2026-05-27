@@ -83,14 +83,22 @@ export function useItineraryPreservation(tripId: string | undefined, trip: any):
 
     restoredOnceRef.current = true;
     console.warn(`[ItineraryPreservation] Destructive change detected. prev=${prev.dayCount}d/${prev.diningCount}dining current=${current.dayCount}d/${current.diningCount}dining — restoring snapshot.`);
-    // Restore via direct DB write to bypass save pipeline mutations.
+    // Restore via the canonical save boundary so the persist-day contract
+    // (ghost rows, prompt-artifact strip, cross-city sweep, timing cascade,
+    // table + activity_costs sync, TRIP_PERSISTED_EVENT resync) runs. A raw
+    // `.update({ itinerary_data })` here was a confirmed pre-/post-refresh
+    // divergence leak path. The frozen gate + ledger destructive passes are
+    // bypassed because this is a self-heal class write.
     (async () => {
       try {
-        const { error } = await supabase
-          .from('trips')
-          .update({ itinerary_data: prev.itinerary, updated_at: new Date().toISOString() })
-          .eq('id', tripId);
-        if (error) throw error;
+        const { safeUpdateItineraryData } = await import('@/services/safeUpdateItineraryData');
+        const res = await safeUpdateItineraryData(tripId, prev.itinerary as any, {}, {
+          allowReduction: true,
+          allowFrozenWrite: true,
+          skipLedgerCheck: true,
+          reason: 'self-heal-preservation-restore',
+        });
+        if (res?.error) throw res.error;
         toast.warning('Detected unexpected itinerary change - restored your previous version.', {
           description: 'Reload the page to see the restored itinerary.',
           duration: 10000,
