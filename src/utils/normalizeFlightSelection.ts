@@ -155,17 +155,38 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
 }
 
 /**
- * Parse a `YYYY-MM-DD` date plus `HH:MM` time into a UTC Date.
+ * Parse a `YYYY-MM-DD` date plus `HH:MM` or `h:mm AM/PM` time into a UTC Date.
  * Returns null on any malformed input — never falls back to `new Date(str)`,
  * which is locale/timezone-dependent (see project date-parsing guidance).
+ *
+ * Accepts both 24h and 12h AM/PM because Step-2 MultiLegFlightEditor uses
+ * free-text inputs with `e.g. 10:30 AM` placeholders, so user-typed strings
+ * frequently arrive as 12h. Previously this regex rejected AM/PM and silently
+ * disabled return-arrival estimation + cross-day overnight inference.
  */
 function parseDateTimeUTC(dateStr?: string, timeStr?: string): Date | null {
   if (!dateStr || !timeStr) return null;
   const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
-  const tm = /^(\d{1,2}):(\d{2})$/.exec(timeStr);
-  if (!dm || !tm) return null;
+  if (!dm) return null;
+
+  const cleaned = timeStr.trim().toUpperCase();
+  let h: number | null = null;
+  let mi: number | null = null;
+
+  const m24 = /^(\d{1,2}):(\d{2})$/.exec(cleaned);
+  if (m24) {
+    h = +m24[1]; mi = +m24[2];
+  } else {
+    const m12 = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(cleaned);
+    if (m12) {
+      h = +m12[1]; mi = +m12[2];
+      if (m12[3] === 'PM' && h !== 12) h += 12;
+      if (m12[3] === 'AM' && h === 12) h = 0;
+    }
+  }
+  if (h == null || mi == null) return null;
+
   const y = +dm[1], mo = +dm[2], d = +dm[3];
-  const h = +tm[1], mi = +tm[2];
   if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59) return null;
   const dt = new Date(Date.UTC(y, mo - 1, d, h, mi));
   if (dt.getUTCDate() !== d || dt.getUTCMonth() !== mo - 1) return null;

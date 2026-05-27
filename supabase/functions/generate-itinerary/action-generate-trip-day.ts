@@ -2631,19 +2631,24 @@ async function _handleGenerateTripDayInner(
   // ── MEAL COMPLIANCE GUARD (before save) ──────────────────────────
   // The generate-day action already has a meal guard, but this catches
   // edge cases where post-processing in this file may have altered days.
-  // Extract flight times — check all known flight_selection shapes
+  // Extract flight times — use shared destination-leg picker so 3+ leg
+  // trips (Home → Hub → Destination → Home) hoist the leg that actually
+  // lands at the destination (leg N-2), not the leg out of home (leg 0).
   const flightSel = (tripCheck?.flight_selection as Record<string, any>) || null;
+  const { pickDestinationArrivalLeg, pickDestinationDepartureLeg } = await import('../_shared/flight-leg-pick.ts');
+  const _arrPick = pickDestinationArrivalLeg(flightSel);
+  const _depPick = pickDestinationDepartureLeg(flightSel);
   const nestedDepSaved = flightSel?.departure as Record<string, any> | undefined;
   const nestedRetSaved = flightSel?.return as Record<string, any> | undefined;
   let savedArrivalTime24: string | undefined =
-    flightSel?.arrivalTime24 || flightSel?.arrivalTime || flightSel?.outbound?.arrivalTime
+    _arrPick.leg?.arrivalTime
+    || flightSel?.arrivalTime24 || flightSel?.arrivalTime || flightSel?.outbound?.arrivalTime
     || nestedDepSaved?.arrival?.time
-    || flightSel?.legs?.[0]?.arrival?.time
     || undefined;
   const savedDepartureTime24: string | undefined =
-    flightSel?.returnDepartureTime24 || flightSel?.returnDepartureTime
+    _depPick.leg?.departureTime
+    || flightSel?.returnDepartureTime24 || flightSel?.returnDepartureTime
     || nestedRetSaved?.departure?.time || nestedRetSaved?.departureTime
-    || (Array.isArray(flightSel?.legs) && flightSel.legs.length > 0 ? flightSel.legs[flightSel.legs.length - 1]?.departure?.time : undefined)
     || undefined;
 
   // FALLBACK: If arrival time is missing from flight_selection, extract from repair-injected flight card on Day 1

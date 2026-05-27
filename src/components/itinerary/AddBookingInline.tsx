@@ -50,6 +50,13 @@ export interface ManualFlightEntry {
   departureTime: string;
   arrivalTime: string;
   departureDate: string;
+  /**
+   * Optional arrival date. When omitted, downstream consumers assume
+   * arrival.date === departure.date (same-day flight). Set explicitly for
+   * overnight / cross-day flights so Day-1 scheduling and meal policy
+   * land on the correct calendar day.
+   */
+  arrivalDate?: string;
   price?: number; // Optional price for budget tracking
   seatNumber?: string;
   confirmationCode?: string;

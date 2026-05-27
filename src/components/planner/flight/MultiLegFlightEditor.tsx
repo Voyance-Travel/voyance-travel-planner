@@ -1049,6 +1049,32 @@ function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded
                   onChange={(e) => onUpdateFlight({ arrivalTime: e.target.value })}
                   className="text-sm"
                 />
+                <label className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="h-3 w-3"
+                    checked={Boolean(
+                      slot.flight.arrivalDate &&
+                      slot.flight.departureDate &&
+                      slot.flight.arrivalDate > slot.flight.departureDate
+                    )}
+                    onChange={(e) => {
+                      const dep = slot.flight.departureDate;
+                      if (!dep) return;
+                      if (e.target.checked) {
+                        // +1 day
+                        const d = parseLocalDate(dep);
+                        if (!d) return;
+                        d.setDate(d.getDate() + 1);
+                        const next = format(d, 'yyyy-MM-dd');
+                        onUpdateFlight({ arrivalDate: next });
+                      } else {
+                        onUpdateFlight({ arrivalDate: undefined });
+                      }
+                    }}
+                  />
+                  Arrives next day (overnight)
+                </label>
               </div>
             </div>
           </div>

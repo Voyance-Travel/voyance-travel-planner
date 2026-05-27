@@ -111,7 +111,11 @@ export async function patchItineraryWithFlight(
         const activities = day1.activities as Array<Record<string, unknown>> | undefined;
         if (activities?.length) {
           const arrivalMins = timeToMinutes(arrivalNorm);
-          const earliestStart = arrivalMins + 30;
+          // Align with cascadeTransportToItinerary TRANSIT_BUFFERS.flight.afterArrival
+          // (105 min: customs + airport transit). Previously 30 min, which
+          // caused the itinerary to visibly "jump forward" by 75 min after the
+          // cascade ran a moment later.
+          const earliestStart = arrivalMins + 105;
 
           for (const act of activities) {
             const title = String(act.title || act.name || '');

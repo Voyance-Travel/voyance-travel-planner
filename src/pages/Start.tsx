@@ -2385,6 +2385,7 @@ export default function Start() {
           arrival: {
             airport: leg.arrivalAirport || '',
             time: leg.arrivalTime || '',
+            date: leg.arrivalDate || leg.departureDate || '',
           },
           price: leg.price || 0,
           cabin: leg.cabinClass || 'economy',
