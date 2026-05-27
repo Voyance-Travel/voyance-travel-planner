@@ -20,6 +20,7 @@ import { getHeroImageByName, getDestinationCanonicalImage } from '@/services/des
 import { supabase } from '@/integrations/supabase/client';
 import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
 import { detectCrossCityMention } from '@/lib/crossCityFilter';
+import { isCrossCityHero } from '@/lib/heroCrossCityGuard';
 import { DESTINATION_STORAGE_IMAGES } from '@/data/destinationStorageImages';
 
 /**
