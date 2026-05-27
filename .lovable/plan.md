@@ -1,142 +1,65 @@
-## What I found so far
 
-This is not one small bad parser. The schedule is being touched by many independent timing layers, and they do not share one definition of “chronologically last,” “pre-dawn,” “arrival,” or “hotel return.”
+# Canonical Timing Spine — Steps 3–7
 
-The Istanbul trip confirms the corruption pattern:
+Steps 1–2 already shipped (arrival-aware `chronologicallyLast` + persist-time hotel-return wrap clamp). This plan finishes the remaining structural work so timing can't silently corrupt again.
 
-- Persisted Day 1 has `Arrival Flight` at `03:05–05:05`.
-- That same day also has a valid `Return to Hotel` at `23:44–23:59`.
-- But the persisted bookend trace says the day’s “last” card is `Arrival Flight` ending `05:05`, and therefore hotel-return verification marks the day as not expecting a return.
-- Why? The wrap-aware sorter treats any `00:00–05:59` time as “after midnight at the end of the day.” That is correct for a late-night bookend, but wrong for a Day 1 arrival flight. So a morning/red-eye arrival gets mistaken for the day’s terminal activity.
+## Step 3 — Single canonical timing helper (backend)
 
-I also found the exact historical shape behind the “Return to hotel at 5:20 AM” class:
+Create `supabase/functions/_shared/timing-spine.ts` as the one place that owns:
 
-- A persisted hotel return row like `21:20–05:20` exists in older trip data.
-- That is an impossible non-nightlife hotel return: it wraps overnight for 8 hours.
-- Some layers strip pre-dawn hotel returns only when the start time is pre-dawn. They miss rows that start in the evening and end the next morning.
+- `parseClock(value)` — accepts `startTime` / `start_time` / `time` / `endTime` / `end_time`, returns minutes-since-midnight or `null`. Replaces 6+ ad-hoc parsers.
+- `classifyRole(activity)` — returns one of `arrival-logistics | departure-logistics | hotel-return | late-nightlife-bookend | meal | normal`. Source/tag/anchor aware (mirrors the predicate already added to `bookend-verification.ts`).
+- `chronoSortKey(activity, dayMode)` — role-aware. Arrival logistics always sort to head on Day 1; hotel-return + late-nightlife bookends always sort to tail; pre-dawn non-bookend cards on Day N≥2 stay as cross-day-bleed signal (already guarded), not "end of day."
+- `clampBookendEnd(activity)` — central clamp used by sanitize-schedule, runStep8, persist-itinerary, action-save-itinerary.
 
-The deeper issue is structural:
+Route these existing call sites through it (no behavior change beyond consistency):
+- `_shared/sanitize-schedule-timing.ts`
+- `_shared/timing-cascade.ts` (`fillMissingStartTimes`, `enforceTimingAndBuffers`)
+- `_shared/bookend-verification.ts`
+- `_shared/clamp-bookend.ts`
+- `_shared/cross-day-bleed-guard.ts`
+- `_shared/predawn-cascade-normalize.ts`
+- `generate-itinerary/universal-quality-pass.ts` (`runStep8`)
+- `generate-itinerary/persist-itinerary.ts`
 
-1. There are multiple hotel-return injectors:
-   - generation quality pass
-   - post-meal finalization loop
-   - save-time pass
-   - persist-boundary verification
-   - read-time UI safety net
+## Step 4 — Frontend mirror
 
-2. There are many local time parsers with different behavior:
-   - some are AM/PM-aware
-   - some ignore AM/PM
-   - some use `startTime`, others use `endTime`, others check aliases differently
-   - some sort raw minutes, others wrap `00:00–06:00` to the next day
+Create `src/lib/itinerary/timingSpine.ts` re-exporting the same three functions (port, not import — edge ≠ FE bundle). Route through it:
+- `src/lib/itinerary/itineraryParser.ts` (sort + cross-day reassignment)
+- `src/lib/itinerary/dayChronoKey.ts`
+- `src/lib/itinerary/ensureHotelReturnBookend.ts`
+- `src/lib/itinerary/normalizePredawnCascade.ts`
+- `src/lib/itinerary/healthCascadePreview.ts`
+- `src/components/itinerary/EditorialItinerary.tsx` (display helpers)
 
-3. The same day may be generated more than once concurrently.
-   - Istanbul has overlapping `generate-trip-day#1/#2/#3/#4` traces for the same trip.
-   - That means a stale generation attempt can write older or partially repaired timing after a newer pass has already repaired it.
+Locks in: parser, health engine, and bookend injector all use the same role classification the backend just wrote.
 
-## Plan to fix the root, not another patch
+## Step 5 — Generation-run idempotency token
 
-### 1. Build one canonical timing spine
-Create one shared backend timing module and one frontend mirror that owns:
+Root cause of "older timing overwrites newer": `generate-trip-day` can be invoked concurrently (chain retry + poller resume + user refresh-day). Last writer wins, even if it's stale.
 
-- parse `HH:MM` and `H:MM AM/PM`
-- format minutes back to `HH:MM`
-- read canonical start/end from `startTime`, `start_time`, `time`, `endTime`, `end_time`
-- classify activity timing role:
-  - day-start arrival logistics
-  - day-end late-night continuation
-  - hotel return bookend
-  - departure logistics
-  - normal activity
-- compute chronological sort key using role, not just clock time
+- Stamp `metadata.active_generation_run_id = crypto.randomUUID()` at the start of every chain (Stage 6 entry + chain resumption + `action-generate-trip-day` entry when no token present).
+- Each `generate-trip-day` invocation carries the token in its payload; on persist, `persistTripItinerary` reads `trips.metadata.active_generation_run_id` and rejects writes whose token doesn't match (sentinel `[STALE_RUN_REJECTED]`).
+- User-edit paths (`action-save-itinerary`, chat executor) are exempt (no token = user write).
+- Token cleared on chain completion or fatal abort.
 
-Key rule: `05:05 Arrival Flight` on Day 1 is a day-start anchor, not the chronological tail. `00:55 late_nightlife_bookend` is a day-end tail.
+## Step 6 — Per-day timing lifecycle trace
 
-### 2. Replace the dangerous local parsers in critical paths
-Refactor only the timing-critical files first:
+Add `metadata.quality.timing_trace[dayN]` = ordered array of `{stage, parsedRoles, head, tail, bookendSource}` snapshots written at: `validate_day`, `repair_day`, `universal_quality_pass`, `persist`, `save-itinerary normalize`, `parser read-time`. Bounded ring buffer (last 6 stages, cap 12KB/day). Powers postmortem on every "why did Day 1 collapse" report without needing log dives.
 
-- backend repair pipeline
-- backend save-itinerary normalization
-- backend persist boundary
-- backend bookend verification
-- backend schedule sanity pass
-- backend hotel-return injector
-- frontend itinerary parser
-- frontend read-time hotel-return injector
-- frontend chronology/health timing helpers
+## Step 7 — One-shot backfill migration
 
-This removes the current split-brain behavior where one layer says “this is the end of the day” and another says “this is the morning.”
+`20260527_clamp_legacy_bookend_wrap.sql` — server-side scan of `trips.itinerary_data` for any hotel-return-shaped activity where `endTime` parses earlier than `startTime` and source is NOT `late_nightlife_bookend`. Clamp `endTime` to `23:59` in JSONB and write a `metadata.repair_log` entry. Pure data heal — no schema change. Targets the Lisbon/Istanbul/Buenos Aires shapes still persisted from before Step 2 was deployed.
 
-### 3. Collapse hotel-return logic into one invariant
-Keep the current user-facing behavior, but make every caller use one shared `ensureTerminalHotelReturn` algorithm.
+## Technical notes
 
-Rules:
+- All work is additive — no breaking change to existing payloads.
+- Steps 3 + 4 are pure refactors gated by existing tests + 2 new spine unit tests.
+- Step 5 is the only behavioral change that can reject writes; it's gated on token presence so legacy flows continue unchanged.
+- Step 7 runs once; idempotent (re-runs are no-ops because `endTime ≤ startTime` no longer holds after clamp).
 
-- Never use a Day 1 arrival flight/arrival transfer as the terminal card.
-- Never inject a hotel return on departure day.
-- If the final real activity ends `14:00–23:59`, append/verify a return ending no later than `23:59`.
-- If the final real activity is true nightlife ending `00:00–02:30`, allow a late-night return ending no later than `02:55`.
-- If the final real activity ends `02:31–13:59`, do not fabricate a “wind down overnight” return unless it is explicitly a late-night continuation.
-- Existing hotel returns with `endTime < startTime` are invalid unless tagged `late_nightlife_bookend`.
+## Out of scope
 
-This directly kills `21:20–05:20` and `23:23–07:23` hotel returns.
-
-### 4. Add a hard write-time quarantine for impossible timing
-At the single persist boundary, before save:
-
-- Clamp or drop non-late-nightlife hotel returns that wrap past midnight.
-- Strip synthetic hotel returns on departure days.
-- Reject or stamp critical trace for any non-logistics Day 1 card before the real arrival availability window.
-- Re-run chronology using the canonical role-aware sort key.
-
-This ensures broken timing cannot persist even if an upstream injector misbehaves.
-
-### 5. Add generation-run idempotency to stop stale writes
-The overlapping Istanbul traces are a major red flag. Add an active generation run token:
-
-- generation start stamps `metadata.active_generation_run_id`
-- every day-generation and finalization write carries that run id
-- before writing, the backend checks the run id still matches
-- stale/duplicate attempts log and exit without mutating itinerary JSON
-
-This prevents older partial runs from overwriting newer repaired timing.
-
-### 6. Add regression fixtures from real failures
-Add focused tests using the observed broken cases:
-
-- Istanbul Day 1: `Arrival Flight 03:05–05:05` plus `Return 23:44–23:59` must treat return as terminal, not arrival flight.
-- Lisbon historical: `Return to Hotel 21:20–05:20` must be clamped or removed before persist.
-- Rome/Mexico City/Buenos Aires/Istanbul arrival blocks must remain ordered after repair.
-- Late-night nightlife case: real `23:30–00:20` nightlife may keep a `00:25–00:50` return.
-- Day 2 pre-dawn museum/activity should shift or move back to prior day, not cascade the whole day into AM.
-- Concurrent generation: stale run cannot persist after newer run id is active.
-
-### 7. Add a timing lifecycle trace for debugging
-For each day, persist a compact timing trace under day metadata:
-
-```text
-input_ai → repair_day → quality_pass → meal_guard → terminal_cleanup → save_normalize → persist_sanity → bookend_verify
-```
-
-Each stage records:
-
-- first card
-- last real card
-- last terminal/bookend card
-- any wrap rows
-- any cards clamped/dropped
-- parser used/version
-
-This gives us a single forensic trail instead of guessing from console logs after the fact.
-
-## Implementation order
-
-1. Add canonical timing helpers and tests.
-2. Patch bookend verification so Day 1 arrival logistics cannot become the day tail.
-3. Patch persist sanity so non-late hotel returns cannot wrap overnight.
-4. Route critical backend timing paths through the canonical helpers.
-5. Route frontend parser/read-time bookend logic through the matching mirror.
-6. Add generation run idempotency guard.
-7. Add real regression fixtures for Istanbul + `21:20–05:20` hotel return.
-
-This is the first fix I would treat as architectural: one timing spine, one hotel-return invariant, one stale-write guard.
+- No UI changes beyond using the new helpers.
+- No new health-engine warning categories.
+- No changes to meal/anchor/cost logic.
