@@ -973,12 +973,19 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   if (isFirstDay && arrivalTime24 && !isHotelChange) {
     const arrivalAirportName = input.arrivalAirport || 'the Airport';
     const transferMinutes = input.airportTransferMinutes || 45;
+    // Landing window: time to deplane, clear immigration, collect baggage.
+    // Card start = landing time (what the user typed as "arrival"); end = start + this.
+    const AIRPORT_PROCESSING_MINS = (input as any).airportProcessingMinutes || 45;
     const arrivalMins = parseTimeToMinutes(arrivalTime24);
 
     if (arrivalMins !== null) {
-      const flightEndMins = arrivalMins;
-      const flightStartMins = Math.max(0, arrivalMins - 120);
-      const transferStartMins = flightEndMins + 30;
+      // Convention v2 (2026-05-27): the "Arrival Flight" card represents the
+      // on-ground landing/customs/baggage window starting AT the user's
+      // landing time, not a 120-min in-flight window ending at it. The
+      // transfer follows immediately (no extra buffer — already baked in).
+      const flightStartMins = arrivalMins;
+      const flightEndMins = arrivalMins + AIRPORT_PROCESSING_MINS;
+      const transferStartMins = flightEndMins;
       const transferEndMins = transferStartMins + transferMinutes;
       const transferHotelName = hotelName || 'Your Hotel';
 
