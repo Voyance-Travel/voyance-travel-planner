@@ -408,3 +408,59 @@ export async function reconcileFulfillment(
   }
   return written;
 }
+
+/**
+ * Thrown by `seedDayIntentsOrThrow` when a trip has structured preference
+ * metadata (mustDoActivities / additionalNotes / perDayActivities / userAnchors)
+ * but the seeder produced zero rows. Fresh generation paths MUST surface this
+ * — silently continuing was the root cause of "Step 3 preferences vanished".
+ */
+export class PreferenceSeedingFailedError extends Error {
+  audit: SeedAudit;
+  constructor(audit: SeedAudit, msg: string) {
+    super(msg);
+    this.name = 'PreferenceSeedingFailedError';
+    this.audit = audit;
+  }
+}
+
+/** True when the trip's metadata blob contains at least one preference source. */
+export function hasPreferenceMetadata(metadata: Record<string, unknown> | null | undefined): boolean {
+  if (!metadata || typeof metadata !== 'object') return false;
+  const md = metadata as Record<string, any>;
+  const mustDoStr = typeof md.mustDoActivities === 'string' ? md.mustDoActivities.trim() : '';
+  const mustDoArr = Array.isArray(md.mustDoActivities) && md.mustDoActivities.length > 0;
+  const notes = typeof md.additionalNotes === 'string' && md.additionalNotes.trim().length > 0;
+  const perDay = Array.isArray(md.perDayActivities) && md.perDayActivities.length > 0;
+  const anchors = Array.isArray(md.userAnchors) && md.userAnchors.length > 0;
+  const constraints = Array.isArray(md.userConstraints) && md.userConstraints.length > 0;
+  return !!(mustDoStr || mustDoArr || notes || perDay || anchors || constraints);
+}
+
+/**
+ * Blocking version of seedDayIntentsFromMetadata. Use on FRESH generation
+ * paths only (chain day-1, generation-core Stage 1). Throws when:
+ *   - metadata indicates preferences exist
+ *   - AND seed audit has `error` set OR `generated > 0 && written == 0`
+ *
+ * Edit / chat / extend-days paths keep the non-blocking variant — their
+ * existing trip_day_intents rows are already trustworthy.
+ */
+export async function seedDayIntentsOrThrow(
+  supabase: SupabaseClient,
+  trip: { id: string; user_id?: string | null; metadata?: Record<string, unknown> | null; start_date?: string | null },
+  totalDays: number,
+  userId?: string | null,
+): Promise<SeedAudit> {
+  const expectsRows = hasPreferenceMetadata(trip?.metadata);
+  const audit = await seedDayIntentsFromMetadata(supabase, trip, totalDays, userId);
+  if (!expectsRows) return audit;
+  if (audit.error) {
+    throw new PreferenceSeedingFailedError(audit, `seed errored: ${audit.error}`);
+  }
+  if (audit.generated > 0 && audit.written === 0) {
+    throw new PreferenceSeedingFailedError(audit, `seed produced ${audit.generated} intents but wrote 0 rows`);
+  }
+  return audit;
+}
+
