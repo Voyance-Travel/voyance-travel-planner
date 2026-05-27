@@ -1,71 +1,84 @@
-## Plan: make Step 2 flight times authoritative
 
-### Goal
-When a user enters flight times in Step 2, the itinerary should use the same destination-arrival and destination-departure times everywhere: fresh generation, post-generation edits, meal policy, transport cascade, and display.
 
-### Root causes found
-- Multi-city Step 2 accepts free-text times like `10:30 AM`, but some duration/normalization code only accepts `HH:MM`.
-- `arrival.date` is not stored from Step 2, so overnight / +1 flights can be interpreted as same-day.
-- Post-generation helpers duplicate leg-picking logic and sometimes fall back to `legs[0]` instead of the destination-arrival leg for 3+ legs.
-- The immediate flight patch uses a 30-minute arrival buffer, while the cascade uses a larger airport buffer, making the itinerary appear to “jump” after saving.
-- One fresh-generation path still relies on context flight data that appears not to be populated consistently from `trips.flight_selection`.
+## You're right — this is a real bug, not a stale browser
 
-### Implementation steps
+The reason your hard refresh "fixed" Day 1 of the Faro trip:
 
-1. **Create one frontend flight timing utility**
-   - Add shared helpers around `normalizeFlightSelection` for:
-     - canonical 24h time parsing (`HH:MM`, `h:mm AM/PM`, ISO wall-clock strings)
-     - destination-arrival leg selection
-     - destination-departure leg selection
-     - optional cross-day arrival detection
-   - Keep user-entered wall-clock time intact conceptually; no timezone conversion.
+- The **database is clean** (I queried it — no 12:30 AM Ilha Deserta exists in either `trips.itinerary_data` or `itinerary_activities`).
+- The browser was showing a **mid-generation snapshot** that the backend later replaced. The frontend kept the early render in memory and never swapped it out, because rendering is gated on the wrong signal.
 
-2. **Preserve arrival dates from Step 2**
-   - Add `arrivalDate?: string` to `ManualFlightEntry`.
-   - In `Start.tsx`, store `arrival.date` on each `FlightLeg`.
-   - For now, default `arrival.date` to `departureDate` when absent so existing form behavior stays stable.
-   - In `MultiLegFlightEditor`, add an arrival-date field for ambiguous/overnight legs so users can explicitly set +1 arrivals.
+So we're rendering Itinerary #1 (corrupt, in-flight), the backend produces Itinerary #2 (clean, finalized), but the user sees #1 until they manually reload. That's the bug.
 
-3. **Fix time parsing in `normalizeFlightSelection`**
-   - Update `parseDateTimeUTC` to parse both `HH:MM` and `h:mm AM/PM`.
-   - Use `arrival.date` when present for outbound duration and return-arrival estimation.
-   - Add tests for `10:30 AM`, `22:15`, overnight arrival dates, and estimated return arrival.
+## Why this happens today
 
-4. **Unify post-generation flight patch + cascade**
-   - Refactor `flightItineraryPatch.ts`, `cascadeTransportToItinerary.ts`, and `recomputeDayModes.ts` to use the same destination-arrival/departure helpers instead of local `legs[0]` fallbacks.
-   - Align the initial patch buffer with the cascade buffer so saving a flight does not apply two conflicting shifts.
-   - Make `recomputeDayModes` treat cross-day inbound flights as applying arrival meal policy to the correct calendar day.
+We already have the right backend contract (the **Frozen After Ready** rule):
 
-5. **Unify backend flight extraction**
-   - Update `prompt-library.extractFlightData` and `action-generate-trip-day` hoisted clock extraction to use `_shared/flight-leg-pick.ts` instead of ad-hoc `legs[0]` / `last leg` reads.
-   - Ensure saved metadata stamps `savedArrivalTime24` / `savedDepartureTime24` from the canonical picked legs.
-   - Keep existing departure buffer rules intact.
+```text
+Backend writes itinerary  →  itinerary_status = 'generated'
+                          →  metadata.fully_persisted = false        ← Phase 1-3 done
+                          →  enrichment + costs + cities run         ← Phase 4-5
+                          →  metadata.fully_persisted = true         ← Phase 6 (final)
+                          →  metadata.itinerary_frozen_at = <now>    ← canonical
+```
 
-6. **Patch in-itinerary flight edits**
-   - Update `AddBookingInline.tsx` to write `arrival.date`, select the destination-departure leg for backward-compatible `return`, and reuse the same tagging/normalization rules as Step 2.
+And `TripDetail` already computes the right boolean:
 
-7. **Tests / validation**
-   - Add focused tests for:
-     - 3-leg route: Home → Hub → Destination → Home uses leg 2 arrival.
-     - AM/PM Step 2 input survives normalization.
-     - overnight arrival date does not shift Day 1 incorrectly.
-     - `recomputeDayModes` uses the canonical destination-arrival leg.
-     - post-generation flight patch and cascade agree on resulting time windows.
+```ts
+// src/pages/TripDetail.tsx (already there, just unused for gating)
+const fullyPersisted = meta?.fully_persisted === true;
+const shouldGuard    = isServerGenerating
+                    || (isReadyish && !fullyPersisted && !!trip.itinerary_data);
+```
 
-### Files likely touched
-- `src/utils/normalizeFlightSelection.ts`
-- `src/components/itinerary/AddBookingInline.tsx`
-- `src/components/planner/flight/MultiLegFlightEditor.tsx`
-- `src/pages/Start.tsx`
-- `src/services/flightItineraryPatch.ts`
-- `src/services/cascadeTransportToItinerary.ts`
-- `src/lib/itinerary/recomputeDayModes.ts`
-- `supabase/functions/_shared/flight-leg-pick.ts`
-- `supabase/functions/generate-itinerary/prompt-library.ts`
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-- targeted tests under `src/utils/__tests__` and/or existing itinerary test folders
+But `shouldGuard` is **only wired to the `beforeunload` warning**. The actual render switch at line 3591 still uses `isServerGenerating || generationStalled` — which flips to `false` the instant the first `itinerary_data.days` array lands, even though Phase 4-6 is still rewriting it. So the partial snapshot gets mounted in `EditorialItinerary`, and the later DB rewrite only reaches the screen via `TRIP_PERSISTED_EVENT` (which fires on edits, not on the silent backend Phase-6 flip).
 
-### Non-goals
-- No itinerary content redesign.
-- No changes to flight booking/search providers.
-- No automatic mutation of old frozen trips beyond normal user-triggered flight save/cascade behavior.
+## The fix — one extra gate, no architectural change
+
+Treat "ready-but-not-fully-persisted" as **still generating** for display purposes. The backend already polls this state. We just stop showing the unfinished plan.
+
+### Changes
+
+1. **`src/pages/TripDetail.tsx`** — introduce a single derived boolean `isFinalizing`:
+   ```ts
+   const fullyPersisted = (trip?.metadata as any)?.fully_persisted === true;
+   const status         = trip?.itinerary_status as string | undefined;
+   const isReadyish     = status === 'ready' || status === 'generated';
+   const isFinalizing   = isReadyish && !fullyPersisted && hasCompletedItineraryData;
+   ```
+   Then change the render branch (≈ line 3591) from:
+   ```ts
+   ) : isServerGenerating || generationStalled ? (
+   ```
+   to:
+   ```ts
+   ) : isServerGenerating || isFinalizing || generationStalled ? (
+   ```
+   and pass `isFinalizing` to `GenerationPhases` so the message reads "Finalizing your itinerary…" instead of "Generating Day N…". `useGenerationPoller` keeps polling on `fully_persisted=false`, fires `onReady` once it flips, and the canonical DB read swaps in the finalized plan in one atomic state update.
+
+2. **`src/pages/TripDetail.tsx` `voyance:trip-loaded` dispatch (line 433)** — gate on `!isFinalizing` too, so `PersistIssuesListener` doesn't surface mid-finalize self-heal warnings as user-visible toasts.
+
+3. **`src/hooks/useGenerationPoller.ts`** — already polls on `fully_persisted === false`. Confirm it dispatches `TRIP_PERSISTED_EVENT` on the flip (it does via the existing onReady path); no change needed beyond a guard that we only treat the trip as truly ready when both `isReadyish && fullyPersisted`.
+
+4. **Legacy trips** (no `fully_persisted` field at all) — `isReadyish && !fullyPersisted` would falsely block them forever. Add a one-line escape: treat the absence of `fully_persisted` as `true` when `itinerary_frozen_at` is set OR the trip was created before the Phase-6 stamp shipped (`created_at < 2026-04-01`). One-liner, no migration needed.
+
+5. **No backend change.** The contract is already correct. The leak was purely the FE rendering an unfinalized snapshot.
+
+### What the user will see instead
+
+- **Before:** itinerary shows up at ~6s with a corrupted Day-1, hangs there forever until manual refresh.
+- **After:** the generation/finalize spinner stays up an extra few seconds (≈ Phase 4-6 duration, typically 5-15s) and the **first** itinerary the user ever sees is the finalized one. No need to know what a hard refresh is.
+
+## Verification
+
+- E2E: extend `e2e/itinerary-content.spec.ts` "every non-departure day ends with hotel return" to also assert that `[data-testid="day-card"]` doesn't render until `body[data-trip-finalized="true"]` (added by TripDetail when `fullyPersisted === true`). This catches any future regression of showing pre-finalize snapshots.
+- Manual: re-generate the Faro trip end-to-end; the spinner should remain visible past the first itinerary write and only release once `metadata.fully_persisted=true` lands. No 12:30 AM Ilha Deserta should ever be visible.
+
+## What this plan deliberately does NOT do
+
+- No changes to the generation pipeline, `runStep8`, parser, bookend guards, or anything that produced the original corrupted Itinerary #1. That backend logic is already self-correcting; the only failure was showing the user the intermediate state.
+- No new persistence layer or staging table. We're just consuming the existing `fully_persisted` flag.
+- No auto-refresh / auto-resume. The Frozen-After-Ready and No-Regression guards still protect against the Dublin-2026-05-14 silent-overwrite class of bug.
+
+## Memory update on apply
+
+Add a memory entry under `mem://constraints/itinerary/no-pre-finalize-render` so this gate is enforced for every future render-path refactor.
