@@ -3584,7 +3584,12 @@ async function _handleGenerateTripDayInner(
   // activity_costs naturally because the persist + cost writer fire below.
   // See mem://constraints/itinerary/must-do-deterministic-injection.
   let mustDoInjection: { attempted: string[]; injected: any[]; unscheduled: string[] } | null = null;
-  if (dayNumber >= totalDays && isComplete && Array.isArray(partialItinerary?.days)) {
+  // NOTE: gate intentionally NOT `isComplete` — when must-dos are missing the
+  // itinerary is typically `incomplete` (too few meaningful activities), and
+  // gating injection on `isComplete` produces a circular silent failure:
+  // shell trip → not complete → injection skipped → shell trip persists.
+  // The injector itself is safe to run on any per-day chain terminus.
+  if (dayNumber >= totalDays && Array.isArray(partialItinerary?.days)) {
     try {
       // ── JSON FALLBACK for arrival/departure clocks ──
       // If the flight selection never carried explicit times (chat-planner
