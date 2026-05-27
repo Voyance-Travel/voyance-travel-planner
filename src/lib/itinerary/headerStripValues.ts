@@ -31,6 +31,10 @@ export interface HeaderStripInputs {
   flightChipUsd: number;
   /** Snapshot still mid-fetch — suppresses dev warns and the reconcile hint. */
   loading?: boolean;
+  /** Hotel cost the snapshot knows about but the budget toggle is hiding. */
+  excludedHotelUsd?: number;
+  /** Flight cost the snapshot knows about but the budget toggle is hiding. */
+  excludedFlightUsd?: number;
 }
 
 export interface HeaderStripValues {
@@ -46,6 +50,13 @@ export interface HeaderStripValues {
   snapshotUnderChips: boolean;
   /** True when the snapshot total > chip sum + $1 (snapshot has unattributed cost). */
   snapshotOverChips: boolean;
+  /** Echo of the excluded inputs (clamped ≥ 0) so callers can render a muted chip. */
+  excludedHotelUsd: number;
+  excludedFlightUsd: number;
+  /** Sum of all excluded categories (≥ 0). */
+  excludedTotalUsd: number;
+  /** True when there is a known, non-trivial excluded amount (> $0.50). */
+  hasExcludedLogistics: boolean;
 }
 
 /**
