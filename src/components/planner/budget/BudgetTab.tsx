@@ -406,6 +406,20 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
 
   // ─── Canonical financial snapshot from DB ledger (single source of truth) ───
   const snapshot = useTripFinancialSnapshot(tripId);
+  // SINGLE SOURCE OF TRUTH for the user-visible "Trip Total" / "Trip Expenses"
+  // number in this tab. MUST match the itinerary header + Payments tab — those
+  // both render `useDisplayedTripTotal(tripId).displayedTotalCents`, which is
+  // `max(snapshotTotalCents, days + hotel + flight)` so the strip equation
+  // balances even when the snapshot fetch transiently lags the chip sum.
+  // Reading raw `snapshot.tripTotalCents` here is what produced the recurring
+  // "Header $736 / Payments $728 / Budget $678" three-way drift.
+  // See mem://constraints/finance/displayed-trip-total-single-source.
+  const displayed = useDisplayedTripTotal(tripId);
+  const tripTotalCents = displayed.loading
+    ? snapshot.tripTotalCents
+    : displayed.displayedTotalCents;
+  const budgetRemainingCents = (snapshot.budgetTotalCents || 0) - tripTotalCents;
+  const toBePaidCents = Math.max(0, tripTotalCents - snapshot.paidCents);
 
   // NOTE: We deliberately do NOT invalidate summary/ledger/allocations queries
   // when the snapshot total changes. The snapshot, summary, and allocations all
