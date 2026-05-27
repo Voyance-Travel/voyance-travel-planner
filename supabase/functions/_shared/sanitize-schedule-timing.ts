@@ -320,8 +320,32 @@ export function sanitizeDaySchedule(
     const e = pickEnd(a);
     if (s === null || e === null) continue;
     if (e >= s) continue;
-    // Legit wrap: late-night card (start >= 21:00) ending in early AM (<06:00)
-    if (s >= 21 * 60 && e < 6 * 60) continue;
+
+    // Hotel-return / accommodation bookends MUST NEVER wrap past midnight.
+    // A "Return to Hotel 21:20 → 05:20" is impossible as a single bookend
+    // card — clamp end to 23:59 unconditionally. The late-nightlife branch
+    // (00:20 nightcap → 00:50 return) handles legit post-midnight bookends
+    // via its own tagged path; those rows have start < 06:00, not 21:20.
+    if (isHotelReturnBookend(a)) {
+      setEnd(a, '23:59');
+      out.invalidEndBeforeStartRepaired++;
+      out.issues.push({
+        code: 'INVALID_TIME_WRAP',
+        dayNumber: dayN,
+        activityId: a.id,
+        title: a.title || a.name,
+        detail: `Hotel-return bookend wrapped past midnight (${fmtHM(s)} → ${fmtHM(e)}); clamped end to 23:59.`,
+        repaired: true,
+      });
+      console.log(`[SCHEDULE_SANITY] day=${day} action=hotel_return_wrap_clamped title="${a.title || a.name || ''}" before=${fmtHM(s)}-${fmtHM(e)} newEnd=23:59`);
+      continue;
+    }
+
+    // Legit wrap (non-bookend only): late-night card (start >= 21:00)
+    // ending in early AM (<06:00), AND explicitly tagged late_nightlife
+    // OR matching a nightlife title. Otherwise the wrap is corruption.
+    if (s >= 21 * 60 && e < 6 * 60 && isLateNightlifeTagged(a)) continue;
+
     // Otherwise: assume the end is right and shift start back to a sane offset,
     // OR if end-before-start is huge (e.g. start 00:00, end 01:15 — would
     // already be a wrap), use a reasonable +75min from start.
