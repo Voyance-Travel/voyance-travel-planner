@@ -452,7 +452,7 @@ export default function TripDetail() {
     const itinData = trip?.itinerary_data as { days?: unknown[] } | null | undefined;
     const hasDays = Array.isArray(itinData?.days) && (itinData!.days!.length > 0);
     if (!hasDays) return;
-    if (isServerGenerating) return;
+    if (isServerGenerating || isFinalizing) return;
     const t = window.setTimeout(() => {
       if (tripLoadedEmittedRef.current) return;
       tripLoadedEmittedRef.current = true;
