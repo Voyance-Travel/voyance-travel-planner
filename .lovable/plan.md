@@ -1,44 +1,42 @@
-## Plan: eliminate trip-total drift at the source
+## Plan: stop generating visible dead gaps and collisions
 
-The recurring bug is not just one bad formula. The app currently has multiple independently-mounted financial readers:
+### Goal
+Make the generation pipeline treat the inline gap warnings as pre-publish failures, not just UI annotations. The user should receive the repaired itinerary on first load, without needing a refresh or manually noticing/filling gaps.
 
-- Itinerary header reads `useTripFinancialSnapshot` + `useTripDayBreakdown` and may display the balanced/clamped header-strip total.
-- Payments tab reads its own `useTripFinancialSnapshot` instance plus `useDisplayedTripTotal`.
-- Budget tab reads another separate `useTripFinancialSnapshot` instance and renders raw `snapshot.tripTotalCents`.
+### What I found
+- The generation gap filler explicitly skips `isFirstDay`, which explains the Day 1 lunch-to-dinner 5h30m dead window.
+- Gap filling runs before several late mutation stages: final meal guard, hotel-return injection, validation gate, orphan-transit cleanup, and the persist-time timing cascade.
+- The persist-time cascade can fix overlaps like breakfast ending 09:15 vs Cathedral starting 09:00, but because it runs at the persist boundary, no final gap-fill pass runs after it. That means the system can fix one timing bug while silently creating or preserving a large open block.
+- Transit recomputation has a sanity clamp only above 180 minutes, so a misleading 109-minute intra-Faro leg can survive even though it is implausible for a local island ferry-to-Old-Town transition.
 
-That means tabs can show different numbers during stale fetch windows or when the header uses the balanced displayed total while Budget uses the raw snapshot total.
+### Implementation steps
+1. **Replace the “skip first day” gap-fill rule with a usable-window rule**
+   - Allow Day 1 gap fill after the arrival/brunch/lunch-start window is satisfied.
+   - Still avoid filling arrival logistics, hotel check-in, freshen-up, and user-locked items.
+   - This directly targets the 13:30 → 19:00 Day 1 gap.
 
-### What I’ll change
+2. **Add a final pre-persist schedule gate**
+   - After all late generation mutations, run one deterministic sequence:
+     1. timing cascade / overlap repair
+     2. orphan transit cleanup
+     3. morning/afternoon/evening gap fill
+     4. timing cascade again on inserted cards
+     5. final gap audit
+   - If a non-departure day still has an unexplained ≥240-minute active-day gap, mark generation as needing repair instead of presenting it as clean.
 
-1. **Create one canonical display model**
-   - Add a shared hook/model that returns the user-visible trip total, raw snapshot total, chip sum, budget remaining, paid/to-be-paid, buckets, and reconciliation flags from one place.
-   - This model will be the only source for any UI label named “Trip Total” / “Trip Expenses.”
+3. **Make the persist boundary return the repaired itinerary, not the pre-repair one**
+   - Ensure the object saved by `persistTripItinerary` after cascade repairs is the same object passed forward to the UI state/poller response.
+   - This prevents the “first itinerary shown, repaired itinerary appears only after hard refresh” class of bugs.
 
-2. **Make Budget tab stop using raw snapshot totals for visible totals**
-   - Replace Budget tab’s visible `snapshot.tripTotalCents` usages for Trip Expenses, percentages, remaining, Budget Coach current total, setup dialog current total, and footer total with the canonical displayed total.
-   - Keep raw snapshot only for diagnostics/internal reconciliation where needed.
+4. **Tighten intra-city transit sanity for impossible local legs**
+   - Add a local-route cap for non-airport, non-intercity transit cards: if the route is inside one city and not explicitly long-distance/ferry excursion, clamp/mark unverified above a reasonable ceiling.
+   - Add a special water-crossing allowance so real ferry legs can be 15–45 minutes, but not 109 minutes unless coordinates or route data prove it.
 
-3. **Make Payments tab and header consume the same display contract**
-   - Ensure Payments tab’s headline and the itinerary header both render the exact same `displayedTotalCents` contract.
-   - Remove dead/local manual hotel/flight computations in Payments that are no longer authoritative and can confuse future fixes.
+5. **Add regression tests with the exact failures**
+   - Day 1 Faro lunch 13:30 → dinner 19:00 must be filled or explicitly marked as intentional free time by generation.
+   - Day 1 breakfast 08:30–09:15 vs Cathedral 09:00 must be repaired before persist/UI response.
+   - Day 2 Chapel of Bones 16:54 → dinner 20:14 must be filled or blocked as unclean.
+   - Ilha Deserta → Old Town 109-minute transit must be clamped/flagged unless verified.
 
-4. **Centralize refresh behavior**
-   - Wire `booking-changed` and `TRIP_PERSISTED_EVENT` through the same financial model so all tabs converge together instead of each tab running a separate timing race.
-   - Keep the current silent-refetch behavior so users do not see phantom “price changed” messages.
-
-5. **Add regression coverage**
-   - Add tests around the shared display model/helper proving:
-     - Budget visible total equals header displayed total.
-     - Payments visible total equals header displayed total.
-     - When `snapshotTotal < day chips + hotel/flight`, all three views render the clamped displayed total, not raw snapshot.
-     - Budget remaining/percent calculations use the same displayed total.
-
-### Success criteria
-
-For the reported case, the three user-facing values must be identical:
-
-```text
-Itinerary summary header Trip Total = Payments tab Trip Total = Budget tab Trip Expenses/Trip total
-```
-
-No tab should ever render a different “Trip Total” by falling back to raw activity rows, local payable totals, or an independently lagging snapshot.
+### Expected result
+Generated itineraries can still include honest free time, but large unexplained windows and direct timing collisions will be repaired or blocked before the itinerary is shown as ready.

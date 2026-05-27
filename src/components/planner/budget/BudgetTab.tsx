@@ -416,7 +416,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   // See mem://constraints/finance/displayed-trip-total-single-source.
   const displayed = useDisplayedTripTotal(tripId);
   const tripTotalCents = displayed.loading
-    ? tripTotalCents
+    ? snapshot.tripTotalCents
     : displayed.displayedTotalCents;
   const budgetRemainingCents = (snapshot.budgetTotalCents || 0) - tripTotalCents;
   const toBePaidCents = Math.max(0, tripTotalCents - snapshot.paidCents);

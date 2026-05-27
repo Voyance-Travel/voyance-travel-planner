@@ -507,16 +507,29 @@ export function recomputeTransitCards<T extends CascadeActivity>(
   // downstream pass questioned it (coords missing on synthetic transfer cards
   // makes the coord-based recompute below a no-op).
   const HARD_DUR_CEILING = 180;
+  // Intra-city ceiling: a "Walk/Transit/Taxi to X" card with no airport,
+  // station, ferry, or intercity hint above 75 min is almost always an AI
+  // misestimate (109-min "Walk to Wander Old Town", 90-min "Travel to
+  // restaurant", etc.). When coords are missing the downstream recompute
+  // can't fix it, so clamp here and flag unverified.
+  const INTRA_CITY_CEILING = 75;
+  const INTRA_CITY_FALLBACK = 25;
   for (let i = 0; i < activities.length; i++) {
     const card = activities[i] as any;
     if (!isTransitCard(card)) continue;
     if (isUntouchableByRecompute(card, lockedIds)) continue;
     const cur = Number(card.durationMinutes ?? card.duration_minutes ?? 0);
-    if (!Number.isFinite(cur) || cur <= HARD_DUR_CEILING) continue;
+    if (!Number.isFinite(cur) || cur <= INTRA_CITY_CEILING) continue;
     const title = String(card.title || card.name || '').toLowerCase();
+    const desc = String(card.description || '').toLowerCase();
     const sub = String(card.subcategory || '').toLowerCase();
-    const isAirportish = /\bairport|terminal|station\b/.test(title) || sub === 'airport_transfer';
-    const fallback = isAirportish ? 45 : 30;
+    const isAirportish = /\b(airport|terminal|station|ferry|train\s*to|bus\s*to|intercity|long[-\s]?distance)\b/.test(title + ' ' + desc)
+      || sub === 'airport_transfer';
+    const overHard = cur > HARD_DUR_CEILING;
+    const overIntra = !isAirportish && cur > INTRA_CITY_CEILING;
+    if (!overHard && !overIntra) continue;
+    const fallback = isAirportish ? 45 : (overHard ? 30 : INTRA_CITY_FALLBACK);
+    const reason = overHard ? `> ${HARD_DUR_CEILING}m hard ceiling` : `> ${INTRA_CITY_CEILING}m intra-city ceiling`;
     const before = `${card.title} @ ${card.startTime} (${cur} min)`;
     card.durationMinutes = fallback;
     card.duration_minutes = fallback;
@@ -539,7 +552,7 @@ export function recomputeTransitCards<T extends CascadeActivity>(
       activityTitle: card.title,
       before,
       after: `${card.title} @ ${card.startTime} (${fallback} min, clamped)`,
-      message: `Clamped implausible transit duration ${cur}min → ${fallback}min on "${card.title}" (no coord verification available).`,
+      message: `Clamped implausible transit duration ${cur}min → ${fallback}min on "${card.title}" (${reason}, no coord verification).`,
     });
   }
   if (clamped > 0) {

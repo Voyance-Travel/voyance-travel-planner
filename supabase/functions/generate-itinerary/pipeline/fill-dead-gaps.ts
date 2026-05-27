@@ -100,8 +100,13 @@ async function fillDeadGapsForWindow(
     console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_window reason=disabled_manual_mode`);
     return { activities: [...activities], inserted: [] };
   }
-  if (opts.isFirstDay) {
-    console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_window reason=first_day`);
+  // Day 1: skip the morning window (arrival logistics typically eat it), but
+  // run the afternoon + evening passes so a 13:30 lunch → 19:00 dinner hole
+  // gets filled instead of shipping as a 5h dead gap. Per-pair logistics
+  // neighbour skip (arrival flight / airport transfer / check-in / freshen
+  // up) still protects the actual arrival sequence below.
+  if (opts.isFirstDay && win.label === 'morning') {
+    console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_window reason=first_day_morning`);
     return { activities: [...activities], inserted: [] };
   }
   if (opts.isLastDay && (opts.latestUsableMins === undefined || opts.latestUsableMins <= win.fromMins)) {
