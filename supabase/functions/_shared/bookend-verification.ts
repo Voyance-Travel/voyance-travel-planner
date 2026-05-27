@@ -65,10 +65,32 @@ function isTrueReturn(a: any): boolean {
   return false;
 }
 
+const ARRIVAL_TITLE_RE = /\b(arrival|inbound|landing|land\s+at|arrive)\b/i;
+const ARRIVAL_ANCHOR_RE = /^(arrival-flight|airport-transfer)$/i;
+
+function isArrivalLogistics(a: any): boolean {
+  if (!a) return false;
+  const anchor = String(a.anchorSource || '').toLowerCase();
+  if (ARRIVAL_ANCHOR_RE.test(anchor)) return true;
+  const src = String(a.source || '').toLowerCase();
+  if (src === 'repair-arrival-flight' || src === 'repair-airport-transfer' ||
+      src === 'repair-arrival-flight-reconciled' || src === 'injected-arrival-flight') return true;
+  const title = String(a.title || a.name || '');
+  if (ARRIVAL_TITLE_RE.test(title) && (
+    /\b(flight|airport|transfer|terminal|gate)\b/i.test(title)
+  )) return true;
+  return false;
+}
+
 function isDepartureTerminal(a: any): boolean {
   if (!a) return false;
   const cat = String(a.category || '').toUpperCase();
   const title = String(a.title || a.name || '');
+  // ARRIVAL flights/transfers are NOT departure terminals. This was the root
+  // cause of the Istanbul Day-1 false-positive where a 03:05–05:05 Arrival
+  // Flight got classified as a departure terminal because it matched both
+  // FLIGHT_TITLE_RE and AIRPORT_RE. See plan.md.
+  if (isArrivalLogistics(a)) return false;
   if (cat === 'FLIGHT' || FLIGHT_TITLE_RE.test(title)) return true;
   if (TRANSPORT_CAT_RE.test(cat) && AIRPORT_RE.test(title)) return true;
   return false;
@@ -87,8 +109,13 @@ function chronologicallyLast(activities: any[]): any | null {
       parseTimeMins(a?.start_time);
     if (t == null) continue;
     // Wrap-aware: treat 00:00–05:59 as next-day so a late-nightlife
-    // bookend stays the chronological tail.
-    const key = t < 6 * 60 ? t + 24 * 60 : t;
+    // bookend stays the chronological tail — EXCEPT for arrival logistics
+    // (Day-1 pre-dawn arrival flight / airport transfer). Those are
+    // day-START anchors, not day-end tails. Without this exemption a
+    // 03:05–05:05 Arrival Flight outranked a 23:44 hotel-return and the
+    // verifier marked the day as not expecting a return.
+    const isArrival = isArrivalLogistics(a);
+    const key = (!isArrival && t < 6 * 60) ? t + 24 * 60 : t;
     if (key > bestKey) {
       bestKey = key;
       bestIdx = i;
