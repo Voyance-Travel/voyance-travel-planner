@@ -38,7 +38,10 @@ Deno.test("§3b reconcile: Istanbul — LLM 03:05 card gets reconciled + locked 
   assertEquals(flight.isLocked, true);
   assertEquals(flight.anchorSource, "arrival-flight");
   assertEquals(flight.source, "repair-arrival-flight-reconciled");
-  assertEquals(flight.durationMinutes, 120);
+  assertEquals(flight.durationMinutes, 45);
+  // v2 convention: card starts AT landing (15:00), ends at 15:45 (deplane+customs+baggage).
+  assertEquals(flight.startTime, "15:00");
+  assertEquals(flight.endTime, "15:45");
   assert(repairs.some((r: any) => r.action === "reconciled_arrival_flight"),
     "must emit reconciled_arrival_flight repair");
   assert(repairs.some((r: any) => r.action === "injected_airport_transfer"),
