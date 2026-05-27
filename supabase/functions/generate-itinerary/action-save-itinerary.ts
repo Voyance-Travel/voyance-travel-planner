@@ -1267,6 +1267,44 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         console.warn('[save-itinerary] reconcileFulfillment failed (non-blocking):', rfErr);
       }
 
+      // ── SEMANTIC FULFILLMENT TRACE (soft, annotation-only) ──
+      // Canonical-preference-spine §5: alias-aware matcher catches "sushi
+      // lunch" → omakase, "rooftop" → skybar, "spa" → wellness. Trace-only —
+      // we DO NOT mutate the itinerary on a soft miss (that's what the
+      // generation prompt + day-brief are for). Surfaces silent preference
+      // collapse in logs so we can flag trips that shipped without honoring
+      // a Step-3 wish. See mem://constraints/itinerary/canonical-preference-spine.
+      try {
+        const { matchDayIntents } = await import('../_shared/preference-matcher.ts');
+        let totalExpected = 0;
+        let totalFulfilled = 0;
+        let totalMissed = 0;
+        const missedByDay: Array<{ day: number; missed: string[] }> = [];
+        const softIntents = mergedIntents.filter((i: any) => !i.locked && i.priority !== 'avoid');
+        for (const d of itineraryDays) {
+          const dn = (d.dayNumber as number) || 0;
+          if (!dn) continue;
+          const summary = matchDayIntents(softIntents as any, dn, (d.activities || []) as any);
+          if (summary.totalIntents === 0) continue;
+          totalExpected += summary.totalIntents;
+          totalFulfilled += summary.fulfilledCount;
+          totalMissed += summary.missedCount;
+          if (summary.missedCount > 0) {
+            missedByDay.push({
+              day: dn,
+              missed: summary.details.filter((x) => !x.fulfilled).map((x) => x.title).slice(0, 6),
+            });
+          }
+        }
+        console.log(
+          `[save-itinerary] PREFERENCE_SPINE fulfillment expected=${totalExpected} ` +
+          `fulfilled=${totalFulfilled} missed=${totalMissed}` +
+          (missedByDay.length > 0 ? ` missedByDay=${JSON.stringify(missedByDay)}` : '')
+        );
+      } catch (matchErr) {
+        console.warn('[save-itinerary] preference-matcher trace failed (non-blocking):', matchErr);
+      }
+
       // ── MUST-DO COVERAGE RESTAMP ─────────────────────────────────────────
       // Whenever the itinerary is rewritten, refresh `metadata.must_do_coverage`
       // so we never carry a stale "missing=[]" stamp from a prior generation
