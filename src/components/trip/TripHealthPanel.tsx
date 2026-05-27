@@ -618,12 +618,14 @@ export function detectGapsForDay(allActivities: any[], dayNumber: number): Healt
   let prevEnd: number | null = null;
   for (const { a, startMins, endMins } of sorted) {
     // INVARIANT 2: first activity never emits a gap (prevEnd starts null).
-    if (prevEnd !== null && startMins - prevEnd >= 180) {
+    // Threshold raised 180 → 240 so the inline FreeTimeMarker (≥60min)
+    // owns the 1–4h window without double-flagging from the health panel.
+    if (prevEnd !== null && startMins - prevEnd >= 240) {
       const gapHours = Math.floor((startMins - prevEnd) / 60);
       issues.push({
         id: `gap-${dayNumber}-${startMins}`,
         severity: 'warning',
-        message: `Day ${dayNumber} has ${gapHours}h gap before ${a.title || a.name || 'next activity'}`,
+        message: `Day ${dayNumber} has ${gapHours}h+ of open time before ${a.title || a.name || 'next activity'}`,
         fixLabel: 'Fill Gap',
         fixAction: 'refresh_day',
         dayNumber,
