@@ -134,29 +134,34 @@ export async function splitJourneyIfNeeded(
       .filter(d => d.dayNumber >= legStartDay && d.dayNumber < legEndDay)
       .map(d => ({ dayNumber: d.dayNumber - dayOffset, activities: d.activities }));
 
-    // Build must-do activities from perDayActivities if available, else use legacy city-name filtering
+    // Build must-do activities. Canonical-preference-spine §4:
+    // trip-wide must-dos (no city name mentioned) MUST clone into every
+    // leg — never silently restricted to leg 1. Closes recurring
+    // "Lisbon→Porto: Step-3 wishes only appear on first leg".
+    const allMustDos: string[] = (metadata.mustDoActivities as string[]) || [];
+    const tripWideMustDos = allMustDos.filter(activity => {
+      const lower = activity.toLowerCase();
+      return !cities.some(c => lower.includes(c.toLowerCase()));
+    });
     let legMustDos: string[];
     if (legPerDayActivities.length > 0) {
-      // Build mustDoActivities from this leg's structured day data
-      legMustDos = legPerDayActivities.flatMap(d =>
+      // Structured per-day data drives this leg, but trip-wide must-dos
+      // still need to ride along on every leg.
+      const fromStructured = legPerDayActivities.flatMap(d =>
         d.activities.split(/,\s*/).map(a => `Day ${d.dayNumber} ${a.trim()}`).filter(Boolean)
       );
+      legMustDos = [...fromStructured, ...tripWideMustDos];
     } else {
-      // Legacy fallback: city-name keyword matching
-      const allMustDos: string[] = (metadata.mustDoActivities as string[]) || [];
+      // Legacy fallback: city-name keyword matching + trip-wide union
       const cityMustDos = allMustDos.filter(activity => {
         const lower = activity.toLowerCase();
         const cityLower = dest.city.toLowerCase();
         return lower.includes(cityLower);
       });
-      // Only first leg gets unassigned generic activities (legacy behavior)
-      const unassignedMustDos = i === 0
-        ? allMustDos.filter(activity => {
-            const lower = activity.toLowerCase();
-            return !cities.some(c => lower.includes(c.toLowerCase()));
-          })
-        : [];
-      legMustDos = [...cityMustDos, ...unassignedMustDos];
+      legMustDos = [...cityMustDos, ...tripWideMustDos];
+    }
+    if (tripWideMustDos.length > 0) {
+      console.log(`[splitJourney] [PREFERENCE_SPLIT] leg=${i + 1} city=${dest.city} tripWide=${tripWideMustDos.length} citySpecific=${legMustDos.length - tripWideMustDos.length}`);
     }
 
     const legMetadata: Record<string, unknown> = {

@@ -1,0 +1,1 @@
+ALTER VIEW public.trips_with_orphan_preferences SET (security_invoker = true);

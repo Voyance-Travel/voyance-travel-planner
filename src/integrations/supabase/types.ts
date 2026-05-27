@@ -320,6 +320,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       activity_feedback: {
@@ -395,6 +402,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "activity_feedback_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -1771,6 +1785,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "agency_trips_linked_trip_id_fkey"
+            columns: ["linked_trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       agent_clients: {
@@ -2414,6 +2435,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "community_guides_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       consent_records: {
@@ -2516,6 +2544,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "cost_change_log_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -3560,6 +3595,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "feedback_prompt_log_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       feedback_prompts: {
@@ -3987,6 +4029,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "free_tier_status_free_trip_id_fkey"
+            columns: ["free_trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       friendships: {
@@ -4155,6 +4204,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "generation_logs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -4336,6 +4392,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: true
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "group_budgets_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: true
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -4536,6 +4599,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "guide_favorites_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       guide_follows: {
@@ -4626,6 +4696,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "guide_manual_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -4857,6 +4934,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "guides_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -5123,6 +5207,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "itinerary_activities_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       itinerary_customization_requests: {
@@ -5189,6 +5280,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "itinerary_customization_requests_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -5274,6 +5372,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "itinerary_days_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       itinerary_templates: {
@@ -5357,6 +5462,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "itinerary_templates_source_trip_id_fkey"
+            columns: ["source_trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       itinerary_versions: {
@@ -5423,6 +5535,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "itinerary_versions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -6397,6 +6516,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "travel_guides_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       travel_intel_cache: {
@@ -6460,6 +6586,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: true
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "travel_intel_cache_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: true
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -6534,6 +6667,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_action_usage_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -6751,6 +6891,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_activities_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       trip_blogs: {
@@ -6843,6 +6990,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_blogs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       trip_budget_ledger: {
@@ -6918,6 +7072,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_budget_ledger_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -7088,6 +7249,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_cities_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       trip_collaborators: {
@@ -7176,6 +7344,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
           {
@@ -7269,6 +7444,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: true
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_complexity_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: true
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -7378,6 +7560,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_cost_tracking_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       trip_date_versions: {
@@ -7453,6 +7642,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_date_versions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -7556,6 +7752,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_day_intents_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       trip_day_summaries: {
@@ -7644,6 +7847,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_day_summaries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -7741,6 +7951,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_departure_summaries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -7850,6 +8067,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_expenses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       trip_feedback_responses: {
@@ -7936,6 +8160,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_feedback_responses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -8222,6 +8453,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_go_back_list_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       trip_intents: {
@@ -8285,6 +8523,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_intents_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -8362,6 +8607,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_invites_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -8468,6 +8720,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_learnings_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       trip_members: {
@@ -8534,6 +8793,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_members_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -8607,6 +8873,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_memories_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       trip_notes: {
@@ -8670,6 +8943,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_notes_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -8744,6 +9024,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_notifications_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -8871,6 +9158,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_payments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       trip_photos: {
@@ -8965,6 +9259,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_photos_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -9092,6 +9393,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_rental_cars_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       trip_reviews: {
@@ -9173,6 +9481,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_reviews_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -9289,6 +9604,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_settlements_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -10620,6 +10942,13 @@ export type Database = {
             referencedColumns: ["trip_id"]
           },
           {
+            foreignKeyName: "trip_collaborators_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
+          {
             foreignKeyName: "trip_collaborators_user_id_profiles_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -10688,6 +11017,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_members_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -10831,6 +11167,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_members_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       trips_with_audit_violations: {
@@ -10894,6 +11237,51 @@ export type Database = {
           sorted_days?: never
           traced_at?: never
           trip_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      trips_with_orphan_preferences: {
+        Row: {
+          active_intents_count: number | null
+          additional_notes: string | null
+          destination: string | null
+          itinerary_status:
+            | Database["public"]["Enums"]["itinerary_status"]
+            | null
+          must_do_count: number | null
+          per_day_count: number | null
+          start_date: string | null
+          trip_id: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          active_intents_count?: never
+          additional_notes?: never
+          destination?: string | null
+          itinerary_status?:
+            | Database["public"]["Enums"]["itinerary_status"]
+            | null
+          must_do_count?: never
+          per_day_count?: never
+          start_date?: string | null
+          trip_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          active_intents_count?: never
+          additional_notes?: never
+          destination?: string | null
+          itinerary_status?:
+            | Database["public"]["Enums"]["itinerary_status"]
+            | null
+          must_do_count?: never
+          per_day_count?: never
+          start_date?: string | null
+          trip_id?: string | null
+          updated_at?: string | null
           user_id?: string | null
         }
         Relationships: []
@@ -11022,6 +11410,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       v_day_totals: {
@@ -11059,6 +11454,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
@@ -11108,6 +11510,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "trip_cost_tracking_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       v_payments_summary: {
@@ -11148,6 +11557,13 @@ export type Database = {
             referencedRelation: "trips_with_chronology_issues"
             referencedColumns: ["trip_id"]
           },
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
+            referencedColumns: ["trip_id"]
+          },
         ]
       }
       v_trip_total: {
@@ -11185,6 +11601,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips_with_chronology_issues"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_with_orphan_preferences"
             referencedColumns: ["trip_id"]
           },
         ]
