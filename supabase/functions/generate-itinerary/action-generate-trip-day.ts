@@ -2982,7 +2982,7 @@ async function _handleGenerateTripDayInner(
   }
   const MIN_MEANINGFUL_PER_DAY = 2; // ≥2 real things per day on avg
   const meaningfulThreshold = totalDays * MIN_MEANINGFUL_PER_DAY;
-  const hasEnoughMeaningful = dayNumber < totalDays || meaningfulActivityCount >= meaningfulThreshold;
+  let hasEnoughMeaningful = dayNumber < totalDays || meaningfulActivityCount >= meaningfulThreshold;
 
   // RECOVERY: a previously-failed day that succeeded on retry leaves a stale
   // entry in metadata.failed_day_numbers, which would otherwise pin status at
@@ -2995,7 +2995,9 @@ async function _handleGenerateTripDayInner(
   if (recoveredFromStaleFailures && !noFailedDays) {
     console.log(`[generate-trip-day:final] Clearing stale failed_day_numbers=${JSON.stringify(failedDayNumbers)} — all days populated on retry`);
   }
-  const isComplete = dayNumber >= totalDays && allDaysHaveActivities && dayCountMatches && effectiveNoFailedDays && hasEnoughMeaningful;
+  // `let` (not const) — see post-injection recompute block below: must-do
+  // injection can flip a shell trip into a complete one.
+  let isComplete = dayNumber >= totalDays && allDaysHaveActivities && dayCountMatches && effectiveNoFailedDays && hasEnoughMeaningful;
   const computedStatus = isComplete ? 'ready' : (dayNumber >= totalDays ? 'partial' : 'generating');
 
   if (dayNumber >= totalDays && !isComplete) {
