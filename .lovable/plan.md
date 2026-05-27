@@ -1,44 +1,142 @@
-# Fix: Return flight arrival shows --:--
+## What I found so far
 
-## Root cause
+This is not one small bad parser. The schedule is being touched by many independent timing layers, and they do not share one definition of “chronologically last,” “pre-dawn,” “arrival,” or “hotel return.”
 
-Two compounding bugs in `src/utils/normalizeFlightSelection.ts`:
+The Istanbul trip confirms the corruption pattern:
 
-1. **New-format early return skips the estimator.** The branch that handles `{ legs: [...] }` (which is what the setup form writes today, and what's persisted for all four affected trips — Dubai, Mexico City, Buenos Aires, Istanbul) returns immediately after mapping `legOrder`. It never calls `estimateReturnArrival` or `autoTagLegs`. Only the legacy `{ departure, return }` branch ran them. Verified by running the normalizer against the persisted `flight_selection` for `99c9d333…` (Dubai) and `3c2da103…` (Istanbul) — both come back with `legs[1].arrival.time = ""`.
+- Persisted Day 1 has `Arrival Flight` at `03:05–05:05`.
+- That same day also has a valid `Return to Hotel` at `23:44–23:59`.
+- But the persisted bookend trace says the day’s “last” card is `Arrival Flight` ending `05:05`, and therefore hotel-return verification marks the day as not expecting a return.
+- Why? The wrap-aware sorter treats any `00:00–05:59` time as “after midnight at the end of the day.” That is correct for a late-night bookend, but wrong for a Day 1 arrival flight. So a morning/red-eye arrival gets mistaken for the day’s terminal activity.
 
-2. **Estimator can't infer overnight outbound.** For Dubai the outbound is `dep 08:00 → arr 06:00` with no `arrival.date`. The estimator falls back to `departure.date` for both endpoints, computes a negative duration, and aborts — so even after fix #1 the Dubai return would still be blank. Buenos Aires (`08:00 → 09:00`) computes a bogus 1h duration for the same reason; it'd populate but with the wrong time.
+I also found the exact historical shape behind the “Return to hotel at 5:20 AM” class:
 
-## Fix
+- A persisted hotel return row like `21:20–05:20` exists in older trip data.
+- That is an impossible non-nightlife hotel return: it wraps overnight for 8 hours.
+- Some layers strip pre-dawn hotel returns only when the start time is pre-dawn. They miss rows that start in the evening and end the next morning.
 
-Frontend only. Single file: `src/utils/normalizeFlightSelection.ts`.
+The deeper issue is structural:
 
-### 1. Hoist post-processing to a shared exit
+1. There are multiple hotel-return injectors:
+   - generation quality pass
+   - post-meal finalization loop
+   - save-time pass
+   - persist-boundary verification
+   - read-time UI safety net
 
-Extract the `estimateReturnArrival(legs) → autoTagLegs(legs) → return wrapped` tail into a helper and call it from **both** the new-format branch and the legacy branch. Net effect: `legs[]`-shaped inputs go through the same enrichment as legacy-shaped inputs.
+2. There are many local time parsers with different behavior:
+   - some are AM/PM-aware
+   - some ignore AM/PM
+   - some use `startTime`, others use `endTime`, others check aliases differently
+   - some sort raw minutes, others wrap `00:00–06:00` to the next day
 
-### 2. Infer overnight outbound in `estimateReturnArrival`
+3. The same day may be generated more than once concurrently.
+   - Istanbul has overlapping `generate-trip-day#1/#2/#3/#4` traces for the same trip.
+   - That means a stale generation attempt can write older or partially repaired timing after a newer pass has already repaired it.
 
-When the outbound's `arrival.date` is missing and the parsed arrival datetime is `≤` the departure datetime, treat the arrival as next-day before computing duration. Keep the existing `0 < durationMin ≤ 20h` sanity cap. Idempotent and bounded; matches how `getDestinationArrivalLeg` consumers already interpret a flight that "wraps past midnight".
+## Plan to fix the root, not another patch
 
-### 3. Regression tests
+### 1. Build one canonical timing spine
+Create one shared backend timing module and one frontend mirror that owns:
 
-Extend `src/utils/__tests__/normalizeFlightSelection.estimateReturnArrival.test.ts`:
+- parse `HH:MM` and `H:MM AM/PM`
+- format minutes back to `HH:MM`
+- read canonical start/end from `startTime`, `start_time`, `time`, `endTime`, `end_time`
+- classify activity timing role:
+  - day-start arrival logistics
+  - day-end late-night continuation
+  - hotel return bookend
+  - departure logistics
+  - normal activity
+- compute chronological sort key using role, not just clock time
 
-- Dubai fixture (`08:00 → 06:00` outbound, no arr date) — return leg populates with `estimated: true`, arrival time ≈ `dep + (22h)`.
-- Istanbul fixture (verbatim persisted payload, new-format `legs[]`) — return leg `arrival.time` = `17:00`, `estimated: true`.
-- Mexico City fixture — return leg arrival populates.
-- Buenos Aires fixture (`08:00 → 09:00`, no arr date) — return leg uses overnight inference (≈25h), not the bogus 1h.
-- Idempotency: a second `normalizeFlightSelection` call on already-normalized output doesn't overwrite the populated time and keeps `estimated: true`.
+Key rule: `05:05 Arrival Flight` on Day 1 is a day-start anchor, not the chronological tail. `00:55 late_nightlife_bookend` is a day-end tail.
 
-## Out of scope
+### 2. Replace the dangerous local parsers in critical paths
+Refactor only the timing-critical files first:
 
-- No DB backfill needed: the normalizer runs at every read site (`EditorialItinerary.allFlightLegs`, `getDestinationArrivalLeg`, `getLastLegDepartureTime`). Once the helper runs in the new-format branch, all four affected trips display correctly on next render.
-- No edge function / backend change. The persisted `flight_selection` shape stays as-is; estimated arrival is a display-time concern (consistent with the existing `estimated: true` marker the UI already renders as "est.").
-- No change to `FlightSyncWarning`, anchor compare, cascade logic, or `buildFlightSelectionFromLegs`.
+- backend repair pipeline
+- backend save-itinerary normalization
+- backend persist boundary
+- backend bookend verification
+- backend schedule sanity pass
+- backend hotel-return injector
+- frontend itinerary parser
+- frontend read-time hotel-return injector
+- frontend chronology/health timing helpers
 
-## Files
+This removes the current split-brain behavior where one layer says “this is the end of the day” and another says “this is the morning.”
 
-- **edited** `src/utils/normalizeFlightSelection.ts` — single shared exit + overnight inference.
-- **edited** `src/utils/__tests__/normalizeFlightSelection.estimateReturnArrival.test.ts` — 4 fixture tests + idempotency.
+### 3. Collapse hotel-return logic into one invariant
+Keep the current user-facing behavior, but make every caller use one shared `ensureTerminalHotelReturn` algorithm.
 
-After approval, I'll also update the existing memory entry `mem://constraints/itinerary/flight-display-normalize-and-anchor-compare` to note the new-format-branch coverage so this doesn't regress.
+Rules:
+
+- Never use a Day 1 arrival flight/arrival transfer as the terminal card.
+- Never inject a hotel return on departure day.
+- If the final real activity ends `14:00–23:59`, append/verify a return ending no later than `23:59`.
+- If the final real activity is true nightlife ending `00:00–02:30`, allow a late-night return ending no later than `02:55`.
+- If the final real activity ends `02:31–13:59`, do not fabricate a “wind down overnight” return unless it is explicitly a late-night continuation.
+- Existing hotel returns with `endTime < startTime` are invalid unless tagged `late_nightlife_bookend`.
+
+This directly kills `21:20–05:20` and `23:23–07:23` hotel returns.
+
+### 4. Add a hard write-time quarantine for impossible timing
+At the single persist boundary, before save:
+
+- Clamp or drop non-late-nightlife hotel returns that wrap past midnight.
+- Strip synthetic hotel returns on departure days.
+- Reject or stamp critical trace for any non-logistics Day 1 card before the real arrival availability window.
+- Re-run chronology using the canonical role-aware sort key.
+
+This ensures broken timing cannot persist even if an upstream injector misbehaves.
+
+### 5. Add generation-run idempotency to stop stale writes
+The overlapping Istanbul traces are a major red flag. Add an active generation run token:
+
+- generation start stamps `metadata.active_generation_run_id`
+- every day-generation and finalization write carries that run id
+- before writing, the backend checks the run id still matches
+- stale/duplicate attempts log and exit without mutating itinerary JSON
+
+This prevents older partial runs from overwriting newer repaired timing.
+
+### 6. Add regression fixtures from real failures
+Add focused tests using the observed broken cases:
+
+- Istanbul Day 1: `Arrival Flight 03:05–05:05` plus `Return 23:44–23:59` must treat return as terminal, not arrival flight.
+- Lisbon historical: `Return to Hotel 21:20–05:20` must be clamped or removed before persist.
+- Rome/Mexico City/Buenos Aires/Istanbul arrival blocks must remain ordered after repair.
+- Late-night nightlife case: real `23:30–00:20` nightlife may keep a `00:25–00:50` return.
+- Day 2 pre-dawn museum/activity should shift or move back to prior day, not cascade the whole day into AM.
+- Concurrent generation: stale run cannot persist after newer run id is active.
+
+### 7. Add a timing lifecycle trace for debugging
+For each day, persist a compact timing trace under day metadata:
+
+```text
+input_ai → repair_day → quality_pass → meal_guard → terminal_cleanup → save_normalize → persist_sanity → bookend_verify
+```
+
+Each stage records:
+
+- first card
+- last real card
+- last terminal/bookend card
+- any wrap rows
+- any cards clamped/dropped
+- parser used/version
+
+This gives us a single forensic trail instead of guessing from console logs after the fact.
+
+## Implementation order
+
+1. Add canonical timing helpers and tests.
+2. Patch bookend verification so Day 1 arrival logistics cannot become the day tail.
+3. Patch persist sanity so non-late hotel returns cannot wrap overnight.
+4. Route critical backend timing paths through the canonical helpers.
+5. Route frontend parser/read-time bookend logic through the matching mirror.
+6. Add generation run idempotency guard.
+7. Add real regression fixtures for Istanbul + `21:20–05:20` hotel return.
+
+This is the first fix I would treat as architectural: one timing spine, one hotel-return invariant, one stale-write guard.
