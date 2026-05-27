@@ -3425,6 +3425,7 @@ export default function TripDetail() {
     && searchParams.get('edit') !== 'true' 
     && !shouldAutoGenerate 
     && !isServerGenerating
+    && !isFinalizing
     && hasItineraryData(trip)) {
     return <Navigate to={`/trip/${trip.id}/active`} replace />;
   }
