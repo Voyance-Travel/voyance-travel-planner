@@ -1,208 +1,58 @@
-# Canonical Preference Spine — root-cause plan
+# Canonical Preference Spine — Remaining Steps
 
-## Diagnosis
+Steps 1 (spine module) and 2 (unified prompt + validator merge) are shipped. The remaining work hardens propagation, enforcement, observability, and legacy heal.
 
-This looks like the same class of problem as timing: we have many preference representations, but no single authoritative lifecycle.
+## Step 3 — Preference Trace (forensic)
 
-Current flow is roughly:
+Add `metadata.quality.preference_trace` ring buffer (cap 8) at the persist boundary in `_shared/persist-itinerary.ts`, alongside the existing `timing_trace`. Each entry:
 
-```text
-Start Step 3 / chat / context form
-  -> trips.metadata blobs
-     - mustDoActivities
-     - additionalNotes
-     - generationRules
-     - pacing
-     - isFirstTimeVisitor / firstTimePerCity
-     - userAnchors
-     - perDayActivities
-  -> best-effort trip_day_intents seeding
-  -> compile-prompt mixes metadata + params + trip_day_intents + legacy fallbacks
-  -> Day Brief prompt asks model to honor wishes
-  -> repair/save checks restore hard anchors, but soft preferences are mostly warnings/prompt-only
+```
+{ stage, ts, expected:[{id,kind,priority,label}], promptInjected:[id], fulfilled:[id], missed:[{id,reason}] }
 ```
 
-The likely root issue is not that one preference field is missing; it is that preferences are split across metadata blobs, `trip_day_intents`, `userAnchors`, generation params, and prompt-only text. Some layers treat “sushi lunch” as a soft wish, some as a must-do, some as trip-wide notes, and some ignore it if a partial structured table already exists.
+- `expected` comes from `mergePreferenceSources` over the day's scope.
+- `promptInjected` is stamped by `compile-prompt.ts` into a transient field on the day result.
+- `fulfilled` / `missed` come from the same matcher used in Step 5.
+- Sentinel: `[PREFERENCE_TRACE] day=N expected=X injected=Y fulfilled=Z missed=W`.
 
-## Highest-risk breakpoints found
+## Step 4 — Multi-City Propagation
 
-1. **Partial `trip_day_intents` masks metadata fallback**
-   - `compile-prompt.ts` uses structured rows when any rows exist, and only falls back to metadata if the structured table is empty.
-   - If seeding writes only some preferences, the remaining metadata preferences can disappear from the Day Brief.
+In `splitJourneyIfNeeded` (generate-itinerary pipeline): trip-wide intents (no city tag, no day_number) MUST be cloned into every leg's prompt scope, not just leg 1. Tag-aware intents (e.g. "sushi in Tokyo") stay scoped. Add `[PREFERENCE_SPLIT] leg=N propagated=K scoped=M` log + unit test covering the Lisbon→Porto pattern where Day-3 lost "wine tasting".
 
-2. **Seeding is non-blocking even when preferences exist**
-   - `seedDayIntentsFromMetadata` logs and returns `0` on failures.
-   - Generation continues, so a trip can build with no durable preference rows even though Step 3 had preferences.
+## Step 5 — Semantic Fulfillment Matcher
 
-3. **Soft preferences are prompt-only, not enforced**
-   - Day Ledger renders `USER WISHES`, but only missing `must` intents get restored/placeholder behavior.
-   - A user can say “spa”, “sushi lunch”, “hidden gems”, or “avoid touristy stuff” and we mostly hope the model follows it.
+New module `_shared/preference-matcher.ts`:
 
-4. **Step 3 fields do not all become canonical intents**
-   - `mustDoActivities` and timed `perDayActivities` get most attention.
-   - `additionalNotes`, `generationRules`, pacing, first-time/returning visitor, and category interests are scattered into prompt blocks, not normalized into one inspectable contract.
+- Category aliases: `{ sushi: [omakase, sashimi, kaiseki…], rooftop: [skybar, terrace, panoramic…], hidden_gem: [local, off-beaten, neighborhood…], spa: [onsen, hammam, thermal…], slow_pace: pacingMetric ≤ X/day }`.
+- `matchIntent(intent, dayActivities)` returns `{fulfilled, evidenceActivityId?, score}`.
+- "Avoid" intents check absence (museums, chains, tourist-traps).
+- Wired into save-itinerary ledger + Step 3 trace. NOT into hard-repair (soft preferences stay soft).
 
-5. **Multiple generation paths pass different preference payloads**
-   - Start page trip creation saves rich metadata.
-   - ItineraryPreview context form writes a subset.
-   - Legacy `generate-day` paths pass `mustDoActivities`, `interestCategories`, `generationRules`, `pacing`, but not consistently all structured data.
-   - Server-chain relies on DB metadata and seeding.
+## Step 6 — Mandatory Seeding Guard
 
-6. **Long multi-city split can drop or misassign generic preferences**
-   - `splitJourneyIfNeeded` filters `mustDoActivities` by city name or assigns unqualified items to leg 1.
-   - Trip-wide preferences may not survive as trip-wide intent rows for later legs.
+Refactor `seedDayIntentsFromMetadata`:
 
-## Plan
+- If metadata contains preferences AND seeding fails (DB error, RLS, partial write), throw `PreferenceSeedingFailedError` on FRESH generation paths only (chain-finalize start, action-generate-trip-day day 1).
+- Edit / chat / extend-days paths stay non-blocking (existing intents are already trustworthy).
+- Wrap with `withStage(trace, 'preference_seed', …)` so failures surface in `auditTimingViolations`-style read-time audit.
+- Sentinel: `[PREFERENCE_SEED] tripId=… seeded=K skipped=M error=…`.
 
-### Step 1 — Add a canonical preference spine module
+## Step 7 — Legacy Backfill + Constraint Doc
 
-Create one backend helper, likely `supabase/functions/_shared/preference-spine.ts`, that owns:
+- One-shot diagnostic SQL view `trips_with_orphan_preferences`: trips where `metadata.mustDoActivities`/`additionalNotes`/`perDayActivities` has rows but zero matching `trip_day_intents`. Read-only — no auto-heal (existing trips are frozen).
+- Lazy `heal-trip-preferences` edge fn callable from TripDetail on owner visit: re-runs `seedDayIntentsFromMetadata` against trips flagged by the view, stamps `metadata.preferences_healed_at`.
+- New memory file `mem://constraints/itinerary/canonical-preference-spine` documenting: single boundary = `mergePreferenceSources`, never re-introduce the `if (usedStructuredIntents) skip metadata` branch, multi-city must propagate trip-wide, matcher is soft-only, seeding is blocking on fresh paths.
+- Add to `mem://index.md` Core: "Preference Spine: single merge boundary; metadata + intents always unioned; trip-wide propagates to every leg."
 
-- `collectPreferenceSources(trip, params?)`
-- `normalizeTripPreferencesToIntents(...)`
-- `classifyIntentHardness(...)` — hard lock vs soft wish vs constraint vs avoid
-- `assignIntentScope(...)` — day-specific, city-specific, trip-wide, leg-wide
-- `summarizePreferenceCoverage(...)`
+## Files Touched
 
-It should produce one canonical `PreferenceSnapshot`:
+- **New**: `supabase/functions/_shared/preference-matcher.ts`, `supabase/functions/heal-trip-preferences/index.ts`, migration for `trips_with_orphan_preferences` view
+- **Edited**: `_shared/persist-itinerary.ts` (trace stamp), `_shared/preference-spine.ts` (add `seedOrThrow` wrapper), `generate-itinerary/pipeline/compile-prompt.ts` (stamp `promptInjected`), `generate-itinerary/pipeline/split-journey.ts` (propagation), `generate-itinerary/action-save-itinerary.ts` (matcher wire-up), `generate-itinerary/action-generate-trip-day.ts` + chain-finalize (mandatory seed)
+- **Tests**: `preference-spine.merge.test.ts`, `preference-matcher.test.ts`, `split-journey.preference-propagation.test.ts`, `preference-seed-blocking.test.ts`
+- **Memory**: `mem://constraints/itinerary/canonical-preference-spine` + index update
 
-```text
-PreferenceSnapshot
-  sources: metadata | params | trip_day_intents | userAnchors | generationRules
-  intents: canonical rows
-  constraints: avoid / dietary / mobility / pacing / first-time / budget style
-  coverage: expected count, seeded count, prompt count, fulfilled count
-  warnings: lost, ambiguous, partial, masked-by-table
-```
+## Non-Goals
 
-### Step 2 — Make intent seeding mandatory when preferences exist
-
-Refactor `seedDayIntentsFromMetadata` into two modes:
-
-- **best-effort** for legacy/background repairs
-- **generation-critical** for fresh generation
-
-Fresh generation should not continue silently if:
-
-- Step 3 metadata contains preferences, but
-- normalized intent count is > 0, and
-- persisted `trip_day_intents` count is 0 or materially partial.
-
-Instead, stamp a clear health code and stop before the AI call, rather than generating a generic itinerary.
-
-### Step 3 — Stop partial structured rows from hiding metadata
-
-Change prompt compilation so it does not use this rule:
-
-```text
-if trip_day_intents exists, ignore legacy metadata fallback
-```
-
-Replace with:
-
-```text
-canonical snapshot = merge(structured rows + metadata-derived rows)
-dedupe by normalized source/title/day/time
-structured rows win on status/fulfillment
-metadata-derived rows fill gaps
-```
-
-This directly targets the “we fixed it but still lose preferences” pattern.
-
-### Step 4 — Convert Step 3 UI outputs into canonical intents at creation time
-
-Update trip creation paths so Start Step 3, chat planner, and context form all write the same intent contract:
-
-- selected landmarks/custom must-dos → activity/restaurant/spa intents
-- `additionalNotes` → parsed actionable intents + trip-wide note constraints
-- `generationRules` → constraint/avoid/time-block intents
-- pacing → explicit pacing constraint
-- first-time/returning visitor → explicit city preference constraint
-- per-city first-time settings → city-scoped constraints
-
-Keep metadata for compatibility, but treat `trip_day_intents` + `PreferenceSnapshot` as the source of truth for generation.
-
-### Step 5 — Strengthen Day Brief from “prompt suggestion” to “contract”
-
-Update `day-ledger.ts` so all user preferences have an enforceable status:
-
-- **must**: exact item/time/venue must appear or a visible repair placeholder is inserted
-- **should**: at least one semantic match must appear somewhere in the trip unless impossible
-- **avoid/constraint**: must be checked after generation, not just written in the prompt
-
-Add a `preference_trace` per day:
-
-```text
-metadata.quality.preference_trace.dayN[]
-  stage: seed | compile | ai_output | repair | save | fulfillment
-  expectedIntents
-  promptIntents
-  matchedIntents
-  missingMust
-  missingShould
-  violatedAvoid
-```
-
-### Step 6 — Add semantic fulfillment checks, not title-only matching
-
-Current fulfillment matching is title-heavy. Add a canonical matcher for:
-
-- cuisine/category wishes: “sushi lunch”, “rooftop drinks”, “spa”
-- vibe wishes: “hidden gems”, “not touristy”, “slow pace”
-- avoid rules: “no seafood”, “avoid museums”, “don’t repeat tourist staples”
-- venue wishes: exact venue/name/address
-
-This prevents soft preferences from being considered untestable.
-
-### Step 7 — Protect preferences through post-generation cleanup
-
-Audit and patch post-generation passes that can erase preference-driven activities:
-
-- repair-day
-- universal-quality-pass
-- meal guard
-- cross-city filters
-- ledger-check
-- persist contract
-- action-save-itinerary final sweeps
-
-Any dropped activity with `isUserRequested`, `anchorSource`, `intentId`, or semantic intent match should emit a trace entry and require a replacement that still satisfies the intent.
-
-### Step 8 — Multi-city preference propagation
-
-Fix long-trip split behavior so trip-wide preferences are copied to every leg as trip-wide rows, while city/day-specific wishes are scoped to the correct leg.
-
-Do not assign generic wishes only to leg 1 unless the user clearly tied them to the first city.
-
-### Step 9 — Add regression tests around real failure shapes
-
-Add tests for:
-
-- Step 3 “sushi lunch + spa + hidden gems” produces scheduled real venues, not generic placeholders.
-- `additionalNotes` with “avoid touristy stuff” survives into Day Brief and post-generation validation.
-- Partial `trip_day_intents` does not mask `metadata.mustDoActivities` or `additionalNotes`.
-- Multi-city split preserves trip-wide preferences across all legs.
-- Soft “should” preferences generate a missing-preference health code if no semantic match appears.
-- Existing hard-anchor tests continue to pass.
-
-### Step 10 — One-time diagnostic/backfill
-
-Add a read-only audit function/report for existing trips:
-
-```text
-trip metadata preferences
-vs trip_day_intents rows
-vs Day Brief prompt intents
-vs final itinerary matches
-```
-
-Use it to find trips where preferences exist in metadata but were never seeded, masked, or fulfilled. For safe cases, backfill missing `trip_day_intents` rows from metadata without changing the itinerary.
-
-## Success criteria
-
-- Every Step 3 preference appears in a canonical preference snapshot before generation.
-- Generation refuses to proceed silently when preferences cannot be seeded.
-- Prompt compilation never loses metadata preferences because a partial structured table exists.
-- Soft preferences are checked semantically after generation.
-- Preference loss becomes visible in `metadata.quality.preference_trace`, not hidden in logs.
-- Multi-city legs preserve trip-wide and city-scoped preferences correctly.
+- No UI changes — entirely backend.
+- No hard-repair for soft preferences (would degrade itinerary diversity).
+- No retroactive auto-mutation of already-frozen trips (lazy heal only on owner visit).
