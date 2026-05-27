@@ -168,6 +168,9 @@ Deno.test('runStep8: afternoon check-in (15:00) is NOT terminal — bookend stil
   // Dinner ends at 21:00 → bookend appended after dinner.
   assertEquals(acts.length, 3);
   assertEquals(lastTitle(acts).startsWith('Return to'), true);
+});
+
+
 
 Deno.test('predawn strip: untagged accommodation card at 00:30 still removed (regression guard)', () => {
   const acts = [
