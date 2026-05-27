@@ -1020,7 +1020,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         card.title = 'Arrival Flight';
         card.name = 'Arrival Flight';
         if (!card.description || /^\s*$/.test(String(card.description))) {
-          card.description = `Arrive at ${arrivalAirportName}.`;
+          card.description = `Land at ${arrivalAirportName}, clear customs, and collect bags.`;
         }
         card.startTime = newFlightStart;
         card.start_time = newFlightStart;
@@ -1038,7 +1038,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         card.locked = true;
         card.lock_state = 'locked';
         card.anchorSource = 'arrival-flight';
-        card.durationMinutes = 120;
+        card.durationMinutes = AIRPORT_PROCESSING_MINS;
         card.source = 'repair-arrival-flight-reconciled';
         // Move to index 0
         if (existingFlightIdx !== 0) {
@@ -1053,14 +1053,14 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           before: `${wasStart}-${wasEnd}`,
           after: `${newFlightStart}-${newFlightEnd}`,
         });
-        console.log(`[Repair §3b] Reconciled LLM arrival flight: was=${wasStart}-${wasEnd} now=${newFlightStart}-${newFlightEnd} (authoritative ${arrivalTime24})`);
+        console.log(`[Repair §3b] Reconciled LLM arrival flight (v2 land-start): was=${wasStart}-${wasEnd} now=${newFlightStart}-${newFlightEnd} (authoritative landing ${arrivalTime24})`);
       } else {
         // ── INJECT: no arrival card → build fresh
         const flightCard: any = {
           id: `day${dayNumber}-arrival-flight-${Date.now()}`,
           title: 'Arrival Flight',
           name: 'Arrival Flight',
-          description: `Arrive at ${arrivalAirportName}.`,
+          description: `Land at ${arrivalAirportName}, clear customs, and collect bags.`,
           startTime: newFlightStart,
           endTime: newFlightEnd,
           category: 'flight',
@@ -1072,13 +1072,13 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           locked: true,
           lock_state: 'locked',
           anchorSource: 'arrival-flight',
-          durationMinutes: 120,
+          durationMinutes: AIRPORT_PROCESSING_MINS,
           source: 'repair-arrival-flight',
         };
         activities.unshift(flightCard);
         if (flightCard.id) lockedIds.add(flightCard.id);
         repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_arrival_flight' });
-        console.log(`[Repair §3b] Injected arrival flight on Day 1 at ${newFlightStart}-${newFlightEnd} (authoritative ${arrivalTime24})`);
+        console.log(`[Repair §3b] Injected arrival flight on Day 1 (v2 land-start) at ${newFlightStart}-${newFlightEnd} (authoritative landing ${arrivalTime24})`);
       }
 
       // ── Transfer: inject if missing (anchored adjacent to flight)
