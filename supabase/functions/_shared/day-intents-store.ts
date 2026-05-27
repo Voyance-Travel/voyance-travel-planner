@@ -468,16 +468,38 @@ export async function seedDayIntentsOrThrow(
   trip: { id: string; user_id?: string | null; metadata?: Record<string, unknown> | null; start_date?: string | null },
   totalDays: number,
   userId?: string | null,
-): Promise<SeedAudit> {
+): Promise<SeedAudit & { usableRows: number }> {
   const expectsRows = hasPreferenceMetadata(trip?.metadata);
   const audit = await seedDayIntentsFromMetadata(supabase, trip, totalDays, userId);
-  if (!expectsRows) return audit;
+
+  // The previous gate (`generated>0 && written===0`) was wrong on the retry
+  // path: when a prior seed succeeded, every intent is "existing" and we
+  // legitimately insert 0 new rows. What actually matters is whether usable
+  // intent rows exist in the table after this call — that's what compile-prompt
+  // and the must-do scheduler read.
+  let usableRows = 0;
+  try {
+    const { count } = await supabase
+      .from('trip_day_intents')
+      .select('id', { count: 'exact', head: true })
+      .eq('trip_id', trip.id)
+      .in('status', ['active', 'fulfilled']);
+    usableRows = typeof count === 'number' ? count : 0;
+  } catch (e) {
+    console.warn('[day-intents-store] usable-rows count failed (non-blocking):', String(e));
+  }
+
+  const result = { ...audit, usableRows };
+  if (!expectsRows) return result;
   if (audit.error) {
     throw new PreferenceSeedingFailedError(audit, `seed errored: ${audit.error}`);
   }
-  if (audit.generated > 0 && audit.written === 0) {
-    throw new PreferenceSeedingFailedError(audit, `seed produced ${audit.generated} intents but wrote 0 rows`);
+  if (usableRows === 0) {
+    throw new PreferenceSeedingFailedError(
+      audit,
+      `seed produced ${audit.generated} intents but 0 usable rows in trip_day_intents after seed`,
+    );
   }
-  return audit;
+  return result;
 }
 
