@@ -106,3 +106,21 @@ Deno.test("§3b no-op: no arrivalTime24 → neither branch fires (no reconciled/
     r.action === "reconciled_arrival_flight" ||
     r.action === "injected_arrival_flight"));
 });
+
+Deno.test("§3b v2 land-start convention: Barcelona — 20:00 landing → card 20:00–20:45, transfer 20:45", () => {
+  const { day, repairs } = repairDay(baseInput({
+    day: { dayNumber: 1, date: "2027-06-01", activities: [] },
+    arrivalTime24: "20:00",
+    arrivalAirport: "BCN",
+    hotelName: "Hotel Arts Barcelona",
+  }));
+  const flight = (day.activities as any[]).find((a) => a.anchorSource === "arrival-flight");
+  const transfer = (day.activities as any[]).find((a) => a.anchorSource === "airport-transfer");
+  assert(flight, "inject path must add an arrival-flight anchor");
+  assertEquals(flight.startTime, "20:00", "card START = landing time (v2 convention)");
+  assertEquals(flight.endTime, "20:45", "card END = landing + 45m on-ground processing");
+  assertEquals(flight.durationMinutes, 45);
+  assert(transfer, "transfer should auto-inject");
+  assertEquals(transfer.startTime, "20:45", "transfer starts when on-ground window ends");
+  assert(repairs.some((r: any) => r.action === "injected_arrival_flight"));
+});
