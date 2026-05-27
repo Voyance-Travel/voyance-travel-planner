@@ -808,6 +808,64 @@ export async function persistTripItinerary(
     } catch (e) {
       console.warn(`[${label}] timing-trace stamp failed (non-blocking):`, e);
     }
+
+    // ── PREFERENCE TRACE (Canonical-Preference-Spine §3) ────────────
+    // Stamp metadata.quality.preference_trace ring buffer (cap 8) so
+    // we have forensic evidence of which Step-3 preferences shipped
+    // fulfilled vs missed on every persist boundary. Soft, trace-only —
+    // never blocks the write. See mem://constraints/itinerary/canonical-preference-spine.
+    let preferenceTraceEntry: Record<string, any> | null = null;
+    let preferenceTraceHistory: any[] = [];
+    try {
+      const { fetchActiveDayIntents } = await import('./day-intents-store.ts');
+      const { matchDayIntents } = await import('./preference-matcher.ts');
+      const rows = await fetchActiveDayIntents(supabase, tripId);
+      if (Array.isArray(rows) && rows.length > 0) {
+        const intents = rows.map((r: any) => ({
+          title: r.title || r.raw || '',
+          dayNumber: r.day_number ?? null,
+          priority: r.priority || 'should',
+          kind: r.kind || 'note',
+          raw: r.raw || r.title || '',
+          locked: !!r.locked,
+        }));
+        let expected = 0, fulfilled = 0, missed = 0;
+        const perDay: Array<{ day: number; total: number; fulfilled: number; missed: number; missedTitles: string[] }> = [];
+        for (const d of days) {
+          const dn = (d?.dayNumber as number) || 0;
+          if (!dn) continue;
+          const acts = Array.isArray(d.activities) ? d.activities : [];
+          const summary = matchDayIntents(intents as any, dn, acts as any);
+          if (summary.totalIntents === 0) continue;
+          expected += summary.totalIntents;
+          fulfilled += summary.fulfilledCount;
+          missed += summary.missedCount;
+          perDay.push({
+            day: dn,
+            total: summary.totalIntents,
+            fulfilled: summary.fulfilledCount,
+            missed: summary.missedCount,
+            missedTitles: summary.details.filter((x) => !x.fulfilled).map((x) => x.title).slice(0, 6),
+          });
+        }
+        preferenceTraceEntry = {
+          at: new Date().toISOString(),
+          label,
+          intentsCount: intents.length,
+          expected,
+          fulfilled,
+          missed,
+          perDay: perDay.slice(0, 20),
+        };
+        console.log(
+          `[PREFERENCE_TRACE] ${label} tripId=${tripId} expected=${expected} ` +
+          `fulfilled=${fulfilled} missed=${missed} days=${perDay.length}`
+        );
+      }
+    } catch (e) {
+      console.warn(`[${label}] preference-trace stamp failed (non-blocking):`, e);
+    }
+
     // ── Metadata merge (success branch) ─────────────────────────────
     // Postgres jsonb columns are full-replace on UPDATE. Without this
     // merge, every save overwrote the entire `metadata` column with
@@ -822,7 +880,7 @@ export async function persistTripItinerary(
     const callerMetaSuccess = (extra.metadata && typeof extra.metadata === 'object')
       ? extra.metadata as Record<string, any>
       : null;
-    if (callerMetaSuccess || chronologyTrace || scheduleSanityTrace) {
+    if (callerMetaSuccess || chronologyTrace || scheduleSanityTrace || preferenceTraceEntry) {
       let priorMeta = oldMetadata;
       if (!priorMeta) {
         try {
@@ -835,17 +893,23 @@ export async function persistTripItinerary(
         ...(priorMeta || {}),
         ...(callerMetaSuccess || {}),
       };
-      if (chronologyTrace || scheduleSanityTrace || auditSummary) {
+      if (chronologyTrace || scheduleSanityTrace || auditSummary || preferenceTraceEntry) {
         const priorQuality = (merged.quality && typeof merged.quality === 'object') ? merged.quality : {};
+        let preferenceTrace = priorQuality.preference_trace;
+        if (preferenceTraceEntry) {
+          preferenceTraceHistory = Array.isArray(priorQuality.preference_trace) ? priorQuality.preference_trace : [];
+          preferenceTrace = [...preferenceTraceHistory, preferenceTraceEntry].slice(-8);
+        }
         merged.quality = {
           ...priorQuality,
           ...(chronologyTrace ? { chronology_trace: chronologyTrace } : {}),
           ...(scheduleSanityTrace ? { schedule_sanity_trace: scheduleSanityTrace } : {}),
           ...(auditSummary ? { audit_summary: auditSummary } : {}),
+          ...(preferenceTraceEntry ? { preference_trace: preferenceTrace } : {}),
         };
       }
       updatePayload.metadata = merged;
-      console.log(`[persist-itinerary] meta-merge (success) tripId=${tripId} priorMustDo=${!!(priorMeta as any)?.mustDoActivities} newMustDo=${!!callerMetaSuccess?.mustDoActivities} chronologyTrace=${chronologyTrace ? `pre=${chronologyTrace.issues_pre}/post=${chronologyTrace.issues_post}` : 'none'} sanityTrace=${scheduleSanityTrace ? 'yes' : 'none'} auditSummary=${auditSummary ? `v=${auditSummary.violations_count}` : 'none'}`);
+      console.log(`[persist-itinerary] meta-merge (success) tripId=${tripId} priorMustDo=${!!(priorMeta as any)?.mustDoActivities} newMustDo=${!!callerMetaSuccess?.mustDoActivities} chronologyTrace=${chronologyTrace ? `pre=${chronologyTrace.issues_pre}/post=${chronologyTrace.issues_post}` : 'none'} sanityTrace=${scheduleSanityTrace ? 'yes' : 'none'} auditSummary=${auditSummary ? `v=${auditSummary.violations_count}` : 'none'} preferenceTrace=${preferenceTraceEntry ? `${preferenceTraceEntry.fulfilled}/${preferenceTraceEntry.expected}` : 'none'}`);
     }
   }
 
