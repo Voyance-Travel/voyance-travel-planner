@@ -164,20 +164,37 @@ export async function upsertDayIntents(
 
   if (rows.length === 0) return 0;
 
-  // Use ON CONFLICT DO NOTHING-style behavior via ignoreDuplicates — the unique
-  // index will catch dupes from previous saves. We don't UPDATE existing rows
-  // because their status / fulfillment may already be advanced.
+  // Dedupe in JS against existing rows. We can't use PostgREST upsert(onConflict)
+  // here because the unique index is expression-based
+  // (COALESCE(day_number,-1), lower(title), COALESCE(locked_source,'')) —
+  // PostgREST requires plain-column onConflict targets and silently rejects the
+  // call with "no unique constraint matching", which previously left
+  // `written=0` and stranded every chat-planner must-do intent.
   try {
+    const { data: existing, error: fetchErr } = await supabase
+      .from('trip_day_intents')
+      .select('day_number,source_entry_point,intent_kind,title,locked_source')
+      .eq('trip_id', tripId)
+      .in('status', ['active', 'fulfilled']);
+    if (fetchErr) {
+      console.warn('[day-intents-store] dedupe fetch error (non-blocking):', fetchErr.message);
+    }
+    const keyOf = (r: { day_number: number | null; source_entry_point: string; intent_kind: string; title: string; locked_source: string | null }) =>
+      `${r.day_number ?? -1}|${r.source_entry_point}|${r.intent_kind}|${(r.title || '').toLowerCase()}|${r.locked_source ?? ''}`;
+    const seen = new Set<string>((existing || []).map((r: any) => keyOf(r)));
+    const fresh = rows.filter((r) => {
+      const k = keyOf(r as any);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    if (fresh.length === 0) return 0;
     const { data, error } = await supabase
       .from('trip_day_intents')
-      .upsert(rows, {
-        onConflict:
-          'trip_id,day_number,source_entry_point,intent_kind,title,locked_source',
-        ignoreDuplicates: true,
-      })
+      .insert(fresh)
       .select('id');
     if (error) {
-      console.warn('[day-intents-store] upsert error (non-blocking):', error.message);
+      console.warn('[day-intents-store] insert error (non-blocking):', error.message);
       return 0;
     }
     return Array.isArray(data) ? data.length : 0;
