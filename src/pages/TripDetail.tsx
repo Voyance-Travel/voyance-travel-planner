@@ -323,6 +323,28 @@ export default function TripDetail() {
   const isServerGenerating = !hasCompletedItineraryData && (
     trip?.itinerary_status === 'generating' || (!isQueuedJourneyLeg && trip?.itinerary_status === 'queued') || (itineraryDaysCount > 0 && !trip?.itinerary_data && trip?.itinerary_status !== 'ready' && (trip?.itinerary_status as string) !== 'generated')
   );
+  // ── Finalizing gate (Frozen-After-Ready render contract) ─────────────
+  // Backend writes itinerary at status='generated' but keeps Phase 4-6
+  // (enrichment, costs, cities) running with metadata.fully_persisted=false.
+  // We must NOT render that partial snapshot — the user would see an
+  // unfinalized plan that only "fixes itself" on hard refresh once Phase 6
+  // flips fully_persisted=true. Treat that window as still-generating.
+  // Legacy escape: trips created before Phase-6 shipped (or already frozen
+  // via itinerary_frozen_at) have no fully_persisted field — treat as done.
+  const isFinalizing = (() => {
+    if (!hasCompletedItineraryData) return false;
+    const status = trip?.itinerary_status as string | undefined;
+    if (status !== 'ready' && status !== 'generated') return false;
+    const meta = (trip?.metadata as Record<string, any> | null | undefined) || {};
+    if (meta?.fully_persisted === true) return false;
+    if (meta?.itinerary_frozen_at) return false;
+    // Legacy trips (created before Phase-6 stamp shipped, 2026-04-01) never
+    // get fully_persisted — assume finalized so they aren't stuck on spinner.
+    const createdAt = trip?.created_at ? new Date(trip.created_at as string).getTime() : 0;
+    const PHASE6_SHIPPED = new Date('2026-04-01').getTime();
+    if (createdAt > 0 && createdAt < PHASE6_SHIPPED) return false;
+    return true;
+  })();
   const [generationStalled, setGenerationStalled] = useState(false);
   const [showStalledUI, setShowStalledUI] = useState(false);
   const stalledTimerRef = useRef<ReturnType<typeof setTimeout>>();
