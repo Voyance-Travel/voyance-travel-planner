@@ -356,6 +356,17 @@ export function usePayableItems({
       });
 
       const transitByDay = new Map<number, { totalCents: number; subItems: PayableSubItem[] }>();
+      // Days where the only transit rows were placeholder/unconfirmed.
+      // Their cents still live in the canonical snapshot (and bucket header),
+      // so we emit a $0 informational group row to keep the Local Transit
+      // card visible and reconcilable. See plan §1 + memory:
+      // mem://constraints/finance/transit-bucket-visibility-mirrors-snapshot.
+      const placeholderTransitDays = new Set<number>();
+
+      // Placeholder departure/return flight detector — these cards render as
+      // "Free" in the itinerary; the only legitimate priced flight row is the
+      // canonical day-0 flight-selection chip emitted above.
+      const PLACEHOLDER_FLIGHT_TITLE_RE = /^\s*(departure|return|outbound|inbound)\s+flight\b/i;
 
       for (const row of canonical.rows) {
         // Skip day-0 logistics rows here — already represented as hotel-selection
@@ -368,8 +379,10 @@ export function usePayableItems({
 
         // Group transit rows
         if (TRANSIT_CATEGORIES.has(cat)) {
-          if (name && isPlaceholderDepartureTransferTitle(name)) continue;
-          if (name && isUnconfirmedIntraCityTaxi({ title: name, category: cat })) continue;
+          if (name && (isPlaceholderDepartureTransferTitle(name) || isUnconfirmedIntraCityTaxi({ title: name, category: cat }))) {
+            placeholderTransitDays.add(row.dayNumber);
+            continue;
+          }
           const bucket = transitByDay.get(row.dayNumber) || { totalCents: 0, subItems: [] };
           bucket.subItems.push({
             id: row.effectiveActivityId || row.rowKey,
@@ -378,6 +391,13 @@ export function usePayableItems({
           });
           bucket.totalCents += row.cents;
           transitByDay.set(row.dayNumber, bucket);
+          continue;
+        }
+
+        // Placeholder departure/return flight stub — skip emission so the
+        // line item matches the "Free" itinerary card. The canonical day-0
+        // flight chip remains the only priced flight row.
+        if (cat === 'flight' && name && PLACEHOLDER_FLIGHT_TITLE_RE.test(name)) {
           continue;
         }
 
@@ -403,6 +423,23 @@ export function usePayableItems({
           assignedMemberId: assignedIds[0],
           assignedMemberIds: [...new Set(assignedIds)],
           budgetCategory: toBudgetCategory(cat),
+        });
+      }
+
+      // Synthetic $0 informational group rows for days that had ONLY
+      // placeholder/unconfirmed transit. Keeps the Local Transit card visible
+      // when buckets.transit > 0 so users see where the headline cents came
+      // from. The bucket card header reads financialSnapshot.buckets.transit
+      // (authoritative); these sub-items are visual reconcilers, not billable.
+      for (const dayNumber of placeholderTransitDays) {
+        if (transitByDay.has(dayNumber)) continue;
+        transitByDay.set(dayNumber, {
+          totalCents: 0,
+          subItems: [{
+            id: `transit-placeholder-d${dayNumber}`,
+            name: 'Estimated walking / short transit — not bookable',
+            amountCents: 0,
+          }],
         });
       }
 
