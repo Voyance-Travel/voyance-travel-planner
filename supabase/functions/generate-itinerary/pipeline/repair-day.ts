@@ -1107,17 +1107,93 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         console.log(`[Repair §3b] Injected arrival flight on Day 1 (v2 land-start) at ${newFlightStart}-${newFlightEnd} (authoritative landing ${arrivalTime24})`);
       }
 
-      // ── Transfer: inject if missing (anchored adjacent to flight)
-      if (existingTransferIdx < 0) {
+      const newTransferStart = minutesToHHMM(transferStartMins);
+      const newTransferEnd = minutesToHHMM(transferEndMins);
+
+      if (existingTransferIdx >= 0) {
+        // ── RECONCILE: overwrite the existing card (incl. AI "Walk to <hotel>"
+        //    free-form connectors) to the authoritative airport-transfer shape.
+        const card: any = activities[existingTransferIdx];
+        const wasTitle = card.title;
+        const wasStart = card.startTime;
+        const wasEnd = card.endTime;
+        const wasDur = card.durationMinutes ?? card.duration_minutes ?? '?';
+        card.title = `Transfer to ${transferHotelName}`;
+        card.name = `Transfer to ${transferHotelName}`;
+        if (!card.description || /^\s*$/.test(String(card.description))) {
+          card.description = `Travel from ${arrivalAirportName} to ${transferHotelName}.`;
+        }
+        card.startTime = newTransferStart;
+        card.start_time = newTransferStart;
+        card.endTime = newTransferEnd;
+        card.end_time = newTransferEnd;
+        card.time = newTransferStart;
+        card.category = 'transport';
+        card.type = 'transport';
+        card.subcategory = 'airport_transfer';
+        card.location = card.location && typeof card.location === 'object'
+          ? { ...card.location, name: transferHotelName, address: card.location.address || hotelAddress || '' }
+          : { name: transferHotelName, address: hotelAddress || '' };
+        card.fromLocation = { name: arrivalAirportName, address: '' };
+        card.cost = card.cost ?? { amount: 0, currency: 'USD' };
+        card.bookingRequired = false;
+        card.isLocked = true;
+        card.locked = true;
+        card.lock_state = 'locked';
+        card.anchorSource = 'airport-transfer';
+        card.durationMinutes = transferMinutes;
+        card.duration_minutes = transferMinutes;
+        card.source = 'repair-airport-transfer-reconciled';
+        // Drop the AI's bogus transportation block (raw walk estimate) so
+        // downstream cascade clamp doesn't try to re-derive from it.
+        if (card.transportation && typeof card.transportation === 'object') {
+          card.transportation.method = 'taxi';
+          card.transportation.durationMinutes = transferMinutes;
+          if (typeof card.transportation.duration === 'string') {
+            card.transportation.duration = `${transferMinutes} min`;
+          }
+        }
+        // Move it to index 1 (immediately after the flight card at index 0).
+        if (existingTransferIdx !== 1) {
+          activities.splice(existingTransferIdx, 1);
+          activities.splice(1, 0, card);
+        }
+        if (card.id) lockedIds.add(card.id);
+        // Dedupe: drop any *other* transit-to-hotel card in the first 4 slots.
+        for (let j = activities.length - 1; j >= 0; j--) {
+          if (j === 1) continue;
+          const other = activities[j];
+          if (!other || other === card) continue;
+          if (j > 4) continue;
+          if (lockedIds.has(other.id) && other.anchorSource !== 'airport-transfer') continue;
+          if (isAirportTransferCard(other, j)) {
+            activities.splice(j, 1);
+            repairs.push({
+              code: FAILURE_CODES.MISSING_SLOT,
+              action: 'deduped_extra_airport_transfer',
+              before: `${other.title} @ ${other.startTime}-${other.endTime}`,
+            });
+          }
+        }
+        repairs.push({
+          code: FAILURE_CODES.MISSING_SLOT,
+          action: 'reconciled_airport_transfer',
+          before: `${wasTitle} @ ${wasStart}-${wasEnd} (${wasDur}min)`,
+          after: `Transfer to ${transferHotelName} @ ${newTransferStart}-${newTransferEnd} (${transferMinutes}min)`,
+        });
+        console.log(`[Repair §3b] Reconciled LLM airport→hotel transfer "${wasTitle}" (${wasStart}-${wasEnd}, ${wasDur}min) → "Transfer to ${transferHotelName}" (${newTransferStart}-${newTransferEnd}, ${transferMinutes}min)`);
+      } else {
+        // ── INJECT: no transfer card → build fresh (anchored adjacent to flight)
         const transferCard: any = {
           id: `day${dayNumber}-airport-transfer-${Date.now()}`,
           title: `Transfer to ${transferHotelName}`,
           name: `Transfer to ${transferHotelName}`,
           description: `Travel from ${arrivalAirportName} to ${transferHotelName}.`,
-          startTime: minutesToHHMM(transferStartMins),
-          endTime: minutesToHHMM(transferEndMins),
+          startTime: newTransferStart,
+          endTime: newTransferEnd,
           category: 'transport',
           type: 'transport',
+          subcategory: 'airport_transfer',
           location: { name: transferHotelName, address: hotelAddress || '' },
           fromLocation: { name: arrivalAirportName, address: '' },
           cost: { amount: 0, currency: 'USD' },
