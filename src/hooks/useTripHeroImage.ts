@@ -125,6 +125,41 @@ export function useTripHeroImage({
   const [apiFailed, setApiFailed] = useState(false);
   const [apiAttribution, setApiAttribution] = useState<UseTripHeroImageResult['attribution']>(undefined);
   const [isLoading, setIsLoading] = useState(false);
+  // Cross-city guard (closes "Madrid photo on Barcelona trip"). We resolve the
+  // photo-id → city hint asynchronously and treat the URL as broken if it
+  // points at a different city than the trip's destination.
+  const [seededCrossCity, setSeededCrossCity] = useState(false);
+  const [canonicalCrossCity, setCanonicalCrossCity] = useState(false);
+
+  useEffect(() => {
+    if (!seededHeroUrl || !destination) { setSeededCrossCity(false); return; }
+    let cancelled = false;
+    isCrossCityHero(seededHeroUrl, destination).then((bad) => {
+      if (cancelled) return;
+      if (bad) {
+        console.warn(
+          `[useTripHeroImage] cross-city seeded hero blocked dest="${destination}" url=${seededHeroUrl}`,
+        );
+        setSeededCrossCity(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [seededHeroUrl, destination]);
+
+  useEffect(() => {
+    if (!canonicalUrl || !destination) { setCanonicalCrossCity(false); return; }
+    let cancelled = false;
+    isCrossCityHero(canonicalUrl, destination).then((bad) => {
+      if (cancelled) return;
+      if (bad) {
+        console.warn(
+          `[useTripHeroImage] cross-city canonical hero blocked dest="${destination}" url=${canonicalUrl}`,
+        );
+        setCanonicalCrossCity(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [canonicalUrl, destination]);
 
   const curatedImages = getCuratedImages(destination);
   const hasCurated = hasCuratedImages(destination);
