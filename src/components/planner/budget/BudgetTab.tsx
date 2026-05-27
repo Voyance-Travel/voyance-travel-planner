@@ -411,12 +411,12 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   // both render `useDisplayedTripTotal(tripId).displayedTotalCents`, which is
   // `max(snapshotTotalCents, days + hotel + flight)` so the strip equation
   // balances even when the snapshot fetch transiently lags the chip sum.
-  // Reading raw `snapshot.tripTotalCents` here is what produced the recurring
+  // Reading raw `tripTotalCents` here is what produced the recurring
   // "Header $736 / Payments $728 / Budget $678" three-way drift.
   // See mem://constraints/finance/displayed-trip-total-single-source.
   const displayed = useDisplayedTripTotal(tripId);
   const tripTotalCents = displayed.loading
-    ? snapshot.tripTotalCents
+    ? tripTotalCents
     : displayed.displayedTotalCents;
   const budgetRemainingCents = (snapshot.budgetTotalCents || 0) - tripTotalCents;
   const toBePaidCents = Math.max(0, tripTotalCents - snapshot.paidCents);
@@ -553,7 +553,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           open={showSetupDialog}
           onOpenChange={setShowSetupDialog}
           memberNames={memberNames}
-          tripTotalCents={snapshot.tripTotalCents}
+          tripTotalCents={tripTotalCents}
           displayCurrency={displayCurrency}
           onSave={async (newSettings) => {
             await updateSettings(newSettings);
@@ -570,9 +570,9 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   // same aggregation, otherwise they drift between renders ($690 (38%) →
   // $1,125 (38%) → $1,125 (63%) bug).
   const budgetCents = settings?.budget_total_cents || 0;
-  const snapshotUsedPct = budgetCents > 0 ? (snapshot.tripTotalCents / budgetCents) * 100 : 0;
-  const snapshotOverageCents = Math.max(0, snapshot.tripTotalCents - budgetCents);
-  const snapshotRemainingCents = Math.max(0, budgetCents - snapshot.tripTotalCents);
+  const snapshotUsedPct = budgetCents > 0 ? (tripTotalCents / budgetCents) * 100 : 0;
+  const snapshotOverageCents = Math.max(0, tripTotalCents - budgetCents);
+  const snapshotRemainingCents = Math.max(0, budgetCents - tripTotalCents);
   const snapshotStatus: 'green' | 'yellow' | 'red' =
     snapshotUsedPct >= 100 ? 'red' : snapshotUsedPct >= 85 ? 'yellow' : 'green';
   const remainingPercent = Math.max(0, 100 - snapshotUsedPct);
@@ -584,7 +584,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     console.error('[budget] source mismatch — snapshot vs summary', {
       snapshotUsedPct,
       summaryUsedPercent: summary.usedPercent,
-      snapshotTotalCents: snapshot.tripTotalCents,
+      snapshotTotalCents: tripTotalCents,
       summaryTotalUsed: summary.totalCommittedCents + summary.plannedTotalCents,
     });
   }
@@ -692,14 +692,14 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       {/* Over-budget diagnostic banner — decomposes the overage and offers one-click fixes (hidden in manual mode) */}
       {!isManualMode && !isGenerating && (() => {
         const budgetCents = settings?.budget_total_cents || 0;
-        if (budgetCents <= 0 || !summary || snapshot.tripTotalCents <= budgetCents) return null;
+        if (budgetCents <= 0 || !summary || tripTotalCents <= budgetCents) return null;
 
         const includeHotel = settings?.budget_include_hotel ?? true;
         const includeFlight = settings?.budget_include_flight ?? false;
         const hotelCents = summary.committedHotelCents || 0;
         const flightCents = summary.committedFlightCents || 0;
         const fixedIncluded = (includeHotel ? hotelCents : 0) + (includeFlight ? flightCents : 0);
-        const discretionaryCents = Math.max(0, snapshot.tripTotalCents - fixedIncluded);
+        const discretionaryCents = Math.max(0, tripTotalCents - fixedIncluded);
 
         const fit = assessBudgetFit({
           hotelCents,
@@ -733,7 +733,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                     </>
                   ) : (
                     <>
-                      Your budget is {formatCurrency(budgetCents)} but the estimated cost for {travelers} traveler{travelers !== 1 ? 's' : ''} is {formatCurrency(snapshot.tripTotalCents)}.
+                      Your budget is {formatCurrency(budgetCents)} but the estimated cost for {travelers} traveler{travelers !== 1 ? 's' : ''} is {formatCurrency(tripTotalCents)}.
                       {fit.drivers[0] && (
                         <> Largest driver: <span className="font-medium text-foreground">{fit.drivers[0].kind === 'discretionary' ? 'food, activities & transit' : fit.drivers[0].kind} ({formatCurrency(fit.drivers[0].cents)})</span>.</>
                       )}
@@ -846,7 +846,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           <BudgetCoach
             tripId={tripId}
             budgetTargetCents={summary.budgetTotalCents}
-            currentTotalCents={snapshot.tripTotalCents}
+            currentTotalCents={tripTotalCents}
             currency={displayCurrency}
             destination={destination}
             itineraryDays={itineraryDays}
@@ -977,11 +977,11 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             <div className={cn("flex items-baseline gap-2 flex-wrap", isGenerating && "opacity-70 animate-pulse")}>
               <span className={cn(
                 "text-2xl font-bold",
-                !isGenerating && snapshot.tripTotalCents > (settings?.budget_total_cents || Infinity) ? "text-destructive" : "text-foreground"
+                !isGenerating && tripTotalCents > (settings?.budget_total_cents || Infinity) ? "text-destructive" : "text-foreground"
               )}>
-                {formatCurrency(snapshot.tripTotalCents)}
+                {formatCurrency(tripTotalCents)}
               </span>
-              {isGenerating && snapshot.tripTotalCents === 0 && (
+              {isGenerating && tripTotalCents === 0 && (
                 <span
                   className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
                   aria-live="polite"
@@ -1009,7 +1009,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
               )}
               {!isGenerating && (settings?.budget_total_cents || 0) > 0 && (
                 <span className="text-xs text-muted-foreground">
-                  ({Math.round((snapshot.tripTotalCents / (settings?.budget_total_cents || 1)) * 100)}%)
+                  ({Math.round((tripTotalCents / (settings?.budget_total_cents || 1)) * 100)}%)
                 </span>
               )}
             </div>
@@ -1019,19 +1019,19 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
               ) : (
                 <>
                   Estimated total for {travelers} traveler{travelers !== 1 ? 's' : ''}
-                  {travelers > 1 && snapshot.tripTotalCents > 0 && (
-                    <> · {formatCurrency(Math.floor(snapshot.tripTotalCents / travelers / 100) * 100)}/person</>
+                  {travelers > 1 && tripTotalCents > 0 && (
+                    <> · {formatCurrency(Math.floor(tripTotalCents / travelers / 100) * 100)}/person</>
                   )}
                 </>
               )}
             </p>
             <Progress
-              value={Math.min((settings?.budget_total_cents || 0) > 0 ? (snapshot.tripTotalCents / (settings!.budget_total_cents || 1)) * 100 : 0, 100)}
+              value={Math.min((settings?.budget_total_cents || 0) > 0 ? (tripTotalCents / (settings!.budget_total_cents || 1)) * 100 : 0, 100)}
               className={cn("h-2 mt-3", isGenerating && "opacity-50")}
             />
             {snapshot.paidCents > 0 && (
               <p className="text-xs text-muted-foreground mt-2">
-                Paid so far: {formatCurrency(snapshot.paidCents)} · To be paid: {formatCurrency(snapshot.toBePaidCents)}
+                Paid so far: {formatCurrency(snapshot.paidCents)} · To be paid: {formatCurrency(toBePaidCents)}
               </p>
             )}
           </CardContent>
@@ -1051,13 +1051,13 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             <div className={cn("flex items-baseline gap-2", isGenerating && "opacity-70 animate-pulse")}>
               <span className={cn(
                 "text-2xl font-bold",
-                isGenerating ? "text-muted-foreground" : (snapshot.budgetRemainingCents < 0 ? "text-destructive" : "text-emerald-600")
+                isGenerating ? "text-muted-foreground" : (budgetRemainingCents < 0 ? "text-destructive" : "text-emerald-600")
               )}>
-                {formatCurrency(snapshot.budgetRemainingCents)}
+                {formatCurrency(budgetRemainingCents)}
               </span>
               {(settings?.budget_total_cents || 0) > 0 && (
                 <span className="text-xs text-muted-foreground">
-                  ({Math.round(Math.max(0, 100 - (snapshot.tripTotalCents / (settings?.budget_total_cents || 1)) * 100))}%)
+                  ({Math.round(Math.max(0, 100 - (tripTotalCents / (settings?.budget_total_cents || 1)) * 100))}%)
                 </span>
               )}
             </div>
@@ -1065,7 +1065,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
               Budget minus trip expenses
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              ≈ {formatCurrency(Math.round(Math.max(0, snapshot.budgetRemainingCents) / Math.max(totalDays, 1)))}/day remaining
+              ≈ {formatCurrency(Math.round(Math.max(0, budgetRemainingCents) / Math.max(totalDays, 1)))}/day remaining
             </p>
           </CardContent>
         </Card>
@@ -1245,14 +1245,14 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             {/* Authoritative trip-total footer — explicit about scope so users
                 don't mistake it for a discretionary subtotal. Mirrors the
                 Trip Expenses headline above; both read the same
-                snapshot.tripTotalCents (resolveCanonicalCostRows already
+                tripTotalCents (resolveCanonicalCostRows already
                 folds in hotel/flight per the toggles below). */}
-            {snapshot.tripTotalCents > 0 && (() => {
+            {tripTotalCents > 0 && (() => {
               const includeHotel = settings?.budget_include_hotel ?? true;
               const includeFlight = settings?.budget_include_flight ?? false;
               const fixedRows = allocations.filter((a) => a.kind === 'fixed');
               const fixedCents = fixedRows.reduce((s, r) => s + (r.usedCents || 0), 0);
-              const discretionaryCents = Math.max(0, snapshot.tripTotalCents - fixedCents);
+              const discretionaryCents = Math.max(0, tripTotalCents - fixedCents);
 
               const includedParts: string[] = [];
               if (includeHotel) includedParts.push('Hotel');
@@ -1309,7 +1309,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-base font-bold tabular-nums">{formatCurrency(snapshot.tripTotalCents)}</div>
+                    <div className="text-base font-bold tabular-nums">{formatCurrency(tripTotalCents)}</div>
                     {breakdownParts.length >= 2 && (
                       <div className="text-[11px] text-muted-foreground mt-0.5">
                         {breakdownParts.join(' · ')}
@@ -1450,7 +1450,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         open={showSetupDialog}
         onOpenChange={setShowSetupDialog}
         memberNames={memberNames}
-        tripTotalCents={snapshot.tripTotalCents}
+        tripTotalCents={tripTotalCents}
         hotelCents={summary?.committedHotelCents || 0}
         totalNights={Math.max(0, totalDays - 1)}
         displayCurrency={displayCurrency}
