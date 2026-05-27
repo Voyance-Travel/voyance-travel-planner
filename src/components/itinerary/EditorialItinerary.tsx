@@ -4009,11 +4009,15 @@ export function EditorialItinerary({
     daysGroupUsd:  daysSubtotalCents / 100,
     hotelChipUsd:  financialSnapshot.effectiveHotelCents / 100,
     flightChipUsd: financialSnapshot.effectiveFlightCents / 100,
+    excludedHotelUsd:  financialSnapshot.excludedHotelCents / 100,
+    excludedFlightUsd: financialSnapshot.excludedFlightCents / 100,
     loading:       financialSnapshot.loading,
   }), [
     financialSnapshot.tripTotalCents,
     financialSnapshot.effectiveHotelCents,
     financialSnapshot.effectiveFlightCents,
+    financialSnapshot.excludedHotelCents,
+    financialSnapshot.excludedFlightCents,
     financialSnapshot.loading,
     daysSubtotalCents,
   ]);

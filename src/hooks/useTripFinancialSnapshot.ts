@@ -64,6 +64,11 @@ export interface FinancialSnapshot {
    *  Use these — not local computeHotelCostUsd / leg sums — when decomposing the trip total. */
   effectiveHotelCents: number;
   effectiveFlightCents: number;
+  /** Hotel/flight cents that are KNOWN but excluded from tripTotalCents because the budget toggle
+   *  is OFF. Header surfaces these as a muted "(excluded)" chip so users don't read the headline
+   *  as the full trip cost. Always 0 when the corresponding toggle is ON. */
+  excludedHotelCents: number;
+  excludedFlightCents: number;
   /** Per-bucket cents. Invariant: sum(buckets) === tripTotalCents. Read these
    *  in PaymentsTab bucket headers so they cannot drift from the headline. */
   buckets: BucketCents;
@@ -777,6 +782,14 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     const effectiveFlightCents = data.includeFlight
       ? Math.max(0, data.committedFlightCents + data.manualFlightDelta)
       : 0;
+    // Surface what the toggle is HIDING so the header can label the headline
+    // as "activities only" + show a muted "(excluded)" chip for the missing cost.
+    const excludedHotelCents = data.includeHotel
+      ? 0
+      : Math.max(0, data.committedHotelCents + data.manualHotelDelta);
+    const excludedFlightCents = data.includeFlight
+      ? 0
+      : Math.max(0, data.committedFlightCents + data.manualFlightDelta);
 
     return {
       tripTotalCents: data.tripTotalCents,
@@ -795,6 +808,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       manualFlightDelta: data.manualFlightDelta,
       effectiveHotelCents,
       effectiveFlightCents,
+      excludedHotelCents,
+      excludedFlightCents,
       buckets: data.buckets,
       bucketsSumCents:
         data.buckets.essentials + data.buckets.food + data.buckets.activities +
