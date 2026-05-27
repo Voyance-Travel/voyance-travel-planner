@@ -3677,6 +3677,78 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // ── RECOMPUTE COMPLETENESS AFTER INJECTION ────────────────────────
+  // Injection above can rescue a shell trip by adding 1–5 user-selected
+  // anchors. Recompute meaningful-activity coverage and the `isComplete`
+  // flag so the trip can flip from `partial` → `ready` once it carries
+  // real activities. Also computes `mustDosStillMissing`, which feeds the
+  // hard persist gate below.
+  let mustDosStillMissing: string[] = [];
+  if (dayNumber >= totalDays && Array.isArray(partialItinerary?.days)) {
+    try {
+      const NON_MEANINGFUL_CATS_RECOMP = new Set([
+        'hotel', 'accommodation', 'lodging', 'stay', 'flight', 'flights',
+        'check-in', 'check-out', 'checkin', 'checkout', 'bag-drop',
+        'departure', 'arrival',
+      ]);
+      const NON_MEANINGFUL_TITLE_RE_RECOMP = /\b(check\s*-?\s*in|check\s*-?\s*out|bag\s*-?\s*drop|return\s+to\s+(?:your\s+)?hotel|hotel\s+checkout|hotel\s+check-?in|airport\s+transfer|departure)\b/i;
+      let recomputedCount = 0;
+      for (const d of partialItinerary.days) {
+        for (const a of (d?.activities || [])) {
+          const cat = `${(a?.category || '')} ${(a?.type || '')}`.toLowerCase();
+          const title = String(a?.title || a?.name || '').trim();
+          if ([...NON_MEANINGFUL_CATS_RECOMP].some(c => cat.includes(c))) continue;
+          if (NON_MEANINGFUL_TITLE_RE_RECOMP.test(title)) continue;
+          recomputedCount++;
+        }
+      }
+      const allDaysHaveActivitiesPost = partialItinerary.days.every(
+        (d: any) => Array.isArray(d.activities) && d.activities.length > 0,
+      );
+      const hasEnoughMeaningfulPost = recomputedCount >= meaningfulThreshold;
+      const isCompletePost =
+        dayCountMatches &&
+        allDaysHaveActivitiesPost &&
+        effectiveNoFailedDays &&
+        hasEnoughMeaningfulPost;
+      if (recomputedCount !== meaningfulActivityCount || isCompletePost !== isComplete) {
+        console.log(
+          `[generate-trip-day] post-injection recompute: meaningful ${meaningfulActivityCount}→${recomputedCount}, isComplete ${isComplete}→${isCompletePost}`,
+        );
+      }
+      meaningfulActivityCount = recomputedCount;
+      hasEnoughMeaningful = hasEnoughMeaningfulPost;
+      isComplete = isCompletePost;
+    } catch (recompErr) {
+      console.warn('[generate-trip-day] post-injection recompute failed (non-blocking):', recompErr);
+    }
+
+    // ── HARD PERSIST GATE: SELECTED PLACES CANNOT SILENTLY MISS ──
+    // Re-assert coverage against the in-memory days (DB-sourced re-check
+    // happens later). If the user picked attractions and we still can't
+    // cover any of them after injection, refuse `ready` — better a `partial`
+    // user can recover from than a polished shell trip that ignored their
+    // selections.
+    try {
+      const { extractMustDoVenues: _extract } = await import('../_shared/extract-must-dos.ts');
+      const { assertMustDoCoverage: _assert } = await import('../_shared/assert-must-do-coverage.ts');
+      const mustDosForGate = _extract(meta);
+      if (mustDosForGate.length > 0) {
+        const cov = _assert(partialItinerary.days, mustDosForGate);
+        mustDosStillMissing = cov.missing;
+        if (cov.missing.length === mustDosForGate.length && isComplete) {
+          // 100% miss on selected places — never call this `ready`.
+          console.warn(
+            `[MUST_DO_HARD_GATE] trip=${tripId} ALL ${cov.missing.length} selected places uncovered after injection — forcing finalStatus=partial`,
+          );
+          isComplete = false;
+        }
+      }
+    } catch (gateErr) {
+      console.warn('[generate-trip-day] hard persist gate failed (non-blocking):', gateErr);
+    }
+  }
+
   if (dayNumber >= totalDays) {
     // All days complete — but only mark ready if all days have real activities
     const finalStatus = isComplete ? 'ready' : 'partial';
