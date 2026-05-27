@@ -1,132 +1,49 @@
 ## Diagnosis
 
-The Barcelona trip proves this is not just a prompt issue:
+The Barcelona failure is not just “the model ignored must-dos.” The engine let a paid generation continue even though the trip had effectively no sightseeing capacity: Day 1 arrival/check-in consumed the evening, Day 2 was early checkout/airport transfer, and all five selected places had no viable window. The current safety nets mostly run after generation, so they can mark the trip partial or try injection, but they do not prevent a logistics-only shell from being produced or clearly explain that the selected plan is infeasible.
 
-- `trips.metadata.mustDoActivities` contains the 5 user choices: Park Güell, Barri Gòtic, La Rambla, Mercat de la Boqueria, Sagrada Família.
-- `trip_day_intents` is empty for the trip.
-- `metadata.intent_seed_audit` says `generated: 5, written: 0`, matching the old failed PostgREST upsert path.
-- The persisted itinerary contains only logistics: arrival flight, hotel check-in, return-to-hotel, checkout, airport transfer.
-- `metadata.must_do_coverage` correctly says all 5 must-dos are missing.
-- The match verdict incorrectly says `mustDos: 0/0` because its snapshot did not include metadata must-dos.
-
-The deeper architecture failure is circular:
-
-```text
-must-dos missing
-  → itinerary has too few meaningful activities
-  → isComplete = false
-  → deterministic must-do injection is skipped because it only runs when isComplete
-  → shell itinerary persists as partial/ready-ish logistics output
-  → user sees an empty paid trip
-```
-
-So even after fixing intent seeding, the final safety net still cannot rescue the exact failure mode it was built for.
+The hotel total issue is separate but similar in UX impact: the math now tracks excluded hotel/flight amounts, but the header and Payments list still do not make “excluded from Trip Total” obvious.
 
 ## Plan
 
-### 1. Make intent seeding reliable and diagnosable
+### 1. Make selected places authoritative everywhere
+- Create one shared “selected places” resolver used by prompt generation, deterministic injection, coverage checks, persist validation, and health metadata.
+- Merge both sources every time:
+  - `trip_day_intents` rows with `priority='must'`
+  - legacy trip metadata like `mustDoActivities`, `perDayActivities`, and `userAnchors`
+- Treat explicit selected landmarks/venues as required, not soft suggestions.
+- Fix the accented-name classifier so places like `Park Güell`, `Barri Gòtic`, and `Sagrada Família` are not downgraded because of Unicode characters.
 
-Update `supabase/functions/_shared/day-intents-store.ts` so seeding reports rows that are usable, not just newly inserted rows.
+### 2. Add a pre-generation feasibility gate
+- Before the itinerary chain starts generating paid content, compute actual sightseeing windows from arrival/departure logistics.
+- If required places exist but the trip has zero viable sightseeing capacity, stop generation with an actionable state instead of producing a shell itinerary.
+- Persist metadata explaining the reason, for example:
+  - `NO_SIGHTSEEING_CAPACITY`
+  - selected places that could not fit
+  - arrival/departure windows that blocked scheduling
+- Do not mark the trip `ready`, do not freeze it, and trigger the existing credit-safety/refund path if a charge already happened.
 
-- Keep the fetch-then-insert implementation.
-- Return an audit shape that distinguishes:
-  - generated intents
-  - inserted intents
-  - already-existing matching intents
-  - active/fulfilled rows available after seeding
-- Change the blocking path so it fails only when preference metadata exists and there are still zero usable intent rows after seeding.
-- Keep expression-index-safe JS dedupe; never reintroduce `.upsert(... onConflict ...)`.
+### 3. Upgrade must-do coverage from “best effort” to a hard contract
+- Move coverage validation into the final persist gate so a trip cannot become `ready` when any required selected place is missing.
+- Stamp `must_do_coverage` even when the trip is `partial`, not only when it reaches `ready`, so we have forensic evidence on failures.
+- Replace the current “only block ready if 100% of selected places are missing” logic with:
+  - any missing required selected place blocks `ready`
+  - soft wishes may warn without blocking
+- Keep deterministic injection, but make it a recovery mechanism after feasibility passes, not the only protection.
 
-### 2. Promote metadata must-dos to first-class generation inputs
+### 4. Surface the failure clearly in the itinerary UI
+- When a trip is partial because selected places could not fit, show a direct banner instead of making the itinerary look complete.
+- Suggested copy: “Your travel times leave no sightseeing window for the places you selected.”
+- Include the missing selected places and a clear next step: adjust travel times/dates or regenerate after changes.
 
-In the generation path, treat `metadata.mustDoActivities` as authoritative even when `trip_day_intents` is empty or stale.
+### 5. Complete the Trip Total clarity fix
+- In the itinerary header, change the label when logistics are excluded, e.g. `Trip Total · activities only`.
+- In the equation row, render muted excluded chips like `Hotel $250 excluded` / `Flights $X excluded` so the user can see why the headline total is lower.
+- In Payments, add an `Excluded from total` badge to hotel/flight rows when their budget toggles are off.
+- Add tests for the excluded hotel case so the header cannot regress to showing `$23` with no explanation.
 
-- Ensure `compile-prompt.ts` continues merging both structured rows and legacy metadata.
-- Add stronger trace fields showing:
-  - `metadataMustDosCount`
-  - `structuredIntentCount`
-  - `promptForDayCount`
-  - source counts from the preference spine
-- Make the match verdict / generation trace read from the same merged preference spine, so it can never report `mustDos: 0/0` when metadata has must-dos.
-
-### 3. Move must-do injection before the completeness gate
-
-Update `supabase/functions/generate-itinerary/action-generate-trip-day.ts` so deterministic must-do injection runs at terminal chain finalization even when the itinerary is currently incomplete.
-
-Current bad condition:
-
-```ts
-if (dayNumber >= totalDays && isComplete && Array.isArray(partialItinerary?.days))
-```
-
-Replace with a terminal-chain condition:
-
-```ts
-if (dayNumber >= totalDays && Array.isArray(partialItinerary?.days))
-```
-
-Then recompute after injection:
-
-- meaningful activity count
-- all-days-have-activities
-- `isComplete`
-- final status
-- persist validation
-- must-do coverage
-
-This removes the circular dependency where must-do injection is blocked because must-do injection has not happened yet.
-
-### 4. Add a hard “selected places cannot silently miss” persist gate
-
-If metadata contains selected places and final coverage still has missing entries:
-
-- Do not mark the trip `ready`.
-- Persist `generation_health.persistGateCodes` with `MUST_DO_UNCOVERED` and/or `MUST_DO_INJECTION_FAILED`.
-- Keep the itinerary visible as partial if needed, but surface a clear recoverable failure state instead of a polished shell trip.
-
-This means a user never gets a paid “complete” trip that ignores their selected places.
-
-### 5. Add a Barcelona regression test fixture
-
-Add tests around the exact case:
-
-- 2-day Barcelona trip.
-- Day 1 late check-in around 10:25 PM.
-- Day 2 departure logistics.
-- Metadata must-dos: Park Güell, Barri Gòtic, La Rambla, Mercat de la Boqueria, Sagrada Família.
-
-Assertions:
-
-- Seeding produces or finds 5 usable intents.
-- Must-do coverage starts missing all 5.
-- Terminal injection runs despite pre-injection `isComplete === false`.
-- Final status is not `ready` unless coverage is satisfied.
-- Generation trace/match verdict does not claim `0/0 must-dos`.
-
-### 6. Repair the existing affected trip data
-
-After code changes, run a one-time data repair for the affected trip(s):
-
-- Re-seed `trip_day_intents` from metadata using the fixed seeder.
-- Clear stale `fully_persisted` / frozen metadata only if needed for regeneration recovery.
-- Trigger or enable a clean regeneration path that can rebuild the trip with selected places included.
-
-### 7. Finish the excluded-hotel header clarity fix
-
-Complete the partially implemented frontend presentation fix:
-
-- In `EditorialItinerary.tsx`, change the header label to `Trip Total · activities only` when hotel/flight costs are known but excluded by budget toggles.
-- Add a tooltip explaining that hotel/flight are tracked but excluded from this total.
-- Add muted equation-row chips like `Hotel $250 excluded` / `Flights $X excluded` without changing the underlying budget math.
-- Add tests in `headerStripValues.test.ts` for excluded hotel, excluded flight, and both excluded.
-
-## Validation
-
-Run focused checks only:
-
-- Edge-function tests for intent seeding, must-do scheduling/injection, and Barcelona fixture.
-- Frontend unit tests for `computeHeaderStripValues`.
-- Database read-back on the affected trip confirming:
-  - `trip_day_intents` has the expected 5 rows after repair.
-  - `must_do_coverage` no longer silently says missing while status is ready.
-  - header values expose excluded hotel cost clearly.
+### 6. Regression tests that lock the real bug class
+- Barcelona infeasible fixture: late arrival + early departure + five selected places must return actionable partial/infeasible state, never `ready`, never frozen, and must stamp missing coverage.
+- Barcelona feasible fixture: with one real sightseeing day, the selected places are scheduled or deterministically injected, and coverage passes.
+- Unicode intent test: `Park Güell`, `Barri Gòtic`, `Sagrada Família` become required selected-place intents.
+- Header/Payments tests: excluded hotel is visibly labeled in both surfaces.

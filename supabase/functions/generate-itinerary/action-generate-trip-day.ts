@@ -3686,6 +3686,7 @@ async function _handleGenerateTripDayInner(
   // real activities. Also computes `mustDosStillMissing`, which feeds the
   // hard persist gate below.
   let mustDosStillMissing: string[] = [];
+  let mustDosTotalForStamp = 0;
   if (dayNumber >= totalDays && Array.isArray(partialItinerary?.days)) {
     try {
       const NON_MEANINGFUL_CATS_RECOMP = new Set([
@@ -3735,13 +3736,16 @@ async function _handleGenerateTripDayInner(
       const { extractMustDoVenues: _extract } = await import('../_shared/extract-must-dos.ts');
       const { assertMustDoCoverage: _assert } = await import('../_shared/assert-must-do-coverage.ts');
       const mustDosForGate = _extract(meta);
+      mustDosTotalForStamp = mustDosForGate.length;
       if (mustDosForGate.length > 0) {
         const cov = _assert(partialItinerary.days, mustDosForGate);
         mustDosStillMissing = cov.missing;
-        if (cov.missing.length === mustDosForGate.length && isComplete) {
-          // 100% miss on selected places — never call this `ready`.
+        if (cov.missing.length > 0 && isComplete) {
+          // ANY missing user-selected place blocks `ready`. Better a `partial`
+          // the user can recover from than a polished shell trip that ignored
+          // their selections. See plan §3 (hard contract upgrade).
           console.warn(
-            `[MUST_DO_HARD_GATE] trip=${tripId} ALL ${cov.missing.length} selected places uncovered after injection — forcing finalStatus=partial`,
+            `[MUST_DO_HARD_GATE] trip=${tripId} ${cov.missing.length}/${mustDosForGate.length} selected places uncovered after injection — forcing finalStatus=partial`,
           );
           isComplete = false;
         }
@@ -3839,6 +3843,18 @@ async function _handleGenerateTripDayInner(
             : {}),
           // Mark in-flight enrichment so UI shows Reconciling and arms beforeunload.
           ...(finalStatus === 'ready' ? { fully_persisted: false } : {}),
+          // Stamp must_do_coverage on partial trips too so the UI banner can
+          // surface "X selected places couldn't fit" without waiting for the
+          // ready-only Phase 6 stamp that never runs on partial. See plan §3.
+          ...(mustDosTotalForStamp > 0 && mustDosStillMissing.length > 0 ? {
+            must_do_coverage: {
+              missing: mustDosStillMissing,
+              total: mustDosTotalForStamp,
+              scheduled: Math.max(0, mustDosTotalForStamp - mustDosStillMissing.length),
+              at: new Date().toISOString(),
+              reason: 'partial_chain_finalized',
+            },
+          } : {}),
         },
       },
     });
