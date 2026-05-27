@@ -274,15 +274,29 @@ export async function writeActivityCostsFromItinerary(
       // carries a number, store it; otherwise leave as $0 so logistics-sync
       // can fill in later.
       if (PRESERVE_CATEGORY_SET.has(mappedCategory)) {
+        // Placeholder departure/return flight stubs ("Departure Flight",
+        // "Return Flight") render as Free in the itinerary and have no
+        // user/booked basis — they must NOT carry a hard cost in
+        // activity_costs, otherwise they leak into buckets.activities (or
+        // buckets.flight when day > 0) and Payments shows a phantom $50
+        // bookable line item. Mirrors the FE PLACEHOLDER_FLIGHT_TITLE_RE in
+        // src/hooks/usePayableItems.ts. The canonical day-0 flight chip
+        // remains the only priced flight row. See plan §2.
+        const isPlaceholderFlight =
+          mappedCategory === 'flight' &&
+          /^\s*(departure|return|outbound|inbound)\s+flight\b/i.test(titleStr) &&
+          (!jsonPrice || !USER_AUTHORED_BASES.has(jsonPrice.source));
         costRows.push({
           trip_id: tripId,
           activity_id: act.id,
           day_number: day.dayNumber || 1,
-          cost_per_person_usd: Math.min(jsonPrice?.amount ?? 0, 5000),
+          cost_per_person_usd: isPlaceholderFlight ? 0 : Math.min(jsonPrice?.amount ?? 0, 5000),
           num_travelers: context.travelers || 1,
           category: mappedCategory,
-          source: jsonPrice ? jsonPrice.source : 'logistics-placeholder',
-          confidence: jsonPrice ? 'high' : 'low',
+          source: isPlaceholderFlight
+            ? 'placeholder_departure_flight'
+            : (jsonPrice ? jsonPrice.source : 'logistics-placeholder'),
+          confidence: isPlaceholderFlight ? 'high' : (jsonPrice ? 'high' : 'low'),
         });
         continue;
       }
