@@ -169,9 +169,8 @@ export function useTripHeroImage({
 
   // Fetch canonical destination hero image (shared across all views)
   useEffect(() => {
-    const shouldFetch =
-      (!seededHeroUrl || seededFailed) &&
-      !canonicalFetched;
+    const seededDone = !seededHeroUrl || seededFailed || seededCrossCity;
+    const shouldFetch = seededDone && !canonicalFetched;
 
     if (!shouldFetch || !destination) return;
 
@@ -188,7 +187,7 @@ export function useTripHeroImage({
       });
 
     return () => { cancelled = true; };
-  }, [destination, seededHeroUrl, seededFailed, canonicalFetched]);
+  }, [destination, seededHeroUrl, seededFailed, seededCrossCity, canonicalFetched]);
 
   // Fetch DB curated image when canonical+curated+storage are exhausted
   useEffect(() => {
