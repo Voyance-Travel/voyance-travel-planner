@@ -415,11 +415,18 @@ export async function cascadeAllTransport(
   // ── Single-city: outbound + return ──
   if (!tripCities?.length && flightSelection) {
     const legs = flightSelection.legs || [];
-    
-    // Find the destination arrival leg (user-marked or heuristic)
+
+    // Pick destination-arrival leg using the SAME heuristic the rest of the
+    // app uses (user flag → leg[0] for 2-leg → legs[N-2] for 3+). Falling
+    // back to `legs[0]` for 3+ legs picked the connection from home → hub
+    // and scheduled Day-1 against the hub-arrival time instead of the
+    // destination-arrival time.
     const markedArrival = legs.find((l: any) => l.isDestinationArrival);
-    const outbound = markedArrival || legs[0] || flightSelection.departure;
-    
+    const outbound =
+      markedArrival
+      || (legs.length >= 3 ? legs[legs.length - 2] : legs[0])
+      || flightSelection.departure;
+
     // Find the destination departure leg (user-marked or last leg)
     const markedDeparture = legs.find((l: any) => l.isDestinationDeparture);
     const returnLeg = markedDeparture || (legs.length >= 2 ? legs[legs.length - 1] : flightSelection.return);
@@ -469,7 +476,9 @@ export async function cascadeAllTransport(
     const firstCity = tripCities[0];
     const firstCityLegs = flightSelection?.legs || [];
     const markedArrival = firstCityLegs.find((l: any) => l.isDestinationArrival);
-    const inboundLeg = markedArrival || firstCityLegs[0] || flightSelection?.departure;
+    const inboundLeg = markedArrival
+      || (firstCityLegs.length >= 3 ? firstCityLegs[firstCityLegs.length - 2] : firstCityLegs[0])
+      || flightSelection?.departure;
     const inboundArrivalTime = inboundLeg?.arrival?.time || firstCity?.transport_details?.arrivalTime;
     const inboundType = inboundLeg?.arrival?.time ? 'flight' : (firstCity?.transport_type || 'flight');
 
