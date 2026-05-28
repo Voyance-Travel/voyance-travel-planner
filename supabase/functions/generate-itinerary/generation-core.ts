@@ -3228,21 +3228,30 @@ export async function finalSaveItinerary(
       try {
         const { data: latestRow } = await supabase
           .from('trips')
-          .select('metadata')
+          .select('metadata, itinerary_status')
           .eq('id', tripId)
           .single();
         const latestMeta = (latestRow?.metadata as Record<string, any>) || {};
-        const finalMeta = {
-          ...latestMeta,
-          itinerary_frozen_at: latestMeta.itinerary_frozen_at || new Date().toISOString(),
-          fully_persisted: true,
-          fully_persisted_at: new Date().toISOString(),
-        };
-        await supabase
-          .from('trips')
-          .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
-          .eq('id', tripId);
-        console.log(`[Stage 6] Phase 6 freeze + fully_persisted stamped for trip ${tripId}`);
+        const latestStatus = (latestRow as any)?.itinerary_status;
+        // Commit-gate may have demoted us to 'partial' — never stamp
+        // fully_persisted/frozen on a non-ready trip.
+        if (latestStatus !== 'ready' && latestStatus !== 'generated') {
+          console.log(
+            `[Stage 6] Phase 6 SKIPPED — status=${latestStatus} (commit gate demoted)`,
+          );
+        } else {
+          const finalMeta = {
+            ...latestMeta,
+            itinerary_frozen_at: latestMeta.itinerary_frozen_at || new Date().toISOString(),
+            fully_persisted: true,
+            fully_persisted_at: new Date().toISOString(),
+          };
+          await supabase
+            .from('trips')
+            .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
+            .eq('id', tripId);
+          console.log(`[Stage 6] Phase 6 freeze + fully_persisted stamped for trip ${tripId}`);
+        }
       } catch (freezeErr) {
         console.warn('[Stage 6] Phase 6 freeze stamp failed (non-blocking):', freezeErr);
       }
