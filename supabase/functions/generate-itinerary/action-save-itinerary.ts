@@ -676,10 +676,28 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       (day as any).metadata.quality = (day as any).metadata.quality || {};
       (day as any).metadata.quality.dayMode = policy.dayMode;
 
+      // Same-day "tomorrow" copy fix — last day with a known dep time means
+      // the flight is THIS calendar day. Catches legacy trips + manual edits
+      // that bypassed gen-time scrub. See mem://constraints/itinerary/same-day-tomorrow-scrub.
+      if (isLastDay && savedDepartureTime24) {
+        const { scrubSameDayTomorrowOnAct, isDepartureLogisticsCard } =
+          await import('../_shared/prompt-leak-scrub.ts');
+        let scrubCount = 0;
+        for (const act of day.activities) {
+          if (!isDepartureLogisticsCard(act)) continue;
+          const res = scrubSameDayTomorrowOnAct(act);
+          if (res.changed) scrubCount++;
+        }
+        if (scrubCount > 0) {
+          console.log(`[SAME_DAY_TOMORROW_SCRUB] day=${dayNumber} cards=${scrubCount} (save-time)`);
+        }
+      }
+
       if (policy.requiredMeals.length === 0) {
         _harvestSave(day.activities);
         continue;
       }
+
 
       const detected = detectMealSlots(day.activities);
       const missing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));

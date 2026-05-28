@@ -161,6 +161,77 @@ export function scrubTitleLeaks(act: any): BodyLeakScrubResult {
   return { changed: fields.length > 0, fields };
 }
 
+// ─── Same-day "tomorrow" scrub (departure-day flight copy) ──────────────────
+//
+// The model frequently writes "prepare for the 08:00 flight tomorrow" or
+// "tomorrow morning's flight" on a checkout/airport-transfer card whose
+// flight is actually later the SAME calendar day. Rewriting unconditionally
+// is wrong (multi-day trips legitimately reference tomorrow), so the helper
+// is only invoked at sites that can prove same-day — departure-day logistics
+// cards in the generator + save-time net.
+//
+// See: COPY ERROR 4A ("prepare for the 08:00 flight tomorrow" on same-day flight).
+// Plan: .lovable/plan.md (Same-Day "Tomorrow" Copy Fix)
+const SAME_DAY_TOMORROW_PATTERNS: Array<[RegExp, string]> = [
+  // "the 08:00 flight tomorrow morning" / "your flight tomorrow"
+  [/\b(flight|departure|transfer|checkout|check[-\s]?out)\s+tomorrow\s+morning\b/gi, '$1 this morning'],
+  [/\b(flight|departure|transfer|checkout|check[-\s]?out)\s+tomorrow\s+(?:afternoon|evening)\b/gi, '$1 later today'],
+  [/\b(flight|departure|transfer|checkout|check[-\s]?out)\s+tomorrow\b/gi, '$1 later today'],
+  // Possessive forms ("tomorrow morning's 08:00 flight")
+  [/\btomorrow\s+morning'?s\b/gi, "this morning's"],
+  [/\btomorrow\s+afternoon'?s\b/gi, "this afternoon's"],
+  [/\btomorrow\s+evening'?s\b/gi, "this evening's"],
+  [/\btomorrow\s+night'?s\b/gi, "tonight's"],
+  [/\btomorrow'?s\b/gi, "today's"],
+  // Trailing "… tomorrow." / "… tomorrow,"
+  [/\btomorrow(?=[\s.,;!?]|$)/gi, 'later today'],
+];
+
+export function scrubSameDayTomorrow(text: string): string {
+  if (typeof text !== 'string' || !text) return text;
+  let next = text;
+  for (const [re, rep] of SAME_DAY_TOMORROW_PATTERNS) {
+    const pat = new RegExp(re.source, re.flags); // fresh — avoid stateful lastIndex
+    next = next.replace(pat, rep);
+  }
+  return next.replace(/\s{2,}/g, ' ').replace(/\s+([.,;!?])/g, '$1').trim();
+}
+
+const SAME_DAY_BODY_FIELDS = [
+  'description', 'tips', 'tip', 'insiderTip', 'insider_tip',
+  'notes', 'note', 'details', 'longDescription', 'long_description',
+] as const;
+
+/**
+ * Apply scrubSameDayTomorrow to every body field on the activity in place.
+ * Caller is responsible for ensuring same-day context.
+ */
+export function scrubSameDayTomorrowOnAct(act: any): BodyLeakScrubResult {
+  if (!act || typeof act !== 'object') return { changed: false, fields: [] };
+  const fields: string[] = [];
+  for (const k of SAME_DAY_BODY_FIELDS) {
+    const v = act[k];
+    if (typeof v !== 'string' || !v) continue;
+    if (!/\btomorrow\b/i.test(v)) continue;
+    const next = scrubSameDayTomorrow(v);
+    if (next !== v) {
+      act[k] = next;
+      fields.push(k);
+    }
+  }
+  return { changed: fields.length > 0, fields };
+}
+
+/** Cards eligible for the same-day rewrite — checkout, airport transfer, flight prep. */
+const DEPARTURE_LOGISTICS_TITLE_RE =
+  /\b(check[-\s]?out|checkout|airport|transfer|departure|flight|terminal|baggage)\b/i;
+
+export function isDepartureLogisticsCard(act: any): boolean {
+  if (!act || typeof act !== 'object') return false;
+  const title = String(act.title || act.name || '');
+  return DEPARTURE_LOGISTICS_TITLE_RE.test(title);
+}
+
 // ─── Sentence integrity (fragment guard) ────────────────────────────────────
 //
 // Catches AI-generated sentence fragments that survived the label scrubs:

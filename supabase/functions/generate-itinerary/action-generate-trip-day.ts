@@ -1529,6 +1529,25 @@ async function _handleGenerateTripDayInner(
       }
     }
 
+    // Same-day "tomorrow" copy fix — last day with a known flight time means
+    // the flight is THIS calendar day. Rewrite "the 08:00 flight tomorrow" →
+    // "the 08:00 flight later today" on checkout / airport-transfer / flight
+    // cards. See mem://constraints/itinerary/same-day-tomorrow-scrub.
+    if (_isLastDay && (depTime24 || savedDepTime24Hoisted)) {
+      const { scrubSameDayTomorrowOnAct, isDepartureLogisticsCard } =
+        await import('../_shared/prompt-leak-scrub.ts');
+      let scrubCount = 0;
+      for (const act of (dayResult!.activities || [])) {
+        if (!isDepartureLogisticsCard(act)) continue;
+        const res = scrubSameDayTomorrowOnAct(act);
+        if (res.changed) scrubCount++;
+      }
+      if (scrubCount > 0) {
+        console.log(`[SAME_DAY_TOMORROW_SCRUB] day=${dayNumber} cards=${scrubCount} (gen-time)`);
+      }
+    }
+
+
     // Generic title validator: clean placeholder business names
     const INDEFINITE_ARTICLE_START = /^(a|an)\s+[a-z]/i;
     const VAGUE_TITLE_KEYWORDS = /\b(or high.end|or similar|boutique wellness|local spa|nearby caf[eé])\b/i;
