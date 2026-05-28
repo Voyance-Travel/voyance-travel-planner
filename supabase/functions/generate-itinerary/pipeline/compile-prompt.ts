@@ -77,6 +77,7 @@ import {
   extractNotesAnchors,
   type ResolvedMustDoEntry,
 } from '../../_shared/resolve-user-intent-venues.ts';
+import { getDestinationSkipList, renderSkipListPromptBlock } from '../../_shared/destination-skip-list.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
