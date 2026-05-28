@@ -7136,14 +7136,9 @@ export function EditorialItinerary({
                  enabled: !!tripId,
                  staleTime: 30_000,
                });
-               return (
-                 <>
-                   <IntegrityContractBanner contract={integrityContract as any} />
-                   <OmittedMustDosBanner
-                     items={((integrityContract as any)?.__placeholder ? null : null) ?? null}
-                   />
-                 </>
-               );
+                return (
+                  <IntegrityContractBanner contract={integrityContract as any} />
+                );
              })()}
 
              {/* Phase 3 — Omitted must-dos surfaced by the Trip Planner LLM */}
