@@ -100,6 +100,12 @@ export interface ValidateDayInput {
 
   /** Budget tier — drives tier-aware walk thresholds (luxury/luminary/splurge/premium → 20m/1000m, else 30m/1500m). */
   budgetTier?: string;
+
+  /** Destination skip list — Voyance Intelligence "skip these" entries.
+   *  Any activity matching one of these is dropped as a critical violation
+   *  (validation-gate handler in pipeline/validation-gate.ts). Empty / undefined
+   *  list silently skips the check. */
+  destinationSkipList?: import('../../_shared/destination-skip-list.ts').SkipListEntry[];
 }
 
 // =============================================================================
