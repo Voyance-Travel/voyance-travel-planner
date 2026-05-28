@@ -1657,6 +1657,7 @@ async function _handleGenerateTripDayInner(
         isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
         previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
         budgetTier: budgetTier || (tripMeta?.budget_tier as string | undefined) || undefined,
+        destinationSkipList: _destinationSkipList,
       });
 
       const isLastDayInCity = cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false;
@@ -1759,6 +1760,7 @@ async function _handleGenerateTripDayInner(
           isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
           previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
           budgetTier: budgetTier || (tripMeta?.budget_tier as string | undefined) || undefined,
+          destinationSkipList: _destinationSkipList,
         });
         const gate = applyValidationGate(
           postRepairDayMinimal as any,
