@@ -36,7 +36,8 @@ export type ExecutionerCode =
   | 'MIDNIGHT_SPILLOVER_ALLOWED'
   | 'MIDNIGHT_SPILLOVER_DROPPED'
   | 'BUFFER_CASCADE_REPAIRED'
-  | 'GEO_OUTLIER';
+  | 'GEO_OUTLIER'
+  | 'GAP_REFILLED';
 
 export interface ExecutionerIssue {
   code: ExecutionerCode;
@@ -56,6 +57,7 @@ export interface ExecutionerCounters {
   geoOutliersFlagged: number;
   geoOutliersDropped: number;
   droppedActivities: number;
+  gapsRefilled: number;
   issues: ExecutionerIssue[];
 }
 
@@ -74,6 +76,12 @@ export interface ExecutionerContext {
   budgetTier?: string | null;
   /** When true the geo coherence pass only flags, never drops. */
   geoFlagOnly?: boolean;
+  /**
+   * Hard override: when true, geo coherence WILL drop outliers regardless of
+   * geoFlagOnly. Wired from env `EXECUTIONER_GEO_DROP_ENABLED=true` once
+   * telemetry shows <2% false-positive rate.
+   */
+  geoDropEnabled?: boolean;
 }
 
 export interface ExecutionerResult {
