@@ -1648,7 +1648,25 @@ Generate activities for this day following ALL constraints above.`;
             act.description = `Time at ${hotelName} to rest and refresh.`;
           }
         }
+
+        // Same-day "tomorrow" copy fix on departure-day logistics cards.
+        // See mem://constraints/itinerary/same-day-tomorrow-scrub.
+        const depTime24 = context.flightData?.departureTime24;
+        if (isLastDay && depTime24) {
+          const { scrubSameDayTomorrowOnAct, isDepartureLogisticsCard } =
+            await import('../_shared/prompt-leak-scrub.ts');
+          let scrubCount = 0;
+          for (const act of generatedDay.activities) {
+            if (!isDepartureLogisticsCard(act)) continue;
+            const res = scrubSameDayTomorrowOnAct(act);
+            if (res.changed) scrubCount++;
+          }
+          if (scrubCount > 0) {
+            console.log(`[SAME_DAY_TOMORROW_SCRUB] day=${dayNumber} cards=${scrubCount} (gen-time)`);
+          }
+        }
       }
+
 
       // ==========================================================================
       // GENERIC TITLE VALIDATOR: Flag and clean placeholder business names
