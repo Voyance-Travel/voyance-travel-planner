@@ -14,6 +14,8 @@ import {
   addMinutesToHHMM,
   normalizeTo24h,
 } from '../flight-hotel-context.ts';
+import { buildEmptyDaySkeleton, type SkeletonMustDoInput } from '../../_shared/build-day-skeleton.ts';
+import type { PatternGroup } from '../../_shared/schema-generation.ts';
 
 export function compileDaySchema(input: DaySchemaInput): CompiledSchema {
   const {
@@ -906,5 +908,53 @@ Add your flight and hotel details for a more complete last day.`;
     }
   }
 
-  return { dayConstraints, flightContext };
+  // ─────────────────────────────────────────────────────────────────────────
+  // PHASE 2 (additive): deterministic day skeleton
+  // Runs alongside the legacy prompt-text path. Captured so we can diff
+  // skeleton-vs-LLM-output for each generated day before the Phase 4
+  // cutover. Failures here MUST NEVER break the legacy path.
+  // ─────────────────────────────────────────────────────────────────────────
+  let daySkeleton: CompiledSchema['daySkeleton'];
+  let daySkeletonOmitted: CompiledSchema['daySkeletonOmitted'];
+  try {
+    const fc = flightContext ?? {};
+    const archetype: string | undefined =
+      fc.primaryArchetypeName ?? fc.archetypeName ?? fc.travelDna?.primary_archetype_name;
+    const patternGroup: PatternGroup | undefined =
+      fc.patternGroup ?? fc.pattern_group ?? undefined;
+    const mustDos: SkeletonMustDoInput[] = (mustDoEventItems ?? []).map((m: any, idx: number) => ({
+      id: m?.id ?? `mustdo-${idx}`,
+      title: m?.priority?.title ?? m?.title ?? `Must-do ${idx + 1}`,
+      category: m?.priority?.category ?? m?.category,
+      priority: typeof m?.priority?.weight === 'number' ? m.priority.weight : undefined,
+      fixedDayNumber: m?.priority?.assignedDay ?? m?.assignedDay,
+    }));
+
+    const result = buildEmptyDaySkeleton({
+      dayNumber: dayNumber || 1,
+      totalDays: totalDays || 1,
+      date: fc.date ?? '',
+      destination: destination ?? '',
+      isFirstDay,
+      isLastDay,
+      patternGroup,
+      archetypeName: archetype ?? null,
+      arrivalTime24: fc.arrivalTime24 ?? (fc.arrivalTime ? normalizeTo24h(fc.arrivalTime) : null),
+      departureTime24: fc.departureTime24 ?? (fc.departureTime ? normalizeTo24h(fc.departureTime) : null),
+      hasHotelData: !!(fc.hotelName || fc.hotelAddress),
+      hotelCheckInTime: fc.hotelCheckInTime ?? null,
+      hotelCheckOutTime: fc.hotelCheckOutTime ?? null,
+      airportTransferMinutes,
+      mustDos,
+    });
+    daySkeleton = result.skeleton;
+    daySkeletonOmitted = result.omitted;
+    console.log(
+      `[compile-day-schema] skeleton built day=${dayNumber} type=${daySkeleton.dayType} group=${daySkeleton.patternGroup} slots=${daySkeleton.slots.length} omitted=${daySkeletonOmitted.length}`,
+    );
+  } catch (err) {
+    console.warn(`[compile-day-schema] skeleton build FAILED (non-fatal): ${(err as Error).message}`);
+  }
+
+  return { dayConstraints, flightContext, daySkeleton, daySkeletonOmitted };
 }

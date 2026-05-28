@@ -255,10 +255,20 @@ export interface CompiledFacts {
 // COMPILED SCHEMA — Return type of compileDaySchema()
 // =============================================================================
 
+import type { SkeletonDay, OmittedMustDo } from '../../_shared/schema-generation.ts';
+
 export interface CompiledSchema {
   dayConstraints: string;
   /** Possibly modified flightContext (e.g. stripped return flight for non-flight departures) */
   flightContext: any;
+  /**
+   * Phase 2 (additive): deterministic populated day skeleton.
+   * Source of truth for the assembly-line pipeline (Fix 22A-E types).
+   * Old prompt-text path (`dayConstraints`) stays live until Phase 4 cutover.
+   */
+  daySkeleton?: SkeletonDay;
+  /** Must-dos that couldn't fit a slot on this day (with reason). */
+  daySkeletonOmitted?: OmittedMustDo[];
 }
 
 export interface DaySchemaInput {
