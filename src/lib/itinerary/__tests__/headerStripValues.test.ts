@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeHeaderStripValues } from '../headerStripValues';
+import { computeHeaderStripValues, excludedBreakdownLabel } from '../headerStripValues';
 
 describe('computeHeaderStripValues', () => {
   it('balances when snapshot total equals days subtotal but a hotel chip is visible (Casablanca / Kyoto / Osaka pattern)', () => {
