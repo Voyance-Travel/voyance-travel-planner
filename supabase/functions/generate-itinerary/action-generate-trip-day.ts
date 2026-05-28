@@ -3757,7 +3757,30 @@ async function _handleGenerateTripDayInner(
 
   if (dayNumber >= totalDays) {
     // All days complete — but only mark ready if all days have real activities
-    const finalStatus = isComplete ? 'ready' : 'partial';
+    let finalStatus: 'ready' | 'partial' | 'failed' = isComplete ? 'ready' : 'partial';
+    let commitGateMetadataPatch: Record<string, any> = {};
+    // ── CANONICAL COMMIT GATE ──
+    // Single boundary that decides whether this trip can become `ready`.
+    // See _shared/commit-itinerary.ts. Mirrors action-save-itinerary and
+    // generation-core Stage 6.
+    try {
+      const { resolveCommitGate } = await import('../_shared/commit-itinerary.ts');
+      const gateResult = await resolveCommitGate({
+        supabase,
+        tripId,
+        days: Array.isArray((partialItinerary as any)?.days) ? (partialItinerary as any).days : [],
+        proposedStatus: finalStatus,
+        preloaded: {
+          arrivalTime24: savedArrTime24Hoisted || null,
+          departureTime24: savedDepTime24Hoisted || null,
+        },
+        label: 'generate-trip-day',
+      });
+      finalStatus = gateResult.status as 'ready' | 'partial' | 'failed';
+      commitGateMetadataPatch = gateResult.metadataPatch;
+    } catch (e) {
+      console.warn('[generate-trip-day:final] commit gate failed (non-blocking):', e);
+    }
     const emptyDaysList = updatedDays
       .filter((d: any) => !Array.isArray(d.activities) || d.activities.length === 0)
       .map((d: any) => d.dayNumber);
@@ -3814,6 +3837,7 @@ async function _handleGenerateTripDayInner(
         unlocked_day_count: newUnlocked,
         metadata: {
           ...meta,
+          ...commitGateMetadataPatch,
           generation_completed_days: isComplete ? totalDays : updatedDays.filter((d: any) => Array.isArray(d.activities) && d.activities.length > 0).length,
           generation_completed_at: new Date().toISOString(),
           generation_heartbeat: new Date().toISOString(),

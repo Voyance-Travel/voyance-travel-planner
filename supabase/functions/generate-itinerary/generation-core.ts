@@ -3111,16 +3111,31 @@ export async function finalSaveItinerary(
       }
     }
 
-    const willBeReady = !emptyItineraryDetected;
     const existingFrozenAt = (existingMetadata as Record<string, any>)?.itinerary_frozen_at;
+
+    // ── CANONICAL COMMIT GATE ──
+    // Single boundary that decides whether this trip can become `ready`.
+    // If hard semantic invariants fail (nightcap in morning, required
+    // must-do missing, hotel-venue before checkin, logistics-only curated
+    // day, infeasible flights), the gate demotes status to 'partial' and
+    // stamps metadata.integrity_contract so the UI banner explains why.
+    // See _shared/commit-itinerary.ts.
+    const proposedStatus: 'ready' | 'failed' = emptyItineraryDetected ? 'failed' : 'ready';
+    const { resolveCommitGate } = await import('../_shared/commit-itinerary.ts');
+    const gateResult = await resolveCommitGate({
+      supabase,
+      tripId,
+      days: (frontendReadyData as any)?.days || [],
+      proposedStatus,
+      label: 'stage-6',
+    });
+    const willBeReady = gateResult.status === 'ready' || gateResult.status === 'generated';
+
     // FREEZE DEFERRED — see mem://constraints/itinerary/saved-badge-honesty.
     // The freeze stamp + fully_persisted=true are written in a SECOND update
-    // after Phase 4 (activity_costs) and Phase 5 (trip_cities) succeed, so
-    // a hard refresh during enrichment doesn't leave the trip frozen on a
-    // partial snapshot. Re-freezing for trips that were already ready
-    // (existingFrozenAt) is preserved here so we don't un-freeze them.
+    // after Phase 4 (activity_costs) and Phase 5 (trip_cities) succeed.
     const updatePayload: Record<string, unknown> = {
-      itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',
+      itinerary_status: gateResult.status,
       dna_snapshot: dnaSnapshot,
       updated_at: new Date().toISOString(),
       ...(context.blendedDnaSnapshot && { blended_dna: context.blendedDnaSnapshot }),
@@ -3130,6 +3145,7 @@ export async function finalSaveItinerary(
           generation_failure_reason: failureReason,
           empty_itinerary_detected_at: new Date().toISOString(),
         }),
+        ...gateResult.metadataPatch,
         // Mark in-flight enrichment so UI can show Reconciling and arm beforeunload.
         ...(willBeReady ? { fully_persisted: false } : {}),
         // Preserve any prior freeze stamp; do NOT introduce a new one yet.
@@ -3212,21 +3228,30 @@ export async function finalSaveItinerary(
       try {
         const { data: latestRow } = await supabase
           .from('trips')
-          .select('metadata')
+          .select('metadata, itinerary_status')
           .eq('id', tripId)
           .single();
         const latestMeta = (latestRow?.metadata as Record<string, any>) || {};
-        const finalMeta = {
-          ...latestMeta,
-          itinerary_frozen_at: latestMeta.itinerary_frozen_at || new Date().toISOString(),
-          fully_persisted: true,
-          fully_persisted_at: new Date().toISOString(),
-        };
-        await supabase
-          .from('trips')
-          .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
-          .eq('id', tripId);
-        console.log(`[Stage 6] Phase 6 freeze + fully_persisted stamped for trip ${tripId}`);
+        const latestStatus = (latestRow as any)?.itinerary_status;
+        // Commit-gate may have demoted us to 'partial' — never stamp
+        // fully_persisted/frozen on a non-ready trip.
+        if (latestStatus !== 'ready' && latestStatus !== 'generated') {
+          console.log(
+            `[Stage 6] Phase 6 SKIPPED — status=${latestStatus} (commit gate demoted)`,
+          );
+        } else {
+          const finalMeta = {
+            ...latestMeta,
+            itinerary_frozen_at: latestMeta.itinerary_frozen_at || new Date().toISOString(),
+            fully_persisted: true,
+            fully_persisted_at: new Date().toISOString(),
+          };
+          await supabase
+            .from('trips')
+            .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
+            .eq('id', tripId);
+          console.log(`[Stage 6] Phase 6 freeze + fully_persisted stamped for trip ${tripId}`);
+        }
       } catch (freezeErr) {
         console.warn('[Stage 6] Phase 6 freeze stamp failed (non-blocking):', freezeErr);
       }
