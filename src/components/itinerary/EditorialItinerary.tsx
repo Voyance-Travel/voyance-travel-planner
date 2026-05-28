@@ -6463,6 +6463,17 @@ export function EditorialItinerary({
                         site="header"
                         tripId={tripId}
                       />
+                      {/* Pricing 3A: don't let hotel/flight silently disappear when the
+                          Budget Visibility toggle excludes them — surface a muted note
+                          so users never see a Trip Total that's missing a known cost. */}
+                      {stripValues.hasExcludedLogistics && (
+                        <div className="text-[11px] text-amber-700 dark:text-amber-300 text-center mt-1">
+                          {excludedBreakdownLabel(stripValues, (usd) =>
+                            formatCurrency(displayCost(usd), tripCurrency),
+                          )}{' '}
+                          excluded from Trip Total — toggle on in Budget Visibility to include
+                        </div>
+                      )}
                       {travelers > 1 && (
                         <div className="text-[11px] text-muted-foreground/70 text-center mt-1">
                           Day badges show /pp · multiply by {travelers} for group cost
