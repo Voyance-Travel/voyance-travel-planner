@@ -42,6 +42,7 @@ import { CreditNudge } from './CreditNudge';
 import { UnlockBanner } from './UnlockBanner';
 import { LockedDayCard } from './LockedDayCard';
 import { IntegrityContractBanner } from './IntegrityContractBanner';
+import { OmittedMustDosBanner } from './OmittedMustDosBanner';
 import { supabase as _supabaseForIntegrity } from '@/integrations/supabase/client';
 // TripTotalDeltaIndicator import removed — see comment near header total.
 import { useReconcilingState } from '@/hooks/useReconcilingState';
@@ -7135,7 +7136,32 @@ export function EditorialItinerary({
                  enabled: !!tripId,
                  staleTime: 30_000,
                });
-               return <IntegrityContractBanner contract={integrityContract as any} />;
+               return (
+                 <>
+                   <IntegrityContractBanner contract={integrityContract as any} />
+                   <OmittedMustDosBanner
+                     items={((integrityContract as any)?.__placeholder ? null : null) ?? null}
+                   />
+                 </>
+               );
+             })()}
+
+             {/* Phase 3 — Omitted must-dos surfaced by the Trip Planner LLM */}
+             {!isCleanPreview && (() => {
+               const { data: omitted } = useQuery({
+                 queryKey: ['trip-omitted-must-dos', tripId],
+                 queryFn: async () => {
+                   const { data } = await _supabaseForIntegrity
+                     .from('trips')
+                     .select('metadata')
+                     .eq('id', tripId)
+                     .single();
+                   return ((data?.metadata as any)?.omitted_must_dos) ?? null;
+                 },
+                 enabled: !!tripId,
+                 staleTime: 30_000,
+               });
+               return <OmittedMustDosBanner items={omitted as any} className="mt-3" />;
              })()}
 
              {/* Bulk Unlock Banner - hidden in clean preview */}
