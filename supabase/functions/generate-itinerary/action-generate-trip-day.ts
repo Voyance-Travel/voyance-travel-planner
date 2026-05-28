@@ -1587,6 +1587,9 @@ async function _handleGenerateTripDayInner(
       const { repairDay } = await import('./pipeline/repair-day.ts');
       const { deriveMealPolicy } = await import('./meal-policy.ts');
       const { normalizeTo24h } = await import('./flight-hotel-context.ts');
+      const { getDestinationSkipList } = await import('../_shared/destination-skip-list.ts');
+      const _destinationSkipList = await getDestinationSkipList(cityInfo?.cityName || destination, supabase);
+
 
       const flightSel = _flightSel;
       const isFirstDay = _isFirstDay;
