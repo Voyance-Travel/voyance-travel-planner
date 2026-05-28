@@ -1086,6 +1086,121 @@ Return ONLY valid JSON array, no markdown:
     } catch (auditErr) {
       console.warn('[generate-trip] Context audit failed (non-blocking):', auditErr);
     }
+
+    // =====================================================================
+    // PHASE 3 — TRIP PLANNER LLM (Layer 1, observational only for now)
+    // =====================================================================
+    // Builds per-day skeletons + asks an LLM to decide which must-do belongs
+    // on which day, and which can't fit. Result is stashed on metadata for
+    // the UI (OmittedMustDosBanner) AND for the Phase 4 Filler to consume.
+    // STRICTLY ADDITIVE: failures are logged and swallowed.
+    try {
+      const { buildEmptyDaySkeleton } = await import('../_shared/build-day-skeleton.ts');
+      const { callTripPlannerLLM } = await import('../_shared/trip-planner-llm.ts');
+      const { extractMustDoVenues } = await import('../_shared/extract-must-dos.ts');
+
+      const { data: tripRowForPlanner } = await supabase
+        .from('trips')
+        .select('metadata, flight_selection, hotel_selection')
+        .eq('id', tripId)
+        .single();
+      const plannerMeta = (tripRowForPlanner?.metadata as Record<string, unknown>) || {};
+      const flightSel = (tripRowForPlanner?.flight_selection as Record<string, unknown>) || {};
+      const hotelSel = (tripRowForPlanner?.hotel_selection as Record<string, unknown>) || {};
+
+      const mustDoTitles = extractMustDoVenues(plannerMeta);
+      const mustDosForPlanner = mustDoTitles.map((title, idx) => ({
+        id: `mustdo-${idx + 1}`,
+        title,
+      }));
+
+      const arrivalTime24 = (flightSel as any)?.outbound?.arrivalTime24
+        ?? (flightSel as any)?.arrivalTime24
+        ?? null;
+      const departureTime24 = (flightSel as any)?.return?.departureTime24
+        ?? (flightSel as any)?.departureTime24
+        ?? null;
+      const hasHotelData = !!(hotelSel as any)?.name || !!(hotelSel as any)?.hotelName;
+      const archetype = (enrichmentContext.archetype as string | undefined) ?? null;
+      const patternGroup = ((plannerMeta as any).pattern_group
+        ?? (plannerMeta as any).patternGroup
+        ?? null) as 'packed' | 'social' | 'balanced' | 'indulgent' | 'gentle' | null;
+
+      const skeletons: any[] = [];
+      const preOmitted: any[] = [];
+      const startDateObj = new Date(startDate);
+      for (let i = 0; i < totalDays; i++) {
+        const dateIso = new Date(startDateObj.getTime() + i * 86400000)
+          .toISOString()
+          .slice(0, 10);
+        const built = buildEmptyDaySkeleton({
+          dayNumber: i + 1,
+          totalDays,
+          date: dateIso,
+          destination,
+          isFirstDay: i === 0,
+          isLastDay: i === totalDays - 1,
+          patternGroup: patternGroup ?? undefined,
+          archetypeName: archetype,
+          arrivalTime24: i === 0 ? arrivalTime24 : null,
+          departureTime24: i === totalDays - 1 ? departureTime24 : null,
+          hasHotelData,
+          mustDos: mustDosForPlanner.map((m) => ({ id: m.id, title: m.title })),
+        });
+        skeletons.push(built.skeleton);
+        preOmitted.push(...built.omitted);
+      }
+
+      console.log(
+        `[generate-trip] 🧠 Planner input: ${totalDays} skeletons, ${mustDosForPlanner.length} must-dos, ${preOmitted.length} pre-omitted`,
+      );
+
+      const plannerResult = await callTripPlannerLLM({
+        destination,
+        totalDays,
+        archetype,
+        patternGroup: patternGroup ?? null,
+        budgetTier: (enrichmentContext.budgetTier as string | undefined) ?? budgetTier ?? null,
+        skeletons,
+        mustDos: mustDosForPlanner,
+        preOmitted,
+      });
+
+      if (plannerResult.ok && plannerResult.plan) {
+        (updatePayload.metadata as Record<string, unknown>).trip_plan = {
+          ...plannerResult.plan,
+          generated_at: new Date().toISOString(),
+          must_do_count: mustDosForPlanner.length,
+          skeleton_count: skeletons.length,
+        };
+        (updatePayload.metadata as Record<string, unknown>).omitted_must_dos =
+          plannerResult.plan.omitted;
+        console.log(
+          `[generate-trip] 🧠 Planner OK: ${plannerResult.plan.dayAssignments.length} day-assignments, ${plannerResult.plan.omitted.length} omitted must-dos`,
+        );
+        await appendGenerationTrace(supabase, tripId, {
+          action: 'generate-trip',
+          phase: 'planner_completed',
+          status: 'ok',
+          extra: {
+            assignments: plannerResult.plan.dayAssignments.length,
+            omitted: plannerResult.plan.omitted.length,
+            mustDoCount: mustDosForPlanner.length,
+          },
+        }).catch(() => {});
+      } else {
+        console.warn(`[generate-trip] 🧠 Planner FAILED (non-blocking): ${plannerResult.error}`);
+        (updatePayload.metadata as Record<string, unknown>).trip_plan_error = plannerResult.error;
+        await appendGenerationTrace(supabase, tripId, {
+          action: 'generate-trip',
+          phase: 'planner_failed',
+          status: 'warn',
+          extra: { error: plannerResult.error },
+        }).catch(() => {});
+      }
+    } catch (plannerErr) {
+      console.warn('[generate-trip] Planner step crashed (non-blocking):', plannerErr);
+    }
   }
   
   await supabase.from('trips').update(updatePayload).eq('id', tripId);
