@@ -2520,6 +2520,48 @@ async function _handleGenerateTripDayInner(
     } catch (_e) { /* non-blocking */ }
   }
 
+  // ── SCHEDULE EXECUTIONER — deterministic post-pipeline enforcement ───────
+  // Single chokepoint for: flight-anchor mismatch (1A), midnight spill (1B),
+  // buffer cascade response-path parity (1C), geo coherence (1D).
+  // See supabase/functions/_shared/schedule-executioner.ts.
+  if (Array.isArray(dayResult?.activities) && dayResult.activities.length > 0) {
+    try {
+      const { runScheduleExecutioner } = await import('../_shared/schedule-executioner.ts');
+      const exec = runScheduleExecutioner(dayResult.activities, {
+        dayNumber,
+        totalDays,
+        isFirstDay: _isFirstDay,
+        isLastDay: _isLastDay,
+        arrivalTime24: _isFirstDay ? savedArrTime24Hoisted : null,
+        departureTime24: _isLastDay ? savedDepTime24Hoisted : null,
+        dayTitle: dayResult?.title || dayResult?.theme || null,
+        budgetTier: budgetTier ?? null,
+        geoFlagOnly: true, // start conservative: log only, no drops yet
+      });
+      dayResult.activities = exec.activities;
+      dayResult.metadata = dayResult.metadata || {};
+      dayResult.metadata.quality = dayResult.metadata.quality || {};
+      dayResult.metadata.quality.executioner = {
+        flightAnchorRepaired: exec.counters.flightAnchorRepaired,
+        midnightSpilloversAllowed: exec.counters.midnightSpilloversAllowed,
+        midnightSpilloversDropped: exec.counters.midnightSpilloversDropped,
+        bufferRepairs: exec.counters.bufferRepairs,
+        overlapRepairs: exec.counters.overlapRepairs,
+        transitRecomputed: exec.counters.transitRecomputed,
+        geoOutliersFlagged: exec.counters.geoOutliersFlagged,
+        geoOutliersDropped: exec.counters.geoOutliersDropped,
+        droppedActivities: exec.counters.droppedActivities,
+        issuesSample: exec.counters.issues.slice(0, 10),
+      };
+      console.log(
+        `[EXECUTIONER_SUMMARY] day=${dayNumber} flight=${exec.counters.flightAnchorRepaired} spillAllowed=${exec.counters.midnightSpilloversAllowed} spillDropped=${exec.counters.midnightSpilloversDropped} buffer=${exec.counters.bufferRepairs} overlap=${exec.counters.overlapRepairs} geoFlagged=${exec.counters.geoOutliersFlagged} geoDropped=${exec.counters.geoOutliersDropped}`,
+      );
+    } catch (execErr) {
+      console.warn('[generate-trip-day] schedule-executioner failed (non-blocking):', execErr);
+    }
+  }
+
+
 
   try {
     await stageLogger.flush();
