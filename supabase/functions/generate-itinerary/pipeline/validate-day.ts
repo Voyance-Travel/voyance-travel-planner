@@ -25,6 +25,7 @@ import {
   extractPerPersonPrice,
   shouldSkipPriceSanity,
 } from '../_shared/category-price-bounds.ts';
+import { matchesDestinationSkipList, type SkipListEntry } from '../../_shared/destination-skip-list.ts';
 
 // =============================================================================
 // GENERIC VENUE PATTERNS — placeholders the AI sometimes generates
