@@ -628,11 +628,17 @@ export function detectGapsForDay(allActivities: any[], dayNumber: number): Healt
     // INVARIANT 2: first activity never emits a gap (prevEnd starts null).
     // Threshold raised 180 → 240 so the inline FreeTimeMarker (≥60min)
     // owns the 1–4h window without double-flagging from the health panel.
-    if (prevEnd !== null && startMins - prevEnd >= 240) {
+    // INVARIANT 2: first activity never emits a gap (prevEnd starts null).
+    // 3h gap → warning (the practical threshold a real day starts feeling
+    // empty). FreeTimeMarker still owns the 1–3h soft window in the UI;
+    // anything ≥3h gets a health warning so structurally-sound-but-empty
+    // days like the Rome Day 2 zero-food case cannot ship silently.
+    if (prevEnd !== null && startMins - prevEnd >= 180) {
       const gapHours = Math.floor((startMins - prevEnd) / 60);
+      const severity: HealthIssue['severity'] = (startMins - prevEnd) >= 300 ? 'error' : 'warning';
       issues.push({
         id: `gap-${dayNumber}-${startMins}`,
-        severity: 'warning',
+        severity,
         message: `Day ${dayNumber} has ${gapHours}h+ of open time before ${a.title || a.name || 'next activity'}`,
         fixLabel: 'Fill Gap',
         fixAction: 'refresh_day',
