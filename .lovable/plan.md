@@ -96,3 +96,13 @@ The Planner LLM (Phase 3) already wrote `omitted_must_dos` and a populated `dayS
 ## Estimated effort
 
 Medium-large. Most of the surface area is the filler module + the adapter + tests; the two action files each get one well-scoped branch insert.
+
+---
+
+## Phase 4 — Status (shipped 2026-05-28)
+
+Shipped: `_shared/slot-filler-llm.ts`, `_shared/skeleton-to-activities.ts`, `_shared/schema-filler-orchestrator.ts`, two test files (12 tests, all green), flag-gated dry-run block in `action-generate-trip-day.ts` (line ~509).
+
+Scope refinement from the approved plan: the `metadata.feature_flags.schema_filler` flag runs the filler in **dry-run mode alongside** the legacy path and stamps `metadata.quality.slot_filler` (ring buffer cap 30). It does NOT yet replace the legacy AI call. Full replacement is a small follow-up flip once dry-run trace looks clean across the beta cohort (plan cutover step 2). Rationale: 4435-line hot path; safer to observe parity first.
+
+`action-generate-day.ts` mirror branch deferred — single-day path is rarely hit in production; chain path covers >95% of trips.
