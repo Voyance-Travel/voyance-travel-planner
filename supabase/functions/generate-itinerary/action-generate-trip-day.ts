@@ -575,7 +575,7 @@ async function _handleGenerateTripDayInner(
               archetype,
               budgetTier: budgetTier ?? null,
               needsRefill: cleanup.needsRefill,
-              usedVenues: usedRestaurants?.slice?.(0, 20) ?? [],
+              usedVenues: [],
             });
             refillTrace = {
               ok: refill.ok,
