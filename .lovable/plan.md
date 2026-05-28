@@ -1,48 +1,38 @@
-# Same-Day "Tomorrow" Copy Fix
+# Continue Schedule Executioner: cleanup/refill + audit-code wiring
 
-## Problem
-On the departure day, AI-generated checkout/airport-prep descriptions read:
-> "prepare for the 08:00 flight tomorrow"
+The Executioner currently detects and stamps `metadata.quality.executioner` counters but only acts in "flag-only" mode for geo (1D) and doesn't refill cards it removes/shifts. This plan closes the loop so defects either get repaired in place or trigger a deterministic refill, and so every Executioner action is visible in the unified generation trace + read-time audit.
 
-…when the flight is later **the same day**. Existing scrub patterns (`FORWARD_REF_RE`, `TOMORROW_REF_RE` in `sanitization.ts`) only catch "tomorrow's adventure/exploration/excursion/day/visit" — they miss the literal pattern "the HH:MM flight tomorrow" and "tomorrow morning's flight".
+## Scope
 
-The forward-ref filter in `action-generate-trip-day.ts` L1520-1530 and `generation-core.ts` L1639-1651 only inspects accommodation cards titled "Return to / Freshen up / Back to / Settle in" — checkout cards (`hotel_checkout`, departure transfers) are not covered.
+1. **Cleanup pass** — after detection, mutate the day in place:
+   - 1A flight-anchor: re-stamp anchor `startTime`/`endTime` to truth, push downstream cards by delta via shared `enforceTimingAndBuffers`.
+   - 1B midnight-spill: legal spill stays (already stamped); illegal spill (non-bookend, non-late-nightlife) gets trimmed back to 23:30 end + flagged for refill.
+   - 1C buffer-cascade: call `enforceTimingAndBuffers` on the response path so what gets persisted matches what got audited.
+   - 1D geo: drop outliers (lock-respecting) when `geoFlagOnly=false`; gated behind a `EXECUTIONER_GEO_DROP_ENABLED` env flag, default off until telemetry shows false-positive rate <2%.
 
-## Fix (scrub-layer only — no business-logic changes)
+2. **Refill pass** — when cleanup removes a non-locked card and leaves a >90 min gap inside the active window, invoke the existing `fillDeadGaps` helper scoped to the affected window. No new LLM call; reuses verified-venue pool + fallback DB. Locked/user/manual/extracted/pinned never refilled over.
 
-Add a single shared helper `scrubSameDayTomorrow(text, { flightIsSameDay })` and wire it into the existing scrub passes. When the activity is on the departure day and the flight (or transfer) occurs the same calendar day, rewrite or strip "tomorrow" references in `description`/`tips`/`notes`.
+3. **Audit-code wiring** — every Executioner action emits:
+   - A `withStage(trace, 'schedule_executioner', …)` span containing per-day counters.
+   - `auditTimingViolations` codes: `EXEC_FLIGHT_ANCHOR_FIXED`, `EXEC_MIDNIGHT_SPILL_TRIMMED`, `EXEC_BUFFER_CASCADE_APPLIED`, `EXEC_GEO_OUTLIER_DROPPED`, `EXEC_GAP_REFILLED`.
+   - Read-time auditor (`useReadTimeAudit`) surfaces these in TripHealthPanel so legacy trips can be self-healed lazily.
 
-### 1. New regex set in `supabase/functions/generate-itinerary/sanitization.ts`
-- `FLIGHT_TOMORROW_RE` — matches: `the 08:00 flight tomorrow`, `tomorrow morning's 08:00 flight`, `tomorrow's flight`, `before tomorrow's checkout`, `for tomorrow's departure/transfer/airport`.
-- Replacement strategy when `flightIsSameDay === true`:
-  - `tomorrow morning's` → `this morning's`
-  - `tomorrow's` → `today's`
-  - `tomorrow` (trailing/leading adverb) → `later today` (or drop if it leaves a clean sentence)
-- When `flightIsSameDay === false`, leave existing text alone (cross-day refs are valid on multi-day trips).
+4. **Persist contract** — Executioner runs as the LAST stage before `persistTripItinerary`. Its output is the authoritative day snapshot; any later stage that re-runs cascade must be a no-op (`driftProbeRef` style).
 
-### 2. Widen forward-ref accommodation filter
-In both `action-generate-trip-day.ts` (L1520-1530) and `generation-core.ts` (L1639-1651):
-- Extend the category match to include `hotel_checkout` / `logistics` / `transit` when the title contains `checkout`, `check-out`, `airport`, `transfer`, `departure`, or `flight`.
-- Pass `flightIsSameDay` (derived from existing flight metadata already in scope — `cityInfo.departureDate` vs the day's date) into `scrubSameDayTomorrow`.
+5. **Tests**:
+   - Extend `schedule-executioner.test.ts` with cleanup + refill fixtures (flight delta, illegal spill trim, geo drop with refill, gap-refill respecting locked rows).
+   - New `executioner-trace.test.ts` verifies trace span + audit codes are emitted and idempotent on second run.
 
-### 3. Save-time net in `action-save-itinerary.ts` normalizeDays
-Run `scrubSameDayTomorrow` over the last day's checkout/departure-logistics cards using the persisted `savedDepartureTime24` / `metadata.savedDepartureDate` already used by the departure-net (Core memory: "Meal Rules — Save-time net"). This catches legacy trips on reload.
+## Technical notes
 
-### 4. UI sanitizer (`src/lib/itinerary/activityNameSanitizer.ts` chain)
-Add the same regex to the existing `sanitizeActivityText` cascade so any persisted leak gets cleaned at render time without a regen.
-
-## Files touched
-- `supabase/functions/generate-itinerary/sanitization.ts` — add `SAME_DAY_TOMORROW_RE` + `scrubSameDayTomorrow` helper.
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — widen forward-ref filter, pass `flightIsSameDay`.
-- `supabase/functions/generate-itinerary/generation-core.ts` — same widening.
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — add save-time net for departure day.
-- `src/lib/itinerary/activityNameSanitizer.ts` — render-time cleanup for already-persisted trips.
-- `supabase/functions/generate-itinerary/__tests__/sanitization.test.ts` (new or extended) — cases:
-  - "prepare for the 08:00 flight tomorrow" + sameDay=true → "prepare for the 08:00 flight later today"
-  - "tomorrow morning's flight at 08:00" + sameDay=true → "this morning's flight at 08:00"
-  - same strings + sameDay=false → unchanged
-  - non-departure-logistics card → unchanged
+- Files touched (single boundary): `supabase/functions/_shared/schedule-executioner.ts`, `supabase/functions/_shared/audit-timing.ts`, `supabase/functions/generate-itinerary/action-generate-day.ts`, `supabase/functions/generate-itinerary/action-generate-trip-day.ts`, plus tests under `_shared/__tests__/`.
+- No DB schema changes. No new edge functions. No frontend changes beyond TripHealthPanel inheriting the new audit codes automatically via `useReadTimeAudit`.
+- Geo-drop stays env-gated; default `geoFlagOnly:true` until we have ≥7 days of `EXEC_GEO_OUTLIER` telemetry showing <2% false positives.
+- Refill is bounded: max 1 refill card per cleanup event per day (avoid runaway pool drain).
+- Idempotency: `metadata.quality.executioner.run_id` short-circuits a second invocation with the same input hash.
 
 ## Out of scope
-- No changes to scheduling, anchors, prompt rules, or generation logic. This is a copy-correctness scrubber bounded to departure-day logistics cards.
-- No memory entry yet — will add one on implementation completion under `mem://constraints/itinerary/same-day-tomorrow-scrub` referencing the 4-layer defense.
+
+- Skeleton/dayAssignments planner (separate subagent's domain — picked up in a follow-up once that trace returns).
+- Cross-day geo coherence (Executioner stays single-day).
+- Any prompt-side changes.
