@@ -107,6 +107,28 @@ Return valid JSON only:
     // Support both old and new response shapes
     const items = parsed.localAlternatives || parsed.skippedItems || [];
 
+    // Cache for backend pipeline (validate-day + refill-slots-llm) — see
+    // _shared/destination-skip-list.ts. Non-blocking; failures only logged.
+    try {
+      const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || Deno.env.get('VITE_SUPABASE_URL');
+      const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (SUPABASE_URL && SERVICE_ROLE && Array.isArray(items) && items.length > 0) {
+        const cacheKey = `skip_list:${String(destination).toLowerCase().trim()}`;
+        await fetch(`${SUPABASE_URL}/rest/v1/destination_insights_cache`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SERVICE_ROLE}`,
+            'apikey': SERVICE_ROLE,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates',
+          },
+          body: JSON.stringify({ destination: cacheKey, insights: { items } }),
+        });
+      }
+    } catch (cacheErr) {
+      console.warn('[generate-skip-list] cache write failed (non-blocking):', cacheErr instanceof Error ? cacheErr.message : cacheErr);
+    }
+
     return new Response(
       JSON.stringify({ success: true, skippedItems: items }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
