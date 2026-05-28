@@ -233,6 +233,20 @@ export function applyValidationGate(
         }
         break;
       }
+      case FAILURE_CODES.SKIP_LIST_VIOLATION: {
+        // Voyance Intelligence "skip list" hit (Robot Restaurant / Seine cruise /
+        // Hard Rock / Piazza Navona / Las Ramblas dining). Drop the activity;
+        // refill-slots-llm picks a replacement that respects the same list.
+        if (!droppedIdx.has(idx)) {
+          droppedIdx.add(idx);
+          counters.droppedActivities++;
+          counters.forcedDowngrades++;
+          console.log(
+            `[SKIP_LIST_DROP] day=${ctx.dayNumber} idx=${idx} title="${(act?.title || act?.name || '').toString().slice(0, 80)}" reason="${r.message.slice(0, 120)}"`,
+          );
+        }
+        break;
+      }
       default: {
         // Unknown critical → blank the offending field if any, else drop.
         if (r.field && typeof act[r.field] === 'string') {
