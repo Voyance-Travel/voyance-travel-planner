@@ -125,3 +125,29 @@ Step B: medium (new module, fixtures, decision rules).
 Step C: small (Filler clone with a different packet shape).
 
 Total: roughly one focused day for the wiring, plus the cutover beta soak you already approved for Phase 4.
+
+---
+
+## Steps B + C + A-scaffold — Status (shipped 2026-05-28)
+
+**Step B — Cleanup module:** `_shared/itinerary-cleanup.ts` (pure, no LLM). 5 ops: `inverted_time_window`, `duplicate_meal_slot`, `category_slot_mismatch`, `cross_city_venue`, `transit_too_far`. Wrap-aware chrono sort (pre-dawn = tail). Locked / user / manual / extracted / pinned / booked / imported rows always exempt. Tier-aware walk threshold (1000m luxury, 1500m else). Returns `{ activities, needsRefill, ops }`.
+
+**Step C — Refill LLM:** `_shared/refill-slots-llm.ts`. Same strict slot-fill Zod contract as Filler (no time/category/cost), single attempt, 8s timeout, drops fills with unknown slotIds, dedupes on slotId. Empty `needsRefill` → ok with zero attempts (no token spend).
+
+**Step A — Cutover scaffold only:** `action-generate-trip-day.ts` now logs `[SLOT_FILLER_PRIMARY] day=N eligible=true|false` when a NEW second flag `metadata.feature_flags.schema_filler_primary === true` is set. The original `schema_filler` dry-run flag is untouched and behaves identically. The actual route-around of the legacy AI call (filler.activities → cleanup → refill → legacy enrich/persist tail) is the next focused commit — kept out of this drop because the downstream chain in that 4495-line file needs careful threading of the adapter activities through compileFacts/validateDay/repairDay/enrichDay/universalQualityPass without breaking the legacy fallback path.
+
+Tests: 14 green (`deno test supabase/functions/_shared/__tests__/itinerary-cleanup.test.ts supabase/functions/_shared/__tests__/refill-slots-llm.test.ts`).
+
+Files:
+- new `supabase/functions/_shared/itinerary-cleanup.ts`
+- new `supabase/functions/_shared/refill-slots-llm.ts`
+- new `supabase/functions/_shared/__tests__/itinerary-cleanup.test.ts`
+- new `supabase/functions/_shared/__tests__/refill-slots-llm.test.ts`
+- edit `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (cutover scaffold log only)
+
+**Next step — Step A cutover (separate, focused commit):**
+1. Refactor the legacy AI-call block into a named function `runLegacyAiDayCall(...) → DayActivity[]`.
+2. When `schema_filler_primary === true` AND `fillerResult.ok` AND zero unfilled → use `fillerResult.activities`; else fall back to `runLegacyAiDayCall`.
+3. Pipe whichever path we chose through `cleanupDay` → `refillDroppedSlots` → existing `validateDay`/`repairDay`/`enrichDay`/`universalQualityPass`/`persist`.
+4. Stamp `metadata.quality.day_pipeline = { path: 'filler' | 'legacy', cleanup_ops, refill_attempted }`.
+5. Beta on the 5 internal trips (short-haul, late-arrival, morning-departure, gentle, packed) before flipping default-on.
