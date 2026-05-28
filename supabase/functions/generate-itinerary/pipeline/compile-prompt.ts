@@ -1819,6 +1819,7 @@ Match the price to the VENUE TYPE, not just the category:
 
 ${preferenceContext}
 ${tripIntentsContext}
+${skipListPromptBlock}
 ${mustDoPrompt}
 ${additionalNotesPrompt}
 ${mustHavesConstraintPrompt}
