@@ -16,7 +16,7 @@ import { getRenderedStartTime, getRenderedEndTime } from '@/lib/itinerary/displa
 import { isWeakAddress } from '@/lib/address-quality';
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 import { timeOfDayBand } from '@/lib/itinerary/timeOfDayBand';
-import { computeHeaderStripValues } from '@/lib/itinerary/headerStripValues';
+import { computeHeaderStripValues, excludedBreakdownLabel } from '@/lib/itinerary/headerStripValues';
 import { coerceDurationString } from '@/utils/plannerUtils';
 import { useLedgerCostOverrideMap, getLedgerOverride, warnOnceLedgerOverride } from '@/utils/ledgerCostOverride';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
