@@ -177,6 +177,7 @@ function newCounters(): ExecutionerCounters {
     geoOutliersFlagged: 0,
     geoOutliersDropped: 0,
     droppedActivities: 0,
+    gapsRefilled: 0,
     issues: [],
   };
 }
