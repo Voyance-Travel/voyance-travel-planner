@@ -188,9 +188,37 @@ function feasibleActivityMinutes(arrivalMin: number | null, departureMin: number
   return Math.max(0, dayEnd - dayStart);
 }
 
-/**
- * Run the integrity contract over a `days` array. Pure / dry-run.
- */
+// ── meal classification (mirrors meal-policy windows) ────────────────────
+const MEAL_BANDS: Record<'breakfast' | 'lunch' | 'dinner', [number, number]> = {
+  breakfast: [5 * 60, 11 * 60],        // 05:00 – 11:00 (brunch counts)
+  lunch:     [11 * 60, 15 * 60 + 30],  // 11:00 – 15:30
+  dinner:    [17 * 60 + 30, 23 * 60 + 30], // 17:30 – 23:30
+};
+const DRINKS_ONLY_RE = /\b(nightcap|cocktail|aperitif|aperitivo|drinks|wine\s+bar|speakeasy|rooftop\s+bar|pub|bar\s+crawl)\b/i;
+
+function isMealCard(a: any): boolean {
+  if (!a) return false;
+  const cat = String(a?.category || '').toLowerCase();
+  if (['dining', 'restaurant', 'food', 'meal', 'cafe', 'breakfast', 'brunch', 'lunch', 'dinner'].includes(cat)) return true;
+  const title = String(a?.title || a?.name || '');
+  return /\b(breakfast|brunch|lunch|dinner|supper)\b/i.test(title);
+}
+
+function classifyMealSlot(a: any): 'breakfast' | 'lunch' | 'dinner' | null {
+  if (!isMealCard(a)) return null;
+  const title = String(a?.title || a?.name || '').toLowerCase();
+  if (DRINKS_ONLY_RE.test(title)) return null; // drinks-only NEVER satisfies dinner
+  if (/\b(breakfast|brunch)\b/.test(title)) return 'breakfast';
+  if (/\b(lunch)\b/.test(title)) return 'lunch';
+  if (/\b(dinner|supper)\b/.test(title)) return 'dinner';
+  // Fall back to time-band when title is neutral (e.g. "Roscioli")
+  const start = pickStart(a);
+  if (start === null) return null;
+  if (start >= MEAL_BANDS.breakfast[0] && start <= MEAL_BANDS.breakfast[1]) return 'breakfast';
+  if (start >= MEAL_BANDS.lunch[0] && start <= MEAL_BANDS.lunch[1]) return 'lunch';
+  if (start >= MEAL_BANDS.dinner[0] && start <= MEAL_BANDS.dinner[1]) return 'dinner';
+  return null;
+}
 export function checkItineraryIntegrity(
   days: readonly any[] | null | undefined,
   ctx: IntegrityContext = {},
