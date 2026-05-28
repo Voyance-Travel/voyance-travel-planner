@@ -262,18 +262,22 @@ export function checkItineraryIntegrity(
     const isLastDay = dayNumber === totalDays;
     const acts: any[] = Array.isArray(day.activities) ? day.activities : [];
 
-    // ── TEMPORAL_ROLE_TIME_MISMATCH: nightcap/cocktail before 17:00
-    // ── HOTEL_VENUE_BEFORE_CHECKIN: hotel-contained venue before check-in
+    // ── TEMPORAL_ROLE_TIME_MISMATCH + NIGHTLIFE_BEFORE_EVENING
+    // ── HOTEL_VENUE_BEFORE_CHECKIN
     for (let idx = 0; idx < acts.length; idx++) {
       const a = acts[idx];
       if (!a || isLocked(a)) continue;
       const start = pickStart(a);
       const title = String(a?.title || a?.name || '');
-      if (start !== null && start < MORNING_CUTOFF_MIN && NIGHT_DRINK_RE.test(title)) {
+      // Nightcap/cocktail/aperitif/speakeasy/rooftop/wine bar before 17:00 is
+      // a hard semantic mismatch — emit a dedicated code so the UI can
+      // explain it ("nightcap was placed at 9 AM") instead of a vague
+      // "temporal role" warning.
+      if (start !== null && start < 17 * 60 && NIGHT_DRINK_RE.test(title)) {
         violations.push({
-          code: 'TEMPORAL_ROLE_TIME_MISMATCH',
+          code: 'NIGHTLIFE_BEFORE_EVENING',
           dayNumber,
-          detail: `Nightlife card "${title}" scheduled at ${a.startTime || a.time} — must be evening (≥17:00).`,
+          detail: `Nightlife card "${title}" scheduled at ${a.startTime || a.time} — must start at 17:00 or later.`,
           activityTitle: title,
           activityTime: a.startTime || a.time || null,
         });
@@ -289,6 +293,28 @@ export function checkItineraryIntegrity(
             activityTime: a.startTime || a.time || null,
           });
         }
+      }
+    }
+
+    // ── MEAL_COVERAGE_MISSING
+    // When the meal policy says this day requires meals and none are
+    // scheduled (or drinks-only cards are masquerading), block ready.
+    const required = ctx.requiredMealsByDay?.[dayNumber] || [];
+    if (required.length > 0) {
+      const scheduledSet = new Set<'breakfast' | 'lunch' | 'dinner'>();
+      for (const a of acts) {
+        const slot = classifyMealSlot(a);
+        if (slot) scheduledSet.add(slot);
+      }
+      const scheduled = Array.from(scheduledSet);
+      const missing = required.filter((m) => !scheduledSet.has(m));
+      mealCoverage.push({ dayNumber, required, scheduled, missing });
+      if (missing.length > 0) {
+        violations.push({
+          code: 'MEAL_COVERAGE_MISSING',
+          dayNumber,
+          detail: `Day ${dayNumber} is missing required meal(s): ${missing.join(', ')}.`,
+        });
       }
     }
 
