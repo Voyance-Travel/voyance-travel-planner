@@ -1,127 +1,144 @@
-I agree with your diagnosis: the current pipeline does not work as a system. The Rome trip shows the same class of failure across three surfaces: timing collapses, required food disappears, and requested places are treated as optional until it is too late.
+# Wire the Existing Schema System Into Real Generation
 
-The root issue is not one Rome bug. It is that the app still has separate advisory validators, repair passes, read-time patches, and cost readers instead of one hard commit contract that decides whether a trip is actually valid.
+## What I got wrong last turn
 
-```text
-Current failure pattern
-AI creates itinerary
-  -> some validators notice some things
-  -> some repair layers patch some things
-  -> save/frozen guard may block later correction
-  -> trip can still look structurally complete while semantically broken
-```
+I said "build the skeleton." You correctly pointed out you already did. The system is in `src/types/schema-generation.ts` and `src/config/pattern-group-configs.ts`, built as "Fix 22A-E" with the explicit comment "ZERO dependencies on existing generation code." It is fully typed: `DaySchema → DaySlot[] → SlotTimeWindow / SlotFilledData / mealType / aiInstruction`. Five pattern groups (packed / social / balanced / indulgent / gentle) with full configs. Archetype→group mapping done. Tests exist.
 
-## Confirmed causes from the current code path
+**It is only wired into the preview pane** (`ItineraryGenerator.tsx` → `fullPreviewService.ts`). The actual generator (`pipeline/compile-day-schema.ts`) returns prompt *text*, throws the typed schema away, and the LLM is asked to invent the day from scratch. That is the root cause of every "missing meal / nightcap at 9 AM / Trevi ignored" failure.
 
-1. **The new commit gate is still only a status gate, not a full commit boundary.**
-   It can demote `ready` to `partial`, but it does not yet own the full sequence: repair, meal enforcement, request coverage, table sync, cost ledger, and freeze. Recent logs also show saves being blocked by the frozen guard before a repair can persist, which means the system can identify a bad trip but still fail to replace it.
-
-2. **Nightcap timing is caught too late and hidden in other layers.**
-   The final integrity contract now flags morning nightcaps, but the generation validator and timing auditor do not consistently treat nightlife/nightcap as an evening-only role. On the frontend timing spine, `nightcap` is still classified like a hotel-return/bookend, which can hide it from gap and health checks.
-
-3. **Meal requirements are not part of final readiness.**
-   Meal policy exists and prompts the AI, and generation validation checks missing meals, but the final commit integrity contract does not yet say: “Day 2 requires breakfast/lunch/dinner, and if they are absent this trip cannot be ready.” That is why a middle Rome day can end up with zero food.
-
-4. **User requests are not treated as a feasibility contract.**
-   Trevi Fountain and Colosseum should become explicit requested-item obligations. If time allows, missing them must block ready. If time does not allow, the trip should become `partial/infeasible` with a user-visible list: “scheduled / left out / why.” Right now, the system can silently drop requested places and still try to present a finished itinerary.
-
-5. **Gap detection has a real scope bug.**
-   The health gap function says it accepts either a full trip array or one day’s activities, but when it receives a day-scoped array whose activities do not each carry `dayNumber`, it filters everything out and returns no warnings. That makes long empty windows invisible.
-
-6. **Math still has competing read paths.**
-   The cost system mostly prefers the activity-cost ledger, but the displayed header/day/payment totals still do some float conversion and multiple independent fetches. That can produce small but persistent drift.
-
-## Implementation plan
-
-### 1. Turn the commit gate into a real commit contract
-
-Create a shared backend `commitItinerary` flow that every generation/save/regeneration/chat/self-heal path must use before any trip can become ready or frozen.
-
-The commit order will be non-negotiable:
+## What you're describing (3-layer intelligence model)
 
 ```text
-normalize schedule
--> classify roles
--> enforce time windows
--> enforce meal policy
--> enforce requested-place coverage / feasibility
--> enforce gaps and landing/departure sequence
--> persist final JSON
--> sync normalized tables
--> write activity_costs from that exact JSON
--> reconcile ledger coverage
--> only then mark ready + fully persisted + frozen
+User submits form
+       │
+       ▼
+┌────────────────────────────────────────────────────┐
+│ Layer 1: PLANNER (deterministic + 1 LLM call)      │
+│   - buildTripSkeleton uses existing DaySchema      │
+│   - PatternGroupConfig picks slot density          │
+│   - DayType picks arrival / standard / departure   │
+│   - Planner LLM: "Given hotel, must-dos, days,     │
+│      lay out logistics. Which day for Trevi?       │
+│      Which neighborhood for breakfast Day 2?       │
+│      Where will time not allow X?"                 │
+│   - Output: filled DaySchema[] + omittedList       │
+└────────────────────────────────────────────────────┘
+       │
+       ▼
+┌────────────────────────────────────────────────────┐
+│ Layer 2: FILLER (parallel LLM call per day)        │
+│   - Per slot: "Name 1 real venue in <neighborhood> │
+│      that fits <slotType>, <DNA>, <dietary>,       │
+│      <budget tier>. Return name + description."    │
+│   - LLM cannot change time, slot, order, schema    │
+│   - Verified-venues DB used first, LLM second      │
+└────────────────────────────────────────────────────┘
+       │
+       ▼
+┌────────────────────────────────────────────────────┐
+│ Layer 3: CLEANUP (deterministic + targeted LLM)    │
+│   - Deterministic: dedupe, transit, dietary, route │
+│   - If a slot ended unfilled or was rejected:      │
+│      one focused LLM call to refill that slot only │
+│   - Persist with commit gate                       │
+└────────────────────────────────────────────────────┘
+       │
+       ▼
+Done. No 20-step repair stack needed.
+User sees: "Trevi reserved Day 1. Pantheon won't fit
+in 2 days — swap or skip?" BEFORE generation starts.
 ```
 
-If any hard invariant fails, the trip is saved as `partial`, not `ready`, with exact reasons.
+This is exactly what the existing `schema-generation.ts` was designed for. We don't build new types. We connect what exists.
 
-### 2. Make timing role validation canonical
+## How we get there without tossing existing code
 
-Add one shared semantic timing validator used by generation validation, final commit, and legacy audit.
+### Phase 1 — Lift the schema system from FE-only to shared
 
-It will enforce:
+The types live in `src/types/schema-generation.ts` (frontend). Backend can't import them. Mirror them to `supabase/functions/_shared/schema-generation.ts` (and the pattern-group configs to `supabase/functions/_shared/pattern-group-configs.ts`). Single source of truth, two import paths. No type drift.
 
-- nightcap/cocktail/speakeasy/rooftop bar cannot start in the morning
-- breakfast/lunch/dinner must be inside their time bands
-- hotel restaurant/bar/spa cannot occur before check-in
-- stale/predawn hotel-return bookends cannot hide a huge active-day gap
-- departure-day activities cannot appear after checkout/airport transfer cutoff
+### Phase 2 — Replace `compileDaySchema` output
 
-Also fix the frontend role classifier so `nightcap` is not treated as a hotel-return bookend.
+`pipeline/compile-day-schema.ts:18` currently returns `{ dayConstraints: string }`. Change it to also return `daySchema: DaySchema` populated with empty slots based on:
+- `DayType` (already classified — arrival band / standard / departure band)
+- `PatternGroupConfig` (read from `trips.metadata.pattern_group`, already stored)
+- Must-dos pre-allocated into compatible slots
+- Meals pre-allocated at config-driven times
 
-### 3. Make meal coverage a final readiness rule
+The existing prompt-text output stays for backwards compatibility during migration. New consumers read `daySchema` directly.
 
-At commit time, derive the required meals for each day from the saved arrival/departure context and actual day shape.
+### Phase 3 — Add the Planner LLM call (Layer 1)
 
-Rules:
+New shared module: `supabase/functions/_shared/trip-planner-llm.ts`.
 
-- full middle day: breakfast, lunch, dinner required
-- valid arrival/departure exceptions preserved
-- drinks-only never satisfies dinner
-- zero-food middle day cannot become ready
-- if there truly is not enough time, mark partial/infeasible and explain, instead of pretending the traveler will “feed themselves”
+Single call **before** the per-day chain starts. Input: hotel, flight, must-dos, days, DNA, pattern group, empty trip skeleton. Output: assignment decisions + omitted list, validated against a Zod schema (no free-form JSON parsing).
 
-### 4. Make user requests contractual with feasibility output
-
-Convert selected places and custom must-dos into a coverage manifest at commit time:
-
-```text
-requested item -> scheduled | omitted_feasible | omitted_infeasible | ambiguous
+```ts
+{
+  dayAssignments: [{ dayNumber, neighborhood, mustDoSlots: [{slotId, mustDoRef}] }],
+  omitted: [{ mustDoTitle, reason: 'not_enough_time' | 'wrong_day_type' }]
+}
 ```
 
-Rules:
+The omitted list is surfaced in the trip-builder confirmation step (uses existing `WhyWeSkippedSection.tsx` component pattern) so the user decides BEFORE generation: swap, drop, or accept.
 
-- feasible required item missing blocks ready
-- impossible item does not fake success; trip becomes partial with omitted list
-- user sees exactly what was left out and why
-- no logistics-only “finished” trip when requested places exist
+### Phase 4 — Convert the per-day LLM call to a slot-fill contract (Layer 2)
 
-For the Rome case, this is where Trevi Fountain and Colosseum would either be scheduled or explicitly listed as omitted due to time constraints.
+`action-generate-day.ts` currently sends free-form prompt → free-form JSON. Replace with:
+- Input to LLM: the populated `DaySchema` with empty `filledData` on activity/meal slots + per-slot `aiInstruction`
+- Output schema (AI SDK `Output.object`): `{ slotId, name, description, venueAddress, durationMin }[]` only
+- Merge: walk skeleton, write filled-data per slot. Cannot change time, cannot add slots.
 
-### 5. Fix gap detection where it is actually broken
+This shrinks the prompt from ~8KB of instructions to ~2KB of context per slot. Fewer tokens, fewer hallucinations, no time invention.
 
-Repair the day-scoped filtering bug so `detectGapsForDay(day.activities, dayNumber)` does not discard all activities when individual cards lack `dayNumber`.
+### Phase 5 — Cleanup layer (Layer 3)
 
-Also restore the 3-hour warning threshold for active-day gaps so “structurally sound but practically empty” days are caught.
+Most of the existing 20-step repair stack becomes unreachable (the LLM can no longer break the things they fix). Keep the genuinely useful deterministic ones:
+- Transit recompute (real distances)
+- Cross-city dedup
+- Verified-venue snap (replace LLM names with verified DB matches when score >0.9)
+- Cost-ledger write
 
-### 6. Make math integer-ledger based
+Add **one focused refill LLM call** for any slot that came back empty, invalid, or got rejected by a cleanup pass. Bounded retry, then mark the slot user-actionable.
 
-Move the displayed total equation to integer cents only and remove avoidable USD float math.
+Delete (eventually): `enforceRequiredMealsFinalGuard`, `injectMissingMustDos`, `sanitizeSchedule` pre-dawn meal repair, `assertNoCrossDayBleed`, ~12 repair steps. They're patching problems the schema model prevents.
 
-Then make the displayed trip total, header chips, day breakdown, and Payments tab read from one resolved ledger result instead of separate fetches/resolver calls where possible.
+### Phase 6 — AI SDK adoption for all 3 LLM calls
 
-### 7. Add regression tests for failure classes, not cities
+Today's LLM calls are hand-rolled `fetch` to the AI gateway with manual JSON parsing. Switch to AI SDK + `Output.object` + Zod schemas. Eliminates a whole class of parse failures and aligns with the platform standard.
 
-Add tests that prove these cannot ship again:
+## What we keep
 
-- nightcap at 9 AM cannot become ready
-- middle full day with zero meals cannot become ready
-- requested Trevi/Colosseum-style places missing while feasible cannot become ready
-- over-requested short trip becomes partial with omitted requested items
-- day-scoped gap detection catches a 3-hour gap
-- stale predawn hotel-return cannot mask an evening schedule gap
-- displayed totals use integer cents and stay consistent across header/payments
+- All the verified venue pools, cost reference data, must-do allocation heuristics, archetype configs, hotel/flight context resolution. Those layers stay.
+- The frontend preview (`fullPreviewService`) — it shares the schema types so it stays accurate to what the backend produces.
+- Commit gate as final sanity check.
 
-## Expected result
+## What we delete
 
-After this, the system does not need another Rome-specific patch. The app will either produce a valid ready itinerary, or it will honestly return a partial/infeasible itinerary with the exact missing meals, broken timing, or omitted user requests listed before it ever claims the trip is done.
+After phases 4–5 ship clean for one week:
+- ~60% of `repair-day.ts`
+- `enforceRequiredMealsFinalGuard`
+- `injectMissingMustDos` (must-dos are slot-allocated, never missing)
+- `sanitizeSchedule` meal-repair branch
+- Free-form prompt branches in `compile-prompt.ts`
+
+## Sized phases
+
+| Phase | Effort | User-visible result |
+|---|---|---|
+| 1 — share types BE/FE | small | none yet |
+| 2 — `compileDaySchema` returns DaySchema object | medium | none yet, parity only |
+| 3 — Planner LLM + omitted list UI | medium | user sees "Trevi won't fit" before generation |
+| 4 — Filler slot-fill LLM | large | meals always present, nightcap-at-9-AM impossible |
+| 5 — Cleanup + retire repair stack | medium | faster generation, fewer failures |
+| 6 — AI SDK adoption | medium | parse failures vanish |
+
+Phases 1–3 are reviewable as one unit (no behavior change yet, but the foundation moves). Phases 4–5 ship behind a `useSchemaGeneration` flag, A/B against current pipeline on 20 trips before flipping default.
+
+## Answering your question directly
+
+> Does that sound better than what we're currently doing?
+
+Yes. And it's most of the way built — Fix 22A-E gave us the type system, configs, archetype mappings, and preview wiring. What's missing is the wiring into the real backend pipeline and the three-layer LLM split. We don't toss anything. We connect what's already there and retire what becomes redundant.
+
+Approve and I'll start with Phase 1+2 (lift schema to shared, make compileDaySchema return the typed object). That's the foundation; without it phases 3–5 can't be built. It's purely additive — old prompt-text output stays live until phase 4 cuts over.
