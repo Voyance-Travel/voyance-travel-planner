@@ -43,7 +43,6 @@ import { UnlockBanner } from './UnlockBanner';
 import { LockedDayCard } from './LockedDayCard';
 import { IntegrityContractBanner } from './IntegrityContractBanner';
 import { OmittedMustDosBanner } from './OmittedMustDosBanner';
-import { supabase as _supabaseForIntegrity } from '@/integrations/supabase/client';
 // TripTotalDeltaIndicator import removed — see comment near header total.
 import { useReconcilingState } from '@/hooks/useReconcilingState';
 import { FrostedGateOverlay } from './FrostedGateOverlay';
@@ -3112,6 +3111,24 @@ export function EditorialItinerary({
     },
     staleTime: 30_000,
     enabled: !!tripId,
+  });
+
+  const { data: tripPlannerMetadata } = useQuery({
+    queryKey: ['trip-planner-metadata', tripId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('trips')
+        .select('metadata')
+        .eq('id', tripId)
+        .single();
+      const metadata = data?.metadata as Record<string, unknown> | null | undefined;
+      return {
+        integrityContract: metadata?.integrity_contract ?? null,
+        omittedMustDos: metadata?.omitted_must_dos ?? null,
+      };
+    },
+    enabled: !!tripId && !isCleanPreview,
+    staleTime: 30_000,
   });
   
   // Wrapper: always pass trip-level fallback so paid days never show as locked
@@ -7122,42 +7139,14 @@ export function EditorialItinerary({
             </div>
             
              {/* Integrity contract banner — surfaces commit-gate violations */}
-             {!isCleanPreview && (() => {
-               const { data: integrityContract } = useQuery({
-                 queryKey: ['trip-integrity-contract', tripId],
-                 queryFn: async () => {
-                   const { data } = await _supabaseForIntegrity
-                     .from('trips')
-                     .select('metadata')
-                     .eq('id', tripId)
-                     .single();
-                   return ((data?.metadata as any)?.integrity_contract) ?? null;
-                 },
-                 enabled: !!tripId,
-                 staleTime: 30_000,
-               });
-                return (
-                  <IntegrityContractBanner contract={integrityContract as any} />
-                );
-             })()}
+             {!isCleanPreview && (
+               <IntegrityContractBanner contract={tripPlannerMetadata?.integrityContract as any} />
+             )}
 
              {/* Phase 3 — Omitted must-dos surfaced by the Trip Planner LLM */}
-             {!isCleanPreview && (() => {
-               const { data: omitted } = useQuery({
-                 queryKey: ['trip-omitted-must-dos', tripId],
-                 queryFn: async () => {
-                   const { data } = await _supabaseForIntegrity
-                     .from('trips')
-                     .select('metadata')
-                     .eq('id', tripId)
-                     .single();
-                   return ((data?.metadata as any)?.omitted_must_dos) ?? null;
-                 },
-                 enabled: !!tripId,
-                 staleTime: 30_000,
-               });
-               return <OmittedMustDosBanner items={omitted as any} className="mt-3" />;
-             })()}
+             {!isCleanPreview && (
+               <OmittedMustDosBanner items={tripPlannerMetadata?.omittedMustDos as any} className="mt-3" />
+             )}
 
              {/* Bulk Unlock Banner - hidden in clean preview */}
              {!isCleanPreview && !isActivelyGenerating && (() => {
