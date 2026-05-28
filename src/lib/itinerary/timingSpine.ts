@@ -73,10 +73,14 @@ const ARRIVAL_SOURCE_RE =
   /^(repair-arrival-flight|repair-airport-transfer|repair-arrival-flight-reconciled|injected-arrival-flight)$/i;
 const DEPARTURE_FLIGHT_TITLE_RE = /\b(departure|outbound)\b.*\b(flight|airport)\b|\bflight\b.*\b(home|out|back)\b/i;
 const DEPARTURE_ANCHOR_RE = /^(departure-flight|transfer-to-airport|airport-departure)$/i;
+// Nightcap intentionally NOT here — a nightcap is nightlife, not a hotel-return
+// bookend. Classifying it as hotel-return hides morning-nightcap bugs from gap
+// and health checks (Rome 9 AM nightcap pattern).
 const HOTEL_RETURN_TITLE_RE =
-  /\b(return\s+to|back\s+to|head\s+back\s+to|wind[\s-]?down|retire|end\s+of\s+day\s+at|nightcap)\b/i;
+  /\b(return\s+to|back\s+to|head\s+back\s+to|wind[\s-]?down|retire|end\s+of\s+day\s+at)\b/i;
 const MEAL_CAT_RE = /\b(dining|restaurant|breakfast|brunch|lunch|dinner|supper|cafe|food)\b/i;
-const MEAL_TITLE_RE = /\b(breakfast|brunch|lunch|dinner|supper|nightcap)\b/i;
+const MEAL_TITLE_RE = /\b(breakfast|brunch|lunch|dinner|supper)\b/i;
+const NIGHTLIFE_TITLE_RE = /\b(nightcap|speakeasy|rooftop\s+bar|cocktail|aperitif|aperitivo|wine\s+bar)\b/i;
 const FLIGHT_CAT_RE = /\b(flight|transport|transit|transfer|logistics)\b/i;
 const AIRPORT_RE = /\b(airport|station|terminal|gate)\b/i;
 const BOOKEND_SOURCES = new Set([
