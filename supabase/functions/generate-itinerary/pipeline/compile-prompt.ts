@@ -404,6 +404,16 @@ export async function compilePrompt(
   }
 
   // ═══════════════════════════════════════════════════════════════════════
+  // DESTINATION SKIP LIST (Voyance Intelligence parity)
+  // ═══════════════════════════════════════════════════════════════════════
+  const destinationSkipList = await getDestinationSkipList(resolvedDestination, supabase);
+  const skipListPromptBlock = renderSkipListPromptBlock(destinationSkipList);
+  if (destinationSkipList.length > 0) {
+    console.log(`[SKIP_LIST_PROMPT] destination="${resolvedDestination}" keywords=${destinationSkipList.length} day=${dayNumber}`);
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════════
   // MUST-DO PARSING & SCHEDULING
   // ═══════════════════════════════════════════════════════════════════════
   let mustDoPrompt = '';
@@ -2037,5 +2047,6 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     flightContext,
     lockedCards: lockedCardsForDay,
     effectiveTraitScores,
+    destinationSkipList,
   };
 }
