@@ -280,6 +280,8 @@ export async function resolveCommitGate(
         violations: [],
         codes: [],
         infeasibleDays: [],
+        omittedRequests: [],
+        mealCoverage: [],
       },
       blockedReady: false,
     };
