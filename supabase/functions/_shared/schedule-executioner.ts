@@ -513,7 +513,7 @@ export function enforceGeoCoherence(
     }
   }
 
-  const dropAllowed = ctx.geoDropEnabled === true || ctx.geoFlagOnly === false;
+  const dropAllowed = ctx.geoDropEnabled === true || !ctx.geoFlagOnly;
   if (dropAllowed && flagged.length > 0) {
     const dropSet = new Set(flagged.map(actId));
     const before = activities.length;
