@@ -166,6 +166,10 @@ export interface IntegrityContext {
   arrivalTime24?: string | null;
   /** Saved departure time (HH:MM 24h) for last-day feasibility. */
   departureTime24?: string | null;
+  /** Per-day required meals from the meal policy. When provided, the
+   *  contract enforces that each required meal has a scheduled card.
+   *  Map key = dayNumber (1-indexed). */
+  requiredMealsByDay?: Record<number, Array<'breakfast' | 'lunch' | 'dinner'>>;
 }
 
 const MORNING_CUTOFF_MIN = 11 * 60; // <11:00 is "morning"
