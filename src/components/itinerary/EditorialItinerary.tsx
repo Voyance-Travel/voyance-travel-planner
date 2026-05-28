@@ -7120,6 +7120,24 @@ export function EditorialItinerary({
               </div>
             </div>
             
+             {/* Integrity contract banner — surfaces commit-gate violations */}
+             {!isCleanPreview && (() => {
+               const { data: integrityContract } = useQuery({
+                 queryKey: ['trip-integrity-contract', tripId],
+                 queryFn: async () => {
+                   const { data } = await _supabaseForIntegrity
+                     .from('trips')
+                     .select('metadata')
+                     .eq('id', tripId)
+                     .single();
+                   return ((data?.metadata as any)?.integrity_contract) ?? null;
+                 },
+                 enabled: !!tripId,
+                 staleTime: 30_000,
+               });
+               return <IntegrityContractBanner contract={integrityContract as any} />;
+             })()}
+
              {/* Bulk Unlock Banner - hidden in clean preview */}
              {!isCleanPreview && !isActivelyGenerating && (() => {
               const lockedDayCount = days.filter(d => !canViewDay(d.dayNumber)).length;
