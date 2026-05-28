@@ -1,89 +1,51 @@
-# Skip-List Self-Contradiction Fix (Issue 2A)
+# Pricing 3A — No silent hotel/flight exclusion from Trip Total
 
-## Root cause
+## Goal
+When the user has flipped off "Include hotel in budget" (or flight), the itinerary header and Payments tab must make it visually obvious that a known cost is being held outside the Trip Total. Today it disappears silently: Travel Essentials reads "Free", the header chip vanishes, and Trip Total drops to activities only — while Payments still shows the full $900 hotel line. We keep the toggle (per your choice) but eliminate the silent path.
 
-The "skip list" is computed in two independent places, **neither of which the generator sees**:
+## Scope
+Read-only behavior change — the underlying math stays as it is. No DB migration. No change to `useTripFinancialSnapshot`, `resolveCanonicalCostRows`, or the budget-visibility toggle semantics. Pure presentation in three surfaces.
 
-1. `src/utils/itineraryValidator.ts` — hardcoded `SKIP_LIST_KEYWORDS` (paris/tokyo/rome/london/barcelona). Used only at *read time* to render the "Voyance Intelligence: 3 activities match our skip list" badge.
-2. `supabase/functions/generate-skip-list/index.ts` — AI-generated alternatives, cached client-side per destination. Powers the "Why we skipped" panel.
+## Changes
 
-The backend generator (`compile-prompt.ts`, `prompt-library.ts`, `validate-day.ts`, `repair-day.ts`) consumes `avoidList` (DNA + archetype `never`), but **never the destination skip list**. So the LLM happily emits Robot Restaurant in Tokyo because it has no idea that's a Voyance "skip" — and validate/repair never drops it because the keyword set lives only in the FE.
+### 1. `src/components/itinerary/EditorialItinerary.tsx` — header strip
+- Right after the existing `Days + Hotel + Flight + Reserve = Trip Total` row, render a single muted note when `headerStripValues.hasExcludedLogistics` is true, e.g.:
+  - `Hotel $900 + Flights $1,240 excluded from Trip Total — toggle on in Budget Visibility to include`
+  - Pluralize/singularize based on which of `excludedHotelUsd` / `excludedFlightUsd` are > 0.
+  - Use `formatCurrency(displayCost(...), tripCurrency)` so it follows the USD/local toggle and the per-traveler convention already used by the chips.
+- Pure render addition; `headerStripValues` already carries `excludedHotelUsd`, `excludedFlightUsd`, `excludedTotalUsd`, `hasExcludedLogistics` (no new hook plumbing needed).
 
-## Fix
+### 2. `src/components/itinerary/PaymentsTab.tsx` — Travel Essentials row
+- Replace the silent "$0 / Free" essentials headline when the toggle excludes hotel/flight but `essentialItems` (which is sourced from `usePayableItems`, toggle-agnostic) still has rows.
+- Show the real essentials amount (sum of `essentialItems.amountCents`) when `financialSnapshot.buckets.essentials` is 0 due to the toggle. Render a small badge next to the amount:
+  - `Excluded from Trip Total` (amber `bg-amber-500/15 text-amber-700`) when the toggle is off.
+  - Tooltip on the badge: "Hotel and/or flight are hidden from your Trip Total because Budget Visibility is set to exclude them. Toggle them on to include."
+- Important: do NOT change `estimatedTotal` / `paidAmount` / overpaid logic — those already read from `displayedTotal` and `financialSnapshot.paidCents`. We only adjust the Essentials card's headline + badge.
 
-Make the destination skip list a first-class input to generation. Single canonical source, used by both FE badge and BE generator/repair.
+### 3. `src/lib/itinerary/headerStripValues.ts` — helper
+- Already exposes `hasExcludedLogistics`. Add a small derivation `excludedBreakdownLabel(values, formatter)` that returns the human string (`"Hotel $900"`, `"Flights $1,240"`, or `"Hotel $900 + Flights $1,240"`) so both surfaces stay in sync. Pure function; no React.
 
-### 1. Canonical skip-list module (BE)
+### 4. Tests (`src/lib/itinerary/__tests__/headerStripValues.test.ts`)
+- New cases:
+  - Hotel-only excluded → `hasExcludedLogistics = true`, label `"Hotel $900"`.
+  - Flight-only excluded → label `"Flights $1,240"`.
+  - Both → label `"Hotel $900 + Flights $1,240"`.
+  - Neither excluded → `hasExcludedLogistics = false`, label `""`.
 
-New `supabase/functions/_shared/destination-skip-list.ts`:
-- Export `SKIP_LIST_KEYWORDS` (hardcoded seeds for paris/tokyo/rome/london/barcelona — moved verbatim from `src/utils/itineraryValidator.ts`).
-- `getDestinationSkipList(destination)`:
-  1. Look up hardcoded seeds (city-prefix match, same matcher as today).
-  2. Read cached AI-generated entries from `destination_insights_cache` (key `skip_list:<destLower>`) if present.
-  3. Merge + dedupe by lowercased keyword. Return `{ keyword, reason?, alternative? }[]`.
-- `matchesDestinationSkipList(title, description, list)` — same substring matcher the FE uses (≥3 chars).
-
-Cache write happens when `generate-skip-list` returns (small change there): after building `localAlternatives`, upsert into `destination_insights_cache` so BE can hydrate without re-calling the LLM.
-
-### 2. Wire into the prompt
-
-`prompt-library.ts` (the personalization block, near the existing `FOOD AVOID`):
-- New section `🚫 DESTINATION SKIP LIST — DO NOT PLACE THESE` listing the merged keywords + the local alternative for each (so the model has a substitute to reach for).
-- Hard rule: "Activities matching any item above are FORBIDDEN. If you'd normally suggest one, use the listed alternative instead."
-
-`compile-prompt.ts` plumbs `destinationSkipList` from `ctx` into the prompt builder. `profile-loader.ts` / `generation-types.ts` add `destinationSkipList: SkipListEntry[]` to the context and populate it via `getDestinationSkipList(ctx.destination)`.
-
-### 3. Validation gate — hard drop, not just warn
-
-`pipeline/validate-day.ts`:
-- New `SKIP_LIST_VIOLATION` issue code, severity `critical` (so `applyValidationGate` drops instead of warning).
-- Runs `matchesDestinationSkipList` on title + description against the destination list. Matches → drop the card with `repair.action='dropped_skip_list_violation'`, telemetry `[SKIP_LIST_DROP]`.
-
-`repair-day.ts` step 10b (existing scrub block): also run the matcher as a safety net post-LLM, mirror the drop. Dropped slots are picked up by the existing `refillDroppedSlots` pipeline already wired into `action-generate-trip-day.ts` — refill prompt receives the same skip list so replacements are valid.
-
-`_shared/refill-slots-llm.ts`: thread `destinationSkipList` through; reject any candidate that matches.
-
-### 4. FE convergence
-
-`src/utils/itineraryValidator.ts`:
-- Keep the hardcoded `SKIP_LIST_KEYWORDS` map in place (FE still needs an offline matcher for the "Heads up" badge on legacy trips).
-- Extend `matchesSkipList` to also accept an injected list (passed in from `useSkipList`) so freshly generated trips use the same merged set the BE used. The badge then shows zero matches on new trips (since BE already dropped them), and the panel becomes diagnostic-only for legacy data.
-
-### 5. Telemetry + tests
-
-- Sentinels: `[SKIP_LIST_PROMPT] destination=… keywords=N`, `[SKIP_LIST_DROP] day=N title="…" matched="…"`, `[SKIP_LIST_REFILL] day=N replaced_with="…"`.
-- Stamp `metadata.quality.skip_list = { prompt_count, dropped_count, refilled_count }`.
-- New tests:
-  - `_shared/__tests__/destination-skip-list.test.ts` — matcher, merge, cache hydration.
-  - `pipeline/__tests__/validate-day-skip-list.test.ts` — Robot Restaurant in Tokyo → critical → drop.
-  - `__tests__/refill-skip-list-respects.test.ts` — refill never returns a blacklisted candidate.
-
-### 6. One-shot legacy cleanup
-
-Optional follow-up (not in this PR): a `heal-skip-list-violations` edge fn that scans existing `trips.itinerary_data` and drops any persisted skip-list matches, then re-persists via `safeUpdateItineraryData('self-heal-skip-list')`. Out of scope unless requested.
+## Out of scope (deliberate)
+- The toggle itself (`budget_include_hotel` / `budget_include_flight`) and where users flip it — unchanged.
+- `tripTotalCents` math — unchanged. The displayed Trip Total still equals what the toggle implies.
+- Payments line items list — unchanged.
+- Memory updates — no new constraint; this is a presentation fix layered on existing `excludedHotelCents` / `excludedFlightCents` snapshot fields that were already plumbed for exactly this case.
 
 ## Files touched
+- `src/lib/itinerary/headerStripValues.ts` (add `excludedBreakdownLabel`)
+- `src/lib/itinerary/__tests__/headerStripValues.test.ts` (4 new cases)
+- `src/components/itinerary/EditorialItinerary.tsx` (header strip note, ~10 lines near line 6470)
+- `src/components/itinerary/PaymentsTab.tsx` (Travel Essentials headline + badge, ~15 lines near line 1438)
 
-**New**
-- `supabase/functions/_shared/destination-skip-list.ts`
-- `supabase/functions/_shared/__tests__/destination-skip-list.test.ts`
-- `supabase/functions/generate-itinerary/pipeline/__tests__/validate-day-skip-list.test.ts`
-- `supabase/functions/generate-itinerary/__tests__/refill-skip-list-respects.test.ts`
-
-**Edited**
-- `supabase/functions/generate-itinerary/profile-loader.ts` (load skip list into ctx)
-- `supabase/functions/generate-itinerary/generation-types.ts` (type + ctx field)
-- `supabase/functions/generate-itinerary/compile-prompt.ts` (thread into prompt builder)
-- `supabase/functions/generate-itinerary/prompt-library.ts` (skip-list section + hard rule)
-- `supabase/functions/generate-itinerary/pipeline/validate-day.ts` (`SKIP_LIST_VIOLATION` critical drop)
-- `supabase/functions/generate-itinerary/repair-day.ts` (step 10b safety net)
-- `supabase/functions/_shared/refill-slots-llm.ts` (reject matches in refill)
-- `supabase/functions/generate-skip-list/index.ts` (cache to `destination_insights_cache`)
-- `src/utils/itineraryValidator.ts` (accept injected list)
-- `src/components/itinerary/EditorialItinerary.tsx` (pass `useSkipList` result into validator)
-
-## What this closes
-
-- Robot Restaurant on Day 2 + Day 3 in Tokyo (and same-class regressions: Seine cruise in Paris, Piazza Navona in Rome, Hard Rock in London, Las Ramblas dining in Barcelona).
-- Self-contradiction between the "Voyance Intelligence: skip these" panel and the generated itinerary — the same list now drives both.
-- Future destinations get coverage automatically via the AI-generated cache; today only the 5 seeded cities are hard-enforced.
+## Verification
+1. Trip with hotel `$900`, flight `$0`, toggle off → header reads `Days + Reserve = Trip Total $240` and below it `Hotel $900 excluded from Trip Total — toggle on …`; Payments Essentials row shows `$900` + amber `Excluded from Trip Total` badge.
+2. Toggle on → note + badge disappear; chip reappears; Trip Total includes hotel as before.
+3. Both hotel & flight excluded → combined label renders.
+4. No regression to the "Matches itinerary" badge or reconcile hint (they read from `displayedTotal`, which we don't touch).

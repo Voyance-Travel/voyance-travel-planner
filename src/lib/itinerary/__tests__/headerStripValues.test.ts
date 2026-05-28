@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeHeaderStripValues } from '../headerStripValues';
+import { computeHeaderStripValues, excludedBreakdownLabel } from '../headerStripValues';
 
 describe('computeHeaderStripValues', () => {
   it('balances when snapshot total equals days subtotal but a hotel chip is visible (Casablanca / Kyoto / Osaka pattern)', () => {
@@ -98,4 +98,48 @@ describe('computeHeaderStripValues', () => {
     }
   });
 });
+
+describe('excludedBreakdownLabel + hasExcludedLogistics (Pricing 3A)', () => {
+  // Trivial formatter: $1234 → "$1,234" — close enough for assertions without
+  // pulling in the full formatCurrency() locale machinery.
+  const f = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
+
+  it('flags hotel-only exclusion and labels it', () => {
+    const v = computeHeaderStripValues({
+      tripTotalUsd: 240, daysGroupUsd: 240, hotelChipUsd: 0, flightChipUsd: 0,
+      excludedHotelUsd: 900, excludedFlightUsd: 0,
+    });
+    expect(v.hasExcludedLogistics).toBe(true);
+    expect(v.excludedTotalUsd).toBe(900);
+    expect(excludedBreakdownLabel(v, f)).toBe('Hotel $900');
+  });
+
+  it('flags flight-only exclusion and labels it', () => {
+    const v = computeHeaderStripValues({
+      tripTotalUsd: 240, daysGroupUsd: 240, hotelChipUsd: 0, flightChipUsd: 0,
+      excludedHotelUsd: 0, excludedFlightUsd: 1240,
+    });
+    expect(v.hasExcludedLogistics).toBe(true);
+    expect(excludedBreakdownLabel(v, f)).toBe('Flights $1,240');
+  });
+
+  it('combines both excluded buckets', () => {
+    const v = computeHeaderStripValues({
+      tripTotalUsd: 240, daysGroupUsd: 240, hotelChipUsd: 0, flightChipUsd: 0,
+      excludedHotelUsd: 900, excludedFlightUsd: 1240,
+    });
+    expect(v.hasExcludedLogistics).toBe(true);
+    expect(v.excludedTotalUsd).toBe(2140);
+    expect(excludedBreakdownLabel(v, f)).toBe('Hotel $900 + Flights $1,240');
+  });
+
+  it('renders nothing when no exclusions', () => {
+    const v = computeHeaderStripValues({
+      tripTotalUsd: 1140, daysGroupUsd: 240, hotelChipUsd: 900, flightChipUsd: 0,
+    });
+    expect(v.hasExcludedLogistics).toBe(false);
+    expect(excludedBreakdownLabel(v, f)).toBe('');
+  });
+});
+
 

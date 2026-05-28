@@ -105,3 +105,26 @@ export function computeHeaderStripValues(input: HeaderStripInputs): HeaderStripV
     hasExcludedLogistics,
   };
 }
+
+/**
+ * Human-readable breakdown of which logistics buckets are being hidden from
+ * the Trip Total by the Budget Visibility toggles. Returns "" when nothing is
+ * excluded. The `formatter` arg is the caller's currency formatter so the
+ * label follows the USD/local toggle that's already in scope.
+ *
+ *   excludedBreakdownLabel({ excludedHotelUsd: 900, excludedFlightUsd: 0 }, f)
+ *     → "Hotel $900"
+ *   excludedBreakdownLabel({ excludedHotelUsd: 0,   excludedFlightUsd: 1240 }, f)
+ *     → "Flights $1,240"
+ *   excludedBreakdownLabel({ excludedHotelUsd: 900, excludedFlightUsd: 1240 }, f)
+ *     → "Hotel $900 + Flights $1,240"
+ */
+export function excludedBreakdownLabel(
+  values: Pick<HeaderStripValues, 'excludedHotelUsd' | 'excludedFlightUsd'>,
+  formatter: (usd: number) => string,
+): string {
+  const parts: string[] = [];
+  if (values.excludedHotelUsd > 0.5) parts.push(`Hotel ${formatter(values.excludedHotelUsd)}`);
+  if (values.excludedFlightUsd > 0.5) parts.push(`Flights ${formatter(values.excludedFlightUsd)}`);
+  return parts.join(' + ');
+}
