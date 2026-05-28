@@ -36,7 +36,8 @@ export type ExecutionerCode =
   | 'MIDNIGHT_SPILLOVER_ALLOWED'
   | 'MIDNIGHT_SPILLOVER_DROPPED'
   | 'BUFFER_CASCADE_REPAIRED'
-  | 'GEO_OUTLIER';
+  | 'GEO_OUTLIER'
+  | 'GAP_REFILLED';
 
 export interface ExecutionerIssue {
   code: ExecutionerCode;
@@ -56,6 +57,7 @@ export interface ExecutionerCounters {
   geoOutliersFlagged: number;
   geoOutliersDropped: number;
   droppedActivities: number;
+  gapsRefilled: number;
   issues: ExecutionerIssue[];
 }
 
@@ -74,6 +76,12 @@ export interface ExecutionerContext {
   budgetTier?: string | null;
   /** When true the geo coherence pass only flags, never drops. */
   geoFlagOnly?: boolean;
+  /**
+   * Hard override: when true, geo coherence WILL drop outliers regardless of
+   * geoFlagOnly. Wired from env `EXECUTIONER_GEO_DROP_ENABLED=true` once
+   * telemetry shows <2% false-positive rate.
+   */
+  geoDropEnabled?: boolean;
 }
 
 export interface ExecutionerResult {
@@ -169,6 +177,7 @@ function newCounters(): ExecutionerCounters {
     geoOutliersFlagged: 0,
     geoOutliersDropped: 0,
     droppedActivities: 0,
+    gapsRefilled: 0,
     issues: [],
   };
 }
@@ -504,7 +513,8 @@ export function enforceGeoCoherence(
     }
   }
 
-  if (!ctx.geoFlagOnly && flagged.length > 0) {
+  const dropAllowed = ctx.geoDropEnabled === true || !ctx.geoFlagOnly;
+  if (dropAllowed && flagged.length > 0) {
     const dropSet = new Set(flagged.map(actId));
     const before = activities.length;
     const survivors = activities.filter((a) => {
@@ -549,3 +559,157 @@ export const __test_only = {
   isArrivalCard,
   isLocked,
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit-code translation (read-time auditor parity)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Convert Executioner counters into the canonical audit-code list shared with
+ * `auditTimingViolations`. The result is meant to be stamped onto
+ * `day.metadata.quality.executioner_audit` and surfaced through the read-time
+ * auditor / TripHealthPanel without needing a fresh write.
+ */
+export interface ExecutionerAuditCode {
+  code:
+    | 'EXEC_FLIGHT_ANCHOR_FIXED'
+    | 'EXEC_MIDNIGHT_SPILL_TRIMMED'
+    | 'EXEC_BUFFER_CASCADE_APPLIED'
+    | 'EXEC_GEO_OUTLIER_DROPPED'
+    | 'EXEC_GAP_REFILLED';
+  count: number;
+  dayNumber: number;
+  detail: string;
+}
+
+export function toExecutionerAuditCodes(
+  counters: ExecutionerCounters,
+  dayNumber: number,
+): ExecutionerAuditCode[] {
+  const out: ExecutionerAuditCode[] = [];
+  if (counters.flightAnchorRepaired > 0) {
+    out.push({
+      code: 'EXEC_FLIGHT_ANCHOR_FIXED',
+      count: counters.flightAnchorRepaired,
+      dayNumber,
+      detail: `Retimed ${counters.flightAnchorRepaired} arrival card(s) to flight truth`,
+    });
+  }
+  if (counters.midnightSpilloversDropped > 0) {
+    out.push({
+      code: 'EXEC_MIDNIGHT_SPILL_TRIMMED',
+      count: counters.midnightSpilloversDropped,
+      dayNumber,
+      detail: `Clamped ${counters.midnightSpilloversDropped} illegal past-midnight wrap(s)`,
+    });
+  }
+  if (counters.bufferRepairs + counters.overlapRepairs > 0) {
+    out.push({
+      code: 'EXEC_BUFFER_CASCADE_APPLIED',
+      count: counters.bufferRepairs + counters.overlapRepairs,
+      dayNumber,
+      detail: `Cascade fixed ${counters.bufferRepairs} buffer + ${counters.overlapRepairs} overlap`,
+    });
+  }
+  if (counters.geoOutliersDropped > 0) {
+    out.push({
+      code: 'EXEC_GEO_OUTLIER_DROPPED',
+      count: counters.geoOutliersDropped,
+      dayNumber,
+      detail: `Dropped ${counters.geoOutliersDropped} off-theme geo outlier(s)`,
+    });
+  }
+  if (counters.gapsRefilled > 0) {
+    out.push({
+      code: 'EXEC_GAP_REFILLED',
+      count: counters.gapsRefilled,
+      dayNumber,
+      detail: `Refilled ${counters.gapsRefilled} gap(s) opened by cleanup`,
+    });
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Refill pass (optional, async)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Caller-supplied refill bridge. Returns ONE activity to insert into the
+ * largest >=90min gap left by Executioner drops, or null to no-op. Kept
+ * generic so the Executioner doesn't depend on `_shared/fill-gap.ts` directly.
+ */
+export type ExecutionerRefillFn = (input: {
+  activities: any[];
+  gapStartTime: string;
+  gapEndTime: string;
+  beforeId?: string;
+  afterId?: string;
+  dayNumber: number;
+}) => Promise<any | null>;
+
+const REFILL_MIN_GAP_MIN = 90;
+const ACTIVE_WINDOW_START_MIN = 9 * 60;
+const ACTIVE_WINDOW_END_MIN = 22 * 60;
+
+/**
+ * Locate the single largest gap inside the active window and call `refill`
+ * once. Inserts at most one card. Honors Universal Locking — never refills
+ * over a locked neighbour. Stamps `source: 'executioner_refill'` on inserts.
+ */
+export async function runExecutionerRefill(
+  result: ExecutionerResult,
+  ctx: ExecutionerContext,
+  refill: ExecutionerRefillFn,
+): Promise<ExecutionerResult> {
+  const { activities, counters } = result;
+  if (counters.droppedActivities === 0) return result;
+  if (!Array.isArray(activities) || activities.length < 1) return result;
+
+  // Build sorted timed neighbours within the active window.
+  const sorted = activities
+    .map((a) => ({ a, s: pickStart(a), e: pickEnd(a) }))
+    .filter((x) => x.s !== null && x.e !== null) as Array<{ a: any; s: number; e: number }>;
+  sorted.sort((x, y) => x.s - y.s);
+  if (sorted.length < 2) return result;
+
+  let best: { gap: number; before: typeof sorted[0]; after: typeof sorted[0] } | null = null;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = sorted[i];
+    const b = sorted[i + 1];
+    const gapStart = Math.max(a.e, ACTIVE_WINDOW_START_MIN);
+    const gapEnd = Math.min(b.s, ACTIVE_WINDOW_END_MIN);
+    const gap = gapEnd - gapStart;
+    if (gap < REFILL_MIN_GAP_MIN) continue;
+    if (!best || gap > best.gap) best = { gap, before: a, after: b };
+  }
+  if (!best) return result;
+
+  try {
+    const inserted = await refill({
+      activities,
+      gapStartTime: fmtHM(Math.max(best.before.e, ACTIVE_WINDOW_START_MIN)),
+      gapEndTime: fmtHM(Math.min(best.after.s, ACTIVE_WINDOW_END_MIN)),
+      beforeId: actId(best.before.a),
+      afterId: actId(best.after.a),
+      dayNumber: ctx.dayNumber,
+    });
+    if (!inserted) return result;
+    inserted.source = inserted.source || 'executioner_refill';
+    inserted.metadata = inserted.metadata || {};
+    inserted.metadata.executionerRefill = true;
+    activities.push(inserted);
+    counters.gapsRefilled++;
+    counters.issues.push({
+      code: 'GAP_REFILLED',
+      activityId: actId(inserted),
+      title: title(inserted),
+      detail: `Refilled ${best.gap}m gap between ${title(best.before.a)} and ${title(best.after.a)}`,
+      repaired: true,
+    });
+    console.log(`[EXECUTIONER] GAP_REFILLED day=${ctx.dayNumber} gap=${best.gap}m title="${title(inserted)}"`);
+  } catch (err) {
+    console.warn(`[EXECUTIONER] refill failed day=${ctx.dayNumber}:`, err);
+  }
+  return result;
+}

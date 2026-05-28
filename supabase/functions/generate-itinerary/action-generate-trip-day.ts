@@ -2550,8 +2550,10 @@ async function _handleGenerateTripDayInner(
   // See supabase/functions/_shared/schedule-executioner.ts.
   if (Array.isArray(dayResult?.activities) && dayResult.activities.length > 0) {
     try {
-      const { runScheduleExecutioner } = await import('../_shared/schedule-executioner.ts');
-      const exec = runScheduleExecutioner(dayResult.activities, {
+      const { runScheduleExecutioner, runExecutionerRefill, toExecutionerAuditCodes } =
+        await import('../_shared/schedule-executioner.ts');
+      const geoDropEnabled = (Deno.env.get('EXECUTIONER_GEO_DROP_ENABLED') || '').toLowerCase() === 'true';
+      const execCtx = {
         dayNumber,
         totalDays,
         isFirstDay: _isFirstDay,
@@ -2560,8 +2562,35 @@ async function _handleGenerateTripDayInner(
         departureTime24: _isLastDay ? savedDepTime24Hoisted : null,
         dayTitle: dayResult?.title || dayResult?.theme || null,
         budgetTier: budgetTier ?? null,
-        geoFlagOnly: true, // start conservative: log only, no drops yet
-      });
+        geoFlagOnly: !geoDropEnabled,
+        geoDropEnabled,
+      };
+      let exec = runScheduleExecutioner(dayResult.activities, execCtx);
+
+      // Refill pass — bounded to 1 insert per cleanup event.
+      if (exec.counters.droppedActivities > 0) {
+        try {
+          const { proposeGapFiller } = await import('../_shared/fill-gap.ts');
+          exec = await runExecutionerRefill(exec, execCtx, async (input) => {
+            return await proposeGapFiller({
+              activities: input.activities,
+              destination: (cityInfo?.cityName || destination) as any,
+              gapStartTime: input.gapStartTime,
+              gapEndTime: input.gapEndTime,
+              beforeId: input.beforeId,
+              afterId: input.afterId,
+              archetype: (tripMeta?.travel_dna_primary as string | undefined) || undefined,
+              dietaryRestrictions: (tripMeta?.dietary_restrictions as string[] | undefined) || [],
+              budgetTier: ((tripMeta?.budget_tier as string | undefined) || budgetTier || 'standard') as any,
+              tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
+              avoidIds: [],
+            } as any, { source: 'executioner_refill' });
+          });
+        } catch (refillErr) {
+          console.warn('[generate-trip-day] executioner refill failed (non-blocking):', refillErr);
+        }
+      }
+
       dayResult.activities = exec.activities;
       dayResult.metadata = dayResult.metadata || {};
       dayResult.metadata.quality = dayResult.metadata.quality || {};
@@ -2575,10 +2604,13 @@ async function _handleGenerateTripDayInner(
         geoOutliersFlagged: exec.counters.geoOutliersFlagged,
         geoOutliersDropped: exec.counters.geoOutliersDropped,
         droppedActivities: exec.counters.droppedActivities,
+        gapsRefilled: exec.counters.gapsRefilled,
+        geoDropEnabled,
         issuesSample: exec.counters.issues.slice(0, 10),
       };
+      dayResult.metadata.quality.executioner_audit = toExecutionerAuditCodes(exec.counters, dayNumber);
       console.log(
-        `[EXECUTIONER_SUMMARY] day=${dayNumber} flight=${exec.counters.flightAnchorRepaired} spillAllowed=${exec.counters.midnightSpilloversAllowed} spillDropped=${exec.counters.midnightSpilloversDropped} buffer=${exec.counters.bufferRepairs} overlap=${exec.counters.overlapRepairs} geoFlagged=${exec.counters.geoOutliersFlagged} geoDropped=${exec.counters.geoOutliersDropped}`,
+        `[EXECUTIONER_SUMMARY] day=${dayNumber} flight=${exec.counters.flightAnchorRepaired} spillAllowed=${exec.counters.midnightSpilloversAllowed} spillDropped=${exec.counters.midnightSpilloversDropped} buffer=${exec.counters.bufferRepairs} overlap=${exec.counters.overlapRepairs} geoFlagged=${exec.counters.geoOutliersFlagged} geoDropped=${exec.counters.geoOutliersDropped} refilled=${exec.counters.gapsRefilled} geoDropEnabled=${geoDropEnabled}`,
       );
     } catch (execErr) {
       console.warn('[generate-trip-day] schedule-executioner failed (non-blocking):', execErr);
