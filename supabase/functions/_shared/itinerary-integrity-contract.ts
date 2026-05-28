@@ -356,9 +356,12 @@ export function checkItineraryIntegrity(
       if (!key) continue;
       if (scheduledIntents.has(key)) continue;
       if (infeasibleTrip) {
-        // Surface once at trip-level via NO_SIGHTSEEING_CAPACITY below.
+        // Trip-wide infeasibility: list in omittedRequests but skip the
+        // per-intent violation (surfaced once via NO_SIGHTSEEING_CAPACITY).
+        omittedRequests.push({ title: intent.title, reason: 'infeasible_time' });
         continue;
       }
+      omittedRequests.push({ title: intent.title, reason: 'not_scheduled' });
       violations.push({
         code: 'REQUIRED_USER_INTENT_MISSING',
         dayNumber: typeof intent.dayNumber === 'number' ? intent.dayNumber : 1,
@@ -394,6 +397,8 @@ export function checkItineraryIntegrity(
     violations,
     codes,
     infeasibleDays,
+    omittedRequests,
+    mealCoverage,
   };
 }
 
