@@ -288,7 +288,7 @@ export function enforceMidnightSpill(
     if (s === null || e === null) continue;
     if (e >= s) continue; // not a wrap
 
-    const allowed = isNightlife(a) || qualifiesAsLateNightlife(a);
+    const allowed = isNightlife(a) || qualifiesAsLateNightlife(a, s, e);
     if (allowed) {
       const spillMin = (24 * 60 - s) + e;
       a.metadata = a.metadata || {};
