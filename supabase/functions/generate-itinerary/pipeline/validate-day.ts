@@ -121,7 +121,8 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   const { day, dayNumber, isFirstDay, isLastDay, hasHotel, hotelName,
     arrivalTime24, returnDepartureTime24, requiredMeals, previousDays,
     avoidList, dietaryRestrictions, mustDoActivities,
-    isHotelChange, previousHotelName, destination, budgetTier } = input;
+    isHotelChange, previousHotelName, destination, budgetTier,
+    destinationSkipList } = input;
 
   const activities = day.activities || [];
 
@@ -205,7 +206,47 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
     checkCrossDayCheckoutHotelLeak(activities, previousDays[previousDays.length - 1], results);
   }
 
+  // --- SKIP_LIST_VIOLATION (Voyance Intelligence parity) ---
+  if (destinationSkipList && destinationSkipList.length > 0) {
+    checkDestinationSkipList(activities, destinationSkipList, results);
+  }
+
   return results;
+}
+
+/**
+ * SKIP_LIST_VIOLATION — flag any activity that the destination skip list
+ * (UI "Why we skipped" panel) explicitly tells the user to avoid. Critical
+ * severity so validation-gate drops the card; refill-slots-llm then picks
+ * a replacement that respects the same list.
+ */
+function checkDestinationSkipList(
+  activities: any[],
+  list: import('../../_shared/destination-skip-list.ts').SkipListEntry[],
+  results: ValidationResult[],
+): void {
+  // Lazy import to avoid cycle in unit tests that stub validate-day.
+  const { matchesDestinationSkipList } = require('../../_shared/destination-skip-list.ts');
+  for (let i = 0; i < activities.length; i++) {
+    const a = activities[i];
+    if (!a) continue;
+    // Universal Locking: never flag locked / user / manual / extracted / pinned.
+    if (a.isLocked || a.locked_source === 'user' || a.locked_source === 'manual'
+        || a.locked_source === 'extracted' || a.locked_source === 'pinned'
+        || a.locked_source === 'booked') continue;
+    const title = String(a.title || a.name || '');
+    const desc = String(a.description || '');
+    const hit = matchesDestinationSkipList(title, desc, list);
+    if (hit) {
+      results.push({
+        code: FAILURE_CODES.SKIP_LIST_VIOLATION,
+        severity: 'critical',
+        message: `"${title}" matches destination skip list ("${hit.keyword}") — Voyance Intelligence tells the user to avoid this. ${hit.alternative ? `Use instead: ${hit.alternative}.` : 'Drop or replace.'}`,
+        activityIndex: i,
+        autoRepairable: true,
+      });
+    }
+  }
 }
 
 /**
