@@ -106,7 +106,7 @@ export interface ValidateDayInput {
    *  Any activity matching one of these is dropped as a critical violation
    *  (validation-gate handler in pipeline/validation-gate.ts). Empty / undefined
    *  list silently skips the check. */
-  destinationSkipList?: import('../../_shared/destination-skip-list.ts').SkipListEntry[];
+  destinationSkipList?: SkipListEntry[];
 }
 
 // =============================================================================
@@ -223,11 +223,9 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
  */
 function checkDestinationSkipList(
   activities: any[],
-  list: import('../../_shared/destination-skip-list.ts').SkipListEntry[],
+  list: SkipListEntry[],
   results: ValidationResult[],
 ): void {
-  // Lazy import to avoid cycle in unit tests that stub validate-day.
-  const { matchesDestinationSkipList } = require('../../_shared/destination-skip-list.ts');
   for (let i = 0; i < activities.length; i++) {
     const a = activities[i];
     if (!a) continue;
