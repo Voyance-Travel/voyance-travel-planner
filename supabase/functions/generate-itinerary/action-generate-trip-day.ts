@@ -563,6 +563,20 @@ async function _handleGenerateTripDayInner(
       } catch (stampErr) {
         console.warn('[SLOT_FILLER] trace stamp failed (non-blocking):', stampErr);
       }
+
+      // ── PHASE 5 CUTOVER SCAFFOLD (flag-gated, separate from dry-run) ──
+      // When `metadata.feature_flags.schema_filler_primary === true`, the next
+      // commit will route fillerResult.activities → cleanupDay → refillDroppedSlots
+      // → existing enrich/repair/persist tail INSTEAD of the legacy AI call.
+      // For now this branch only logs readiness so we can see in production
+      // which trips have the flag set and how often the filler would have been
+      // primary path eligible (ok + zero unfilled slots).
+      if ((ff as Record<string, unknown>).schema_filler_primary === true) {
+        const eligible = fillerResult.ok && fillerResult.unfilledSlotIds.length === 0;
+        console.log(
+          `[SLOT_FILLER_PRIMARY] day=${dayNumber} eligible=${eligible} fills=${fillerResult.fillCount} unfilled=${fillerResult.unfilledSlotIds.length} — scaffold only, legacy path still primary`,
+        );
+      }
     }
   } catch (fillerErr) {
     console.warn('[SLOT_FILLER] dry-run failed (non-blocking):', fillerErr);
