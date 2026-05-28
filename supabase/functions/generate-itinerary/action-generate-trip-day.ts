@@ -545,7 +545,7 @@ async function _handleGenerateTripDayInner(
         tripPlan: (tripMeta.trip_plan as any) ?? null,
       });
       console.log(
-        `[SLOT_FILLER] day=${dayNumber} ok=${fillerResult.ok} fills=${fillerResult.fillCount} unfilled=${fillerResult.unfilledSlotIds.length} attempts=${fillerResult.attempts} durationMs=${fillerResult.durationMs}${fillerResult.error ? ` error=${fillerResult.error}` : ''}`,
+        `[SLOT_FILLER] day=${dayNumber} ok=${fillerResult.ok} fills=${fillerResult.fillCount} unfilled=${fillerResult.unfilledSlotIds.length} attempts=${fillerResult.attempts} durationMs=${fillerResult.durationMs} appliedDayAssignment=${fillerResult.trace.appliedDayAssignment} assignedMustDos=${fillerResult.trace.assignedMustDoIds.length}${fillerResult.error ? ` error=${fillerResult.error}` : ''}`,
       );
 
       // ── PHASE 5/6 — CLEANUP + REFILL DRY-RUN (chained off Filler) ──

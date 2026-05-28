@@ -3,7 +3,7 @@
 // Behavior:
 //   1. Rebuild the per-day SkeletonDay deterministically (same code Phase 3 uses).
 //   2. Apply trip_plan.dayAssignments from metadata (must-do refs already
-//      decided by the Planner).
+//      decided by the Planner) via selectMustDosForDay().
 //   3. Call fillDaySkeleton against the empty slots.
 //   4. Merge the result back into the skeleton, run the adapter, return shape
 //      ready to feed into the legacy enrich/repair tail.
@@ -53,14 +53,76 @@ export interface FillerOrchestratorResult {
     unfilled: number;
     durationMs: number;
     error?: string;
+    /** Whether a Planner dayAssignment was found and applied for this day. */
+    appliedDayAssignment: boolean;
+    /** IDs from the Planner's mustDoSlots for this day (empty when no assignment). */
+    assignedMustDoIds: string[];
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pure helper — exported so it can be unit-tested without mocking the LLM.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Given the full must-do list and a (possibly absent) trip_plan, return the
+ * subset that belongs to `dayNumber`.
+ *
+ * Rules (in priority order):
+ *  1. If `tripPlan.dayAssignments` is absent → return full list (legacy fallback).
+ *  2. If no assignment exists for `dayNumber` → return full list (safety fallback).
+ *  3. Otherwise keep only must-dos whose `id` is referenced in that day's
+ *     `mustDoSlots[].mustDoRef` **OR** whose `fixedDayNumber === dayNumber`
+ *     (hard-anchored must-dos are always preserved regardless of Planner output).
+ */
+export function selectMustDosForDay(
+  mustDos: FillerOrchestratorInput['mustDos'],
+  dayNumber: number,
+  tripPlan?: FillerOrchestratorInput['tripPlan'] | null,
+): {
+  filtered: FillerOrchestratorInput['mustDos'];
+  appliedDayAssignment: boolean;
+  assignedMustDoIds: string[];
+} {
+  if (!tripPlan?.dayAssignments?.length) {
+    return { filtered: mustDos, appliedDayAssignment: false, assignedMustDoIds: [] };
+  }
+
+  const assignment = tripPlan.dayAssignments.find((a) => a.dayNumber === dayNumber);
+  if (!assignment) {
+    return { filtered: mustDos, appliedDayAssignment: false, assignedMustDoIds: [] };
+  }
+
+  const assignedIds = new Set(assignment.mustDoSlots.map((s) => s.mustDoRef));
+  const filtered = mustDos.filter(
+    (m) => assignedIds.has(m.id) || m.fixedDayNumber === dayNumber,
+  );
+
+  return {
+    filtered,
+    appliedDayAssignment: true,
+    assignedMustDoIds: [...assignedIds],
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Orchestrator
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function runSchemaFillerForDay(
   input: FillerOrchestratorInput,
   opts: FillerCallOptions = {},
 ): Promise<FillerOrchestratorResult> {
   const t0 = Date.now();
+
+  // Apply Planner day assignments — filter must-dos to only those assigned to
+  // this specific day. Falls back to full list when no tripPlan is present.
+  const { filtered: dayMustDos, appliedDayAssignment, assignedMustDoIds } = selectMustDosForDay(
+    input.mustDos,
+    input.dayNumber,
+    input.tripPlan,
+  );
+
   const built = buildEmptyDaySkeleton({
     dayNumber: input.dayNumber,
     totalDays: input.totalDays,
@@ -75,7 +137,7 @@ export async function runSchemaFillerForDay(
     arrivalTime24: input.dayNumber === 1 ? input.arrivalTime24 ?? null : null,
     departureTime24: input.dayNumber === input.totalDays ? input.departureTime24 ?? null : null,
     hasHotelData: input.hasHotelData,
-    mustDos: input.mustDos.map((m) => ({
+    mustDos: dayMustDos.map((m) => ({
       id: m.id,
       title: m.title,
       category: m.category ?? undefined,
@@ -86,7 +148,7 @@ export async function runSchemaFillerForDay(
 
   const skeleton = built.skeleton;
   const titles: Record<string, string> = Object.fromEntries(
-    input.mustDos.map((m) => [m.id, m.title]),
+    dayMustDos.map((m) => [m.id, m.title]),
   );
 
   const filler = await fillDaySkeleton(
@@ -112,6 +174,8 @@ export async function runSchemaFillerForDay(
         unfilled: filler.unfilledSlotIds.length,
         durationMs: filler.durationMs,
         error: filler.error,
+        appliedDayAssignment,
+        assignedMustDoIds,
       },
     };
   }
@@ -134,6 +198,8 @@ export async function runSchemaFillerForDay(
       fills: filler.response.fills.length,
       unfilled: filler.unfilledSlotIds.length,
       durationMs: filler.durationMs,
+      appliedDayAssignment,
+      assignedMustDoIds,
     },
   };
 }
