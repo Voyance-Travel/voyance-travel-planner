@@ -2574,15 +2574,15 @@ async function _handleGenerateTripDayInner(
           exec = await runExecutionerRefill(exec, execCtx, async (input) => {
             return await proposeGapFiller({
               activities: input.activities,
-              destination: destination as any,
+              destination: (cityInfo?.cityName || destination) as any,
               gapStartTime: input.gapStartTime,
               gapEndTime: input.gapEndTime,
               beforeId: input.beforeId,
               afterId: input.afterId,
-              archetype: (tripContext as any)?.archetype,
-              dietaryRestrictions: (tripContext as any)?.dietaryRestrictions || [],
-              budgetTier: (budgetTier as any) || 'standard',
-              tripCurrency: (tripContext as any)?.tripCurrency || 'USD',
+              archetype: (tripMeta?.travel_dna_primary as string | undefined) || undefined,
+              dietaryRestrictions: (tripMeta?.dietary_restrictions as string[] | undefined) || [],
+              budgetTier: ((tripMeta?.budget_tier as string | undefined) || budgetTier || 'standard') as any,
+              tripCurrency: (tripMeta?.currency as string | undefined) || 'USD',
               avoidIds: [],
             } as any, { source: 'executioner_refill' });
           });
