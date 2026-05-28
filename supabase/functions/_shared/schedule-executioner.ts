@@ -288,9 +288,12 @@ export function enforceMidnightSpill(
     if (s === null || e === null) continue;
     if (e >= s) continue; // not a wrap
 
-    const allowed = isNightlife(a) || qualifiesAsLateNightlife(a, s, e);
+    // Pass nulls so qualifiesAsLateNightlife only uses title/category — the
+    // time-anchored fallback inside that predicate would over-allow any
+    // late wrap (e.g. a museum at 23:30→00:30) and defeat the safety net.
+    const allowed = isNightlife(a) || qualifiesAsLateNightlife(a, null, null);
     if (allowed) {
-      const spillMin = (24 * 60 - s) + e;
+      const spillMin = e; // minutes since midnight on next day
       a.metadata = a.metadata || {};
       a.metadata.spillsPastMidnight = true;
       a.metadata.spilloverMinutes = spillMin;
