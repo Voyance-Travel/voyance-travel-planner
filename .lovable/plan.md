@@ -1,224 +1,127 @@
-Yes — I do know the systematic issue now.
+I agree with your diagnosis: the current pipeline does not work as a system. The Rome trip shows the same class of failure across three surfaces: timing collapses, required food disappears, and requested places are treated as optional until it is too late.
 
-The root issue is not Rome, Barcelona, nightcaps, gaps, routing, or one bad regex. The root issue is that the app does **not have one authoritative commit boundary** for an itinerary.
-
-Right now, the system treats a trip as mutable JSON flowing through many best-effort layers:
+The root issue is not one Rome bug. It is that the app still has separate advisory validators, repair passes, read-time patches, and cost readers instead of one hard commit contract that decides whether a trip is actually valid.
 
 ```text
-AI output
-  → sanitizer
-  → repair pass
-  → chronology pass
-  → bookend pass
-  → intent pass
-  → cost pass
-  → parser/read-time pass
-  → frozen guard
-  → normalized tables
-  → activity_costs
-  → UI totals
+Current failure pattern
+AI creates itinerary
+  -> some validators notice some things
+  -> some repair layers patch some things
+  -> save/frozen guard may block later correction
+  -> trip can still look structurally complete while semantically broken
 ```
 
-But these layers do not operate as one transaction. Many are advisory, non-blocking, or run after the trip has already been marked ready/frozen. That is why every new fix “finds the issue” but does not end the class of failures.
+## Confirmed causes from the current code path
 
-## Confirmed systematic root cause
+1. **The new commit gate is still only a status gate, not a full commit boundary.**
+   It can demote `ready` to `partial`, but it does not yet own the full sequence: repair, meal enforcement, request coverage, table sync, cost ledger, and freeze. Recent logs also show saves being blocked by the frozen guard before a repair can persist, which means the system can identify a bad trip but still fail to replace it.
 
-### 1. Time is not modeled as a schedule contract
+2. **Nightcap timing is caught too late and hidden in other layers.**
+   The final integrity contract now flags morning nightcaps, but the generation validator and timing auditor do not consistently treat nightlife/nightcap as an evening-only role. On the frontend timing spine, `nightcap` is still classified like a hotel-return/bookend, which can hide it from gap and health checks.
 
-The engine still stores activity cards with loose fields like `title`, `category`, `startTime`, `endTime`, and then later tries to infer meaning from them.
+3. **Meal requirements are not part of final readiness.**
+   Meal policy exists and prompts the AI, and generation validation checks missing meals, but the final commit integrity contract does not yet say: “Day 2 requires breakfast/lunch/dinner, and if they are absent this trip cannot be ready.” That is why a middle Rome day can end up with zero food.
 
-That is why a card like:
+4. **User requests are not treated as a feasibility contract.**
+   Trevi Fountain and Colosseum should become explicit requested-item obligations. If time allows, missing them must block ready. If time does not allow, the trip should become `partial/infeasible` with a user-visible list: “scheduled / left out / why.” Right now, the system can silently drop requested places and still try to present a finished itinerary.
+
+5. **Gap detection has a real scope bug.**
+   The health gap function says it accepts either a full trip array or one day’s activities, but when it receives a day-scoped array whose activities do not each carry `dayNumber`, it filters everything out and returns no warnings. That makes long empty windows invisible.
+
+6. **Math still has competing read paths.**
+   The cost system mostly prefers the activity-cost ledger, but the displayed header/day/payment totals still do some float conversion and multiple independent fetches. That can produce small but persistent drift.
+
+## Implementation plan
+
+### 1. Turn the commit gate into a real commit contract
+
+Create a shared backend `commitItinerary` flow that every generation/save/regeneration/chat/self-heal path must use before any trip can become ready or frozen.
+
+The commit order will be non-negotiable:
 
 ```text
-Nightcap at Divinity Terrace Lounge Bar — 9:00 AM
+normalize schedule
+-> classify roles
+-> enforce time windows
+-> enforce meal policy
+-> enforce requested-place coverage / feasibility
+-> enforce gaps and landing/departure sequence
+-> persist final JSON
+-> sync normalized tables
+-> write activity_costs from that exact JSON
+-> reconcile ledger coverage
+-> only then mark ready + fully persisted + frozen
 ```
 
-can survive: the system sees an activity row, not a typed schedule role with hard constraints.
+If any hard invariant fails, the trip is saved as `partial`, not `ready`, with exact reasons.
 
-The fix is not another nightcap regex. The fix is that every activity must be classified before commit as one of a small set of roles, and each role must have legal time windows and sequencing rules.
+### 2. Make timing role validation canonical
 
-### 2. Planning intent is advisory instead of contractual
+Add one shared semantic timing validator used by generation validation, final commit, and legacy audit.
 
-User-selected places and must-dos are still treated like preferences that can be lost, overwritten, injected, dropped, or matched later.
+It will enforce:
 
-That is the core Barcelona failure: the user paid for curated planning, but the final persisted trip could still become logistics-only because must-dos were not enforced at the same place that marks the trip ready.
+- nightcap/cocktail/speakeasy/rooftop bar cannot start in the morning
+- breakfast/lunch/dinner must be inside their time bands
+- hotel restaurant/bar/spa cannot occur before check-in
+- stale/predawn hotel-return bookends cannot hide a huge active-day gap
+- departure-day activities cannot appear after checkout/airport transfer cutoff
 
-Required user selections must become a commit-time hard contract:
+Also fix the frontend role classifier so `nightcap` is not treated as a hotel-return bookend.
 
-```text
-If required place is feasible and missing → trip cannot be ready.
-If required place is infeasible because of flights/time → trip must be partial/infeasible, not shell-ready.
-```
+### 3. Make meal coverage a final readiness rule
 
-### 3. Landing/freeze happens before truth is proven
-
-The system can still write `ready`, freeze the trip, and later discover that activity costs, normalized tables, must-do coverage, or timing are wrong.
-
-Then the frozen guard can block repairs while returning success-like responses. That creates the exact loop you described: “we fixed it,” but the trip did not change.
-
-The fix is that freeze/ready must be the final step of one commit, not a status update that happens before all invariants are proven.
-
-### 4. Math has multiple sources of truth
-
-The app still has multiple competing cost representations:
-
-```text
-JSON card cost
-activity_costs rows
-header totals
-Payments tab
-budget snapshot
-fallback repair costs
-```
-
-Even if most readers now prefer `activity_costs`, the writer still derives rows from JSON/reference/fallback after schedule generation. That allows small and large drifts because math is not part of the same commit contract as the itinerary.
-
-The fix is that `activity_costs` must be the only committed display ledger. JSON cost can exist only as draft/input metadata. A trip cannot be fully persisted/ready unless the ledger has been written and reconciled against the final committed days.
-
-## What I would change
-
-### 1. Create one `commitItinerary` boundary
-
-Replace the scattered finalization behavior with one backend commit function used by every path:
-
-```text
-generation
-regeneration
-save-itinerary
-chat mutations
-repair actions
-legacy self-heal
-sync/rebuild paths
-```
-
-This function becomes the only place allowed to:
-
-- write `trips.itinerary_data`
-- write normalized itinerary tables
-- write `activity_costs`
-- set `itinerary_status = ready`
-- set `metadata.fully_persisted = true`
-- set `metadata.itinerary_frozen_at`
-
-### 2. Make the commit order non-negotiable
-
-The final write must happen in this order:
-
-```text
-1. Normalize activities into canonical schedule roles
-2. Enforce time/sequence rules
-3. Enforce required user selections
-4. Enforce minimum planning density / no shell curated day
-5. Enforce landing/departure/check-in/check-out sequence
-6. Persist final JSON
-7. Sync normalized tables from that exact JSON
-8. Write activity_costs from that exact JSON
-9. Reconcile ledger coverage
-10. Only then mark ready + fully_persisted + frozen
-```
-
-If any hard invariant fails, the trip remains `partial` with exact failure metadata. No ready. No frozen success. No silent no-op.
-
-### 3. Move integrity enforcement into the actual commit point
-
-The current new integrity contract is a start, but it is not enough because it is currently wired into only part of the pipeline. It must move into the shared persistence/finalization boundary, not sit beside individual actions.
-
-That means generation-core and per-day chain cannot independently stamp ready/frozen unless the shared commit contract says the itinerary is valid.
-
-### 4. Treat frozen repair as a real system operation
-
-Frozen trips need two explicit outcomes:
-
-```text
-system repair persisted
-system repair blocked
-```
-
-Never:
-
-```text
-success: true, skipped: true, reason: frozen
-```
-
-for anything that the user or system interprets as “fixed.”
-
-System invariant repairs should be allowed through a narrow `allowFrozenWrite` path, but only through the same commit contract.
-
-### 5. Make time a typed model, not title guessing
-
-Activities need canonical roles before validation:
-
-```text
-arrival-logistics
-check-in-logistics
-hotel-contained-venue
-meal-breakfast
-meal-lunch
-meal-dinner
-normal-activity
-nightlife
-nightcap
-freshen-up
-hotel-return-bookend
-departure-logistics
-```
-
-Then enforce hard rules:
-
-- nightcap/nightlife cannot start in the morning
-- dinner cannot be midnight unless explicitly late-night continuation
-- hotel venue cannot occur before check-in
-- return-to-hotel cannot hide an unexplained active-day gap
-- departure-day leisure cannot happen after airport transfer/check-out cutoff
-- logistics-only curated days cannot be ready when user selections exist
-
-### 6. Make user selections non-droppable
-
-At commit time, required places must be checked against the actual final persisted day set, not an in-memory pre-persist copy.
+At commit time, derive the required meals for each day from the saved arrival/departure context and actual day shape.
 
 Rules:
 
-- required feasible place missing → block ready
-- required place injected but dropped during persistence → block ready
-- required place impossible because of flights → partial/infeasible, not ready
-- soft wishes can remain advisory; required selections cannot
+- full middle day: breakfast, lunch, dinner required
+- valid arrival/departure exceptions preserved
+- drinks-only never satisfies dinner
+- zero-food middle day cannot become ready
+- if there truly is not enough time, mark partial/infeasible and explain, instead of pretending the traveler will “feed themselves”
 
-### 7. Make cost ledger part of readiness
+### 4. Make user requests contractual with feasibility output
 
-A trip cannot become fully persisted unless `activity_costs` matches the final committed activities.
+Convert selected places and custom must-dos into a coverage manifest at commit time:
+
+```text
+requested item -> scheduled | omitted_feasible | omitted_infeasible | ambiguous
+```
 
 Rules:
 
-- header, day totals, cards, Payments all read the ledger
-- JSON costs do not define final totals
-- logistics/bookend/check-in rows are zero unless user/booked/manual
-- ledger write failure means no `fully_persisted=true`
-- ledger coverage gap means reconciling/partial, not fake final math
+- feasible required item missing blocks ready
+- impossible item does not fake success; trip becomes partial with omitted list
+- user sees exactly what was left out and why
+- no logistics-only “finished” trip when requested places exist
 
-## Regression coverage to prove it is fixed
+For the Rome case, this is where Trevi Fountain and Colosseum would either be scheduled or explicitly listed as omitted due to time constraints.
 
-I would add tests for failure classes, not city strings:
+### 5. Fix gap detection where it is actually broken
+
+Repair the day-scoped filtering bug so `detectGapsForDay(day.activities, dayNumber)` does not discard all activities when individual cards lack `dayNumber`.
+
+Also restore the 3-hour warning threshold for active-day gaps so “structurally sound but practically empty” days are caught.
+
+### 6. Make math integer-ledger based
+
+Move the displayed total equation to integer cents only and remove avoidable USD float math.
+
+Then make the displayed trip total, header chips, day breakdown, and Payments tab read from one resolved ledger result instead of separate fetches/resolver calls where possible.
+
+### 7. Add regression tests for failure classes, not cities
+
+Add tests that prove these cannot ship again:
 
 - nightcap at 9 AM cannot become ready
-- hotel bar/spa/restaurant before check-in cannot become ready
-- logistics-only curated day with selected places cannot become ready
-- required must-do feasible but missing cannot become ready
-- required must-do infeasible becomes partial/infeasible, not shell-ready
-- ready/frozen trip can receive a system integrity repair and actually persist
-- frozen blocked writes return blocked, not success
-- 180-minute active-day gap is detected consistently
-- day/header/Payments totals all match the same ledger
+- middle full day with zero meals cannot become ready
+- requested Trevi/Colosseum-style places missing while feasible cannot become ready
+- over-requested short trip becomes partial with omitted requested items
+- day-scoped gap detection catches a 3-hour gap
+- stale predawn hotel-return cannot mask an evening schedule gap
+- displayed totals use integer cents and stay consistent across header/payments
 
-## The actual fix direction
+## Expected result
 
-No more logs. No more one-off patches. No more “found the issue.”
-
-The fix is to stop letting many independent layers each decide part of the truth. We need one final itinerary commit contract that owns:
-
-```text
-time + planning + landing + math + ready/frozen status
-```
-
-Only that contract can decide whether a trip is ready.
-
-If you approve implementation, I will not add another diagnostic layer. I will consolidate the finalization path so broken time/planning/math cannot be committed as ready in the first place.
+After this, the system does not need another Rome-specific patch. The app will either produce a valid ready itinerary, or it will honestly return a partial/infeasible itinerary with the exact missing meals, broken timing, or omitted user requests listed before it ever claims the trip is done.
