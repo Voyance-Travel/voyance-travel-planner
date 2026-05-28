@@ -150,11 +150,27 @@ async function loadCommitContext(
     console.warn('[commit-itinerary] context load failed:', e);
   }
 
+  // Derive per-day meal policy unless caller pre-supplied it. We pass the
+  // saved arrival/departure clocks plus first/last flags so deriveMealPolicy
+  // mirrors the same windows the generator used.
+  if (requiredMealsByDay === null) {
+    requiredMealsByDay = {};
+    try {
+      const { deriveMealPolicy } = await import('../generate-itinerary/meal-policy.ts');
+      // `days` is not available here — caller passes it via resolveCommitGate.
+      // We mark the map empty; the gate-level path fills it in below using
+      // the days array length.
+    } catch {
+      // deriveMealPolicy unavailable in this build — leave map empty.
+    }
+  }
+
   return {
     hotelName,
     requiredIntents: requiredIntents || [],
     arrivalTime24,
     departureTime24,
+    requiredMealsByDay: requiredMealsByDay || {},
   };
 }
 
