@@ -3837,6 +3837,7 @@ async function _handleGenerateTripDayInner(
         unlocked_day_count: newUnlocked,
         metadata: {
           ...meta,
+          ...commitGateMetadataPatch,
           generation_completed_days: isComplete ? totalDays : updatedDays.filter((d: any) => Array.isArray(d.activities) && d.activities.length > 0).length,
           generation_completed_at: new Date().toISOString(),
           generation_heartbeat: new Date().toISOString(),
