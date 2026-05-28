@@ -41,6 +41,7 @@ export interface CommitGateInput {
     requiredIntents?: Array<{ title: string; dayNumber?: number | null }>;
     arrivalTime24?: string | null;
     departureTime24?: string | null;
+    requiredMealsByDay?: Record<number, Array<'breakfast' | 'lunch' | 'dinner'>>;
   };
   /** Caller label used in log lines (e.g. 'save-itinerary', 'stage-6'). */
   label: string;
