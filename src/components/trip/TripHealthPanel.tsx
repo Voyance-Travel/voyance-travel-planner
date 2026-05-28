@@ -588,9 +588,17 @@ export function detectGapsForDay(allActivities: any[], dayNumber: number): Healt
   };
 
   // Hard day-boundary guard — first thing, before anything else.
-  const dayActivities = allActivities.filter(
-    (a: any) => (a.dayNumber ?? a.day_number) === dayNumber
+  // Caller may pass either a flat cross-day array OR an already-scoped
+  // single-day array. If NO row carries a dayNumber/day_number field,
+  // assume the caller already scoped it and skip the filter (which would
+  // otherwise discard everything and silently produce zero gaps —
+  // the Rome "structurally sound, practically empty" bug).
+  const hasDayTag = allActivities.some(
+    (a: any) => (a?.dayNumber ?? a?.day_number) != null,
   );
+  const dayActivities = hasDayTag
+    ? allActivities.filter((a: any) => (a.dayNumber ?? a.day_number) === dayNumber)
+    : allActivities;
   if (dayActivities.length === 0) return issues;
 
   // Cascade preview against the full activity list so adjustments propagate
