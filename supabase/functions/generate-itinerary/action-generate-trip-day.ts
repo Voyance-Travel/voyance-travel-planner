@@ -1587,6 +1587,9 @@ async function _handleGenerateTripDayInner(
       const { repairDay } = await import('./pipeline/repair-day.ts');
       const { deriveMealPolicy } = await import('./meal-policy.ts');
       const { normalizeTo24h } = await import('./flight-hotel-context.ts');
+      const { getDestinationSkipList } = await import('../_shared/destination-skip-list.ts');
+      const _destinationSkipList = await getDestinationSkipList(cityInfo?.cityName || destination, supabase);
+
 
       const flightSel = _flightSel;
       const isFirstDay = _isFirstDay;
@@ -1654,6 +1657,7 @@ async function _handleGenerateTripDayInner(
         isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
         previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
         budgetTier: budgetTier || (tripMeta?.budget_tier as string | undefined) || undefined,
+        destinationSkipList: _destinationSkipList,
       });
 
       const isLastDayInCity = cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false;
@@ -1756,6 +1760,7 @@ async function _handleGenerateTripDayInner(
           isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
           previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
           budgetTier: budgetTier || (tripMeta?.budget_tier as string | undefined) || undefined,
+          destinationSkipList: _destinationSkipList,
         });
         const gate = applyValidationGate(
           postRepairDayMinimal as any,

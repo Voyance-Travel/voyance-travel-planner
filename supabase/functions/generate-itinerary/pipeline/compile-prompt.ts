@@ -77,6 +77,7 @@ import {
   extractNotesAnchors,
   type ResolvedMustDoEntry,
 } from '../../_shared/resolve-user-intent-venues.ts';
+import { getDestinationSkipList, renderSkipListPromptBlock } from '../../_shared/destination-skip-list.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -119,6 +120,11 @@ export interface CompiledPrompt {
 
   // Effective trait scores (post-blend) consumed by repair pipeline
   effectiveTraitScores: { pace: number; budget: number; adventure: number; authenticity: number; planning: number };
+
+  /** Destination skip list — Voyance Intelligence "skip these" entries.
+   *  Threaded through to validate-day + refill-slots-llm so the same list
+   *  drives generation, validation, and refill. */
+  destinationSkipList: import('../../_shared/destination-skip-list.ts').SkipListEntry[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -396,6 +402,16 @@ export async function compilePrompt(
       console.log(`[compile-prompt] Loaded ${intents.length} trip intents`);
     }
   }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // DESTINATION SKIP LIST (Voyance Intelligence parity)
+  // ═══════════════════════════════════════════════════════════════════════
+  const destinationSkipList = await getDestinationSkipList(resolvedDestination, supabase);
+  const skipListPromptBlock = renderSkipListPromptBlock(destinationSkipList);
+  if (destinationSkipList.length > 0) {
+    console.log(`[SKIP_LIST_PROMPT] destination="${resolvedDestination}" keywords=${destinationSkipList.length} day=${dayNumber}`);
+  }
+
 
   // ═══════════════════════════════════════════════════════════════════════
   // MUST-DO PARSING & SCHEDULING
@@ -1803,6 +1819,7 @@ Match the price to the VENUE TYPE, not just the category:
 
 ${preferenceContext}
 ${tripIntentsContext}
+${skipListPromptBlock}
 ${mustDoPrompt}
 ${additionalNotesPrompt}
 ${mustHavesConstraintPrompt}
@@ -2031,5 +2048,6 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     flightContext,
     lockedCards: lockedCardsForDay,
     effectiveTraitScores,
+    destinationSkipList,
   };
 }

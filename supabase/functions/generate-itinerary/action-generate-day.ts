@@ -1225,6 +1225,8 @@ export async function handleGenerateDay(
         const resolvedPreviousHotelName = facts.resolvedPreviousHotelName;
 
         // --- VALIDATE ---
+        const { getDestinationSkipList: _getSkipList } = await import('../_shared/destination-skip-list.ts');
+        const _skipListAGD = await _getSkipList(resolvedDestination || destination || '', supabase);
         const validationInput: ValidateDayInput = {
           day: currentDayMinimal,
           dayNumber,
@@ -1246,9 +1248,11 @@ export async function handleGenerateDay(
           isHotelChange: resolvedIsHotelChange,
           previousHotelName: resolvedPreviousHotelName,
           budgetTier: budgetTier || undefined,
+          destinationSkipList: _skipListAGD,
         };
 
         const validationResults = validateDay(validationInput);
+
 
         const errorCount = validationResults.filter(r => r.severity === 'error' || r.severity === 'critical').length;
         const warningCount = validationResults.filter(r => r.severity === 'warning').length;
