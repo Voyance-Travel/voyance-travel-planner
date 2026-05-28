@@ -1,8 +1,8 @@
 // Unit tests for the deterministic itinerary-cleanup boundary.
 
 import { assert, assertEquals } from 'jsr:@std/assert@1';
-import { cleanupDay } from './itinerary-cleanup.ts';
-import type { AdapterActivity } from './skeleton-to-activities.ts';
+import { cleanupDay } from '../itinerary-cleanup.ts';
+import type { AdapterActivity } from '../skeleton-to-activities.ts';
 
 function mk(
   partial: Partial<AdapterActivity> & { id: string; title: string; startTime: string; endTime: string; category: string },
