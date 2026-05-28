@@ -3111,16 +3111,31 @@ export async function finalSaveItinerary(
       }
     }
 
-    const willBeReady = !emptyItineraryDetected;
     const existingFrozenAt = (existingMetadata as Record<string, any>)?.itinerary_frozen_at;
+
+    // ── CANONICAL COMMIT GATE ──
+    // Single boundary that decides whether this trip can become `ready`.
+    // If hard semantic invariants fail (nightcap in morning, required
+    // must-do missing, hotel-venue before checkin, logistics-only curated
+    // day, infeasible flights), the gate demotes status to 'partial' and
+    // stamps metadata.integrity_contract so the UI banner explains why.
+    // See _shared/commit-itinerary.ts.
+    const proposedStatus: 'ready' | 'failed' = emptyItineraryDetected ? 'failed' : 'ready';
+    const { resolveCommitGate } = await import('../_shared/commit-itinerary.ts');
+    const gateResult = await resolveCommitGate({
+      supabase,
+      tripId,
+      days: (frontendReadyData as any)?.days || [],
+      proposedStatus,
+      label: 'stage-6',
+    });
+    const willBeReady = gateResult.status === 'ready' || gateResult.status === 'generated';
+
     // FREEZE DEFERRED — see mem://constraints/itinerary/saved-badge-honesty.
     // The freeze stamp + fully_persisted=true are written in a SECOND update
-    // after Phase 4 (activity_costs) and Phase 5 (trip_cities) succeed, so
-    // a hard refresh during enrichment doesn't leave the trip frozen on a
-    // partial snapshot. Re-freezing for trips that were already ready
-    // (existingFrozenAt) is preserved here so we don't un-freeze them.
+    // after Phase 4 (activity_costs) and Phase 5 (trip_cities) succeed.
     const updatePayload: Record<string, unknown> = {
-      itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',
+      itinerary_status: gateResult.status,
       dna_snapshot: dnaSnapshot,
       updated_at: new Date().toISOString(),
       ...(context.blendedDnaSnapshot && { blended_dna: context.blendedDnaSnapshot }),
@@ -3130,6 +3145,7 @@ export async function finalSaveItinerary(
           generation_failure_reason: failureReason,
           empty_itinerary_detected_at: new Date().toISOString(),
         }),
+        ...gateResult.metadataPatch,
         // Mark in-flight enrichment so UI can show Reconciling and arm beforeunload.
         ...(willBeReady ? { fully_persisted: false } : {}),
         // Preserve any prior freeze stamp; do NOT introduce a new one yet.
