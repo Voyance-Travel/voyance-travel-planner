@@ -119,6 +119,11 @@ export interface CompiledPrompt {
 
   // Effective trait scores (post-blend) consumed by repair pipeline
   effectiveTraitScores: { pace: number; budget: number; adventure: number; authenticity: number; planning: number };
+
+  /** Destination skip list — Voyance Intelligence "skip these" entries.
+   *  Threaded through to validate-day + refill-slots-llm so the same list
+   *  drives generation, validation, and refill. */
+  destinationSkipList: import('../../_shared/destination-skip-list.ts').SkipListEntry[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
