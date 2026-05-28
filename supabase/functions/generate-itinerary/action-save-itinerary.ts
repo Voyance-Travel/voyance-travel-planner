@@ -1084,6 +1084,8 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   //   - inserts a placeholder for missing 'must' user intents so the user can see them;
   //   - flags vibe-clashes (e.g. two splurge dinners back-to-back).
   // User-locked items are never touched.
+  // Hoisted so the canonical integrity contract at the freeze stamp can read it.
+  let mergedIntentsForContract: any[] = [];
   try {
     const tripMeta = (trip as any).metadata as Record<string, unknown> | null;
     const userAnchors = Array.isArray(tripMeta?.userAnchors)
@@ -1127,6 +1129,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           totalDays: itineraryDays.length,
         });
         mergedIntents = merge.intents;
+        mergedIntentsForContract = merge.intents;
         tripWideFromTable = merge.tripWideNotes;
         console.log(
           `[save-itinerary] PREFERENCE_SPINE total=${merge.intents.length} ` +
@@ -1587,8 +1590,8 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     // mergedIntents was built earlier in the ledger pipeline. priority='must'
     // = REQUIRED selections (user-anchor or explicit must-do). Soft chips
     // (priority='should') stay advisory.
-    const requiredIntents = Array.isArray(mergedIntents)
-      ? mergedIntents
+    const requiredIntents = Array.isArray(mergedIntentsForContract)
+      ? mergedIntentsForContract
           .filter((i: any) => i?.priority === 'must' && typeof i?.title === 'string' && i.title.trim().length > 0)
           .map((i: any) => ({ title: String(i.title), dayNumber: typeof i.dayNumber === 'number' ? i.dayNumber : null }))
       : [];
