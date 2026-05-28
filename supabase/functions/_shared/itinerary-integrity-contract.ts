@@ -198,9 +198,11 @@ export function checkItineraryIntegrity(
   const ranAt = new Date().toISOString();
   const violations: IntegrityViolation[] = [];
   const infeasibleDays: number[] = [];
+  const mealCoverage: IntegrityVerdict['mealCoverage'] = [];
+  const omittedRequests: OmittedRequest[] = [];
 
   if (!Array.isArray(days) || days.length === 0) {
-    return { ok: true, ranAt, violations: [], codes: [], infeasibleDays: [] };
+    return { ok: true, ranAt, violations: [], codes: [], infeasibleDays: [], omittedRequests, mealCoverage };
   }
 
   const totalDays = days.length;
