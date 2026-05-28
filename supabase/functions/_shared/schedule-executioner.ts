@@ -513,7 +513,8 @@ export function enforceGeoCoherence(
     }
   }
 
-  if (!ctx.geoFlagOnly && flagged.length > 0) {
+  const dropAllowed = ctx.geoDropEnabled === true || ctx.geoFlagOnly === false;
+  if (dropAllowed && flagged.length > 0) {
     const dropSet = new Set(flagged.map(actId));
     const before = activities.length;
     const survivors = activities.filter((a) => {
