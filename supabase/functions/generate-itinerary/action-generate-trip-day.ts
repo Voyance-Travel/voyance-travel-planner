@@ -547,13 +547,60 @@ async function _handleGenerateTripDayInner(
       console.log(
         `[SLOT_FILLER] day=${dayNumber} ok=${fillerResult.ok} fills=${fillerResult.fillCount} unfilled=${fillerResult.unfilledSlotIds.length} attempts=${fillerResult.attempts} durationMs=${fillerResult.durationMs}${fillerResult.error ? ` error=${fillerResult.error}` : ''}`,
       );
-      // Stamp trace under metadata.quality.slot_filler (ring buffer cap 30).
+
+      // ── PHASE 5/6 — CLEANUP + REFILL DRY-RUN (chained off Filler) ──
+      // Run the full assembly-line on the filler output so the trace shows
+      // what cleanup would drop and what refill would replace. Still NEVER
+      // replaces the legacy primary path — telemetry only.
+      let cleanupTrace: Record<string, unknown> | undefined;
+      let refillTrace: Record<string, unknown> | undefined;
+      if (fillerResult.ok && fillerResult.activities.length > 0) {
+        try {
+          const { cleanupDay } = await import('../_shared/itinerary-cleanup.ts');
+          const cleanup = cleanupDay(fillerResult.activities, { budgetTier: budgetTier ?? null });
+          cleanupTrace = {
+            in: fillerResult.activities.length,
+            out: cleanup.activities.length,
+            needsRefill: cleanup.needsRefill.length,
+            ops: cleanup.ops,
+          };
+          console.log(
+            `[CLEANUP_DRYRUN] day=${dayNumber} in=${fillerResult.activities.length} out=${cleanup.activities.length} dropped=${cleanup.needsRefill.length} ops=${JSON.stringify(cleanup.ops)}`,
+          );
+
+          if (cleanup.needsRefill.length > 0) {
+            const { refillDroppedSlots } = await import('../_shared/refill-slots-llm.ts');
+            const refill = await refillDroppedSlots({
+              destination,
+              archetype,
+              budgetTier: budgetTier ?? null,
+              needsRefill: cleanup.needsRefill,
+              usedVenues: [],
+            });
+            refillTrace = {
+              ok: refill.ok,
+              fills: refill.response?.fills.length ?? 0,
+              unfilled: refill.unfilledSlotIds.length,
+              durationMs: refill.durationMs,
+              error: refill.error,
+            };
+            console.log(
+              `[REFILL_DRYRUN] day=${dayNumber} ok=${refill.ok} fills=${refill.response?.fills.length ?? 0} unfilled=${refill.unfilledSlotIds.length} durationMs=${refill.durationMs}${refill.error ? ` error=${refill.error}` : ''}`,
+            );
+          }
+        } catch (chainErr) {
+          console.warn('[CLEANUP_REFILL_DRYRUN] chain failed (non-blocking):', chainErr);
+        }
+      }
+
+      // Stamp combined trace under metadata.quality.slot_filler (ring buffer cap 30).
       try {
         const { data: tripRow } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
         const prevMeta = (tripRow?.metadata as Record<string, unknown>) ?? {};
         const prevQuality = (prevMeta.quality as Record<string, unknown>) ?? {};
         const prevTrace = Array.isArray((prevQuality as any).slot_filler) ? ((prevQuality as any).slot_filler as any[]) : [];
-        const nextTrace = [...prevTrace, fillerResult.trace].slice(-30);
+        const combinedTrace = { ...fillerResult.trace, cleanup: cleanupTrace, refill: refillTrace };
+        const nextTrace = [...prevTrace, combinedTrace].slice(-30);
         await supabase.from('trips').update({
           metadata: {
             ...prevMeta,
@@ -568,13 +615,11 @@ async function _handleGenerateTripDayInner(
       // When `metadata.feature_flags.schema_filler_primary === true`, the next
       // commit will route fillerResult.activities → cleanupDay → refillDroppedSlots
       // → existing enrich/repair/persist tail INSTEAD of the legacy AI call.
-      // For now this branch only logs readiness so we can see in production
-      // which trips have the flag set and how often the filler would have been
-      // primary path eligible (ok + zero unfilled slots).
       if ((ff as Record<string, unknown>).schema_filler_primary === true) {
-        const eligible = fillerResult.ok && fillerResult.unfilledSlotIds.length === 0;
+        const eligibleClean = cleanupTrace ? (cleanupTrace.needsRefill as number) === 0 : false;
+        const eligible = fillerResult.ok && fillerResult.unfilledSlotIds.length === 0 && eligibleClean;
         console.log(
-          `[SLOT_FILLER_PRIMARY] day=${dayNumber} eligible=${eligible} fills=${fillerResult.fillCount} unfilled=${fillerResult.unfilledSlotIds.length} — scaffold only, legacy path still primary`,
+          `[SLOT_FILLER_PRIMARY] day=${dayNumber} eligible=${eligible} fills=${fillerResult.fillCount} unfilled=${fillerResult.unfilledSlotIds.length} cleanupDropped=${cleanupTrace?.needsRefill ?? 'n/a'} — scaffold only, legacy path still primary`,
         );
       }
     }
