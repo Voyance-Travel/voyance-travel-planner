@@ -429,6 +429,8 @@ export function applyIntegrityContractToFreezeStamp(opts: {
         codes: verdict.codes,
         infeasibleDays: verdict.infeasibleDays,
         violations: verdict.violations.slice(0, 30),
+        omittedRequests: verdict.omittedRequests.slice(0, 30),
+        mealCoverage: verdict.mealCoverage.slice(0, 30),
         blocked_ready: blockReady,
       },
     },
