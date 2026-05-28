@@ -1441,16 +1441,39 @@ export function PaymentsTab({
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
-                    <p className="font-medium">
-                      {displayMoney(
-                        financialSnapshot.loading
-                          ? essentialItems.reduce((sum, i) => sum + i.amountCents, 0)
-                          : (financialSnapshot.buckets?.essentials ?? essentialItems.reduce((sum, i) => sum + i.amountCents, 0))
-                      )}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {essentialItems.filter(i => i.payment?.status === 'paid').length}/{essentialItems.length} paid
-                    </p>
+                    {(() => {
+                      // Pricing 3A: when Budget Visibility excludes hotel and/or
+                      // flight, `financialSnapshot.buckets.essentials` is $0 but
+                      // `essentialItems` (toggle-agnostic) still carries the real
+                      // rows. Show the real amount + an explicit "Excluded" badge
+                      // instead of a silent "Free" headline.
+                      const itemsSum = essentialItems.reduce((sum, i) => sum + i.amountCents, 0);
+                      const bucketCents = financialSnapshot.loading
+                        ? itemsSum
+                        : (financialSnapshot.buckets?.essentials ?? itemsSum);
+                      const excluded =
+                        !financialSnapshot.loading &&
+                        displayedTotal.headerStripValues.hasExcludedLogistics &&
+                        bucketCents === 0 &&
+                        itemsSum > 0;
+                      const amountCents = excluded ? itemsSum : bucketCents;
+                      return (
+                        <>
+                          <p className="font-medium">{displayMoney(amountCents)}</p>
+                          {excluded && (
+                            <p
+                              className="text-[10px] mt-0.5 inline-block px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                              title="Hotel and/or flight are hidden from your Trip Total because Budget Visibility is set to exclude them. Toggle them on to include."
+                            >
+                              Excluded from Trip Total
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {essentialItems.filter(i => i.payment?.status === 'paid').length}/{essentialItems.length} paid
+                          </p>
+                        </>
+                      );
+                    })()}
                   </div>
                   <ChevronDown className={cn(
                     "h-5 w-5 text-muted-foreground transition-transform",
