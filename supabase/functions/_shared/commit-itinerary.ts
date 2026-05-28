@@ -67,6 +67,7 @@ async function loadCommitContext(
   requiredIntents: Array<{ title: string; dayNumber?: number | null }>;
   arrivalTime24: string | null;
   departureTime24: string | null;
+  requiredMealsByDay: Record<number, Array<'breakfast' | 'lunch' | 'dinner'>>;
 }> {
   let hotelName = preloaded?.hotelName ?? null;
   let requiredIntents = preloaded?.requiredIntents ?? null;
