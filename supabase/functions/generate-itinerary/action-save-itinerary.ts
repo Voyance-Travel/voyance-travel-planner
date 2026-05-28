@@ -1564,7 +1564,59 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     warnings: persistVerdict.warnings,
   };
 
-  const nextStatus = emptyItineraryDetected ? 'failed' : (persistVerdict.ok ? 'ready' : 'partial');
+  let nextStatus: 'ready' | 'generated' | 'partial' | 'failed' =
+    emptyItineraryDetected ? 'failed' : (persistVerdict.ok ? 'ready' : 'partial');
+
+  // ── CANONICAL INTEGRITY CONTRACT ──
+  // Single authoritative gate that demotes ready→partial when hard semantic
+  // failures survived every prior layer (nightcap in morning, hotel-venue
+  // before checkin, required must-do silently dropped, logistics-only
+  // curated day, infeasible flight schedule). The contract stamps
+  // metadata.integrity_contract so the UI banner can explain WHY a trip
+  // is partial. See _shared/itinerary-integrity-contract.ts.
+  let integrityMetadataPatch: Record<string, any> = {};
+  try {
+    const { checkItineraryIntegrity, applyIntegrityContractToFreezeStamp } =
+      await import('../_shared/itinerary-integrity-contract.ts');
+    const tripMetaForContract = (trip.metadata as Record<string, any>) || {};
+    const contractHotelName: string | null =
+      tripMetaForContract?.selected_hotel?.name
+        || tripMetaForContract?.hotel?.name
+        || tripMetaForContract?.accommodation?.name
+        || null;
+    // mergedIntents was built earlier in the ledger pipeline. priority='must'
+    // = REQUIRED selections (user-anchor or explicit must-do). Soft chips
+    // (priority='should') stay advisory.
+    const requiredIntents = Array.isArray(mergedIntents)
+      ? mergedIntents
+          .filter((i: any) => i?.priority === 'must' && typeof i?.title === 'string' && i.title.trim().length > 0)
+          .map((i: any) => ({ title: String(i.title), dayNumber: typeof i.dayNumber === 'number' ? i.dayNumber : null }))
+      : [];
+    const verdict = checkItineraryIntegrity(((itinerary as any)?.days) || [], {
+      hotelName: contractHotelName,
+      requiredIntents,
+      arrivalTime24: savedArrivalTime24 || null,
+      departureTime24: savedDepartureTime24 || null,
+    });
+    const applied = applyIntegrityContractToFreezeStamp({ proposedStatus: nextStatus, verdict });
+    nextStatus = applied.status;
+    integrityMetadataPatch = applied.metadataPatch;
+    if (!verdict.ok) {
+      console.warn(
+        `[INTEGRITY_CONTRACT] tripId=${tripId} blocked_ready=${applied.status !== 'ready'} ` +
+        `codes=[${verdict.codes.join(',')}] violations=${verdict.violations.length} ` +
+        `requiredIntents=${requiredIntents.length}`,
+      );
+      for (const v of verdict.violations.slice(0, 10)) {
+        console.warn(`[INTEGRITY_CONTRACT]   day=${v.dayNumber} code=${v.code} — ${v.detail}`);
+      }
+    } else {
+      console.log(`[INTEGRITY_CONTRACT] tripId=${tripId} ok requiredIntents=${requiredIntents.length}`);
+    }
+  } catch (icErr) {
+    console.warn('[INTEGRITY_CONTRACT] gate failed (non-blocking — allowing prior nextStatus):', icErr);
+  }
+
   // ── FREEZE STAMP ──
   // First time the trip transitions to ready/generated, stamp
   // metadata.itinerary_frozen_at so future page-load self-heal writes are
@@ -1588,6 +1640,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       ...(callerExtraUpdate?.metadata || {}),
       ...(emptyItineraryDetected ? { ...existingMetadataForEmpty, generation_failure_reason: failureReason, empty_itinerary_detected_at: new Date().toISOString() } : {}),
       persist_validation: persistValidationStamp,
+      ...integrityMetadataPatch,
       ...(freezeStamp ? { itinerary_frozen_at: freezeStamp } : {}),
       // User edits to an already-ready trip are synchronous — keep fully_persisted true.
       // See mem://constraints/itinerary/saved-badge-honesty.
