@@ -32,10 +32,12 @@
 
 export type IntegrityCode =
   | 'TEMPORAL_ROLE_TIME_MISMATCH'
+  | 'NIGHTLIFE_BEFORE_EVENING'
   | 'HOTEL_VENUE_BEFORE_CHECKIN'
   | 'REQUIRED_USER_INTENT_MISSING'
   | 'NO_SIGHTSEEING_CAPACITY'
-  | 'LOGISTICS_ONLY_CURATED_DAY';
+  | 'LOGISTICS_ONLY_CURATED_DAY'
+  | 'MEAL_COVERAGE_MISSING';
 
 export interface IntegrityViolation {
   code: IntegrityCode;
@@ -43,6 +45,11 @@ export interface IntegrityViolation {
   detail: string;
   activityTitle?: string;
   activityTime?: string | null;
+}
+
+export interface OmittedRequest {
+  title: string;
+  reason: 'infeasible_time' | 'not_scheduled';
 }
 
 export interface IntegrityVerdict {
@@ -54,6 +61,12 @@ export interface IntegrityVerdict {
    *  Persisted so the UI can render an "infeasible" explainer instead
    *  of treating the trip as broken. */
   infeasibleDays: number[];
+  /** Structured manifest the UI surfaces: what was requested and didn't
+   *  land, plus why. Empty when all required intents were scheduled. */
+  omittedRequests: OmittedRequest[];
+  /** Per-day meal-coverage report. Days with `missing.length > 0` and
+   *  no infeasibility excuse will fail the contract. */
+  mealCoverage: Array<{ dayNumber: number; required: string[]; scheduled: string[]; missing: string[] }>;
 }
 
 // ── role detection (kept minimal; mirrors `_shared/timing-spine.ts`)
@@ -153,6 +166,10 @@ export interface IntegrityContext {
   arrivalTime24?: string | null;
   /** Saved departure time (HH:MM 24h) for last-day feasibility. */
   departureTime24?: string | null;
+  /** Per-day required meals from the meal policy. When provided, the
+   *  contract enforces that each required meal has a scheduled card.
+   *  Map key = dayNumber (1-indexed). */
+  requiredMealsByDay?: Record<number, Array<'breakfast' | 'lunch' | 'dinner'>>;
 }
 
 const MORNING_CUTOFF_MIN = 11 * 60; // <11:00 is "morning"
@@ -171,9 +188,37 @@ function feasibleActivityMinutes(arrivalMin: number | null, departureMin: number
   return Math.max(0, dayEnd - dayStart);
 }
 
-/**
- * Run the integrity contract over a `days` array. Pure / dry-run.
- */
+// ── meal classification (mirrors meal-policy windows) ────────────────────
+const MEAL_BANDS: Record<'breakfast' | 'lunch' | 'dinner', [number, number]> = {
+  breakfast: [5 * 60, 11 * 60],        // 05:00 – 11:00 (brunch counts)
+  lunch:     [11 * 60, 15 * 60 + 30],  // 11:00 – 15:30
+  dinner:    [17 * 60 + 30, 23 * 60 + 30], // 17:30 – 23:30
+};
+const DRINKS_ONLY_RE = /\b(nightcap|cocktail|aperitif|aperitivo|drinks|wine\s+bar|speakeasy|rooftop\s+bar|pub|bar\s+crawl)\b/i;
+
+function isMealCard(a: any): boolean {
+  if (!a) return false;
+  const cat = String(a?.category || '').toLowerCase();
+  if (['dining', 'restaurant', 'food', 'meal', 'cafe', 'breakfast', 'brunch', 'lunch', 'dinner'].includes(cat)) return true;
+  const title = String(a?.title || a?.name || '');
+  return /\b(breakfast|brunch|lunch|dinner|supper)\b/i.test(title);
+}
+
+function classifyMealSlot(a: any): 'breakfast' | 'lunch' | 'dinner' | null {
+  if (!isMealCard(a)) return null;
+  const title = String(a?.title || a?.name || '').toLowerCase();
+  if (DRINKS_ONLY_RE.test(title)) return null; // drinks-only NEVER satisfies dinner
+  if (/\b(breakfast|brunch)\b/.test(title)) return 'breakfast';
+  if (/\b(lunch)\b/.test(title)) return 'lunch';
+  if (/\b(dinner|supper)\b/.test(title)) return 'dinner';
+  // Fall back to time-band when title is neutral (e.g. "Roscioli")
+  const start = pickStart(a);
+  if (start === null) return null;
+  if (start >= MEAL_BANDS.breakfast[0] && start <= MEAL_BANDS.breakfast[1]) return 'breakfast';
+  if (start >= MEAL_BANDS.lunch[0] && start <= MEAL_BANDS.lunch[1]) return 'lunch';
+  if (start >= MEAL_BANDS.dinner[0] && start <= MEAL_BANDS.dinner[1]) return 'dinner';
+  return null;
+}
 export function checkItineraryIntegrity(
   days: readonly any[] | null | undefined,
   ctx: IntegrityContext = {},
@@ -181,9 +226,11 @@ export function checkItineraryIntegrity(
   const ranAt = new Date().toISOString();
   const violations: IntegrityViolation[] = [];
   const infeasibleDays: number[] = [];
+  const mealCoverage: IntegrityVerdict['mealCoverage'] = [];
+  const omittedRequests: OmittedRequest[] = [];
 
   if (!Array.isArray(days) || days.length === 0) {
-    return { ok: true, ranAt, violations: [], codes: [], infeasibleDays: [] };
+    return { ok: true, ranAt, violations: [], codes: [], infeasibleDays: [], omittedRequests, mealCoverage };
   }
 
   const totalDays = days.length;
@@ -215,18 +262,22 @@ export function checkItineraryIntegrity(
     const isLastDay = dayNumber === totalDays;
     const acts: any[] = Array.isArray(day.activities) ? day.activities : [];
 
-    // ── TEMPORAL_ROLE_TIME_MISMATCH: nightcap/cocktail before 17:00
-    // ── HOTEL_VENUE_BEFORE_CHECKIN: hotel-contained venue before check-in
+    // ── TEMPORAL_ROLE_TIME_MISMATCH + NIGHTLIFE_BEFORE_EVENING
+    // ── HOTEL_VENUE_BEFORE_CHECKIN
     for (let idx = 0; idx < acts.length; idx++) {
       const a = acts[idx];
       if (!a || isLocked(a)) continue;
       const start = pickStart(a);
       const title = String(a?.title || a?.name || '');
-      if (start !== null && start < MORNING_CUTOFF_MIN && NIGHT_DRINK_RE.test(title)) {
+      // Nightcap/cocktail/aperitif/speakeasy/rooftop/wine bar before 17:00 is
+      // a hard semantic mismatch — emit a dedicated code so the UI can
+      // explain it ("nightcap was placed at 9 AM") instead of a vague
+      // "temporal role" warning.
+      if (start !== null && start < 17 * 60 && NIGHT_DRINK_RE.test(title)) {
         violations.push({
-          code: 'TEMPORAL_ROLE_TIME_MISMATCH',
+          code: 'NIGHTLIFE_BEFORE_EVENING',
           dayNumber,
-          detail: `Nightlife card "${title}" scheduled at ${a.startTime || a.time} — must be evening (≥17:00).`,
+          detail: `Nightlife card "${title}" scheduled at ${a.startTime || a.time} — must start at 17:00 or later.`,
           activityTitle: title,
           activityTime: a.startTime || a.time || null,
         });
@@ -242,6 +293,28 @@ export function checkItineraryIntegrity(
             activityTime: a.startTime || a.time || null,
           });
         }
+      }
+    }
+
+    // ── MEAL_COVERAGE_MISSING
+    // When the meal policy says this day requires meals and none are
+    // scheduled (or drinks-only cards are masquerading), block ready.
+    const required = ctx.requiredMealsByDay?.[dayNumber] || [];
+    if (required.length > 0) {
+      const scheduledSet = new Set<'breakfast' | 'lunch' | 'dinner'>();
+      for (const a of acts) {
+        const slot = classifyMealSlot(a);
+        if (slot) scheduledSet.add(slot);
+      }
+      const scheduled = Array.from(scheduledSet);
+      const missing = required.filter((m) => !scheduledSet.has(m));
+      mealCoverage.push({ dayNumber, required, scheduled, missing });
+      if (missing.length > 0) {
+        violations.push({
+          code: 'MEAL_COVERAGE_MISSING',
+          dayNumber,
+          detail: `Day ${dayNumber} is missing required meal(s): ${missing.join(', ')}.`,
+        });
       }
     }
 
@@ -283,9 +356,12 @@ export function checkItineraryIntegrity(
       if (!key) continue;
       if (scheduledIntents.has(key)) continue;
       if (infeasibleTrip) {
-        // Surface once at trip-level via NO_SIGHTSEEING_CAPACITY below.
+        // Trip-wide infeasibility: list in omittedRequests but skip the
+        // per-intent violation (surfaced once via NO_SIGHTSEEING_CAPACITY).
+        omittedRequests.push({ title: intent.title, reason: 'infeasible_time' });
         continue;
       }
+      omittedRequests.push({ title: intent.title, reason: 'not_scheduled' });
       violations.push({
         code: 'REQUIRED_USER_INTENT_MISSING',
         dayNumber: typeof intent.dayNumber === 'number' ? intent.dayNumber : 1,
@@ -321,6 +397,8 @@ export function checkItineraryIntegrity(
     violations,
     codes,
     infeasibleDays,
+    omittedRequests,
+    mealCoverage,
   };
 }
 
@@ -351,6 +429,8 @@ export function applyIntegrityContractToFreezeStamp(opts: {
         codes: verdict.codes,
         infeasibleDays: verdict.infeasibleDays,
         violations: verdict.violations.slice(0, 30),
+        omittedRequests: verdict.omittedRequests.slice(0, 30),
+        mealCoverage: verdict.mealCoverage.slice(0, 30),
         blocked_ready: blockReady,
       },
     },

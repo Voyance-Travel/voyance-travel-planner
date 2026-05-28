@@ -41,6 +41,7 @@ export interface CommitGateInput {
     requiredIntents?: Array<{ title: string; dayNumber?: number | null }>;
     arrivalTime24?: string | null;
     departureTime24?: string | null;
+    requiredMealsByDay?: Record<number, Array<'breakfast' | 'lunch' | 'dinner'>>;
   };
   /** Caller label used in log lines (e.g. 'save-itinerary', 'stage-6'). */
   label: string;
@@ -66,23 +67,27 @@ async function loadCommitContext(
   requiredIntents: Array<{ title: string; dayNumber?: number | null }>;
   arrivalTime24: string | null;
   departureTime24: string | null;
+  requiredMealsByDay: Record<number, Array<'breakfast' | 'lunch' | 'dinner'>>;
 }> {
   let hotelName = preloaded?.hotelName ?? null;
   let requiredIntents = preloaded?.requiredIntents ?? null;
   let arrivalTime24 = preloaded?.arrivalTime24 ?? null;
   let departureTime24 = preloaded?.departureTime24 ?? null;
+  let requiredMealsByDay = preloaded?.requiredMealsByDay ?? null;
 
   // Short-circuit: caller already prepared everything.
   if (
     requiredIntents !== null &&
     arrivalTime24 !== null &&
-    departureTime24 !== null
+    departureTime24 !== null &&
+    requiredMealsByDay !== null
   ) {
     return {
       hotelName,
       requiredIntents,
       arrivalTime24,
       departureTime24,
+      requiredMealsByDay,
     };
   }
 
@@ -150,7 +155,42 @@ async function loadCommitContext(
     requiredIntents: requiredIntents || [],
     arrivalTime24,
     departureTime24,
+    requiredMealsByDay: requiredMealsByDay || {},
   };
+}
+
+/**
+ * Derive per-day required meals from `deriveMealPolicy`, mirroring the
+ * windows the generator used. Returns {} when meal-policy can't be
+ * imported in this build (e.g. shared-only test contexts).
+ */
+async function deriveRequiredMealsByDay(
+  days: any[],
+  arrivalTime24: string | null,
+  departureTime24: string | null,
+): Promise<Record<number, Array<'breakfast' | 'lunch' | 'dinner'>>> {
+  const out: Record<number, Array<'breakfast' | 'lunch' | 'dinner'>> = {};
+  try {
+    const { deriveMealPolicy } = await import('../generate-itinerary/meal-policy.ts');
+    const totalDays = days.length;
+    for (let i = 0; i < days.length; i++) {
+      const dayNumber = Number(days[i]?.dayNumber || i + 1);
+      const isFirstDay = i === 0;
+      const isLastDay = i === days.length - 1;
+      const policy = deriveMealPolicy({
+        dayNumber,
+        totalDays,
+        isFirstDay,
+        isLastDay,
+        arrivalTime24: isFirstDay && arrivalTime24 ? arrivalTime24 : undefined,
+        departureTime24: isLastDay && departureTime24 ? departureTime24 : undefined,
+      });
+      out[dayNumber] = policy.requiredMeals as Array<'breakfast' | 'lunch' | 'dinner'>;
+    }
+  } catch (e) {
+    console.warn('[commit-itinerary] deriveRequiredMealsByDay failed:', e);
+  }
+  return out;
 }
 
 /**
@@ -180,6 +220,8 @@ export async function resolveCommitGate(
         violations: [],
         codes: [],
         infeasibleDays: [],
+        omittedRequests: [],
+        mealCoverage: [],
       },
       blockedReady: false,
     };
@@ -187,11 +229,16 @@ export async function resolveCommitGate(
 
   try {
     const ctx = await loadCommitContext(supabase, tripId, preloaded);
+    const requiredMealsByDay =
+      Object.keys(ctx.requiredMealsByDay || {}).length > 0
+        ? ctx.requiredMealsByDay
+        : await deriveRequiredMealsByDay(days || [], ctx.arrivalTime24, ctx.departureTime24);
     const verdict = checkItineraryIntegrity(days || [], {
       hotelName: ctx.hotelName,
       requiredIntents: ctx.requiredIntents,
       arrivalTime24: ctx.arrivalTime24,
       departureTime24: ctx.departureTime24,
+      requiredMealsByDay,
     });
     const applied = applyIntegrityContractToFreezeStamp({
       proposedStatus,
@@ -233,6 +280,8 @@ export async function resolveCommitGate(
         violations: [],
         codes: [],
         infeasibleDays: [],
+        omittedRequests: [],
+        mealCoverage: [],
       },
       blockedReady: false,
     };
