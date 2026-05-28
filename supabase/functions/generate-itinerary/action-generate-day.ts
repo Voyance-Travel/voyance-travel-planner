@@ -1844,6 +1844,38 @@ export async function handleGenerateDay(
       await innerTimer.updateProgress(`day_${dayNumber}_post_processing_complete`, postProcPct);
     }
 
+    // ── SCHEDULE EXECUTIONER (single-day path mirror) ────────────────────
+    try {
+      const { runScheduleExecutioner } = await import('../_shared/schedule-executioner.ts');
+      const exec = runScheduleExecutioner(generatedDay.activities || [], {
+        dayNumber,
+        totalDays: totalDays || 1,
+        isFirstDay,
+        isLastDay,
+        arrivalTime24: isFirstDay ? (flightContext as any)?.arrivalTime24 ?? null : null,
+        departureTime24: isLastDay ? (flightContext as any)?.returnDepartureTime24 ?? null : null,
+        dayTitle: generatedDay?.title || generatedDay?.theme || null,
+        budgetTier: budgetTier ?? null,
+        geoFlagOnly: true,
+      });
+      generatedDay.activities = exec.activities;
+      generatedDay.metadata = generatedDay.metadata || {};
+      generatedDay.metadata.quality = generatedDay.metadata.quality || {};
+      generatedDay.metadata.quality.executioner = {
+        flightAnchorRepaired: exec.counters.flightAnchorRepaired,
+        midnightSpilloversAllowed: exec.counters.midnightSpilloversAllowed,
+        midnightSpilloversDropped: exec.counters.midnightSpilloversDropped,
+        bufferRepairs: exec.counters.bufferRepairs,
+        overlapRepairs: exec.counters.overlapRepairs,
+        geoOutliersFlagged: exec.counters.geoOutliersFlagged,
+        geoOutliersDropped: exec.counters.geoOutliersDropped,
+        issuesSample: exec.counters.issues.slice(0, 10),
+      };
+      console.log(`[EXECUTIONER_SUMMARY] (single) day=${dayNumber} flight=${exec.counters.flightAnchorRepaired} spill+=${exec.counters.midnightSpilloversAllowed} buffer=${exec.counters.bufferRepairs} geo=${exec.counters.geoOutliersFlagged}`);
+    } catch (execErr) {
+      console.warn('[generate-day] schedule-executioner failed (non-blocking):', execErr);
+    }
+
     // ── FINAL PRICING GUARD — handled by universalQualityPass earlier ──
     // No-op: pricing caps already enforced during quality pass
 
