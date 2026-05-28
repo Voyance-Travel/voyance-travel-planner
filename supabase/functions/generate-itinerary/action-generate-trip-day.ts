@@ -508,6 +508,66 @@ async function _handleGenerateTripDayInner(
     }));
   } catch (_e) { /* trace-only */ }
 
+  // ── PHASE 4 — SCHEMA FILLER DRY-RUN (flag-gated, never blocks) ─────
+  // When `metadata.feature_flags.schema_filler === true`, build the skeleton,
+  // call the slot-filler LLM, run the adapter, and stamp a trace. We do NOT
+  // replace the legacy prompt path here — that's a follow-up flip once the
+  // dry-run trace looks clean across the beta cohort.
+  try {
+    const ff = (tripMeta.feature_flags as Record<string, unknown> | undefined) ?? {};
+    if (ff.schema_filler === true) {
+      const { runSchemaFillerForDay } = await import('../_shared/schema-filler-orchestrator.ts');
+      const { extractMustDoVenues } = await import('../_shared/extract-must-dos.ts');
+      const flightSel = (tripCheck.flight_selection as Record<string, unknown> | null) ?? {};
+      const hotelSel = (tripCheck.hotel_selection as Record<string, unknown> | null) ?? {};
+      const arrivalTime24 = ((flightSel as any)?.outbound?.arrivalTime24 ?? (flightSel as any)?.arrivalTime24 ?? null) as string | null;
+      const departureTime24 = ((flightSel as any)?.return?.departureTime24 ?? (flightSel as any)?.departureTime24 ?? null) as string | null;
+      const hasHotelData = !!(hotelSel as any)?.name || !!(hotelSel as any)?.hotelName;
+      const archetype = (tripMeta.archetype as string | undefined)
+        ?? ((tripMeta.travel_dna as any)?.primary_archetype_name as string | undefined)
+        ?? null;
+      const patternGroup = ((tripMeta.pattern_group as any) ?? (tripMeta.patternGroup as any) ?? null) as
+        | 'packed' | 'social' | 'balanced' | 'indulgent' | 'gentle' | null;
+      const mustDoTitles = extractMustDoVenues(tripMeta);
+      const fillerResult = await runSchemaFillerForDay({
+        tripId,
+        dayNumber,
+        totalDays,
+        destination,
+        startDate,
+        budgetTier: budgetTier ?? null,
+        archetype,
+        patternGroup,
+        arrivalTime24,
+        departureTime24,
+        hasHotelData,
+        mustDos: mustDoTitles.map((t, i) => ({ id: `mustdo-${i + 1}`, title: t })),
+        tripPlan: (tripMeta.trip_plan as any) ?? null,
+      });
+      console.log(
+        `[SLOT_FILLER] day=${dayNumber} ok=${fillerResult.ok} fills=${fillerResult.fillCount} unfilled=${fillerResult.unfilledSlotIds.length} attempts=${fillerResult.attempts} durationMs=${fillerResult.durationMs}${fillerResult.error ? ` error=${fillerResult.error}` : ''}`,
+      );
+      // Stamp trace under metadata.quality.slot_filler (ring buffer cap 30).
+      try {
+        const { data: tripRow } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+        const prevMeta = (tripRow?.metadata as Record<string, unknown>) ?? {};
+        const prevQuality = (prevMeta.quality as Record<string, unknown>) ?? {};
+        const prevTrace = Array.isArray((prevQuality as any).slot_filler) ? ((prevQuality as any).slot_filler as any[]) : [];
+        const nextTrace = [...prevTrace, fillerResult.trace].slice(-30);
+        await supabase.from('trips').update({
+          metadata: {
+            ...prevMeta,
+            quality: { ...prevQuality, slot_filler: nextTrace },
+          },
+        }).eq('id', tripId);
+      } catch (stampErr) {
+        console.warn('[SLOT_FILLER] trace stamp failed (non-blocking):', stampErr);
+      }
+    }
+  } catch (fillerErr) {
+    console.warn('[SLOT_FILLER] dry-run failed (non-blocking):', fillerErr);
+  }
+
   const restaurantPoolByCity: Record<string, any[]> = (tripMeta.restaurant_pool as any) || {};
   const metaUsedRestaurants: string[] = Array.isArray(tripMeta.used_restaurants) ? (tripMeta.used_restaurants as string[]) : [];
 

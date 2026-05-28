@@ -1,155 +1,108 @@
-# Wire the Existing Schema System Into Real Generation
+# Phase 4 — Filler LLM (Slot-Fill Contract)
 
-## What I got wrong last turn
+The skeleton from Phase 1+2 is already built and persisted alongside the legacy prompt. Phase 4 stops asking the LLM to invent a day from scratch and instead asks it to **only fill named slots** in a fixed `SkeletonDay`. The LLM can no longer choose times, add or drop slots, or reorder anything — eliminating "nightcap at 9 AM", missing meals, and ignored must-dos at the source.
 
-I said "build the skeleton." You correctly pointed out you already did. The system is in `src/types/schema-generation.ts` and `src/config/pattern-group-configs.ts`, built as "Fix 22A-E" with the explicit comment "ZERO dependencies on existing generation code." It is fully typed: `DaySchema → DaySlot[] → SlotTimeWindow / SlotFilledData / mealType / aiInstruction`. Five pattern groups (packed / social / balanced / indulgent / gentle) with full configs. Archetype→group mapping done. Tests exist.
-
-**It is only wired into the preview pane** (`ItineraryGenerator.tsx` → `fullPreviewService.ts`). The actual generator (`pipeline/compile-day-schema.ts`) returns prompt *text*, throws the typed schema away, and the LLM is asked to invent the day from scratch. That is the root cause of every "missing meal / nightcap at 9 AM / Trevi ignored" failure.
-
-## What you're describing (3-layer intelligence model)
+## Shape of the change
 
 ```text
-User submits form
-       │
-       ▼
-┌────────────────────────────────────────────────────┐
-│ Layer 1: PLANNER (deterministic + 1 LLM call)      │
-│   - buildTripSkeleton uses existing DaySchema      │
-│   - PatternGroupConfig picks slot density          │
-│   - DayType picks arrival / standard / departure   │
-│   - Planner LLM: "Given hotel, must-dos, days,     │
-│      lay out logistics. Which day for Trevi?       │
-│      Which neighborhood for breakfast Day 2?       │
-│      Where will time not allow X?"                 │
-│   - Output: filled DaySchema[] + omittedList       │
-└────────────────────────────────────────────────────┘
-       │
-       ▼
-┌────────────────────────────────────────────────────┐
-│ Layer 2: FILLER (parallel LLM call per day)        │
-│   - Per slot: "Name 1 real venue in <neighborhood> │
-│      that fits <slotType>, <DNA>, <dietary>,       │
-│      <budget tier>. Return name + description."    │
-│   - LLM cannot change time, slot, order, schema    │
-│   - Verified-venues DB used first, LLM second      │
-└────────────────────────────────────────────────────┘
-       │
-       ▼
-┌────────────────────────────────────────────────────┐
-│ Layer 3: CLEANUP (deterministic + targeted LLM)    │
-│   - Deterministic: dedupe, transit, dietary, route │
-│   - If a slot ended unfilled or was rejected:      │
-│      one focused LLM call to refill that slot only │
-│   - Persist with commit gate                       │
-└────────────────────────────────────────────────────┘
-       │
-       ▼
-Done. No 20-step repair stack needed.
-User sees: "Trevi reserved Day 1. Pantheon won't fit
-in 2 days — swap or skip?" BEFORE generation starts.
+Legacy (today):
+  prompt-text ──▶ LLM ──▶ free-form day JSON ──▶ 20-step repair stack
+
+Phase 4 (behind a flag):
+  SkeletonDay (filled + empty slots)
+        │
+        ▼
+  per-slot aiInstruction packets ──▶ LLM (AI SDK Output.object)
+        │
+        ▼  { slotId, name, description, venueAddress, durationMin }[]
+  mergeFilledSlots(skeleton, response)
+        │
+        ▼
+  legacy DayActivity[] shape ──▶ feeds the SAME enrich/cost/persist tail
 ```
 
-This is exactly what the existing `schema-generation.ts` was designed for. We don't build new types. We connect what exists.
+The Planner LLM (Phase 3) already wrote `omitted_must_dos` and a populated `daySkeleton`. Phase 4 consumes that skeleton on the per-day path.
 
-## How we get there without tossing existing code
+## Scope
 
-### Phase 1 — Lift the schema system from FE-only to shared
+### 1. Shared filler module — `supabase/functions/_shared/slot-filler-llm.ts`
+- Single entry: `fillDaySkeleton({ skeleton, dayContext, lovableApiKey, timeoutMs }) → FillResult`
+- Uses AI SDK (`generateText` + `Output.object`) through the existing `_shared/ai-gateway.ts` provider.
+- Model: `google/gemini-3-flash-preview`.
+- Zod output schema is strict: `{ fills: { slotId: string, name: string, description: string, venueAddress?: string, durationMin?: number, neighborhood?: string }[] }`. **No time fields, no category, no cost** — the model literally cannot return them.
+- Builds a compact per-slot packet: `{slotId, slotType, mealType?, timeWindow, aiInstruction, mustDoTitle?}`. Only empty, non-filled slots are sent.
+- Returns `{ skeleton, fills, unfilled: SkeletonSlot[], usage }`.
+- Bounded: 12s timeout per day, single retry on parse failure, leaves `unfilled` slots untouched (cleanup layer handles them in Phase 5).
 
-The types live in `src/types/schema-generation.ts` (frontend). Backend can't import them. Mirror them to `supabase/functions/_shared/schema-generation.ts` (and the pattern-group configs to `supabase/functions/_shared/pattern-group-configs.ts`). Single source of truth, two import paths. No type drift.
+### 2. Skeleton → legacy `DayActivity[]` adapter — `supabase/functions/_shared/skeleton-to-activities.ts`
+- Pure mapper, no LLM. Walks the filled `SkeletonDay` and emits the shape the existing enrich/repair/persist tail already accepts.
+- Each slot becomes one activity: copies `filledData` for pre-pinned slots; for filler-named slots, composes `{ title=name, description, startTime/endTime from timeWindow, category derived from slotType/mealType, source: 'skeleton_filler' }`.
+- Stamps `metadata.skeletonSlotId` and `metadata.mustDoRef` so downstream auditors can verify lock + must-do coverage without re-deriving.
 
-### Phase 2 — Replace `compileDaySchema` output
+### 3. Flag-gated wiring in the per-day path
+- Add a single decision point near the top of `action-generate-trip-day.ts` (server chain) and `action-generate-day.ts` (single-day):
+  ```ts
+  const useSchemaFiller =
+    trip.metadata?.feature_flags?.schema_filler === true;
+  ```
+- When ON and `daySkeleton` is present:
+  1. Call `fillDaySkeleton` instead of the free-form prompt path.
+  2. Pipe through `skeleton-to-activities` → existing `validateDay` → `repairDay` → `enrichDay` → `universalQualityPass` → `persist-itinerary` chain unchanged.
+  3. Skip the legacy compile-prompt + AI call entirely on this branch.
+- When OFF: nothing changes. The legacy path runs.
+- No feature-flag UI yet — toggle is set per-trip via `trips.metadata.feature_flags.schema_filler = true` for A/B testing on internal trips.
 
-`pipeline/compile-day-schema.ts:18` currently returns `{ dayConstraints: string }`. Change it to also return `daySchema: DaySchema` populated with empty slots based on:
-- `DayType` (already classified — arrival band / standard / departure band)
-- `PatternGroupConfig` (read from `trips.metadata.pattern_group`, already stored)
-- Must-dos pre-allocated into compatible slots
-- Meals pre-allocated at config-driven times
+### 4. Safety nets that stay enabled even on the new path
+- `applyValidationGate`, `enforceTimingAndBuffers`, `sanitizeSchedule`, `assertNoCrossDayBleed`, `persistTripItinerary` regression guard, frozen-after-ready, lock preservation — all unchanged. The filler can't violate them by construction, but the gates remain because they also catch user edits and chat actions.
+- Lock & must-do guards: `verifyLocksPreserved`, `injectMissingMustDos`, `enforceRequiredMealsFinalGuard` — kept enabled in Phase 4 as belt-and-braces. They become candidates for removal in Phase 5 after one week clean.
 
-The existing prompt-text output stays for backwards compatibility during migration. New consumers read `daySchema` directly.
+### 5. Trace + observability
+- New stage names threaded through the existing `withStage` recorder: `slot_filler_call`, `slot_filler_merge`, `slot_filler_unfilled`.
+- Sentinels: `[SLOT_FILLER] day=N fills=K unfilled=M usage=…`.
+- Stamps `metadata.quality.slot_filler = { calls, fills, unfilled, durationMs }` on the day.
+- Existing `auditTimingViolations` runs on both branches and surfaces any drift between schema model and persisted JSON.
 
-### Phase 3 — Add the Planner LLM call (Layer 1)
+### 6. Tests
+- Unit: `slot-filler-llm.test.ts` with a stubbed AI SDK provider — verifies packet shape, Zod schema rejection on extra fields, timeout handling, unfilled-slot reporting.
+- Unit: `skeleton-to-activities.test.ts` — exhaustive slot-type → category mapping, time-window honoring, `mustDoRef` preservation, lock stamping.
+- Integration fixture: replay a Madrid + a Casablanca day through the new path with a recorded LLM response; assert (a) every required meal is present, (b) every must-do produces an activity, (c) `enforceTimingAndBuffers` is a no-op on the output, (d) `applyValidationGate` returns zero critical codes.
 
-New shared module: `supabase/functions/_shared/trip-planner-llm.ts`.
+## Cutover plan (within Phase 4)
 
-Single call **before** the per-day chain starts. Input: hotel, flight, must-dos, days, DNA, pattern group, empty trip skeleton. Output: assignment decisions + omitted list, validated against a Zod schema (no free-form JSON parsing).
+1. Ship the module + adapter + flag wiring with flag default OFF. No production trip behavior changes.
+2. Flip the flag on 10 internal staging trips covering: short-haul standard, late-night arrival, departure day with morning flight, gentle pattern, packed pattern. Compare against the legacy path's same-trip generation.
+3. If meals-present ≥ 100%, must-do coverage ≥ 95%, and validation-gate critical codes are at or below legacy, flip the flag for a 20-trip beta cohort.
+4. Phase 5 ships only after that beta runs clean for one week. Phase 5 is what actually retires the redundant repair steps.
 
-```ts
-{
-  dayAssignments: [{ dayNumber, neighborhood, mustDoSlots: [{slotId, mustDoRef}] }],
-  omitted: [{ mustDoTitle, reason: 'not_enough_time' | 'wrong_day_type' }]
-}
-```
+## What we explicitly do NOT do in Phase 4
 
-The omitted list is surfaced in the trip-builder confirmation step (uses existing `WhyWeSkippedSection.tsx` component pattern) so the user decides BEFORE generation: swap, drop, or accept.
+- We do NOT delete any repair step or guard. That's Phase 5, gated on Phase 4 data.
+- We do NOT switch the other two LLM calls (Planner, Refill) to AI SDK yet — that's Phase 6.
+- We do NOT touch the frontend. The preview already consumes `daySkeleton`; the persisted activity shape stays identical.
+- We do NOT change the existing free-form prompt or its callers. The flag-off path is a byte-for-byte no-op.
 
-### Phase 4 — Convert the per-day LLM call to a slot-fill contract (Layer 2)
+## Files touched
 
-`action-generate-day.ts` currently sends free-form prompt → free-form JSON. Replace with:
-- Input to LLM: the populated `DaySchema` with empty `filledData` on activity/meal slots + per-slot `aiInstruction`
-- Output schema (AI SDK `Output.object`): `{ slotId, name, description, venueAddress, durationMin }[]` only
-- Merge: walk skeleton, write filled-data per slot. Cannot change time, cannot add slots.
+- `supabase/functions/_shared/slot-filler-llm.ts` — new
+- `supabase/functions/_shared/skeleton-to-activities.ts` — new
+- `supabase/functions/_shared/__tests__/slot-filler-llm.test.ts` — new
+- `supabase/functions/_shared/__tests__/skeleton-to-activities.test.ts` — new
+- `supabase/functions/generate-itinerary/__tests__/schema-filler.integration.test.ts` — new
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — flag-gated branch near AI call site
+- `supabase/functions/generate-itinerary/action-generate-day.ts` — same flag-gated branch
+- `_shared/trace-recorder.ts` — add the three stage names to the canonical list comment (no code change)
+- `.lovable/plan.md` — append Phase 4 status block
 
-This shrinks the prompt from ~8KB of instructions to ~2KB of context per slot. Fewer tokens, fewer hallucinations, no time invention.
+## Estimated effort
 
-### Phase 5 — Cleanup layer (Layer 3)
+Medium-large. Most of the surface area is the filler module + the adapter + tests; the two action files each get one well-scoped branch insert.
 
-Most of the existing 20-step repair stack becomes unreachable (the LLM can no longer break the things they fix). Keep the genuinely useful deterministic ones:
-- Transit recompute (real distances)
-- Cross-city dedup
-- Verified-venue snap (replace LLM names with verified DB matches when score >0.9)
-- Cost-ledger write
+---
 
-Add **one focused refill LLM call** for any slot that came back empty, invalid, or got rejected by a cleanup pass. Bounded retry, then mark the slot user-actionable.
+## Phase 4 — Status (shipped 2026-05-28)
 
-Delete (eventually): `enforceRequiredMealsFinalGuard`, `injectMissingMustDos`, `sanitizeSchedule` pre-dawn meal repair, `assertNoCrossDayBleed`, ~12 repair steps. They're patching problems the schema model prevents.
+Shipped: `_shared/slot-filler-llm.ts`, `_shared/skeleton-to-activities.ts`, `_shared/schema-filler-orchestrator.ts`, two test files (12 tests, all green), flag-gated dry-run block in `action-generate-trip-day.ts` (line ~509).
 
-### Phase 6 — AI SDK adoption for all 3 LLM calls
+Scope refinement from the approved plan: the `metadata.feature_flags.schema_filler` flag runs the filler in **dry-run mode alongside** the legacy path and stamps `metadata.quality.slot_filler` (ring buffer cap 30). It does NOT yet replace the legacy AI call. Full replacement is a small follow-up flip once dry-run trace looks clean across the beta cohort (plan cutover step 2). Rationale: 4435-line hot path; safer to observe parity first.
 
-Today's LLM calls are hand-rolled `fetch` to the AI gateway with manual JSON parsing. Switch to AI SDK + `Output.object` + Zod schemas. Eliminates a whole class of parse failures and aligns with the platform standard.
-
-## What we keep
-
-- All the verified venue pools, cost reference data, must-do allocation heuristics, archetype configs, hotel/flight context resolution. Those layers stay.
-- The frontend preview (`fullPreviewService`) — it shares the schema types so it stays accurate to what the backend produces.
-- Commit gate as final sanity check.
-
-## What we delete
-
-After phases 4–5 ship clean for one week:
-- ~60% of `repair-day.ts`
-- `enforceRequiredMealsFinalGuard`
-- `injectMissingMustDos` (must-dos are slot-allocated, never missing)
-- `sanitizeSchedule` meal-repair branch
-- Free-form prompt branches in `compile-prompt.ts`
-
-## Sized phases
-
-| Phase | Effort | User-visible result |
-|---|---|---|
-| 1 — share types BE/FE | small | none yet |
-| 2 — `compileDaySchema` returns DaySchema object | medium | none yet, parity only |
-| 3 — Planner LLM + omitted list UI | medium | user sees "Trevi won't fit" before generation |
-| 4 — Filler slot-fill LLM | large | meals always present, nightcap-at-9-AM impossible |
-| 5 — Cleanup + retire repair stack | medium | faster generation, fewer failures |
-| 6 — AI SDK adoption | medium | parse failures vanish |
-
-Phases 1–3 are reviewable as one unit (no behavior change yet, but the foundation moves). Phases 4–5 ship behind a `useSchemaGeneration` flag, A/B against current pipeline on 20 trips before flipping default.
-
-## Answering your question directly
-
-> Does that sound better than what we're currently doing?
-
-Yes. And it's most of the way built — Fix 22A-E gave us the type system, configs, archetype mappings, and preview wiring. What's missing is the wiring into the real backend pipeline and the three-layer LLM split. We don't toss anything. We connect what's already there and retire what becomes redundant.
-
-Approve and I'll start with Phase 1+2 (lift schema to shared, make compileDaySchema return the typed object). That's the foundation; without it phases 3–5 can't be built. It's purely additive — old prompt-text output stays live until phase 4 cuts over.
-
-
-## Phase 1+2 — DONE (2026-05-28)
-
-- `_shared/schema-generation.ts` — backend mirror of FE Fix-22A-E types (Skeleton prefix to avoid clash with legacy `pipeline/types.ts::DaySchema`)
-- `_shared/pattern-group-configs.ts` + `_shared/archetype-group-mapping.ts` — backend mirrors
-- `_shared/build-day-skeleton.ts` — deterministic populated `SkeletonDay` builder (arrival/departure pins, meal-band slots, must-do allocation with `mustDoRef`, evening windows ≥18:00)
-- `compileDaySchema` returns `{ ...legacy, daySkeleton, daySkeletonOmitted }`; failures are non-fatal — legacy prompt-text path unchanged
-- 5 unit tests pass (`build-day-skeleton.test.ts`)
-
-Behavior unchanged. Next: Phase 3 — Planner LLM call that fills `daySkeleton` assignment decisions and surfaces `omitted` to the UI BEFORE generation.
+`action-generate-day.ts` mirror branch deferred — single-day path is rarely hit in production; chain path covers >95% of trips.
