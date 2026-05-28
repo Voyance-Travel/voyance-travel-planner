@@ -32,10 +32,12 @@
 
 export type IntegrityCode =
   | 'TEMPORAL_ROLE_TIME_MISMATCH'
+  | 'NIGHTLIFE_BEFORE_EVENING'
   | 'HOTEL_VENUE_BEFORE_CHECKIN'
   | 'REQUIRED_USER_INTENT_MISSING'
   | 'NO_SIGHTSEEING_CAPACITY'
-  | 'LOGISTICS_ONLY_CURATED_DAY';
+  | 'LOGISTICS_ONLY_CURATED_DAY'
+  | 'MEAL_COVERAGE_MISSING';
 
 export interface IntegrityViolation {
   code: IntegrityCode;
@@ -43,6 +45,11 @@ export interface IntegrityViolation {
   detail: string;
   activityTitle?: string;
   activityTime?: string | null;
+}
+
+export interface OmittedRequest {
+  title: string;
+  reason: 'infeasible_time' | 'not_scheduled';
 }
 
 export interface IntegrityVerdict {
@@ -54,6 +61,12 @@ export interface IntegrityVerdict {
    *  Persisted so the UI can render an "infeasible" explainer instead
    *  of treating the trip as broken. */
   infeasibleDays: number[];
+  /** Structured manifest the UI surfaces: what was requested and didn't
+   *  land, plus why. Empty when all required intents were scheduled. */
+  omittedRequests: OmittedRequest[];
+  /** Per-day meal-coverage report. Days with `missing.length > 0` and
+   *  no infeasibility excuse will fail the contract. */
+  mealCoverage: Array<{ dayNumber: number; required: string[]; scheduled: string[]; missing: string[] }>;
 }
 
 // ── role detection (kept minimal; mirrors `_shared/timing-spine.ts`)
