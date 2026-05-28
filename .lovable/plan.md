@@ -142,3 +142,14 @@ Phases 1–3 are reviewable as one unit (no behavior change yet, but the foundat
 Yes. And it's most of the way built — Fix 22A-E gave us the type system, configs, archetype mappings, and preview wiring. What's missing is the wiring into the real backend pipeline and the three-layer LLM split. We don't toss anything. We connect what's already there and retire what becomes redundant.
 
 Approve and I'll start with Phase 1+2 (lift schema to shared, make compileDaySchema return the typed object). That's the foundation; without it phases 3–5 can't be built. It's purely additive — old prompt-text output stays live until phase 4 cuts over.
+
+
+## Phase 1+2 — DONE (2026-05-28)
+
+- `_shared/schema-generation.ts` — backend mirror of FE Fix-22A-E types (Skeleton prefix to avoid clash with legacy `pipeline/types.ts::DaySchema`)
+- `_shared/pattern-group-configs.ts` + `_shared/archetype-group-mapping.ts` — backend mirrors
+- `_shared/build-day-skeleton.ts` — deterministic populated `SkeletonDay` builder (arrival/departure pins, meal-band slots, must-do allocation with `mustDoRef`, evening windows ≥18:00)
+- `compileDaySchema` returns `{ ...legacy, daySkeleton, daySkeletonOmitted }`; failures are non-fatal — legacy prompt-text path unchanged
+- 5 unit tests pass (`build-day-skeleton.test.ts`)
+
+Behavior unchanged. Next: Phase 3 — Planner LLM call that fills `daySkeleton` assignment decisions and surfaces `omitted` to the UI BEFORE generation.
