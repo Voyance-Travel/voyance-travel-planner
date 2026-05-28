@@ -1850,7 +1850,9 @@ export async function handleGenerateDay(
 
     // ── SCHEDULE EXECUTIONER (single-day path mirror) ────────────────────
     try {
-      const { runScheduleExecutioner } = await import('../_shared/schedule-executioner.ts');
+      const { runScheduleExecutioner, toExecutionerAuditCodes } =
+        await import('../_shared/schedule-executioner.ts');
+      const geoDropEnabled = (Deno.env.get('EXECUTIONER_GEO_DROP_ENABLED') || '').toLowerCase() === 'true';
       const exec = runScheduleExecutioner(generatedDay.activities || [], {
         dayNumber,
         totalDays: totalDays || 1,
@@ -1860,7 +1862,8 @@ export async function handleGenerateDay(
         departureTime24: isLastDay ? (flightContext as any)?.returnDepartureTime24 ?? null : null,
         dayTitle: generatedDay?.title || generatedDay?.theme || null,
         budgetTier: budgetTier ?? null,
-        geoFlagOnly: true,
+        geoFlagOnly: !geoDropEnabled,
+        geoDropEnabled,
       });
       generatedDay.activities = exec.activities;
       generatedDay.metadata = generatedDay.metadata || {};
@@ -1873,9 +1876,12 @@ export async function handleGenerateDay(
         overlapRepairs: exec.counters.overlapRepairs,
         geoOutliersFlagged: exec.counters.geoOutliersFlagged,
         geoOutliersDropped: exec.counters.geoOutliersDropped,
+        gapsRefilled: exec.counters.gapsRefilled,
+        geoDropEnabled,
         issuesSample: exec.counters.issues.slice(0, 10),
       };
-      console.log(`[EXECUTIONER_SUMMARY] (single) day=${dayNumber} flight=${exec.counters.flightAnchorRepaired} spill+=${exec.counters.midnightSpilloversAllowed} buffer=${exec.counters.bufferRepairs} geo=${exec.counters.geoOutliersFlagged}`);
+      generatedDay.metadata.quality.executioner_audit = toExecutionerAuditCodes(exec.counters, dayNumber);
+      console.log(`[EXECUTIONER_SUMMARY] (single) day=${dayNumber} flight=${exec.counters.flightAnchorRepaired} spill+=${exec.counters.midnightSpilloversAllowed} buffer=${exec.counters.bufferRepairs} geo=${exec.counters.geoOutliersFlagged} geoDropEnabled=${geoDropEnabled}`);
     } catch (execErr) {
       console.warn('[generate-day] schedule-executioner failed (non-blocking):', execErr);
     }
