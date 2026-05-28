@@ -42,6 +42,7 @@ import { CreditNudge } from './CreditNudge';
 import { UnlockBanner } from './UnlockBanner';
 import { LockedDayCard } from './LockedDayCard';
 import { IntegrityContractBanner } from './IntegrityContractBanner';
+import { OmittedMustDosBanner } from './OmittedMustDosBanner';
 import { supabase as _supabaseForIntegrity } from '@/integrations/supabase/client';
 // TripTotalDeltaIndicator import removed — see comment near header total.
 import { useReconcilingState } from '@/hooks/useReconcilingState';
