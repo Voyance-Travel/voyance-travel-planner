@@ -73,18 +73,21 @@ async function loadCommitContext(
   let requiredIntents = preloaded?.requiredIntents ?? null;
   let arrivalTime24 = preloaded?.arrivalTime24 ?? null;
   let departureTime24 = preloaded?.departureTime24 ?? null;
+  let requiredMealsByDay = preloaded?.requiredMealsByDay ?? null;
 
   // Short-circuit: caller already prepared everything.
   if (
     requiredIntents !== null &&
     arrivalTime24 !== null &&
-    departureTime24 !== null
+    departureTime24 !== null &&
+    requiredMealsByDay !== null
   ) {
     return {
       hotelName,
       requiredIntents,
       arrivalTime24,
       departureTime24,
+      requiredMealsByDay,
     };
   }
 
