@@ -220,6 +220,8 @@ export async function resolveCommitGate(
         violations: [],
         codes: [],
         infeasibleDays: [],
+        omittedRequests: [],
+        mealCoverage: [],
       },
       blockedReady: false,
     };
@@ -227,11 +229,16 @@ export async function resolveCommitGate(
 
   try {
     const ctx = await loadCommitContext(supabase, tripId, preloaded);
+    const requiredMealsByDay =
+      Object.keys(ctx.requiredMealsByDay || {}).length > 0
+        ? ctx.requiredMealsByDay
+        : await deriveRequiredMealsByDay(days || [], ctx.arrivalTime24, ctx.departureTime24);
     const verdict = checkItineraryIntegrity(days || [], {
       hotelName: ctx.hotelName,
       requiredIntents: ctx.requiredIntents,
       arrivalTime24: ctx.arrivalTime24,
       departureTime24: ctx.departureTime24,
+      requiredMealsByDay,
     });
     const applied = applyIntegrityContractToFreezeStamp({
       proposedStatus,
