@@ -36,7 +36,13 @@ export type AuditCode =
   | 'CROSS_DAY_BLEED'
   | 'INVERTED_WINDOW'
   | 'MISSING_DINNER'
-  | 'DUPLICATE_TITLE_SAME_DAY';
+  | 'DUPLICATE_TITLE_SAME_DAY'
+  // Schedule-Executioner mirrors (read-time surfacing of write-time actions).
+  | 'EXEC_FLIGHT_ANCHOR_FIXED'
+  | 'EXEC_MIDNIGHT_SPILL_TRIMMED'
+  | 'EXEC_BUFFER_CASCADE_APPLIED'
+  | 'EXEC_GEO_OUTLIER_DROPPED'
+  | 'EXEC_GAP_REFILLED';
 
 export type AuditSeverity = 'critical' | 'warn';
 
