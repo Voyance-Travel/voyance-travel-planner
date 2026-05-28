@@ -150,21 +150,6 @@ async function loadCommitContext(
     console.warn('[commit-itinerary] context load failed:', e);
   }
 
-  // Derive per-day meal policy unless caller pre-supplied it. We pass the
-  // saved arrival/departure clocks plus first/last flags so deriveMealPolicy
-  // mirrors the same windows the generator used.
-  if (requiredMealsByDay === null) {
-    requiredMealsByDay = {};
-    try {
-      const { deriveMealPolicy } = await import('../generate-itinerary/meal-policy.ts');
-      // `days` is not available here — caller passes it via resolveCommitGate.
-      // We mark the map empty; the gate-level path fills it in below using
-      // the days array length.
-    } catch {
-      // deriveMealPolicy unavailable in this build — leave map empty.
-    }
-  }
-
   return {
     hotelName,
     requiredIntents: requiredIntents || [],
@@ -172,6 +157,40 @@ async function loadCommitContext(
     departureTime24,
     requiredMealsByDay: requiredMealsByDay || {},
   };
+}
+
+/**
+ * Derive per-day required meals from `deriveMealPolicy`, mirroring the
+ * windows the generator used. Returns {} when meal-policy can't be
+ * imported in this build (e.g. shared-only test contexts).
+ */
+async function deriveRequiredMealsByDay(
+  days: any[],
+  arrivalTime24: string | null,
+  departureTime24: string | null,
+): Promise<Record<number, Array<'breakfast' | 'lunch' | 'dinner'>>> {
+  const out: Record<number, Array<'breakfast' | 'lunch' | 'dinner'>> = {};
+  try {
+    const { deriveMealPolicy } = await import('../generate-itinerary/meal-policy.ts');
+    const totalDays = days.length;
+    for (let i = 0; i < days.length; i++) {
+      const dayNumber = Number(days[i]?.dayNumber || i + 1);
+      const isFirstDay = i === 0;
+      const isLastDay = i === days.length - 1;
+      const policy = deriveMealPolicy({
+        dayNumber,
+        totalDays,
+        isFirstDay,
+        isLastDay,
+        arrivalTime24: isFirstDay && arrivalTime24 ? arrivalTime24 : undefined,
+        departureTime24: isLastDay && departureTime24 ? departureTime24 : undefined,
+      });
+      out[dayNumber] = policy.requiredMeals as Array<'breakfast' | 'lunch' | 'dinner'>;
+    }
+  } catch (e) {
+    console.warn('[commit-itinerary] deriveRequiredMealsByDay failed:', e);
+  }
+  return out;
 }
 
 /**
