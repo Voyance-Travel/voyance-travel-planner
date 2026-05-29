@@ -99,15 +99,36 @@ const AIRPORT_TRANSFER_RE = /\b(airport\s+transfer|transfer\s+(to|from)\s+(your\
 const HOTEL_TITLE_RE = /\b(hotel|check[-\s]?in|check[-\s]?out|return to|head back to|wind down)\b/i;
 const LOGISTICS_CATS = new Set(['transit', 'transport', 'transportation', 'flight', 'logistics', 'transfer', 'accommodation', 'stay', 'hotel', 'lodging']);
 
-function isLocked(a: any): boolean {
+/**
+ * Truly immutable: user-touched, manually added, imported from a booking,
+ * or pinned. NEVER includes system-emitted anchors (arrival-flight /
+ * airport-transfer / check-in), which the Executioner is allowed to repair
+ * against flight/hotel truth.
+ */
+function isUserOwned(a: any): boolean {
   if (!a) return false;
-  if (a.isLocked === true || a.locked === true || a.is_locked === true) return true;
-  if (a.lock_state === 'locked') return true;
   if (a.userAdded || a.userEdited || a.isManual || a.extracted || a.pinned) return true;
   const src = String(a.source || '').toLowerCase();
   if (LOCKED_SOURCE_RE.test(src)) return true;
   const basis = String(a?.cost?.basis || a?.estimatedCost?.basis || '').toLowerCase();
   if (basis === 'user' || basis === 'user_override' || basis === 'booked') return true;
+  return false;
+}
+
+/**
+ * General "do not move" guard. Used by passes where preserving locked
+ * non-anchor cards matters (geo, midnight). Flight-anchor and impossible-
+ * logistics passes use `isUserOwned` instead so they CAN repair system
+ * anchors whose `isLocked=true` was stamped by anchor-guard.
+ */
+function isLocked(a: any): boolean {
+  if (!a) return false;
+  if (isUserOwned(a)) return true;
+  // Non-user-owned isLocked=true is treated as moveable by truth-repair
+  // passes (anchor-guard stamps system anchors as locked). Other passes
+  // still get the "don't touch" semantics via this fn.
+  if (a.isLocked === true || a.locked === true || a.is_locked === true) return true;
+  if (a.lock_state === 'locked') return true;
   return false;
 }
 
