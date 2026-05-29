@@ -376,7 +376,10 @@ export function checkItineraryIntegrity(
       }
       for (let idx = 0; idx < acts.length; idx++) {
         const a = acts[idx];
-        if (!a || isLocked(a)) continue;
+        // Only user-owned rows are immutable here; system-generated airport
+        // transfers MUST be checked or the Lisbon/Amsterdam post-checkin
+        // loop pattern continues to ship as ready.
+        if (!a || isUserOwned(a)) continue;
         const t = String(a?.title || a?.name || '');
         const anchor = String(a?.anchorSource || '').toLowerCase();
         const isAirportXfer =
