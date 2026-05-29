@@ -2181,7 +2181,7 @@ export default function TripDetail() {
                       console.log(
                         `[TripDetail] Self-heal: status '${__status}' kept partial after rebuild (${realDayCount}/${expectedTotal} days) — commit gate decides ready.`,
                       );
-                      const promotedMeta = {
+                      const promotedMeta: Record<string, any> = {
                         ...meta,
                         failed_day_numbers: [],
                         generation_completed_days: expectedTotal,
