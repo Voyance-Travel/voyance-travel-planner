@@ -343,6 +343,108 @@ export function checkItineraryIntegrity(
         });
       }
     }
+
+    // ── AIRPORT_LOOP_ON_NON_DEPARTURE
+    // Lisbon root-cause class: arrival night had check-in → travel-to-airport
+    // → return-to-hotel loop, and middle days sometimes carry an airport
+    // transfer with no flight on that day. Mirrors the Executioner pass but
+    // runs at commit time so any pre-existing or chat-injected loop blocks
+    // the ready stamp.
+    if (!isLastDay) {
+      // Find first check-in index on this day (Day 1 only realistically has one)
+      let checkinIdx = -1;
+      for (let k = 0; k < acts.length; k++) {
+        const t = String(acts[k]?.title || acts[k]?.name || '');
+        if (/\bcheck[-\s]?in\b/i.test(t)) { checkinIdx = k; break; }
+      }
+      for (let idx = 0; idx < acts.length; idx++) {
+        const a = acts[idx];
+        if (!a || isLocked(a)) continue;
+        const t = String(a?.title || a?.name || '');
+        const anchor = String(a?.anchorSource || '').toLowerCase();
+        const isAirportXfer =
+          anchor === 'airport-transfer' ||
+          /\b(airport\s+transfer|transfer\s+to\s+(?:the\s+)?airport|airport\s+(?:pickup|pick[- ]up))\b/i.test(t);
+        if (!isAirportXfer) continue;
+        // Middle day: never legitimate.
+        if (!isFirstDay) {
+          violations.push({
+            code: 'AIRPORT_LOOP_ON_NON_DEPARTURE',
+            dayNumber,
+            detail: `Day ${dayNumber} contains an airport transfer ("${t}") but is not the departure day.`,
+            activityTitle: t,
+            activityTime: a.startTime || a.time || null,
+          });
+        } else if (checkinIdx !== -1 && idx > checkinIdx) {
+          // Day 1 post-check-in transfer = loop.
+          violations.push({
+            code: 'AIRPORT_LOOP_ON_NON_DEPARTURE',
+            dayNumber,
+            detail: `Arrival day has a post-checkin airport transfer ("${t}") — loop back to the airport on arrival night.`,
+            activityTitle: t,
+            activityTime: a.startTime || a.time || null,
+          });
+        }
+      }
+    }
+
+    // ── FLIGHT_ANCHOR_COMMIT_MISMATCH (Day 1 only)
+    // If we have an arrival clock truth and Day 1's arrival anchor card
+    // disagrees by >20 min, the Executioner did not run or was overridden.
+    // Block the ready stamp so the user sees the truth.
+    if (isFirstDay && ctx.arrivalTime24) {
+      const truthMin = parseHM(ctx.arrivalTime24);
+      if (truthMin !== null) {
+        for (const a of acts) {
+          if (!a || isLocked(a)) continue;
+          const t = String(a?.title || a?.name || '');
+          const anchor = String(a?.anchorSource || '').toLowerCase();
+          const isArrival =
+            anchor === 'arrival-flight' ||
+            /\b(arrival|landing|land\s+at|inbound)\b.*\b(flight|airport)\b|\b(arrival|flight\s+arrival)\b/i.test(t);
+          if (!isArrival) continue;
+          const stamped = pickStart(a);
+          if (stamped === null) continue;
+          if (Math.abs(stamped - truthMin) > 20) {
+            violations.push({
+              code: 'FLIGHT_ANCHOR_COMMIT_MISMATCH',
+              dayNumber,
+              detail: `Arrival anchor "${t}" stamped ${a.startTime || a.time} but flight truth is ${ctx.arrivalTime24}.`,
+              activityTitle: t,
+              activityTime: a.startTime || a.time || null,
+            });
+          }
+        }
+      }
+    }
+
+    // ── NEIGHBORHOOD_ADDRESS_CONFLICT
+    // Lisbon root-cause: Day titled "Alfama Wandering" had an activity
+    // pinned to Av. da Liberdade. Run the neighborhood guard at commit time;
+    // when destination is known and a conflict exists, block ready.
+    if (ctx.destination && day?.title) {
+      try {
+        // Lazy import — keep the contract tree-shake friendly and avoid
+        // import cycles in test-only contexts.
+        const guard = (globalThis as any).__neighborhoodGuard;
+        const checkFn = guard?.checkNeighborhoodCoherence;
+        if (typeof checkFn === 'function') {
+          for (const a of acts) {
+            if (!a || isLocked(a) || isLogisticsRow(a)) continue;
+            const verdict = checkFn(a, day.title, ctx.destination);
+            if (verdict?.mismatch) {
+              violations.push({
+                code: 'NEIGHBORHOOD_ADDRESS_CONFLICT',
+                dayNumber,
+                detail: verdict.detail || `Activity neighborhood conflicts with day theme.`,
+                activityTitle: String(a?.title || a?.name || ''),
+                activityTime: a?.startTime || a?.time || null,
+              });
+            }
+          }
+        }
+      } catch { /* non-blocking */ }
+    }
   }
 
   // ── REQUIRED_USER_INTENT_MISSING / NO_SIGHTSEEING_CAPACITY
