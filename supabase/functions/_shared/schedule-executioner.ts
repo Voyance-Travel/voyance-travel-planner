@@ -37,7 +37,10 @@ export type ExecutionerCode =
   | 'MIDNIGHT_SPILLOVER_DROPPED'
   | 'BUFFER_CASCADE_REPAIRED'
   | 'GEO_OUTLIER'
-  | 'GAP_REFILLED';
+  | 'GAP_REFILLED'
+  | 'AIRPORT_LOOP_DROPPED'
+  | 'TRANSFER_DURATION_CLAMPED'
+  | 'DEPARTURE_TRANSFER_WITHOUT_CLOCK';
 
 export interface ExecutionerIssue {
   code: ExecutionerCode;
