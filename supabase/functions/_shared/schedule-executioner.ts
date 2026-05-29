@@ -798,6 +798,30 @@ export function toExecutionerAuditCodes(
       detail: `Refilled ${counters.gapsRefilled} gap(s) opened by cleanup`,
     });
   }
+  if (counters.airportLoopsDropped > 0) {
+    out.push({
+      code: 'EXEC_AIRPORT_LOOP_DROPPED',
+      count: counters.airportLoopsDropped,
+      dayNumber,
+      detail: `Dropped ${counters.airportLoopsDropped} airport-loop transfer(s)`,
+    });
+  }
+  if (counters.transfersClamped > 0) {
+    out.push({
+      code: 'EXEC_TRANSFER_CLAMPED',
+      count: counters.transfersClamped,
+      dayNumber,
+      detail: `Clamped ${counters.transfersClamped} implausible-duration transfer(s)`,
+    });
+  }
+  if (counters.departureTransfersStripped > 0) {
+    out.push({
+      code: 'EXEC_DEPARTURE_TRANSFER_FLAGGED',
+      count: counters.departureTransfersStripped,
+      dayNumber,
+      detail: `Flagged ${counters.departureTransfersStripped} departure transfer(s) without clock truth`,
+    });
+  }
   return out;
 }
 
