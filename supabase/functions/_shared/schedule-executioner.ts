@@ -228,7 +228,7 @@ export function enforceFlightAnchors(
   const TOLERANCE = 5;
 
   for (const a of activities) {
-    if (!a || isLocked(a)) continue;
+    if (!a || isUserOwned(a)) continue;
     if (!isArrivalCard(a)) continue;
     const startMin = pickStart(a);
     const endMin = pickEnd(a);
@@ -237,21 +237,26 @@ export function enforceFlightAnchors(
     if (Math.abs(stamped - truthMin) <= TOLERANCE) continue;
 
     const before = `${a.startTime ?? a.start_time ?? a.time ?? ''}`;
+    const beforeEnd = `${a.endTime ?? a.end_time ?? ''}`;
     setStart(a, ctx.arrivalTime24);
-    // Preserve duration when available, else collapse to a 15-min landing block.
-    const dur = (startMin !== null && endMin !== null && endMin > startMin)
+    // Preserve duration when it's a *plausible* landing-block duration.
+    // If the AI stamped a 2-hour "Arrival in X" with a wrong start, treat it
+    // as a stale convention and collapse to a short 15-min landing block —
+    // the actual airport-transfer card handles the trip-to-hotel time.
+    let dur = (startMin !== null && endMin !== null && endMin > startMin)
       ? (endMin - startMin)
       : 15;
+    if (dur > 30) dur = 15;
     setEnd(a, fmtHM(truthMin + dur));
     counters.flightAnchorRepaired++;
     counters.issues.push({
       code: 'FLIGHT_ANCHOR_MISMATCH',
       activityId: actId(a),
       title: title(a),
-      detail: `Arrival card retimed ${before} → ${ctx.arrivalTime24} to match flight truth`,
+      detail: `Arrival card retimed ${before}→${beforeEnd} to ${ctx.arrivalTime24}→${a.endTime} (flight truth)`,
       repaired: true,
     });
-    console.log(`[EXECUTIONER] FLIGHT_ANCHOR_MISMATCH day=${ctx.dayNumber} title="${title(a)}" was=${before} truth=${ctx.arrivalTime24}`);
+    console.log(`[EXECUTIONER] FLIGHT_ANCHOR_MISMATCH day=${ctx.dayNumber} title="${title(a)}" was=${before}→${beforeEnd} truth=${ctx.arrivalTime24}→${a.endTime}`);
   }
 
   // Drop any non-locked, non-logistics card that starts strictly before the
