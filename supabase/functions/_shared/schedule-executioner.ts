@@ -59,6 +59,9 @@ export interface ExecutionerCounters {
   transitRecomputed: number;
   geoOutliersFlagged: number;
   geoOutliersDropped: number;
+  airportLoopsDropped: number;
+  transfersClamped: number;
+  departureTransfersStripped: number;
   droppedActivities: number;
   gapsRefilled: number;
   issues: ExecutionerIssue[];
