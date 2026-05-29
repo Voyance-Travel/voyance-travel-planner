@@ -80,12 +80,29 @@ const HOTEL_LOGISTICS_RE = /\b(check[-\s]?in|check[-\s]?out|return to|head back 
 const ARRIVAL_LOGISTICS_RE = /\b(arrival|arrive|land(?:ing)?|transfer to|airport (?:pickup|transfer)|flight )\b/i;
 const DEPARTURE_LOGISTICS_RE = /\b(departure|depart|transfer to (?:the )?airport|airport transfer|departure flight)\b/i;
 const HOTEL_VENUE_HINT_RE = /\bat (?:the )?(hotel|resort|riad|lodge)\b|\b(hotel)\s+(restaurant|bar|spa|lounge|bistro)\b/i;
-const LOCKED_SOURCE_RE = /^(user|user_added|manual|extracted|pinned)$/i;
+const LOCKED_SOURCE_RE = /^(user|user_added|manual|extracted|pinned|booked|imported)$/i;
 
 function isLocked(a: any): boolean {
   if (!a) return false;
   if (a.isLocked === true || a.locked === true || a.is_locked === true) return true;
   if (a.lock_state === 'locked') return true;
+  const src = String(a?.source || '').toLowerCase();
+  if (LOCKED_SOURCE_RE.test(src)) return true;
+  const basis = String(a?.cost?.basis || a?.estimatedCost?.basis || '').toLowerCase();
+  if (basis === 'user' || basis === 'user_override' || basis === 'booked') return true;
+  return false;
+}
+
+/**
+ * Truly user-owned: user-touched / manual / imported / booked / pinned.
+ * Distinguishes from system-generated anchors (arrival-flight, airport-
+ * transfer, generated check-in) which the gate IS allowed to check and
+ * which repair passes are allowed to mutate. Mirrors
+ * `schedule-executioner.ts::isUserOwned`.
+ */
+function isUserOwned(a: any): boolean {
+  if (!a) return false;
+  if (a.userAdded || a.userEdited || a.isManual || a.extracted || a.pinned) return true;
   const src = String(a?.source || '').toLowerCase();
   if (LOCKED_SOURCE_RE.test(src)) return true;
   const basis = String(a?.cost?.basis || a?.estimatedCost?.basis || '').toLowerCase();
@@ -359,7 +376,10 @@ export function checkItineraryIntegrity(
       }
       for (let idx = 0; idx < acts.length; idx++) {
         const a = acts[idx];
-        if (!a || isLocked(a)) continue;
+        // Only user-owned rows are immutable here; system-generated airport
+        // transfers MUST be checked or the Lisbon/Amsterdam post-checkin
+        // loop pattern continues to ship as ready.
+        if (!a || isUserOwned(a)) continue;
         const t = String(a?.title || a?.name || '');
         const anchor = String(a?.anchorSource || '').toLowerCase();
         const isAirportXfer =
@@ -396,7 +416,11 @@ export function checkItineraryIntegrity(
       const truthMin = parseHM(ctx.arrivalTime24);
       if (truthMin !== null) {
         for (const a of acts) {
-          if (!a || isLocked(a)) continue;
+          // System anchors (`source='repair-arrival-flight'`, `anchorSource=
+          // 'arrival-flight'` with `isLocked=true` stamped by anchor-guard)
+          // MUST be checked against flight truth — they were the leak path
+          // for the Lisbon 19:00 / Amsterdam 20:00 ships-as-ready bug.
+          if (!a || isUserOwned(a)) continue;
           const t = String(a?.title || a?.name || '');
           const anchor = String(a?.anchorSource || '').toLowerCase();
           const isArrival =

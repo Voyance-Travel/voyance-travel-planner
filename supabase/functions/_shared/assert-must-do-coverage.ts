@@ -62,7 +62,27 @@ const ALIAS_MAP: Record<string, string[]> = {
   'topkapi palace': ['topkapi', 'topkapı', 'topkapi palace', 'topkapı sarayı'],
   'grand bazaar': ['grand bazaar', 'kapali carsi', 'kapalı çarşı'],
   'basilica cistern': ['basilica cistern', 'yerebatan', 'yerebatan sarnici', 'yerebatan sarnıcı'],
+  // Lisbon
+  'tram 28': ['tram 28', 'electrico 28', 'eléctrico 28', 'tram 28 ride', 'ride tram', 'ride tram 28', 'tram 28 through alfama'],
+  'belem tower': ['belem tower', 'torre de belem', 'torre de belém'],
+  'jeronimos monastery': ['jeronimos', 'jerónimos', 'mosteiro dos jeronimos', 'mosteiro dos jerónimos'],
+  // Amsterdam
+  'canal boat tour': ['canal boat tour', 'canal cruise', 'boat tour', 'take a canal boat tour', 'canal tour', 'amsterdam canal cruise', 'canal sightseeing cruise'],
+  'anne frank house': ['anne frank house', 'anne frank huis'],
+  rijksmuseum: ['rijksmuseum'],
+  'van gogh museum': ['van gogh museum', 'van gogh'],
 };
+
+/**
+ * Named transit/water-experience patterns that are user-selected ATTRACTIONS,
+ * not in-transit logistics. Tram 28, Funicular da Bica, Tram 1 (Lisbon),
+ * canal boat tours, ferry rides — when the user lists them as must-dos they
+ * are the destination, not the means of getting somewhere. These must NOT be
+ * disqualified by NON_QUALIFYING_CATEGORY_RE just because the AI categorised
+ * the row as `transport`.
+ */
+const NAMED_TRANSIT_EXPERIENCE_RE =
+  /\b(tram|el[eé]ctrico|funicular|cable\s*car|gondola|cog\s*railway)\s*\d+\b|\b(canal\s+(?:boat|cruise|tour|sightseeing)|boat\s+tour|river\s+cruise|harbor\s+cruise|ferry\s+ride)\b/i;
 
 /**
  * Categories whose rows can NEVER satisfy a venue-level must-do.
@@ -144,9 +164,17 @@ function matchesWord(haystack: string, matcher: string): boolean {
  */
 function isNonQualifyingActivity(act: any): boolean {
   if (!act || typeof act !== 'object') return false;
+  const title = String(act.title || act.name || '');
+  // ESCAPE HATCH: named transit/water experiences (Tram 28, canal boat tour,
+  // funicular, cable car, ferry ride) are user-selected attractions, not
+  // logistics. Allow them through even if the AI tagged them `transport`.
+  if (NAMED_TRANSIT_EXPERIENCE_RE.test(title)) {
+    // Still block pure "travel to" framings.
+    if (TRAVEL_PREFIX_RE.test(title)) return true;
+    return false;
+  }
   const cat = String(act.category || '').toLowerCase();
   if (NON_QUALIFYING_CATEGORY_RE.test(cat)) return true;
-  const title = String(act.title || act.name || '');
   if (TRAVEL_PREFIX_RE.test(title)) return true;
   const src = String(act.source || '').toLowerCase();
   if (/bookend|hotel.?return|hotel.?checkout/.test(src)) return true;

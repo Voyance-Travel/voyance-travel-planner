@@ -4381,46 +4381,78 @@ async function _handleGenerateTripDayInner(
 
     }
 
-    // ── PHASE 6: FREEZE STAMP + fully_persisted=true ────────────────
-    // Only after table-sync + activity_costs succeed do we declare the
-    // trip fully saved. See mem://constraints/itinerary/saved-badge-honesty
-    // + mem://constraints/itinerary/frozen-after-ready.
+    // ── PHASE 6: FINAL COMMIT GATE + FREEZE STAMP ───────────────────
+    // The gate runs HERE — after table-sync + activity_costs + must-do
+    // retry — because earlier passes can mutate or drop activities the
+    // first gate accepted. This is the only place that may stamp
+    // `ready` + `fully_persisted` + `itinerary_frozen_at`. If the gate
+    // blocks now, downgrade to `partial` and skip the freeze entirely.
+    // See .lovable/plan.md (Move commit boundary to Phase 6).
     if (finalStatus === 'ready' && isComplete) {
       try {
-        const { data: latestRow } = await supabase
+        // Re-read the persisted JSON so the gate sees what's actually on disk
+        // after sanitizeSchedule / table sync / cost writes / must-do retry.
+        const { data: dbRow } = await supabase
           .from('trips')
-          .select('metadata')
+          .select('itinerary_data, metadata')
           .eq('id', tripId)
           .single();
-        const latestMeta = (latestRow?.metadata as Record<string, any>) || {};
-        const finalMeta: Record<string, any> = {
-          ...latestMeta,
-          itinerary_frozen_at: latestMeta.itinerary_frozen_at || new Date().toISOString(),
-          fully_persisted: true,
-          fully_persisted_at: new Date().toISOString(),
-        };
-        if (mustDoCoverage) {
-          finalMeta.must_do_coverage = {
-            ...mustDoCoverage,
-            at: new Date().toISOString(),
-          };
-        }
-        // Validate-then-stamp: only record `must_do_repair_attempted` if the
-        // injector actually ran AND post-injection coverage was re-asserted.
-        if (mustDoInjection) {
-          finalMeta.must_do_repair_attempted = {
-            at: new Date().toISOString(),
-            attempted: mustDoInjection.attempted,
-            injected: mustDoInjection.injected,
-            stillMissing: mustDoCoverage?.missing || [],
-          };
-        }
+        const dbDays = ((dbRow?.itinerary_data as any)?.days || []) as any[];
+        const latestMeta = (dbRow?.metadata as Record<string, any>) || {};
 
-        await supabase
-          .from('trips')
-          .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
-          .eq('id', tripId);
-        console.log(`[generate-trip-day] Phase 6 freeze + fully_persisted stamped for trip ${tripId}`);
+        const { resolveCommitGate: _finalGate } = await import('../_shared/commit-itinerary.ts');
+        const finalGateResult = await _finalGate({
+          supabase,
+          tripId,
+          days: dbDays.length > 0 ? dbDays : ((partialItinerary as any)?.days || []),
+          proposedStatus: 'ready',
+          preloaded: {
+            arrivalTime24: savedArrTime24Hoisted || null,
+            departureTime24: savedDepTime24Hoisted || null,
+          },
+          label: 'generate-trip-day:phase-6',
+        });
+
+        if (finalGateResult.status !== 'ready' && finalGateResult.status !== 'generated') {
+          // Gate blocked freeze. Persist partial + integrity_contract codes
+          // so the UI banner explains why; do NOT stamp frozen/fully_persisted.
+          const blockedMeta: Record<string, any> = {
+            ...latestMeta,
+            ...finalGateResult.metadataPatch,
+          };
+          blockedMeta.quality = { ...(blockedMeta.quality || {}), final_gate_trace: { at: new Date().toISOString(), status: finalGateResult.status, codes: finalGateResult.verdict.codes, site: 'phase-6' } };
+          await supabase
+            .from('trips')
+            .update({ itinerary_status: 'partial' as any, metadata: blockedMeta, updated_at: new Date().toISOString() })
+            .eq('id', tripId);
+          console.warn(`[generate-trip-day] Phase 6 GATE BLOCKED ready for trip ${tripId} codes=[${finalGateResult.verdict.codes.join(',')}]`);
+        } else {
+          // Gate ok → freeze.
+          const finalMeta: Record<string, any> = {
+            ...latestMeta,
+            ...finalGateResult.metadataPatch,
+            itinerary_frozen_at: latestMeta.itinerary_frozen_at || new Date().toISOString(),
+            fully_persisted: true,
+            fully_persisted_at: new Date().toISOString(),
+          };
+          finalMeta.quality = { ...(finalMeta.quality || {}), final_gate_trace: { at: new Date().toISOString(), status: 'ready', codes: [], site: 'phase-6' } };
+          if (mustDoCoverage) {
+            finalMeta.must_do_coverage = { ...mustDoCoverage, at: new Date().toISOString() };
+          }
+          if (mustDoInjection) {
+            finalMeta.must_do_repair_attempted = {
+              at: new Date().toISOString(),
+              attempted: mustDoInjection.attempted,
+              injected: mustDoInjection.injected,
+              stillMissing: mustDoCoverage?.missing || [],
+            };
+          }
+          await supabase
+            .from('trips')
+            .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
+            .eq('id', tripId);
+          console.log(`[generate-trip-day] Phase 6 freeze + fully_persisted stamped for trip ${tripId}`);
+        }
       } catch (freezeErr) {
         console.warn('[generate-trip-day] Phase 6 freeze stamp failed (non-blocking):', freezeErr);
       }

@@ -1,121 +1,215 @@
-# Root Cause (one sentence)
+## Conclusion
 
-**There is no single deterministic compiler that owns the transition from "draft itinerary" to "paid deliverable."** Generation, repair, meal guard, must-do injection, executioner, cost sync, and title coherence each run as independent passes, each can mark the trip persisted, and none of them can *block* a trip from being marked `ready` when canonical truths disagree. So contradictions ship.
+The root issue is now clear: the new “commit gate” exists, but it is not actually the final compiler. It is currently an advisory validator that can be bypassed or invalidated after it runs.
 
-Every Lisbon failure is the same shape:
-- Flight arrival 21:00 → Day 1 shows 19:00 arrival block (anchor truth ignored at commit).
-- Must-do "Tram 28" appears in Day 4 title but on no day (title generator ran on different `days` than injector).
-- Alfama wander pinned to Av. da Liberdade (semantic guard exists but doesn't block commit).
-- Hotel $250×3 priced but Payments says "Free" (financial truth has two sources, neither authoritative at commit).
-- Post-checkin → Airport → Hotel loop on arrival night (no invariant says "non-departure day can't contain a return-airport leg").
+The Amsterdam QA proves four concrete failures in the current implementation:
 
-These are not five bugs. They are one missing boundary, observed five times.
+1. **Gate runs too early**: in `action-generate-trip-day`, `resolveCommitGate()` runs before later mutators (`sanitizeSchedule`, table sync, activity-cost write, must-do DB coverage). The itinerary can pass the gate, then be changed, then still freeze as ready.
+2. **Gate skips system-locked flight anchors**: `itinerary-integrity-contract.ts` uses `isLocked()` and skips arrival cards with `isLocked=true`, even though those are system anchors, not user-owned. This is why the 8 PM/10 PM mismatch can still ship.
+3. **Must-do check is non-blocking after persist**: post-DB must-do coverage can log `MUST_DO_UNCOVERED`, but it does not demote `finalStatus` before Phase 6 freezes the trip.
+4. **Ready/freeze writes still bypass the gate**: `TripDetail.tsx` has several direct `itinerary_status: 'ready'` / `fully_persisted: true` self-heal paths. `persistTripItinerary` does not reject ready writes without a gate result.
 
----
+So the one true conclusion is: **we have not yet moved the boundary.** We added checks, but the final status transition is still distributed.
 
-# The Fix: `finalizeTripForCommit` — Single Commit Gate
+## Implementation Plan
 
-One module. One call site per write path. The **only** code allowed to set `itinerary_status='ready'`, `metadata.fully_persisted=true`, `metadata.itinerary_frozen_at`.
+### 1. Replace “commit gate” with a true final compiler
 
-```text
-generate/repair/enrich/meal-guard/executioner/cost-sync/title-coherence
-                            │
-                            ▼
-              finalizeTripForCommit(days, truth)
-                            │
-              ┌─────────────┴─────────────┐
-              │  runs invariants in order │
-              │  each returns ok | block  │
-              └─────────────┬─────────────┘
-                            ▼
-            ┌──────────────────────────────┐
-            │ ok:true  → persist as ready  │
-            │ ok:false → persist as partial│
-            │           + healthCodes      │
-            └──────────────────────────────┘
+Create/upgrade one final function, e.g. `finalizeTripForCommit`, that runs after every mutation and returns:
+
+```ts
+{
+  days,
+  status: 'ready' | 'partial' | 'failed',
+  metadataPatch,
+  canFreeze: boolean,
+  codes
+}
 ```
 
-If any invariant blocks, the trip persists as `partial` with explicit codes. No silent ship.
+It must be the only function that decides:
 
----
+- `itinerary_status='ready'`
+- `metadata.fully_persisted=true`
+- `metadata.itinerary_frozen_at`
 
-# Invariants (the contract)
+Unlike the current `resolveCommitGate`, it must run **after**:
 
-Each is a pure function `(days, truth) → { ok, days, codes }`. Order matters; later invariants see the output of earlier ones.
+- schedule sanity
+- executioner
+- must-do injection
+- title coherence
+- table sync readiness checks
+- activity cost write / hotel ledger sync
 
-1. **Flight anchor truth** — system-locked arrival/departure cards repaired to match `truth.flights[].arrival/departure`. Stale 2h arrival blocks collapsed to 15-min landing anchors. User/manual locks untouched.
-   Block: `FINAL_FLIGHT_ANCHOR_MISMATCH`.
+### 2. Move the gate to the actual end of generation
 
-2. **Impossible logistics** — non-departure day cannot contain `transfer-to-airport`; departure-day transfer requires flight/train clock; unverified transit >180m clamped or dropped; arrival-night cannot contain a post-checkin airport loop.
-   Block: `FINAL_AIRPORT_LOOP_DROPPED`, `FINAL_TRANSFER_DURATION_CLAMPED`, `FINAL_DEPARTURE_TRANSFER_WITHOUT_CLOCK`.
+In `action-generate-trip-day.ts`:
 
-3. **Must-do presence** — every required must-do from `trip_day_intents` (priority=must) is visibly scheduled. Injection runs *inside* the gate, after meals, before title regen. Zero overlap with meal windows.
-   Block: `FINAL_MUST_DO_MISSING`, `FINAL_MUST_DO_OVERLAP_REJECTED`.
+- Stop calling `resolveCommitGate()` before `sanitizeSchedule` and before post-persist coverage.
+- Run all final mutations first.
+- Re-read the persisted itinerary JSON after final persist/table sync.
+- Run `finalizeTripForCommit()` on the DB-visible days.
+- If any blocking code remains, update the trip as `partial` and never run Phase 6 freeze.
+- If ok, then and only then stamp `ready + fully_persisted + frozen`.
 
-4. **Day title coherence** — titles regenerated *after* injections/drops so titles can only reference scheduled content. If a title references a venue not on its day → rewrite.
-   Block (non-fatal, auto-repair): `FINAL_DAY_TITLE_REWRITTEN`.
+This directly fixes the current pattern where `MUST_DO_UNCOVERED` logs but Phase 6 still freezes.
 
-5. **Neighborhood/address coherence** — title/description neighborhood must match pinned address neighborhood (existing `neighborhood-coherence-guard.ts` becomes a blocker, not advisory).
-   Block: `FINAL_NEIGHBORHOOD_ADDRESS_CONFLICT`.
+### 3. Add a hard ready-write guard to `persistTripItinerary`
 
-6. **Financial truth** — if `truth.hotel.totalPrice > 0`, Payments must surface it; `budget_include_hotel` defaults true when a priced hotel is selected; UI copy "Excluded from budget" never "Free" for priced items.
-   Block: `FINAL_HOTEL_COST_EXCLUDED_FROM_OUT_OF_POCKET`.
+Update `persistTripItinerary` so any `extraUpdate` attempting to write:
 
-7. **Status transition** — only this gate writes `ready` / `fully_persisted=true` / `itinerary_frozen_at`. All other writers must pass `status='partial'` or call the gate.
+- `itinerary_status: 'ready' | 'generated'`
+- `metadata.fully_persisted: true`
+- `metadata.itinerary_frozen_at`
 
----
+must include a valid internal gate result/token from `finalizeTripForCommit`.
 
-# Wiring (minimal surface)
+Without that token, downgrade to `partial` and stamp:
 
-- **New**: `supabase/functions/_shared/finalize-trip-for-commit.ts` — the gate. Composes existing pieces; doesn't reimplement them.
-- **New**: `supabase/functions/_shared/truth-snapshot.ts` — assembles `{flights, hotel, intents, dayDates}` from trip row + intents table. One source of truth per commit.
-- **Edit**: `action-generate-trip-day.ts` (chain final pass) and `action-generate-day.ts` — replace ad-hoc "set ready" writes with `finalizeTripForCommit(...)` → `persistTripItinerary` with returned status.
-- **Edit**: `action-save-itinerary.ts` — user-edit path also routes through the gate (passes `editedByUser=true` so locks tighten).
-- **Edit**: `persistTripItinerary` — refuses to write `ready`/`fully_persisted=true` unless caller passes `commitToken` from gate. Hard guardrail.
-- **Edit**: `src/hooks/useTripFinancialSnapshot.ts` + `PaymentsTab.tsx` — read `truth.hotel.totalPrice` directly; "Excluded" vs "Free" copy.
-- **Existing passes stay**: executioner, meal guard, must-do injector, neighborhood guard — all become *steps invoked by the gate* rather than independent finishers. We delete their right to mark `ready`.
+```ts
+metadata.quality.final_gate_bypassed = true
+```
 
----
+This prevents future frontend/self-heal paths from silently promoting bad trips.
 
-# What this changes vs the last 50 attempts
+### 4. Remove frontend direct ready promotions
 
-| Past approach | Why it failed |
-|---|---|
-| Add another validator | Ran in parallel, couldn't block commit |
-| Add another repair pass | Mutated `days` after another pass had already persisted `ready` |
-| Tighten one anchor rule | Other writers still bypassed it |
-| Add another health code | Surfaced post-ship, didn't prevent ship |
+Patch `TripDetail.tsx` and related client paths so page-load/self-heal logic never writes `ready` directly.
 
-This change moves the boundary, not the rules. The rules we already have become *enforceable* because there is finally one place that can refuse to ship.
+Replace with one of:
 
----
+- `partial` for recovered-but-not-finalized trips
+- backend `save-itinerary`/commit path for user-triggered saves
+- local UI state only, without DB promotion
 
-# Verification
+The frontend must not be able to freeze or certify a paid itinerary.
 
-- One Lisbon regression fixture covering all five failures in one trip → asserts `status='partial'` with the exact 5 codes before fix, `status='ready'` after.
-- Unit tests per invariant (8–10 tests).
-- Grep guard test: no code outside `finalize-trip-for-commit.ts` writes `itinerary_status='ready'` or `metadata.fully_persisted=true`.
-- Read-time audit (`useReadTimeAudit`) gains a `FINAL_GATE_BYPASSED` code for any legacy trip persisted ready without `metadata.quality.final_gate_trace`.
+### 5. Fix flight truth as a first invariant
 
----
+Update the integrity contract to use the same lock distinction as the Executioner:
 
-# Out of scope (intentionally)
+- user/manual/booked/imported/pinned = immutable
+- system anchors (`arrival-flight`, `airport-transfer`, generated check-in/out) = repairable and checkable
 
-- New AI prompts, new model upgrades, new venue databases — the gate uses existing data.
-- UI redesign of Payments — only the "Free vs Excluded" string and the priced-hotel default.
-- Backfilling legacy trips — they self-heal on next save once they route through the gate.
+Then enforce:
 
----
+- arrival card start/end must match entered arrival truth within tolerance
+- if mismatch is repairable, repair it before commit
+- if not repairable, block ready with `FINAL_FLIGHT_ANCHOR_MISMATCH`
 
-# Deliverable
+Also fix `flight-leg-pick` / flight context so a connecting leg cannot be selected as destination arrival unless its airport matches the trip destination.
 
-After this lands, the answer to "did we fix the root issue?" is verifiable in one query:
+### 6. Fix impossible logistics and orphan transit at commit
+
+Add final deterministic passes before certification:
+
+- Drop Day 1 post-check-in hotel return loops.
+- Drop airport transfers on middle days.
+- On departure day, if no departure clock truth exists, do not fabricate checkout/airport transfer as a complete day.
+- Drop transit cards whose destination activity does not exist, e.g. “Walk to Cafe Chris” with no Cafe Chris stop.
+- Clamp or remove unverified transfer durations over 180 minutes.
+
+Blocking codes:
+
+- `FINAL_AIRPORT_LOOP_DROPPED`
+- `FINAL_ORPHAN_TRANSIT_DROPPED`
+- `FINAL_DEPARTURE_TRANSFER_WITHOUT_CLOCK`
+- `FINAL_TRANSFER_DURATION_CLAMPED`
+
+### 7. Make must-do coverage a blocking commit invariant
+
+Fix the matcher and the timing:
+
+- Add named transit experiences to must-do coverage: `Tram 28`, `Canal boat tour`, funiculars, cable cars, route/line-number activities.
+- Do not disqualify user-requested transit experiences just because their category is `transport`.
+- Add Amsterdam/Lisbon aliases: `canal boat tour`, `canal cruise`, `boat tour`, `tram 28`, `eléctrico 28`.
+- Run coverage on the DB-visible final itinerary, not only in-memory days.
+- If missing after injection, status must be `partial`, not ready.
+
+Blocking code:
+
+- `FINAL_MUST_DO_MISSING`
+
+### 8. Regenerate/rewrite day titles after final drops/injections
+
+Move day-title coherence after must-do injection and logistics drops.
+
+Remove the current low-signal escape hatch that accepts titles with no activity overlap. A title like “Tram Rides & Farewells” must be rewritten if no tram/canal/boat activity exists on that day.
+
+Code:
+
+- `FINAL_DAY_TITLE_REWRITTEN` as non-fatal metadata
+- no fabricated title references allowed in a ready trip
+
+### 9. Make hotel/payment truth part of commit
+
+Move hotel ledger sync out of fragile frontend load effects and into backend commit finalization.
+
+Fix these known payment causes:
+
+- `syncHotelToLedger` must compute real nights, not depend on a one-shot frontend effect.
+- Remove/replace `budgetSyncedRef` so hotel changes sync reliably.
+- Single-city hotel save must sync when `pricePerNight` exists even without `totalPrice`.
+- Logistics upsert should key on deterministic `activity_id`, not category/day only.
+- Archived manual hotel payments must not delete the canonical hotel row.
+- `resolveCanonicalCostRows` must not rescue stale transport rows onto walking legs or $0 transit placeholders.
+
+Commit invariant:
+
+- if selected hotel has a real price, Payments/header/day totals must share one canonical total.
+- “Free” must never be shown for a priced hotel; if excluded, label it “Excluded”.
+
+Blocking code:
+
+- `FINAL_HOTEL_COST_NOT_SURFACED`
+- `FINAL_PAYMENT_TOTAL_MISMATCH`
+
+### 10. Add one Amsterdam/Lisbon regression fixture that must fail before and pass after
+
+Create a single fixture containing:
+
+- arrival truth 22:00 but generated arrival 20:00
+- check-in followed by “Return to Hotel”
+- “Walk to Cafe Chris” with no Cafe Chris activity
+- departure transfer with no departure flight clock
+- missing “Take a canal boat tour”
+- hotel $200/night × 3 excluded from Payments
+- Payments tab/header/line-item mismatch
+
+Assertions:
+
+- before repair: finalizer returns `partial` with exact final-gate codes
+- after repair: finalizer returns `ready`
+- no trip can be `ready` without `metadata.quality.final_gate_trace`
+
+### 11. Add a grep/lint guard for future regressions
+
+Add a test that fails if any code outside the finalizer writes:
+
+- `itinerary_status: 'ready'`
+- `fully_persisted: true`
+- `itinerary_frozen_at`
+
+Allowed exceptions must be explicitly listed and should be near-zero.
+
+## Success Criteria
+
+After implementation, this query must be true for newly generated trips:
 
 ```sql
-select count(*) from trips
+select count(*)
+from trips
 where itinerary_status = 'ready'
   and metadata->'quality'->>'final_gate_trace' is null;
--- must be 0 for trips created after deploy
+-- must be 0
 ```
 
-If that count is 0 and the Lisbon fixture passes, the loop is closed.
+And for the Amsterdam fixture:
+
+- no flight-time mismatch ships as ready
+- no post-check-in hotel loop ships as ready
+- no orphan transit node ships as ready
+- no missing canal boat must-do ships as ready
+- no priced hotel appears as Free
+- Payments “Matches itinerary” only appears when the canonical totals actually match
