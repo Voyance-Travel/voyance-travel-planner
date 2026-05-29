@@ -416,7 +416,11 @@ export function checkItineraryIntegrity(
       const truthMin = parseHM(ctx.arrivalTime24);
       if (truthMin !== null) {
         for (const a of acts) {
-          if (!a || isLocked(a)) continue;
+          // System anchors (`source='repair-arrival-flight'`, `anchorSource=
+          // 'arrival-flight'` with `isLocked=true` stamped by anchor-guard)
+          // MUST be checked against flight truth — they were the leak path
+          // for the Lisbon 19:00 / Amsterdam 20:00 ships-as-ready bug.
+          if (!a || isUserOwned(a)) continue;
           const t = String(a?.title || a?.name || '');
           const anchor = String(a?.anchorSource || '').toLowerCase();
           const isArrival =
