@@ -505,6 +505,43 @@ export function checkItineraryIntegrity(
     }
   }
 
+  // ── HOTEL_COST_NOT_SURFACED (trip-wide)
+  // Lisbon root-cause: Bairro Alto Hotel $250×3 was selected but Payments
+  // showed "Flights & Accommodation Free". When a priced hotel exists and
+  // budgetIncludeHotel !== true AND no hotel cost row sits on day 0/1,
+  // block ready so the user sees a partial badge with a clear reason.
+  if (
+    typeof ctx.hotelTotalPriceUsdCents === 'number' &&
+    ctx.hotelTotalPriceUsdCents > 0 &&
+    ctx.budgetIncludeHotel !== true
+  ) {
+    let hotelCostRowFound = false;
+    for (const day of days.slice(0, 2)) {
+      const acts = Array.isArray(day?.activities) ? day.activities : [];
+      for (const a of acts) {
+        const cat = String(a?.category || '').toLowerCase();
+        const amount = Number(a?.cost?.amount ?? a?.estimatedCost?.amount ?? a?.price ?? 0);
+        if ((cat === 'accommodation' || cat === 'hotel' || cat === 'stay') && amount > 0) {
+          hotelCostRowFound = true;
+          break;
+        }
+      }
+      if (hotelCostRowFound) break;
+    }
+    if (!hotelCostRowFound) {
+      violations.push({
+        code: 'HOTEL_COST_NOT_SURFACED',
+        dayNumber: 1,
+        detail:
+          `Selected hotel has a price of $${(ctx.hotelTotalPriceUsdCents / 100).toFixed(0)} ` +
+          `but it is excluded from the budget AND no day-0 hotel cost row exists. ` +
+          `Payments will show "Free" — flip budget_include_hotel=true or add a hotel cost row.`,
+      });
+    }
+  }
+
+
+
   const codes = Array.from(new Set(violations.map((v) => v.code)));
   return {
     ok: violations.length === 0,
