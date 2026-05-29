@@ -253,12 +253,29 @@ export async function resolveCommitGate(
       Object.keys(ctx.requiredMealsByDay || {}).length > 0
         ? ctx.requiredMealsByDay
         : await deriveRequiredMealsByDay(days || [], ctx.arrivalTime24, ctx.departureTime24);
+
+    // Wire neighborhood-coherence guard into the contract via a globalThis
+    // bridge — keeps the integrity contract tree-shake friendly and avoids
+    // an import cycle (contract → guard → contract via tests).
+    try {
+      const g: any = globalThis as any;
+      if (!g.__neighborhoodGuard) {
+        const mod = await import('./neighborhood-coherence-guard.ts');
+        g.__neighborhoodGuard = { checkNeighborhoodCoherence: mod.checkNeighborhoodCoherence };
+      }
+    } catch (e) {
+      console.warn('[commit-itinerary] neighborhood guard bridge failed:', e);
+    }
+
     const verdict = checkItineraryIntegrity(days || [], {
       hotelName: ctx.hotelName,
       requiredIntents: ctx.requiredIntents,
       arrivalTime24: ctx.arrivalTime24,
       departureTime24: ctx.departureTime24,
       requiredMealsByDay,
+      destination: (ctx as any).destination ?? null,
+      hotelTotalPriceUsdCents: (ctx as any).hotelTotalPriceUsdCents ?? null,
+      budgetIncludeHotel: (ctx as any).budgetIncludeHotel ?? null,
     });
     const applied = applyIntegrityContractToFreezeStamp({
       proposedStatus,
