@@ -3246,29 +3246,51 @@ export async function finalSaveItinerary(
       try {
         const { data: latestRow } = await supabase
           .from('trips')
-          .select('metadata, itinerary_status')
+          .select('itinerary_data, metadata, itinerary_status')
           .eq('id', tripId)
           .single();
         const latestMeta = (latestRow?.metadata as Record<string, any>) || {};
         const latestStatus = (latestRow as any)?.itinerary_status;
-        // Commit-gate may have demoted us to 'partial' — never stamp
-        // fully_persisted/frozen on a non-ready trip.
         if (latestStatus !== 'ready' && latestStatus !== 'generated') {
           console.log(
-            `[Stage 6] Phase 6 SKIPPED — status=${latestStatus} (commit gate demoted)`,
+            `[Stage 6] Phase 6 SKIPPED — status=${latestStatus} (commit gate demoted earlier)`,
           );
         } else {
-          const finalMeta = {
-            ...latestMeta,
-            itinerary_frozen_at: latestMeta.itinerary_frozen_at || new Date().toISOString(),
-            fully_persisted: true,
-            fully_persisted_at: new Date().toISOString(),
-          };
-          await supabase
-            .from('trips')
-            .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
-            .eq('id', tripId);
-          console.log(`[Stage 6] Phase 6 freeze + fully_persisted stamped for trip ${tripId}`);
+          // Re-run the commit gate against the on-disk JSON now that
+          // activity_costs + trip_cities + table sync have all settled. If
+          // the gate now blocks, downgrade to `partial` and do NOT stamp
+          // ready/frozen/fully_persisted. See .lovable/plan.md.
+          const onDiskDays = ((latestRow?.itinerary_data as any)?.days || []) as any[];
+          const finalGate = await resolveCommitGate({
+            supabase,
+            tripId,
+            days: onDiskDays.length > 0 ? onDiskDays : ((frontendReadyData as any)?.days || []),
+            proposedStatus: 'ready',
+            label: 'stage-6:phase-6',
+          });
+          if (finalGate.status !== 'ready' && finalGate.status !== 'generated') {
+            const blockedMeta: Record<string, any> = { ...latestMeta, ...finalGate.metadataPatch };
+            blockedMeta.quality = { ...(blockedMeta.quality || {}), final_gate_trace: { at: new Date().toISOString(), status: finalGate.status, codes: finalGate.verdict.codes, site: 'stage-6:phase-6' } };
+            await supabase
+              .from('trips')
+              .update({ itinerary_status: 'partial' as any, metadata: blockedMeta, updated_at: new Date().toISOString() })
+              .eq('id', tripId);
+            console.warn(`[Stage 6] Phase 6 GATE BLOCKED ready for trip ${tripId} codes=[${finalGate.verdict.codes.join(',')}]`);
+          } else {
+            const finalMeta: Record<string, any> = {
+              ...latestMeta,
+              ...finalGate.metadataPatch,
+              itinerary_frozen_at: latestMeta.itinerary_frozen_at || new Date().toISOString(),
+              fully_persisted: true,
+              fully_persisted_at: new Date().toISOString(),
+            };
+            finalMeta.quality = { ...(finalMeta.quality || {}), final_gate_trace: { at: new Date().toISOString(), status: 'ready', codes: [], site: 'stage-6:phase-6' } };
+            await supabase
+              .from('trips')
+              .update({ metadata: finalMeta, updated_at: new Date().toISOString() })
+              .eq('id', tripId);
+            console.log(`[Stage 6] Phase 6 freeze + fully_persisted stamped for trip ${tripId}`);
+          }
         }
       } catch (freezeErr) {
         console.warn('[Stage 6] Phase 6 freeze stamp failed (non-blocking):', freezeErr);
