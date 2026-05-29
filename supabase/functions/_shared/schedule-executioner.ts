@@ -37,7 +37,10 @@ export type ExecutionerCode =
   | 'MIDNIGHT_SPILLOVER_DROPPED'
   | 'BUFFER_CASCADE_REPAIRED'
   | 'GEO_OUTLIER'
-  | 'GAP_REFILLED';
+  | 'GAP_REFILLED'
+  | 'AIRPORT_LOOP_DROPPED'
+  | 'TRANSFER_DURATION_CLAMPED'
+  | 'DEPARTURE_TRANSFER_WITHOUT_CLOCK';
 
 export interface ExecutionerIssue {
   code: ExecutionerCode;
@@ -56,6 +59,9 @@ export interface ExecutionerCounters {
   transitRecomputed: number;
   geoOutliersFlagged: number;
   geoOutliersDropped: number;
+  airportLoopsDropped: number;
+  transfersClamped: number;
+  departureTransfersStripped: number;
   droppedActivities: number;
   gapsRefilled: number;
   issues: ExecutionerIssue[];
@@ -99,15 +105,36 @@ const AIRPORT_TRANSFER_RE = /\b(airport\s+transfer|transfer\s+(to|from)\s+(your\
 const HOTEL_TITLE_RE = /\b(hotel|check[-\s]?in|check[-\s]?out|return to|head back to|wind down)\b/i;
 const LOGISTICS_CATS = new Set(['transit', 'transport', 'transportation', 'flight', 'logistics', 'transfer', 'accommodation', 'stay', 'hotel', 'lodging']);
 
-function isLocked(a: any): boolean {
+/**
+ * Truly immutable: user-touched, manually added, imported from a booking,
+ * or pinned. NEVER includes system-emitted anchors (arrival-flight /
+ * airport-transfer / check-in), which the Executioner is allowed to repair
+ * against flight/hotel truth.
+ */
+function isUserOwned(a: any): boolean {
   if (!a) return false;
-  if (a.isLocked === true || a.locked === true || a.is_locked === true) return true;
-  if (a.lock_state === 'locked') return true;
   if (a.userAdded || a.userEdited || a.isManual || a.extracted || a.pinned) return true;
   const src = String(a.source || '').toLowerCase();
   if (LOCKED_SOURCE_RE.test(src)) return true;
   const basis = String(a?.cost?.basis || a?.estimatedCost?.basis || '').toLowerCase();
   if (basis === 'user' || basis === 'user_override' || basis === 'booked') return true;
+  return false;
+}
+
+/**
+ * General "do not move" guard. Used by passes where preserving locked
+ * non-anchor cards matters (geo, midnight). Flight-anchor and impossible-
+ * logistics passes use `isUserOwned` instead so they CAN repair system
+ * anchors whose `isLocked=true` was stamped by anchor-guard.
+ */
+function isLocked(a: any): boolean {
+  if (!a) return false;
+  if (isUserOwned(a)) return true;
+  // Non-user-owned isLocked=true is treated as moveable by truth-repair
+  // passes (anchor-guard stamps system anchors as locked). Other passes
+  // still get the "don't touch" semantics via this fn.
+  if (a.isLocked === true || a.locked === true || a.is_locked === true) return true;
+  if (a.lock_state === 'locked') return true;
   return false;
 }
 
@@ -176,6 +203,9 @@ function newCounters(): ExecutionerCounters {
     transitRecomputed: 0,
     geoOutliersFlagged: 0,
     geoOutliersDropped: 0,
+    airportLoopsDropped: 0,
+    transfersClamped: 0,
+    departureTransfersStripped: 0,
     droppedActivities: 0,
     gapsRefilled: 0,
     issues: [],
@@ -207,7 +237,7 @@ export function enforceFlightAnchors(
   const TOLERANCE = 5;
 
   for (const a of activities) {
-    if (!a || isLocked(a)) continue;
+    if (!a || isUserOwned(a)) continue;
     if (!isArrivalCard(a)) continue;
     const startMin = pickStart(a);
     const endMin = pickEnd(a);
@@ -216,21 +246,26 @@ export function enforceFlightAnchors(
     if (Math.abs(stamped - truthMin) <= TOLERANCE) continue;
 
     const before = `${a.startTime ?? a.start_time ?? a.time ?? ''}`;
+    const beforeEnd = `${a.endTime ?? a.end_time ?? ''}`;
     setStart(a, ctx.arrivalTime24);
-    // Preserve duration when available, else collapse to a 15-min landing block.
-    const dur = (startMin !== null && endMin !== null && endMin > startMin)
+    // Preserve duration when it's a *plausible* landing-block duration.
+    // If the AI stamped a 2-hour "Arrival in X" with a wrong start, treat it
+    // as a stale convention and collapse to a short 15-min landing block —
+    // the actual airport-transfer card handles the trip-to-hotel time.
+    let dur = (startMin !== null && endMin !== null && endMin > startMin)
       ? (endMin - startMin)
       : 15;
+    if (dur > 30) dur = 15;
     setEnd(a, fmtHM(truthMin + dur));
     counters.flightAnchorRepaired++;
     counters.issues.push({
       code: 'FLIGHT_ANCHOR_MISMATCH',
       activityId: actId(a),
       title: title(a),
-      detail: `Arrival card retimed ${before} → ${ctx.arrivalTime24} to match flight truth`,
+      detail: `Arrival card retimed ${before}→${beforeEnd} to ${ctx.arrivalTime24}→${a.endTime} (flight truth)`,
       repaired: true,
     });
-    console.log(`[EXECUTIONER] FLIGHT_ANCHOR_MISMATCH day=${ctx.dayNumber} title="${title(a)}" was=${before} truth=${ctx.arrivalTime24}`);
+    console.log(`[EXECUTIONER] FLIGHT_ANCHOR_MISMATCH day=${ctx.dayNumber} title="${title(a)}" was=${before}→${beforeEnd} truth=${ctx.arrivalTime24}→${a.endTime}`);
   }
 
   // Drop any non-locked, non-logistics card that starts strictly before the
