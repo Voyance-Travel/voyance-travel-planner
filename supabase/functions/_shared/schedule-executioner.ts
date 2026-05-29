@@ -744,7 +744,10 @@ export interface ExecutionerAuditCode {
     | 'EXEC_MIDNIGHT_SPILL_TRIMMED'
     | 'EXEC_BUFFER_CASCADE_APPLIED'
     | 'EXEC_GEO_OUTLIER_DROPPED'
-    | 'EXEC_GAP_REFILLED';
+    | 'EXEC_GAP_REFILLED'
+    | 'EXEC_AIRPORT_LOOP_DROPPED'
+    | 'EXEC_TRANSFER_CLAMPED'
+    | 'EXEC_DEPARTURE_TRANSFER_FLAGGED';
   count: number;
   dayNumber: number;
   detail: string;
