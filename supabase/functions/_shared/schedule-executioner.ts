@@ -569,6 +569,136 @@ export function enforceGeoCoherence(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Pass 5 — Impossible logistics (Lisbon root-cause class)
+//
+// Three deterministic invariants on logistics rows that the AI keeps
+// inventing and that no prior repair pass catches at the right time:
+//
+//   (a) AIRPORT_LOOP_DROPPED — a non-departure day cannot contain a
+//       "transfer to airport" / "airport transfer" row that is NOT the
+//       arrival-day inbound transfer. Specifically, on Day 1 (arrival),
+//       a transfer card AFTER a check-in row is a loop ("you arrived,
+//       checked in, then drove back to the airport"). On any middle day
+//       (not first, not last), an airport transfer is always bogus.
+//
+//   (b) TRANSFER_DURATION_CLAMPED — a non-flight, non-train, non-booked
+//       transit/transfer with stated duration > 180min is implausible at
+//       city scale; we clamp endTime to start + 180min. Flight/train
+//       rows are exempt (long-haul is legitimate). Locked/user/booked
+//       rows are exempt.
+//
+//   (c) DEPARTURE_TRANSFER_WITHOUT_CLOCK — on the departure day, an
+//       airport transfer card with no departure clock from flight truth
+//       is FLAGGED (not dropped — generator may have a valid clock we
+//       can't see). The integrity contract escalates this to a blocker
+//       at commit time if the trip is being marked ready.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FLIGHT_OR_TRAIN_RE = /\b(flight|train|rail|tgv|eurostar|shinkansen|ferry|cruise)\b/i;
+
+export function enforceImpossibleLogistics(
+  activities: any[],
+  ctx: ExecutionerContext,
+  counters: ExecutionerCounters,
+): any[] {
+  if (!Array.isArray(activities) || activities.length === 0) return activities;
+
+  // (a) Airport-loop drop
+  // Find first check-in row index (if any) on Day 1; transfers BEFORE it are
+  // arrival transfers (legitimate), transfers AFTER it are loops.
+  const firstCheckinIdx = activities.findIndex((a) => {
+    const t = title(a);
+    return /\bcheck[-\s]?in\b/i.test(t);
+  });
+
+  const survivors: any[] = [];
+  for (let i = 0; i < activities.length; i++) {
+    const a = activities[i];
+    if (!a || isUserOwned(a)) { survivors.push(a); continue; }
+
+    if (isAirportTransfer(a)) {
+      // Middle days: never legitimate.
+      if (!ctx.isFirstDay && !ctx.isLastDay) {
+        counters.airportLoopsDropped++;
+        counters.droppedActivities++;
+        counters.issues.push({
+          code: 'AIRPORT_LOOP_DROPPED',
+          activityId: actId(a),
+          title: title(a),
+          detail: `Dropped airport transfer on middle day ${ctx.dayNumber} (no flight on this day).`,
+          repaired: true,
+        });
+        console.log(`[EXECUTIONER] AIRPORT_LOOP_DROPPED day=${ctx.dayNumber} title="${title(a)}" (middle day)`);
+        continue;
+      }
+      // Day 1: transfers AFTER the first check-in are loops.
+      if (ctx.isFirstDay && firstCheckinIdx !== -1 && i > firstCheckinIdx) {
+        counters.airportLoopsDropped++;
+        counters.droppedActivities++;
+        counters.issues.push({
+          code: 'AIRPORT_LOOP_DROPPED',
+          activityId: actId(a),
+          title: title(a),
+          detail: `Dropped post-checkin airport transfer on arrival day (loop).`,
+          repaired: true,
+        });
+        console.log(`[EXECUTIONER] AIRPORT_LOOP_DROPPED day=${ctx.dayNumber} title="${title(a)}" (post-checkin loop)`);
+        continue;
+      }
+      // Last day: flag-only if no departure clock truth.
+      if (ctx.isLastDay && !ctx.departureTime24) {
+        counters.departureTransfersStripped++; // misnamed historically; reused as "flagged"
+        counters.issues.push({
+          code: 'DEPARTURE_TRANSFER_WITHOUT_CLOCK',
+          activityId: actId(a),
+          title: title(a),
+          detail: `Departure airport transfer present but no departure clock — cannot verify timing.`,
+          repaired: false,
+        });
+        console.log(`[EXECUTIONER] DEPARTURE_TRANSFER_WITHOUT_CLOCK day=${ctx.dayNumber} title="${title(a)}"`);
+      }
+    }
+
+    // (b) Transfer duration clamp (skip flight/train, skip booked, skip user)
+    if (isLogistics(a)) {
+      const s = pickStart(a);
+      const e = pickEnd(a);
+      const t = title(a);
+      const cat = String(a?.category || '').toLowerCase();
+      const isLongHaul =
+        cat === 'flight' || FLIGHT_OR_TRAIN_RE.test(t) || FLIGHT_OR_TRAIN_RE.test(cat);
+      const basis = String(a?.cost?.basis || a?.estimatedCost?.basis || '').toLowerCase();
+      const isBooked = basis === 'booked';
+      if (!isLongHaul && !isBooked && s !== null && e !== null) {
+        const dur = e > s ? e - s : (24 * 60 - s) + e;
+        if (dur > 180) {
+          const beforeEnd = `${a.endTime ?? a.end_time ?? ''}`;
+          const newEnd = (s + 180) % (24 * 60);
+          setEnd(a, fmtHM(newEnd));
+          counters.transfersClamped++;
+          counters.issues.push({
+            code: 'TRANSFER_DURATION_CLAMPED',
+            activityId: actId(a),
+            title: title(a),
+            detail: `Clamped implausible transit duration ${dur}m → 180m (${beforeEnd}→${a.endTime}).`,
+            repaired: true,
+          });
+          console.log(`[EXECUTIONER] TRANSFER_DURATION_CLAMPED day=${ctx.dayNumber} title="${title(a)}" was=${dur}m`);
+        }
+      }
+    }
+
+    survivors.push(a);
+  }
+
+  if (survivors.length !== activities.length) {
+    activities.length = 0;
+    activities.push(...survivors);
+  }
+  return activities;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Orchestrator
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -581,6 +711,7 @@ export function runScheduleExecutioner(
 
   let working = activities;
   working = enforceFlightAnchors(working, ctx, counters);
+  working = enforceImpossibleLogistics(working, ctx, counters);
   working = enforceMidnightSpill(working, ctx, counters);
   working = enforceGeoCoherence(working, ctx, counters);
   working = enforceBufferCascade(working, ctx, counters);
@@ -592,7 +723,9 @@ export const __test_only = {
   neighborhoodTokensFromTitle,
   isNightlife,
   isArrivalCard,
+  isAirportTransfer,
   isLocked,
+  isUserOwned,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -611,7 +744,10 @@ export interface ExecutionerAuditCode {
     | 'EXEC_MIDNIGHT_SPILL_TRIMMED'
     | 'EXEC_BUFFER_CASCADE_APPLIED'
     | 'EXEC_GEO_OUTLIER_DROPPED'
-    | 'EXEC_GAP_REFILLED';
+    | 'EXEC_GAP_REFILLED'
+    | 'EXEC_AIRPORT_LOOP_DROPPED'
+    | 'EXEC_TRANSFER_CLAMPED'
+    | 'EXEC_DEPARTURE_TRANSFER_FLAGGED';
   count: number;
   dayNumber: number;
   detail: string;
@@ -660,6 +796,30 @@ export function toExecutionerAuditCodes(
       count: counters.gapsRefilled,
       dayNumber,
       detail: `Refilled ${counters.gapsRefilled} gap(s) opened by cleanup`,
+    });
+  }
+  if (counters.airportLoopsDropped > 0) {
+    out.push({
+      code: 'EXEC_AIRPORT_LOOP_DROPPED',
+      count: counters.airportLoopsDropped,
+      dayNumber,
+      detail: `Dropped ${counters.airportLoopsDropped} airport-loop transfer(s)`,
+    });
+  }
+  if (counters.transfersClamped > 0) {
+    out.push({
+      code: 'EXEC_TRANSFER_CLAMPED',
+      count: counters.transfersClamped,
+      dayNumber,
+      detail: `Clamped ${counters.transfersClamped} implausible-duration transfer(s)`,
+    });
+  }
+  if (counters.departureTransfersStripped > 0) {
+    out.push({
+      code: 'EXEC_DEPARTURE_TRANSFER_FLAGGED',
+      count: counters.departureTransfersStripped,
+      dayNumber,
+      detail: `Flagged ${counters.departureTransfersStripped} departure transfer(s) without clock truth`,
     });
   }
   return out;

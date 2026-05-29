@@ -1,152 +1,121 @@
-## One true conclusion
+# Root Cause (one sentence)
 
-The root issue is not that one validator is weak. The root issue is that the app has **many partial truth systems** and no single final commit gate that owns the paid itinerary before it becomes `ready`.
+**There is no single deterministic compiler that owns the transition from "draft itinerary" to "paid deliverable."** Generation, repair, meal guard, must-do injection, executioner, cost sync, and title coherence each run as independent passes, each can mark the trip persisted, and none of them can *block* a trip from being marked `ready` when canonical truths disagree. So contradictions ship.
 
-Lisbon proves it:
+Every Lisbon failure is the same shape:
+- Flight arrival 21:00 → Day 1 shows 19:00 arrival block (anchor truth ignored at commit).
+- Must-do "Tram 28" appears in Day 4 title but on no day (title generator ran on different `days` than injector).
+- Alfama wander pinned to Av. da Liberdade (semantic guard exists but doesn't block commit).
+- Hotel $250×3 priced but Payments says "Free" (financial truth has two sources, neither authoritative at commit).
+- Post-checkin → Airport → Hotel loop on arrival night (no invariant says "non-departure day can't contain a return-airport leg").
 
-- **Flight truth existed** (`21:00`) but the generated arrival card was system-locked at `19:00 → 21:00`, so the Executioner skipped it.
-- **Must-do truth existed** (`Ride Tram 28`) but injection happened late and overlapped breakfast, while the title pipeline had already named days from stale/aspirational content.
-- **Hotel cost truth existed** (`$750` activity_costs row) but UI budget inclusion truth hid it, so Payments said `$12` “matches”.
-- **Geo truth existed in text** (`Alfama`) but address truth contradicted it (`Avenida da Liberdade`), and the geo guard only checked title/centroid, not semantic neighborhood contradiction.
-- **Airport-loop truth was obvious** (`check-in → travel to airport`) but no final logistics invariant rejected it as impossible on a non-departure day.
+These are not five bugs. They are one missing boundary, observed five times.
 
-So the real failure is: **we validate fragments, then later passes mutate or reinterpret the itinerary, and the final product is allowed to ship even when canonical truths disagree.**
+---
 
-## Correct architectural fix: Final Commit Gate
+# The Fix: `finalizeTripForCommit` — Single Commit Gate
 
-Build one deterministic `finalizeTripForCommit` boundary and make it the only path that can mark a trip `ready` / `fully_persisted=true`.
+One module. One call site per write path. The **only** code allowed to set `itinerary_status='ready'`, `metadata.fully_persisted=true`, `metadata.itinerary_frozen_at`.
 
-This gate must run after all generation, repair, meal guard, must-do injection, executioner, schedule sanity, cost sync, and title coherence logic. If it cannot produce a coherent itinerary, it must leave the trip `partial` with explicit health codes — never publish a polished paid itinerary with known contradictions.
-
-## Implementation plan
-
-### 1. Create a single final commit contract
-
-Add a backend finalizer module that accepts:
-
-- raw `days`
-- flight truth
-- hotel truth
-- must-do truth
-- cost ledger truth
-- destination/neighborhood truth
-- trip metadata
-
-It returns either:
-
-```ts
-{ ok: true, days, metadata, healthCodes: [] }
+```text
+generate/repair/enrich/meal-guard/executioner/cost-sync/title-coherence
+                            │
+                            ▼
+              finalizeTripForCommit(days, truth)
+                            │
+              ┌─────────────┴─────────────┐
+              │  runs invariants in order │
+              │  each returns ok | block  │
+              └─────────────┬─────────────┘
+                            ▼
+            ┌──────────────────────────────┐
+            │ ok:true  → persist as ready  │
+            │ ok:false → persist as partial│
+            │           + healthCodes      │
+            └──────────────────────────────┘
 ```
 
-or:
+If any invariant blocks, the trip persists as `partial` with explicit codes. No silent ship.
 
-```ts
-{ ok: false, days, metadata, healthCodes, blockingReasons }
+---
+
+# Invariants (the contract)
+
+Each is a pure function `(days, truth) → { ok, days, codes }`. Order matters; later invariants see the output of earlier ones.
+
+1. **Flight anchor truth** — system-locked arrival/departure cards repaired to match `truth.flights[].arrival/departure`. Stale 2h arrival blocks collapsed to 15-min landing anchors. User/manual locks untouched.
+   Block: `FINAL_FLIGHT_ANCHOR_MISMATCH`.
+
+2. **Impossible logistics** — non-departure day cannot contain `transfer-to-airport`; departure-day transfer requires flight/train clock; unverified transit >180m clamped or dropped; arrival-night cannot contain a post-checkin airport loop.
+   Block: `FINAL_AIRPORT_LOOP_DROPPED`, `FINAL_TRANSFER_DURATION_CLAMPED`, `FINAL_DEPARTURE_TRANSFER_WITHOUT_CLOCK`.
+
+3. **Must-do presence** — every required must-do from `trip_day_intents` (priority=must) is visibly scheduled. Injection runs *inside* the gate, after meals, before title regen. Zero overlap with meal windows.
+   Block: `FINAL_MUST_DO_MISSING`, `FINAL_MUST_DO_OVERLAP_REJECTED`.
+
+4. **Day title coherence** — titles regenerated *after* injections/drops so titles can only reference scheduled content. If a title references a venue not on its day → rewrite.
+   Block (non-fatal, auto-repair): `FINAL_DAY_TITLE_REWRITTEN`.
+
+5. **Neighborhood/address coherence** — title/description neighborhood must match pinned address neighborhood (existing `neighborhood-coherence-guard.ts` becomes a blocker, not advisory).
+   Block: `FINAL_NEIGHBORHOOD_ADDRESS_CONFLICT`.
+
+6. **Financial truth** — if `truth.hotel.totalPrice > 0`, Payments must surface it; `budget_include_hotel` defaults true when a priced hotel is selected; UI copy "Excluded from budget" never "Free" for priced items.
+   Block: `FINAL_HOTEL_COST_EXCLUDED_FROM_OUT_OF_POCKET`.
+
+7. **Status transition** — only this gate writes `ready` / `fully_persisted=true` / `itinerary_frozen_at`. All other writers must pass `status='partial'` or call the gate.
+
+---
+
+# Wiring (minimal surface)
+
+- **New**: `supabase/functions/_shared/finalize-trip-for-commit.ts` — the gate. Composes existing pieces; doesn't reimplement them.
+- **New**: `supabase/functions/_shared/truth-snapshot.ts` — assembles `{flights, hotel, intents, dayDates}` from trip row + intents table. One source of truth per commit.
+- **Edit**: `action-generate-trip-day.ts` (chain final pass) and `action-generate-day.ts` — replace ad-hoc "set ready" writes with `finalizeTripForCommit(...)` → `persistTripItinerary` with returned status.
+- **Edit**: `action-save-itinerary.ts` — user-edit path also routes through the gate (passes `editedByUser=true` so locks tighten).
+- **Edit**: `persistTripItinerary` — refuses to write `ready`/`fully_persisted=true` unless caller passes `commitToken` from gate. Hard guardrail.
+- **Edit**: `src/hooks/useTripFinancialSnapshot.ts` + `PaymentsTab.tsx` — read `truth.hotel.totalPrice` directly; "Excluded" vs "Free" copy.
+- **Existing passes stay**: executioner, meal guard, must-do injector, neighborhood guard — all become *steps invoked by the gate* rather than independent finishers. We delete their right to mark `ready`.
+
+---
+
+# What this changes vs the last 50 attempts
+
+| Past approach | Why it failed |
+|---|---|
+| Add another validator | Ran in parallel, couldn't block commit |
+| Add another repair pass | Mutated `days` after another pass had already persisted `ready` |
+| Tighten one anchor rule | Other writers still bypassed it |
+| Add another health code | Surfaced post-ship, didn't prevent ship |
+
+This change moves the boundary, not the rules. The rules we already have become *enforceable* because there is finally one place that can refuse to ship.
+
+---
+
+# Verification
+
+- One Lisbon regression fixture covering all five failures in one trip → asserts `status='partial'` with the exact 5 codes before fix, `status='ready'` after.
+- Unit tests per invariant (8–10 tests).
+- Grep guard test: no code outside `finalize-trip-for-commit.ts` writes `itinerary_status='ready'` or `metadata.fully_persisted=true`.
+- Read-time audit (`useReadTimeAudit`) gains a `FINAL_GATE_BYPASSED` code for any legacy trip persisted ready without `metadata.quality.final_gate_trace`.
+
+---
+
+# Out of scope (intentionally)
+
+- New AI prompts, new model upgrades, new venue databases — the gate uses existing data.
+- UI redesign of Payments — only the "Free vs Excluded" string and the priced-hotel default.
+- Backfilling legacy trips — they self-heal on next save once they route through the gate.
+
+---
+
+# Deliverable
+
+After this lands, the answer to "did we fix the root issue?" is verifiable in one query:
+
+```sql
+select count(*) from trips
+where itinerary_status = 'ready'
+  and metadata->'quality'->>'final_gate_trace' is null;
+-- must be 0 for trips created after deploy
 ```
 
-No downstream pass can mutate `days` after this.
-
-### 2. Make flight anchors truth-owned, not normal locks
-
-System-created anchors are not user locks.
-
-Rules:
-
-- User/manual/imported/booked rows remain immutable.
-- System flight/transfer/check-in anchors may be repaired by flight/hotel truth.
-- Old arrival block convention `19:00 → 21:00` with truth `21:00` becomes `21:00 → 21:15`, not a two-hour airport activity.
-- If flight truth exists and arrival card disagrees, the finalizer repairs it or blocks `ready`.
-
-Blocking code: `FINAL_FLIGHT_ANCHOR_MISMATCH`.
-
-### 3. Add impossible-logistics invariants
-
-Rules:
-
-- Non-departure day cannot contain hotel check-in followed by airport-bound travel.
-- Non-departure airport transfer is allowed only as arrival airport → hotel, before check-in/luggage-drop.
-- Departure transfer requires departure flight/train truth; otherwise no concrete transfer duration is emitted.
-- Any unverified transfer over 180 minutes is clamped or dropped before commit.
-
-Blocking/repair codes:
-
-- `FINAL_AIRPORT_LOOP_DROPPED`
-- `FINAL_TRANSFER_DURATION_CLAMPED`
-- `FINAL_DEPARTURE_TRANSFER_WITHOUT_CLOCK`
-
-### 4. Make must-dos a blocking paid-deliverable requirement
-
-Rules:
-
-- Must-do injection runs inside the finalizer, after meals and real activity blocks exist.
-- Injected must-dos cannot overlap meals or committed activities.
-- A day title cannot reference a must-do unless that must-do is visibly scheduled on that day.
-- If any explicit must-do remains missing, trip status must be `partial`, not `ready`.
-
-Blocking/repair codes:
-
-- `FINAL_MUST_DO_MISSING`
-- `FINAL_MUST_DO_OVERLAP_REJECTED`
-- `FINAL_DAY_TITLE_REWRITTEN`
-
-### 5. Add semantic neighborhood/address coherence
-
-The current geo check is too geometric. Add a semantic guard:
-
-- If title/description says `Alfama`, address/location cannot point to `Avenida da Liberdade`.
-- For neighborhood-wandering activities, prefer neighborhood-level location over a misleading exact street address.
-- Start with Lisbon neighborhood aliases, then keep helper extensible by city.
-
-Blocking/repair codes:
-
-- `FINAL_NEIGHBORHOOD_ADDRESS_CONFLICT`
-- `FINAL_LOCATION_DOWNGRADED_TO_NEIGHBORHOOD`
-
-### 6. Fix financial truth semantics
-
-Payments cannot say “Trip Total $12 — Matches itinerary” when a real selected hotel cost exists.
-
-Rules:
-
-- If a selected hotel has `totalPrice` or `pricePerNight × nights`, Payments must surface it as a real expected cost.
-- If the user excludes hotel from the planning budget, UI copy must say “Excluded from budget”, not “Free”, and must not claim the out-of-pocket trip total is only activities/transit.
-- Forward creation default: priced hotel means `budget_include_hotel=true` unless explicitly opted out.
-
-Codes/tests:
-
-- `FINAL_HOTEL_COST_EXCLUDED_FROM_OUT_OF_POCKET`
-- Lisbon fixture: `$104 itinerary + $750 hotel = $854 out-of-pocket`.
-
-### 7. Wire status honestly
-
-Only the finalizer can set:
-
-- `itinerary_status='ready'`
-- `metadata.fully_persisted=true`
-- `metadata.itinerary_frozen_at`
-
-If blocking reasons exist:
-
-- status stays `partial`
-- UI gets health codes
-- paid delivery is not presented as complete
-
-### 8. Tests that must pass before calling this fixed
-
-Add one Lisbon regression fixture covering all failures together:
-
-- arrival truth `21:00`, generated system-locked `19:00 → 21:00` repaired
-- no post-check-in airport loop
-- no 525-minute transfer
-- Tram 28 visibly scheduled without meal overlap
-- no day title says Tram unless Tram exists that day
-- Alfama activity not pinned to Avenida da Liberdade
-- hotel `$750` appears as expected out-of-pocket spend
-
-Also add smaller unit tests for each invariant so this does not become another one-off patch.
-
-## What changes from the last 50 attempts
-
-We stop adding another validator beside the others.
-
-We make one finalizer the **paid-deliverable compiler**. Everything before it is draft generation. Everything after it is persistence only. If canonical truths disagree, the itinerary cannot be marked ready.
+If that count is 0 and the Lisbon fixture passes, the loop is closed.
