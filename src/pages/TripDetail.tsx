@@ -1101,11 +1101,17 @@ export default function TripDetail() {
           expectedDayCount = ((trip.metadata as any)?.generation_total_days) || allDays.length;
         }
         if (realDays.length >= expectedDayCount && expectedDayCount > 0) {
-          // All days have real activities — generation truly completed, fix stale status
-          console.log(`[TripDetail] Stuck-heal: ${realDays.length}/${expectedDayCount} real days complete — correcting to 'ready'`);
+          // Frontend MUST NOT promote a trip to ready — that's the commit
+          // gate's exclusive job (backend `resolveCommitGate`). Demote to
+          // partial + stamp `final_gate_bypassed` so the auditor + UI banner
+          // surface the bypass attempt. See .lovable/plan.md.
+          console.log(`[TripDetail] Stuck-heal: ${realDays.length}/${expectedDayCount} real days — correcting to 'partial' (gate runs server-side)`);
           stuckHealAttempted.current = true;
+          const meta = { ...((trip.metadata as any) || {}) };
+          meta.quality = { ...(meta.quality || {}), final_gate_bypassed: true, final_gate_bypassed_at: new Date().toISOString(), final_gate_bypass_site: 'frontend-stuck-heal' };
           await supabase.from('trips').update({
-            itinerary_status: 'ready',
+            itinerary_status: 'partial',
+            metadata: meta,
             updated_at: new Date().toISOString(),
           }).eq('id', trip.id);
           queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
@@ -1120,10 +1126,13 @@ export default function TripDetail() {
       // would silently overwrite visible content. Correct status
       // instead. See mem://constraints/itinerary/no-auto-resume-on-load.
       if (hasItineraryData(trip)) {
-        console.warn(`[TripDetail] Stuck-heal SKIPPED for ${trip.id} — itinerary_data has real activities; correcting status to 'ready'.`);
+        console.warn(`[TripDetail] Stuck-heal SKIPPED for ${trip.id} — itinerary_data has real activities; correcting status to 'partial' (commit gate runs server-side only).`);
         stuckHealAttempted.current = true;
+        const meta = { ...((trip.metadata as any) || {}) };
+        meta.quality = { ...(meta.quality || {}), final_gate_bypassed: true, final_gate_bypassed_at: new Date().toISOString(), final_gate_bypass_site: 'frontend-stuck-heal-has-data' };
         await supabase.from('trips').update({
-          itinerary_status: 'ready',
+          itinerary_status: 'partial',
+          metadata: meta,
           updated_at: new Date().toISOString(),
         }).eq('id', trip.id);
         queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
@@ -1615,16 +1624,18 @@ export default function TripDetail() {
           );
           const realDayCount = Math.max(staleRealDays.length, itineraryDaysDbCount);
           if (effectiveExpected > 0 && realDayCount >= effectiveExpected) {
-            console.warn(`[TripDetail] Self-heal: status is 'generating' but ${realDayCount} real days exist (expected ${effectiveExpected}) — correcting to 'ready'`);
+            console.warn(`[TripDetail] Self-heal: status is 'generating' but ${realDayCount} real days exist (expected ${effectiveExpected}) — correcting to 'partial' (commit gate runs server-side).`);
             if (tripId) {
+              const baseMeta = { ...(tripData.metadata as any || {}), generation_total_days: effectiveExpected };
+              baseMeta.quality = { ...(baseMeta.quality || {}), final_gate_bypassed: true, final_gate_bypassed_at: new Date().toISOString(), final_gate_bypass_site: 'frontend-stale-generating' };
               supabase.from('trips').update({
-                itinerary_status: 'ready',
-                metadata: { ...(tripData.metadata as any || {}), generation_total_days: effectiveExpected },
+                itinerary_status: 'partial',
+                metadata: baseMeta,
                 updated_at: new Date().toISOString(),
               }).eq('id', tripId).then(() => {});
+              tripData = { ...tripData, itinerary_status: 'partial', metadata: baseMeta as any };
+              setTrip(tripData);
             }
-            tripData = { ...tripData, itinerary_status: 'ready' };
-            setTrip(tripData);
           } else if (effectiveExpected > 0) {
             console.log(`[TripDetail] Self-heal: only ${realDayCount}/${effectiveExpected} real days — NOT marking as ready`);
           }
@@ -2164,28 +2175,30 @@ export default function TripDetail() {
                       __status === 'partial' || __status === 'failed' ||
                       __status === 'generating' || __status === 'queued';
                     if (wasUnsettled && expectedTotal > 0 && realDayCount >= expectedTotal) {
+                      // Demote to partial + bypass marker. The commit gate
+                      // (server-side) is the only authority that can promote
+                      // to ready/fully_persisted/frozen.
                       console.log(
-                        `[TripDetail] Self-heal: promoting status '${__status}' → 'ready' (rebuilt ${realDayCount}/${expectedTotal} days)`,
+                        `[TripDetail] Self-heal: status '${__status}' kept partial after rebuild (${realDayCount}/${expectedTotal} days) — commit gate decides ready.`,
                       );
                       const promotedMeta = {
                         ...meta,
                         failed_day_numbers: [],
                         generation_completed_days: expectedTotal,
                         generation_total_days: expectedTotal,
-                        fully_persisted: true,
-                        fully_persisted_at: new Date().toISOString(),
                         recovered_from_tables_at: new Date().toISOString(),
                       };
+                      promotedMeta.quality = { ...(promotedMeta.quality || {}), final_gate_bypassed: true, final_gate_bypassed_at: new Date().toISOString(), final_gate_bypass_site: 'frontend-rebuild-from-tables' };
                       delete (promotedMeta as any).generation_error;
                       delete (promotedMeta as any).chain_error;
                       delete (promotedMeta as any).chain_broken_at_day;
                       await supabase
                         .from('trips')
-                        .update({ itinerary_status: 'ready' as any, metadata: promotedMeta as any })
+                        .update({ itinerary_status: 'partial' as any, metadata: promotedMeta as any })
                         .eq('id', tripId);
                       tripData = {
                         ...tripData,
-                        itinerary_status: 'ready' as any,
+                        itinerary_status: 'partial' as any,
                         metadata: promotedMeta as any,
                       } as any;
                     }
