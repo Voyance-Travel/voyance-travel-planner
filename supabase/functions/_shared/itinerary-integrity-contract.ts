@@ -174,6 +174,15 @@ export interface IntegrityContext {
    *  contract enforces that each required meal has a scheduled card.
    *  Map key = dayNumber (1-indexed). */
   requiredMealsByDay?: Record<number, Array<'breakfast' | 'lunch' | 'dinner'>>;
+  /** Destination string (e.g. "Lisbon, Portugal") — enables the
+   *  neighborhood-address coherence invariant. */
+  destination?: string | null;
+  /** Selected hotel total price in USD cents. When > 0 the contract
+   *  asserts the cost is surfaced (either via a day-0 hotel cost row or
+   *  `budgetIncludeHotel === true`). */
+  hotelTotalPriceUsdCents?: number | null;
+  /** Whether trip-level `budget_include_hotel` is true. */
+  budgetIncludeHotel?: boolean | null;
 }
 
 const MORNING_CUTOFF_MIN = 11 * 60; // <11:00 is "morning"
