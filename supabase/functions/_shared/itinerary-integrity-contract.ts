@@ -80,12 +80,29 @@ const HOTEL_LOGISTICS_RE = /\b(check[-\s]?in|check[-\s]?out|return to|head back 
 const ARRIVAL_LOGISTICS_RE = /\b(arrival|arrive|land(?:ing)?|transfer to|airport (?:pickup|transfer)|flight )\b/i;
 const DEPARTURE_LOGISTICS_RE = /\b(departure|depart|transfer to (?:the )?airport|airport transfer|departure flight)\b/i;
 const HOTEL_VENUE_HINT_RE = /\bat (?:the )?(hotel|resort|riad|lodge)\b|\b(hotel)\s+(restaurant|bar|spa|lounge|bistro)\b/i;
-const LOCKED_SOURCE_RE = /^(user|user_added|manual|extracted|pinned)$/i;
+const LOCKED_SOURCE_RE = /^(user|user_added|manual|extracted|pinned|booked|imported)$/i;
 
 function isLocked(a: any): boolean {
   if (!a) return false;
   if (a.isLocked === true || a.locked === true || a.is_locked === true) return true;
   if (a.lock_state === 'locked') return true;
+  const src = String(a?.source || '').toLowerCase();
+  if (LOCKED_SOURCE_RE.test(src)) return true;
+  const basis = String(a?.cost?.basis || a?.estimatedCost?.basis || '').toLowerCase();
+  if (basis === 'user' || basis === 'user_override' || basis === 'booked') return true;
+  return false;
+}
+
+/**
+ * Truly user-owned: user-touched / manual / imported / booked / pinned.
+ * Distinguishes from system-generated anchors (arrival-flight, airport-
+ * transfer, generated check-in) which the gate IS allowed to check and
+ * which repair passes are allowed to mutate. Mirrors
+ * `schedule-executioner.ts::isUserOwned`.
+ */
+function isUserOwned(a: any): boolean {
+  if (!a) return false;
+  if (a.userAdded || a.userEdited || a.isManual || a.extracted || a.pinned) return true;
   const src = String(a?.source || '').toLowerCase();
   if (LOCKED_SOURCE_RE.test(src)) return true;
   const basis = String(a?.cost?.basis || a?.estimatedCost?.basis || '').toLowerCase();
