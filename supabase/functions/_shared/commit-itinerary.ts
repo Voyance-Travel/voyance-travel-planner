@@ -91,13 +91,31 @@ async function loadCommitContext(
     };
   }
 
+  let destination: string | null = null;
+  let hotelTotalPriceUsdCents: number | null = null;
+  let budgetIncludeHotel: boolean | null = null;
+
   try {
     const { data: trip } = await supabase
       .from('trips')
-      .select('metadata, destination_country, start_date')
+      .select('metadata, destination, destination_country, start_date, budget_include_hotel')
       .eq('id', tripId)
       .single();
     const meta = ((trip as any)?.metadata as Record<string, any>) || {};
+    destination = (trip as any)?.destination || meta?.destination || null;
+    budgetIncludeHotel = (trip as any)?.budget_include_hotel ?? meta?.budget_include_hotel ?? null;
+    const hotelSel = meta?.selected_hotel || meta?.hotel || meta?.accommodation;
+    if (hotelSel) {
+      const totalUsdCents = Number(
+        hotelSel?.totalPriceUsdCents ?? hotelSel?.total_price_usd_cents ?? 0,
+      );
+      const totalUsd = Number(hotelSel?.totalPrice ?? hotelSel?.total_price ?? 0);
+      if (Number.isFinite(totalUsdCents) && totalUsdCents > 0) {
+        hotelTotalPriceUsdCents = totalUsdCents;
+      } else if (Number.isFinite(totalUsd) && totalUsd > 0) {
+        hotelTotalPriceUsdCents = Math.round(totalUsd * 100);
+      }
+    }
     if (hotelName === null) {
       hotelName =
         meta?.selected_hotel?.name ||
@@ -112,7 +130,6 @@ async function loadCommitContext(
       departureTime24 = (meta?.savedDepartureTime24 as string) || null;
     }
     if (requiredIntents === null) {
-      // Pull from preference spine — same source action-save-itinerary uses.
       try {
         const { fetchActiveDayIntents } = await import('./day-intents-store.ts');
         const { mergePreferenceSources } = await import('./preference-spine.ts');
@@ -156,7 +173,10 @@ async function loadCommitContext(
     arrivalTime24,
     departureTime24,
     requiredMealsByDay: requiredMealsByDay || {},
-  };
+    destination,
+    hotelTotalPriceUsdCents,
+    budgetIncludeHotel,
+  } as any;
 }
 
 /**
