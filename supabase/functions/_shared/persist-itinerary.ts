@@ -141,6 +141,12 @@ export interface PersistResult {
   /** True when the strict day-count floor blocked the write (incoming day
    *  count was less than max(prior_json, itinerary_days_table)). */
   dayCountShrinkBlocked?: boolean;
+  /** True when the persist-boundary final commit gate demoted ready→partial
+   *  and stripped freeze stamps. The itinerary_data still writes; only the
+   *  status/freeze metadata is rewritten. */
+  finalGateDemoted?: boolean;
+  /** Integrity verdict codes when finalGateDemoted=true. */
+  finalGateCodes?: string[];
 }
 
 /** Capped-size ring buffer of rejected attempts written under
