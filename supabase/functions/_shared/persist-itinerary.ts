@@ -125,6 +125,16 @@ export interface PersistItineraryOptions {
    * deleted every non-meal card themselves).
    */
   allowMealOnly?: boolean;
+  /**
+   * Optional content-bound HMAC token minted by `resolveCommitGate` when
+   * the upstream gate already passed. The persist boundary RE-runs the
+   * gate either way (DB is the single source of truth), but a valid
+   * token short-circuits the redundant re-check AND is logged as
+   * `[COMMIT_TOKEN] verified` for audit. Token verification uses the
+   * exact `days` payload about to be persisted, so the caller can't swap
+   * days between mint and persist (`commit-token.ts::verifyCommitToken`).
+   */
+  commitToken?: string | null;
 }
 
 export interface PersistResult {
@@ -147,6 +157,10 @@ export interface PersistResult {
   finalGateDemoted?: boolean;
   /** Integrity verdict codes when finalGateDemoted=true. */
   finalGateCodes?: string[];
+  /** Freshly minted token from the persist-boundary re-gate. Callers
+   *  that need to forward proof (e.g. an outer pipeline writing a
+   *  follow-up trips.update) can read it here. */
+  commitToken?: string | null;
 }
 
 /** Capped-size ring buffer of rejected attempts written under
