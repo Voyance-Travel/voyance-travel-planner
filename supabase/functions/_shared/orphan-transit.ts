@@ -90,6 +90,10 @@ export function pruneOrphanTransits(activities: any[]): number {
     if (target) {
       const targetNorm = normalize(target);
       const targetTokens = targetNorm.split(' ').filter(t => t.length >= 4);
+      const significant = targetTokens.filter(t => !STOP_TOKENS.has(t));
+      const significantNeeded = significant.length >= 2
+        ? Math.ceil(significant.length / 2)
+        : 0; // disable majority pass when <2 significant tokens (avoid false negatives)
       let matched = false;
       for (let j = i + 1; j < activities.length; j++) {
         const next = activities[j];
@@ -101,9 +105,17 @@ export function pruneOrphanTransits(activities: any[]): number {
         ].filter(Boolean).map(normalize);
         const blob = candidates.join(' | ');
         if (!blob) continue;
+        // Tier 1: substring (diacritic-stripped).
         if (blob.includes(targetNorm)) { matched = true; break; }
+        // Tier 2: strict AND on all length≥4 tokens (legacy behavior).
         if (targetTokens.length > 0 && targetTokens.every(t => blob.includes(t))) {
           matched = true; break;
+        }
+        // Tier 3: majority match on significant (non-stopword) tokens.
+        // "Walk to Anne Frank House" → significant=[anne,frank,house]; "Anne Frank Museum" → 2/3 hit.
+        if (significantNeeded > 0) {
+          const hits = significant.reduce((n, t) => n + (blob.includes(t) ? 1 : 0), 0);
+          if (hits >= significantNeeded) { matched = true; break; }
         }
       }
       if (!matched) {
