@@ -294,7 +294,7 @@ export function enforceFlightAnchors(
 
     const before = `${a.startTime ?? a.start_time ?? a.time ?? ''}`;
     const beforeEnd = `${a.endTime ?? a.end_time ?? ''}`;
-    setStart(a, ctx.arrivalTime24);
+    setStart(a, truth24);
     // Preserve duration when it's a *plausible* landing-block duration.
     // If the AI stamped a 2-hour "Arrival in X" with a wrong start, treat it
     // as a stale convention and collapse to a short 15-min landing block —
@@ -309,10 +309,10 @@ export function enforceFlightAnchors(
       code: 'FLIGHT_ANCHOR_MISMATCH',
       activityId: actId(a),
       title: title(a),
-      detail: `Arrival card retimed ${before}→${beforeEnd} to ${ctx.arrivalTime24}→${a.endTime} (flight truth)`,
+      detail: `Arrival card retimed ${before}→${beforeEnd} to ${truth24}→${a.endTime} (flight truth)`,
       repaired: true,
     });
-    console.log(`[EXECUTIONER] FLIGHT_ANCHOR_MISMATCH day=${ctx.dayNumber} title="${title(a)}" was=${before}→${beforeEnd} truth=${ctx.arrivalTime24}→${a.endTime}`);
+    console.log(`[EXECUTIONER] FLIGHT_ANCHOR_MISMATCH day=${ctx.dayNumber} title="${title(a)}" was=${before}→${beforeEnd} truth=${truth24}→${a.endTime}`);
   }
 
   // Drop any non-locked, non-logistics card that starts strictly before the
