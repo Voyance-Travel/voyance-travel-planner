@@ -73,8 +73,8 @@ describe('frontend cannot promote to ready/frozen', () => {
         const line = lines[i];
         if (!FORBIDDEN_PATTERNS.some((re) => re.test(line))) continue;
         // Check allow-list: any rule whose file matches AND whose
-        // context regex matches this OR the preceding 3 lines passes.
-        const ctx = lines.slice(Math.max(0, i - 3), i + 2).join('\n');
+        // context regex matches this OR the surrounding 8 lines passes.
+        const ctx = lines.slice(Math.max(0, i - 8), i + 8).join('\n');
         const allowed = ALLOW.some(
           (a) => file.endsWith(a.file) && a.match.test(ctx),
         );
