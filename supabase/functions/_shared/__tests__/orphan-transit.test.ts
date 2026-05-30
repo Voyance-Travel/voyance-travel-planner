@@ -58,3 +58,34 @@ Deno.test('end-of-day transit with transportation.kind=departure survives even w
   assertEquals(removed, 0);
   assertEquals(acts.length, 2);
 });
+
+Deno.test('diacritic match: "Walk to Cafe Chris" survives when day has scheduled "Café Chris"', () => {
+  const acts = [
+    { id: '1', title: 'Walk to Cafe Chris', category: 'transport' },
+    { id: '2', title: 'Drinks at Café Chris', category: 'dining' },
+  ];
+  const removed = pruneOrphanTransits(acts);
+  assertEquals(removed, 0);
+  assertEquals(acts.length, 2);
+});
+
+Deno.test('majority match: "Walk to Anne Frank House" survives when day has "Anne Frank Museum"', () => {
+  const acts = [
+    { id: '1', title: 'Walk to Anne Frank House', category: 'transport' },
+    { id: '2', title: 'Visit Anne Frank Museum', category: 'sightseeing' },
+  ];
+  const removed = pruneOrphanTransits(acts);
+  assertEquals(removed, 0);
+  assertEquals(acts.length, 2);
+});
+
+Deno.test('negative: majority match does not over-trigger on unrelated venues', () => {
+  const acts = [
+    { id: '1', title: 'Walk to Bo Innovation', category: 'transport' },
+    { id: '2', title: 'Lunch at Quay', category: 'dining' },
+  ];
+  const removed = pruneOrphanTransits(acts);
+  assertEquals(removed, 1);
+  assertEquals(acts.length, 1);
+});
+

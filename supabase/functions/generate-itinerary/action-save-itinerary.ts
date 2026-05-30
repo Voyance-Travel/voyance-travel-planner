@@ -1078,6 +1078,25 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     }
   }
 
+  // ── STEP 2.68: ORPHAN-TRANSIT SAFETY NET ──────────────────────────
+  // Final pass that drops "Walk to X" connectors when X no longer appears in
+  // the day (cross-city/placeholder strip / manual edit / undo / chat edit).
+  // Mirrors the executioner's pass so chat/save paths that don't re-run the
+  // executioner can't leak orphans like Amsterdam "Walk to Cafe Chris".
+  try {
+    const { pruneOrphanTransits } = await import('../_shared/orphan-transit.ts');
+    for (const day of itineraryDays) {
+      const removed = pruneOrphanTransits(day.activities || []);
+      if (removed > 0) {
+        console.warn(`[SAVE_ORPHAN_TRANSIT] day=${day.dayNumber} removed=${removed}`);
+      }
+    }
+  } catch (orphanErr) {
+    console.warn('[save-itinerary] STEP 2.68 orphan-transit net failed (non-blocking):', orphanErr);
+  }
+
+
+
   // ── STEP 2.7: DINING DESCRIPTION BACKSTOP ─────────────────────────
   // Final pass that fills any blank/templated dining blurbs before persistence.
   // Catches:
