@@ -608,18 +608,21 @@ export function checkItineraryIntegrity(
     ctx.hotelTotalPriceUsdCents > 0 &&
     ctx.budgetIncludeHotel !== true
   ) {
-    let hotelCostRowFound = false;
-    for (const day of days.slice(0, 2)) {
-      const acts = Array.isArray(day?.activities) ? day.activities : [];
-      for (const a of acts) {
-        const cat = String(a?.category || '').toLowerCase();
-        const amount = Number(a?.cost?.amount ?? a?.estimatedCost?.amount ?? a?.price ?? 0);
-        if ((cat === 'accommodation' || cat === 'hotel' || cat === 'stay') && amount > 0) {
-          hotelCostRowFound = true;
-          break;
+    // Fast path: server-side activity_costs check already confirmed the row.
+    let hotelCostRowFound = ctx.hotelCostRowFound === true;
+    if (!hotelCostRowFound) {
+      for (const day of days.slice(0, 2)) {
+        const acts = Array.isArray(day?.activities) ? day.activities : [];
+        for (const a of acts) {
+          const cat = String(a?.category || '').toLowerCase();
+          const amount = Number(a?.cost?.amount ?? a?.estimatedCost?.amount ?? a?.price ?? 0);
+          if ((cat === 'accommodation' || cat === 'hotel' || cat === 'stay') && amount > 0) {
+            hotelCostRowFound = true;
+            break;
+          }
         }
+        if (hotelCostRowFound) break;
       }
-      if (hotelCostRowFound) break;
     }
     if (!hotelCostRowFound) {
       violations.push({
