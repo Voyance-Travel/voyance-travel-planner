@@ -713,6 +713,38 @@ export function enforceImpossibleLogistics(
     const a = activities[i];
     if (!a || isUserOwned(a)) { survivors.push(a); continue; }
 
+    // (a-bis) Hotel-return loop drop — Day 1, post-checkin, mid-day.
+    // Legitimate end-of-day hotel-return bookends carry source: 'bookend-*' or
+    // 'late_nightlife_bookend' and start ≥18:00 / are wrap-window tail rows;
+    // those are exempt. We only target plain "Return to [hotel/brand]" cards
+    // the AI dropped in between check-in and the natural day wind-down.
+    if (ctx.isFirstDay && firstCheckinIdx !== -1 && i > firstCheckinIdx) {
+      if (isHotelReturnCard(a, ctx.hotelName ?? null)) {
+        const src = String(a?.source || '').toLowerCase();
+        const tags: string[] = Array.isArray(a?.tags) ? a.tags.map((x: any) => String(x).toLowerCase()) : [];
+        const isBookendSource =
+          src.startsWith('bookend-') ||
+          src === 'late_nightlife_bookend' ||
+          tags.some(t => t.startsWith('bookend-') || t === 'late_nightlife_bookend');
+        const startMin = pickStart(a);
+        const beforeEvening = startMin !== null && startMin < 18 * 60;
+        if (!isBookendSource && beforeEvening) {
+          counters.hotelReturnLoopsDropped++;
+          counters.droppedActivities++;
+          counters.issues.push({
+            code: 'HOTEL_RETURN_LOOP_DROPPED',
+            activityId: actId(a),
+            title: title(a),
+            detail: `Dropped post-checkin hotel-return loop on arrival day (start ${a.startTime ?? a.start_time ?? a.time}).`,
+            repaired: true,
+          });
+          console.log(`[EXECUTIONER] HOTEL_RETURN_LOOP_DROPPED day=${ctx.dayNumber} title="${title(a)}" start=${a.startTime ?? a.start_time ?? a.time}`);
+          continue;
+        }
+      }
+    }
+
+
     if (isAirportTransfer(a)) {
       // Middle days: never legitimate.
       if (!ctx.isFirstDay && !ctx.isLastDay) {
