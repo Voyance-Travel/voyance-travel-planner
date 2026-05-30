@@ -60,7 +60,11 @@ Deno.test("1A: arrival card 21:30 retimes to flight truth 22:00", () => {
   assertEquals(counters.flightAnchorRepaired, 1);
 });
 
-Deno.test("1A: locked arrival card is NEVER retimed", () => {
+Deno.test("1A: user-owned arrival card is NEVER retimed (system anchors WITH isLocked:true ARE checked)", () => {
+  // Phase 2 semantic: isUserOwned (not isLocked) is the immutability key.
+  // System-generated arrival anchors stamped isLocked:true by anchor-guard
+  // MUST be retimed when they disagree with flight truth — that was the
+  // Lisbon 19:00 / Amsterdam 20:00 ships-as-ready leak path.
   const acts = [
     {
       id: "arr1",
@@ -69,7 +73,7 @@ Deno.test("1A: locked arrival card is NEVER retimed", () => {
       anchorSource: "arrival-flight",
       startTime: "21:30",
       endTime: "21:45",
-      isLocked: true,
+      source: "user", // truly user-owned
     },
   ];
   const ctx: ExecutionerContext = { ...baseCtx, arrivalTime24: "22:00" };
@@ -78,6 +82,7 @@ Deno.test("1A: locked arrival card is NEVER retimed", () => {
   assertEquals(acts[0].startTime, "21:30");
   assertEquals(counters.flightAnchorRepaired, 0);
 });
+
 
 Deno.test("1A: arrival within 5m tolerance is left alone", () => {
   const acts = [
