@@ -34,8 +34,24 @@ export function extractTransitTarget(act: any): string | null {
 }
 
 function normalize(s: string): string {
-  return String(s || '').toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  // NFD-decompose + strip combining marks so "Café" → "cafe" (diacritic match).
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} ]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
+
+// Low-signal tokens stripped from the "significant" majority-match set.
+// Kept inside strict-AND tokens so existing exact matches don't regress.
+const STOP_TOKENS = new Set([
+  'the', 'a', 'an', 'and', 'at', 'in', 'on', 'of', 'to', 'for', 'with',
+  'de', 'la', 'le', 'les', 'el', 'il', 'van', 'het', 'der', 'die', 'das',
+  'museum', 'house', 'restaurant', 'cafe', 'bar', 'hotel', 'shop', 'store',
+  'park', 'plaza', 'square',
+]);
 
 /**
  * Drop transit cards whose target no longer exists in the day. Mutates
