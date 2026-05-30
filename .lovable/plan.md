@@ -1,57 +1,58 @@
-# Post-Arrival Hotel-Return Loop — Plan
+# Orphan-Transit Match Gap — Diacritics + Partial Names + Save-Time Net
 
-## Problem
+## Diagnosis
 
-On arrival day, the AI sometimes emits a generic "Return to Your Hotel" card *after* the check-in block. Today the Executioner's `enforceImpossibleLogistics` only catches airport-transfer loops via `isAirportTransfer(a)`; a hotel-return card (category=accommodation/logistics, title like "Return to your hotel", no airport keywords) slips through. Upstream, the arrival-day prompt in `flight-hotel-context.ts` tells the AI to budget 4h for "transport to hotel, check-in" but never asserts "you are now at the hotel — do not emit a return-to-hotel step."
+`pruneOrphanTransits` (supabase/functions/_shared/orphan-transit.ts:88-91) matches a transit's "to X" target against later activities via `normalize()` + token-AND. Two real-world gaps let orphans survive the Executioner:
 
-This is the same class of bug as the airport-loop fix, just for a different card shape.
+1. **Diacritic gap.** `normalize()` (line 36) lowercases and strips non-`\p{L}\p{N}` chars but leaves combining marks intact. So `"Walk to Cafe Chris"` → target `"cafe chris"`, while the scheduled card `"Café Chris"` normalizes to `"café chris"`. `blob.includes("cafe chris")` is false (`é` ≠ `e`), and token `"cafe"` is missing from `"café chris"` for the same reason. **Match fails → orphan never dropped.** This is the literal Amsterdam reproducer.
+2. **Strict AND-token gap.** Targets like `"Walk to Anne Frank House"` produce tokens `["anne","frank","house"]`, while the real scheduled card is `"Anne Frank Museum"`. One missing token (`house`) kills the AND match.
+3. **Generated-after-Executioner gap.** Repair / save-time edits that drop a destination card don't re-run the Executioner. Only universal-quality-pass + action-generate-trip-day call `pruneOrphanTransits`; **no pass runs at save-time**, so chat/edit/undo paths leak.
 
-## Fix (3 layers, no behavior change for legitimate end-of-day bookends)
+## Fix — 3 small changes, no behavior change for current passing tests
 
-### 1. Executioner: extend Pass 5(a) to catch hotel-return loops
-**File:** `supabase/functions/_shared/schedule-executioner.ts`
+### 1. orphan-transit.ts — diacritic-safe normalize + relaxed token match
 
-- Add a local `isHotelReturnCard(a)` helper that matches the same brand-aware pattern already used by `clamp-bookend.ts::isBookendCard` / `hideGhostActivities.ts` (title regex `^(return|head back|back) to (the |your )?(hotel|HOTEL_BRAND_RE|<ctx.hotelName>)`, category in {accommodation, logistics, transit, return}, NOT a meal/sightseeing).
-- Inside the `enforceImpossibleLogistics` loop, after the existing `isAirportTransfer` branch, add:
-  - **Day 1 only**, after `firstCheckinIdx >= 0`: any `isHotelReturnCard(a)` at index `i > firstCheckinIdx` AND whose `startTime` is **before 18:00** (i.e. not the legitimate end-of-day bookend) → drop with new code `HOTEL_RETURN_LOOP_DROPPED`.
-  - User-owned / locked / `source` starting `bookend-*` or `late_nightlife_bookend` are exempt (mirrors existing guards). Source-tagged bookends are the read-time / save-time injection path — they're never loops.
-- Add counter `hotelReturnLoopsDropped` to `ExecutionerCounters` and surface via `toExecutionerAuditCodes` as `EXEC_HOTEL_RETURN_LOOP_DROPPED`.
+- Update `normalize()` to NFD-normalize and strip combining marks **before** the existing punctuation strip:
+  `String(s||'').normalize('NFD').replace(/\p{M}+/gu,'').toLowerCase().replace(/[^\p{L}\p{N} ]+/gu,' ').replace(/\s+/g,' ').trim()`
+- After tokenizing `targetNorm`, drop low-signal stop tokens (`the`, `a`, `de`, `la`, `le`, `van`, `het`, `at`, `in`, `on`, `and`, `museum`, `house`, `restaurant`, `cafe`, `bar`, `hotel`) from a `significant` set — but keep them in `targetTokens` for the strict pass.
+- Match logic becomes (in order): substring → strict AND on `targetTokens` (unchanged) → **new** majority match: `significant` ≥ 2 tokens AND ≥ ceil(significant.length/2) appear in blob.
+- No change to logistics exemption, locked/userPinned skip, or end-of-day Case 1.
 
-Net effect: after arrival check-in, a mid-afternoon "Return to hotel" plain card is dropped; the canonical end-of-day hotel-return bookend (≥19:00, `source:'bookend-*'`) is untouched.
+### 2. action-save-itinerary.ts — final safety-net pass
 
-### 2. Prompt: assert post-arrival location
-**File:** `supabase/functions/generate-itinerary/flight-hotel-context.ts` (the arrival-day flight-info block ~line 368)
+After the existing terminal cleanup / departure-day enforcement and BEFORE persist:
+```ts
+const { pruneOrphanTransits } = await import('../_shared/orphan-transit.ts');
+for (const day of days) {
+  const removed = pruneOrphanTransits(day.activities || []);
+  if (removed > 0) console.warn(`[SAVE_ORPHAN_TRANSIT] day=${day.dayNumber} removed=${removed}`);
+}
+```
+Mirrors the established defense-in-depth pattern (e.g. `[SAVE_DEPARTURE_NET]`, `[POST_CHECKOUT_PRUNE]` from memory). Locked/user-pinned rows already exempt inside the helper.
 
-Append one explicit line after the existing "Allow 4 hours for: customs/immigration, baggage, transport to hotel, check-in" directive:
+### 3. orphan-transit.test.ts — lock the new behavior
 
-> "AFTER check-in the traveler IS AT THE HOTEL. Do NOT emit a 'Return to Hotel' or 'Head back to hotel' activity between check-in and the natural end-of-day bookend — they're already there. The only legitimate hotel-return card is the day's final bookend, which is injected automatically."
-
-Pure prompt addition — no code-flow change.
-
-### 3. Save-time net (defense-in-depth)
-**File:** `supabase/functions/generate-itinerary/action-save-itinerary.ts` (existing `normalizeDays` pipeline)
-
-Add a one-pass strip after `enforceDepartureDayLogistics` that, per day, drops any non-locked, non-bookend-source hotel-return card sitting BEFORE the day's last non-bookend activity. Sentinel: `[HOTEL_RETURN_LOOP_STRIP] day=N dropped=K`. This catches legacy persisted trips and any path that bypasses the Executioner (chat-applied edits, manual paste).
-
-## Tests
-
-**New:** `supabase/functions/_shared/__tests__/executioner-hotel-return-loop.test.ts`
-- Day 1: `[Arrival transfer 14:00, Check-in 16:00, Return to hotel 17:30, Dinner 19:30, Return to JW Marriott 22:30 source=bookend-readtime]` → mid-day return dropped, bookend preserved.
-- Day 1 luxury hotel brand: `Head back to Aman Venice 17:00` after `Check-in 16:30` → dropped.
-- Locked `Return to hotel 17:00` (user-pinned) → preserved.
-- Day 3 (middle): same card pattern with no check-in → NOT dropped by this rule (out of scope — handled elsewhere if at all).
+Add three cases:
+- `"Walk to Cafe Chris"` with scheduled `"Café Chris"` → dropped=0 (match via diacritic-strip).
+- `"Walk to Anne Frank House"` with scheduled `"Anne Frank Museum"` → dropped=0 (majority match: `anne`+`frank` of 2 significant).
+- `"Walk to Bo Innovation"` with scheduled `"Lunch at Quay"` (no overlap) → dropped=1 (negative: majority match doesn't over-trigger).
 
 ## Out of scope
 
-- Read-time bookend injection logic (already correct).
-- Adding a `HOTEL_RETURN_LOOP` validation-gate code — Executioner drop + save-time net are sufficient; validation gate is for content quality, not logistics loops.
-- Backfill of historical trips beyond what the save-time net already heals on next save.
+- Read-time orphan strip in the parser (current memory rules favor write-time fixes).
+- Backfilling historical trips — Executioner runs on next save; save-time net catches legacy edits.
+- Changing `isTransitActivity` detection (separate concern).
+- Touching the `flight-leg-pick` parity work from the prior turn.
 
-## Files Touched
+## Verification
 
-- `supabase/functions/_shared/schedule-executioner.ts` (helper + Pass 5a extension + counter)
-- `supabase/functions/_shared/itinerary-integrity-contract.ts` (audit code mapping)
-- `supabase/functions/generate-itinerary/flight-hotel-context.ts` (one prompt line)
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (save-time strip)
-- `supabase/functions/_shared/__tests__/executioner-hotel-return-loop.test.ts` (new)
-- `mem/constraints/itinerary/` — new `post-checkin-hotel-return-loop.md` + `mem/index.md` link
+- `supabase--test_edge_functions` filtered on `orphan-transit` after edits — existing 6 cases must still pass; 3 new cases must pass.
+- `rg "[ORPHAN-TRANSIT]|[SAVE_ORPHAN_TRANSIT]"` in edge logs for the next Amsterdam-shaped trip will show drops at the save-time net if upstream still leaks.
+
+## Files touched
+
+- `supabase/functions/_shared/orphan-transit.ts` (normalize + match)
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (1 net loop)
+- `supabase/functions/_shared/__tests__/orphan-transit.test.ts` (3 cases)
+- `mem/constraints/itinerary/orphan-transit-and-dining-strip.md` (append diacritic + save-net notes)
+- `mem/index.md` (one-line bump on existing memory entry)
