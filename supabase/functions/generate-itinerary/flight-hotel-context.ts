@@ -365,7 +365,29 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
         }
 
         console.log(`[FlightContext] Return raw ${returnDepartureTimeStr}, return24: ${returnDepartureTime24}, latest activity: ${latestLastActivity}`);
+      } else {
+        // Mirror Day-1 parseFailed for the last-day path: if flight_selection
+        // contains any return-leg signal but the picker couldn't extract a
+        // departure time, mark `departureParseFailed=true` so
+        // compile-day-facts injects a soft departure floor instead of
+        // letting the LLM invent a 6 AM checkout against no anchor.
+        const fr = flightRaw as Record<string, any>;
+        const hasReturnSignal = Boolean(
+          (Array.isArray(fr?.legs) && fr.legs.length >= 2) ||
+          (fr?.return && typeof fr.return === 'object') ||
+          fr?.returnDepartureTime ||
+          fr?.returnDepartureTime24 ||
+          fr?.returnDepartureAirport
+        );
+        if (hasReturnSignal) {
+          departureParseFailed = true;
+          console.warn(
+            `[FLIGHT_INGEST_PARSE_FAIL] last_day tripId=${tripId} shape=${departurePick.shape} legPick=${departurePick.source} raw=undefined — return-leg present but no departure time`
+          );
+        }
       }
+
+
 
 
       // Flight intelligence override
