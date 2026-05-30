@@ -330,7 +330,7 @@ export function enforceFlightAnchors(
         code: 'FLIGHT_ANCHOR_MISMATCH',
         activityId: actId(a),
         title: title(a),
-        detail: `Dropped non-logistics card starting before arrival (${a.startTime ?? a.start_time} < ${ctx.arrivalTime24})`,
+        detail: `Dropped non-logistics card starting before arrival (${a.startTime ?? a.start_time} < ${truth24})`,
         repaired: true,
       });
       console.log(`[EXECUTIONER] pre-arrival drop day=${ctx.dayNumber} title="${title(a)}" start=${a.startTime}`);
