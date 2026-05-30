@@ -430,7 +430,7 @@ export function checkItineraryIntegrity(
           if (!isArrival) continue;
           const stamped = pickStart(a);
           if (stamped === null) continue;
-          if (Math.abs(stamped - truthMin) > 20) {
+          if (Math.abs(stamped - truthMin) > 10) {
             violations.push({
               code: 'FLIGHT_ANCHOR_COMMIT_MISMATCH',
               dayNumber,
