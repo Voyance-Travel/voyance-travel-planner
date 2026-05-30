@@ -246,6 +246,7 @@ function newCounters(): ExecutionerCounters {
     geoOutliersFlagged: 0,
     geoOutliersDropped: 0,
     airportLoopsDropped: 0,
+    hotelReturnLoopsDropped: 0,
     transfersClamped: 0,
     departureTransfersStripped: 0,
     orphanTransitsDropped: 0,
