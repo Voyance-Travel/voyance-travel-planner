@@ -2564,9 +2564,7 @@ async function _handleGenerateTripDayInner(
         budgetTier: budgetTier ?? null,
         geoFlagOnly: !geoDropEnabled,
         geoDropEnabled,
-        rawFlightSelection: _isFirstDay
-          ? ((flightContext as any)?.rawFlightSelection ?? null)
-          : null,
+        rawFlightSelection: _isFirstDay ? (_flightSel ?? null) : null,
       };
       let exec = runScheduleExecutioner(dayResult.activities, execCtx);
 
