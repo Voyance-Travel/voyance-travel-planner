@@ -1865,6 +1865,7 @@ export async function handleGenerateDay(
         geoFlagOnly: !geoDropEnabled,
         geoDropEnabled,
         rawFlightSelection: isFirstDay ? ((flightContext as any)?.rawFlightSelection ?? null) : null,
+        hotelName: (flightContext as any)?.hotelName || paramHotelName || params.hotelOverride?.name || null,
       });
       generatedDay.activities = exec.activities;
       generatedDay.metadata = generatedDay.metadata || {};

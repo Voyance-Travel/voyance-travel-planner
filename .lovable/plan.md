@@ -1,59 +1,57 @@
-# Flight Anchor Truth: Edge ↔ FE Parity
+# Post-Arrival Hotel-Return Loop — Plan
 
-## Root cause
+## Problem
 
-`supabase/functions/_shared/flight-leg-pick.ts` is a partial port of `src/utils/normalizeFlightSelection.ts`. It diverges in three ways that all bias toward picking the wrong leg, then `flight-hotel-context.ts` commits that wrong value as `arrivalTime24` and the Executioner happily "repairs" the day against the wrong truth.
+On arrival day, the AI sometimes emits a generic "Return to Your Hotel" card *after* the check-in block. Today the Executioner's `enforceImpossibleLogistics` only catches airport-transfer loops via `isAirportTransfer(a)`; a hotel-return card (category=accommodation/logistics, title like "Return to your hotel", no airport keywords) slips through. Upstream, the arrival-day prompt in `flight-hotel-context.ts` tells the AI to budget 4h for "transport to hotel, check-in" but never asserts "you are now at the hotel — do not emit a return-to-hotel step."
 
-1. **No `autoTagLegs` fallback.** When `flight_selection.legs[]` exists but no leg carries `isDestinationArrival`, FE infers the marker (single → leg 0; 2-leg → leg 0; 3+ → leg N-2 / destIata match). The edge picker only checks `legs.find(l => l.isDestinationArrival)` — if the flag is missing it walks a different heuristic, and on round-trips that wrote `legs[]` without flags it can return the **return leg's** departure airport's arrival time.
-2. **No `estimateReturnArrival`.** FE fills `legs[1].arrival.time` from outbound duration when the form didn't collect it. The edge picker doesn't, so multi-leg trips can have the picker fall back to a leg with a populated `arrival.time` that isn't the destination arrival.
-3. **Legacy/flat branch reads `data.arrivalTime` blind.** For the `{ departure: {...}, return: {...} }` shape, the edge picker reads `dep?.arrival?.time` but for the `flat` shape it reads `data.arrivalTime` with zero validation. If the value is an ISO 8601 string with a TZ offset, `parseTimeToMinutes` (in `flight-hotel-context.ts`) only matches `HH:MM (AM|PM)?` and falls back via `normalizeTo24h`'s ISO regex — which does work — but the picker's `source` label hides that we ever consulted this branch, so the parseFailed instrumentation can't fire and no audit trail exists.
+This is the same class of bug as the airport-loop fix, just for a different card shape.
 
-In the Amsterdam case the trip stored `legs[]` without `isDestinationArrival` flags, the picker returned the wrong leg's `arrival.time` (an earlier connection arrival around 20:00), `normalizeTo24h` happily produced `20:00`, `ARRIVAL_BUFFER_MINS = 4h` pushed `earliestFirstActivity` to a sane-looking 00:00, the LLM scheduled the "arrival flight" card around 20:00, and the Executioner had nothing to repair because `ctx.arrivalTime24 = 20:00` matched.
+## Fix (3 layers, no behavior change for legitimate end-of-day bookends)
 
-## Fix
+### 1. Executioner: extend Pass 5(a) to catch hotel-return loops
+**File:** `supabase/functions/_shared/schedule-executioner.ts`
 
-### 1. Port FE normalization into the shared edge picker
+- Add a local `isHotelReturnCard(a)` helper that matches the same brand-aware pattern already used by `clamp-bookend.ts::isBookendCard` / `hideGhostActivities.ts` (title regex `^(return|head back|back) to (the |your )?(hotel|HOTEL_BRAND_RE|<ctx.hotelName>)`, category in {accommodation, logistics, transit, return}, NOT a meal/sightseeing).
+- Inside the `enforceImpossibleLogistics` loop, after the existing `isAirportTransfer` branch, add:
+  - **Day 1 only**, after `firstCheckinIdx >= 0`: any `isHotelReturnCard(a)` at index `i > firstCheckinIdx` AND whose `startTime` is **before 18:00** (i.e. not the legitimate end-of-day bookend) → drop with new code `HOTEL_RETURN_LOOP_DROPPED`.
+  - User-owned / locked / `source` starting `bookend-*` or `late_nightlife_bookend` are exempt (mirrors existing guards). Source-tagged bookends are the read-time / save-time injection path — they're never loops.
+- Add counter `hotelReturnLoopsDropped` to `ExecutionerCounters` and surface via `toExecutionerAuditCodes` as `EXEC_HOTEL_RETURN_LOOP_DROPPED`.
 
-Replace `flight-leg-pick.ts` `pickDestinationArrivalLeg` / `pickDestinationDepartureLeg` with calls that go through a Deno-port of `normalizeFlightSelection` (legs[] + legacy + flat → unified `legs[]`, then `autoTagLegs` + `estimateReturnArrival`). Both pickers then read the user-marked or auto-tagged leg only — no second heuristic.
+Net effect: after arrival check-in, a mid-afternoon "Return to hotel" plain card is dropped; the canonical end-of-day hotel-return bookend (≥19:00, `source:'bookend-*'`) is untouched.
 
-New module: `supabase/functions/_shared/normalize-flight-selection.ts`. Mirrors `src/utils/normalizeFlightSelection.ts` exactly (legs/legacy/flat detection, `parseDateTimeUTC` accepting 24h + 12h, `estimateReturnArrival` for round-trips, `autoTagLegs` for missing markers).
+### 2. Prompt: assert post-arrival location
+**File:** `supabase/functions/generate-itinerary/flight-hotel-context.ts` (the arrival-day flight-info block ~line 368)
 
-`flight-leg-pick.ts` then becomes a thin wrapper that:
-- normalizes,
-- finds the `isDestinationArrival` (or `isDestinationDeparture`) leg,
-- returns `{ shape, source, leg, rawArrivalString, rawDepartureString }` exactly like today (no signature change for `flight-hotel-context.ts`).
+Append one explicit line after the existing "Allow 4 hours for: customs/immigration, baggage, transport to hotel, check-in" directive:
 
-### 2. Add an arrival-truth sanity check before committing it
+> "AFTER check-in the traveler IS AT THE HOTEL. Do NOT emit a 'Return to Hotel' or 'Head back to hotel' activity between check-in and the natural end-of-day bookend — they're already there. The only legitimate hotel-return card is the day's final bookend, which is injected automatically."
 
-In `flight-hotel-context.ts` after computing `arrivalTime24`, cross-check against alternate sources and downgrade to `parseFailed = true` (soft fallback) when they disagree by more than 30 minutes:
+Pure prompt addition — no code-flow change.
 
-- `flight_intelligence.destinationSchedule[0].arrivalDatetime` (already read further down) — pull this BEFORE picking, not after, and let it OVERRIDE the picker when present.
-- `flight_selection.arrivalTime` flat-shape field (when present alongside legs[]).
-- A new `rawUserEnteredArrival` audit field captured by the normalizer (the very first time `leg.arrival.time` was non-empty on the marked leg).
+### 3. Save-time net (defense-in-depth)
+**File:** `supabase/functions/generate-itinerary/action-save-itinerary.ts` (existing `normalizeDays` pipeline)
 
-If any two sources disagree by >30m, log `[FLIGHT_TRUTH_DISAGREE]` with all candidates and choose the one matching `flight_intelligence` > marked leg > legacy `departure.arrival.time` > flat `arrivalTime`. Stamp the chosen source on the result so the Executioner can include it in `EXEC_FLIGHT_ANCHOR_FIXED` audit metadata.
+Add a one-pass strip after `enforceDepartureDayLogistics` that, per day, drops any non-locked, non-bookend-source hotel-return card sitting BEFORE the day's last non-bookend activity. Sentinel: `[HOTEL_RETURN_LOOP_STRIP] day=N dropped=K`. This catches legacy persisted trips and any path that bypasses the Executioner (chat-applied edits, manual paste).
 
-### 3. Make the Executioner re-verify truth at run time
+## Tests
 
-In `enforceFlightAnchors` (schedule-executioner.ts ~237), when `ctx.arrivalTime24` exists, also re-pull the raw `flight_selection` from `ctx` (already plumbed for hotel checks) and assert the picked arrival agrees with `ctx.arrivalTime24` within 10 minutes. If they disagree, log `EXEC_FLIGHT_TRUTH_DRIFT` and trust the freshly-normalized value (Executioner is the last gate before persist, so re-normalizing here closes the loop if any upstream stage corrupted `ctx`).
-
-### 4. Tests
-
-- `flight-leg-pick.parity.test.ts` (new): fixtures for all four shapes (legs+flags / legs-without-flags / legacy / flat), each asserting the BE picker returns the same leg as the FE `getDestinationArrivalLeg`. Includes the Amsterdam reproducer: 2-leg round-trip with no `isDestinationArrival` flag, arrival 22:00 → must return 22:00 not 20:00.
-- Extend `integrity-contract.amsterdam.test.ts`: when raw `flight_selection.legs[]` says 22:00 but the persisted Day-1 arrival card says 20:00, the gate must catch `FLIGHT_ANCHOR_COMMIT_MISMATCH` (already does — confirm via fixture).
-- New `flight-truth-disagree.test.ts`: feed `flight_selection` saying 20:00 and `flight_intelligence` saying 22:00 → `arrivalTime24` resolves to 22:00 + log line emitted.
-
-## Files
-
-- **New:** `supabase/functions/_shared/normalize-flight-selection.ts` (Deno port of FE module)
-- **New:** `supabase/functions/_shared/__tests__/flight-leg-pick.parity.test.ts`
-- **New:** `supabase/functions/_shared/__tests__/flight-truth-disagree.test.ts`
-- **Edit:** `supabase/functions/_shared/flight-leg-pick.ts` (route through new normalizer)
-- **Edit:** `supabase/functions/generate-itinerary/flight-hotel-context.ts` (cross-check + source stamp + early flight_intelligence read)
-- **Edit:** `supabase/functions/_shared/schedule-executioner.ts` (`enforceFlightAnchors` re-verify)
-- **Edit:** `mem/index.md` + `mem/constraints/itinerary/final-commit-gate.md` (record the new "Flight Truth Reconciliation" rule)
+**New:** `supabase/functions/_shared/__tests__/executioner-hotel-return-loop.test.ts`
+- Day 1: `[Arrival transfer 14:00, Check-in 16:00, Return to hotel 17:30, Dinner 19:30, Return to JW Marriott 22:30 source=bookend-readtime]` → mid-day return dropped, bookend preserved.
+- Day 1 luxury hotel brand: `Head back to Aman Venice 17:00` after `Check-in 16:30` → dropped.
+- Locked `Return to hotel 17:00` (user-pinned) → preserved.
+- Day 3 (middle): same card pattern with no check-in → NOT dropped by this rule (out of scope — handled elsewhere if at all).
 
 ## Out of scope
 
-- Changing the form/UI for entering flights. The fix is read-side only — existing trips with already-stored `legs[]` without flags will resolve correctly via `autoTagLegs`.
-- Backfilling historical trips. The next regeneration / refresh pulls the corrected truth automatically; one-shot migration not needed.
+- Read-time bookend injection logic (already correct).
+- Adding a `HOTEL_RETURN_LOOP` validation-gate code — Executioner drop + save-time net are sufficient; validation gate is for content quality, not logistics loops.
+- Backfill of historical trips beyond what the save-time net already heals on next save.
+
+## Files Touched
+
+- `supabase/functions/_shared/schedule-executioner.ts` (helper + Pass 5a extension + counter)
+- `supabase/functions/_shared/itinerary-integrity-contract.ts` (audit code mapping)
+- `supabase/functions/generate-itinerary/flight-hotel-context.ts` (one prompt line)
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (save-time strip)
+- `supabase/functions/_shared/__tests__/executioner-hotel-return-loop.test.ts` (new)
+- `mem/constraints/itinerary/` — new `post-checkin-hotel-return-loop.md` + `mem/index.md` link

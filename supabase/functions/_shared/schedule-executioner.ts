@@ -68,6 +68,7 @@ export type ExecutionerCode =
   | 'GEO_OUTLIER'
   | 'GAP_REFILLED'
   | 'AIRPORT_LOOP_DROPPED'
+  | 'HOTEL_RETURN_LOOP_DROPPED'
   | 'TRANSFER_DURATION_CLAMPED'
   | 'DEPARTURE_TRANSFER_WITHOUT_CLOCK'
   | 'ORPHAN_TRANSIT_DROPPED';
@@ -91,6 +92,7 @@ export interface ExecutionerCounters {
   geoOutliersFlagged: number;
   geoOutliersDropped: number;
   airportLoopsDropped: number;
+  hotelReturnLoopsDropped: number;
   transfersClamped: number;
   departureTransfersStripped: number;
   orphanTransitsDropped: number;
@@ -128,6 +130,10 @@ export interface ExecutionerContext {
    * `ctx.arrivalTime24` was committed from a wrong leg before reaching here.
    */
   rawFlightSelection?: unknown;
+  /** Trip's hotel name (lowercased internally) — enables matching post-checkin
+   * "Return to [hotel]" loops where the AI used the brand string rather than
+   * the generic word "hotel". */
+  hotelName?: string | null;
 }
 
 export interface ExecutionerResult {
@@ -216,6 +222,28 @@ function isAirportTransfer(a: any): boolean {
   const anchor = String(a?.anchorSource || '').toLowerCase();
   return anchor === 'airport-transfer';
 }
+
+// Plain "Return to / Head back to / Back to [hotel|brand|name]" cards. NOT a
+// legitimate end-of-day bookend — those carry `source: 'bookend-*' |
+// 'late_nightlife_bookend'` and are exempted at call site. Used by Pass 5a
+// to drop post-checkin hotel-return loops on arrival day.
+const HOTEL_RETURN_VERB_RE =
+  /^\s*(?:return|head\s+back|back|go\s+back|walk\s+back|shuttle\s+back)\s+to\b/i;
+const HOTEL_NOUN_RE =
+  /\b(?:hotel|hostel|inn|resort|lodge|ryokan|riad|guesthouse|guest\s*house|b&b|marriott|hilton|hyatt|ritz[\-\s]?carlton|four\s*seasons|st\.?\s*regis|peninsula|aman|belmond|cipriani|gritti|kempinski|rosewood|mandarin\s*oriental|raffles|bvlgari|bulgari|conrad|edition|sofitel|fairmont|shangri[\-\s]?la|intercontinental|le\s*meridien|westin|sheraton|nobu\s*hotel|nh\s*collection|melia)\b/i;
+
+function isHotelReturnCard(a: any, hotelName?: string | null): boolean {
+  if (!a) return false;
+  const t = title(a);
+  if (!HOTEL_RETURN_VERB_RE.test(t)) return false;
+  // Must reference a hotel noun, a brand, or the trip's own hotel name.
+  if (HOTEL_NOUN_RE.test(t)) return true;
+  if (hotelName && hotelName.length >= 3) {
+    const needle = hotelName.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').trim();
+    if (needle && t.toLowerCase().includes(needle)) return true;
+  }
+  return false;
+}
 function isLogistics(a: any): boolean {
   const cat = String(a?.category || '').toLowerCase();
   if (LOGISTICS_CATS.has(cat)) return true;
@@ -244,6 +272,7 @@ function newCounters(): ExecutionerCounters {
     geoOutliersFlagged: 0,
     geoOutliersDropped: 0,
     airportLoopsDropped: 0,
+    hotelReturnLoopsDropped: 0,
     transfersClamped: 0,
     departureTransfersStripped: 0,
     orphanTransitsDropped: 0,
@@ -684,6 +713,38 @@ export function enforceImpossibleLogistics(
     const a = activities[i];
     if (!a || isUserOwned(a)) { survivors.push(a); continue; }
 
+    // (a-bis) Hotel-return loop drop — Day 1, post-checkin, mid-day.
+    // Legitimate end-of-day hotel-return bookends carry source: 'bookend-*' or
+    // 'late_nightlife_bookend' and start ≥18:00 / are wrap-window tail rows;
+    // those are exempt. We only target plain "Return to [hotel/brand]" cards
+    // the AI dropped in between check-in and the natural day wind-down.
+    if (ctx.isFirstDay && firstCheckinIdx !== -1 && i > firstCheckinIdx) {
+      if (isHotelReturnCard(a, ctx.hotelName ?? null)) {
+        const src = String(a?.source || '').toLowerCase();
+        const tags: string[] = Array.isArray(a?.tags) ? a.tags.map((x: any) => String(x).toLowerCase()) : [];
+        const isBookendSource =
+          src.startsWith('bookend-') ||
+          src === 'late_nightlife_bookend' ||
+          tags.some(t => t.startsWith('bookend-') || t === 'late_nightlife_bookend');
+        const startMin = pickStart(a);
+        const beforeEvening = startMin !== null && startMin < 18 * 60;
+        if (!isBookendSource && beforeEvening) {
+          counters.hotelReturnLoopsDropped++;
+          counters.droppedActivities++;
+          counters.issues.push({
+            code: 'HOTEL_RETURN_LOOP_DROPPED',
+            activityId: actId(a),
+            title: title(a),
+            detail: `Dropped post-checkin hotel-return loop on arrival day (start ${a.startTime ?? a.start_time ?? a.time}).`,
+            repaired: true,
+          });
+          console.log(`[EXECUTIONER] HOTEL_RETURN_LOOP_DROPPED day=${ctx.dayNumber} title="${title(a)}" start=${a.startTime ?? a.start_time ?? a.time}`);
+          continue;
+        }
+      }
+    }
+
+
     if (isAirportTransfer(a)) {
       // Middle days: never legitimate.
       if (!ctx.isFirstDay && !ctx.isLastDay) {
@@ -810,6 +871,7 @@ export const __test_only = {
   isNightlife,
   isArrivalCard,
   isAirportTransfer,
+  isHotelReturnCard,
   isLocked,
   isUserOwned,
 };
@@ -832,6 +894,7 @@ export interface ExecutionerAuditCode {
     | 'EXEC_GEO_OUTLIER_DROPPED'
     | 'EXEC_GAP_REFILLED'
     | 'EXEC_AIRPORT_LOOP_DROPPED'
+    | 'EXEC_HOTEL_RETURN_LOOP_DROPPED'
     | 'EXEC_TRANSFER_CLAMPED'
     | 'EXEC_DEPARTURE_TRANSFER_FLAGGED'
     | 'EXEC_ORPHAN_TRANSIT_DROPPED';
@@ -892,6 +955,14 @@ export function toExecutionerAuditCodes(
       count: counters.airportLoopsDropped,
       dayNumber,
       detail: `Dropped ${counters.airportLoopsDropped} airport-loop transfer(s)`,
+    });
+  }
+  if (counters.hotelReturnLoopsDropped > 0) {
+    out.push({
+      code: 'EXEC_HOTEL_RETURN_LOOP_DROPPED',
+      count: counters.hotelReturnLoopsDropped,
+      dayNumber,
+      detail: `Dropped ${counters.hotelReturnLoopsDropped} post-checkin hotel-return loop(s)`,
     });
   }
   if (counters.transfersClamped > 0) {

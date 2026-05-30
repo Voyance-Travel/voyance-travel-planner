@@ -2565,6 +2565,7 @@ async function _handleGenerateTripDayInner(
         geoFlagOnly: !geoDropEnabled,
         geoDropEnabled,
         rawFlightSelection: _isFirstDay ? (_flightSel ?? null) : null,
+        hotelName: (cityInfo as any)?.hotelName || (typeof tripHotelName !== 'undefined' ? tripHotelName : null) || null,
       };
       let exec = runScheduleExecutioner(dayResult.activities, execCtx);
 
