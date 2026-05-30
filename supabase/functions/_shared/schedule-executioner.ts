@@ -871,6 +871,7 @@ export const __test_only = {
   isNightlife,
   isArrivalCard,
   isAirportTransfer,
+  isHotelReturnCard,
   isLocked,
   isUserOwned,
 };
