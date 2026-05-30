@@ -282,22 +282,16 @@ export function enforceFlightAnchors(
   let truth24 = ctx.arrivalTime24 || undefined;
   if (ctx.rawFlightSelection) {
     try {
-      // Dynamic import to avoid pulling the normalizer when not needed.
-      // deno-lint-ignore no-explicit-any
-      const mod: any = (globalThis as any).__flight_leg_pick_mod
-        || ((globalThis as any).__flight_leg_pick_mod = null);
-      // Inline require fallback — sync path below.
-    } catch { /* ignored */ }
-  }
-  // Sync wrapper — we do the re-pick here using a static import added at file top.
-  if (ctx.rawFlightSelection) {
-    try {
       const repicked = _repickArrivalTruth(ctx.rawFlightSelection);
-      if (repicked && truth24 && Math.abs((parseTime(repicked) ?? 0) - (parseTime(truth24) ?? 0)) > 10) {
-        console.warn(
-          `[EXECUTIONER] EXEC_FLIGHT_TRUTH_DRIFT day=${ctx.dayNumber} ctx=${truth24} picked=${repicked} — trusting picker`
-        );
-        truth24 = repicked;
+      if (repicked && truth24) {
+        const a = parseTime(repicked) ?? 0;
+        const b = parseTime(truth24) ?? 0;
+        if (Math.abs(a - b) > 10) {
+          console.warn(
+            `[EXECUTIONER] EXEC_FLIGHT_TRUTH_DRIFT day=${ctx.dayNumber} ctx=${truth24} picked=${repicked} — trusting picker`
+          );
+          truth24 = repicked;
+        }
       } else if (repicked && !truth24) {
         truth24 = repicked;
       }
