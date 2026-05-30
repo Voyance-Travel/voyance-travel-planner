@@ -33,7 +33,17 @@ const ALLOW = [
   // safeUpdateItineraryData routes through backend `save-itinerary`
   // edge function, which itself runs `resolveCommitGate`. Approved.
   { file: 'src/pages/TripDetail.tsx', match: /safeUpdateItineraryData\(/, label: 'goes-through-backend-gate' },
+  // Demo-mode localStorage writes — never touch the DB, never reach the
+  // backend gate. The browser-only demo trip object is allowed to carry
+  // `itinerary_status:'ready'` so the demo UI behaves like a real trip.
+  { file: 'src/components/itinerary/EditorialItinerary.tsx', match: /localStorage|voyance_demo_trips/, label: 'demo-localStorage-not-db' },
+  // ItineraryEditor save routes through safeUpdateItineraryData → backend
+  // save-itinerary → resolveCommitGate, which will demote to partial when
+  // the contract fails. Passing `ready` in extraUpdate is the proposed
+  // status, not an unconditional override.
+  { file: 'src/components/itinerary/ItineraryEditor.tsx', match: /safeUpdateItineraryData\(/, label: 'goes-through-backend-gate' },
 ];
+
 
 const FORBIDDEN_PATTERNS = [
   /itinerary_status\s*:\s*['"]ready['"]/i,
