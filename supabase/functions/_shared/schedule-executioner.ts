@@ -218,6 +218,28 @@ function isAirportTransfer(a: any): boolean {
   const anchor = String(a?.anchorSource || '').toLowerCase();
   return anchor === 'airport-transfer';
 }
+
+// Plain "Return to / Head back to / Back to [hotel|brand|name]" cards. NOT a
+// legitimate end-of-day bookend — those carry `source: 'bookend-*' |
+// 'late_nightlife_bookend'` and are exempted at call site. Used by Pass 5a
+// to drop post-checkin hotel-return loops on arrival day.
+const HOTEL_RETURN_VERB_RE =
+  /^\s*(?:return|head\s+back|back|go\s+back|walk\s+back|shuttle\s+back)\s+to\b/i;
+const HOTEL_NOUN_RE =
+  /\b(?:hotel|hostel|inn|resort|lodge|ryokan|riad|guesthouse|guest\s*house|b&b|marriott|hilton|hyatt|ritz[\-\s]?carlton|four\s*seasons|st\.?\s*regis|peninsula|aman|belmond|cipriani|gritti|kempinski|rosewood|mandarin\s*oriental|raffles|bvlgari|bulgari|conrad|edition|sofitel|fairmont|shangri[\-\s]?la|intercontinental|le\s*meridien|westin|sheraton|nobu\s*hotel|nh\s*collection|melia)\b/i;
+
+function isHotelReturnCard(a: any, hotelName?: string | null): boolean {
+  if (!a) return false;
+  const t = title(a);
+  if (!HOTEL_RETURN_VERB_RE.test(t)) return false;
+  // Must reference a hotel noun, a brand, or the trip's own hotel name.
+  if (HOTEL_NOUN_RE.test(t)) return true;
+  if (hotelName && hotelName.length >= 3) {
+    const needle = hotelName.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').trim();
+    if (needle && t.toLowerCase().includes(needle)) return true;
+  }
+  return false;
+}
 function isLogistics(a: any): boolean {
   const cat = String(a?.category || '').toLowerCase();
   if (LOGISTICS_CATS.has(cat)) return true;
