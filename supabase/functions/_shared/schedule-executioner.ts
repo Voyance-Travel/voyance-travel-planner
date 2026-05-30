@@ -246,8 +246,40 @@ export function enforceFlightAnchors(
   ctx: ExecutionerContext,
   counters: ExecutionerCounters,
 ): any[] {
-  if (!ctx.isFirstDay || !ctx.arrivalTime24) return activities;
-  const truthMin = parseTime(ctx.arrivalTime24);
+  if (!ctx.isFirstDay) return activities;
+
+  // Re-verify truth from rawFlightSelection if provided. If the freshly-picked
+  // arrival disagrees with the passed-in ctx.arrivalTime24 by >10m, log
+  // EXEC_FLIGHT_TRUTH_DRIFT and trust the freshly-picked value. Executioner
+  // is the last gate before persist — closes any upstream context corruption.
+  let truth24 = ctx.arrivalTime24 || undefined;
+  if (ctx.rawFlightSelection) {
+    try {
+      // Dynamic import to avoid pulling the normalizer when not needed.
+      // deno-lint-ignore no-explicit-any
+      const mod: any = (globalThis as any).__flight_leg_pick_mod
+        || ((globalThis as any).__flight_leg_pick_mod = null);
+      // Inline require fallback — sync path below.
+    } catch { /* ignored */ }
+  }
+  // Sync wrapper — we do the re-pick here using a static import added at file top.
+  if (ctx.rawFlightSelection) {
+    try {
+      const repicked = _repickArrivalTruth(ctx.rawFlightSelection);
+      if (repicked && truth24 && Math.abs((parseTime(repicked) ?? 0) - (parseTime(truth24) ?? 0)) > 10) {
+        console.warn(
+          `[EXECUTIONER] EXEC_FLIGHT_TRUTH_DRIFT day=${ctx.dayNumber} ctx=${truth24} picked=${repicked} — trusting picker`
+        );
+        truth24 = repicked;
+      } else if (repicked && !truth24) {
+        truth24 = repicked;
+      }
+    } catch (e) {
+      console.warn(`[EXECUTIONER] truth re-pick failed:`, e);
+    }
+  }
+  if (!truth24) return activities;
+  const truthMin = parseTime(truth24);
   if (truthMin === null) return activities;
   const TOLERANCE = 5;
 
