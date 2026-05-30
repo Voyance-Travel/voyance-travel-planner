@@ -773,7 +773,9 @@ export interface ExecutionerAuditCode {
     | 'EXEC_GAP_REFILLED'
     | 'EXEC_AIRPORT_LOOP_DROPPED'
     | 'EXEC_TRANSFER_CLAMPED'
-    | 'EXEC_DEPARTURE_TRANSFER_FLAGGED';
+    | 'EXEC_DEPARTURE_TRANSFER_FLAGGED'
+    | 'EXEC_ORPHAN_TRANSIT_DROPPED';
+
   count: number;
   dayNumber: number;
   detail: string;
