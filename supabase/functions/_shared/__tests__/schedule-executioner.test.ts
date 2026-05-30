@@ -21,10 +21,16 @@ function newCounters() {
     transitRecomputed: 0,
     geoOutliersFlagged: 0,
     geoOutliersDropped: 0,
+    airportLoopsDropped: 0,
+    transfersClamped: 0,
+    departureTransfersStripped: 0,
+    orphanTransitsDropped: 0,
     droppedActivities: 0,
+    gapsRefilled: 0,
     issues: [] as any[],
   };
 }
+
 
 const baseCtx: ExecutionerContext = {
   dayNumber: 1,
