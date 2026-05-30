@@ -201,6 +201,11 @@ export interface IntegrityContext {
   hotelTotalPriceUsdCents?: number | null;
   /** Whether trip-level `budget_include_hotel` is true. */
   budgetIncludeHotel?: boolean | null;
+  /** Server-side check: a Day-0 hotel row exists in `activity_costs`.
+   *  When true, `HOTEL_COST_NOT_SURFACED` is satisfied even if the row
+   *  hasn't been mirrored into `days[0].activities`. Populated by
+   *  `resolveCommitGate` after `ensureHotelCostRow`. */
+  hotelCostRowFound?: boolean | null;
 }
 
 const MORNING_CUTOFF_MIN = 11 * 60; // <11:00 is "morning"
