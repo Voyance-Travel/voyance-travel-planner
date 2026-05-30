@@ -37,6 +37,11 @@ export type AuditCode =
   | 'INVERTED_WINDOW'
   | 'MISSING_DINNER'
   | 'DUPLICATE_TITLE_SAME_DAY'
+  // Must-do injection mirror — fires when an injected anchor persisted with
+  // empty address AND empty description (bare stub). Closes Amsterdam/Lisbon/
+  // Tokyo/Faro/Istanbul/Buenos Aires cohort where 17/18 injected anchors
+  // shipped as bare cards. See mem://constraints/itinerary/must-do-coverage-injection.
+  | 'MUST_DO_BARE_STUB'
   // Schedule-Executioner mirrors (read-time surfacing of write-time actions).
   | 'EXEC_FLIGHT_ANCHOR_FIXED'
   | 'EXEC_MIDNIGHT_SPILL_TRIMMED'
@@ -356,12 +361,39 @@ function emptyCounts(): Record<AuditCode, number> {
     INVERTED_WINDOW: 0,
     MISSING_DINNER: 0,
     DUPLICATE_TITLE_SAME_DAY: 0,
+    MUST_DO_BARE_STUB: 0,
     EXEC_FLIGHT_ANCHOR_FIXED: 0,
     EXEC_MIDNIGHT_SPILL_TRIMMED: 0,
     EXEC_BUFFER_CASCADE_APPLIED: 0,
     EXEC_GEO_OUTLIER_DROPPED: 0,
     EXEC_GAP_REFILLED: 0,
   };
+}
+
+// MUST_DO_BARE_STUB — injected anchor persisted with empty address+description.
+function auditMustDoBareStubs(days: any[]): AuditViolation[] {
+  const out: AuditViolation[] = [];
+  for (let i = 0; i < days.length; i++) {
+    const d = days[i];
+    const dn = typeof d?.dayNumber === 'number' ? d.dayNumber : i + 1;
+    const acts: any[] = Array.isArray(d?.activities) ? d.activities : [];
+    for (const a of acts) {
+      const src = String(a?.source ?? '').toLowerCase();
+      if (src !== 'must-do-injection') continue;
+      const addr = String(a?.location?.address || '').trim();
+      const desc = String(a?.description || '').trim();
+      if (addr.length === 0 && desc.length === 0) {
+        out.push({
+          code: 'MUST_DO_BARE_STUB',
+          severity: 'warn',
+          dayNumber: dn,
+          activityIds: [actId(a)],
+          detail: `${title(a) || '(untitled)'} persisted with empty address + empty description`,
+        });
+      }
+    }
+  }
+  return out;
 }
 
 /**
@@ -383,6 +415,7 @@ export function auditTimingViolations(
     all.push(...auditDay(d, dn, ctx, i === 0));
   }
   all.push(...auditCrossDayBleed(days));
+  all.push(...auditMustDoBareStubs(days));
 
   // JSON_TABLE_PARITY — per-day diff if table counts provided.
   let tableActivityCount = 0;

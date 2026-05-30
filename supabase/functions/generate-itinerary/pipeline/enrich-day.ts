@@ -373,3 +373,113 @@ export async function enrichAndValidateHours(input: EnrichDayInput): Promise<any
 
   return activities;
 }
+
+// =============================================================================
+// Anchor-only enrichment (post-injection)
+// =============================================================================
+
+/**
+ * Predicate: locked anchor row that still needs venue/address resolution.
+ * Mirrors `isAnchorNeedingEnrichment` inside `enrichActivities` but exported
+ * for callers that need to detect post-injection bare anchors.
+ */
+export function isAnchorNeedingEnrichment(a: any): boolean {
+  if (!a || typeof a !== 'object') return false;
+  if (!a.anchorSource) return false;
+  if (a.needsAnchorEnrichment === true) return true;
+  const addr = String(a?.location?.address || '').trim();
+  const venue = String(a?.location?.name || a?.venue_name || '').trim();
+  return !addr || !venue;
+}
+
+export interface EnrichAnchorActivitiesInput {
+  activities: any[];
+  destination: string;
+  supabaseUrl: string;
+  supabaseKey: string;
+  googleMapsApiKey: string;
+  lovableApiKey: string;
+  hotelCoordinates?: { lat: number; lng: number };
+  /** Hard wall-clock budget (default 8000ms). On timeout, remaining anchors are left as-is. */
+  timeBudgetMs?: number;
+}
+
+export interface EnrichAnchorActivitiesResult {
+  attempted: number;
+  resolved: number;
+  unresolvedTitles: string[];
+}
+
+/**
+ * Run anchor enrichment over a subset of activities (typically the cards just
+ * inserted by `injectMissingMustDos`). MUTATES each anchor in-place with the
+ * resolved venue/address/phone/website/photo/placeId, then clears
+ * `needsAnchorEnrichment`. Locked identity (title/time/category/cost/source/
+ * anchorSource) is preserved verbatim — only geo+contact fields are copied.
+ *
+ * Wired into `action-generate-trip-day.ts` immediately after
+ * `injectMissingMustDos` so injected cards never persist as bare stubs.
+ * See mem://constraints/itinerary/must-do-coverage-injection.
+ */
+export async function enrichAnchorActivities(
+  input: EnrichAnchorActivitiesInput,
+): Promise<EnrichAnchorActivitiesResult> {
+  const out: EnrichAnchorActivitiesResult = { attempted: 0, resolved: 0, unresolvedTitles: [] };
+  const targets = (input.activities || []).filter(isAnchorNeedingEnrichment);
+  out.attempted = targets.length;
+  if (targets.length === 0) return out;
+  if (!input.googleMapsApiKey) {
+    console.warn(`[MUST_DO_ENRICH] no GOOGLE_MAPS_API_KEY — leaving ${targets.length} anchor(s) bare`);
+    out.unresolvedTitles = targets.map((t: any) => String(t?.title || t?.name || ''));
+    return out;
+  }
+
+  const budgetMs = input.timeBudgetMs ?? 8000;
+  const startedAt = Date.now();
+
+  // Sequential to keep within the 8s wall-clock budget and avoid Google QPS spikes.
+  for (const original of targets) {
+    if (Date.now() - startedAt >= budgetMs) {
+      console.warn(`[MUST_DO_ENRICH] time budget reached — ${targets.length - out.resolved} anchor(s) left bare`);
+      out.unresolvedTitles.push(String(original?.title || original?.name || ''));
+      continue;
+    }
+    try {
+      const result = await enrichActivityWithRetry(
+        original,
+        input.destination,
+        input.supabaseUrl,
+        input.supabaseKey,
+        input.googleMapsApiKey,
+        input.lovableApiKey,
+        1,
+        input.hotelCoordinates,
+      );
+      const enriched: any = result.activity;
+      const addr = String(enriched?.location?.address || '').trim();
+      if (addr) {
+        // Mutate the original card in place — preserves array identity for the
+        // caller's days[].activities reference.
+        original.location = { ...(original.location || {}), ...enriched.location };
+        if (!original.venue_name && enriched.venue_name) original.venue_name = enriched.venue_name;
+        if (enriched.rating && !original.rating) original.rating = enriched.rating;
+        if (enriched.photoUrl && !original.photoUrl) original.photoUrl = enriched.photoUrl;
+        if (enriched.phone && !original.phone) original.phone = enriched.phone;
+        if (enriched.website && !original.website) original.website = enriched.website;
+        if (enriched.mapLink && !original.mapLink) original.mapLink = enriched.mapLink;
+        if (enriched.placeId && !original.placeId) original.placeId = enriched.placeId;
+        original.needsAnchorEnrichment = false;
+        out.resolved++;
+        console.log(`[MUST_DO_ENRICH] resolved=true title="${String(original.title || '').slice(0, 60)}" addr="${addr.slice(0, 80)}"`);
+      } else {
+        out.unresolvedTitles.push(String(original?.title || original?.name || ''));
+        console.warn(`[MUST_DO_ENRICH] resolved=false title="${String(original.title || '').slice(0, 60)}" — no address from Places`);
+      }
+    } catch (e) {
+      out.unresolvedTitles.push(String(original?.title || original?.name || ''));
+      console.warn(`[MUST_DO_ENRICH] threw for "${String(original.title || '').slice(0, 60)}":`, e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return out;
+}

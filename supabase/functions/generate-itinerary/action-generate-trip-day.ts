@@ -3892,11 +3892,78 @@ async function _handleGenerateTripDayInner(
             console.warn(`[MUST_DO_INJECT]   ! UNSCHEDULED "${u}" — no eligible slot`);
           }
         }
+
+        // ── POST-INJECTION ENRICHMENT ─────────────────────────────────
+        // `injectMissingMustDos` runs AFTER per-day `enrichDay`, so the new
+        // anchor cards (empty address + empty description + `needsAnchorEnrichment:true`)
+        // would otherwise persist as bare stubs. Resolve their real operator
+        // via Google Places, then route any still-empty descriptions through
+        // the existing `description-fill` LLM helper. Per-day, soft-fail.
+        // See mem://constraints/itinerary/must-do-coverage-injection.
+        if (mustDoInjection && mustDoInjection.injected.length > 0) {
+          const enrichDaysSet = new Set<number>(mustDoInjection.injected.map(i => i.dayNumber));
+          const supaUrl = Deno.env.get('SUPABASE_URL') || '';
+          const supaKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+          const gMapsKey = Deno.env.get('GOOGLE_MAPS_API_KEY') || '';
+          const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
+          const enrichSummary: Array<{ day: number; attempted: number; resolved: number; unresolved: string[] }> = [];
+          try {
+            const { enrichAnchorActivities } = await import('./pipeline/enrich-day.ts');
+            const { fillMissingDescriptions } = await import('../_shared/description-fill.ts');
+            for (const day of partialItinerary.days) {
+              const dn = Number(day?.dayNumber);
+              if (!enrichDaysSet.has(dn)) continue;
+              const dayCity = dayCityMap?.[dn - 1]?.cityName || destination;
+              const dayHotelCoords = dayCityMap?.[dn - 1]?.hotelCoordinates || tripHotelCoordinates;
+              const acts = Array.isArray(day.activities) ? day.activities : [];
+              const enrichRes = await enrichAnchorActivities({
+                activities: acts,
+                destination: dayCity,
+                supabaseUrl: supaUrl,
+                supabaseKey: supaKey,
+                googleMapsApiKey: gMapsKey,
+                lovableApiKey: lovableKey,
+                hotelCoordinates: dayHotelCoords,
+                timeBudgetMs: 8000,
+              });
+              enrichSummary.push({
+                day: dn,
+                attempted: enrichRes.attempted,
+                resolved: enrichRes.resolved,
+                unresolved: enrichRes.unresolvedTitles,
+              });
+              // Fill descriptions for the just-injected anchors (works even
+              // when address resolution failed — gives the user readable copy).
+              try {
+                await fillMissingDescriptions(acts, dayCity, lovableKey || undefined, dn);
+              } catch (descErr) {
+                console.warn(`[MUST_DO_ENRICH] description-fill failed day=${dn}:`, descErr instanceof Error ? descErr.message : String(descErr));
+              }
+            }
+            const totalAttempted = enrichSummary.reduce((a, b) => a + b.attempted, 0);
+            const totalResolved = enrichSummary.reduce((a, b) => a + b.resolved, 0);
+            const unresolved = enrichSummary.flatMap(s => s.unresolved);
+            console.log(`[MUST_DO_ENRICH_SUMMARY] trip=${tripId} attempted=${totalAttempted} resolved=${totalResolved} unresolved=${unresolved.length}`);
+            // Stamp telemetry so the read-time audit + dashboards can surface
+            // bare-stub regressions without re-scanning every card.
+            (partialItinerary as any).metadata = (partialItinerary as any).metadata || {};
+            (partialItinerary as any).metadata.quality = (partialItinerary as any).metadata.quality || {};
+            (partialItinerary as any).metadata.quality.must_do_enrichment = {
+              at: new Date().toISOString(),
+              attempted: totalAttempted,
+              resolved: totalResolved,
+              unresolved,
+            };
+          } catch (enrichErr) {
+            console.warn('[MUST_DO_ENRICH] post-injection enrichment failed (non-blocking):', enrichErr instanceof Error ? enrichErr.message : String(enrichErr));
+          }
+        }
       }
     } catch (injErr) {
       console.warn('[generate-trip-day] must-do injection failed (non-blocking):', injErr);
     }
   }
+
 
   // ── RECOMPUTE COMPLETENESS AFTER INJECTION ────────────────────────
   // Injection above can rescue a shell trip by adding 1–5 user-selected
