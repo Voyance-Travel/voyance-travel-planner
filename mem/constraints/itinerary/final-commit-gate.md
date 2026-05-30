@@ -1,6 +1,6 @@
 ---
 name: Final Commit Gate Is The Boundary
-description: resolveCommitGate is sole authority for ready/frozen. Server hotel sync runs before HOTEL_COST_NOT_SURFACED. FINAL_ORPHAN_TRANSIT + executioner orphan drops. Flight anchor ±10m via isUserOwned. action-save-itinerary re-gates every edit. safeUpdateItineraryData strips client ready/frozen fields. Lint test blocks regressions.
+description: resolveCommitGate sole authority for ready/frozen. Server hotel sync, FINAL_ORPHAN_TRANSIT, ±10m flight anchor via isUserOwned, edit-path re-gate, client promotion strip, noRawReadyWrites lint. Phase 3: commit token forwarded from gen Stage 6 / gen-trip-day Phase 6 / save-itinerary into persistTripItinerary; COMMIT_TOKEN_STRICT env pre-demotes ready→partial when caller bypassed gate; content-drift tolerated; audit at metadata.quality.commit_token_audit.
 type: constraint
 ---
 
@@ -27,3 +27,13 @@ type: constraint
 **Sentinels**: `[generate-trip-day] Phase 6 GATE BLOCKED ready` / `[Stage 6] Phase 6 GATE BLOCKED ready` / `[save-itinerary] GATE demoted to partial` / `[safeUpdateItineraryData] stripped client-side …` / `EXEC_ORPHAN_TRANSIT_DROPPED`.
 
 **Success query**: `select count(*) from trips where itinerary_status='ready' and metadata->'quality'->>'final_gate_trace' is null` must trend to 0 for trips created after deploy.
+---
+
+## Phase 3 (2026-05-30)
+
+- **Token forwarding**: `resolveCommitGate` mints token on verdict.ok. All 3 sites pass it via `persistTripItinerary({ commitToken })`.
+- **Strict enforcement**: env `COMMIT_TOKEN_STRICT=true` → ready/generated/frozen claims without an authenticated token are pre-demoted to `partial` (freeze stamps stripped) BEFORE the re-gate. Re-gate still authoritative.
+- **Content-drift tolerance**: persist mutates `days` internally; signature+trip+TTL match is sufficient. Pure content tamper (no other gate fields valid) still rejected.
+- **Audit**: `metadata.quality.commit_token_audit = { result: 'verified'|'rejected'|'missing'|'verify-error', reason?, ageMs?, strict, enforced? }`.
+- **Tests**: `_shared/__tests__/commit-token-enforcement.test.ts` — 6 pass.
+- **Sentinels**: `[COMMIT_TOKEN] verified|authenticated|rejected|missing`, `[COMMIT_TOKEN_STRICT_DEMOTE]`.
