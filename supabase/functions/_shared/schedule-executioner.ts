@@ -42,7 +42,9 @@ export type ExecutionerCode =
   | 'GAP_REFILLED'
   | 'AIRPORT_LOOP_DROPPED'
   | 'TRANSFER_DURATION_CLAMPED'
-  | 'DEPARTURE_TRANSFER_WITHOUT_CLOCK';
+  | 'DEPARTURE_TRANSFER_WITHOUT_CLOCK'
+  | 'ORPHAN_TRANSIT_DROPPED';
+
 
 export interface ExecutionerIssue {
   code: ExecutionerCode;
