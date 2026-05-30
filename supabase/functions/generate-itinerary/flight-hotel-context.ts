@@ -617,7 +617,9 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
       rawHotelSelection: trip.hotel_selection,
       rawFlightIntelligence: trip.flight_intelligence,
       parseFailed,
+      departureParseFailed,
       legPickSource,
+      legDeparturePickSource,
     };
   } catch (e) {
     console.error('[FlightHotel] Error:', e);
