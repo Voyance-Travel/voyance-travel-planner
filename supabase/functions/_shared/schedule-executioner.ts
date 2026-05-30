@@ -130,6 +130,10 @@ export interface ExecutionerContext {
    * `ctx.arrivalTime24` was committed from a wrong leg before reaching here.
    */
   rawFlightSelection?: unknown;
+  /** Trip's hotel name (lowercased internally) — enables matching post-checkin
+   * "Return to [hotel]" loops where the AI used the brand string rather than
+   * the generic word "hotel". */
+  hotelName?: string | null;
 }
 
 export interface ExecutionerResult {
