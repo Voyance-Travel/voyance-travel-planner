@@ -850,8 +850,17 @@ export function toExecutionerAuditCodes(
       detail: `Flagged ${counters.departureTransfersStripped} departure transfer(s) without clock truth`,
     });
   }
+  if (counters.orphanTransitsDropped > 0) {
+    out.push({
+      code: 'EXEC_ORPHAN_TRANSIT_DROPPED',
+      count: counters.orphanTransitsDropped,
+      dayNumber,
+      detail: `Dropped ${counters.orphanTransitsDropped} orphan transit card(s) with no destination`,
+    });
+  }
   return out;
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Refill pass (optional, async)
