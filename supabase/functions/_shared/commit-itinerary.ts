@@ -273,6 +273,31 @@ export async function resolveCommitGate(
       console.warn('[commit-itinerary] neighborhood guard bridge failed:', e);
     }
 
+    // ── SERVER-SIDE HOTEL COST SYNC ──────────────────────────────────
+    // Lisbon/Amsterdam root cause: a priced hotel was selected, but the
+    // Day-0 `activity_costs` row was written by the frontend AFTER the
+    // gate ran. The gate then flagged HOTEL_COST_NOT_SURFACED and either
+    // demoted to partial or was silently bypassed by `allowFrozenWrite`.
+    //
+    // Fix: write the Day-0 hotel row HERE, before the check, so the gate
+    // and the user's Payments tab see the same canonical source of truth.
+    // Frontend `useHotelLedgerSync` is now belt-and-suspenders.
+    let hotelCostRowFound = false;
+    const hotelTotalCents = (ctx as any).hotelTotalPriceUsdCents;
+    const budgetIncludeHotel = (ctx as any).budgetIncludeHotel;
+    if (
+      typeof hotelTotalCents === 'number' &&
+      hotelTotalCents > 0 &&
+      budgetIncludeHotel !== true
+    ) {
+      hotelCostRowFound = await ensureHotelCostRow(
+        supabase,
+        tripId,
+        hotelTotalCents,
+        ctx.hotelName,
+      );
+    }
+
     const verdict = checkItineraryIntegrity(days || [], {
       hotelName: ctx.hotelName,
       requiredIntents: ctx.requiredIntents,
@@ -280,8 +305,9 @@ export async function resolveCommitGate(
       departureTime24: ctx.departureTime24,
       requiredMealsByDay,
       destination: (ctx as any).destination ?? null,
-      hotelTotalPriceUsdCents: (ctx as any).hotelTotalPriceUsdCents ?? null,
-      budgetIncludeHotel: (ctx as any).budgetIncludeHotel ?? null,
+      hotelTotalPriceUsdCents: hotelTotalCents ?? null,
+      budgetIncludeHotel: budgetIncludeHotel ?? null,
+      hotelCostRowFound,
     });
     const applied = applyIntegrityContractToFreezeStamp({
       proposedStatus,
@@ -306,11 +332,24 @@ export async function resolveCommitGate(
       );
     }
 
+    // Mint a commit token ONLY when verdict.ok=true. The token is content-
+    // bound (HMAC over a sha256 of the exact `days` payload) so a caller
+    // can't swap days between mint and persist. See commit-token.ts.
+    let commitToken: string | null = null;
+    if (verdict.ok && (proposedStatus === 'ready' || proposedStatus === 'generated')) {
+      try {
+        commitToken = await mintCommitToken(tripId, days || []);
+      } catch (e) {
+        console.warn(`[COMMIT_GATE] site=${label} mintCommitToken failed:`, e);
+      }
+    }
+
     return {
       status: applied.status,
       metadataPatch: applied.metadataPatch,
       verdict,
       blockedReady,
+      commitToken,
     };
   } catch (e) {
     console.warn(`[COMMIT_GATE] site=${label} gate failed (non-blocking):`, e);
@@ -327,6 +366,122 @@ export async function resolveCommitGate(
         mealCoverage: [],
       },
       blockedReady: false,
+      commitToken: null,
     };
+  }
+}
+
+/**
+ * Ensure a Day-0 hotel row exists in `activity_costs` for the trip.
+ *
+ * Mirrors the shape written by `src/services/budgetLedgerSync.ts::syncHotelToLedger`
+ * (category='hotel', day_number=0, source='commit-gate-hotel-sync') so the
+ * Payments view + commit gate share one canonical source of truth.
+ *
+ * Guards:
+ *  • Skip if a manual hotel `trip_payments` row already exists — the user
+ *    owns the hotel line in that case (matches the frontend syncHotelToLedger
+ *    guard that prevented the "Hotel Accommodation $2,850" double-billing).
+ *  • Skip if a Day-0 hotel row already exists (idempotent).
+ *
+ * Returns `true` when a Day-0 hotel row is present after this call.
+ * Returns `false` on any error so the caller can still surface
+ * HOTEL_COST_NOT_SURFACED as a blocking code.
+ */
+async function ensureHotelCostRow(
+  supabase: any,
+  tripId: string,
+  hotelTotalPriceUsdCents: number,
+  hotelName: string | null,
+): Promise<boolean> {
+  try {
+    // Manual hotel payment exists → user owns the cost line. Don't write.
+    const { data: manual } = await supabase
+      .from('trip_payments')
+      .select('id')
+      .eq('trip_id', tripId)
+      .eq('item_type', 'hotel')
+      .like('item_id', 'manual-%')
+      .is('archived_at', null)
+      .limit(1);
+    if (manual && manual.length > 0) {
+      // Treat as surfaced — manual payment satisfies HOTEL_COST_NOT_SURFACED.
+      return true;
+    }
+
+    // Idempotent check.
+    const { data: existing } = await supabase
+      .from('activity_costs')
+      .select('id, cost_per_person_usd, num_travelers')
+      .eq('trip_id', tripId)
+      .eq('category', 'hotel')
+      .eq('day_number', 0)
+      .maybeSingle();
+    if (existing) {
+      const total = Number(existing.cost_per_person_usd || 0) *
+        Math.max(Number(existing.num_travelers || 1), 1);
+      if (total > 0) return true;
+      // Row exists with $0 — refresh it below.
+    }
+
+    // Load traveler count for per-person split.
+    const { data: trip } = await supabase
+      .from('trips')
+      .select('num_travelers')
+      .eq('id', tripId)
+      .maybeSingle();
+    const numTravelers = Math.max(Number(trip?.num_travelers || 1), 1);
+    const totalUsd = hotelTotalPriceUsdCents / 100;
+    const perPerson = totalUsd / numTravelers;
+
+    // Deterministic activity_id mirroring the frontend logisticsActivityId.
+    const base = String(tripId).replace(/-/g, '');
+    const activityId =
+      'a' + base.slice(1, 8) + '-' + base.slice(8, 12) + '-4' + base.slice(13, 15) +
+      'a-' + base.slice(16, 20) + '-' + base.slice(20, 32);
+
+    const notes = hotelName ? `Hotel: ${hotelName}` : 'Hotel';
+    if (existing) {
+      const { error } = await supabase
+        .from('activity_costs')
+        .update({
+          cost_per_person_usd: perPerson,
+          num_travelers: numTravelers,
+          notes,
+          source: 'commit-gate-hotel-sync',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+      if (error) {
+        console.warn('[commit-itinerary] ensureHotelCostRow update failed:', error.message);
+        return false;
+      }
+    } else {
+      const { error } = await supabase
+        .from('activity_costs')
+        .insert({
+          trip_id: tripId,
+          activity_id: activityId,
+          day_number: 0,
+          category: 'hotel',
+          cost_per_person_usd: perPerson,
+          num_travelers: numTravelers,
+          source: 'commit-gate-hotel-sync',
+          confidence: 'high',
+          is_paid: false,
+          notes,
+        });
+      if (error) {
+        console.warn('[commit-itinerary] ensureHotelCostRow insert failed:', error.message);
+        return false;
+      }
+    }
+    console.log(
+      `[COMMIT_GATE] hotel cost row synced trip=${tripId} total=$${totalUsd.toFixed(0)} per_person=$${perPerson.toFixed(0)} travelers=${numTravelers}`,
+    );
+    return true;
+  } catch (e) {
+    console.warn('[commit-itinerary] ensureHotelCostRow failed:', e);
+    return false;
   }
 }
