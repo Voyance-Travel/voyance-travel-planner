@@ -212,11 +212,13 @@ function newCounters(): ExecutionerCounters {
     airportLoopsDropped: 0,
     transfersClamped: 0,
     departureTransfersStripped: 0,
+    orphanTransitsDropped: 0,
     droppedActivities: 0,
     gapsRefilled: 0,
     issues: [],
   };
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass 1 — Flight anchor enforcement
