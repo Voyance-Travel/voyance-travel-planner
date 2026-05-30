@@ -1,6 +1,6 @@
 ---
 name: Final Commit Gate Is The Boundary
-description: Phase 6 re-runs resolveCommitGate against on-disk JSON; isUserOwned (not isLocked) guards flight-anchor + airport-loop checks; frontend self-heal writes partial not ready; lint test blocks new raw ready writes
+description: resolveCommitGate is sole authority for ready/frozen. Server hotel sync runs before HOTEL_COST_NOT_SURFACED. FINAL_ORPHAN_TRANSIT + executioner orphan drops. Flight anchor ±10m via isUserOwned. action-save-itinerary re-gates every edit. safeUpdateItineraryData strips client ready/frozen fields. Lint test blocks regressions.
 type: constraint
 ---
 
