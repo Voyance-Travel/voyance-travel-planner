@@ -66,10 +66,12 @@ export interface ExecutionerCounters {
   airportLoopsDropped: number;
   transfersClamped: number;
   departureTransfersStripped: number;
+  orphanTransitsDropped: number;
   droppedActivities: number;
   gapsRefilled: number;
   issues: ExecutionerIssue[];
 }
+
 
 export interface ExecutionerContext {
   dayNumber: number;
