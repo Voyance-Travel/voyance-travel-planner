@@ -94,6 +94,13 @@ export interface ExecutionerContext {
    * telemetry shows <2% false-positive rate.
    */
   geoDropEnabled?: boolean;
+  /**
+   * Raw flight_selection from the trip row. When present, `enforceFlightAnchors`
+   * re-normalizes via the shared picker and overrides `arrivalTime24` if the
+   * picked truth disagrees by >10m. Closes the upstream-corruption path where
+   * `ctx.arrivalTime24` was committed from a wrong leg before reaching here.
+   */
+  rawFlightSelection?: unknown;
 }
 
 export interface ExecutionerResult {
