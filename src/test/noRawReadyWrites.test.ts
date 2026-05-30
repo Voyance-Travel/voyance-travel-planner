@@ -36,7 +36,7 @@ const ALLOW = [
   // Server-side recovery + canonical save service — invoke save-itinerary
   // edge function directly; backend gate runs there. Pre-existing, audited.
   { file: 'src/services/generationRecovery.ts', match: /generationRecovery|recover|promote/i, label: 'recovery-service-backend-gate' },
-  { file: 'src/services/supabase/trips.ts', match: /createTrip|insertTrip|trips/i, label: 'canonical-trip-service' },
+  { file: 'src/services/supabase/trips.ts', match: /createTrip|insertTrip|updateTrip|saveItinerary|trips/i, label: 'canonical-trip-service' },
 ];
 
 
