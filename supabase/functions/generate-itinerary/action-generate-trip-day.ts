@@ -3976,6 +3976,7 @@ async function _handleGenerateTripDayInner(
     // All days complete — but only mark ready if all days have real activities
     let finalStatus: 'ready' | 'partial' | 'failed' = isComplete ? 'ready' : 'partial';
     let commitGateMetadataPatch: Record<string, any> = {};
+    let commitGateToken: string | null = null;
     // ── CANONICAL COMMIT GATE ──
     // Single boundary that decides whether this trip can become `ready`.
     // See _shared/commit-itinerary.ts. Mirrors action-save-itinerary and
@@ -3995,6 +3996,7 @@ async function _handleGenerateTripDayInner(
       });
       finalStatus = gateResult.status as 'ready' | 'partial' | 'failed';
       commitGateMetadataPatch = gateResult.metadataPatch;
+      commitGateToken = gateResult.commitToken || null;
     } catch (e) {
       console.warn('[generate-trip-day:final] commit gate failed (non-blocking):', e);
     }
