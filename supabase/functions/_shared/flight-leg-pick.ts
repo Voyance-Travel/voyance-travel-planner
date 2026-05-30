@@ -121,6 +121,18 @@ export function pickDestinationDepartureLeg(raw: unknown): LegPickResult {
   }
 
   const idx = normalized.legs.findIndex((l) => l?.isDestinationDeparture);
+
+  // Single-leg `legs[]` (one-way outbound) has no destination-departure to
+  // pick — autoTagLegs deliberately leaves `isDestinationDeparture` unset
+  // for length===1. Falling back to legs[0] here would return the HOME
+  // airport's departure time and silently corrupt the last-day anchor.
+  // Only the synthesized return-leg path (legacy/flat with returnDeparture*
+  // keys) lands here with length>=2, so a missing marker on length===1 is a
+  // true "no return flight known" signal.
+  if (idx < 0 && normalized.legs.length === 1 && shape === 'legs') {
+    return { shape, source: 'none' };
+  }
+
   const picked =
     idx >= 0 ? normalized.legs[idx] : normalized.legs[normalized.legs.length - 1];
   return {

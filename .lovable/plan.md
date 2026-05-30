@@ -1,58 +1,85 @@
-# Orphan-Transit Match Gap — Diacritics + Partial Names + Save-Time Net
+# Plan — Last-day departure anchor reaches the prompt
 
-## Diagnosis
+## Root cause
 
-`pruneOrphanTransits` (supabase/functions/_shared/orphan-transit.ts:88-91) matches a transit's "to X" target against later activities via `normalize()` + token-AND. Two real-world gaps let orphans survive the Executioner:
+The Day-1 arrival path has 3 defenses (hardened picker, `parseFailed` flag, Day-1 soft floor in `compile-day-facts.ts`). The last-day departure path has **none** of them:
 
-1. **Diacritic gap.** `normalize()` (line 36) lowercases and strips non-`\p{L}\p{N}` chars but leaves combining marks intact. So `"Walk to Cafe Chris"` → target `"cafe chris"`, while the scheduled card `"Café Chris"` normalizes to `"café chris"`. `blob.includes("cafe chris")` is false (`é` ≠ `e`), and token `"cafe"` is missing from `"café chris"` for the same reason. **Match fails → orphan never dropped.** This is the literal Amsterdam reproducer.
-2. **Strict AND-token gap.** Targets like `"Walk to Anne Frank House"` produce tokens `["anne","frank","house"]`, while the real scheduled card is `"Anne Frank Museum"`. One missing token (`house`) kills the AND match.
-3. **Generated-after-Executioner gap.** Repair / save-time edits that drop a destination card don't re-run the Executioner. Only universal-quality-pass + action-generate-trip-day call `pruneOrphanTransits`; **no pass runs at save-time**, so chat/edit/undo paths leak.
+1. `pickDestinationDepartureLeg` (`flight-leg-pick.ts`) → `normalizeFlightSelection` only reads `ret.departure.time`. It misses the shapes `action-generate-trip-day.ts` already falls back to: `return.departureTime`, top-level `returnDepartureTime`, `returnDepartureTime24`. Those flat/legacy shapes return `source:'none'` or pick the outbound leg's `departure.time` (home airport, not destination).
+2. `getFlightHotelContext` only sets `parseFailed` for arrival. When `returnDeparture` is undefined the LAST-DAY constraint block at lines 425–430 is silently skipped — the prompt has no departure anchor.
+3. `compile-day-facts.ts` has the Day-1 SOFT FALLBACK (lines 527–545) but no last-day equivalent.
 
-## Fix — 3 small changes, no behavior change for current passing tests
+Net: `action-generate-trip-day._depTime24Raw` knows the departure (so post-hoc anchor-guard can trim/cap), but the prompt itself never told the LLM — it invents an early checkout and skips the flight block. Anchor-guard cleans up the flight leg later, but cannot retroactively turn an arbitrary 6 AM checkout into a believable late-morning checkout-then-transfer sequence.
 
-### 1. orphan-transit.ts — diacritic-safe normalize + relaxed token match
+## Changes
 
-- Update `normalize()` to NFD-normalize and strip combining marks **before** the existing punctuation strip:
-  `String(s||'').normalize('NFD').replace(/\p{M}+/gu,'').toLowerCase().replace(/[^\p{L}\p{N} ]+/gu,' ').replace(/\s+/g,' ').trim()`
-- After tokenizing `targetNorm`, drop low-signal stop tokens (`the`, `a`, `de`, `la`, `le`, `van`, `het`, `at`, `in`, `on`, `and`, `museum`, `house`, `restaurant`, `cafe`, `bar`, `hotel`) from a `significant` set — but keep them in `targetTokens` for the strict pass.
-- Match logic becomes (in order): substring → strict AND on `targetTokens` (unchanged) → **new** majority match: `significant` ≥ 2 tokens AND ≥ ceil(significant.length/2) appear in blob.
-- No change to logistics exemption, locked/userPinned skip, or end-of-day Case 1.
+### 1. Harden the departure picker — `supabase/functions/_shared/normalize-flight-selection.ts`
 
-### 2. action-save-itinerary.ts — final safety-net pass
+In the legacy `{ departure, return }` branch (~line 200), when constructing the return leg, also read alternate keys:
+- `ret.departure?.time ?? ret.departureTime ?? data.returnDepartureTime`
+- `ret.departure?.airport ?? ret.departureAirport`
 
-After the existing terminal cleanup / departure-day enforcement and BEFORE persist:
+In the flat branch (~line 222), additionally accept `data.returnDepartureTime` / `data.returnDepartureTime24` and synthesize a second leg so the picker can mark `isDestinationDeparture` on it. Keep behavior identical when those fields are absent.
+
+### 2. Picker safety — `supabase/functions/_shared/flight-leg-pick.ts`
+
+In `pickDestinationDepartureLeg`, when `legs.length === 1` and no `isDestinationDeparture` marker exists, return `{ source: 'none', leg: undefined }` instead of pretending the single (outbound) leg's `departure.time` is the destination departure. This prevents silent home-airport-as-destination-departure errors.
+
+### 3. Surface `departureParseFailed` — `supabase/functions/generate-itinerary/flight-hotel-context.ts`
+
+- Extend `FlightHotelContextResult` with `departureParseFailed?: boolean` and `legDeparturePickSource?: string`.
+- In the parsing block (after line 358), mirror the Day-1 `parseFailed` pattern: if `flightRaw` is present AND the picker indicates a return-leg shape (legs.length>=2, legacy `return` object, or any `returnDeparture*` field) AND `returnDeparture` is still undefined, set `departureParseFailed=true` and log `[FLIGHT_INGEST_PARSE_FAIL] last_day tripId=… shape=… legPick=…`.
+- Return both new fields in the result envelope (line 563-589).
+
+### 4. Last-day soft fallback — `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`
+
+Add a block mirroring the Day-1 fallback (lines 527–545), after the existing arrival fallback:
+
 ```ts
-const { pruneOrphanTransits } = await import('../_shared/orphan-transit.ts');
-for (const day of days) {
-  const removed = pruneOrphanTransits(day.activities || []);
-  if (removed > 0) console.warn(`[SAVE_ORPHAN_TRANSIT] day=${day.dayNumber} removed=${removed}`);
+if (
+  isLastDay &&
+  !flightContext.returnDepartureTime24 &&
+  (flightContext as any).departureParseFailed &&
+  (flightContext as any).rawFlightSelection
+) {
+  const SOFT_DEP_FLOOR = '18:00';
+  const latest = addMinutesToHHMM(SOFT_DEP_FLOOR, -180); // 15:00
+  flightContext = {
+    ...flightContext,
+    returnDepartureTime24: SOFT_DEP_FLOOR,
+    latestLastActivityTime: latest,
+    context: (flightContext.context || '') +
+      `\n\n⚠️ LAST DAY SOFT DEPARTURE FALLBACK — flight_selection was provided but the return-departure time could not be parsed. Treat departure as ${SOFT_DEP_FLOOR}; latest non-logistics activity must end by ${latest}. Do NOT emit a checkout earlier than 10:00 unless you have a credible reason.`,
+  };
+  console.warn(`[compile-day-facts] Last-day soft-departure fallback applied — floor=${SOFT_DEP_FLOOR}`);
 }
 ```
-Mirrors the established defense-in-depth pattern (e.g. `[SAVE_DEPARTURE_NET]`, `[POST_CHECKOUT_PRUNE]` from memory). Locked/user-pinned rows already exempt inside the helper.
 
-### 3. orphan-transit.test.ts — lock the new behavior
+Also add a `[FLIGHT_INGEST] day=N isLast=true …` trace mirroring the Day-1 trace at lines 549–555.
 
-Add three cases:
-- `"Walk to Cafe Chris"` with scheduled `"Café Chris"` → dropped=0 (match via diacritic-strip).
-- `"Walk to Anne Frank House"` with scheduled `"Anne Frank Museum"` → dropped=0 (majority match: `anne`+`frank` of 2 significant).
-- `"Walk to Bo Innovation"` with scheduled `"Lunch at Quay"` (no overlap) → dropped=1 (negative: majority match doesn't over-trigger).
+### 5. Tests
 
-## Out of scope
+- `supabase/functions/_shared/__tests__/flight-leg-pick.parity.test.ts` — add cases:
+  - Legacy `{ return: { departureTime: '22:00', departureAirport: 'CDG' } }` (flat departure keys) returns picked leg with `departureTime: '22:00'`.
+  - Flat `{ returnDepartureTime: '22:00', arrivalTime: '14:00' }` returns picked leg with `departureTime: '22:00'`.
+  - Single-leg `{ legs: [outbound] }` returns `source: 'none'` for departure (no false picks).
+- New `compile-day-facts.last-day-soft-fallback.test.ts` — assert the soft-departure block fires only when `isLastDay && departureParseFailed && rawFlightSelection` and skipped otherwise.
 
-- Read-time orphan strip in the parser (current memory rules favor write-time fixes).
-- Backfilling historical trips — Executioner runs on next save; save-time net catches legacy edits.
-- Changing `isTransitActivity` detection (separate concern).
-- Touching the `flight-leg-pick` parity work from the prior turn.
+### 6. Memory
 
-## Verification
-
-- `supabase--test_edge_functions` filtered on `orphan-transit` after edits — existing 6 cases must still pass; 3 new cases must pass.
-- `rg "[ORPHAN-TRANSIT]|[SAVE_ORPHAN_TRANSIT]"` in edge logs for the next Amsterdam-shaped trip will show drops at the save-time net if upstream still leaks.
+Create `mem/constraints/itinerary/last-day-departure-anchor-parity.md` documenting the 3-defense parity with Day-1 arrival, and add a one-liner to `mem/index.md` Core (mirrors the existing flight-anchor-truth entry).
 
 ## Files touched
 
-- `supabase/functions/_shared/orphan-transit.ts` (normalize + match)
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (1 net loop)
-- `supabase/functions/_shared/__tests__/orphan-transit.test.ts` (3 cases)
-- `mem/constraints/itinerary/orphan-transit-and-dining-strip.md` (append diacritic + save-net notes)
-- `mem/index.md` (one-line bump on existing memory entry)
+- `supabase/functions/_shared/normalize-flight-selection.ts`
+- `supabase/functions/_shared/flight-leg-pick.ts`
+- `supabase/functions/generate-itinerary/flight-hotel-context.ts`
+- `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`
+- `supabase/functions/_shared/__tests__/flight-leg-pick.parity.test.ts` (extend)
+- `supabase/functions/generate-itinerary/__tests__/compile-day-facts.last-day-soft-fallback.test.ts` (new)
+- `mem/constraints/itinerary/last-day-departure-anchor-parity.md` (new)
+- `mem/index.md` (append)
+
+## Out of scope
+
+- `action-generate-trip-day._depTime24Raw` fallback chain — already covers what we need post-prompt. Not touching anchor-guard / executioner.
+- UI / FE normalizer — already correct, BE is the lagging side.

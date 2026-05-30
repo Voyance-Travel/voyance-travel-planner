@@ -544,12 +544,48 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Last-Day SOFT DEPARTURE FALLBACK — mirror of Day-1 arrival fallback.
+  // When flight_selection was provided but the return-departure couldn't be
+  // parsed (`departureParseFailed=true`), the prompt's LAST-DAY constraint
+  // block would render empty and the LLM has been observed emitting an
+  // arbitrary 6 AM checkout with no flight anchor. Floor at 18:00 +
+  // latest-activity 15:00 so the model gets a believable window.
+  // ─────────────────────────────────────────────────────────────────────────
+  if (
+    isLastDay &&
+    !flightContext.returnDepartureTime24 &&
+    (flightContext as any).departureParseFailed &&
+    (flightContext as any).rawFlightSelection
+  ) {
+    const SOFT_DEP_FLOOR = '18:00';
+    const latest = addMinutesToHHMM(SOFT_DEP_FLOOR, -180); // 15:00
+    flightContext = {
+      ...flightContext,
+      returnDepartureTime24: SOFT_DEP_FLOOR,
+      latestLastActivityTime: latest,
+      context:
+        (flightContext.context || '') +
+        `\n\n⚠️ LAST DAY SOFT DEPARTURE FALLBACK — flight_selection was provided but the return-departure time could not be parsed. Treat departure as ${SOFT_DEP_FLOOR}; latest non-logistics activity must end by ${latest}. Do NOT emit a checkout earlier than 10:00 unless you have a credible reason.`,
+    };
+    console.warn(
+      `[compile-day-facts] Last-day soft-departure fallback applied — floor=${SOFT_DEP_FLOOR} legDeparturePick=${(flightContext as any).legDeparturePickSource || 'unknown'}`
+    );
+  }
+
   // Trace recorder hook — surfaces flight-ingest state in trace_events so the
   // next "Day 1 wrong" report can be diagnosed in seconds.
   if (isFirstDay) {
     try {
       console.log(
         `[FLIGHT_INGEST] day=1 tripId=${tripId} shape=${(flightContext as any).rawFlightSelection ? 'present' : 'absent'} legPick=${(flightContext as any).legPickSource || 'n/a'} arrivalTime24=${flightContext.arrivalTime24 || 'undefined'} earliest=${flightContext.earliestFirstActivityTime || 'undefined'} parseFailed=${(flightContext as any).parseFailed === true} constraintWillRender=${Boolean(flightContext.arrivalTime24)}`
+      );
+    } catch (_e) { /* logging only */ }
+  }
+  if (isLastDay) {
+    try {
+      console.log(
+        `[FLIGHT_INGEST] day=${dayNumber} isLast=true tripId=${tripId} shape=${(flightContext as any).rawFlightSelection ? 'present' : 'absent'} legDeparturePick=${(flightContext as any).legDeparturePickSource || 'n/a'} returnDepartureTime24=${flightContext.returnDepartureTime24 || 'undefined'} latest=${flightContext.latestLastActivityTime || 'undefined'} departureParseFailed=${(flightContext as any).departureParseFailed === true} constraintWillRender=${Boolean(flightContext.returnDepartureTime24)}`
       );
     } catch (_e) { /* logging only */ }
   }

@@ -92,3 +92,51 @@ Deno.test('return-arrival back-fill via estimateReturnArrival', () => {
   assertEquals(dep.rawDepartureString, '11:00');
   assertEquals(dep.leg?.arrivalTime, '19:00');
 });
+
+// ─── Last-day departure picker hardening (Day-4-6AM-checkout bug) ──────────
+
+Deno.test('legacy { return: { departureTime, departureAirport } } — flat keys on return object', () => {
+  const flight = {
+    departure: {
+      departure: { airport: 'JFK', time: '14:00', date: '2026-06-01' },
+      arrival: { airport: 'CDG', time: '22:00', date: '2026-06-01' },
+    },
+    return: {
+      // No nested `.departure.time` — uses flat `departureTime`/`departureAirport`.
+      departureTime: '22:00',
+      departureAirport: 'CDG',
+      arrivalTime: '00:30',
+      arrivalAirport: 'JFK',
+    },
+  };
+  const dep = pickDestinationDepartureLeg(flight);
+  assertEquals(dep.rawDepartureString, '22:00');
+  assertEquals(dep.leg?.departureAirport, 'CDG');
+});
+
+Deno.test('flat top-level { returnDepartureTime, returnDepartureAirport }', () => {
+  const flight = {
+    departureAirport: 'JFK',
+    arrivalAirport: 'CDG',
+    arrivalTime: '14:00',
+    returnDepartureTime: '22:00',
+    returnDepartureAirport: 'CDG',
+  };
+  const dep = pickDestinationDepartureLeg(flight);
+  assertEquals(dep.rawDepartureString, '22:00');
+  assertEquals(dep.leg?.departureAirport, 'CDG');
+});
+
+Deno.test('single-leg legs[] (one-way outbound) — departure picker returns source:none', () => {
+  // Returning legs[0].departure.time here would surface the HOME airport's
+  // departure time as the "destination departure" and silently corrupt the
+  // last-day anchor. Picker MUST signal `source:'none'` instead.
+  const flight = {
+    legs: [
+      { departure: { airport: 'JFK', time: '14:00', date: '2026-06-01' }, arrival: { airport: 'AMS', time: '22:00', date: '2026-06-01' } },
+    ],
+  };
+  const dep = pickDestinationDepartureLeg(flight);
+  assertEquals(dep.source, 'none');
+  assertEquals(dep.leg, undefined);
+});

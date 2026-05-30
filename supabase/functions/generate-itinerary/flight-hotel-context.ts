@@ -30,8 +30,15 @@ export interface FlightHotelContextResult {
    *  to a HH:MM 24h value. Downstream uses this to inject a conservative
    *  soft-fallback rule instead of silently skipping the Day 1 constraint. */
   parseFailed?: boolean;
+  /** True when flight_selection was present but the return-departure time
+   *  could not be parsed. Mirrors `parseFailed` for the last-day path so
+   *  compile-day-facts can inject a soft departure floor instead of letting
+   *  the LLM invent an arbitrary 6 AM checkout. */
+  departureParseFailed?: boolean;
   /** Debug: where the destination-arrival leg was picked from. */
   legPickSource?: string;
+  /** Debug: where the destination-departure leg was picked from. */
+  legDeparturePickSource?: string;
 }
 
 export interface AirportTransferFare {
@@ -237,7 +244,9 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
     // function picks the same destination-arrival leg the user saw in Step 2).
     const flightRaw = trip.flight_selection as Record<string, unknown> | null;
     let legPickSource: string | undefined;
+    let legDeparturePickSource: string | undefined;
     let parseFailed = false;
+    let departureParseFailed = false;
 
     if (flightRaw) {
       const flightInfo: string[] = [];
@@ -245,6 +254,7 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
       const arrivalPick = pickDestinationArrivalLeg(flightRaw);
       const departurePick = pickDestinationDepartureLeg(flightRaw);
       legPickSource = arrivalPick.source;
+      legDeparturePickSource = departurePick.source;
 
       const outboundArrival =
         arrivalPick.rawArrivalString || arrivalPick.leg?.arrivalTime;
@@ -355,7 +365,29 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
         }
 
         console.log(`[FlightContext] Return raw ${returnDepartureTimeStr}, return24: ${returnDepartureTime24}, latest activity: ${latestLastActivity}`);
+      } else {
+        // Mirror Day-1 parseFailed for the last-day path: if flight_selection
+        // contains any return-leg signal but the picker couldn't extract a
+        // departure time, mark `departureParseFailed=true` so
+        // compile-day-facts injects a soft departure floor instead of
+        // letting the LLM invent a 6 AM checkout against no anchor.
+        const fr = flightRaw as Record<string, any>;
+        const hasReturnSignal = Boolean(
+          (Array.isArray(fr?.legs) && fr.legs.length >= 2) ||
+          (fr?.return && typeof fr.return === 'object') ||
+          fr?.returnDepartureTime ||
+          fr?.returnDepartureTime24 ||
+          fr?.returnDepartureAirport
+        );
+        if (hasReturnSignal) {
+          departureParseFailed = true;
+          console.warn(
+            `[FLIGHT_INGEST_PARSE_FAIL] last_day tripId=${tripId} shape=${departurePick.shape} legPick=${departurePick.source} raw=undefined — return-leg present but no departure time`
+          );
+        }
       }
+
+
 
 
       // Flight intelligence override
@@ -585,7 +617,9 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
       rawHotelSelection: trip.hotel_selection,
       rawFlightIntelligence: trip.flight_intelligence,
       parseFailed,
+      departureParseFailed,
       legPickSource,
+      legDeparturePickSource,
     };
   } catch (e) {
     console.error('[FlightHotel] Error:', e);

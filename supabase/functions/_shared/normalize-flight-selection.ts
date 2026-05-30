@@ -184,14 +184,14 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
       airline: (dep.airline as string) || '',
       flightNumber: (dep.flightNumber as string) || '',
       departure: {
-        airport: (dep.departure?.airport as string) || '',
-        time: (dep.departure?.time as string) || '',
-        date: (dep.departure?.date as string) || '',
+        airport: (dep.departure?.airport as string) || (dep.departureAirport as string) || '',
+        time: (dep.departure?.time as string) || (dep.departureTime as string) || '',
+        date: (dep.departure?.date as string) || (dep.departureDate as string) || '',
       },
       arrival: {
-        airport: (dep.arrival?.airport as string) || '',
-        time: (dep.arrival?.time as string) || '',
-        date: (dep.arrival?.date as string) || undefined,
+        airport: (dep.arrival?.airport as string) || (dep.arrivalAirport as string) || '',
+        time: (dep.arrival?.time as string) || (dep.arrivalTime as string) || '',
+        date: (dep.arrival?.date as string) || (dep.arrivalDate as string) || undefined,
       },
       price: (dep.price as number) || 0,
       cabin: (dep.cabin as string) || 'economy',
@@ -204,17 +204,56 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
       airline: (ret.airline as string) || '',
       flightNumber: (ret.flightNumber as string) || '',
       departure: {
-        airport: (ret.departure?.airport as string) || '',
-        time: (ret.departure?.time as string) || '',
-        date: (ret.departure?.date as string) || '',
+        // Accept flat keys on the return object (`departureTime`,
+        // `departureAirport`) in addition to nested `.departure.time` —
+        // both shapes appear in production flight_selection rows and
+        // action-generate-trip-day already falls back to both. Without
+        // these the picker silently misses the return-leg departure
+        // time and the prompt loses its last-day anchor.
+        airport: (ret.departure?.airport as string) || (ret.departureAirport as string) || '',
+        time: (ret.departure?.time as string) || (ret.departureTime as string) || '',
+        date: (ret.departure?.date as string) || (ret.departureDate as string) || '',
       },
       arrival: {
-        airport: (ret.arrival?.airport as string) || '',
-        time: (ret.arrival?.time as string) || '',
-        date: (ret.arrival?.date as string) || undefined,
+        airport: (ret.arrival?.airport as string) || (ret.arrivalAirport as string) || '',
+        time: (ret.arrival?.time as string) || (ret.arrivalTime as string) || '',
+        date: (ret.arrival?.date as string) || (ret.arrivalDate as string) || undefined,
       },
       price: (ret.price as number) || 0,
       cabin: (ret.cabin as string) || 'economy',
+    });
+  }
+
+  // Top-level legacy keys: `{ returnDepartureTime, returnDepartureAirport, ... }`
+  // Synthesize a return leg so the picker can mark a destination-departure
+  // when only flat top-level fields are present.
+  if (
+    legs.length <= 1 &&
+    (data.returnDepartureTime || data.returnDepartureTime24 || data.returnDepartureAirport)
+  ) {
+    const retTime =
+      (data.returnDepartureTime as string) || (data.returnDepartureTime24 as string) || '';
+    legs.push({
+      legOrder: legs.length + 1,
+      airline: '',
+      flightNumber: '',
+      departure: {
+        airport:
+          (data.returnDepartureAirport as string) ||
+          (data.arrivalAirport as string) ||
+          '',
+        time: retTime,
+        date: (data.returnDepartureDate as string) || '',
+      },
+      arrival: {
+        airport:
+          (data.returnArrivalAirport as string) ||
+          (data.departureAirport as string) ||
+          '',
+        time: (data.returnArrivalTime as string) || '',
+      },
+      price: 0,
+      cabin: 'economy',
     });
   }
 
@@ -248,6 +287,12 @@ export function detectShape(raw: unknown): FlightSelectionShape {
   const d = raw as Record<string, unknown>;
   if (Array.isArray(d.legs) && (d.legs as any[]).length > 0) return 'legs';
   if (d.departure || d.return) return 'legacy';
-  if (d.arrivalTime || d.departureAirport) return 'flat';
+  if (
+    d.arrivalTime ||
+    d.departureAirport ||
+    d.returnDepartureTime ||
+    d.returnDepartureTime24 ||
+    d.returnDepartureAirport
+  ) return 'flat';
   return 'unknown';
 }
