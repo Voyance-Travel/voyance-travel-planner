@@ -1399,6 +1399,51 @@ export default function TripDetail() {
     })();
   }, [trip?.id, trip?.itinerary_status, trip?.metadata]);
 
+  // ------------------------------------------------------------------
+  // Must-Do Bare Anchor backfill — lazy one-shot per trip.
+  // Resolves injected must-do anchors persisted with empty address+description
+  // (the 6/7 affected trips in the Amsterdam/Lisbon/Tokyo/Faro/Istanbul/BA
+  // cohort). Gated on metadata stamp so it never re-fires.
+  // See mem://constraints/itinerary/must-do-coverage-injection.
+  // ------------------------------------------------------------------
+  const mustDoBackfillAttempted = useRef(false);
+  useEffect(() => {
+    if (!trip?.id || mustDoBackfillAttempted.current) return;
+    const meta = (trip.metadata as Record<string, unknown>) || {};
+    if (meta.must_do_enrichment_backfilled_at) return;
+    const itin = (trip.itinerary_data as { days?: Array<{ activities?: any[] }> } | null) || null;
+    const days = Array.isArray(itin?.days) ? itin!.days! : [];
+    if (days.length === 0) return;
+    // Detect bare anchors: source='must-do-injection' AND empty address AND empty description.
+    let hasBare = false;
+    outer: for (const d of days) {
+      for (const a of d.activities || []) {
+        const src = String((a as any)?.source || '').toLowerCase();
+        if (src !== 'must-do-injection') continue;
+        const addr = String((a as any)?.location?.address || '').trim();
+        const desc = String((a as any)?.description || '').trim();
+        if (addr.length === 0 && desc.length === 0) { hasBare = true; break outer; }
+      }
+    }
+    if (!hasBare) return;
+    mustDoBackfillAttempted.current = true;
+    (async () => {
+      try {
+        const { error } = await supabase.functions.invoke('backfill-must-do-anchor-enrichment', {
+          body: { tripId: trip.id },
+        });
+        if (error) {
+          console.warn('[TripDetail] backfill-must-do-anchor-enrichment failed (non-blocking):', error);
+          mustDoBackfillAttempted.current = false;
+        }
+      } catch (err) {
+        console.warn('[TripDetail] backfill-must-do-anchor-enrichment threw (non-blocking):', err);
+        mustDoBackfillAttempted.current = false;
+      }
+    })();
+  }, [trip?.id, trip?.metadata, trip?.itinerary_data]);
+
+
 
 
   // Auto-trigger generation only when ?generate=true is present
