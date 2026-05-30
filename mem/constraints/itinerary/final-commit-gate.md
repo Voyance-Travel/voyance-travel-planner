@@ -1,6 +1,6 @@
 ---
 name: Final Commit Gate Is The Boundary
-description: Phase 6 re-runs resolveCommitGate against on-disk JSON; isUserOwned (not isLocked) guards flight-anchor + airport-loop checks; frontend self-heal writes partial not ready; lint test blocks new raw ready writes
+description: resolveCommitGate is sole authority for ready/frozen. Server hotel sync runs before HOTEL_COST_NOT_SURFACED. FINAL_ORPHAN_TRANSIT + executioner orphan drops. Flight anchor ±10m via isUserOwned. action-save-itinerary re-gates every edit. safeUpdateItineraryData strips client ready/frozen fields. Lint test blocks regressions.
 type: constraint
 ---
 
@@ -16,8 +16,14 @@ type: constraint
 
 4. **Must-do recognizes named experiences**: `assert-must-do-coverage.ts` adds aliases for Lisbon (`tram 28`, `belem tower`, `jeronimos`) + Amsterdam (`canal boat tour`, `anne frank house`, `rijksmuseum`, `van gogh`). `NAMED_TRANSIT_EXPERIENCE_RE` exempts tram/funicular/cable-car/ferry/canal-cruise from `NON_QUALIFYING_CATEGORY_RE` so "Tram 28 Ride" categorised as `transport` still satisfies the must-do.
 
-5. **Regression fixture**: `_shared/__tests__/integrity-contract.amsterdam.test.ts` locks all four failure modes (flight mismatch, post-checkin loop, missing canal boat, priced hotel not surfaced) — fixture fails before fixes, passes after.
+5. **Regression fixture**: `_shared/__tests__/integrity-contract.amsterdam.test.ts` locks all five failure modes (flight mismatch ±10m, post-checkin loop, missing canal boat, priced hotel not surfaced, orphan transit) + `hotelCostRowFound:true` bypass.
 
-**Sentinels**: `[generate-trip-day] Phase 6 GATE BLOCKED ready` / `[Stage 6] Phase 6 GATE BLOCKED ready` / `[TripDetail] Stuck-heal: ... 'partial' (gate runs server-side)`.
+6. **Phase 2 additions** (2026-05-30):
+   - **Server hotel sync**: `ensureHotelCostRow` in `resolveCommitGate` writes the Day-0 hotel `activity_costs` row directly before integrity checks. Frontend `useHotelLedgerSync` is observe-only; the race where gate ran before the row existed is closed.
+   - **FINAL_ORPHAN_TRANSIT invariant**: "Walk/Taxi/Tram to X" requires a non-bookend activity matching X within ±90 min same day. Otherwise dropped by `schedule-executioner` (`pruneOrphanTransits`, counter `orphanTransitsDropped`, code `EXEC_ORPHAN_TRANSIT_DROPPED`) and re-validated.
+   - **Edit-path re-gate**: `action-save-itinerary` always invokes `resolveCommitGate` — if a user edit re-breaks integrity, status drops to `partial` and `metadata.integrity_contract` carries the verdict.
+   - **Client promotion strip**: `safeUpdateItineraryData` silently scrubs `itinerary_status: 'ready'|'generated'`, `metadata.itinerary_frozen_at`, `metadata.fully_persisted`, `metadata.fully_persisted_at` from any caller's `extraUpdate` before invoking the backend.
+
+**Sentinels**: `[generate-trip-day] Phase 6 GATE BLOCKED ready` / `[Stage 6] Phase 6 GATE BLOCKED ready` / `[save-itinerary] GATE demoted to partial` / `[safeUpdateItineraryData] stripped client-side …` / `EXEC_ORPHAN_TRANSIT_DROPPED`.
 
 **Success query**: `select count(*) from trips where itinerary_status='ready' and metadata->'quality'->>'final_gate_trace' is null` must trend to 0 for trips created after deploy.

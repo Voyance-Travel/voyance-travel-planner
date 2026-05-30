@@ -95,6 +95,31 @@ export async function safeUpdateItineraryData(
   options: SafeUpdateOptions = {}
 ): Promise<{ error: any } | undefined> {
   try {
+    // ── CLIENT-SIDE PROMOTION STRIP ──
+    // Only the server-side commit gate (`_shared/commit-itinerary.ts`) may
+    // promote a trip to ready/generated or stamp `itinerary_frozen_at` /
+    // `fully_persisted`. Silently scrub any such fields the caller passed —
+    // they would otherwise ride through `extraUpdate` and bypass the gate.
+    // The lint test `src/test/noRawReadyWrites.test.ts` blocks new offenders.
+    const sanitizedExtra: Record<string, any> = { ...(extraFields || {}) };
+    if ('itinerary_status' in sanitizedExtra) {
+      const s = String(sanitizedExtra.itinerary_status || '').toLowerCase();
+      if (s === 'ready' || s === 'generated') {
+        console.warn(`[safeUpdateItineraryData] stripped client-side itinerary_status=${s} (reason=${options.reason || 'unspecified'}) — only the server commit gate may promote.`);
+        delete sanitizedExtra.itinerary_status;
+      }
+    }
+    if (sanitizedExtra.metadata && typeof sanitizedExtra.metadata === 'object') {
+      const m = sanitizedExtra.metadata as Record<string, any>;
+      if ('itinerary_frozen_at' in m || 'fully_persisted' in m || 'fully_persisted_at' in m) {
+        console.warn(`[safeUpdateItineraryData] stripped client-side freeze metadata (reason=${options.reason || 'unspecified'}) — only the server commit gate may freeze.`);
+        delete m.itinerary_frozen_at;
+        delete m.fully_persisted;
+        delete m.fully_persisted_at;
+      }
+    }
+    extraFields = sanitizedExtra;
+
     const { data: current } = await supabase
       .from('trips')
       .select('itinerary_data, itinerary_status, metadata')
