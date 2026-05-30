@@ -32,7 +32,7 @@ Deno.test("toExecutionerAuditCodes emits EXEC_* codes for each non-zero counter"
   const counters = {
     flightAnchorRepaired: 1, midnightSpilloversAllowed: 0, midnightSpilloversDropped: 2,
     bufferRepairs: 1, overlapRepairs: 1, transitRecomputed: 0,
-    geoOutliersFlagged: 3, geoOutliersDropped: 2, droppedActivities: 2,
+    geoOutliersFlagged: 3, geoOutliersDropped: 2, airportLoopsDropped: 0, transfersClamped: 0, departureTransfersStripped: 0, orphanTransitsDropped: 0, droppedActivities: 2,
     gapsRefilled: 1, issues: [],
   };
   const codes = toExecutionerAuditCodes(counters, 5);
@@ -54,7 +54,7 @@ Deno.test("runExecutionerRefill no-ops when no drops occurred", async () => {
     counters: {
       flightAnchorRepaired: 0, midnightSpilloversAllowed: 0, midnightSpilloversDropped: 0,
       bufferRepairs: 0, overlapRepairs: 0, transitRecomputed: 0,
-      geoOutliersFlagged: 0, geoOutliersDropped: 0, droppedActivities: 0,
+      geoOutliersFlagged: 0, geoOutliersDropped: 0, airportLoopsDropped: 0, transfersClamped: 0, departureTransfersStripped: 0, orphanTransitsDropped: 0, droppedActivities: 0,
       gapsRefilled: 0, issues: [] as any[],
     },
   };
@@ -75,7 +75,7 @@ Deno.test("runExecutionerRefill picks the largest >=90min gap and inserts once",
     counters: {
       flightAnchorRepaired: 0, midnightSpilloversAllowed: 0, midnightSpilloversDropped: 0,
       bufferRepairs: 0, overlapRepairs: 0, transitRecomputed: 0,
-      geoOutliersFlagged: 1, geoOutliersDropped: 1, droppedActivities: 1,
+      geoOutliersFlagged: 1, geoOutliersDropped: 1, airportLoopsDropped: 0, transfersClamped: 0, departureTransfersStripped: 0, orphanTransitsDropped: 0, droppedActivities: 1,
       gapsRefilled: 0, issues: [] as any[],
     },
   };
@@ -102,7 +102,7 @@ Deno.test("runExecutionerRefill skips when largest gap is < 90 min", async () =>
     counters: {
       flightAnchorRepaired: 0, midnightSpilloversAllowed: 0, midnightSpilloversDropped: 0,
       bufferRepairs: 0, overlapRepairs: 0, transitRecomputed: 0,
-      geoOutliersFlagged: 0, geoOutliersDropped: 0, droppedActivities: 1,
+      geoOutliersFlagged: 0, geoOutliersDropped: 0, airportLoopsDropped: 0, transfersClamped: 0, departureTransfersStripped: 0, orphanTransitsDropped: 0, droppedActivities: 1,
       gapsRefilled: 0, issues: [] as any[],
     },
   };
@@ -121,7 +121,7 @@ Deno.test("runExecutionerRefill swallows refill errors (non-blocking)", async ()
     counters: {
       flightAnchorRepaired: 0, midnightSpilloversAllowed: 0, midnightSpilloversDropped: 0,
       bufferRepairs: 0, overlapRepairs: 0, transitRecomputed: 0,
-      geoOutliersFlagged: 0, geoOutliersDropped: 0, droppedActivities: 1,
+      geoOutliersFlagged: 0, geoOutliersDropped: 0, airportLoopsDropped: 0, transfersClamped: 0, departureTransfersStripped: 0, orphanTransitsDropped: 0, droppedActivities: 1,
       gapsRefilled: 0, issues: [] as any[],
     },
   };

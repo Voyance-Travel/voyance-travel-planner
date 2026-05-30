@@ -161,23 +161,38 @@ export function normalizeVenueName(s: string): string {
     .trim();
 }
 
+// Strip leading verb/article prefixes so "Take a canal boat tour" matches a
+// scheduled "Canal Boat Tour" activity. Keeps the matcher whole-word safe
+// (still requires the keyword phrase to appear as a whole word in the
+// candidate title/venue/description).
+const INTENT_STOPWORD_PREFIX_RE =
+  /^(?:please\s+)?(?:take|visit|go\s+to|see|try|eat\s+at|dine\s+at|book|ride|do|experience|explore|tour|stop\s+at|catch|attend)\s+(?:a|an|the)?\s*/i;
+
+function stripIntentPrefix(s: string): string {
+  return String(s || '').replace(INTENT_STOPWORD_PREFIX_RE, '').trim();
+}
+
 function activityMatchesIntent(act: any, intentTitle: string): boolean {
-  const norm = normalizeVenueName(intentTitle);
-  if (!norm) return false;
-  const candidates = [
-    act?.title, act?.name,
-    act?.location?.name, act?.venue_name,
-    act?.description,
-  ].filter((v) => typeof v === 'string');
-  for (const c of candidates) {
-    const cn = normalizeVenueName(c);
-    if (!cn) continue;
-    if (cn === norm) return true;
-    // Whole-word containment (avoid "park" matching "Carpark Hotel")
-    if (new RegExp(`\\b${norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(cn)) return true;
+  // Try the original title first, then the verb/article-stripped version.
+  const candidates = [intentTitle, stripIntentPrefix(intentTitle)];
+  for (const variant of candidates) {
+    const norm = normalizeVenueName(variant);
+    if (!norm || norm.length < 3) continue;
+    const fields = [
+      act?.title, act?.name,
+      act?.location?.name, act?.venue_name,
+      act?.description,
+    ].filter((v) => typeof v === 'string');
+    for (const c of fields) {
+      const cn = normalizeVenueName(c);
+      if (!cn) continue;
+      if (cn === norm) return true;
+      if (new RegExp(`\\b${norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(cn)) return true;
+    }
   }
   return false;
 }
+
 
 export interface IntegrityContext {
   /** Selected/explicit hotel name for the trip (best effort). */

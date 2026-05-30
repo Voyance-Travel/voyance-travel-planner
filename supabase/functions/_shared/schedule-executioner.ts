@@ -26,6 +26,8 @@ import {
   type CascadeActivity,
 } from './timing-cascade.ts';
 import { qualifiesAsLateNightlife } from './late-nightlife-predicate.ts';
+import { pruneOrphanTransits } from './orphan-transit.ts';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -40,7 +42,9 @@ export type ExecutionerCode =
   | 'GAP_REFILLED'
   | 'AIRPORT_LOOP_DROPPED'
   | 'TRANSFER_DURATION_CLAMPED'
-  | 'DEPARTURE_TRANSFER_WITHOUT_CLOCK';
+  | 'DEPARTURE_TRANSFER_WITHOUT_CLOCK'
+  | 'ORPHAN_TRANSIT_DROPPED';
+
 
 export interface ExecutionerIssue {
   code: ExecutionerCode;
@@ -62,10 +66,12 @@ export interface ExecutionerCounters {
   airportLoopsDropped: number;
   transfersClamped: number;
   departureTransfersStripped: number;
+  orphanTransitsDropped: number;
   droppedActivities: number;
   gapsRefilled: number;
   issues: ExecutionerIssue[];
 }
+
 
 export interface ExecutionerContext {
   dayNumber: number;
@@ -206,11 +212,13 @@ function newCounters(): ExecutionerCounters {
     airportLoopsDropped: 0,
     transfersClamped: 0,
     departureTransfersStripped: 0,
+    orphanTransitsDropped: 0,
     droppedActivities: 0,
     gapsRefilled: 0,
     issues: [],
   };
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass 1 — Flight anchor enforcement
@@ -716,8 +724,26 @@ export function runScheduleExecutioner(
   working = enforceGeoCoherence(working, ctx, counters);
   working = enforceBufferCascade(working, ctx, counters);
 
+  // Final pass — drop orphan transit connectors whose target activity was
+  // pruned by upstream filters (cross-city / placeholder strip / geo drop).
+  // Closes the Amsterdam "Walk to Cafe Chris" → no Cafe Chris pattern.
+  try {
+    const removed = pruneOrphanTransits(working);
+    if (removed > 0) {
+      counters.orphanTransitsDropped += removed;
+      counters.issues.push({
+        code: 'ORPHAN_TRANSIT_DROPPED',
+        detail: `Dropped ${removed} orphan transit card(s) with no scheduled destination on day ${ctx.dayNumber}.`,
+        repaired: true,
+      });
+    }
+  } catch (e) {
+    console.warn(`[EXECUTIONER] orphan-transit pass failed day=${ctx.dayNumber}:`, (e as Error)?.message);
+  }
+
   return { activities: working, counters };
 }
+
 
 export const __test_only = {
   neighborhoodTokensFromTitle,
@@ -747,7 +773,9 @@ export interface ExecutionerAuditCode {
     | 'EXEC_GAP_REFILLED'
     | 'EXEC_AIRPORT_LOOP_DROPPED'
     | 'EXEC_TRANSFER_CLAMPED'
-    | 'EXEC_DEPARTURE_TRANSFER_FLAGGED';
+    | 'EXEC_DEPARTURE_TRANSFER_FLAGGED'
+    | 'EXEC_ORPHAN_TRANSIT_DROPPED';
+
   count: number;
   dayNumber: number;
   detail: string;
@@ -822,8 +850,17 @@ export function toExecutionerAuditCodes(
       detail: `Flagged ${counters.departureTransfersStripped} departure transfer(s) without clock truth`,
     });
   }
+  if (counters.orphanTransitsDropped > 0) {
+    out.push({
+      code: 'EXEC_ORPHAN_TRANSIT_DROPPED',
+      count: counters.orphanTransitsDropped,
+      dayNumber,
+      detail: `Dropped ${counters.orphanTransitsDropped} orphan transit card(s) with no destination`,
+    });
+  }
   return out;
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Refill pass (optional, async)
