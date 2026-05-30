@@ -37,6 +37,11 @@ export type AuditCode =
   | 'INVERTED_WINDOW'
   | 'MISSING_DINNER'
   | 'DUPLICATE_TITLE_SAME_DAY'
+  // Must-do injection mirror — fires when an injected anchor persisted with
+  // empty address AND empty description (bare stub). Closes Amsterdam/Lisbon/
+  // Tokyo/Faro/Istanbul/Buenos Aires cohort where 17/18 injected anchors
+  // shipped as bare cards. See mem://constraints/itinerary/must-do-coverage-injection.
+  | 'MUST_DO_BARE_STUB'
   // Schedule-Executioner mirrors (read-time surfacing of write-time actions).
   | 'EXEC_FLIGHT_ANCHOR_FIXED'
   | 'EXEC_MIDNIGHT_SPILL_TRIMMED'
