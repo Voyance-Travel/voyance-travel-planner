@@ -1,25 +1,26 @@
-# Final Commit Gate — Phase 2 COMPLETE ✅
+# Final Commit Gate — Phase 3 COMPLETE ✅
 
-All six items shipped. See `mem://constraints/itinerary/final-commit-gate` for the live contract.
+Phases 1 & 2 shipped previously. Phase 3 wires the commit token end-to-end and makes verification enforcing.
 
-## Shipped
+## Phase 3 shipped
 
-1. **Token-gated persistence** — `commit-token.ts` (HMAC-SHA256, content-hash bound, 5-min TTL, single-use). `persistTripItinerary` logs `[COMMIT_TOKEN] verified|rejected|missing` but the persist boundary re-runs the gate as the actual source of truth.
-2. **Server-side hotel sync** — `ensureHotelCostRow` writes Day-0 hotel `activity_costs` row before `HOTEL_COST_NOT_SURFACED` runs. Frontend `useHotelLedgerSync` race closed.
-3. **New blocking invariants**:
-   - `FINAL_ORPHAN_TRANSIT` — "Walk to X" requires X within ±90 min; executioner drops orphans (`EXEC_ORPHAN_TRANSIT_DROPPED`).
-   - `REQUIRED_USER_INTENT_MISSING` (pre-existing) covers canal-boat-tour class.
-   - `FLIGHT_ANCHOR_COMMIT_MISMATCH` tightened to ±10m via `isUserOwned` (not `isLocked`).
-4. **Frontend cleanup**:
-   - `safeUpdateItineraryData` strips client-side `itinerary_status: ready/generated`, `metadata.itinerary_frozen_at`, `fully_persisted`, `fully_persisted_at` before invoking the backend save action.
-   - `src/test/noRawReadyWrites.test.ts` blocks any new offender on those four fields.
-5. **Edit-path re-gate** — `action-save-itinerary` always runs `resolveCommitGate`; user edits that re-break integrity drop status to `partial` and surface `metadata.integrity_contract`.
-6. **Amsterdam fixture** — `_shared/__tests__/integrity-contract.amsterdam.test.ts` exercises all five Amsterdam failure modes plus the `hotelCostRowFound:true` bypass branch.
+1. **Upstream token forwarding** — All 3 ready-claim sites now forward the minted token to `persistTripItinerary({ commitToken })`:
+   - `generation-core.ts` Stage 6 final save
+   - `action-generate-trip-day.ts` Phase 6 final persist
+   - `action-save-itinerary.ts` user edit save
+2. **Strict-mode enforcement** — `persistTripItinerary` reads env `COMMIT_TOKEN_STRICT`. When `true`, a ready/generated/frozen claim that lacks an authenticated token is **pre-demoted to `partial`** (and freeze stamps stripped) before the redundant re-gate runs. Catches any future bypass of `resolveCommitGate`.
+3. **Content-drift tolerance** — Persist mutates `days` internally (sanitizeSchedule, timing cascade, predawn normalize). Strict mode accepts tokens that pass signature/trip/TTL but fail content-hash (logged as `content-drift`). Real content tamper still rejected.
+4. **Audit stamp** — Every ready-claim write stamps `metadata.quality.commit_token_audit = { result, reason?, ageMs?, strict, enforced? }` so rollout is queryable without parsing logs.
+5. **Tests** — `_shared/__tests__/commit-token-enforcement.test.ts` (6 tests): mint/verify round-trip, tampered-days rejection, audit stamping (missing + verified), strict-mode demote on missing, strict-mode allow on verified. All passing.
+
+## Rollout
+
+Currently `COMMIT_TOKEN_STRICT` is unset → enforcement off, audit on. To enable:
+1. Query `select metadata->'quality'->'commit_token_audit'->>'result', count(*) from trips where itinerary_status='ready' group by 1` after a few days.
+2. When `verified` dominates, set `COMMIT_TOKEN_STRICT=true` via secrets tool.
 
 ## Verification surface
 
-- `[Stage 6] / [generate-trip-day] Phase 6 GATE BLOCKED ready`
-- `[save-itinerary] GATE demoted to partial`
-- `[safeUpdateItineraryData] stripped client-side …`
-- `EXEC_ORPHAN_TRANSIT_DROPPED` in `metadata.quality.executioner_audit`
-- DB: `select count(*) from trips where itinerary_status='ready' and metadata->'quality'->>'final_gate_trace' is null` → 0
+- `[COMMIT_TOKEN] verified|authenticated|rejected|missing`
+- `[COMMIT_TOKEN_STRICT_DEMOTE]`
+- DB: `select count(*) from trips where itinerary_status='ready' and metadata->'quality'->'commit_token_audit'->>'result' = 'missing'` → trends to 0 after deploy.
