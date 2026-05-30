@@ -1675,6 +1675,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     label: 'save-itinerary',
     allowFrozenWrite,
     saveReason,
+    commitToken: saveCommitToken,
   });
 
   if (error) {
