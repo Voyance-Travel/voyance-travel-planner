@@ -724,8 +724,26 @@ export function runScheduleExecutioner(
   working = enforceGeoCoherence(working, ctx, counters);
   working = enforceBufferCascade(working, ctx, counters);
 
+  // Final pass — drop orphan transit connectors whose target activity was
+  // pruned by upstream filters (cross-city / placeholder strip / geo drop).
+  // Closes the Amsterdam "Walk to Cafe Chris" → no Cafe Chris pattern.
+  try {
+    const removed = pruneOrphanTransits(working);
+    if (removed > 0) {
+      counters.orphanTransitsDropped += removed;
+      counters.issues.push({
+        code: 'ORPHAN_TRANSIT_DROPPED',
+        detail: `Dropped ${removed} orphan transit card(s) with no scheduled destination on day ${ctx.dayNumber}.`,
+        repaired: true,
+      });
+    }
+  } catch (e) {
+    console.warn(`[EXECUTIONER] orphan-transit pass failed day=${ctx.dayNumber}:`, (e as Error)?.message);
+  }
+
   return { activities: working, counters };
 }
+
 
 export const __test_only = {
   neighborhoodTokensFromTitle,
