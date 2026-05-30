@@ -125,6 +125,16 @@ export interface PersistItineraryOptions {
    * deleted every non-meal card themselves).
    */
   allowMealOnly?: boolean;
+  /**
+   * Optional content-bound HMAC token minted by `resolveCommitGate` when
+   * the upstream gate already passed. The persist boundary RE-runs the
+   * gate either way (DB is the single source of truth), but a valid
+   * token short-circuits the redundant re-check AND is logged as
+   * `[COMMIT_TOKEN] verified` for audit. Token verification uses the
+   * exact `days` payload about to be persisted, so the caller can't swap
+   * days between mint and persist (`commit-token.ts::verifyCommitToken`).
+   */
+  commitToken?: string | null;
 }
 
 export interface PersistResult {
@@ -147,6 +157,10 @@ export interface PersistResult {
   finalGateDemoted?: boolean;
   /** Integrity verdict codes when finalGateDemoted=true. */
   finalGateCodes?: string[];
+  /** Freshly minted token from the persist-boundary re-gate. Callers
+   *  that need to forward proof (e.g. an outer pipeline writing a
+   *  follow-up trips.update) can read it here. */
+  commitToken?: string | null;
 }
 
 /** Capped-size ring buffer of rejected attempts written under
@@ -937,6 +951,7 @@ export async function persistTripItinerary(
   // ready unless this gate says it can.
   let finalGateDemoted = false;
   let finalGateCodes: string[] = [];
+  let mintedCommitToken: string | null = null;
   try {
     const proposedStatus = String(updatePayload?.itinerary_status || '');
     const meta = (updatePayload?.metadata as Record<string, any>) || {};
@@ -949,6 +964,28 @@ export async function persistTripItinerary(
       proposesFullyPersisted;
 
     if (isReadyClaim && Array.isArray(days) && days.length > 0 && !regressionBlocked && !mealOnlyBlocked) {
+      // Verify caller-provided commit token (audit-only — the re-gate
+      // below is still the authoritative check).
+      if (options.commitToken) {
+        try {
+          const { verifyCommitToken } = await import('./commit-token.ts');
+          const v = await verifyCommitToken(options.commitToken, tripId, days);
+          if (v.ok) {
+            console.log(
+              `[${label}] [COMMIT_TOKEN] verified ageMs=${v.ageMs} tripId=${tripId}`,
+            );
+          } else {
+            console.warn(
+              `[${label}] [COMMIT_TOKEN] rejected reason=${v.reason} ageMs=${v.ageMs ?? 'n/a'} tripId=${tripId} — re-gate will decide`,
+            );
+          }
+        } catch (e) {
+          console.warn(`[${label}] [COMMIT_TOKEN] verify failed (non-blocking):`, e);
+        }
+      } else {
+        console.log(`[${label}] [COMMIT_TOKEN] missing tripId=${tripId} — re-gate will decide`);
+      }
+
       const { resolveCommitGate } = await import('./commit-itinerary.ts');
       const gateResult = await resolveCommitGate({
         supabase,
@@ -957,6 +994,7 @@ export async function persistTripItinerary(
         proposedStatus: (proposedStatus === 'generated' ? 'generated' : 'ready') as any,
         label: `persist-boundary:${label}`,
       });
+      mintedCommitToken = gateResult.commitToken || null;
       if (gateResult.blockedReady) {
         finalGateDemoted = true;
         finalGateCodes = gateResult.verdict.codes || [];
@@ -1000,6 +1038,6 @@ export async function persistTripItinerary(
       console.warn(`[${label}] reconcileFailedDays failed (non-blocking):`, e);
     }
   }
-  return { error, regressionBlocked, mealOnlyBlocked, finalGateDemoted, finalGateCodes };
+  return { error, regressionBlocked, mealOnlyBlocked, finalGateDemoted, finalGateCodes, commitToken: mintedCommitToken };
 
 }
