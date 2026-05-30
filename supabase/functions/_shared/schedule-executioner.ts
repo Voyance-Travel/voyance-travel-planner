@@ -957,6 +957,14 @@ export function toExecutionerAuditCodes(
       detail: `Dropped ${counters.airportLoopsDropped} airport-loop transfer(s)`,
     });
   }
+  if (counters.hotelReturnLoopsDropped > 0) {
+    out.push({
+      code: 'EXEC_HOTEL_RETURN_LOOP_DROPPED',
+      count: counters.hotelReturnLoopsDropped,
+      dayNumber,
+      detail: `Dropped ${counters.hotelReturnLoopsDropped} post-checkin hotel-return loop(s)`,
+    });
+  }
   if (counters.transfersClamped > 0) {
     out.push({
       code: 'EXEC_TRANSFER_CLAMPED',
