@@ -274,6 +274,26 @@ export function normalizeDays(days: any[], tripStartDate: string | null, destina
     }
     const pruneResult = pruneNonLogisticsAfterCheckout(activities);
     const transferPruneResult = pruneNonLogisticsAfterAirportTransfer(activities, dayNumber);
+    // Day-1 post-checkin "Return to Hotel" loop strip (defense-in-depth for
+    // paths that bypass the Executioner: legacy trips, chat edits, paste).
+    {
+      const hotelLoopRes = stripHotelReturnLoop(activities, {
+        dayNumber,
+        isFirstDay: idx === 0,
+        // Best-effort hotel-name lookup: scan the day's check-in row for a
+        // brand/title token. normalizeDays doesn't carry trip-level hotelName.
+        hotelName: (() => {
+          const checkin = activities.find((a: any) =>
+            /\bcheck[-\s]?in\b/i.test(String(a?.title || a?.name || ''))
+          );
+          const raw = String(checkin?.location?.name || checkin?.venue || checkin?.title || '');
+          return raw || null;
+        })(),
+      });
+      if (hotelLoopRes.droppedCount > 0) {
+        activities = hotelLoopRes.activities;
+      }
+    }
     // Freshen-up position invariant — drops post-dinner / clamps overlap
     {
       const lockedIds = new Set<string>(
