@@ -27,6 +27,33 @@ import {
 } from './timing-cascade.ts';
 import { qualifiesAsLateNightlife } from './late-nightlife-predicate.ts';
 import { pruneOrphanTransits } from './orphan-transit.ts';
+import { pickDestinationArrivalLeg } from './flight-leg-pick.ts';
+
+/**
+ * Re-pick the destination-arrival truth from a raw flight_selection and
+ * return it as 'HH:MM' (24h). Returns undefined when the input is missing
+ * or the picker found no arrival string. Used by `enforceFlightAnchors`
+ * as a last-gate cross-check against ctx.arrivalTime24.
+ */
+function _repickArrivalTruth(raw: unknown): string | undefined {
+  if (!raw) return undefined;
+  const picked = pickDestinationArrivalLeg(raw);
+  const s = picked?.rawArrivalString || picked?.leg?.arrivalTime;
+  if (!s) return undefined;
+  const m = String(s).trim().match(/^(\d{1,2}):(\d{2})/);
+  if (m) {
+    const h = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10);
+    if (h >= 0 && h < 24 && mm >= 0 && mm < 60) {
+      return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
+  }
+  // ISO 8601 — extract local HH:MM ignoring TZ offset (same convention as
+  // flight-hotel-context.normalizeTo24h).
+  const iso = String(s).trim().match(/^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/);
+  if (iso) return `${iso[1]}:${iso[2]}`;
+  return undefined;
+}
 
 
 // ─────────────────────────────────────────────────────────────────────────────
