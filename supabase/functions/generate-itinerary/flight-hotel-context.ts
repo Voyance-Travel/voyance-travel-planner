@@ -30,8 +30,15 @@ export interface FlightHotelContextResult {
    *  to a HH:MM 24h value. Downstream uses this to inject a conservative
    *  soft-fallback rule instead of silently skipping the Day 1 constraint. */
   parseFailed?: boolean;
+  /** True when flight_selection was present but the return-departure time
+   *  could not be parsed. Mirrors `parseFailed` for the last-day path so
+   *  compile-day-facts can inject a soft departure floor instead of letting
+   *  the LLM invent an arbitrary 6 AM checkout. */
+  departureParseFailed?: boolean;
   /** Debug: where the destination-arrival leg was picked from. */
   legPickSource?: string;
+  /** Debug: where the destination-departure leg was picked from. */
+  legDeparturePickSource?: string;
 }
 
 export interface AirportTransferFare {
