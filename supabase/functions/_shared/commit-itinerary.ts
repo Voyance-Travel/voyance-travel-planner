@@ -29,6 +29,7 @@ import {
   checkItineraryIntegrity,
   type IntegrityVerdict,
 } from './itinerary-integrity-contract.ts';
+import { mintCommitToken } from './commit-token.ts';
 
 export interface CommitGateInput {
   supabase: any;
@@ -52,6 +53,11 @@ export interface CommitGateResult {
   metadataPatch: Record<string, any>;
   verdict: IntegrityVerdict;
   blockedReady: boolean;
+  /** Single-use, content-bound HMAC token. Issued ONLY when verdict.ok=true
+   *  AND proposedStatus was 'ready'|'generated'. Callers forward this to
+   *  `persistTripItinerary({ commitToken })` so the persist boundary can
+   *  attest that the exact payload it's writing was gate-approved. */
+  commitToken?: string | null;
 }
 
 /**
