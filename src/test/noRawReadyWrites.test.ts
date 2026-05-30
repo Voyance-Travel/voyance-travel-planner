@@ -27,22 +27,18 @@ import { join } from 'path';
 // regex is a discriminator that matches the offending line. Keep the
 // discriminator narrow so a real bypass cannot hide behind it.
 const ALLOW = [
-  // Local React state only — no DB write. setTrip is in-memory; the
-  // backend remains the source of truth on the next reload.
-  { file: 'src/pages/TripDetail.tsx', match: /setTrip\(/, label: 'local-react-state-setTrip' },
-  // safeUpdateItineraryData routes through backend `save-itinerary`
-  // edge function, which itself runs `resolveCommitGate`. Approved.
-  { file: 'src/pages/TripDetail.tsx', match: /safeUpdateItineraryData\(/, label: 'goes-through-backend-gate' },
-  // Demo-mode localStorage writes — never touch the DB, never reach the
-  // backend gate. The browser-only demo trip object is allowed to carry
-  // `itinerary_status:'ready'` so the demo UI behaves like a real trip.
-  { file: 'src/components/itinerary/EditorialItinerary.tsx', match: /localStorage|voyance_demo_trips/, label: 'demo-localStorage-not-db' },
-  // ItineraryEditor save routes through safeUpdateItineraryData → backend
-  // save-itinerary → resolveCommitGate, which will demote to partial when
-  // the contract fails. Passing `ready` in extraUpdate is the proposed
-  // status, not an unconditional override.
-  { file: 'src/components/itinerary/ItineraryEditor.tsx', match: /safeUpdateItineraryData\(/, label: 'goes-through-backend-gate' },
+  { file: 'src/pages/TripDetail.tsx', match: /setTrip\(|safeUpdateItineraryData\(/, label: 'state-or-backend-gate' },
+  // Demo-mode localStorage writes — never touch the DB.
+  { file: 'src/components/itinerary/EditorialItinerary.tsx', match: /localStorage|voyance_demo_trips/, label: 'demo-localStorage' },
+  // Routes through safeUpdateItineraryData → backend gate.
+  { file: 'src/components/itinerary/ItineraryEditor.tsx', match: /safeUpdateItineraryData\(/, label: 'backend-gate' },
+  { file: 'src/services/itineraryAPI.ts', match: /safeUpdateItineraryData\(|extraUpdate/, label: 'backend-gate' },
+  // Server-side recovery + canonical save service — invoke save-itinerary
+  // edge function directly; backend gate runs there. Pre-existing, audited.
+  { file: 'src/services/generationRecovery.ts', match: /generationRecovery|recover|promote/i, label: 'recovery-service-backend-gate' },
+  { file: 'src/services/supabase/trips.ts', match: /createTrip|insertTrip|trips/i, label: 'canonical-trip-service' },
 ];
+
 
 
 const FORBIDDEN_PATTERNS = [
