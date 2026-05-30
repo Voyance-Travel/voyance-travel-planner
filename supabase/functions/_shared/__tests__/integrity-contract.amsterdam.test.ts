@@ -150,3 +150,35 @@ Deno.test('amsterdam fixture — after fixing all four, verdict.ok = true', () =
   assertEquals(verdict.codes, [], `unexpected codes: [${verdict.codes.join(',')}]`);
   assert(verdict.ok, 'healed fixture must pass');
 });
+
+Deno.test('amsterdam fixture — orphan transit (Walk to Cafe Chris) BLOCKS ready', () => {
+  const orphanDays = [
+    {
+      dayNumber: 2,
+      title: 'Jordaan',
+      activities: [
+        { id: 'a1', title: 'Brunch at Bakers', category: 'dining', startTime: '10:00', endTime: '11:00' },
+        // Orphan: points at "Cafe Chris" but no Cafe Chris on the day.
+        { id: 'a2', title: 'Walk to Cafe Chris', category: 'transport', startTime: '14:00', endTime: '14:20' },
+        { id: 'a3', title: 'Return to Hotel V Nesplein', category: 'accommodation', startTime: '22:00', endTime: '23:00' },
+      ],
+    },
+  ];
+  const verdict = checkItineraryIntegrity(orphanDays as any, {});
+  assert(
+    verdict.codes.includes('FINAL_ORPHAN_TRANSIT'),
+    `expected FINAL_ORPHAN_TRANSIT; got [${verdict.codes.join(',')}]`,
+  );
+});
+
+Deno.test('amsterdam fixture — flight anchor within 10m is OK', () => {
+  const okDays = [{
+    dayNumber: 1,
+    title: 'Arrival',
+    activities: [
+      { id: 'd1', title: 'Arrival Flight', category: 'flight', anchorSource: 'arrival-flight', isLocked: true, startTime: '22:08', endTime: '22:23' },
+    ],
+  }];
+  const verdict = checkItineraryIntegrity(okDays as any, { arrivalTime24: '22:00' });
+  assert(!verdict.codes.includes('FLIGHT_ANCHOR_COMMIT_MISMATCH'), 'within 10m must pass');
+});
