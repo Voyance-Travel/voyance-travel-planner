@@ -41,7 +41,8 @@ export type IntegrityCode =
   | 'FLIGHT_ANCHOR_COMMIT_MISMATCH'
   | 'AIRPORT_LOOP_ON_NON_DEPARTURE'
   | 'NEIGHBORHOOD_ADDRESS_CONFLICT'
-  | 'HOTEL_COST_NOT_SURFACED';
+  | 'HOTEL_COST_NOT_SURFACED'
+  | 'FINAL_ORPHAN_TRANSIT';
 
 export interface IntegrityViolation {
   code: IntegrityCode;
