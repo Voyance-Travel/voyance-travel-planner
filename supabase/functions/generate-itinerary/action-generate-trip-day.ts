@@ -4051,6 +4051,7 @@ async function _handleGenerateTripDayInner(
     await __persistFinal(supabase, tripId, partialItinerary, {
       destination: destination ?? null,
       label: 'generate-trip-day:final',
+      commitToken: commitGateToken,
       extraUpdate: {
         itinerary_status: finalStatus,
         unlocked_day_count: newUnlocked,
