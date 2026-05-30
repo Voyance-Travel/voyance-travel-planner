@@ -1864,6 +1864,7 @@ export async function handleGenerateDay(
         budgetTier: budgetTier ?? null,
         geoFlagOnly: !geoDropEnabled,
         geoDropEnabled,
+        rawFlightSelection: isFirstDay ? ((flightContext as any)?.rawFlightSelection ?? null) : null,
       });
       generatedDay.activities = exec.activities;
       generatedDay.metadata = generatedDay.metadata || {};
