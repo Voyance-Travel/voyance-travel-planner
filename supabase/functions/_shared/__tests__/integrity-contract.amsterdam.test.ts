@@ -125,6 +125,22 @@ Deno.test('amsterdam fixture — priced hotel not surfaced BLOCKS ready', () => 
   );
 });
 
+Deno.test('amsterdam fixture — hotelCostRowFound bypass satisfies HOTEL_COST_NOT_SURFACED', () => {
+  // Server-side ensureHotelCostRow wrote the Day-0 row; the gate must
+  // accept that even though days[0] has no accommodation card with a price.
+  const verdict = checkItineraryIntegrity(amsterdamDays, {
+    hotelName: 'Hotel V Nesplein',
+    arrivalTime24: '22:00',
+    hotelTotalPriceUsdCents: 60000,
+    budgetIncludeHotel: false,
+    hotelCostRowFound: true,
+  });
+  assert(
+    !verdict.codes.includes('HOTEL_COST_NOT_SURFACED'),
+    `HOTEL_COST_NOT_SURFACED must NOT fire when hotelCostRowFound=true; got [${verdict.codes.join(',')}]`,
+  );
+});
+
 Deno.test('amsterdam fixture — after fixing all four, verdict.ok = true', () => {
   const healed = JSON.parse(JSON.stringify(amsterdamDays));
   // Fix S-1
