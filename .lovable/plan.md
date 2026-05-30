@@ -1,85 +1,99 @@
-# Plan — Last-day departure anchor reaches the prompt
+## What the user reported (and what's actually wrong)
 
-## Root cause
+The user's diagnosis says "no scheduler tracks must-dos across multi-day generation" — that's **stale**. The deterministic cross-day scheduler (`_shared/schedule-must-dos.ts` + `_shared/inject-missing-must-dos.ts`) already runs at chain-finalization in `action-generate-trip-day.ts` (line ~3813) when `dayNumber >= totalDays`. It correctly assigns user-selected venues to the lowest-landmark-load day and stamps `metadata.must_do_coverage`.
 
-The Day-1 arrival path has 3 defenses (hardened picker, `parseFailed` flag, Day-1 soft floor in `compile-day-facts.ts`). The last-day departure path has **none** of them:
+The Amsterdam trip `51df6c32…` proves it: "Take a canal boat tour" was injected on Day 3, 10:30–12:00 as a locked anchor, persisted to JSON, to `itinerary_activities`, and to `activity_costs`. The card is NOT hidden by `isGhostActivity` (it short-circuits on `isLocked:true`).
 
-1. `pickDestinationDepartureLeg` (`flight-leg-pick.ts`) → `normalizeFlightSelection` only reads `ret.departure.time`. It misses the shapes `action-generate-trip-day.ts` already falls back to: `return.departureTime`, top-level `returnDepartureTime`, `returnDepartureTime24`. Those flat/legacy shapes return `source:'none'` or pick the outbound leg's `departure.time` (home airport, not destination).
-2. `getFlightHotelContext` only sets `parseFailed` for arrival. When `returnDeparture` is undefined the LAST-DAY constraint block at lines 425–430 is silently skipped — the prompt has no departure anchor.
-3. `compile-day-facts.ts` has the Day-1 SOFT FALLBACK (lines 527–545) but no last-day equivalent.
+### The real bug: injection runs after enrichment
 
-Net: `action-generate-trip-day._depTime24Raw` knows the departure (so post-hoc anchor-guard can trim/cap), but the prompt itself never told the LLM — it invents an early checkout and skips the flight block. Anchor-guard cleans up the flight leg later, but cannot retroactively turn an arbitrary 6 AM checkout into a believable late-morning checkout-then-transfer sequence.
+`enrich-day.ts` (which resolves real operator names + addresses + descriptions via `verified_venues` / Google Places for cards flagged `needsAnchorEnrichment:true`) runs **per day, inside the day's pipeline, BEFORE the chain-finalization step that injects missing must-dos**. So the injected card persists forever as:
 
-## Changes
-
-### 1. Harden the departure picker — `supabase/functions/_shared/normalize-flight-selection.ts`
-
-In the legacy `{ departure, return }` branch (~line 200), when constructing the return leg, also read alternate keys:
-- `ret.departure?.time ?? ret.departureTime ?? data.returnDepartureTime`
-- `ret.departure?.airport ?? ret.departureAirport`
-
-In the flat branch (~line 222), additionally accept `data.returnDepartureTime` / `data.returnDepartureTime24` and synthesize a second leg so the picker can mark `isDestinationDeparture` on it. Keep behavior identical when those fields are absent.
-
-### 2. Picker safety — `supabase/functions/_shared/flight-leg-pick.ts`
-
-In `pickDestinationDepartureLeg`, when `legs.length === 1` and no `isDestinationDeparture` marker exists, return `{ source: 'none', leg: undefined }` instead of pretending the single (outbound) leg's `departure.time` is the destination departure. This prevents silent home-airport-as-destination-departure errors.
-
-### 3. Surface `departureParseFailed` — `supabase/functions/generate-itinerary/flight-hotel-context.ts`
-
-- Extend `FlightHotelContextResult` with `departureParseFailed?: boolean` and `legDeparturePickSource?: string`.
-- In the parsing block (after line 358), mirror the Day-1 `parseFailed` pattern: if `flightRaw` is present AND the picker indicates a return-leg shape (legs.length>=2, legacy `return` object, or any `returnDeparture*` field) AND `returnDeparture` is still undefined, set `departureParseFailed=true` and log `[FLIGHT_INGEST_PARSE_FAIL] last_day tripId=… shape=… legPick=…`.
-- Return both new fields in the result envelope (line 563-589).
-
-### 4. Last-day soft fallback — `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`
-
-Add a block mirroring the Day-1 fallback (lines 527–545), after the existing arrival fallback:
-
-```ts
-if (
-  isLastDay &&
-  !flightContext.returnDepartureTime24 &&
-  (flightContext as any).departureParseFailed &&
-  (flightContext as any).rawFlightSelection
-) {
-  const SOFT_DEP_FLOOR = '18:00';
-  const latest = addMinutesToHHMM(SOFT_DEP_FLOOR, -180); // 15:00
-  flightContext = {
-    ...flightContext,
-    returnDepartureTime24: SOFT_DEP_FLOOR,
-    latestLastActivityTime: latest,
-    context: (flightContext.context || '') +
-      `\n\n⚠️ LAST DAY SOFT DEPARTURE FALLBACK — flight_selection was provided but the return-departure time could not be parsed. Treat departure as ${SOFT_DEP_FLOOR}; latest non-logistics activity must end by ${latest}. Do NOT emit a checkout earlier than 10:00 unless you have a credible reason.`,
-  };
-  console.warn(`[compile-day-facts] Last-day soft-departure fallback applied — floor=${SOFT_DEP_FLOOR}`);
-}
+```json
+{ "title": "Take a canal boat tour",
+  "location": { "name": "Take a canal boat tour", "address": "" },
+  "description": "",
+  "needsAnchorEnrichment": true,
+  "isLocked": true }
 ```
 
-Also add a `[FLIGHT_INGEST] day=N isLast=true …` trace mirroring the Day-1 trace at lines 549–555.
+The card renders, but with no real operator (Stromma / Lovers / Flagship), no address, no description. To the user this reads as "the canal boat tour is missing" or as a placeholder card.
+
+### Scope check across the cohort (last 14 days)
+
+| Trip | Injected | Bare (empty address) |
+|---|---|---|
+| Amsterdam `51df6c32` | 3 | 3 |
+| Lisbon `0fe99cb0` | 3 | 3 |
+| Tokyo `d060f0d5` | 2 | 2 |
+| Faro `c8003cf0` | 4 | 4 |
+| Istanbul `3c2da103` | 2 | 2 |
+| Buenos Aires `094d7ca4` | 3 | 3 |
+| Rome `d18b2e8a` | 4 | 0 (enriched by later edit) |
+| Mexico City `e4217b97` | 0 | — |
+
+**17 of 18 injected anchors across 6 of 7 affected trips are bare stubs.**
+
+---
+
+## Plan
+
+### 1. Post-injection enrichment pass (`action-generate-trip-day.ts`)
+
+After the existing `injectMissingMustDos` block at line ~3884, when `mustDoInjection.injected.length > 0`:
+
+- Group injected slots by `dayNumber`.
+- For each affected day, re-invoke the existing `enrichDay` pipeline (or its inner `enrichActivities` helper) **scoped to anchors with `needsAnchorEnrichment:true`** — same predicate already in `enrich-day.ts` line 46-58. Locked-but-needs-enrichment is the documented escape hatch.
+- Use the existing `verified_venues` → Google Places fallback chain. Soft-fail per anchor: if no operator resolves, leave the card in place but stamp `metadata.must_do_enrichment_failed: [venue,…]` and emit a `MUST_DO_ENRICHMENT_FAILED` health code (mirrors the existing `MUST_DO_INJECTION_FAILED` pattern).
+- Hard timeout: 8 s per day (mirrors `description-fill.ts`). On timeout, persist the bare card — better than blocking the chain.
+
+Sentinel: `[MUST_DO_ENRICH] day=N venue="…" resolved=true|false addr="…"`.
+
+### 2. Description fill for injected anchors
+
+After enrichment, if `description` is still empty, route the card through the existing `_shared/description-fill.ts` (already wired into both orchestrators). This is the same module that fixes Madrid restaurant blurbs; it's safe for an anchor card and stays inside the same Stage-6 budget.
+
+### 3. Cross-trip backfill (one-shot)
+
+Create a lazy edge function `backfill-must-do-anchor-enrichment` that:
+- Queries trips where `metadata ? 'must_do_repair_attempted'` AND any injected card has empty `location.address`.
+- Runs the same enrichment + description-fill pipeline.
+- Persists via `safeUpdateItineraryData` with `saveReason:'self-heal-must-do-enrich'` (passes existing self-heal gate; respects Frozen-After-Ready + Universal Locking).
+- Invoked from `TripDetail.tsx` on mount when the trip carries a bare injected anchor (gated, fires at most once per trip per session).
+
+Closes the 6 already-affected trips listed above.
+
+### 4. New health code + read-time audit
+
+- Add `MUST_DO_BARE_STUB` to `auditTimingViolations` in `_shared/audit-timing.ts`: fires when a persisted card with `source:'must-do-injection'` has empty `location.address` AND empty `description` AND `needsAnchorEnrichment:true`. Surfaces in `generation_health.persistGateCodes` so future regressions trip the dashboard.
+- Stamps `metadata.quality.must_do_enrichment = { attempted, resolved, unresolved }` on each chain-finalization run.
 
 ### 5. Tests
 
-- `supabase/functions/_shared/__tests__/flight-leg-pick.parity.test.ts` — add cases:
-  - Legacy `{ return: { departureTime: '22:00', departureAirport: 'CDG' } }` (flat departure keys) returns picked leg with `departureTime: '22:00'`.
-  - Flat `{ returnDepartureTime: '22:00', arrivalTime: '14:00' }` returns picked leg with `departureTime: '22:00'`.
-  - Single-leg `{ legs: [outbound] }` returns `source: 'none'` for departure (no false picks).
-- New `compile-day-facts.last-day-soft-fallback.test.ts` — assert the soft-departure block fires only when `isLastDay && departureParseFailed && rawFlightSelection` and skipped otherwise.
+- `inject-then-enrich.test.ts` — fixture with 2 must-dos missing → inject → assert both have non-empty `location.address` AND non-empty `description` after the pass.
+- `must-do-bare-stub-audit.test.ts` — fixture with bare injected card → assert `MUST_DO_BARE_STUB` code emitted.
+- Extend `schedule-and-inject-must-dos.test.ts` with an assertion that injected cards carry `needsAnchorEnrichment:true` (locking the contract the new enrichment pass reads).
 
 ### 6. Memory
 
-Create `mem/constraints/itinerary/last-day-departure-anchor-parity.md` documenting the 3-defense parity with Day-1 arrival, and add a one-liner to `mem/index.md` Core (mirrors the existing flight-anchor-truth entry).
+- Update `mem://constraints/itinerary/must-do-coverage-injection.md` with a new "Post-Injection Enrichment" section.
+- Add Core line to `mem://index.md`: "Must-Do Injection → enrichment chain: `injectMissingMustDos` MUST be followed by a per-day re-enrichment pass before persist. Bare anchors (`source:'must-do-injection'` + empty address + empty description) trigger `MUST_DO_BARE_STUB` audit code."
 
-## Files touched
-
-- `supabase/functions/_shared/normalize-flight-selection.ts`
-- `supabase/functions/_shared/flight-leg-pick.ts`
-- `supabase/functions/generate-itinerary/flight-hotel-context.ts`
-- `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`
-- `supabase/functions/_shared/__tests__/flight-leg-pick.parity.test.ts` (extend)
-- `supabase/functions/generate-itinerary/__tests__/compile-day-facts.last-day-soft-fallback.test.ts` (new)
-- `mem/constraints/itinerary/last-day-departure-anchor-parity.md` (new)
-- `mem/index.md` (append)
+---
 
 ## Out of scope
 
-- `action-generate-trip-day._depTime24Raw` fallback chain — already covers what we need post-prompt. Not touching anchor-guard / executioner.
-- UI / FE normalizer — already correct, BE is the lagging side.
+- Reordering the pipeline so per-day enrichment happens after injection (would require restructuring the chain — much riskier than a targeted post-pass).
+- Changing the alias map or extraction logic (already correct for canal boat tour and the other 5 affected destinations).
+- Frontend changes — the cards already render; this is purely a backend data-completeness fix.
+
+---
+
+## Files touched
+
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (post-injection enrichment + description-fill block)
+- `supabase/functions/generate-itinerary/pipeline/enrich-day.ts` (export the per-activity enrichment helper if not already exported)
+- `supabase/functions/_shared/audit-timing.ts` (new `MUST_DO_BARE_STUB` code)
+- `supabase/functions/backfill-must-do-anchor-enrichment/index.ts` (new edge fn)
+- `src/pages/TripDetail.tsx` (lazy invocation gate, mirrors existing self-heal patterns)
+- `mem/constraints/itinerary/must-do-coverage-injection.md` + `mem/index.md`
+- 3 test files
