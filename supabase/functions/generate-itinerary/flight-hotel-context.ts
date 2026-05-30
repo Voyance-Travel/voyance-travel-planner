@@ -244,7 +244,9 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
     // function picks the same destination-arrival leg the user saw in Step 2).
     const flightRaw = trip.flight_selection as Record<string, unknown> | null;
     let legPickSource: string | undefined;
+    let legDeparturePickSource: string | undefined;
     let parseFailed = false;
+    let departureParseFailed = false;
 
     if (flightRaw) {
       const flightInfo: string[] = [];
@@ -252,6 +254,7 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
       const arrivalPick = pickDestinationArrivalLeg(flightRaw);
       const departurePick = pickDestinationDepartureLeg(flightRaw);
       legPickSource = arrivalPick.source;
+      legDeparturePickSource = departurePick.source;
 
       const outboundArrival =
         arrivalPick.rawArrivalString || arrivalPick.leg?.arrivalTime;
