@@ -952,6 +952,30 @@ export async function persistTripItinerary(
   let finalGateDemoted = false;
   let finalGateCodes: string[] = [];
   let mintedCommitToken: string | null = null;
+  // Audit trace stamped under metadata.quality.commit_token_audit so we
+  // can measure rollout (% of ready claims carrying a valid token) before
+  // flipping COMMIT_TOKEN_STRICT=true.
+  let tokenAudit: {
+    result: 'verified' | 'rejected' | 'missing' | 'verify-error';
+    reason?: string;
+    ageMs?: number;
+    strict: boolean;
+    enforced?: boolean;
+  } | null = null;
+  // Defense-in-depth strict mode. When env COMMIT_TOKEN_STRICT=true, a
+  // ready claim without a valid token is demoted to partial BEFORE the
+  // redundant re-gate runs. The re-gate still runs as the authoritative
+  // check — strict mode only catches code paths that bypass
+  // resolveCommitGate entirely (any future regression).
+  const strictMode = (() => {
+    try {
+      // @ts-ignore — Deno globals
+      const env = (globalThis as any).Deno?.env?.get?.('COMMIT_TOKEN_STRICT');
+      return env === 'true' || env === '1';
+    } catch {
+      return false;
+    }
+  })();
   try {
     const proposedStatus = String(updatePayload?.itinerary_status || '');
     const meta = (updatePayload?.metadata as Record<string, any>) || {};
@@ -964,26 +988,48 @@ export async function persistTripItinerary(
       proposesFullyPersisted;
 
     if (isReadyClaim && Array.isArray(days) && days.length > 0 && !regressionBlocked && !mealOnlyBlocked) {
-      // Verify caller-provided commit token (audit-only — the re-gate
-      // below is still the authoritative check).
+      // Verify caller-provided commit token.
       if (options.commitToken) {
         try {
           const { verifyCommitToken } = await import('./commit-token.ts');
           const v = await verifyCommitToken(options.commitToken, tripId, days);
           if (v.ok) {
+            tokenAudit = { result: 'verified', ageMs: v.ageMs, strict: strictMode };
             console.log(
-              `[${label}] [COMMIT_TOKEN] verified ageMs=${v.ageMs} tripId=${tripId}`,
+              `[${label}] [COMMIT_TOKEN] verified ageMs=${v.ageMs} tripId=${tripId} strict=${strictMode}`,
             );
           } else {
+            tokenAudit = { result: 'rejected', reason: v.reason, ageMs: v.ageMs, strict: strictMode };
             console.warn(
-              `[${label}] [COMMIT_TOKEN] rejected reason=${v.reason} ageMs=${v.ageMs ?? 'n/a'} tripId=${tripId} — re-gate will decide`,
+              `[${label}] [COMMIT_TOKEN] rejected reason=${v.reason} ageMs=${v.ageMs ?? 'n/a'} tripId=${tripId} strict=${strictMode}`,
             );
           }
         } catch (e) {
-          console.warn(`[${label}] [COMMIT_TOKEN] verify failed (non-blocking):`, e);
+          tokenAudit = { result: 'verify-error', reason: String(e), strict: strictMode };
+          console.warn(`[${label}] [COMMIT_TOKEN] verify failed:`, e);
         }
       } else {
-        console.log(`[${label}] [COMMIT_TOKEN] missing tripId=${tripId} — re-gate will decide`);
+        tokenAudit = { result: 'missing', strict: strictMode };
+        console.log(`[${label}] [COMMIT_TOKEN] missing tripId=${tripId} strict=${strictMode}`);
+      }
+
+      // Strict-mode pre-demote: any non-verified outcome forces partial up
+      // front. Re-gate still runs (will re-mint a fresh token if days are
+      // actually clean — but proposedStatus is already 'partial' so no
+      // freeze flags will be written either way).
+      if (strictMode && tokenAudit && tokenAudit.result !== 'verified') {
+        tokenAudit.enforced = true;
+        finalGateDemoted = true;
+        finalGateCodes = ['COMMIT_TOKEN_MISSING_OR_INVALID'];
+        console.warn(
+          `[${label}] [COMMIT_TOKEN_STRICT_DEMOTE] tripId=${tripId} reason=${tokenAudit.reason ?? tokenAudit.result}`,
+        );
+        updatePayload.itinerary_status = 'partial';
+        const newMeta = { ...(updatePayload.metadata || {}) };
+        delete newMeta.itinerary_frozen_at;
+        delete newMeta.fully_persisted;
+        delete newMeta.fully_persisted_at;
+        updatePayload.metadata = newMeta;
       }
 
       const { resolveCommitGate } = await import('./commit-itinerary.ts');
@@ -997,7 +1043,7 @@ export async function persistTripItinerary(
       mintedCommitToken = gateResult.commitToken || null;
       if (gateResult.blockedReady) {
         finalGateDemoted = true;
-        finalGateCodes = gateResult.verdict.codes || [];
+        finalGateCodes = Array.from(new Set([...finalGateCodes, ...(gateResult.verdict.codes || [])]));
         console.warn(
           `[${label}] [PERSIST_FINAL_GATE_DEMOTED] tripId=${tripId} ` +
             `proposedStatus=${proposedStatus} codes=[${finalGateCodes.join(',')}] ` +
@@ -1018,6 +1064,15 @@ export async function persistTripItinerary(
         };
         updatePayload.metadata = newMeta;
       }
+    }
+
+    // Always stamp the token audit so rollout is queryable without logs.
+    if (tokenAudit) {
+      const newMeta = { ...(updatePayload.metadata || {}) };
+      const quality = { ...(newMeta.quality || {}) };
+      quality.commit_token_audit = { ...tokenAudit, at: new Date().toISOString() };
+      newMeta.quality = quality;
+      updatePayload.metadata = newMeta;
     }
   } catch (e) {
     console.warn(`[${label}] persist-boundary final gate failed (non-blocking):`, e);
