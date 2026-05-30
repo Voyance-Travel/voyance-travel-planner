@@ -418,7 +418,9 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
           flightConstraints += `\n   - Allow 4 hours for: customs/immigration, baggage, transport to hotel, check-in`;
           flightConstraints += `\n   - EARLIEST first sightseeing activity: ${earliestFirstActivity} (NOT earlier!)`;
           flightConstraints += `\n   - If arrival is late (after 6 PM), Day 1 should only include: arrival → transfer → check-in → (optional) quick dinner near hotel → rest`;
+          flightConstraints += `\n   - 🛏️ POST-CHECKIN LOCATION: after check-in the traveler IS AT THE HOTEL. Do NOT emit a "Return to Hotel" / "Head back to hotel" / "Back to [hotel name]" activity between check-in and the day's natural wind-down — they're already there. The end-of-day hotel-return bookend is injected automatically; you must NOT generate one.`;
         }
+        
         
         if (latestLastActivity) {
           flightConstraints += `\n\n🚨 LAST DAY TIMING CONSTRAINT:`;
