@@ -26,6 +26,8 @@ import {
   type CascadeActivity,
 } from './timing-cascade.ts';
 import { qualifiesAsLateNightlife } from './late-nightlife-predicate.ts';
+import { pruneOrphanTransits } from './orphan-transit.ts';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
