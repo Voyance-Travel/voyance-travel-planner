@@ -92,6 +92,7 @@ export interface ExecutionerCounters {
   geoOutliersFlagged: number;
   geoOutliersDropped: number;
   airportLoopsDropped: number;
+  hotelReturnLoopsDropped: number;
   transfersClamped: number;
   departureTransfersStripped: number;
   orphanTransitsDropped: number;
