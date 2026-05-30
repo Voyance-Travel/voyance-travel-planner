@@ -1594,6 +1594,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // hard semantic failures survived every prior layer. See
   // _shared/commit-itinerary.ts + _shared/itinerary-integrity-contract.ts.
   let integrityMetadataPatch: Record<string, any> = {};
+  let saveCommitToken: string | null = null;
   try {
     const { resolveCommitGate } = await import('../_shared/commit-itinerary.ts');
     const tripMetaForContract = (trip.metadata as Record<string, any>) || {};
@@ -1622,6 +1623,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     });
     nextStatus = gateResult.status;
     integrityMetadataPatch = gateResult.metadataPatch;
+    saveCommitToken = gateResult.commitToken || null;
   } catch (icErr) {
     console.warn('[INTEGRITY_CONTRACT] gate failed (non-blocking — allowing prior nextStatus):', icErr);
   }
@@ -1673,6 +1675,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     label: 'save-itinerary',
     allowFrozenWrite,
     saveReason,
+    commitToken: saveCommitToken,
   });
 
   if (error) {

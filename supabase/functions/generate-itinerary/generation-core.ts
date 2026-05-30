@@ -3179,6 +3179,7 @@ export async function finalSaveItinerary(
       destination: context.destination ?? null,
       label: 'final-save',
       extraUpdate: updatePayload,
+      commitToken: gateResult.commitToken || null,
     });
 
     if (error) {
