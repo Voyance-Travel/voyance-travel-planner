@@ -919,6 +919,72 @@ export async function persistTripItinerary(
     }
   }
 
+  // ── PERSIST-BOUNDARY FINAL COMMIT GATE ──────────────────────────
+  // The single AUTHORITATIVE chokepoint. Any payload reaching this line
+  // that proposes `itinerary_status ∈ {ready, generated}` OR stamps
+  // `metadata.itinerary_frozen_at` / `metadata.fully_persisted=true`
+  // MUST pass `resolveCommitGate` against the FINAL post-mutation `days`
+  // array (after artifact strip, contract, cross-day bleed, sanitize,
+  // cascade — i.e. exactly what we're about to write to disk).
+  //
+  // Gate failure ⇒ status forced to 'partial', freeze/fully_persisted
+  // stamps stripped, integrity_contract verdict merged into metadata.
+  // The itinerary_data JSON still writes (DB is source of truth) — we
+  // only refuse to LABEL it as ready/frozen.
+  //
+  // This closes the bypass surface: even if every prior layer is wrong
+  // or a future caller invents a new write path, no trip can ship as
+  // ready unless this gate says it can.
+  let finalGateDemoted = false;
+  let finalGateCodes: string[] = [];
+  try {
+    const proposedStatus = String(updatePayload?.itinerary_status || '');
+    const meta = (updatePayload?.metadata as Record<string, any>) || {};
+    const proposesFrozen = !!meta?.itinerary_frozen_at;
+    const proposesFullyPersisted = meta?.fully_persisted === true;
+    const isReadyClaim =
+      proposedStatus === 'ready' ||
+      proposedStatus === 'generated' ||
+      proposesFrozen ||
+      proposesFullyPersisted;
+
+    if (isReadyClaim && Array.isArray(days) && days.length > 0 && !regressionBlocked && !mealOnlyBlocked) {
+      const { resolveCommitGate } = await import('./commit-itinerary.ts');
+      const gateResult = await resolveCommitGate({
+        supabase,
+        tripId,
+        days,
+        proposedStatus: (proposedStatus === 'generated' ? 'generated' : 'ready') as any,
+        label: `persist-boundary:${label}`,
+      });
+      if (gateResult.blockedReady) {
+        finalGateDemoted = true;
+        finalGateCodes = gateResult.verdict.codes || [];
+        console.warn(
+          `[${label}] [PERSIST_FINAL_GATE_DEMOTED] tripId=${tripId} ` +
+            `proposedStatus=${proposedStatus} codes=[${finalGateCodes.join(',')}] ` +
+            `violations=${gateResult.verdict.violations.length}`,
+        );
+        // Force partial + strip freeze stamps. Merge integrity verdict in.
+        updatePayload.itinerary_status = 'partial';
+        const newMeta = { ...(updatePayload.metadata || {}) };
+        delete newMeta.itinerary_frozen_at;
+        delete newMeta.fully_persisted;
+        delete newMeta.fully_persisted_at;
+        // Fold integrity_contract verdict in so the UI can render the
+        // exact blocking reasons in TripHealthPanel.
+        newMeta.integrity_contract = {
+          ...(gateResult.metadataPatch?.integrity_contract || {}),
+          enforced_by: 'persist-boundary',
+          enforced_at: new Date().toISOString(),
+        };
+        updatePayload.metadata = newMeta;
+      }
+    }
+  } catch (e) {
+    console.warn(`[${label}] persist-boundary final gate failed (non-blocking):`, e);
+  }
+
   const { error } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
   if (error) {
     console.error(`[${label}] trips.update failed:`, error);
@@ -934,6 +1000,6 @@ export async function persistTripItinerary(
       console.warn(`[${label}] reconcileFailedDays failed (non-blocking):`, e);
     }
   }
-  return { error, regressionBlocked, mealOnlyBlocked };
+  return { error, regressionBlocked, mealOnlyBlocked, finalGateDemoted, finalGateCodes };
 
 }
