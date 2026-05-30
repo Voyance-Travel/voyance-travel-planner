@@ -951,6 +951,7 @@ export async function persistTripItinerary(
   // ready unless this gate says it can.
   let finalGateDemoted = false;
   let finalGateCodes: string[] = [];
+  let mintedCommitToken: string | null = null;
   try {
     const proposedStatus = String(updatePayload?.itinerary_status || '');
     const meta = (updatePayload?.metadata as Record<string, any>) || {};
