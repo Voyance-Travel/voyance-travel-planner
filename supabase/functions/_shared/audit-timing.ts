@@ -415,6 +415,7 @@ export function auditTimingViolations(
     all.push(...auditDay(d, dn, ctx, i === 0));
   }
   all.push(...auditCrossDayBleed(days));
+  all.push(...auditMustDoBareStubs(days));
 
   // JSON_TABLE_PARITY — per-day diff if table counts provided.
   let tableActivityCount = 0;
