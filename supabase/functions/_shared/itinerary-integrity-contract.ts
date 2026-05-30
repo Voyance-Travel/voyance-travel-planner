@@ -41,7 +41,8 @@ export type IntegrityCode =
   | 'FLIGHT_ANCHOR_COMMIT_MISMATCH'
   | 'AIRPORT_LOOP_ON_NON_DEPARTURE'
   | 'NEIGHBORHOOD_ADDRESS_CONFLICT'
-  | 'HOTEL_COST_NOT_SURFACED';
+  | 'HOTEL_COST_NOT_SURFACED'
+  | 'FINAL_ORPHAN_TRANSIT';
 
 export interface IntegrityViolation {
   code: IntegrityCode;
@@ -429,7 +430,7 @@ export function checkItineraryIntegrity(
           if (!isArrival) continue;
           const stamped = pickStart(a);
           if (stamped === null) continue;
-          if (Math.abs(stamped - truthMin) > 20) {
+          if (Math.abs(stamped - truthMin) > 10) {
             violations.push({
               code: 'FLIGHT_ANCHOR_COMMIT_MISMATCH',
               dayNumber,
@@ -469,7 +470,70 @@ export function checkItineraryIntegrity(
         }
       } catch { /* non-blocking */ }
     }
+
+    // ── FINAL_ORPHAN_TRANSIT
+    // Amsterdam root-cause class: "Walk to Cafe Chris" / "Taxi to Foodhallen"
+    // shipped without the actual Cafe Chris / Foodhallen activity being
+    // scheduled. The user is routed to a venue that doesn't appear on the
+    // day. This catches the residual orphan that survives executioner's
+    // pruneOrphanTransits when the target name doesn't match a cross-city
+    // signal.
+    //
+    // A transit row "Walk/Taxi/Tram/Bus/Metro/Train to X" requires a
+    // non-bookend, non-logistics same-day activity whose normalized title or
+    // venue name contains the X token within ±90 min of the transit's
+    // end time.
+    const TRANSIT_TARGET_RE = /^(?:walk|taxi|tram|bus|metro|train|cab|uber|drive|ride|head|transfer)\s+to\s+(.{2,80})$/i;
+    for (let idx = 0; idx < acts.length; idx++) {
+      const a = acts[idx];
+      if (!a || isLocked(a)) continue;
+      const t = String(a?.title || a?.name || '').trim();
+      const m = t.match(TRANSIT_TARGET_RE);
+      if (!m) continue;
+      const targetRaw = String(m[1] || '')
+        .replace(/[.,;!?].*$/, '')
+        .replace(/\s+(for|to|on|in|at)\s+.*$/i, '')
+        .trim();
+      // Skip generic "Walk to Hotel/Airport" — bookend/logistics, covered
+      // by other invariants.
+      if (/\b(hotel|airport|station|terminal|station|home|accommodation|stay)\b/i.test(targetRaw)) continue;
+      const targetKey = normalizeVenueName(targetRaw);
+      if (!targetKey || targetKey.length < 3) continue;
+
+      const transitEnd = pickStart(a) ?? null;
+      let matched = false;
+      for (let j = 0; j < acts.length; j++) {
+        if (j === idx) continue;
+        const o = acts[j];
+        if (!o) continue;
+        // Skip other transit rows / bookends.
+        if (isLogisticsRow(o)) continue;
+        const ot = String(o?.title || o?.name || '');
+        const ov = String(o?.location?.name || o?.venue_name || '');
+        const otn = normalizeVenueName(ot);
+        const ovn = normalizeVenueName(ov);
+        const tokenMatch =
+          otn.includes(targetKey) ||
+          ovn.includes(targetKey) ||
+          new RegExp(`\\b${targetKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(otn);
+        if (!tokenMatch) continue;
+        if (transitEnd === null) { matched = true; break; }
+        const oStart = pickStart(o);
+        if (oStart === null) { matched = true; break; }
+        if (Math.abs(oStart - transitEnd) <= 90) { matched = true; break; }
+      }
+      if (!matched) {
+        violations.push({
+          code: 'FINAL_ORPHAN_TRANSIT',
+          dayNumber,
+          detail: `Transit "${t}" points to "${targetRaw}" but no matching activity is scheduled on day ${dayNumber}.`,
+          activityTitle: t,
+          activityTime: a?.startTime || a?.time || null,
+        });
+      }
+    }
   }
+
 
   // ── REQUIRED_USER_INTENT_MISSING / NO_SIGHTSEEING_CAPACITY
   if (requiredIntents.length > 0) {
