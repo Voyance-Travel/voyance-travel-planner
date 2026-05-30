@@ -271,6 +271,55 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
         arrivalTime24 = normalizeTo24h(outboundArrival) || undefined;
         flightInfo.push(`  Arrival: ${arrivalTimeStr}${arrivalTime24 ? ` (24h: ${arrivalTime24})` : ''}`);
 
+        // ── Cross-source sanity check ──────────────────────────────────────
+        // Picker said one thing. Compare against the other candidate sources
+        // we have on hand (flight_intelligence + flat-shape arrivalTime) and
+        // log if they disagree by >30m so an upstream form/picker mismatch
+        // surfaces in logs instead of silently shipping. flight_intelligence
+        // still takes precedence in the override block below — this is just
+        // an audit trail + record the chosen truth source.
+        let arrivalTruthSource: 'picker' | 'flight_intelligence' | 'flat_field' = 'picker';
+        try {
+          const flightIntelEarly = trip.flight_intelligence as Record<string, unknown> | null;
+          const schedEarly = flightIntelEarly
+            ? ((flightIntelEarly.destinationSchedule || flightIntelEarly.destination_schedule) as Array<Record<string, unknown>> | undefined)
+            : undefined;
+          const firstDestEarly = Array.isArray(schedEarly)
+            ? schedEarly.find((d: any) => d.isFirstDestination || d.is_first_destination)
+            : undefined;
+          const intelArrRaw = ((firstDestEarly?.arrivalDatetime || (firstDestEarly as any)?.arrival_datetime) as string | undefined) ||
+            ((firstDestEarly?.availableFrom || (firstDestEarly as any)?.available_from) as string | undefined);
+          const intelArr = intelArrRaw
+            ? (intelArrRaw.includes('T') ? normalizeTo24h(intelArrRaw.split('T')[1]?.substring(0, 5) || '') : normalizeTo24h(intelArrRaw))
+            : undefined;
+          const flatArr = !Array.isArray((flightRaw as any).legs) && (flightRaw as any).arrivalTime
+            ? normalizeTo24h(String((flightRaw as any).arrivalTime))
+            : undefined;
+
+          const candidates: Array<{ src: string; value?: string }> = [
+            { src: 'picker', value: arrivalTime24 },
+            { src: 'flight_intelligence', value: intelArr || undefined },
+            { src: 'flat_field', value: flatArr || undefined },
+          ].filter((c) => !!c.value);
+
+          if (candidates.length >= 2) {
+            const baseMin = parseTimeToMinutes(arrivalTime24!) || 0;
+            const disagree = candidates.some((c) => {
+              const m = parseTimeToMinutes(c.value!) || 0;
+              return Math.abs(m - baseMin) > 30;
+            });
+            if (disagree) {
+              console.warn(
+                `[FLIGHT_TRUTH_DISAGREE] tripId=${tripId} candidates=${JSON.stringify(candidates)} chose=${arrivalTime24} — precedence: flight_intelligence > picker > flat`
+              );
+              if (intelArr) arrivalTruthSource = 'flight_intelligence';
+            }
+          }
+        } catch (e) {
+          console.warn('[FLIGHT_TRUTH_DISAGREE] cross-check error:', e);
+        }
+        (flightInfo as any).arrivalTruthSource = arrivalTruthSource;
+
         if (arrivalTime24) {
           const ARRIVAL_BUFFER_MINS = 4 * 60;
           earliestFirstActivity = minutesToHHMM((parseTimeToMinutes(arrivalTime24) || 0) + ARRIVAL_BUFFER_MINS);
@@ -285,7 +334,7 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
           );
         }
 
-        console.log(`[FlightContext] Raw arrival: "${outboundArrival}", arrival24: ${arrivalTime24}, earliest sightseeing: ${earliestFirstActivity}, parseFailed=${parseFailed}`);
+        console.log(`[FlightContext] Raw arrival: "${outboundArrival}", arrival24: ${arrivalTime24}, earliest sightseeing: ${earliestFirstActivity}, parseFailed=${parseFailed}, truthSource=${arrivalTruthSource}`);
       } else if (flightRaw && (flightRaw.departure || (flightRaw as any).legs || flightRaw.arrivalTime)) {
         // flight_selection is present but no arrival string survived the picker.
         // Treat as parse-failure so Day 1 gets a soft floor instead of silence.

@@ -27,6 +27,33 @@ import {
 } from './timing-cascade.ts';
 import { qualifiesAsLateNightlife } from './late-nightlife-predicate.ts';
 import { pruneOrphanTransits } from './orphan-transit.ts';
+import { pickDestinationArrivalLeg } from './flight-leg-pick.ts';
+
+/**
+ * Re-pick the destination-arrival truth from a raw flight_selection and
+ * return it as 'HH:MM' (24h). Returns undefined when the input is missing
+ * or the picker found no arrival string. Used by `enforceFlightAnchors`
+ * as a last-gate cross-check against ctx.arrivalTime24.
+ */
+function _repickArrivalTruth(raw: unknown): string | undefined {
+  if (!raw) return undefined;
+  const picked = pickDestinationArrivalLeg(raw);
+  const s = picked?.rawArrivalString || picked?.leg?.arrivalTime;
+  if (!s) return undefined;
+  const m = String(s).trim().match(/^(\d{1,2}):(\d{2})/);
+  if (m) {
+    const h = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10);
+    if (h >= 0 && h < 24 && mm >= 0 && mm < 60) {
+      return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
+  }
+  // ISO 8601 — extract local HH:MM ignoring TZ offset (same convention as
+  // flight-hotel-context.normalizeTo24h).
+  const iso = String(s).trim().match(/^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/);
+  if (iso) return `${iso[1]}:${iso[2]}`;
+  return undefined;
+}
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -94,6 +121,13 @@ export interface ExecutionerContext {
    * telemetry shows <2% false-positive rate.
    */
   geoDropEnabled?: boolean;
+  /**
+   * Raw flight_selection from the trip row. When present, `enforceFlightAnchors`
+   * re-normalizes via the shared picker and overrides `arrivalTime24` if the
+   * picked truth disagrees by >10m. Closes the upstream-corruption path where
+   * `ctx.arrivalTime24` was committed from a wrong leg before reaching here.
+   */
+  rawFlightSelection?: unknown;
 }
 
 export interface ExecutionerResult {
@@ -239,8 +273,34 @@ export function enforceFlightAnchors(
   ctx: ExecutionerContext,
   counters: ExecutionerCounters,
 ): any[] {
-  if (!ctx.isFirstDay || !ctx.arrivalTime24) return activities;
-  const truthMin = parseTime(ctx.arrivalTime24);
+  if (!ctx.isFirstDay) return activities;
+
+  // Re-verify truth from rawFlightSelection if provided. If the freshly-picked
+  // arrival disagrees with the passed-in ctx.arrivalTime24 by >10m, log
+  // EXEC_FLIGHT_TRUTH_DRIFT and trust the freshly-picked value. Executioner
+  // is the last gate before persist — closes any upstream context corruption.
+  let truth24 = ctx.arrivalTime24 || undefined;
+  if (ctx.rawFlightSelection) {
+    try {
+      const repicked = _repickArrivalTruth(ctx.rawFlightSelection);
+      if (repicked && truth24) {
+        const a = parseTime(repicked) ?? 0;
+        const b = parseTime(truth24) ?? 0;
+        if (Math.abs(a - b) > 10) {
+          console.warn(
+            `[EXECUTIONER] EXEC_FLIGHT_TRUTH_DRIFT day=${ctx.dayNumber} ctx=${truth24} picked=${repicked} — trusting picker`
+          );
+          truth24 = repicked;
+        }
+      } else if (repicked && !truth24) {
+        truth24 = repicked;
+      }
+    } catch (e) {
+      console.warn(`[EXECUTIONER] truth re-pick failed:`, e);
+    }
+  }
+  if (!truth24) return activities;
+  const truthMin = parseTime(truth24);
   if (truthMin === null) return activities;
   const TOLERANCE = 5;
 
@@ -255,7 +315,7 @@ export function enforceFlightAnchors(
 
     const before = `${a.startTime ?? a.start_time ?? a.time ?? ''}`;
     const beforeEnd = `${a.endTime ?? a.end_time ?? ''}`;
-    setStart(a, ctx.arrivalTime24);
+    setStart(a, truth24);
     // Preserve duration when it's a *plausible* landing-block duration.
     // If the AI stamped a 2-hour "Arrival in X" with a wrong start, treat it
     // as a stale convention and collapse to a short 15-min landing block —
@@ -270,10 +330,10 @@ export function enforceFlightAnchors(
       code: 'FLIGHT_ANCHOR_MISMATCH',
       activityId: actId(a),
       title: title(a),
-      detail: `Arrival card retimed ${before}→${beforeEnd} to ${ctx.arrivalTime24}→${a.endTime} (flight truth)`,
+      detail: `Arrival card retimed ${before}→${beforeEnd} to ${truth24}→${a.endTime} (flight truth)`,
       repaired: true,
     });
-    console.log(`[EXECUTIONER] FLIGHT_ANCHOR_MISMATCH day=${ctx.dayNumber} title="${title(a)}" was=${before}→${beforeEnd} truth=${ctx.arrivalTime24}→${a.endTime}`);
+    console.log(`[EXECUTIONER] FLIGHT_ANCHOR_MISMATCH day=${ctx.dayNumber} title="${title(a)}" was=${before}→${beforeEnd} truth=${truth24}→${a.endTime}`);
   }
 
   // Drop any non-locked, non-logistics card that starts strictly before the
@@ -291,7 +351,7 @@ export function enforceFlightAnchors(
         code: 'FLIGHT_ANCHOR_MISMATCH',
         activityId: actId(a),
         title: title(a),
-        detail: `Dropped non-logistics card starting before arrival (${a.startTime ?? a.start_time} < ${ctx.arrivalTime24})`,
+        detail: `Dropped non-logistics card starting before arrival (${a.startTime ?? a.start_time} < ${truth24})`,
         repaired: true,
       });
       console.log(`[EXECUTIONER] pre-arrival drop day=${ctx.dayNumber} title="${title(a)}" start=${a.startTime}`);
