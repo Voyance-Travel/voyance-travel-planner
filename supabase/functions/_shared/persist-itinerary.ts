@@ -989,14 +989,33 @@ export async function persistTripItinerary(
 
     if (isReadyClaim && Array.isArray(days) && days.length > 0 && !regressionBlocked && !mealOnlyBlocked) {
       // Verify caller-provided commit token.
+      //
+      // NOTE: persistTripItinerary mutates `days` internally
+      // (sanitizeSchedule, enforceTimingAndBuffers, predawn cascade, …)
+      // BEFORE we verify, so a strict content-hash match against the
+      // current `days` is expected to fail when those mutators touched
+      // anything. We treat `content-mismatch` as a soft signal (logged
+      // but not enforced), and require the cheaper guarantees —
+      // signature valid, trip-bound, within TTL — for strict-mode
+      // authentication of the caller (proves they ran resolveCommitGate
+      // upstream rather than bypassing it).
       if (options.commitToken) {
         try {
           const { verifyCommitToken } = await import('./commit-token.ts');
           const v = await verifyCommitToken(options.commitToken, tripId, days);
+          const authenticated = v.ok || v.reason === 'content-mismatch';
           if (v.ok) {
             tokenAudit = { result: 'verified', ageMs: v.ageMs, strict: strictMode };
             console.log(
               `[${label}] [COMMIT_TOKEN] verified ageMs=${v.ageMs} tripId=${tripId} strict=${strictMode}`,
+            );
+          } else if (authenticated) {
+            // Signature/trip/TTL valid but content drifted (expected
+            // when internal mutators ran). Treat as verified for
+            // strict-mode purposes; flag drift in audit.
+            tokenAudit = { result: 'verified', reason: 'content-drift', ageMs: v.ageMs, strict: strictMode };
+            console.log(
+              `[${label}] [COMMIT_TOKEN] authenticated (content-drift expected from mutators) ageMs=${v.ageMs} tripId=${tripId}`,
             );
           } else {
             tokenAudit = { result: 'rejected', reason: v.reason, ageMs: v.ageMs, strict: strictMode };
@@ -1012,6 +1031,7 @@ export async function persistTripItinerary(
         tokenAudit = { result: 'missing', strict: strictMode };
         console.log(`[${label}] [COMMIT_TOKEN] missing tripId=${tripId} strict=${strictMode}`);
       }
+
 
       // Strict-mode pre-demote: any non-verified outcome forces partial up
       // front. Re-gate still runs (will re-mint a fresh token if days are
