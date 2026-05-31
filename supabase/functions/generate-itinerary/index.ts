@@ -12,6 +12,7 @@ import { handleSyncItineraryTables } from './action-sync-tables.ts';
 import { handleRepairTripCosts } from './action-repair-costs.ts';
 import { handleGenerateTrip } from './action-generate-trip.ts';
 import { handleGenerateTripDay } from './action-generate-trip-day.ts';
+import { handleGenerateTripDayV2, shouldUseV2Chain } from './v2/generate-trip-day-v2.ts';
 import { handleGenerateDay } from './action-generate-day.ts';
 import { handleGenerateFull } from './action-generate-full.ts';
 import { corsHeaders, type ActionContext } from './action-types.ts';
