@@ -3886,7 +3886,20 @@ export default function TripDetail() {
               const rawFlight = trip.flight_selection as Record<string, unknown> | null;
               
               const normalizedFlight = rawFlight ? (() => {
-                const normalized = normalizeFlightSelection(rawFlight);
+                const _destIata = (() => {
+                  try {
+                    const fs: any = rawFlight || {};
+                    const legsArr = Array.isArray(fs.legs) ? fs.legs : [];
+                    const marked = legsArr.find((l: any) => l?.isDestinationArrival);
+                    return (
+                      (marked?.arrival?.airport as string | undefined) ||
+                      (marked?.arrivalAirport as string | undefined) ||
+                      (fs.arrivalAirport as string | undefined) ||
+                      null
+                    );
+                  } catch { return null; }
+                })();
+                const normalized = normalizeFlightSelection(rawFlight, { destinationIata: _destIata });
                 if (!normalized || normalized.legs.length === 0) {
                   // Fall back to legacy outbound/return extraction
                   const getFlightLeg = (source: Record<string, unknown> | undefined) => {
