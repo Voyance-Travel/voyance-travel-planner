@@ -2855,8 +2855,18 @@ async function _handleGenerateTripDayInner(
   // lands at the destination (leg N-2), not the leg out of home (leg 0).
   const flightSel = (tripCheck?.flight_selection as Record<string, any>) || null;
   const { pickDestinationArrivalLeg, pickDestinationDepartureLeg } = await import('../_shared/flight-leg-pick.ts');
-  const _arrPick = pickDestinationArrivalLeg(flightSel);
-  const _depPick = pickDestinationDepartureLeg(flightSel);
+  // Derive destination IATA from flat shape or user-marked leg so multi-leg
+  // shapes don't get the wrong leg auto-tagged. flight_intelligence isn't
+  // selected on tripCheck here; flight-hotel-context.ts uses the richer path.
+  const _flightLegs = Array.isArray(flightSel?.legs) ? (flightSel.legs as any[]) : [];
+  const _markedArrLeg = _flightLegs.find((l) => l?.isDestinationArrival);
+  const _destIata =
+    (((_markedArrLeg?.arrival?.airport as string | undefined) ||
+      (_markedArrLeg?.arrivalAirport as string | undefined) ||
+      (flightSel?.arrivalAirport as string | undefined) ||
+      '') as string).trim().toUpperCase() || null;
+  const _arrPick = pickDestinationArrivalLeg(flightSel, { destinationIata: _destIata });
+  const _depPick = pickDestinationDepartureLeg(flightSel, { destinationIata: _destIata });
   const nestedDepSaved = flightSel?.departure as Record<string, any> | undefined;
   const nestedRetSaved = flightSel?.return as Record<string, any> | undefined;
   let savedArrivalTime24: string | undefined =
