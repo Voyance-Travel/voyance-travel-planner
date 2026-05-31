@@ -17,6 +17,7 @@ import { isWeakAddress } from '@/lib/address-quality';
 import { dayChronoKey } from '@/lib/itinerary/dayChronoKey';
 import { timeOfDayBand } from '@/lib/itinerary/timeOfDayBand';
 import { computeHeaderStripValues, excludedBreakdownLabel } from '@/lib/itinerary/headerStripValues';
+import { composeDisplayedTripTotal } from '@/hooks/useDisplayedTripTotal';
 import { coerceDurationString } from '@/utils/plannerUtils';
 import { useLedgerCostOverrideMap, getLedgerOverride, warnOnceLedgerOverride } from '@/utils/ledgerCostOverride';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
@@ -4029,31 +4030,36 @@ export function EditorialItinerary({
   );
 
   // ─── Single header-strip computation ───
-  // Both the large top-line `Trip Total` and the equation-row `Trip Total`
-  // MUST read from the same helper so they can never disagree (root cause of
-  // the recurring `Days + Hotel = Trip Total` math-wrong header on
-  // Casablanca/Kyoto/Osaka/Amsterdam/Sapporo). The helper guarantees
-  // `displayed = max(snapshot, days + hotel + flight)` whenever a hotel/flight
-  // chip is visible, so the headline always includes the hotel even when the
-  // snapshot fetch is mid-flight or under-counts.
-  // See mem://constraints/finance/header-strip-mirrors-snapshot.
-  const headerStripValues = useMemo(() => computeHeaderStripValues({
-    tripTotalUsd:  financialSnapshot.tripTotalCents / 100,
-    daysGroupUsd:  daysSubtotalCents / 100,
-    hotelChipUsd:  financialSnapshot.effectiveHotelCents / 100,
-    flightChipUsd: financialSnapshot.effectiveFlightCents / 100,
-    excludedHotelUsd:  financialSnapshot.excludedHotelCents / 100,
-    excludedFlightUsd: financialSnapshot.excludedFlightCents / 100,
-    loading:       financialSnapshot.loading,
-  }), [
-    financialSnapshot.tripTotalCents,
-    financialSnapshot.effectiveHotelCents,
-    financialSnapshot.effectiveFlightCents,
-    financialSnapshot.excludedHotelCents,
-    financialSnapshot.excludedFlightCents,
-    financialSnapshot.loading,
-    daysSubtotalCents,
-  ]);
+  // Sourced from the shared `composeDisplayedTripTotal` composer so the
+  // top-line `Trip Total`, the equation-row `Trip Total`, the Reconciling
+  // hint, the PaymentsTab "Trip Total"/"Matches itinerary" badge, and the
+  // BudgetTab/BudgetCoach `currentTotalCents` all read from the same
+  // function. Composer guarantees `displayed = max(snapshot, days + hotel
+  // + flight)` whenever a hotel/flight chip is visible. We reuse the
+  // existing `financialSnapshot` + `tripDayBreakdown` instances (which the
+  // per-day panels also need) instead of calling `useDisplayedTripTotal`
+  // here — that would trigger a duplicate snapshot+breakdown fetch.
+  // See mem://constraints/finance/displayed-trip-total-single-source +
+  // mem://constraints/finance/header-strip-mirrors-snapshot.
+  const dayNumbersForStrip = useMemo(
+    () => days.map(d => d.dayNumber),
+    [days],
+  );
+  const displayedTotal = useMemo(
+    () => composeDisplayedTripTotal(financialSnapshot, tripDayBreakdown, dayNumbersForStrip),
+    [
+      financialSnapshot.tripTotalCents,
+      financialSnapshot.effectiveHotelCents,
+      financialSnapshot.effectiveFlightCents,
+      financialSnapshot.excludedHotelCents,
+      financialSnapshot.excludedFlightCents,
+      financialSnapshot.loading,
+      tripDayBreakdown.byDay,
+      tripDayBreakdown.loading,
+      dayNumbersForStrip,
+    ],
+  );
+  const headerStripValues = displayedTotal.headerStripValues;
 
   // Dev guard: warn when day totals exceed trip total (indicates the snapshot
   // dropped rows the day breakdown still counts — e.g. orphan filter mismatch).
