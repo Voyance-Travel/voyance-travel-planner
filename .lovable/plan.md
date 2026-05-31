@@ -31,22 +31,24 @@ New file `supabase/functions/_shared/trip-facts.ts`. Pure orchestration over exi
 
 Snapshot test against a known trip row. No callers wired yet.
 
-### Phase B — `action-generate-trip-day-v2.ts` (3-4 days, the high-leverage phase)
+### Phase B — `action-generate-trip-day-v2.ts` (3-4 days, the high-leverage phase) — **SCAFFOLD SHIPPED**
 
-Skip `action-generate-day-v2` for now; the 4,780-line file is the actual bottleneck. New thin wrapper:
+Status: scaffold landed at `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts`. Wires `resolveTripFacts → compileDayFacts → compilePrompt → compileDaySchema → callAI → repairDay → applyValidationGate → enrichAndValidateHours → persistDay → persistTripItinerary → writeActivityCostsFromItinerary`. Router check `shouldUseV2Chain` reads `trips.metadata.useV2Chain`; defaults to v1 for every trip. Smoke tests in `v2/__tests__/generate-trip-day-v2.test.ts` (5 passing).
 
-```text
-resolveTripFacts(tripId) → facts
-for d in startDay..facts.dates.totalDays:
-  prompt = buildDayPrompt(facts, d)        // existing compile-prompt
-  raw    = await callDayLLM(prompt)        // existing ai-call
-  day    = await repairAndValidate(raw, facts) // existing repair-day + validation-gate (black box)
-  await persistDay(day, facts)             // existing persist-day
-```
+**Not yet ported from v1** (gate for cutover; flag stays off until each lands):
+- `scheduleMustDos` + `injectMissingMustDos` (Core: Must-Do Coverage)
+- `_shared/schedule-executioner.ts` final chokepoint (Core: Schedule Executioner)
+- `runBookendVerification` (Core: Persist-Boundary Bookend Verification)
+- `anchor-guard` cross-day dedupe + floating drop
+- `ledger-check` mutating passes (vibe-clash dinner downgrade, repeat-already-done)
+- Post-meal guard + `runStep8` retry
+- `scrubActivity` / `scrubPhantomEventRefs` / nuclear cross-city + dining sweeps
+- `assertNoCrossDayBleed`
+- Chain self-invoke (next-day kick + heartbeat polling)
+- `withStage` trace-recorder instrumentation
 
-- Feature flag `useV2Chain` on the router; old `generate-trip-day` continues to serve in parallel.
-- The 4,780-line file stays on disk until v2 ships clean on 5+ internal trips.
-- `writeActivityCostsFromItinerary` called exactly once inside `persistDay`. The two other write sites (`action-generate-trip-day.ts:4294`, `generation-core.ts:3211`) become no-ops via the flag.
+Each of the above is an existing module in `_shared/` or `pipeline/`; porting them is a wiring exercise inside the v2 wrapper, not a rewrite. Target: 2 internal trips green on v2 before flipping the default.
+
 
 ### Phase C — Detector → repair upgrades (1-2 days)
 
