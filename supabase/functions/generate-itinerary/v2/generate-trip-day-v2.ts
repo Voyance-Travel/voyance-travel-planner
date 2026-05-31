@@ -172,7 +172,7 @@ export async function handleGenerateTripDayV2(
       supabase,
       tripId,
       dayNumber,
-      date: facts.dates.dayDates[dayNumber - 1],
+      date: dayDate,
       generatedDay: finalDay,
       normalizedActivities: finalDay.activities,
       action: 'generate-trip-day',
@@ -197,7 +197,7 @@ export async function handleGenerateTripDayV2(
       : [];
     const mergedDays = [...existingDays];
     const idx = mergedDays.findIndex((d: any) => d?.dayNumber === dayNumber);
-    const newDayPayload = { ...finalDay, dayNumber, date: facts.dates.dayDates[dayNumber - 1] };
+    const newDayPayload = { ...finalDay, dayNumber, date: dayDate };
     if (idx >= 0) mergedDays[idx] = newDayPayload;
     else mergedDays.push(newDayPayload);
 
@@ -212,7 +212,12 @@ export async function handleGenerateTripDayV2(
       console.warn(`[v2] persistTripItinerary not applied: ${persistResult.error || 'frozen'}`);
     }
 
-    await writeActivityCostsFromItinerary(supabase, tripId, {
+    await writeActivityCostsFromItinerary(supabase, tripId, mergedDays, {
+      destination: facts.destination.city,
+      travelers: facts.travelers.count,
+      budgetTier: facts.preferences.budgetTier,
+    });
+
       days: mergedDays,
     } as any);
 
