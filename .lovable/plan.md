@@ -1,62 +1,88 @@
-# Phase B Finish — v2 Parity Ports ✅ SHIPPED
+# Phase B ✅ SHIPPED + Phase C ✅ SHIPPED
 
-Status: all 6 parity ports wired into `generate-trip-day-v2.ts`. Tests green (6/6). Still gated behind `trips.metadata.useV2Chain === true`. Next: flip 2 internal trips and run parity diff vs v1.
+Status:
+- Phase B parity ports all wired into `generate-trip-day-v2.ts`, 6/6 tests green.
+- Phase C detector→repair upgrades wired between enrich and executioner, 11/11 tests green.
+- v2 still gated behind `trips.metadata.useV2Chain === true`.
 
-## Ports (in order of risk) — all complete
+Next: flip 2 internal trips, run parity diff vs v1, then Phase D cutover.
 
+---
 
+## Phase C — Detector→Repair Upgrades ✅ SHIPPED
 
-### 1. ledger-check mutating passes
-Wire `ledgerCheck(days, ledgers)` into v2 after `repairDay`, before `scheduleExecutioner`. Highest risk — handles vibe-clash dinner downgrades and repeat-already-done (with meal exemption per Core memory). Reuse existing `supabase/functions/generate-itinerary/ledger-check.ts` as-is; just need to build the per-day ledger context from `tripFacts` + prior days.
+New module `supabase/functions/generate-itinerary/v2/detector-repairs.ts`:
+exposes `runDetectorRepairs(activities, dayNumber) → { activities, counters, unresolvedOverlaps }`.
+Three deterministic passes in order:
 
-### 2. Post-meal-guard + runStep8 retry
-After `enforceRequiredMealsFinalGuard` fires, run:
-- `fillAfterMealGuard` (existing helper) for description backfill on injected dining stubs
-- `runStep8` retry to add hotel-return bookend if meal guard pushed dinner late
-Sentinel `hotel_return_post_meal_guard` per existing contract.
+1. **closingHoursAutoShift** — Drops cards scheduled outside venue hours
+   (`startsAfterClose`, `endsAfterClose` with 15-min grace, `startsBeforeOpen`).
+   Replaced inline with `needs_replacement: true` + `metadata.dropped_reason` +
+   `metadata.original_title` + `metadata.venue_hours`. Locked / user / booked
+   rows exempt. Runs first so the overlap pass doesn't waste shift budget on
+   cards we're about to drop.
 
-### 3. Post-injection enrichment for must-do stubs
-After `injectMissingMustDos`, call `enrichDay` again scoped to newly-injected rows (they enter with `needsAnchorEnrichment:true`) + `fillMissingDescriptions` for any blank descriptions.
+2. **overlapAutoShift** — Walks pairs (i-1, i). When `currStart < prevEnd`,
+   pushes current forward in 15-min increments. Cap = 90 min cumulative
+   day-wide shift; on breach or when the next card is locked/exempt, the
+   overlap is appended to `unresolvedOverlaps[]` and surfaced at
+   `metadata.quality.unresolved_overlaps`.
 
-### 4. scrubPhantomEventRefs + nuclear sweeps
-Add to per-card validation loop (already runs `scrubActivity`):
-- `scrubPhantomEventRefs` (clause-level phantom-ref strip)
-- `nuclearCrossCitySweep` + `nuclearDiningStrip` + `nuclearWellnessSweep` in terminalCleanup-equivalent stage
+3. **transitSanityWiden** — Transit cards (`category=transit/transport/transfer/
+   logistics` or title starting `walk/stroll/transfer/drive/taxi/metro/bus/
+   train`) with duration <8 min get widened when EITHER prev↔next haversine
+   sits in 200–1500 m OR `neighborhood` mismatches between prev and next.
+   New duration = max(10, ceil(km × 12)). Stamps
+   `metadata.transit_widened = { from_min, to_min, distance_m, reason }`.
 
-### 5. Chain self-invoke
-After successful persist of day N, if N < tripDays:
-- Fire-and-forget `EdgeRuntime.waitUntil` invoke of next day via `supabase.functions.invoke('generate-itinerary', { body: { action: 'generate-trip-day', tripId, dayNumber: N+1 } })`
-- Emit launcher phase markers per `mem://constraints/observability/launcher-phase-markers`
-- Heartbeat-aware: respect cancel flag in `trips.metadata.generation_cancelled`
+Counters → `day.metadata.quality.v2_detector_repairs = { overlapsShifted,
+overlapsUnresolved, closingDropped, transitWidened, totalShiftMin }`.
+Sentinel: `[V2_DETECTOR_REPAIRS] day=N overlap=X unresolved=Y closing=Z transit=W shiftMin=M`.
 
-### 6. withStage trace instrumentation
-Wrap every pipeline stage in `withStage(trace, name, {dayNumber, inputs}, ctx => …)` using canonical names from `mem://constraints/observability/unified-generation-trace`. Trace persisted to `metadata.quality.generation_trace`.
+Wiring in `generate-trip-day-v2.ts`: new stage `v2_detector_repairs` runs
+inside `withStage` between `enrichAndValidateHours` (Section 6) and
+`runScheduleExecutioner` (Section 6b). Failures are non-blocking.
 
-## Tests
-Extend `v2/__tests__/generate-trip-day-v2.test.ts`:
-- ledger-check vibe-clash mutation flows through v2
-- chain self-invoke fires for N<tripDays, suppressed when cancelled
-- trace recorder captures all canonical stage names
-- meal-guard → post-fill chain produces non-empty dining descriptions
+Tests: `supabase/functions/generate-itinerary/v2/__tests__/detector-repairs.test.ts`
+(11 cases — empty input, single overlap shift, 90-min cap with unresolved,
+locked-next protection, closing-after / before / grace / locked-exempt,
+transit haversine + neighborhood + below-threshold no-op, closing-before-overlap
+ordering).
 
-## Verification (parity gate)
-1. Run full deno test suite — must stay green
-2. Flip `metadata.useV2Chain=true` on 2 internal trips (3-day + 5-day, different destinations)
-3. Compare v1 vs v2 outputs: must-do coverage, meal counts, hotel-return bookends, cost ledger parity, no cross-day bleed
-4. Health-score parity (±2 points acceptable)
+---
 
-## Files
+## Phase B — v2 Parity Ports ✅ SHIPPED
+
+All 6 ports live; see git history for line-level details:
+1. ledger-check mutating passes
+2. Post-meal-guard + runStep8 retry
+3. Post-injection enrichment for must-do stubs
+4. scrubPhantomEventRefs + nuclear sweeps
+5. Chain self-invoke
+6. withStage trace instrumentation
+
+---
+
+## Verification (parity gate — user action)
+
+1. Deno test suite must stay green ✅
+2. Flip `metadata.useV2Chain = true` on 2 internal trips (3-day + 5-day,
+   different destinations).
+3. Compare v1 vs v2: must-do coverage, meal counts, hotel-return bookends,
+   cost ledger parity, no cross-day bleed, no unresolved_overlaps > 0.
+4. Health-score parity (±2 points acceptable).
+
+## Files (Phase C)
+
+**New:**
+- `supabase/functions/generate-itinerary/v2/detector-repairs.ts`
+- `supabase/functions/generate-itinerary/v2/__tests__/detector-repairs.test.ts`
 
 **Modified:**
-- `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts` — wire all 6 ports
-- `supabase/functions/generate-itinerary/v2/__tests__/generate-trip-day-v2.test.ts` — extend coverage
-- `.lovable/plan.md` — mark Phase B complete
+- `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts` (+ import + Section 6a stage)
+- `.lovable/plan.md`
 
-**No new files** — all helpers exist in `_shared/` or `generate-itinerary/`.
-
-## Out of scope (next phases)
-- Phase C detector→repair upgrades (overlap auto-shift, closing-hours, transit-sanity widen)
-- Phase D cutover + v1 deletion
-- Phase E financial snapshot audit
-
-After parity green on 2 trips, ready for Phase C kickoff.
+## Out of scope (Phase D + E)
+- Phase D: flip default `useV2Chain` after parity green; delete
+  `action-generate-trip-day.ts` (4,780 lines) and `generation-core.ts` Stage 6 writer.
+- Phase E: route Budget Coach + reconciling toast through `useDisplayedTripTotal`.
