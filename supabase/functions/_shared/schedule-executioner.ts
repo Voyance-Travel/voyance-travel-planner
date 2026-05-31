@@ -314,7 +314,7 @@ export function enforceFlightAnchors(
   let truth24 = ctx.arrivalTime24 || undefined;
   if (ctx.rawFlightSelection) {
     try {
-      const repicked = _repickArrivalTruth(ctx.rawFlightSelection);
+      const repicked = _repickArrivalTruth(ctx.rawFlightSelection, ctx.destinationIata);
       if (repicked && truth24) {
         const a = parseTime(repicked) ?? 0;
         const b = parseTime(truth24) ?? 0;
