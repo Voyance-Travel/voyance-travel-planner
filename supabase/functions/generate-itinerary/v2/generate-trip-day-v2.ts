@@ -218,8 +218,7 @@ export async function handleGenerateTripDayV2(
       budgetTier: facts.preferences.budgetTier,
     });
 
-      days: mergedDays,
-    } as any);
+
 
     const ms = Date.now() - t0;
     console.log(`[v2] generate-trip-day OK day=${dayNumber} in ${ms}ms`);
