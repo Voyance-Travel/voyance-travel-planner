@@ -251,10 +251,44 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
     if (flightRaw) {
       const flightInfo: string[] = [];
 
-      const arrivalPick = pickDestinationArrivalLeg(flightRaw);
-      const departurePick = pickDestinationDepartureLeg(flightRaw);
+      // Derive destination IATA so autoTagLegs can disambiguate multi-leg
+      // and non-canonical-order shapes (closes Dublin/Amsterdam wrong-anchor
+      // pattern where leg ordering didn't match the naive "leg 0 = arrival"
+      // assumption). Sources, in priority order:
+      //   1. flight_intelligence.destinationSchedule first-destination airport
+      //   2. flat-shape arrivalAirport
+      //   3. a user-marked isDestinationArrival leg's arrival airport
+      let destinationIata: string | null = null;
+      try {
+        const fi = trip.flight_intelligence as Record<string, unknown> | null;
+        const sched = fi
+          ? ((fi.destinationSchedule || fi.destination_schedule) as Array<Record<string, unknown>> | undefined)
+          : undefined;
+        const firstDest = Array.isArray(sched)
+          ? (sched.find((d: any) => d.isFirstDestination || d.is_first_destination) || sched[0])
+          : undefined;
+        const iataFromIntel =
+          (firstDest?.arrivalAirport as string | undefined) ||
+          ((firstDest as any)?.arrival_airport as string | undefined);
+        const iataFromFlat = (flightRaw as any).arrivalAirport as string | undefined;
+        const legsArr = Array.isArray((flightRaw as any).legs) ? ((flightRaw as any).legs as any[]) : [];
+        const markedLeg = legsArr.find((l) => l?.isDestinationArrival);
+        const iataFromMarked =
+          (markedLeg?.arrival?.airport as string | undefined) ||
+          (markedLeg?.arrivalAirport as string | undefined);
+        destinationIata = (iataFromIntel || iataFromFlat || iataFromMarked || '').trim() || null;
+        if (destinationIata) destinationIata = destinationIata.toUpperCase();
+      } catch (_) {
+        destinationIata = null;
+      }
+
+      const arrivalPick = pickDestinationArrivalLeg(flightRaw, { destinationIata });
+      const departurePick = pickDestinationDepartureLeg(flightRaw, { destinationIata });
       legPickSource = arrivalPick.source;
       legDeparturePickSource = departurePick.source;
+      console.log(
+        `[FlightContext] destinationIata=${destinationIata ?? '(none)'} arrPickSource=${legPickSource} depPickSource=${legDeparturePickSource}`,
+      );
 
       const outboundArrival =
         arrivalPick.rawArrivalString || arrivalPick.leg?.arrivalTime;
