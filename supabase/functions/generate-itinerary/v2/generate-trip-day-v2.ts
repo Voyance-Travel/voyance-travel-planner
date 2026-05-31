@@ -1,33 +1,27 @@
 /**
- * generate-trip-day-v2.ts — Phase B scaffold.
+ * generate-trip-day-v2.ts — Phase B wrapper.
  *
- * Thin wrapper over the existing pipeline helpers. Composes:
+ * Thin orchestration over existing pipeline helpers. Composes:
  *   resolveTripFacts → compileDayFacts → compilePrompt → callAI →
  *   repairDay → applyValidationGate → enrichAndValidateHours →
- *   persistDay (tables) + persistTripItinerary (JSON) +
- *   writeActivityCostsFromItinerary
+ *   scrubActivity (per-card) → runScheduleExecutioner (per-day) →
+ *   persistDay (tables) + merged days → applyAnchorsWin +
+ *   normalizePredawnCascade + assertNoCrossDayBleed +
+ *   runBookendVerification + must-do coverage/injection (on final day) →
+ *   persistTripItinerary (JSON) + writeActivityCostsFromItinerary
  *
  * ──────────────────────────────────────────────────────────────────────────
- * STATUS — NOT PRODUCTION READY
+ * STATUS — STILL BEHIND `trips.metadata.useV2Chain === true`
  * ──────────────────────────────────────────────────────────────────────────
- * Gated behind `trips.metadata.useV2Chain === true`. The router falls back
- * to v1 (`action-generate-trip-day.ts`, 4,780 lines) for every trip until
- * the v1-only stages below are ported into the wrapper or its callees:
+ * Gated default = OFF. Router falls back to v1 (`action-generate-trip-day.ts`)
+ * for every trip until v2 ships clean on 5+ internal trips.
  *
- *   - scheduleMustDos + injectMissingMustDos (must-do coverage gate)
- *   - schedule-executioner (final deterministic post-pipeline chokepoint)
- *   - persist-boundary bookend verification (runBookendVerification)
- *   - anchor-guard cross-day dedupe / floating drop
- *   - ledger-check destructive passes (vibe-clash dinner downgrade, etc.)
- *   - post-meal guard + runStep8 retry
- *   - scrubActivity / scrubPhantomEventRefs / cross-city sweeps
- *   - assertNoCrossDayBleed
+ * Still not ported (next round):
+ *   - ledger-check destructive passes (vibe-clash dinner downgrade)
+ *   - post-injection anchor-enrichment + description-fill
  *   - chain-self-invoke for the next day
- *   - trace-recorder withStage instrumentation
- *
- * Cutover plan: enable per-trip via `useV2Chain` metadata flag on 5 internal
- * trips, verify byte-for-byte parity vs v1 across the 10 P0 checks, then
- * flip the default in the router and delete v1.
+ *   - withStage trace-recorder instrumentation
+ *   - cross-city nuclear sweeps (scrubActivity covers per-card already)
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -44,6 +38,15 @@ import { enrichAndValidateHours } from '../pipeline/enrich-day.ts';
 import { persistDay } from '../pipeline/persist-day.ts';
 import { persistTripItinerary } from '../../_shared/persist-itinerary.ts';
 import { writeActivityCostsFromItinerary } from '../../_shared/write-activity-costs.ts';
+import { scrubActivity } from '../../_shared/scrub-activity.ts';
+import { runScheduleExecutioner, toExecutionerAuditCodes } from '../../_shared/schedule-executioner.ts';
+import { applyAnchorsWin } from '../anchor-guard.ts';
+import { runBookendVerification } from '../../_shared/bookend-verification.ts';
+import { assertNoCrossDayBleed } from '../../_shared/cross-day-bleed-guard.ts';
+import { normalizePredawnCascade } from '../../_shared/predawn-cascade-normalize.ts';
+import { assertMustDoCoverage } from '../../_shared/assert-must-do-coverage.ts';
+import { injectMissingMustDos } from '../../_shared/inject-missing-must-dos.ts';
+import { extractMustDoVenues } from '../../_shared/extract-must-dos.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -68,8 +71,11 @@ export async function handleGenerateTripDayV2(
   try {
     // ── 1. Unified facts (Phase A) ─────────────────────────────────────
     const facts = await resolveTripFacts(supabase, tripId);
+    const totalDays = facts.dates.totalDays;
+    const isFirstDay = dayNumber === 1;
+    const isLastDay = totalDays > 0 && dayNumber === totalDays;
 
-    // Compute the calendar date for this day (TripFacts has start/total only).
+    // Compute the calendar date for this day.
     const dayDate = (() => {
       if (!facts.dates.startDate) return null;
       const d = new Date(facts.dates.startDate + 'T00:00:00Z');
@@ -82,7 +88,7 @@ export async function handleGenerateTripDayV2(
       ...params,
       tripId,
       dayNumber,
-      totalDays: facts.dates.totalDays,
+      totalDays,
       destination: facts.destination.city,
       destinationCountry: facts.destination.country,
       date: dayDate,
@@ -96,7 +102,7 @@ export async function handleGenerateTripDayV2(
       ...params,
       tripId,
       dayNumber,
-      totalDays: facts.dates.totalDays,
+      totalDays,
       destination: facts.destination.city,
       date: dayDate,
       travelers: facts.travelers.count,
@@ -105,10 +111,9 @@ export async function handleGenerateTripDayV2(
       preferences: facts.preferences.interests,
     }, dayFacts);
 
-
     const schema = compileDaySchema({
       dayNumber,
-      totalDays: facts.dates.totalDays,
+      totalDays,
       facts: dayFacts,
       compiled,
     } as any);
@@ -155,6 +160,19 @@ export async function handleGenerateTripDayV2(
       label: 'v2',
     } as any);
 
+    // ── 5b. scrubActivity per card — unified output validation layer ───
+    // See mem://constraints/itinerary/unified-output-validation-layer.
+    const scrubAgg = { titleLeak: 0, bodyLeak: 0, fragment: 0, mealSuffix: 0, crossCity: 0, countryMismatch: 0, phantomRef: 0, downgraded: 0 } as Record<string, number>;
+    if (Array.isArray(gated.day?.activities)) {
+      for (const a of gated.day.activities) {
+        const ops = scrubActivity(a, { destination: facts.destination.city });
+        for (const k of Object.keys(scrubAgg)) {
+          scrubAgg[k] += (ops as any)[k] || 0;
+        }
+      }
+      console.log(`[v2] [SCRUB_ACTIVITY] day=${dayNumber} dest=${facts.destination.city} ops=${JSON.stringify(scrubAgg)}`);
+    }
+
     // ── 6. Address / hours enrichment ──────────────────────────────────
     const enriched = await enrichAndValidateHours({
       supabase,
@@ -165,7 +183,53 @@ export async function handleGenerateTripDayV2(
       activities: gated.day.activities,
     } as any);
 
-    const finalDay = { ...gated.day, activities: enriched };
+    let finalDay: any = { ...gated.day, activities: enriched };
+
+    // ── 6b. Schedule Executioner — deterministic post-pipeline chokepoint
+    // See mem://constraints/itinerary/schedule-executioner.
+    if (Array.isArray(finalDay.activities) && finalDay.activities.length > 0) {
+      try {
+        const geoDropEnabled = (Deno.env.get('EXECUTIONER_GEO_DROP_ENABLED') || '').toLowerCase() === 'true';
+        const execCtx = {
+          dayNumber,
+          totalDays,
+          isFirstDay,
+          isLastDay,
+          arrivalTime24: isFirstDay ? facts.arrival.time24 : null,
+          departureTime24: isLastDay ? facts.departure.time24 : null,
+          dayTitle: finalDay?.title || finalDay?.theme || null,
+          budgetTier: facts.preferences.budgetTier ?? null,
+          geoFlagOnly: !geoDropEnabled,
+          geoDropEnabled,
+          rawFlightSelection: null,
+          destinationIata: isFirstDay ? facts.destination.iata : null,
+          hotelName: facts.hotel.name,
+        } as any;
+        const exec = runScheduleExecutioner(finalDay.activities, execCtx);
+        finalDay.activities = exec.activities;
+        finalDay.metadata = finalDay.metadata || {};
+        finalDay.metadata.quality = finalDay.metadata.quality || {};
+        finalDay.metadata.quality.executioner = {
+          flightAnchorRepaired: exec.counters.flightAnchorRepaired,
+          midnightSpilloversAllowed: exec.counters.midnightSpilloversAllowed,
+          midnightSpilloversDropped: exec.counters.midnightSpilloversDropped,
+          bufferRepairs: exec.counters.bufferRepairs,
+          overlapRepairs: exec.counters.overlapRepairs,
+          transitRecomputed: exec.counters.transitRecomputed,
+          geoOutliersFlagged: exec.counters.geoOutliersFlagged,
+          geoOutliersDropped: exec.counters.geoOutliersDropped,
+          droppedActivities: exec.counters.droppedActivities,
+          gapsRefilled: exec.counters.gapsRefilled,
+          geoDropEnabled,
+        };
+        finalDay.metadata.quality.executioner_audit = toExecutionerAuditCodes(exec.counters, dayNumber);
+        console.log(
+          `[v2] [EXECUTIONER_SUMMARY] day=${dayNumber} flight=${exec.counters.flightAnchorRepaired} buffer=${exec.counters.bufferRepairs} overlap=${exec.counters.overlapRepairs} geoFlagged=${exec.counters.geoOutliersFlagged} dropped=${exec.counters.droppedActivities}`,
+        );
+      } catch (execErr) {
+        console.warn('[v2] schedule-executioner failed (non-blocking):', execErr);
+      }
+    }
 
     // ── 7. Persist tables (itinerary_days + itinerary_activities) ──────
     const persisted = await persistDay({
@@ -186,10 +250,10 @@ export async function handleGenerateTripDayV2(
       );
     }
 
-    // ── 8. Patch trips.itinerary_data with this day, then write costs ──
+    // ── 8. Patch trips.itinerary_data with this day ────────────────────
     const { data: tripRow } = await supabase
       .from('trips')
-      .select('itinerary_data')
+      .select('itinerary_data, metadata')
       .eq('id', tripId)
       .maybeSingle();
     const existingDays: any[] = Array.isArray(tripRow?.itinerary_data?.days)
@@ -200,7 +264,74 @@ export async function handleGenerateTripDayV2(
     const newDayPayload = { ...finalDay, dayNumber, date: dayDate };
     if (idx >= 0) mergedDays[idx] = newDayPayload;
     else mergedDays.push(newDayPayload);
+    mergedDays.sort((a: any, b: any) => (a?.dayNumber ?? 0) - (b?.dayNumber ?? 0));
 
+    const tripMeta = (tripRow?.metadata as any) || {};
+
+    // ── 8b. Cross-day quality passes (run every day; cheap + idempotent) ─
+    try {
+      const bleed = assertNoCrossDayBleed(mergedDays);
+      if (bleed.bleedFixed > 0) {
+        console.log(`[v2] [DAY1_BLEED_GUARD] fixed=${bleed.bleedFixed}`);
+      }
+    } catch (e) { console.warn('[v2] cross-day-bleed-guard failed:', e); }
+
+    for (const d of mergedDays) {
+      try {
+        const acts = Array.isArray(d?.activities) ? d.activities : [];
+        const res = normalizePredawnCascade(acts);
+        if (res.shifted > 0) {
+          d.activities = res.activities;
+          console.log(`[v2] [PREDAWN_CASCADE_NORMALIZE] day=${d.dayNumber} shifted=${res.shifted}`);
+        }
+      } catch (e) { console.warn('[v2] predawn normalize failed:', e); }
+    }
+
+    // ── 8c. Chain-finalization stages (run on every persisted day;
+    //         must-do injection only fires when coverage warrants) ──────
+    let mustDoInjection: any = null;
+    try {
+      const userAnchors: any[] = Array.isArray(tripMeta.userAnchors) ? tripMeta.userAnchors : [];
+      if (userAnchors.length > 0) {
+        const guarded = applyAnchorsWin(mergedDays, userAnchors);
+        if (guarded.restored > 0 || guarded.reaffirmed > 0) {
+          console.log(`[v2] [ANCHOR_GUARD] restored=${guarded.restored} reaffirmed=${guarded.reaffirmed}`);
+        }
+      }
+
+      const mustDos = extractMustDoVenues(tripMeta);
+      if (mustDos.length > 0 && mergedDays.length > 0) {
+        const coverage = assertMustDoCoverage(mergedDays, mustDos);
+        if (coverage.missing.length > 0) {
+          mustDoInjection = injectMissingMustDos(mergedDays, coverage.missing, {
+            arrivalTime24: facts.arrival.time24,
+            departureTime24: facts.departure.time24,
+            arrivalBufferMins: 120,
+            departureBufferMins: 180,
+            transferMinsToAirport: 60,
+          } as any);
+          console.log(
+            `[v2] [MUST_DO_INJECT] attempted=${mustDoInjection.attempted.length} injected=${mustDoInjection.injected.length} unscheduled=${mustDoInjection.unscheduled.length}`,
+          );
+        }
+      }
+    } catch (e) {
+      console.warn('[v2] chain-finalization stages failed (non-blocking):', e);
+    }
+
+    // ── 8d. Persist-boundary bookend verification (per-day, every write) ─
+    try {
+      const verify = await runBookendVerification(mergedDays, {
+        destination: facts.destination.city,
+        label: 'v2-bookend',
+        expectedTotalDays: totalDays,
+      });
+      console.log(
+        `[v2] [BOOKEND_VERIFY_SUMMARY] scanned=${verify.scanned} expected=${verify.expected} injected=${verify.injected} missing=${verify.missing}`,
+      );
+    } catch (e) { console.warn('[v2] bookend-verification failed:', e); }
+
+    // ── 9. Single write of merged JSON ─────────────────────────────────
     const persistResult = await persistTripItinerary(
       supabase,
       tripId,
@@ -212,13 +343,12 @@ export async function handleGenerateTripDayV2(
       console.warn(`[v2] persistTripItinerary not applied: ${persistResult.error || 'frozen'}`);
     }
 
+    // ── 10. Activity costs writer (single source of truth) ─────────────
     await writeActivityCostsFromItinerary(supabase, tripId, mergedDays, {
       destination: facts.destination.city,
       travelers: facts.travelers.count,
       budgetTier: facts.preferences.budgetTier,
     });
-
-
 
     const ms = Date.now() - t0;
     console.log(`[v2] generate-trip-day OK day=${dayNumber} in ${ms}ms`);
@@ -229,6 +359,9 @@ export async function handleGenerateTripDayV2(
         version: 'v2',
         dayNumber,
         day: finalDay,
+        mustDoInjection: mustDoInjection
+          ? { attempted: mustDoInjection.attempted.length, injected: mustDoInjection.injected.length, unscheduled: mustDoInjection.unscheduled.length }
+          : null,
         durationMs: ms,
       }),
       { status: 200, headers: jsonHeaders },
