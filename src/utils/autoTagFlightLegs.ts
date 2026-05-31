@@ -54,6 +54,11 @@ export function autoTagLegs<T extends LegLike>(
     let arrivalIdx = -1;
     if (legs.length === 1) {
       arrivalIdx = 0;
+    } else if (legs.length === 2 && destIata) {
+      // Prefer the leg whose arrival airport matches dest (handles non-canonical
+      // 2-leg shapes like connector → destination).
+      const matched = legs.findIndex((l) => getArrivalAirport(l) === destIata);
+      arrivalIdx = matched >= 0 ? matched : 0;
     } else if (legs.length === 2) {
       arrivalIdx = 0;
     } else if (destIata) {
@@ -74,10 +79,18 @@ export function autoTagLegs<T extends LegLike>(
     if (legs.length === 1) {
       // one-way: no return leg, leave departure unset
       departureIdx = -1;
+    } else if (legs.length === 2 && destIata) {
+      // LAST leg whose departure airport matches dest (typically return leg).
+      let matched = -1;
+      for (let i = legs.length - 1; i >= 0; i--) {
+        if (getDepartureAirport(legs[i]) === destIata) { matched = i; break; }
+      }
+      departureIdx = matched >= 0 ? matched : 1;
     } else if (legs.length === 2) {
       departureIdx = 1;
     } else if (destIata) {
       // LAST leg whose departure airport matches dest (handles multi-city)
+
       for (let i = legs.length - 1; i >= 0; i--) {
         if (getDepartureAirport(legs[i]) === destIata) {
           departureIdx = i;
