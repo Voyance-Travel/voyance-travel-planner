@@ -31,23 +31,20 @@ New file `supabase/functions/_shared/trip-facts.ts`. Pure orchestration over exi
 
 Snapshot test against a known trip row. No callers wired yet.
 
-### Phase B — `action-generate-trip-day-v2.ts` (3-4 days, the high-leverage phase) — **SCAFFOLD SHIPPED**
+### Phase B — `action-generate-trip-day-v2.ts` (3-4 days, the high-leverage phase) — **CORE STAGES WIRED**
 
-Status: scaffold landed at `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts`. Wires `resolveTripFacts → compileDayFacts → compilePrompt → compileDaySchema → callAI → repairDay → applyValidationGate → enrichAndValidateHours → persistDay → persistTripItinerary → writeActivityCostsFromItinerary`. Router check `shouldUseV2Chain` reads `trips.metadata.useV2Chain`; defaults to v1 for every trip. Smoke tests in `v2/__tests__/generate-trip-day-v2.test.ts` (5 passing).
+Status: v2 wrapper at `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts` now composes:
+`resolveTripFacts → compileDayFacts → compilePrompt → compileDaySchema → callAI → repairDay → applyValidationGate → scrubActivity (per-card) → enrichAndValidateHours → runScheduleExecutioner (per-day) → persistDay → assertNoCrossDayBleed → normalizePredawnCascade → applyAnchorsWin → assertMustDoCoverage + injectMissingMustDos → runBookendVerification → persistTripItinerary → writeActivityCostsFromItinerary`. Router check `shouldUseV2Chain` reads `trips.metadata.useV2Chain`; default still v1. Smoke tests passing (8/8 across Phase A + B).
 
 **Not yet ported from v1** (gate for cutover; flag stays off until each lands):
-- `scheduleMustDos` + `injectMissingMustDos` (Core: Must-Do Coverage)
-- `_shared/schedule-executioner.ts` final chokepoint (Core: Schedule Executioner)
-- `runBookendVerification` (Core: Persist-Boundary Bookend Verification)
-- `anchor-guard` cross-day dedupe + floating drop
 - `ledger-check` mutating passes (vibe-clash dinner downgrade, repeat-already-done)
-- Post-meal guard + `runStep8` retry
-- `scrubActivity` / `scrubPhantomEventRefs` / nuclear cross-city + dining sweeps
-- `assertNoCrossDayBleed`
+- Post-meal guard + `runStep8` retry (covered partially by bookend-verification)
+- Post-injection anchor-enrichment + `description-fill` for must-do stubs
 - Chain self-invoke (next-day kick + heartbeat polling)
 - `withStage` trace-recorder instrumentation
+- `scrubPhantomEventRefs` / nuclear cross-city + dining sweeps beyond per-card scrubActivity
 
-Each of the above is an existing module in `_shared/` or `pipeline/`; porting them is a wiring exercise inside the v2 wrapper, not a rewrite. Target: 2 internal trips green on v2 before flipping the default.
+Each remaining item is an existing module in `_shared/` or `pipeline/`; porting is wiring, not rewrite. Target: 2 internal trips green on v2 before flipping the default.
 
 
 ### Phase C — Detector → repair upgrades (1-2 days)
