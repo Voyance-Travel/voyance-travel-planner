@@ -80,7 +80,15 @@ function classifySource(
   return flag === 'isDestinationArrival' ? 'autotag_multi_leg' : 'autotag_last_leg';
 }
 
-export function pickDestinationArrivalLeg(raw: unknown): LegPickResult {
+export interface LegPickOptions {
+  /** Final-destination IATA forwarded to autoTagLegs via normalizeFlightSelection. */
+  destinationIata?: string | null;
+}
+
+export function pickDestinationArrivalLeg(
+  raw: unknown,
+  opts: LegPickOptions = {},
+): LegPickResult {
   const shape = detectShape(raw);
   if (shape === 'unknown' || !raw) return { shape, source: 'none' };
 
@@ -91,7 +99,9 @@ export function pickDestinationArrivalLeg(raw: unknown): LegPickResult {
     Array.isArray((raw as any).legs) &&
     ((raw as any).legs as any[]).some((l) => l?.isDestinationArrival);
 
-  const normalized = normalizeFlightSelection(raw);
+  const normalized = normalizeFlightSelection(raw, {
+    destinationIata: opts.destinationIata ?? null,
+  });
   if (!normalized || normalized.legs.length === 0) {
     return { shape, source: 'normalize_failed' };
   }
@@ -106,7 +116,10 @@ export function pickDestinationArrivalLeg(raw: unknown): LegPickResult {
   };
 }
 
-export function pickDestinationDepartureLeg(raw: unknown): LegPickResult {
+export function pickDestinationDepartureLeg(
+  raw: unknown,
+  opts: LegPickOptions = {},
+): LegPickResult {
   const shape = detectShape(raw);
   if (shape === 'unknown' || !raw) return { shape, source: 'none' };
 
@@ -115,7 +128,9 @@ export function pickDestinationDepartureLeg(raw: unknown): LegPickResult {
     Array.isArray((raw as any).legs) &&
     ((raw as any).legs as any[]).some((l) => l?.isDestinationDeparture);
 
-  const normalized = normalizeFlightSelection(raw);
+  const normalized = normalizeFlightSelection(raw, {
+    destinationIata: opts.destinationIata ?? null,
+  });
   if (!normalized || normalized.legs.length === 0) {
     return { shape, source: 'normalize_failed' };
   }
