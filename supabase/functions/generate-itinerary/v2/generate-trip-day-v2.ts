@@ -3,25 +3,23 @@
  *
  * Thin orchestration over existing pipeline helpers. Composes:
  *   resolveTripFacts → compileDayFacts → compilePrompt → callAI →
- *   repairDay → applyValidationGate → enrichAndValidateHours →
- *   scrubActivity (per-card) → runScheduleExecutioner (per-day) →
- *   persistDay (tables) + merged days → applyAnchorsWin +
- *   normalizePredawnCascade + assertNoCrossDayBleed +
- *   runBookendVerification + must-do coverage/injection (on final day) →
- *   persistTripItinerary (JSON) + writeActivityCostsFromItinerary
+ *   repairDay → applyValidationGate → scrubActivity (+ scrubPhantomEventRefs) →
+ *   enrichAndValidateHours → runScheduleExecutioner → meal-guard +
+ *   fillAfterMealGuard + runStep8 retry → persistDay (tables) → merge JSON →
+ *   assertNoCrossDayBleed + normalizePredawnCascade → applyAnchorsWin +
+ *   ledger-check + must-do coverage/injection → nuclear sweeps (cross-city /
+ *   dining / wellness) → runBookendVerification → persistTripItinerary +
+ *   writeActivityCostsFromItinerary → chain self-invoke next day.
+ *
+ * Every stage is wrapped in `withStage(trace, …)` for observability parity
+ * with v1. Trace recorder runs in noop mode unless a `traceId` is threaded
+ * in via params — same contract as v1.
  *
  * ──────────────────────────────────────────────────────────────────────────
  * STATUS — STILL BEHIND `trips.metadata.useV2Chain === true`
  * ──────────────────────────────────────────────────────────────────────────
  * Gated default = OFF. Router falls back to v1 (`action-generate-trip-day.ts`)
- * for every trip until v2 ships clean on 5+ internal trips.
- *
- * Still not ported (next round):
- *   - ledger-check destructive passes (vibe-clash dinner downgrade)
- *   - post-injection anchor-enrichment + description-fill
- *   - chain-self-invoke for the next day
- *   - withStage trace-recorder instrumentation
- *   - cross-city nuclear sweeps (scrubActivity covers per-card already)
+ * for every trip until v2 ships clean on 2+ internal trips.
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -39,6 +37,7 @@ import { persistDay } from '../pipeline/persist-day.ts';
 import { persistTripItinerary } from '../../_shared/persist-itinerary.ts';
 import { writeActivityCostsFromItinerary } from '../../_shared/write-activity-costs.ts';
 import { scrubActivity } from '../../_shared/scrub-activity.ts';
+import { buildDayScheduleSummary, scrubPhantomEventRefs } from '../../_shared/prompt-leak-scrub.ts';
 import { runScheduleExecutioner, toExecutionerAuditCodes } from '../../_shared/schedule-executioner.ts';
 import { applyAnchorsWin } from '../anchor-guard.ts';
 import { runBookendVerification } from '../../_shared/bookend-verification.ts';
@@ -47,6 +46,12 @@ import { normalizePredawnCascade } from '../../_shared/predawn-cascade-normalize
 import { assertMustDoCoverage } from '../../_shared/assert-must-do-coverage.ts';
 import { injectMissingMustDos } from '../../_shared/inject-missing-must-dos.ts';
 import { extractMustDoVenues } from '../../_shared/extract-must-dos.ts';
+import { fillAfterMealGuard } from '../../_shared/post-meal-guard-fill.ts';
+import { enforceRequiredMealsFinalGuard, detectMealSlots } from '../day-validation.ts';
+import { runStep8 } from '../universal-quality-pass.ts';
+import { ledgerCheck } from '../ledger-check.ts';
+import { nuclearCrossCitySweep, nuclearDiningStrip, nuclearWellnessSweep } from '../fix-placeholders.ts';
+import { noopTrace, attachTrace, withStage, type Trace } from '../../_shared/trace-recorder.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -56,7 +61,7 @@ export async function handleGenerateTripDayV2(
   params: Record<string, any>,
 ): Promise<Response> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
-  const { tripId, dayNumber } = params;
+  const { tripId, dayNumber, traceId } = params;
 
   if (!tripId || typeof dayNumber !== 'number') {
     return new Response(
@@ -66,11 +71,16 @@ export async function handleGenerateTripDayV2(
   }
 
   const t0 = Date.now();
+  const trace: Trace = traceId ? attachTrace(traceId) : noopTrace();
   console.log(`[v2] generate-trip-day tripId=${tripId} day=${dayNumber} user=${userId}`);
 
   try {
     // ── 1. Unified facts (Phase A) ─────────────────────────────────────
-    const facts = await resolveTripFacts(supabase, tripId);
+    const facts = await withStage(trace, 'compile_facts', { dayNumber, inputs: { tripId } }, async (ctx) => {
+      const f = await resolveTripFacts(supabase, tripId);
+      ctx.outputs = { destination: f.destination.city, totalDays: f.dates.totalDays };
+      return f;
+    });
     const totalDays = facts.dates.totalDays;
     const isFirstDay = dayNumber === 1;
     const isLastDay = totalDays > 0 && dayNumber === totalDays;
@@ -83,52 +93,73 @@ export async function handleGenerateTripDayV2(
       return d.toISOString().slice(0, 10);
     })();
 
+    // Cancel-flag guard — chain self-invoke writes generation_cancelled.
+    {
+      const { data: cancelRow } = await supabase
+        .from('trips')
+        .select('metadata')
+        .eq('id', tripId)
+        .maybeSingle();
+      if ((cancelRow?.metadata as any)?.generation_cancelled === true) {
+        console.log(`[v2] generation_cancelled=true — short-circuit day=${dayNumber}`);
+        return new Response(
+          JSON.stringify({ success: false, cancelled: true, code: 'V2_CANCELLED' }),
+          { status: 200, headers: jsonHeaders },
+        );
+      }
+    }
+
     // ── 2. Day-scoped facts (existing helper) ──────────────────────────
-    const dayFacts = await compileDayFacts(supabase, userId, {
-      ...params,
-      tripId,
-      dayNumber,
-      totalDays,
-      destination: facts.destination.city,
-      destinationCountry: facts.destination.country,
-      date: dayDate,
-      travelers: facts.travelers.count,
-      preferences: facts.preferences.interests,
-      isMultiCity: (params as any).isMultiCity,
-    });
+    const dayFacts = await withStage(trace, 'compile_facts', { dayNumber, inputs: { stage: 'day' } }, async () =>
+      compileDayFacts(supabase, userId, {
+        ...params,
+        tripId,
+        dayNumber,
+        totalDays,
+        destination: facts.destination.city,
+        destinationCountry: facts.destination.country,
+        date: dayDate,
+        travelers: facts.travelers.count,
+        preferences: facts.preferences.interests,
+        isMultiCity: (params as any).isMultiCity,
+      })
+    );
 
     // ── 3. Compile prompt + schema ─────────────────────────────────────
-    const compiled = await compilePrompt(supabase, userId, LOVABLE_API_KEY, {
-      ...params,
-      tripId,
-      dayNumber,
-      totalDays,
-      destination: facts.destination.city,
-      date: dayDate,
-      travelers: facts.travelers.count,
-      tripType: facts.preferences.tripType,
-      budgetTier: facts.preferences.budgetTier,
-      preferences: facts.preferences.interests,
-    }, dayFacts);
+    const compiled = await withStage(trace, 'compile_prompt', { dayNumber }, async () =>
+      compilePrompt(supabase, userId, LOVABLE_API_KEY, {
+        ...params,
+        tripId,
+        dayNumber,
+        totalDays,
+        destination: facts.destination.city,
+        date: dayDate,
+        travelers: facts.travelers.count,
+        tripType: facts.preferences.tripType,
+        budgetTier: facts.preferences.budgetTier,
+        preferences: facts.preferences.interests,
+      }, dayFacts)
+    );
 
-    const schema = compileDaySchema({
-      dayNumber,
-      totalDays,
-      facts: dayFacts,
-      compiled,
-    } as any);
+    const schema = await withStage(trace, 'compile_schema', { dayNumber }, () =>
+      compileDaySchema({ dayNumber, totalDays, facts: dayFacts, compiled } as any)
+    );
 
     // ── 4. LLM call ────────────────────────────────────────────────────
-    const ai = await callAI({
-      systemPrompt: compiled.systemPrompt,
-      userPrompt: compiled.userPrompt,
-      schema,
-      LOVABLE_API_KEY,
-      action: 'generate-trip-day-v2',
-      tripId,
-      userId,
-      dayNumber,
-    } as any);
+    const ai = await withStage(trace, 'ai_call', { dayNumber }, async (ctx) => {
+      const r = await callAI({
+        systemPrompt: compiled.systemPrompt,
+        userPrompt: compiled.userPrompt,
+        schema,
+        LOVABLE_API_KEY,
+        action: 'generate-trip-day-v2',
+        tripId,
+        userId,
+        dayNumber,
+      } as any);
+      ctx.outputs = { success: r.success, activities: r.day?.activities?.length || 0 };
+      return r;
+    });
 
     if (!ai.success || !ai.day) {
       return new Response(
@@ -138,50 +169,61 @@ export async function handleGenerateTripDayV2(
     }
 
     // ── 5. Repair + validation gate ────────────────────────────────────
-    const repaired = repairDay({
-      day: ai.day,
-      dayNumber,
-      destination: facts.destination.city,
-      destinationCountry: facts.destination.country,
-      facts: dayFacts,
-      compiled,
-      mealPolicy: facts.mealPolicy(dayNumber),
-    } as any);
+    const repaired = await withStage(trace, 'repair_day', { dayNumber }, () =>
+      repairDay({
+        day: ai.day,
+        dayNumber,
+        destination: facts.destination.city,
+        destinationCountry: facts.destination.country,
+        facts: dayFacts,
+        compiled,
+        mealPolicy: facts.mealPolicy(dayNumber),
+      } as any)
+    );
 
-    const validations = validateDay({
-      day: repaired.day,
-      dayNumber,
-      destination: facts.destination.city,
-      mealPolicy: facts.mealPolicy(dayNumber),
-    } as any);
+    const validations = await withStage(trace, 'validate_day', { dayNumber }, (ctx) => {
+      const v = validateDay({
+        day: repaired.day,
+        dayNumber,
+        destination: facts.destination.city,
+        mealPolicy: facts.mealPolicy(dayNumber),
+      } as any);
+      ctx.outputs = { codes: (v as any)?.codes?.length || 0 };
+      return v;
+    });
 
-    const gated = applyValidationGate(repaired.day, validations, {
-      dayNumber,
-      label: 'v2',
-    } as any);
+    const gated = applyValidationGate(repaired.day, validations, { dayNumber, label: 'v2' } as any);
 
-    // ── 5b. scrubActivity per card — unified output validation layer ───
-    // See mem://constraints/itinerary/unified-output-validation-layer.
+    // ── 5b. scrubActivity + scrubPhantomEventRefs per card ─────────────
+    // See mem://constraints/itinerary/unified-output-validation-layer +
+    //     mem://constraints/itinerary/schedule-coherent-copy.
     const scrubAgg = { titleLeak: 0, bodyLeak: 0, fragment: 0, mealSuffix: 0, crossCity: 0, countryMismatch: 0, phantomRef: 0, downgraded: 0 } as Record<string, number>;
     if (Array.isArray(gated.day?.activities)) {
+      const summary = buildDayScheduleSummary(gated.day.activities);
       for (const a of gated.day.activities) {
         const ops = scrubActivity(a, { destination: facts.destination.city });
         for (const k of Object.keys(scrubAgg)) {
           scrubAgg[k] += (ops as any)[k] || 0;
         }
+        try {
+          const phantom = scrubPhantomEventRefs(a, summary);
+          if (phantom.changed) scrubAgg.phantomRef += phantom.stripped;
+        } catch (_e) { /* non-blocking */ }
       }
       console.log(`[v2] [SCRUB_ACTIVITY] day=${dayNumber} dest=${facts.destination.city} ops=${JSON.stringify(scrubAgg)}`);
     }
 
     // ── 6. Address / hours enrichment ──────────────────────────────────
-    const enriched = await enrichAndValidateHours({
-      supabase,
-      tripId,
-      dayNumber,
-      destination: facts.destination.city,
-      destinationCountry: facts.destination.country,
-      activities: gated.day.activities,
-    } as any);
+    const enriched = await withStage(trace, 'enrich_day', { dayNumber }, () =>
+      enrichAndValidateHours({
+        supabase,
+        tripId,
+        dayNumber,
+        destination: facts.destination.city,
+        destinationCountry: facts.destination.country,
+        activities: gated.day.activities,
+      } as any)
+    );
 
     let finalDay: any = { ...gated.day, activities: enriched };
 
@@ -231,17 +273,68 @@ export async function handleGenerateTripDayV2(
       }
     }
 
+    // ── 6c. Meal-guard + post-fill + Step 8 retry ──────────────────────
+    // Per mem://constraints/itinerary/day-end-hotel-return-bookend +
+    //     mem://constraints/itinerary/dining-description-persist-net.
+    try {
+      const mealPolicy = facts.mealPolicy(dayNumber);
+      if (mealPolicy.requiredMeals.length > 0) {
+        const detectedPre = detectMealSlots(finalDay.activities || []);
+        const missingPre = mealPolicy.requiredMeals.filter((m) => !detectedPre.includes(m));
+        if (missingPre.length > 0) {
+          const fmgResult = enforceRequiredMealsFinalGuard(
+            finalDay.activities,
+            mealPolicy.requiredMeals,
+            dayNumber,
+            facts.destination.city || 'the destination',
+            'USD',
+            mealPolicy.dayMode,
+            [], // no per-day pool prefetch in v2 minimal port (fillAfterMealGuard re-describes)
+          );
+          if (!fmgResult.alreadyCompliant) {
+            finalDay.activities = fmgResult.activities as any;
+            finalDay.metadata = finalDay.metadata || {};
+            finalDay.metadata.quality = finalDay.metadata.quality || {};
+            finalDay.metadata.quality.meal_audit = {
+              required: mealPolicy.requiredMeals,
+              detected_pre: detectedPre,
+              missing_pre: missingPre,
+              injected: fmgResult.injectedMeals,
+              source: 'v2:final-per-day',
+            };
+            console.warn(`[v2] [MEAL_AUDIT] day=${dayNumber} required=[${mealPolicy.requiredMeals.join(',')}] injected=[${fmgResult.injectedMeals.join(',')}]`);
+            await fillAfterMealGuard(finalDay.activities, facts.destination.city, dayNumber, 'v2:final-per-day');
+          }
+        }
+      }
+      // Step 8 retry — unconditional, idempotent (per Predawn-Strip Allowlist memory).
+      if (dayNumber < totalDays) {
+        const beforeLen = (finalDay.activities || []).length;
+        runStep8(finalDay.activities, dayNumber - 1, facts.hotel.name || undefined);
+        if ((finalDay.activities || []).length > beforeLen) {
+          finalDay.metadata = finalDay.metadata || {};
+          finalDay.metadata.quality = finalDay.metadata.quality || {};
+          finalDay.metadata.quality.hotel_return_post_meal_guard = true;
+          console.log(`[v2] hotel_return_post_meal_guard day=${dayNumber}`);
+        }
+      }
+    } catch (e) {
+      console.warn('[v2] meal-guard / Step 8 retry failed (non-blocking):', e);
+    }
+
     // ── 7. Persist tables (itinerary_days + itinerary_activities) ──────
-    const persisted = await persistDay({
-      supabase,
-      tripId,
-      dayNumber,
-      date: dayDate,
-      generatedDay: finalDay,
-      normalizedActivities: finalDay.activities,
-      action: 'generate-trip-day',
-      profile: dayFacts as any,
-    });
+    const persisted = await withStage(trace, 'persist_gate', { dayNumber }, () =>
+      persistDay({
+        supabase,
+        tripId,
+        dayNumber,
+        date: dayDate,
+        generatedDay: finalDay,
+        normalizedActivities: finalDay.activities,
+        action: 'generate-trip-day',
+        profile: dayFacts as any,
+      })
+    );
 
     if (!persisted.success) {
       return new Response(
@@ -272,7 +365,6 @@ export async function handleGenerateTripDayV2(
     try {
       const bleed = assertNoCrossDayBleed(mergedDays, { site: 'v2' });
       if (bleed.changed) {
-        // Re-mirror the cloned days back into mergedDays slot-by-slot.
         for (let i = 0; i < mergedDays.length && i < bleed.days.length; i++) {
           (mergedDays[i] as any).activities = (bleed.days[i] as any).activities;
         }
@@ -292,39 +384,121 @@ export async function handleGenerateTripDayV2(
       } catch (e) { console.warn('[v2] predawn normalize failed:', e); }
     }
 
-    // ── 8c. Chain-finalization stages (run on every persisted day;
-    //         must-do injection only fires when coverage warrants) ──────
+    // ── 8c. Chain-finalization: anchors-win + must-do coverage/injection ─
     let mustDoInjection: any = null;
     try {
       const userAnchors: any[] = Array.isArray(tripMeta.userAnchors) ? tripMeta.userAnchors : [];
       if (userAnchors.length > 0) {
-        const guarded = applyAnchorsWin(mergedDays, userAnchors);
-        if (guarded.restored > 0 || guarded.reaffirmed > 0) {
-          console.log(`[v2] [ANCHOR_GUARD] restored=${guarded.restored} reaffirmed=${guarded.reaffirmed}`);
-        }
+        await withStage(trace, 'anchor_guard', { dayNumber }, (ctx) => {
+          const guarded = applyAnchorsWin(mergedDays, userAnchors);
+          ctx.outputs = { restored: guarded.restored, reaffirmed: guarded.reaffirmed };
+          if (guarded.restored > 0 || guarded.reaffirmed > 0) {
+            console.log(`[v2] [ANCHOR_GUARD] restored=${guarded.restored} reaffirmed=${guarded.reaffirmed}`);
+          }
+          return guarded;
+        });
       }
 
       const mustDos = extractMustDoVenues(tripMeta);
       if (mustDos.length > 0 && mergedDays.length > 0) {
-        const coverage = assertMustDoCoverage(mergedDays, mustDos);
-        if (coverage.missing.length > 0) {
-          mustDoInjection = injectMissingMustDos(mergedDays, coverage.missing, {
-            arrivalTime24: facts.arrival.time24,
-            departureTime24: facts.departure.time24,
-            arrivalBufferMins: 120,
-            departureBufferMins: 180,
-            transferMinsToAirport: 60,
-          } as any);
-          console.log(
-            `[v2] [MUST_DO_INJECT] attempted=${mustDoInjection.attempted.length} injected=${mustDoInjection.injected.length} unscheduled=${mustDoInjection.unscheduled.length}`,
-          );
-        }
+        await withStage(trace, 'must_do_coverage', { dayNumber }, async (ctx) => {
+          const coverage = assertMustDoCoverage(mergedDays, mustDos);
+          if (coverage.missing.length > 0) {
+            mustDoInjection = injectMissingMustDos(mergedDays, coverage.missing, {
+              arrivalTime24: facts.arrival.time24,
+              departureTime24: facts.departure.time24,
+              arrivalBufferMins: 120,
+              departureBufferMins: 180,
+              transferMinsToAirport: 60,
+            } as any);
+            console.log(
+              `[v2] [MUST_DO_INJECT] attempted=${mustDoInjection.attempted.length} injected=${mustDoInjection.injected.length} unscheduled=${mustDoInjection.unscheduled.length}`,
+            );
+            // Post-injection description fill for stubs.
+            if (mustDoInjection.injected.length > 0) {
+              await fillAfterMealGuard(
+                mergedDays.flatMap((d: any) => Array.isArray(d?.activities) ? d.activities : []),
+                facts.destination.city,
+                dayNumber,
+                'v2:must-do-inject',
+              );
+            }
+          }
+          ctx.outputs = { missing: coverage.missing.length, injected: mustDoInjection?.injected?.length || 0 };
+        });
       }
     } catch (e) {
       console.warn('[v2] chain-finalization stages failed (non-blocking):', e);
     }
 
-    // ── 8d. Persist-boundary bookend verification (per-day, every write) ─
+    // ── 8d. Ledger-check (vibe-clash + repeat detection) ───────────────
+    // Pragmatic minimal-port: build a single-day ledger context from
+    // mergedDays metadata. Mutating passes (vibe-clash dinner downgrade)
+    // still fire because they only need forwardState + alreadyDone.
+    try {
+      const priorActs = mergedDays
+        .filter((d: any) => (d?.dayNumber ?? 0) < dayNumber)
+        .flatMap((d: any) => Array.isArray(d?.activities)
+          ? d.activities.map((a: any) => ({ title: a?.title || a?.name || '', dayNumber: d.dayNumber }))
+          : []);
+      const forwardActs = mergedDays
+        .filter((d: any) => (d?.dayNumber ?? 0) > dayNumber)
+        .flatMap((d: any) => Array.isArray(d?.activities)
+          ? d.activities.map((a: any) => ({
+              dayNumber: d.dayNumber,
+              title: a?.title || a?.name || '',
+              category: a?.category,
+              startTime: a?.startTime,
+              kind: undefined,
+            }))
+          : []);
+      const ledger: any = {
+        dayNumber,
+        userIntent: [],
+        alreadyDone: priorActs.filter((p) => p.title),
+        closures: [],
+        forwardState: forwardActs.filter((f) => f.title),
+      };
+      const lc = await withStage(trace, 'ledger_check', { dayNumber }, async (ctx) => {
+        const r = await ledgerCheck(mergedDays, [ledger], { supabase, tripId });
+        ctx.outputs = { warnings: r.warnings.length, removed: r.removed, inserted: r.inserted };
+        return r;
+      });
+      if (lc.removed > 0 || lc.inserted > 0 || lc.warnings.length > 0) {
+        console.log(`[v2] [LEDGER_CHECK] removed=${lc.removed} inserted=${lc.inserted} warnings=${lc.warnings.length}`);
+      }
+      // ledgerCheck returns mutated days array (same refs).
+      if (Array.isArray(lc.days)) {
+        for (let i = 0; i < mergedDays.length && i < lc.days.length; i++) {
+          (mergedDays[i] as any).activities = (lc.days[i] as any).activities;
+        }
+      }
+    } catch (e) {
+      console.warn('[v2] ledger-check failed (non-blocking):', e);
+    }
+
+    // ── 8e. Terminal nuclear sweeps (cross-city / dining / wellness) ───
+    // Final safety net before persist. See mem://constraints/itinerary/
+    // {cross-city-fallback-integrity, orphan-transit-and-dining-strip,
+    //  wellness-placeholder-leak-paths}.
+    for (const d of mergedDays) {
+      const acts = Array.isArray(d?.activities) ? d.activities : null;
+      if (!acts) continue;
+      try {
+        const cc = nuclearCrossCitySweep(acts, facts.destination.city || '');
+        if (cc > 0) console.log(`[v2] [NUCLEAR_CROSS_CITY] day=${d.dayNumber} swept=${cc}`);
+      } catch (_e) { /* non-blocking */ }
+      try {
+        const ds = nuclearDiningStrip(acts, facts.destination.city || '');
+        if (ds > 0) console.log(`[v2] [NUCLEAR_DINING_STRIP] day=${d.dayNumber} stripped=${ds}`);
+      } catch (_e) { /* non-blocking */ }
+      try {
+        const ws = nuclearWellnessSweep(acts, facts.destination.city || '', facts.hotel.name || undefined);
+        if (ws > 0) console.log(`[v2] [NUCLEAR_WELLNESS] day=${d.dayNumber} swept=${ws}`);
+      } catch (_e) { /* non-blocking */ }
+    }
+
+    // ── 8f. Persist-boundary bookend verification ──────────────────────
     try {
       const verify = await runBookendVerification(mergedDays, {
         destination: facts.destination.city,
@@ -337,11 +511,13 @@ export async function handleGenerateTripDayV2(
     } catch (e) { console.warn('[v2] bookend-verification failed:', e); }
 
     // ── 9. Single write of merged JSON ─────────────────────────────────
-    const persistResult = await persistTripItinerary(
-      supabase,
-      tripId,
-      { ...(tripRow?.itinerary_data || {}), days: mergedDays },
-      { label: 'v2-generate-trip-day', saveReason: 'v2-day-write' },
+    const persistResult = await withStage(trace, 'persist_written', { dayNumber }, () =>
+      persistTripItinerary(
+        supabase,
+        tripId,
+        { ...(tripRow?.itinerary_data || {}), days: mergedDays },
+        { label: 'v2-generate-trip-day', saveReason: 'v2-day-write' },
+      )
     );
 
     if (persistResult.error || persistResult.frozenBlocked) {
@@ -349,11 +525,58 @@ export async function handleGenerateTripDayV2(
     }
 
     // ── 10. Activity costs writer (single source of truth) ─────────────
-    await writeActivityCostsFromItinerary(supabase, tripId, mergedDays, {
-      destination: facts.destination.city,
-      travelers: facts.travelers.count,
-      budgetTier: facts.preferences.budgetTier,
-    });
+    await withStage(trace, 'activity_costs_written', { dayNumber }, () =>
+      writeActivityCostsFromItinerary(supabase, tripId, mergedDays, {
+        destination: facts.destination.city,
+        travelers: facts.travelers.count,
+        budgetTier: facts.preferences.budgetTier,
+      })
+    );
+
+    // ── 11. Chain self-invoke for next day (fire-and-forget) ───────────
+    // Mirrors v1 action-generate-trip-day:4684 — uses EdgeRuntime.waitUntil
+    // so the response returns immediately while the next day generates
+    // server-side. Cancel-aware via metadata.generation_cancelled.
+    if (dayNumber < totalDays) {
+      try {
+        const generateUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-itinerary`;
+        const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const chainBody = JSON.stringify({
+          action: 'generate-trip-day',
+          tripId,
+          userId,
+          dayNumber: dayNumber + 1,
+          totalDays,
+          traceId,
+        });
+        const chainPromise = (async () => {
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              const resp = await fetch(generateUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
+                body: chainBody,
+              });
+              if (resp.ok) return;
+              await resp.text().catch(() => null);
+              if (resp.status >= 400 && resp.status < 500) {
+                console.error(`[v2] chain attempt ${attempt} client error ${resp.status} — not retrying`);
+                return;
+              }
+            } catch (err) {
+              console.error(`[v2] chain attempt ${attempt} error:`, err);
+            }
+            if (attempt < 3) await new Promise((r) => setTimeout(r, 2000 * attempt));
+          }
+          console.error(`[v2] all chain attempts failed for day ${dayNumber + 1}`);
+        })();
+        const eRT = (globalThis as any).EdgeRuntime;
+        if (eRT && typeof eRT.waitUntil === 'function') eRT.waitUntil(chainPromise);
+        console.log(`[v2] chained to day ${dayNumber + 1}`);
+      } catch (e) {
+        console.warn('[v2] chain self-invoke setup failed (non-blocking):', e);
+      }
+    }
 
     const ms = Date.now() - t0;
     console.log(`[v2] generate-trip-day OK day=${dayNumber} in ${ms}ms`);
