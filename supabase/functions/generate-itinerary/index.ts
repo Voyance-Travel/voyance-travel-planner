@@ -332,12 +332,15 @@ serve(async (req) => {
     }
 
     if (action === 'generate-trip-day') {
-      // Phase B: per-trip v2 chain feature flag. Defaults off; flip via
-      // `trips.metadata.useV2Chain = true` for internal QA trips only.
+      // Phase D (cutover): v2 chain is the DEFAULT.
+      // Kill-switch: `trips.metadata.useV1Chain === true` forces legacy v1
+      // handler for emergency rollback during the 1-week soak.
+      // Scheduled for deletion in Phase E.
       if (await shouldUseV2Chain(supabase, (params as any)?.tripId)) {
         console.log(`[generate-itinerary] Routing to v2 chain for trip=${(params as any)?.tripId}`);
         return handleGenerateTripDayV2(supabase, authResult.userId, params);
       }
+      console.log(`[generate-itinerary] Kill-switch active — routing to v1 for trip=${(params as any)?.tripId}`);
       return handleGenerateTripDay(supabase, authResult.userId, params);
     }
 
