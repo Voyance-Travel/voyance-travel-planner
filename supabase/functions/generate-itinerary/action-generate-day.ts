@@ -1865,6 +1865,22 @@ export async function handleGenerateDay(
         geoFlagOnly: !geoDropEnabled,
         geoDropEnabled,
         rawFlightSelection: isFirstDay ? ((flightContext as any)?.rawFlightSelection ?? null) : null,
+        destinationIata: isFirstDay ? (() => {
+          try {
+            const fs: any = (flightContext as any)?.rawFlightSelection || null;
+            const fromCtx = (flightContext as any)?.arrivalAirport as string | undefined;
+            if (fromCtx) return String(fromCtx).trim().toUpperCase() || null;
+            if (!fs) return null;
+            const legsArr = Array.isArray(fs.legs) ? fs.legs : [];
+            const marked = legsArr.find((l: any) => l?.isDestinationArrival);
+            const iata =
+              (marked?.arrival?.airport as string | undefined) ||
+              (marked?.arrivalAirport as string | undefined) ||
+              (fs.arrivalAirport as string | undefined) ||
+              '';
+            return (iata || '').trim().toUpperCase() || null;
+          } catch (_) { return null; }
+        })() : null,
         hotelName: (flightContext as any)?.hotelName || paramHotelName || params.hotelOverride?.name || null,
       });
       generatedDay.activities = exec.activities;
