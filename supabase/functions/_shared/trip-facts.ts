@@ -193,7 +193,7 @@ export async function resolveTripFacts(
       raw: String(m.notes || m.label).trim(),
       locked: false,
       tripWide: true,
-      origin: 'legacy_must_do' as const,
+      origin: 'must_do' as const,
     }));
 
   // Dedupe chip intents against already-merged titles (case-insensitive).
