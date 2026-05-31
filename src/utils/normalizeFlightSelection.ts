@@ -307,8 +307,8 @@ export function buildFlightSelectionFromLegs(legsIn: FlightLeg[], isManualEntry 
  * Falls back to the last outbound/connection leg (i.e. the leg that
  * actually lands at the destination, not a layover).
  */
-export function getFirstLegArrivalTime(raw: unknown): string | undefined {
-  const normalized = normalizeFlightSelection(raw);
+export function getFirstLegArrivalTime(raw: unknown, opts: NormalizeFlightOptions = {}): string | undefined {
+  const normalized = normalizeFlightSelection(raw, opts);
   if (!normalized || normalized.legs.length === 0) return undefined;
 
   // 1. User-marked destination arrival leg
@@ -335,8 +335,8 @@ export function getFirstLegArrivalTime(raw: unknown): string | undefined {
  * Prefers the leg explicitly marked isDestinationDeparture by the user.
  * Falls back to the last leg (return flight).
  */
-export function getLastLegDepartureTime(raw: unknown): string | undefined {
-  const normalized = normalizeFlightSelection(raw);
+export function getLastLegDepartureTime(raw: unknown, opts: NormalizeFlightOptions = {}): string | undefined {
+  const normalized = normalizeFlightSelection(raw, opts);
   if (!normalized || normalized.legs.length === 0) return undefined;
 
   // 1. User-marked destination departure leg
@@ -352,8 +352,8 @@ export function getLastLegDepartureTime(raw: unknown): string | undefined {
  * Get the leg that arrives at the final destination.
  * Used by FlightSyncWarning and cascade logic.
  */
-export function getDestinationArrivalLeg(raw: unknown): FlightLeg | undefined {
-  const normalized = normalizeFlightSelection(raw);
+export function getDestinationArrivalLeg(raw: unknown, opts: NormalizeFlightOptions = {}): FlightLeg | undefined {
+  const normalized = normalizeFlightSelection(raw, opts);
   if (!normalized || normalized.legs.length === 0) return undefined;
 
   const marked = normalized.legs.find(l => l.isDestinationArrival);
