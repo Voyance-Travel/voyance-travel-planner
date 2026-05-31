@@ -332,6 +332,12 @@ serve(async (req) => {
     }
 
     if (action === 'generate-trip-day') {
+      // Phase B: per-trip v2 chain feature flag. Defaults off; flip via
+      // `trips.metadata.useV2Chain = true` for internal QA trips only.
+      if (await shouldUseV2Chain(supabase, (params as any)?.tripId)) {
+        console.log(`[generate-itinerary] Routing to v2 chain for trip=${(params as any)?.tripId}`);
+        return handleGenerateTripDayV2(supabase, authResult.userId, params);
+      }
       return handleGenerateTripDay(supabase, authResult.userId, params);
     }
 
