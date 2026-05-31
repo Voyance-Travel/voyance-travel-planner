@@ -16,10 +16,11 @@
  * in via params — same contract as v1.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * STATUS — STILL BEHIND `trips.metadata.useV2Chain === true`
+ * STATUS — PHASE D CUTOVER (DEFAULT-ON)
  * ──────────────────────────────────────────────────────────────────────────
- * Gated default = OFF. Router falls back to v1 (`action-generate-trip-day.ts`)
- * for every trip until v2 ships clean on 2+ internal trips.
+ * v2 is now the DEFAULT generation chain for all trips. Kill-switch:
+ * `trips.metadata.useV1Chain = true` forces the legacy v1 handler for
+ * emergency rollback. Soak window: 1 week before Phase E deletion.
  * ──────────────────────────────────────────────────────────────────────────
  */
 
