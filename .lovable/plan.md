@@ -1,88 +1,67 @@
-# Phase B ✅ SHIPPED + Phase C ✅ SHIPPED
+# Phase D ✅ SHIPPED (Cutover, kill-switch active)
 
 Status:
-- Phase B parity ports all wired into `generate-trip-day-v2.ts`, 6/6 tests green.
-- Phase C detector→repair upgrades wired between enrich and executioner, 11/11 tests green.
-- v2 still gated behind `trips.metadata.useV2Chain === true`.
+- v2 is now the **DEFAULT** generation chain for all trips.
+- Kill-switch: set `trips.metadata.useV1Chain = true` to force legacy v1
+  handler for emergency rollback. Scheduled for deletion in Phase E after
+  a 1-week soak.
+- Router fails OPEN to v2 on metadata read errors (cutover default).
+- All 6 v2 router tests green.
 
-Next: flip 2 internal trips, run parity diff vs v1, then Phase D cutover.
+---
+
+## Phase D — Cutover ✅ SHIPPED
+
+**`supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts`**
+- `shouldUseV2Chain()` flipped: default `true`. Returns `false` only when
+  `metadata.useV1Chain === true` (boolean strict) or `tripId` is empty.
+- Errors during metadata read fail OPEN to v2.
+
+**`supabase/functions/generate-itinerary/index.ts`**
+- Router log copy updated to call out kill-switch path explicitly.
+
+**Tests updated (`v2/__tests__/generate-trip-day-v2.test.ts`)** — 6/6 green:
+- defaults to TRUE post-cutover
+- `useV1Chain=true` boolean strict → routes to v1
+- `useV1Chain='true'`/`1` (non-boolean) → still v2
+- empty tripId → false (defensive)
+- input validation contracts (unchanged)
+
+## Soak plan (next 7 days)
+
+1. Monitor `[generate-itinerary] Kill-switch active` log frequency — should
+   be 0 unless a trip is manually flagged.
+2. Watch `[V2_DETECTOR_REPAIRS]` / `[EXECUTIONER_SUMMARY]` counters across
+   generations for unresolved overlaps or geo drops.
+3. Compare health-score distribution week-over-week (±2 points acceptable).
+4. If a regression class surfaces, flip affected trip's `useV1Chain=true`
+   from the DB, file an issue, and continue soak on the rest.
+
+## Phase E (queued, NOT shipped)
+
+- Delete `action-generate-trip-day.ts` (4,780 lines) once soak is clean.
+- Delete `generation-core.ts` Stage 6 writer.
+- Delete `shouldUseV2Chain` flag plumbing + router branch.
+- Wire Budget Coach + reconciling toast through `useDisplayedTripTotal`.
+
+## Files (Phase D)
+
+**Modified:**
+- `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts`
+- `supabase/functions/generate-itinerary/index.ts`
+- `supabase/functions/generate-itinerary/v2/__tests__/generate-trip-day-v2.test.ts`
+- `.lovable/plan.md`
 
 ---
 
 ## Phase C — Detector→Repair Upgrades ✅ SHIPPED
 
-New module `supabase/functions/generate-itinerary/v2/detector-repairs.ts`:
-exposes `runDetectorRepairs(activities, dayNumber) → { activities, counters, unresolvedOverlaps }`.
-Three deterministic passes in order:
-
-1. **closingHoursAutoShift** — Drops cards scheduled outside venue hours
-   (`startsAfterClose`, `endsAfterClose` with 15-min grace, `startsBeforeOpen`).
-   Replaced inline with `needs_replacement: true` + `metadata.dropped_reason` +
-   `metadata.original_title` + `metadata.venue_hours`. Locked / user / booked
-   rows exempt. Runs first so the overlap pass doesn't waste shift budget on
-   cards we're about to drop.
-
-2. **overlapAutoShift** — Walks pairs (i-1, i). When `currStart < prevEnd`,
-   pushes current forward in 15-min increments. Cap = 90 min cumulative
-   day-wide shift; on breach or when the next card is locked/exempt, the
-   overlap is appended to `unresolvedOverlaps[]` and surfaced at
-   `metadata.quality.unresolved_overlaps`.
-
-3. **transitSanityWiden** — Transit cards (`category=transit/transport/transfer/
-   logistics` or title starting `walk/stroll/transfer/drive/taxi/metro/bus/
-   train`) with duration <8 min get widened when EITHER prev↔next haversine
-   sits in 200–1500 m OR `neighborhood` mismatches between prev and next.
-   New duration = max(10, ceil(km × 12)). Stamps
-   `metadata.transit_widened = { from_min, to_min, distance_m, reason }`.
-
-Counters → `day.metadata.quality.v2_detector_repairs = { overlapsShifted,
-overlapsUnresolved, closingDropped, transitWidened, totalShiftMin }`.
-Sentinel: `[V2_DETECTOR_REPAIRS] day=N overlap=X unresolved=Y closing=Z transit=W shiftMin=M`.
-
-Wiring in `generate-trip-day-v2.ts`: new stage `v2_detector_repairs` runs
-inside `withStage` between `enrichAndValidateHours` (Section 6) and
-`runScheduleExecutioner` (Section 6b). Failures are non-blocking.
-
-Tests: `supabase/functions/generate-itinerary/v2/__tests__/detector-repairs.test.ts`
-(11 cases — empty input, single overlap shift, 90-min cap with unresolved,
-locked-next protection, closing-after / before / grace / locked-exempt,
-transit haversine + neighborhood + below-threshold no-op, closing-before-overlap
-ordering).
-
----
+`v2/detector-repairs.ts` — closingHoursAutoShift / overlapAutoShift /
+transitSanityWiden. Counters at `metadata.quality.v2_detector_repairs`.
+11/11 tests green.
 
 ## Phase B — v2 Parity Ports ✅ SHIPPED
 
-All 6 ports live; see git history for line-level details:
-1. ledger-check mutating passes
-2. Post-meal-guard + runStep8 retry
-3. Post-injection enrichment for must-do stubs
-4. scrubPhantomEventRefs + nuclear sweeps
-5. Chain self-invoke
-6. withStage trace instrumentation
-
----
-
-## Verification (parity gate — user action)
-
-1. Deno test suite must stay green ✅
-2. Flip `metadata.useV2Chain = true` on 2 internal trips (3-day + 5-day,
-   different destinations).
-3. Compare v1 vs v2: must-do coverage, meal counts, hotel-return bookends,
-   cost ledger parity, no cross-day bleed, no unresolved_overlaps > 0.
-4. Health-score parity (±2 points acceptable).
-
-## Files (Phase C)
-
-**New:**
-- `supabase/functions/generate-itinerary/v2/detector-repairs.ts`
-- `supabase/functions/generate-itinerary/v2/__tests__/detector-repairs.test.ts`
-
-**Modified:**
-- `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts` (+ import + Section 6a stage)
-- `.lovable/plan.md`
-
-## Out of scope (Phase D + E)
-- Phase D: flip default `useV2Chain` after parity green; delete
-  `action-generate-trip-day.ts` (4,780 lines) and `generation-core.ts` Stage 6 writer.
-- Phase E: route Budget Coach + reconciling toast through `useDisplayedTripTotal`.
+ledger-check / post-meal-guard runStep8 retry / post-injection enrichment /
+scrubPhantomEventRefs + nuclear sweeps / chain self-invoke / withStage
+trace instrumentation. 6/6 tests green.
