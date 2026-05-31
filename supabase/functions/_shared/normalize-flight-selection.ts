@@ -145,14 +145,36 @@ export function estimateReturnArrival(legs: NormalizedLeg[]): void {
 
 // ─── main normalizer ────────────────────────────────────────────────────────
 
-export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelection | null {
+export interface NormalizeFlightOptions {
+  /**
+   * Final-destination IATA hint forwarded to autoTagLegs. CRITICAL: without
+   * this, multi-leg trips where leg order doesn't match the naive
+   * "leg 0 = outbound destination" heuristic get the wrong leg tagged
+   * isDestinationArrival, poisoning the Day-1 anchor.
+   */
+  destinationIata?: string | null;
+}
+
+export function normalizeFlightSelection(
+  raw: unknown,
+  opts: NormalizeFlightOptions = {},
+): NormalizedFlightSelection | null {
   if (!raw || typeof raw !== 'object') return null;
   const data = raw as Record<string, unknown>;
+  const destinationIata = opts.destinationIata ?? null;
 
   const finalize = (legs: NormalizedLeg[]): NormalizedFlightSelection | null => {
     if (legs.length === 0) return null;
     estimateReturnArrival(legs);
-    const tagged = autoTagLegs(legs);
+    const tagged = autoTagLegs(legs, { destinationIata });
+    if (!destinationIata && legs.length >= 2) {
+      // Surface trips that hit autoTagLegs without IATA disambiguation.
+      try {
+        console.warn(
+          `[FLIGHT_TAG_NO_IATA] legs=${legs.length} arr=${tagged.findIndex((l: any) => l?.isDestinationArrival)} dep=${tagged.findIndex((l: any) => l?.isDestinationDeparture)}`,
+        );
+      } catch (_) {}
+    }
     return {
       legs: tagged,
       isManualEntry: data.isManualEntry as boolean | undefined,
