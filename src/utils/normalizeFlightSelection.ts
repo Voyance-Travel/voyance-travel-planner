@@ -53,10 +53,22 @@ export interface NormalizedFlightSelection {
  * - Legacy format: { departure: {...}, return: {...} }
  * - Flat format: { arrivalTime, departureAirport, ... }
  */
-export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelection | null {
+export interface NormalizeFlightOptions {
+  /** Final-destination IATA forwarded to autoTagLegs. Without this,
+   * multi-leg shapes whose order doesn't match the naive "leg 0 = arrival"
+   * heuristic get the wrong leg tagged isDestinationArrival, poisoning the
+   * Day-1 anchor. */
+  destinationIata?: string | null;
+}
+
+export function normalizeFlightSelection(
+  raw: unknown,
+  opts: NormalizeFlightOptions = {},
+): NormalizedFlightSelection | null {
   if (!raw || typeof raw !== 'object') return null;
 
   const data = raw as Record<string, unknown>;
+  const destinationIata = opts.destinationIata ?? null;
 
   // Shared exit: run estimateReturnArrival + autoTagLegs and wrap.
   // BOTH the new-format and legacy branches must go through this — otherwise
@@ -65,13 +77,14 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
   const finalize = (legs: FlightLeg[]): NormalizedFlightSelection | null => {
     if (legs.length === 0) return null;
     estimateReturnArrival(legs);
-    const tagged = autoTagLegs(legs);
+    const tagged = autoTagLegs(legs, { destinationIata });
     return {
       legs: tagged,
       isManualEntry: data.isManualEntry as boolean | undefined,
       totalPrice: tagged.reduce((sum, l) => sum + (l.price || 0), 0),
     };
   };
+
 
   // New format: already has legs[]
   if (Array.isArray(data.legs) && data.legs.length > 0) {
