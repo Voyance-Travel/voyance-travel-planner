@@ -270,19 +270,24 @@ export async function handleGenerateTripDayV2(
 
     // ── 8b. Cross-day quality passes (run every day; cheap + idempotent) ─
     try {
-      const bleed = assertNoCrossDayBleed(mergedDays);
-      if (bleed.bleedFixed > 0) {
-        console.log(`[v2] [DAY1_BLEED_GUARD] fixed=${bleed.bleedFixed}`);
+      const bleed = assertNoCrossDayBleed(mergedDays, { site: 'v2' });
+      if (bleed.changed) {
+        // Re-mirror the cloned days back into mergedDays slot-by-slot.
+        for (let i = 0; i < mergedDays.length && i < bleed.days.length; i++) {
+          (mergedDays[i] as any).activities = (bleed.days[i] as any).activities;
+        }
+        console.log(`[v2] [DAY1_BLEED_GUARD] moved=${bleed.movedCount}`);
       }
     } catch (e) { console.warn('[v2] cross-day-bleed-guard failed:', e); }
 
-    for (const d of mergedDays) {
+    for (let i = 0; i < mergedDays.length; i++) {
+      const d = mergedDays[i];
       try {
         const acts = Array.isArray(d?.activities) ? d.activities : [];
-        const res = normalizePredawnCascade(acts);
-        if (res.shifted > 0) {
+        const res = normalizePredawnCascade(acts, i, { dayNumber: d?.dayNumber, site: 'v2' });
+        if (res.changed) {
           d.activities = res.activities;
-          console.log(`[v2] [PREDAWN_CASCADE_NORMALIZE] day=${d.dayNumber} shifted=${res.shifted}`);
+          console.log(`[v2] [PREDAWN_CASCADE_NORMALIZE] day=${d.dayNumber} count=${res.count} shiftMin=${res.shiftMin}`);
         }
       } catch (e) { console.warn('[v2] predawn normalize failed:', e); }
     }
