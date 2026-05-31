@@ -2565,6 +2565,20 @@ async function _handleGenerateTripDayInner(
         geoFlagOnly: !geoDropEnabled,
         geoDropEnabled,
         rawFlightSelection: _isFirstDay ? (_flightSel ?? null) : null,
+        destinationIata: _isFirstDay ? (() => {
+          try {
+            const fs: any = _flightSel || null;
+            if (!fs) return null;
+            const legsArr = Array.isArray(fs.legs) ? fs.legs : [];
+            const marked = legsArr.find((l: any) => l?.isDestinationArrival);
+            const iata =
+              (marked?.arrival?.airport as string | undefined) ||
+              (marked?.arrivalAirport as string | undefined) ||
+              (fs.arrivalAirport as string | undefined) ||
+              '';
+            return (iata || '').trim().toUpperCase() || null;
+          } catch (_) { return null; }
+        })() : null,
         hotelName: (cityInfo as any)?.hotelName || (typeof tripHotelName !== 'undefined' ? tripHotelName : null) || null,
       };
       let exec = runScheduleExecutioner(dayResult.activities, execCtx);
