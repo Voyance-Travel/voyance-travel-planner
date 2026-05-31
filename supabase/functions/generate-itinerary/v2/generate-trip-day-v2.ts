@@ -630,8 +630,13 @@ export async function handleGenerateTripDayV2(
 }
 
 /**
- * Router-level feature-flag check. Reads `trips.metadata.useV2Chain`.
- * Returns false (and routes to v1) for any error or absent flag.
+ * Router-level feature-flag check. Phase D (cutover):
+ *   - v2 is the DEFAULT for all trips.
+ *   - Kill-switch: set `trips.metadata.useV1Chain === true` to force the
+ *     legacy handler. Intended for emergency rollback during 1-week soak;
+ *     scheduled for deletion in Phase E.
+ * Returns true → route to v2. Empty tripId → false (defensive).
+ * Errors fail OPEN to v2 (post-cutover default).
  */
 export async function shouldUseV2Chain(
   supabase: any,
@@ -644,8 +649,10 @@ export async function shouldUseV2Chain(
       .select('metadata')
       .eq('id', tripId)
       .maybeSingle();
-    return (data?.metadata as any)?.useV2Chain === true;
+    const meta = (data?.metadata as any) ?? {};
+    if (meta.useV1Chain === true) return false; // kill-switch wins
+    return true; // default-on
   } catch {
-    return false;
+    return true; // fail open to v2 (cutover default)
   }
 }
