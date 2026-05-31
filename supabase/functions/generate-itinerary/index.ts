@@ -12,6 +12,7 @@ import { handleSyncItineraryTables } from './action-sync-tables.ts';
 import { handleRepairTripCosts } from './action-repair-costs.ts';
 import { handleGenerateTrip } from './action-generate-trip.ts';
 import { handleGenerateTripDay } from './action-generate-trip-day.ts';
+import { handleGenerateTripDayV2, shouldUseV2Chain } from './v2/generate-trip-day-v2.ts';
 import { handleGenerateDay } from './action-generate-day.ts';
 import { handleGenerateFull } from './action-generate-full.ts';
 import { corsHeaders, type ActionContext } from './action-types.ts';
@@ -331,6 +332,12 @@ serve(async (req) => {
     }
 
     if (action === 'generate-trip-day') {
+      // Phase B: per-trip v2 chain feature flag. Defaults off; flip via
+      // `trips.metadata.useV2Chain = true` for internal QA trips only.
+      if (await shouldUseV2Chain(supabase, (params as any)?.tripId)) {
+        console.log(`[generate-itinerary] Routing to v2 chain for trip=${(params as any)?.tripId}`);
+        return handleGenerateTripDayV2(supabase, authResult.userId, params);
+      }
       return handleGenerateTripDay(supabase, authResult.userId, params);
     }
 
