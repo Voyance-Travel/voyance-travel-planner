@@ -35,9 +35,9 @@ import { pickDestinationArrivalLeg } from './flight-leg-pick.ts';
  * or the picker found no arrival string. Used by `enforceFlightAnchors`
  * as a last-gate cross-check against ctx.arrivalTime24.
  */
-function _repickArrivalTruth(raw: unknown): string | undefined {
+function _repickArrivalTruth(raw: unknown, destinationIata?: string | null): string | undefined {
   if (!raw) return undefined;
-  const picked = pickDestinationArrivalLeg(raw);
+  const picked = pickDestinationArrivalLeg(raw, { destinationIata: destinationIata ?? null });
   const s = picked?.rawArrivalString || picked?.leg?.arrivalTime;
   if (!s) return undefined;
   const m = String(s).trim().match(/^(\d{1,2}):(\d{2})/);
@@ -130,6 +130,9 @@ export interface ExecutionerContext {
    * `ctx.arrivalTime24` was committed from a wrong leg before reaching here.
    */
   rawFlightSelection?: unknown;
+  /** Destination IATA forwarded to the picker so multi-leg shapes pick the
+   * leg that actually lands at the destination, not leg 0 by default. */
+  destinationIata?: string | null;
   /** Trip's hotel name (lowercased internally) — enables matching post-checkin
    * "Return to [hotel]" loops where the AI used the brand string rather than
    * the generic word "hotel". */
@@ -311,7 +314,7 @@ export function enforceFlightAnchors(
   let truth24 = ctx.arrivalTime24 || undefined;
   if (ctx.rawFlightSelection) {
     try {
-      const repicked = _repickArrivalTruth(ctx.rawFlightSelection);
+      const repicked = _repickArrivalTruth(ctx.rawFlightSelection, ctx.destinationIata);
       if (repicked && truth24) {
         const a = parseTime(repicked) ?? 0;
         const b = parseTime(truth24) ?? 0;

@@ -52,24 +52,28 @@ export function autoTagLegs<T extends Record<string, any>>(
   if (!anyArr) {
     let idx = -1;
     if (legs.length === 1) idx = 0;
-    else if (legs.length === 2) idx = 0;
     else if (destIata) {
+      // IATA-led pick for ALL multi-leg shapes (including 2-leg) — closes
+      // the Dublin/Amsterdam pattern where leg 0 wasn't the real arrival.
       idx = legs.findIndex((l) => getArrivalAirport(l) === destIata);
-      if (idx < 0) idx = legs.length - 2;
-    } else idx = legs.length - 2;
+      if (idx < 0) idx = legs.length === 2 ? 0 : legs.length - 2;
+    } else if (legs.length === 2) idx = 0;
+    else idx = legs.length - 2;
     if (idx >= 0 && idx < legs.length) (legs[idx] as any).isDestinationArrival = true;
   }
 
   if (!anyDep) {
     let idx = -1;
     if (legs.length === 1) idx = -1;
-    else if (legs.length === 2) idx = 1;
     else if (destIata) {
+      // LAST leg whose departure airport matches destination (handles
+      // multi-city). 2-leg falls back to leg 1 when no match.
       for (let i = legs.length - 1; i >= 0; i--) {
         if (getDepartureAirport(legs[i]) === destIata) { idx = i; break; }
       }
       if (idx < 0) idx = legs.length - 1;
-    } else idx = legs.length - 1;
+    } else if (legs.length === 2) idx = 1;
+    else idx = legs.length - 1;
     if (idx >= 0 && idx < legs.length) (legs[idx] as any).isDestinationDeparture = true;
   }
 
@@ -145,14 +149,36 @@ export function estimateReturnArrival(legs: NormalizedLeg[]): void {
 
 // ─── main normalizer ────────────────────────────────────────────────────────
 
-export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelection | null {
+export interface NormalizeFlightOptions {
+  /**
+   * Final-destination IATA hint forwarded to autoTagLegs. CRITICAL: without
+   * this, multi-leg trips where leg order doesn't match the naive
+   * "leg 0 = outbound destination" heuristic get the wrong leg tagged
+   * isDestinationArrival, poisoning the Day-1 anchor.
+   */
+  destinationIata?: string | null;
+}
+
+export function normalizeFlightSelection(
+  raw: unknown,
+  opts: NormalizeFlightOptions = {},
+): NormalizedFlightSelection | null {
   if (!raw || typeof raw !== 'object') return null;
   const data = raw as Record<string, unknown>;
+  const destinationIata = opts.destinationIata ?? null;
 
   const finalize = (legs: NormalizedLeg[]): NormalizedFlightSelection | null => {
     if (legs.length === 0) return null;
     estimateReturnArrival(legs);
-    const tagged = autoTagLegs(legs);
+    const tagged = autoTagLegs(legs, { destinationIata });
+    if (!destinationIata && legs.length >= 2) {
+      // Surface trips that hit autoTagLegs without IATA disambiguation.
+      try {
+        console.warn(
+          `[FLIGHT_TAG_NO_IATA] legs=${legs.length} arr=${tagged.findIndex((l: any) => l?.isDestinationArrival)} dep=${tagged.findIndex((l: any) => l?.isDestinationDeparture)}`,
+        );
+      } catch (_) {}
+    }
     return {
       legs: tagged,
       isManualEntry: data.isManualEntry as boolean | undefined,

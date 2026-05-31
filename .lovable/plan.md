@@ -1,99 +1,57 @@
-## What the user reported (and what's actually wrong)
+# Fix 1 of 4 — Flight Anchor Bug (S-1)
 
-The user's diagnosis says "no scheduler tracks must-dos across multi-day generation" — that's **stale**. The deterministic cross-day scheduler (`_shared/schedule-must-dos.ts` + `_shared/inject-missing-must-dos.ts`) already runs at chain-finalization in `action-generate-trip-day.ts` (line ~3813) when `dayNumber >= totalDays`. It correctly assigns user-selected venues to the lowest-landmark-load day and stamps `metadata.must_do_coverage`.
+## Root cause (confirmed)
 
-The Amsterdam trip `51df6c32…` proves it: "Take a canal boat tour" was injected on Day 3, 10:30–12:00 as a locked anchor, persisted to JSON, to `itinerary_activities`, and to `activity_costs`. The card is NOT hidden by `isGhostActivity` (it short-circuits on `isLocked:true`).
+`autoTagLegs(legs, { destinationIata })` is documented to use the destination IATA as a tie-breaker for 3+ leg itineraries and as a sanity check on 2-leg ones. But **both** normalizers — edge and FE — call it with no options:
 
-### The real bug: injection runs after enrichment
+- `supabase/functions/_shared/normalize-flight-selection.ts:155` → `autoTagLegs(legs)`
+- `src/utils/normalizeFlightSelection.ts:68` → `autoTagLegs(legs)`
 
-`enrich-day.ts` (which resolves real operator names + addresses + descriptions via `verified_venues` / Google Places for cards flagged `needsAnchorEnrichment:true`) runs **per day, inside the day's pipeline, BEFORE the chain-finalization step that injects missing must-dos**. So the injected card persists forever as:
+The trip's destination IATA exists on the trip record (`destination_iata` and/or the arrival airport entered in Step 2) but never reaches the tagger. For any 2-leg or 3+ leg shape where the array order doesn't match the naive "leg 0 = outbound" assumption (connecting flights, legacy `{departure,return}` re-emitted as `legs[]`, AI-generated multi-segment trips), the wrong leg gets tagged `isDestinationArrival`. That wrong arrival time flows into the Day 1 prompt anchor and corrupts every downstream scheduling rule.
 
-```json
-{ "title": "Take a canal boat tour",
-  "location": { "name": "Take a canal boat tour", "address": "" },
-  "description": "",
-  "needsAnchorEnrichment": true,
-  "isLocked": true }
-```
+## Fix
 
-The card renders, but with no real operator (Stromma / Lovers / Flagship), no address, no description. To the user this reads as "the canal boat tour is missing" or as a placeholder card.
+Thread `destinationIata` through one call chain on each side, then pass it to `autoTagLegs`.
 
-### Scope check across the cohort (last 14 days)
+### Edge (primary)
 
-| Trip | Injected | Bare (empty address) |
-|---|---|---|
-| Amsterdam `51df6c32` | 3 | 3 |
-| Lisbon `0fe99cb0` | 3 | 3 |
-| Tokyo `d060f0d5` | 2 | 2 |
-| Faro `c8003cf0` | 4 | 4 |
-| Istanbul `3c2da103` | 2 | 2 |
-| Buenos Aires `094d7ca4` | 3 | 3 |
-| Rome `d18b2e8a` | 4 | 0 (enriched by later edit) |
-| Mexico City `e4217b97` | 0 | — |
+1. **`supabase/functions/_shared/normalize-flight-selection.ts`**
+   - Add optional second arg: `normalizeFlightSelection(raw, opts?: { destinationIata?: string | null })`.
+   - Pass `opts?.destinationIata` into `finalize`, then into `autoTagLegs(legs, { destinationIata })`.
 
-**17 of 18 injected anchors across 6 of 7 affected trips are bare stubs.**
+2. **`supabase/functions/_shared/flight-leg-pick.ts`**
+   - Add optional second arg to `pickDestinationArrivalLeg` and `pickDestinationDepartureLeg`: `(raw, opts?: { destinationIata?: string | null })`.
+   - Forward to `normalizeFlightSelection(raw, opts)`.
 
----
+3. **`supabase/functions/generate-itinerary/flight-hotel-context.ts`** (line ~254)
+   - Read `trip.destination_iata` (fall back to `trip.arrival_airport` / `flightRaw.arrivalAirport`).
+   - Pass `{ destinationIata }` into both picker calls.
 
-## Plan
+4. **`supabase/functions/generate-itinerary/action-generate-trip-day.ts`** (line ~2858) — same threading for the diagnostic picks.
 
-### 1. Post-injection enrichment pass (`action-generate-trip-day.ts`)
+5. **`supabase/functions/_shared/schedule-executioner.ts`** (line ~40, `_repickArrivalTruth`) — accept and forward `destinationIata` from `ctx`. Both generators (`action-generate-trip-day.ts`, `action-generate-day.ts`) already pass `execCtx.rawFlightSelection`; add `execCtx.destinationIata` next to it.
 
-After the existing `injectMissingMustDos` block at line ~3884, when `mustDoInjection.injected.length > 0`:
+### Frontend (parity)
 
-- Group injected slots by `dayNumber`.
-- For each affected day, re-invoke the existing `enrichDay` pipeline (or its inner `enrichActivities` helper) **scoped to anchors with `needsAnchorEnrichment:true`** — same predicate already in `enrich-day.ts` line 46-58. Locked-but-needs-enrichment is the documented escape hatch.
-- Use the existing `verified_venues` → Google Places fallback chain. Soft-fail per anchor: if no operator resolves, leave the card in place but stamp `metadata.must_do_enrichment_failed: [venue,…]` and emit a `MUST_DO_ENRICHMENT_FAILED` health code (mirrors the existing `MUST_DO_INJECTION_FAILED` pattern).
-- Hard timeout: 8 s per day (mirrors `description-fill.ts`). On timeout, persist the bare card — better than blocking the chain.
+6. **`src/utils/normalizeFlightSelection.ts`** — same optional-arg addition; forward into `autoTagLegs`. Update `getDestinationArrivalLeg`, `getDestinationDepartureLeg`, `getFirstLegArrivalTime`, `getLastLegDepartureTime` to accept and forward `opts`. Callers without IATA stay backward-compatible (parameter is optional).
 
-Sentinel: `[MUST_DO_ENRICH] day=N venue="…" resolved=true|false addr="…"`.
+7. **Callers that have trip context** — `src/pages/TripDetail.tsx:3889` and `src/components/itinerary/EditorialItinerary.tsx:3786` pass `{ destinationIata: trip.destination_iata ?? trip.arrival_airport }`. Other callers (FlightSyncWarning, etc.) can stay as-is until needed; the new arg is optional.
 
-### 2. Description fill for injected anchors
+## Tests
 
-After enrichment, if `description` is still empty, route the card through the existing `_shared/description-fill.ts` (already wired into both orchestrators). This is the same module that fixes Madrid restaurant blurbs; it's safe for an anchor card and stays inside the same Stage-6 budget.
+- **New** `supabase/functions/_shared/__tests__/flight-leg-pick.destination-iata.test.ts`:
+  - 2-leg trip where leg 0 arrives at a layover and leg 1 arrives at destination → with `destinationIata` set, leg 1 is tagged arrival (without IATA, leg 0 is wrongly tagged — locks the bug).
+  - 3-leg ATL→JFK→CDG + CDG→ATL with `destinationIata:'CDG'` → leg 1 tagged arrival, leg 2 tagged departure (already covered in `autoTagFlightLegs.test.ts` for the FE helper — this asserts the edge pipeline now actually reaches that branch).
+  - Regression: existing 2-leg "leg 0 already correct" case still picks leg 0 when IATA matches.
+- Existing `flight-leg-pick.parity.test.ts` stays green (all current cases call without IATA → behavior unchanged for them).
 
-### 3. Cross-trip backfill (one-shot)
+## Memory
 
-Create a lazy edge function `backfill-must-do-anchor-enrichment` that:
-- Queries trips where `metadata ? 'must_do_repair_attempted'` AND any injected card has empty `location.address`.
-- Runs the same enrichment + description-fill pipeline.
-- Persists via `safeUpdateItineraryData` with `saveReason:'self-heal-must-do-enrich'` (passes existing self-heal gate; respects Frozen-After-Ready + Universal Locking).
-- Invoked from `TripDetail.tsx` on mount when the trip carries a bare injected anchor (gated, fires at most once per trip per session).
+Update `mem/constraints/itinerary/flight-anchor-truth-parity.md` to document the IATA threading requirement and add a `[FLIGHT_TAG_NO_IATA]` warn log when `destinationIata` is missing but a multi-leg shape is being tagged.
 
-Closes the 6 already-affected trips listed above.
+## Out of scope (separate fixes, user acknowledged)
 
-### 4. New health code + read-time audit
+- `budget_include_hotel` default → `true` in Start.tsx
+- Three-way payment total reconciliation (header / snapshot / breakdown)
 
-- Add `MUST_DO_BARE_STUB` to `auditTimingViolations` in `_shared/audit-timing.ts`: fires when a persisted card with `source:'must-do-injection'` has empty `location.address` AND empty `description` AND `needsAnchorEnrichment:true`. Surfaces in `generation_health.persistGateCodes` so future regressions trip the dashboard.
-- Stamps `metadata.quality.must_do_enrichment = { attempted, resolved, unresolved }` on each chain-finalization run.
-
-### 5. Tests
-
-- `inject-then-enrich.test.ts` — fixture with 2 must-dos missing → inject → assert both have non-empty `location.address` AND non-empty `description` after the pass.
-- `must-do-bare-stub-audit.test.ts` — fixture with bare injected card → assert `MUST_DO_BARE_STUB` code emitted.
-- Extend `schedule-and-inject-must-dos.test.ts` with an assertion that injected cards carry `needsAnchorEnrichment:true` (locking the contract the new enrichment pass reads).
-
-### 6. Memory
-
-- Update `mem://constraints/itinerary/must-do-coverage-injection.md` with a new "Post-Injection Enrichment" section.
-- Add Core line to `mem://index.md`: "Must-Do Injection → enrichment chain: `injectMissingMustDos` MUST be followed by a per-day re-enrichment pass before persist. Bare anchors (`source:'must-do-injection'` + empty address + empty description) trigger `MUST_DO_BARE_STUB` audit code."
-
----
-
-## Out of scope
-
-- Reordering the pipeline so per-day enrichment happens after injection (would require restructuring the chain — much riskier than a targeted post-pass).
-- Changing the alias map or extraction logic (already correct for canal boat tour and the other 5 affected destinations).
-- Frontend changes — the cards already render; this is purely a backend data-completeness fix.
-
----
-
-## Files touched
-
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (post-injection enrichment + description-fill block)
-- `supabase/functions/generate-itinerary/pipeline/enrich-day.ts` (export the per-activity enrichment helper if not already exported)
-- `supabase/functions/_shared/audit-timing.ts` (new `MUST_DO_BARE_STUB` code)
-- `supabase/functions/backfill-must-do-anchor-enrichment/index.ts` (new edge fn)
-- `src/pages/TripDetail.tsx` (lazy invocation gate, mirrors existing self-heal patterns)
-- `mem/constraints/itinerary/must-do-coverage-injection.md` + `mem/index.md`
-- 3 test files
+These will be addressed in Fix 2 and Fix 3 after this lands.

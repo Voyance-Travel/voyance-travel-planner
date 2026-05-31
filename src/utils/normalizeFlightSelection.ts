@@ -53,10 +53,22 @@ export interface NormalizedFlightSelection {
  * - Legacy format: { departure: {...}, return: {...} }
  * - Flat format: { arrivalTime, departureAirport, ... }
  */
-export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelection | null {
+export interface NormalizeFlightOptions {
+  /** Final-destination IATA forwarded to autoTagLegs. Without this,
+   * multi-leg shapes whose order doesn't match the naive "leg 0 = arrival"
+   * heuristic get the wrong leg tagged isDestinationArrival, poisoning the
+   * Day-1 anchor. */
+  destinationIata?: string | null;
+}
+
+export function normalizeFlightSelection(
+  raw: unknown,
+  opts: NormalizeFlightOptions = {},
+): NormalizedFlightSelection | null {
   if (!raw || typeof raw !== 'object') return null;
 
   const data = raw as Record<string, unknown>;
+  const destinationIata = opts.destinationIata ?? null;
 
   // Shared exit: run estimateReturnArrival + autoTagLegs and wrap.
   // BOTH the new-format and legacy branches must go through this — otherwise
@@ -65,13 +77,14 @@ export function normalizeFlightSelection(raw: unknown): NormalizedFlightSelectio
   const finalize = (legs: FlightLeg[]): NormalizedFlightSelection | null => {
     if (legs.length === 0) return null;
     estimateReturnArrival(legs);
-    const tagged = autoTagLegs(legs);
+    const tagged = autoTagLegs(legs, { destinationIata });
     return {
       legs: tagged,
       isManualEntry: data.isManualEntry as boolean | undefined,
       totalPrice: tagged.reduce((sum, l) => sum + (l.price || 0), 0),
     };
   };
+
 
   // New format: already has legs[]
   if (Array.isArray(data.legs) && data.legs.length > 0) {
@@ -294,8 +307,8 @@ export function buildFlightSelectionFromLegs(legsIn: FlightLeg[], isManualEntry 
  * Falls back to the last outbound/connection leg (i.e. the leg that
  * actually lands at the destination, not a layover).
  */
-export function getFirstLegArrivalTime(raw: unknown): string | undefined {
-  const normalized = normalizeFlightSelection(raw);
+export function getFirstLegArrivalTime(raw: unknown, opts: NormalizeFlightOptions = {}): string | undefined {
+  const normalized = normalizeFlightSelection(raw, opts);
   if (!normalized || normalized.legs.length === 0) return undefined;
 
   // 1. User-marked destination arrival leg
@@ -322,8 +335,8 @@ export function getFirstLegArrivalTime(raw: unknown): string | undefined {
  * Prefers the leg explicitly marked isDestinationDeparture by the user.
  * Falls back to the last leg (return flight).
  */
-export function getLastLegDepartureTime(raw: unknown): string | undefined {
-  const normalized = normalizeFlightSelection(raw);
+export function getLastLegDepartureTime(raw: unknown, opts: NormalizeFlightOptions = {}): string | undefined {
+  const normalized = normalizeFlightSelection(raw, opts);
   if (!normalized || normalized.legs.length === 0) return undefined;
 
   // 1. User-marked destination departure leg
@@ -339,8 +352,8 @@ export function getLastLegDepartureTime(raw: unknown): string | undefined {
  * Get the leg that arrives at the final destination.
  * Used by FlightSyncWarning and cascade logic.
  */
-export function getDestinationArrivalLeg(raw: unknown): FlightLeg | undefined {
-  const normalized = normalizeFlightSelection(raw);
+export function getDestinationArrivalLeg(raw: unknown, opts: NormalizeFlightOptions = {}): FlightLeg | undefined {
+  const normalized = normalizeFlightSelection(raw, opts);
   if (!normalized || normalized.legs.length === 0) return undefined;
 
   const marked = normalized.legs.find(l => l.isDestinationArrival);

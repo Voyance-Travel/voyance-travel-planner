@@ -3783,7 +3783,20 @@ export function EditorialItinerary({
     // in missing return-leg arrival time (form doesn't collect it) and
     // autoTagLegs sets destination flags. Without this, the return leg
     // renders as "--:--".
-    const normalized = normalizeFlightSelection(flightSelection as unknown);
+    const _destIata = (() => {
+      try {
+        const fs: any = flightSelection || {};
+        const legsArr = Array.isArray(fs.legs) ? fs.legs : [];
+        const marked = legsArr.find((l: any) => l?.isDestinationArrival);
+        return (
+          (marked?.arrival?.airport as string | undefined) ||
+          (marked?.arrivalAirport as string | undefined) ||
+          (fs.arrivalAirport as string | undefined) ||
+          null
+        );
+      } catch { return null; }
+    })();
+    const normalized = normalizeFlightSelection(flightSelection as unknown, { destinationIata: _destIata });
     if (normalized && normalized.legs.length > 0) {
       return normalized.legs.map(l => normalizeLeg(l as unknown as Record<string, unknown>));
     }
