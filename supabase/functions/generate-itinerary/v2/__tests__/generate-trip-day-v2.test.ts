@@ -49,3 +49,13 @@ Deno.test('handleGenerateTripDayV2: rejects non-number dayNumber', async () => {
   const body = await res.json();
   assert(String(body.error).includes('dayNumber'));
 });
+
+// Phase B parity-port wiring smoke test — confirms all new helper imports
+// (ledger-check, meal-guard, runStep8, nuclear sweeps, trace-recorder,
+// scrubPhantomEventRefs, post-meal-guard-fill) resolve at module load.
+// Regression guard against missing-import deploy failures.
+Deno.test('v2 module exports both entrypoints after parity ports', async () => {
+  const mod = await import('../generate-trip-day-v2.ts');
+  assertEquals(typeof mod.handleGenerateTripDayV2, 'function');
+  assertEquals(typeof mod.shouldUseV2Chain, 'function');
+});
