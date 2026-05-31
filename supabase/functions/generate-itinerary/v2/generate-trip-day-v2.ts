@@ -52,6 +52,7 @@ import { runStep8 } from '../universal-quality-pass.ts';
 import { ledgerCheck } from '../ledger-check.ts';
 import { nuclearCrossCitySweep, nuclearDiningStrip, nuclearWellnessSweep } from '../fix-placeholders.ts';
 import { noopTrace, attachTrace, withStage, type Trace } from '../../_shared/trace-recorder.ts';
+import { runDetectorRepairs } from './detector-repairs.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -226,6 +227,27 @@ export async function handleGenerateTripDayV2(
     );
 
     let finalDay: any = { ...gated.day, activities: enriched };
+
+    // ── 6a. Phase C: v2 detector→repair upgrades ────────────────────────
+    // Closing-hours drop + overlap auto-shift (cap 90min/day) + transit-sanity widen.
+    // Runs AFTER enrich (needs venue hours + coords) and BEFORE executioner so
+    // the executioner's geo/flight/buffer pass sees the cleaned schedule.
+    try {
+      const det = await withStage(trace, 'v2_detector_repairs', { dayNumber }, (ctx) => {
+        const r = runDetectorRepairs(finalDay.activities, dayNumber);
+        ctx.outputs = r.counters as any;
+        return r;
+      });
+      finalDay.activities = det.activities;
+      finalDay.metadata = finalDay.metadata || {};
+      finalDay.metadata.quality = finalDay.metadata.quality || {};
+      finalDay.metadata.quality.v2_detector_repairs = det.counters;
+      if (det.unresolvedOverlaps.length > 0) {
+        finalDay.metadata.quality.unresolved_overlaps = det.unresolvedOverlaps;
+      }
+    } catch (e) {
+      console.warn('[v2] detector-repairs failed (non-blocking):', e);
+    }
 
     // ── 6b. Schedule Executioner — deterministic post-pipeline chokepoint
     // See mem://constraints/itinerary/schedule-executioner.
