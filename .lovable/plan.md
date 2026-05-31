@@ -1,8 +1,10 @@
-# Phase B Finish — v2 Parity Ports
+# Phase B Finish — v2 Parity Ports ✅ SHIPPED
 
-Goal: bring `generate-trip-day-v2.ts` to functional parity with v1 so we can flip 2 internal trips to `useV2Chain=true` and verify before Phase C.
+Status: all 6 parity ports wired into `generate-trip-day-v2.ts`. Tests green (6/6). Still gated behind `trips.metadata.useV2Chain === true`. Next: flip 2 internal trips and run parity diff vs v1.
 
-## Ports (in order of risk)
+## Ports (in order of risk) — all complete
+
+
 
 ### 1. ledger-check mutating passes
 Wire `ledgerCheck(days, ledgers)` into v2 after `repairDay`, before `scheduleExecutioner`. Highest risk — handles vibe-clash dinner downgrades and repeat-already-done (with meal exemption per Core memory). Reuse existing `supabase/functions/generate-itinerary/ledger-check.ts` as-is; just need to build the per-day ledger context from `tripFacts` + prior days.
