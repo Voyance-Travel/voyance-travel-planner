@@ -35,9 +35,9 @@ import { pickDestinationArrivalLeg } from './flight-leg-pick.ts';
  * or the picker found no arrival string. Used by `enforceFlightAnchors`
  * as a last-gate cross-check against ctx.arrivalTime24.
  */
-function _repickArrivalTruth(raw: unknown): string | undefined {
+function _repickArrivalTruth(raw: unknown, destinationIata?: string | null): string | undefined {
   if (!raw) return undefined;
-  const picked = pickDestinationArrivalLeg(raw);
+  const picked = pickDestinationArrivalLeg(raw, { destinationIata: destinationIata ?? null });
   const s = picked?.rawArrivalString || picked?.leg?.arrivalTime;
   if (!s) return undefined;
   const m = String(s).trim().match(/^(\d{1,2}):(\d{2})/);
