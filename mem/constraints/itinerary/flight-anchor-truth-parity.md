@@ -5,7 +5,22 @@ type: constraint
 ---
 
 The destination-arrival leg the prompt + Executioner trust MUST match the
-leg the user saw in the FE editor. Three layers guarantee parity:
+leg the user saw in the FE editor. Four layers guarantee parity:
+
+**`destinationIata` MUST be threaded into `autoTagLegs` on both sides.** Edge
+callers (`normalize-flight-selection.ts`, `flight-leg-pick.ts`,
+`flight-hotel-context.ts`, `action-generate-trip-day.ts`,
+`action-generate-day.ts`, `schedule-executioner.ts`) and FE callers
+(`src/utils/normalizeFlightSelection.ts`, `TripDetail.tsx`,
+`EditorialItinerary.tsx`) accept an optional `{ destinationIata }` opt and
+forward it. Without it, 2-leg connecting flights (ATL→JFK→DUB stored as
+`legs[]` where leg 0 ends at the connector) get leg 0 wrongly tagged as
+destination arrival, corrupting Day 1 anchor and every downstream schedule
+rule. When `destinationIata` is missing on a multi-leg shape, the tagger
+emits `[FLIGHT_TAG_NO_IATA] legs=N arr=I dep=J` so the upstream caller
+omission surfaces in logs.
+
+
 
 1. **`supabase/functions/_shared/normalize-flight-selection.ts`** is a
    Deno port of `src/utils/normalizeFlightSelection.ts` — same legs/legacy/
