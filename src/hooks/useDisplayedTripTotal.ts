@@ -2,24 +2,27 @@
  * useDisplayedTripTotal
  *
  * Single source of truth for the user-visible "Trip Total" rendered by:
- *   - EditorialItinerary header (top-line + equation row)
+ *   - EditorialItinerary header (top-line + equation row + Reconciling hint)
  *   - PaymentsTab "Trip Total" headline + "Matches itinerary" badge
+ *   - BudgetTab `tripTotalCents` + BudgetCoach `currentTotalCents` prop
  *
- * Internally composes `useTripFinancialSnapshot` + `useTripDayBreakdown` and
- * runs them through `computeHeaderStripValues` so both surfaces always render
- * the same number — including when `displayed = max(snapshot, chipSum)` clamps
- * up to keep the equation `Days + Hotel + Flight + Reserve = Trip Total`
- * balanced.
+ * The hook composes `useTripFinancialSnapshot` + `useTripDayBreakdown` and
+ * routes them through `computeHeaderStripValues` so every surface renders
+ * the same number — including when `displayed = max(snapshot, chipSum)`
+ * clamps up to keep the equation
+ * `Days + Hotel + Flight + Reserve = Trip Total` balanced.
  *
- * Closes the Copenhagen $1,124 vs $1,048 gap: PaymentsTab used to read raw
- * `snapshot.tripTotalCents` while the header read `displayedTripTotalUsd`.
+ * For consumers that already hold a snapshot+breakdown pair (e.g. the
+ * EditorialItinerary header, which uses the breakdown for per-day panels too)
+ * use `composeDisplayedTripTotal` directly to avoid duplicate fetches —
+ * parity is preserved because both code paths run the same composer.
  *
  * See mem://constraints/finance/displayed-trip-total-single-source.
  */
 
 import { useMemo } from 'react';
 import { useTripFinancialSnapshot, type FinancialSnapshot } from './useTripFinancialSnapshot';
-import { useTripDayBreakdown } from './useTripDayBreakdown';
+import { useTripDayBreakdown, type TripDayBreakdown } from './useTripDayBreakdown';
 import { computeHeaderStripValues, type HeaderStripValues } from '@/lib/itinerary/headerStripValues';
 
 export interface DisplayedTripTotal {
@@ -44,57 +47,40 @@ export interface DisplayedTripTotal {
 }
 
 /**
- * @param tripId   Trip UUID.
+ * Pure composer — given already-fetched snapshot + breakdown, returns the
+ * displayed-total payload. Use this when the calling component already
+ * subscribes to both hooks and you want parity WITHOUT double-fetching.
+ *
  * @param dayNumbers Optional list of day numbers to include in the days
  *   subtotal. When omitted, sums every day > 0 in the breakdown (Day 0 is
  *   logistics — hotel/flight chips already capture it).
  */
-export function useDisplayedTripTotal(
-  tripId: string,
+export function composeDisplayedTripTotal(
+  snapshot: FinancialSnapshot,
+  breakdown: TripDayBreakdown,
   dayNumbers?: number[],
 ): DisplayedTripTotal {
-  const snapshot = useTripFinancialSnapshot(tripId);
-  const breakdown = useTripDayBreakdown(tripId);
-
-  const dayKey = dayNumbers ? dayNumbers.slice().sort((a, b) => a - b).join(',') : '*';
-
-  const daysSubtotalCents = useMemo(() => {
-    let sum = 0;
-    if (dayNumbers && dayNumbers.length > 0) {
-      for (const d of dayNumbers) {
-        const b = breakdown.byDay[d];
-        if (b) sum += b.totalCents;
-      }
-    } else {
-      for (const [k, b] of Object.entries(breakdown.byDay)) {
-        if (Number(k) > 0) sum += b.totalCents;
-      }
+  let daysSubtotalCents = 0;
+  if (dayNumbers && dayNumbers.length > 0) {
+    for (const d of dayNumbers) {
+      const b = breakdown.byDay[d];
+      if (b) daysSubtotalCents += b.totalCents;
     }
-    return sum;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [breakdown.byDay, dayKey]);
+  } else {
+    for (const [k, b] of Object.entries(breakdown.byDay)) {
+      if (Number(k) > 0) daysSubtotalCents += b.totalCents;
+    }
+  }
 
-  const headerStripValues = useMemo(
-    () =>
-      computeHeaderStripValues({
-        tripTotalUsd: snapshot.tripTotalCents / 100,
-        daysGroupUsd: daysSubtotalCents / 100,
-        hotelChipUsd: snapshot.effectiveHotelCents / 100,
-        flightChipUsd: snapshot.effectiveFlightCents / 100,
-        excludedHotelUsd: snapshot.excludedHotelCents / 100,
-        excludedFlightUsd: snapshot.excludedFlightCents / 100,
-        loading: snapshot.loading,
-      }),
-    [
-      snapshot.tripTotalCents,
-      snapshot.effectiveHotelCents,
-      snapshot.effectiveFlightCents,
-      snapshot.excludedHotelCents,
-      snapshot.excludedFlightCents,
-      snapshot.loading,
-      daysSubtotalCents,
-    ],
-  );
+  const headerStripValues = computeHeaderStripValues({
+    tripTotalUsd: snapshot.tripTotalCents / 100,
+    daysGroupUsd: daysSubtotalCents / 100,
+    hotelChipUsd: snapshot.effectiveHotelCents / 100,
+    flightChipUsd: snapshot.effectiveFlightCents / 100,
+    excludedHotelUsd: snapshot.excludedHotelCents / 100,
+    excludedFlightUsd: snapshot.excludedFlightCents / 100,
+    loading: snapshot.loading,
+  });
 
   const displayedTotalCents = Math.round(headerStripValues.displayedTripTotalUsd * 100);
   const chipSumCents = Math.round(headerStripValues.chipSumUsd * 100);
@@ -110,4 +96,35 @@ export function useDisplayedTripTotal(
     headerStripValues,
     daysSubtotalCents,
   };
+}
+
+/**
+ * @param tripId   Trip UUID.
+ * @param dayNumbers Optional list of day numbers to include in the days
+ *   subtotal. When omitted, sums every day > 0 in the breakdown.
+ */
+export function useDisplayedTripTotal(
+  tripId: string,
+  dayNumbers?: number[],
+): DisplayedTripTotal {
+  const snapshot = useTripFinancialSnapshot(tripId);
+  const breakdown = useTripDayBreakdown(tripId);
+
+  const dayKey = dayNumbers ? dayNumbers.slice().sort((a, b) => a - b).join(',') : '*';
+
+  return useMemo(
+    () => composeDisplayedTripTotal(snapshot, breakdown, dayNumbers),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      snapshot.tripTotalCents,
+      snapshot.effectiveHotelCents,
+      snapshot.effectiveFlightCents,
+      snapshot.excludedHotelCents,
+      snapshot.excludedFlightCents,
+      snapshot.loading,
+      breakdown.byDay,
+      breakdown.loading,
+      dayKey,
+    ],
+  );
 }
