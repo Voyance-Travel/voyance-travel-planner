@@ -69,6 +69,14 @@ export async function handleGenerateTripDayV2(
     // ── 1. Unified facts (Phase A) ─────────────────────────────────────
     const facts = await resolveTripFacts(supabase, tripId);
 
+    // Compute the calendar date for this day (TripFacts has start/total only).
+    const dayDate = (() => {
+      if (!facts.dates.startDate) return null;
+      const d = new Date(facts.dates.startDate + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + (dayNumber - 1));
+      return d.toISOString().slice(0, 10);
+    })();
+
     // ── 2. Day-scoped facts (existing helper) ──────────────────────────
     const dayFacts = await compileDayFacts(supabase, userId, {
       ...params,
@@ -77,10 +85,10 @@ export async function handleGenerateTripDayV2(
       totalDays: facts.dates.totalDays,
       destination: facts.destination.city,
       destinationCountry: facts.destination.country,
-      date: facts.dates.dayDates[dayNumber - 1],
+      date: dayDate,
       travelers: facts.travelers.count,
       preferences: facts.preferences.interests,
-      isMultiCity: facts.isMultiCity,
+      isMultiCity: (params as any).isMultiCity,
     });
 
     // ── 3. Compile prompt + schema ─────────────────────────────────────
@@ -90,12 +98,13 @@ export async function handleGenerateTripDayV2(
       dayNumber,
       totalDays: facts.dates.totalDays,
       destination: facts.destination.city,
-      date: facts.dates.dayDates[dayNumber - 1],
+      date: dayDate,
       travelers: facts.travelers.count,
-      tripType: facts.tripType,
-      budgetTier: facts.budgetTier,
+      tripType: facts.preferences.tripType,
+      budgetTier: facts.preferences.budgetTier,
       preferences: facts.preferences.interests,
     }, dayFacts);
+
 
     const schema = compileDaySchema({
       dayNumber,
