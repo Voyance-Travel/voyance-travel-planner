@@ -52,24 +52,28 @@ export function autoTagLegs<T extends Record<string, any>>(
   if (!anyArr) {
     let idx = -1;
     if (legs.length === 1) idx = 0;
-    else if (legs.length === 2) idx = 0;
     else if (destIata) {
+      // IATA-led pick for ALL multi-leg shapes (including 2-leg) — closes
+      // the Dublin/Amsterdam pattern where leg 0 wasn't the real arrival.
       idx = legs.findIndex((l) => getArrivalAirport(l) === destIata);
-      if (idx < 0) idx = legs.length - 2;
-    } else idx = legs.length - 2;
+      if (idx < 0) idx = legs.length === 2 ? 0 : legs.length - 2;
+    } else if (legs.length === 2) idx = 0;
+    else idx = legs.length - 2;
     if (idx >= 0 && idx < legs.length) (legs[idx] as any).isDestinationArrival = true;
   }
 
   if (!anyDep) {
     let idx = -1;
     if (legs.length === 1) idx = -1;
-    else if (legs.length === 2) idx = 1;
     else if (destIata) {
+      // LAST leg whose departure airport matches destination (handles
+      // multi-city). 2-leg falls back to leg 1 when no match.
       for (let i = legs.length - 1; i >= 0; i--) {
         if (getDepartureAirport(legs[i]) === destIata) { idx = i; break; }
       }
       if (idx < 0) idx = legs.length - 1;
-    } else idx = legs.length - 1;
+    } else if (legs.length === 2) idx = 1;
+    else idx = legs.length - 1;
     if (idx >= 0 && idx < legs.length) (legs[idx] as any).isDestinationDeparture = true;
   }
 
