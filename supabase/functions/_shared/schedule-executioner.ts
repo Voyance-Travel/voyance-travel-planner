@@ -130,6 +130,9 @@ export interface ExecutionerContext {
    * `ctx.arrivalTime24` was committed from a wrong leg before reaching here.
    */
   rawFlightSelection?: unknown;
+  /** Destination IATA forwarded to the picker so multi-leg shapes pick the
+   * leg that actually lands at the destination, not leg 0 by default. */
+  destinationIata?: string | null;
   /** Trip's hotel name (lowercased internally) — enables matching post-checkin
    * "Return to [hotel]" loops where the AI used the brand string rather than
    * the generic word "hotel". */
