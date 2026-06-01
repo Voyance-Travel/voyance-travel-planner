@@ -83,6 +83,11 @@ export const FAILURE_CODES = {
   // Destination skip-list violation (Voyance Intelligence parity)
   // See _shared/destination-skip-list.ts + mem://constraints/itinerary/destination-skip-list
   SKIP_LIST_VIOLATION:         'SKIP_LIST_VIOLATION',
+
+  // Last-day checkout backward-anchor overlap (Executioner repairs deterministically;
+  // validator emits as warning so legacy trips surface via read-time auditor).
+  // See mem://constraints/itinerary/checkout-backward-anchor
+  CHECKOUT_OVERLAP:            'CHECKOUT_OVERLAP',
 } as const;
 
 export type FailureCode = typeof FAILURE_CODES[keyof typeof FAILURE_CODES];
