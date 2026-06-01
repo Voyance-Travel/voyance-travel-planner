@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 /**
  * Generate Local Alternatives — AI-powered insider recommendations for ANY destination.
