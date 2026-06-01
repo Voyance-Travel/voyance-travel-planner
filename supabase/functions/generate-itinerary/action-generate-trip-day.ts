@@ -1669,6 +1669,28 @@ async function _handleGenerateTripDayInner(
         }
       }
 
+      // ── STAMP DEPARTURE ANCHOR TRUTH (last day, post-LLM, pre-validate) ──
+      // Mirror of arrival stamper. The LLM frequently invents a pre-dawn
+      // "Departure Flight" card (e.g. 01:35 AM) that starves meal repair on
+      // the final day. Overwrite to the real return-departure time so
+      // breakfast/lunch/pre-departure dinner can be injected normally.
+      // See mem://constraints/itinerary/flight-anchor-truth-parity.
+      if (isLastDay && depTime24) {
+        const stampDep = stampDepartureAnchorTruth(dayMinimal, {
+          isLastDay: true,
+          departureTime24: depTime24,
+          departureAirport: (flightSel as any)?.return?.departureAirport || (flightSel as any)?.returnDepartureAirport || null,
+          boardingLeadMins: 45,
+        });
+        if (stampDep.mutated) {
+          console.log(
+            `[STAMP_DEPARTURE_TRUTH] trip-day day=${dayNumber} was=${stampDep.wasStart}-${stampDep.wasEnd} now=${stampDep.newStart}-${stampDep.newEnd} (truth=${depTime24})`,
+          );
+        }
+      }
+
+
+
       const validationResults = validateDay({
         day: dayMinimal,
         dayNumber, isFirstDay, isLastDay, totalDays,
