@@ -1,26 +1,24 @@
 /**
- * backfill-must-do-anchor-enrichment — lazy per-trip backfill that resolves
- * bare must-do anchor cards (source:'must-do-injection' + empty address +
- * empty description) using the same Google Places + description-fill chain
- * that fresh generation now runs post-injection.
- *
- * Called once-per-trip-per-session from TripDetail.tsx on mount when a trip
- * carries any bare injected anchor. Stamps
+ * backfill-must-do-anchor-enrichment — lazy per-trip backfill that stamps
  * `metadata.must_do_enrichment_backfilled_at` so the lazy trigger never
  * re-fires.
  *
- * Mirrors `heal-trip-chronology/index.ts` shape: user-auth check, RLS-scoped
- * access check, service-role write that bypasses Frozen-After-Ready.
+ * NOTE (2026-06-01): The full enrichment chain (Google Places address
+ * resolution + Gemini description-fill) lives inside
+ * `generate-itinerary/pipeline/*` and `_shared/description-fill.ts`. Both
+ * transitively import `generate-itinerary/pipeline/types.ts`, which Supabase's
+ * per-function bundler refuses to resolve from a different function folder.
+ * This function therefore currently only stamps the "we attempted" flag so
+ * `TripDetail` stops re-invoking it (and CORS-erroring the browser console).
+ *
+ * Proper fix tracked separately: extract `enrichAnchorActivities` and the
+ * description-fill helpers into `_shared/` with no cross-pipeline imports,
+ * then restore the real backfill body here.
  *
  * See mem://constraints/itinerary/must-do-coverage-injection.
  */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
-import {
-  enrichAnchorActivities,
-  isAnchorNeedingEnrichment,
-} from '../generate-itinerary/pipeline/enrich-day.ts';
-import { fillMissingDescriptions } from '../_shared/description-fill.ts';
 
 interface ReqBody {
   tripId?: string;
@@ -32,114 +30,6 @@ function isBareAnchor(a: any): boolean {
   const addr = String(a?.location?.address || '').trim();
   const desc = String(a?.description || '').trim();
   return addr.length === 0 && desc.length === 0;
-}
-
-async function backfillOne(
-  svc: ReturnType<typeof createClient>,
-  tripId: string,
-  env: { gMapsKey: string; lovableKey: string; supaUrl: string; supaKey: string },
-): Promise<{
-  tripId: string;
-  scanned: number;
-  attempted: number;
-  resolved: number;
-  unresolved: string[];
-  filledDescriptions: number;
-  skipped?: string;
-}> {
-  const { data: trip, error } = await svc
-    .from('trips')
-    .select('id, destination, itinerary_data, metadata, hotel_selection')
-    .eq('id', tripId)
-    .maybeSingle();
-  if (error || !trip) {
-    return { tripId, scanned: 0, attempted: 0, resolved: 0, unresolved: [], filledDescriptions: 0, skipped: 'not_found' };
-  }
-  const itin: any = trip.itinerary_data || {};
-  const days = Array.isArray(itin?.days) ? itin.days : [];
-  if (days.length === 0) {
-    return { tripId, scanned: 0, attempted: 0, resolved: 0, unresolved: [], filledDescriptions: 0, skipped: 'no_days' };
-  }
-
-  let totalScanned = 0;
-  let totalAttempted = 0;
-  let totalResolved = 0;
-  const unresolved: string[] = [];
-  let totalFilledDesc = 0;
-
-  const destination = String((trip as any).destination || '');
-  const hotelSel: any = (trip as any).hotel_selection || {};
-  const hotelCoords =
-    hotelSel?.coordinates && typeof hotelSel.coordinates.lat === 'number'
-      ? { lat: hotelSel.coordinates.lat, lng: hotelSel.coordinates.lng }
-      : undefined;
-
-  for (const day of days) {
-    const acts = Array.isArray(day?.activities) ? day.activities : [];
-    const bareCount = acts.filter(isBareAnchor).length;
-    if (bareCount === 0) continue;
-    totalScanned += bareCount;
-
-    // Run anchor enrichment (uses the same predicate; bare anchors satisfy it
-    // because they have empty address/venue).
-    const res = await enrichAnchorActivities({
-      activities: acts,
-      destination,
-      supabaseUrl: env.supaUrl,
-      supabaseKey: env.supaKey,
-      googleMapsApiKey: env.gMapsKey,
-      lovableApiKey: env.lovableKey,
-      hotelCoordinates: hotelCoords,
-      timeBudgetMs: 8000,
-    });
-    totalAttempted += res.attempted;
-    totalResolved += res.resolved;
-    unresolved.push(...res.unresolvedTitles);
-
-    // Fill descriptions for the still-blank anchors.
-    try {
-      const before = acts.filter((a: any) => isAnchorNeedingEnrichment(a) || (String(a?.source || '') === 'must-do-injection' && !(a?.description || '').trim())).length;
-      await fillMissingDescriptions(acts, destination, env.lovableKey || undefined, Number(day?.dayNumber) || 0);
-      const after = acts.filter((a: any) => String(a?.source || '') === 'must-do-injection' && !(a?.description || '').trim()).length;
-      totalFilledDesc += Math.max(0, before - after);
-    } catch (descErr) {
-      console.warn(`[backfill-must-do] description-fill failed day=${day?.dayNumber}:`, descErr instanceof Error ? descErr.message : String(descErr));
-    }
-  }
-
-  const meta = ((trip as any).metadata as Record<string, any>) || {};
-  const nextMeta = {
-    ...meta,
-    must_do_enrichment_backfilled_at: new Date().toISOString(),
-    must_do_enrichment_backfill_summary: {
-      scanned: totalScanned,
-      attempted: totalAttempted,
-      resolved: totalResolved,
-      unresolved,
-      filledDescriptions: totalFilledDesc,
-    },
-  };
-
-  // Only write itinerary_data if anything actually changed — otherwise just
-  // stamp metadata so we never re-fire.
-  if (totalResolved > 0 || totalFilledDesc > 0) {
-    const healedItin = { ...itin, days };
-    const { error: upErr } = await svc
-      .from('trips')
-      .update({ itinerary_data: healedItin, metadata: nextMeta })
-      .eq('id', tripId);
-    if (upErr) {
-      console.warn(`[backfill-must-do] persist failed trip=${tripId}:`, upErr);
-      return { tripId, scanned: totalScanned, attempted: totalAttempted, resolved: totalResolved, unresolved, filledDescriptions: totalFilledDesc, skipped: 'persist_failed' };
-    }
-  } else {
-    await svc.from('trips').update({ metadata: nextMeta }).eq('id', tripId);
-  }
-
-  console.log(
-    `[backfill-must-do] trip=${tripId} scanned=${totalScanned} attempted=${totalAttempted} resolved=${totalResolved} filledDesc=${totalFilledDesc} unresolved=${unresolved.length}`,
-  );
-  return { tripId, scanned: totalScanned, attempted: totalAttempted, resolved: totalResolved, unresolved, filledDescriptions: totalFilledDesc };
 }
 
 Deno.serve(async (req) => {
@@ -158,8 +48,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const gMapsKey = Deno.env.get('GOOGLE_MAPS_API_KEY') || '';
-    const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
 
     const authClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
@@ -180,7 +68,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // RLS-scoped access check before service-role write.
+    // RLS-scoped access check.
     const { data: accessOk, error: accessErr } = await authClient
       .from('trips')
       .select('id')
@@ -193,16 +81,50 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Stamp metadata so the FE lazy trigger doesn't keep firing.
     const svc = createClient(supabaseUrl, serviceKey);
-    const result = await backfillOne(svc, tripId, {
-      gMapsKey,
-      lovableKey,
-      supaUrl: supabaseUrl,
-      supaKey: serviceKey,
-    });
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    const { data: trip } = await svc
+      .from('trips')
+      .select('itinerary_data, metadata')
+      .eq('id', tripId)
+      .maybeSingle();
+
+    const itin: any = (trip as any)?.itinerary_data || {};
+    const days = Array.isArray(itin?.days) ? itin.days : [];
+    let scanned = 0;
+    for (const day of days) {
+      const acts = Array.isArray(day?.activities) ? day.activities : [];
+      scanned += acts.filter(isBareAnchor).length;
+    }
+
+    const meta = ((trip as any)?.metadata as Record<string, any>) || {};
+    const nextMeta = {
+      ...meta,
+      must_do_enrichment_backfilled_at: new Date().toISOString(),
+      must_do_enrichment_backfill_summary: {
+        scanned,
+        attempted: 0,
+        resolved: 0,
+        unresolved: [],
+        filledDescriptions: 0,
+        deferred: 'cross_fn_bundler_refactor_pending',
+      },
+    };
+    await svc.from('trips').update({ metadata: nextMeta }).eq('id', tripId);
+
+    console.log(`[backfill-must-do] trip=${tripId} scanned=${scanned} (stamp-only; enrichment deferred)`);
+    return new Response(
+      JSON.stringify({
+        tripId,
+        scanned,
+        attempted: 0,
+        resolved: 0,
+        unresolved: [],
+        filledDescriptions: 0,
+        deferred: true,
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
   } catch (err) {
     console.error('[backfill-must-do-anchor-enrichment] error:', err);
     return new Response(JSON.stringify({ error: String(err) }), {
