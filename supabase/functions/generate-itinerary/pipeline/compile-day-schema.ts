@@ -744,6 +744,7 @@ DEPARTURE DAY ACTIVITIES: 2-3 maximum, but CONDENSED
 ⚠️ Final activity should be LOW-STAKES (can be skipped if running late).
 ⚠️ No reservations that can't be cancelled.
 ⚠️ CHECKOUT must happen BEFORE luggage collection/transfer. This is auto-enforced by post-processing.
+⚠️ HARD: Every non-checkout, non-bookend activity scheduled BEFORE checkout MUST have endTime ≤ ${checkoutTime} − 15min (travel back to the hotel). Overlapping checkout is a defect and will be auto-trimmed.
 THE TRAVELER IS LEAVING. A gentle goodbye, not a marathon.`;
         }
 
