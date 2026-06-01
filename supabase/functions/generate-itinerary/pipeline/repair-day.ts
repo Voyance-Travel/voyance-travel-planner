@@ -4646,6 +4646,28 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
     return ta - tb;
   });
 
+  // 5) Force airport-transit cards to method=taxi with capped duration.
+  //    Catches LLM-emitted "Walk to Transfer to Airport — 1h 46m" that
+  //    survived §15b's coord-based recompute.
+  //    See mem://constraints/itinerary/airport-transit-must-be-taxi
+  try {
+    const { enforceAirportTransitOnDay } = await import('../../_shared/airport-transit-classifier.ts');
+    const fixed = enforceAirportTransitOnDay(activities, {
+      transferMinutes: transferMins,
+      lockedIds,
+    });
+    if (fixed > 0) {
+      repairs.push({
+        code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+        action: 'airport_transit_method_enforced',
+        count: fixed,
+      } as any);
+      console.log(`[Repair §15z] day=${dayNumber} airport-transit method enforced on ${fixed} card(s)`);
+    }
+  } catch (e) {
+    console.warn(`[Repair §15z] airport-transit classifier failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
   return { activities, repairs };
 }
 
