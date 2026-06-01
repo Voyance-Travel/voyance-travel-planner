@@ -46,6 +46,25 @@ export class AICallError extends Error {
   }
 }
 
+function assertLovableApiKey(apiKey: string | undefined): string {
+  const key = String(apiKey || '').trim();
+  if (!key) {
+    throw new AICallError(
+      'LOVABLE_API_KEY missing',
+      500,
+      'AI configuration is missing. Please try again in a moment.',
+    );
+  }
+  if (key.startsWith('Bearer ') || key.startsWith('eyJ')) {
+    throw new AICallError(
+      'LOVABLE_API_KEY malformed',
+      500,
+      'AI configuration is invalid. Please try again in a moment.',
+    );
+  }
+  return key;
+}
+
 // =============================================================================
 // Tool schema for create_day_itinerary
 // =============================================================================
@@ -129,6 +148,7 @@ const DAY_ITINERARY_TOOL_SCHEMA = {
  */
 export async function callAI(input: AICallInput): Promise<AICallResult> {
   const { systemPrompt, userPrompt, apiKey, dayNumber, maxAttempts = 5, trace, tracePurpose } = input;
+  const lovableApiKey = assertLovableApiKey(apiKey);
   let data: any = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -143,7 +163,7 @@ export async function callAI(input: AICallInput): Promise<AICallResult> {
       response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          "Lovable-API-Key": lovableApiKey,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
