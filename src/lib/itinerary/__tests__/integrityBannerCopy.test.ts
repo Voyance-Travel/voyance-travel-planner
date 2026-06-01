@@ -33,12 +33,12 @@ describe('pickBannerVariant', () => {
     expect(v?.kind).toBe('empty');
   });
 
-  it('returns incomplete when failure=incomplete_itinerary and 0 meaningful', () => {
+  it('returns incomplete when failure=incomplete_itinerary (degenerate plan)', () => {
     const v = pickBannerVariant({
       itineraryStatus: 'failed',
       generationFailureReason: 'incomplete_itinerary',
       integrityCodes: [],
-      meaningfulActivityCount: 0,
+      meaningfulActivityCount: 1, // hotel + single filler
     });
     expect(v?.kind).toBe('incomplete');
   });
