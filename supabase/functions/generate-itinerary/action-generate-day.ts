@@ -82,6 +82,7 @@ import { callAI, AICallError } from './pipeline/ai-call.ts';
 import { attachTrace } from '../_shared/trace-recorder.ts';
 import { enrichAndValidateHours } from './pipeline/enrich-day.ts';
 import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
+import { stampArrivalAnchorTruth } from '../_shared/stamp-arrival-anchor-truth.ts';
 
 // =============================================================================
 // FALLBACK RESTAURANT DATABASE — Rich city-aware venue pool for placeholder replacement
@@ -995,6 +996,30 @@ export async function handleGenerateDay(
 
     // Sync normalizedActivities with any backfilled events
     normalizedActivities = generatedDay.activities;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FLIGHT ARRIVAL TRUTH STAMP — overwrite Day-1 arrival card with the
+    // user's actual arrival time before validate/repair sees it. Mirrors the
+    // v2 + chain paths (action-generate-trip-day.ts).
+    // See mem://constraints/itinerary/flight-anchor-truth-parity
+    // ═══════════════════════════════════════════════════════════════════════
+    try {
+      const stampRes = stampArrivalAnchorTruth(generatedDay, {
+        isFirstDay,
+        arrivalTime24: (flightContext as any)?.arrivalTime24 || undefined,
+        arrivalAirport: arrivalAirportDisplay || (flightContext as any)?.arrivalAirport || undefined,
+        airportProcessingMins: 45,
+        isHotelChange: facts.resolvedIsHotelChange,
+      });
+      if (stampRes.mutated) {
+        console.log(`[STAMP_ARRIVAL_TRUTH] action-generate-day day=${dayNumber} was=${stampRes.wasStart} now=${stampRes.newStart} (truth=${(flightContext as any)?.arrivalTime24})`);
+        normalizedActivities = generatedDay.activities;
+      } else if (stampRes.action !== 'noop_not_first_day' && stampRes.action !== 'noop_no_arrival_time' && stampRes.action !== 'noop_already_aligned') {
+        console.log(`[STAMP_ARRIVAL_TRUTH] action-generate-day day=${dayNumber} action=${stampRes.action}`);
+      }
+    } catch (stampErr) {
+      console.warn('[STAMP_ARRIVAL_TRUTH] action-generate-day failed (non-blocking):', stampErr);
+    }
 
     // If AI omitted the travel activity, inject deterministic fallback
     // =======================================================================
