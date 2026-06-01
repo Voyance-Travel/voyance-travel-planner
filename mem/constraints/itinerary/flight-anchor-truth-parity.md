@@ -84,6 +84,12 @@ idempotent. Stamps `isLocked=true`, `lockReason='flight-truth'`,
   response, before `validate_day_pre_repair`.
 - legacy chain path: `action-generate-trip-day.ts` runs it on `dayMinimal`
   before `validateDay`.
+- single-day path: `action-generate-day.ts` (regenerate-day / Smart Finish /
+  assistant rewrite_day) runs it on `generatedDay` after must-do backfill +
+  transition-day injection, before the pipeline validate/repair block. Without
+  this, the integrity contract correctly detected `FLIGHT_ANCHOR_COMMIT_MISMATCH`
+  and demoted the trip to `partial`, but nothing ever overwrote the LLM's
+  arrival time — the alarm rang but the fire was never put out.
 - commit-gate self-heal: `_shared/commit-itinerary.ts::resolveCommitGate`
   detects `FLIGHT_ANCHOR_COMMIT_MISMATCH`, runs the stamper on `days[0]`,
   re-runs the integrity contract once. If the mismatch clears, the trip
@@ -91,7 +97,7 @@ idempotent. Stamps `isLocked=true`, `lockReason='flight-truth'`,
   ['FLIGHT_ANCHOR_COMMIT_MISMATCH']`. Otherwise it still demotes to
   `partial` (no behaviour regression).
 
-Sentinel: `[STAMP_ARRIVAL_TRUTH] v2|trip-day day=N was=… now=… (truth=HH:MM)`
+Sentinel: `[STAMP_ARRIVAL_TRUTH] v2|trip-day|action-generate-day day=N was=… now=… (truth=HH:MM)`
 and `[COMMIT_GATE] … self-heal FLIGHT_ANCHOR_COMMIT_MISMATCH`.
 
 Tests: `_shared/__tests__/stamp-arrival-anchor-truth.test.ts` (6 cases).
