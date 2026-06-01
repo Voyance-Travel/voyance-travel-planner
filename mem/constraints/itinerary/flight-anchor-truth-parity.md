@@ -72,3 +72,26 @@ marked + picked, so `arrivalTime24=22:00` instead of `20:00`.
 - `[FLIGHT_TRUTH_DISAGREE]` — cross-source disagreement at ingestion
 - `[EXECUTIONER] EXEC_FLIGHT_TRUTH_DRIFT` — ctx.arrivalTime24 corrupted upstream
 - `[FlightContext] … truthSource=picker|flight_intelligence`
+
+## Layer 5 (added 2026-06-01): Authoritative Stamper
+
+`supabase/functions/_shared/stamp-arrival-anchor-truth.ts::stampArrivalAnchorTruth`
+is the single owner of the Day-1 arrival card's `startTime`/`endTime`. Pure,
+idempotent. Stamps `isLocked=true`, `lockReason='flight-truth'`,
+`anchorSource='arrival-flight'`, `source='stamp-arrival-truth'`. Wired:
+
+- v2 path: `generate-trip-day-v2.ts` runs it immediately after the LLM
+  response, before `validate_day_pre_repair`.
+- legacy chain path: `action-generate-trip-day.ts` runs it on `dayMinimal`
+  before `validateDay`.
+- commit-gate self-heal: `_shared/commit-itinerary.ts::resolveCommitGate`
+  detects `FLIGHT_ANCHOR_COMMIT_MISMATCH`, runs the stamper on `days[0]`,
+  re-runs the integrity contract once. If the mismatch clears, the trip
+  ships `ready` with `metadata.integrity_contract.repaired_codes:
+  ['FLIGHT_ANCHOR_COMMIT_MISMATCH']`. Otherwise it still demotes to
+  `partial` (no behaviour regression).
+
+Sentinel: `[STAMP_ARRIVAL_TRUTH] v2|trip-day day=N was=… now=… (truth=HH:MM)`
+and `[COMMIT_GATE] … self-heal FLIGHT_ANCHOR_COMMIT_MISMATCH`.
+
+Tests: `_shared/__tests__/stamp-arrival-anchor-truth.test.ts` (6 cases).

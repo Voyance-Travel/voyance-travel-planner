@@ -22,6 +22,7 @@ import { matchesAIStubVenue } from './fix-placeholders.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
 import { stripBookendsForPrompt, isCrossDayPromptNoise } from '../_shared/strip-bookends-for-prompt.ts';
+import { stampArrivalAnchorTruth } from '../_shared/stamp-arrival-anchor-truth.ts';
 import { startTrace, noopTrace, type Trace } from '../_shared/trace-recorder.ts';
 import { computeMatchVerdict } from '../_shared/match-verdict.ts';
 
@@ -1647,6 +1648,26 @@ async function _handleGenerateTripDayInner(
           transportation: a.transportation || { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
         })),
       };
+
+      // ── STAMP ARRIVAL ANCHOR TRUTH (Day 1, post-LLM, pre-validate) ──
+      // Authoritative overwrite of the arrival-flight card's start/end to
+      // the user's ground-truth landing time. Idempotent — repair-day §3b
+      // and schedule-executioner also call the same stamper as defense in
+      // depth. See mem://constraints/itinerary/flight-anchor-truth-parity.
+      if (isFirstDay && arrTime24) {
+        const stamp = stampArrivalAnchorTruth(dayMinimal, {
+          isFirstDay: true,
+          arrivalTime24: arrTime24,
+          arrivalAirport: (flightSel as any)?.outbound?.arrivalAirport || (flightSel as any)?.arrivalAirport || null,
+          airportProcessingMins: 45,
+          isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
+        });
+        if (stamp.mutated) {
+          console.log(
+            `[STAMP_ARRIVAL_TRUTH] trip-day day=${dayNumber} was=${stamp.wasStart}-${stamp.wasEnd} now=${stamp.newStart}-${stamp.newEnd} (truth=${arrTime24})`,
+          );
+        }
+      }
 
       const validationResults = validateDay({
         day: dayMinimal,

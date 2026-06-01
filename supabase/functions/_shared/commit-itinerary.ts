@@ -30,6 +30,7 @@ import {
   type IntegrityVerdict,
 } from './itinerary-integrity-contract.ts';
 import { mintCommitToken } from './commit-token.ts';
+import { stampArrivalAnchorTruth } from './stamp-arrival-anchor-truth.ts';
 
 export interface CommitGateInput {
   supabase: any;
@@ -298,7 +299,7 @@ export async function resolveCommitGate(
       );
     }
 
-    const verdict = checkItineraryIntegrity(days || [], {
+    let verdict = checkItineraryIntegrity(days || [], {
       hotelName: ctx.hotelName,
       requiredIntents: ctx.requiredIntents,
       arrivalTime24: ctx.arrivalTime24,
@@ -309,10 +310,63 @@ export async function resolveCommitGate(
       budgetIncludeHotel: budgetIncludeHotel ?? null,
       hotelCostRowFound,
     });
+
+    // ── SELF-HEAL: FLIGHT_ANCHOR_COMMIT_MISMATCH ────────────────────
+    // The integrity contract flags but never repairs. Run the stamper on
+    // Day 1 in-place and re-check once. If the mismatch clears, ship
+    // ready with `repaired_codes` stamped on metadata. If not, fall
+    // through to the existing demote-to-partial path.
+    let repairedCodes: string[] = [];
+    if (
+      !verdict.ok &&
+      verdict.codes.includes('FLIGHT_ANCHOR_COMMIT_MISMATCH') &&
+      ctx.arrivalTime24 &&
+      Array.isArray(days) &&
+      days.length > 0
+    ) {
+      try {
+        const stamp = stampArrivalAnchorTruth(days[0], {
+          isFirstDay: true,
+          arrivalTime24: ctx.arrivalTime24,
+          arrivalAirport: null,
+          isHotelChange: false,
+        });
+        if (stamp.mutated) {
+          console.warn(
+            `[COMMIT_GATE] site=${label} tripId=${tripId} self-heal FLIGHT_ANCHOR_COMMIT_MISMATCH ` +
+              `was=${stamp.wasStart}-${stamp.wasEnd} now=${stamp.newStart}-${stamp.newEnd}`,
+          );
+          const reVerdict = checkItineraryIntegrity(days, {
+            hotelName: ctx.hotelName,
+            requiredIntents: ctx.requiredIntents,
+            arrivalTime24: ctx.arrivalTime24,
+            departureTime24: ctx.departureTime24,
+            requiredMealsByDay,
+            destination: (ctx as any).destination ?? null,
+            hotelTotalPriceUsdCents: hotelTotalCents ?? null,
+            budgetIncludeHotel: budgetIncludeHotel ?? null,
+            hotelCostRowFound,
+          });
+          if (!reVerdict.codes.includes('FLIGHT_ANCHOR_COMMIT_MISMATCH')) {
+            repairedCodes.push('FLIGHT_ANCHOR_COMMIT_MISMATCH');
+            verdict = reVerdict;
+          }
+        }
+      } catch (e) {
+        console.warn(`[COMMIT_GATE] site=${label} self-heal stamp failed:`, e);
+      }
+    }
+
     const applied = applyIntegrityContractToFreezeStamp({
       proposedStatus,
       verdict,
     });
+    if (repairedCodes.length > 0) {
+      applied.metadataPatch.integrity_contract = {
+        ...(applied.metadataPatch.integrity_contract || {}),
+        repaired_codes: repairedCodes,
+      };
+    }
     const blockedReady = applied.status !== proposedStatus;
 
     if (!verdict.ok) {
