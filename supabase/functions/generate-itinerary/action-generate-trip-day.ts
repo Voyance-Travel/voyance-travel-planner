@@ -2245,6 +2245,16 @@ async function _handleGenerateTripDayInner(
           );
           if (!_fmgResult.alreadyCompliant) {
             dayResult.activities = _fmgResult.activities as any;
+            // Snapshot the IDs the guard added so the MEAL_FINAL_AUDIT block
+            // (post-everything) can detect if a downstream pass silently
+            // stripped one (validation-gate / orphan-transit / dedup / etc.).
+            // Heuristic: any activity now present whose id wasn't in the
+            // pre-guard set is treated as a fresh injection.
+            const _preIds = new Set((dayResult.activities as any[]).filter(Boolean).map((a: any) => a?.id).filter(Boolean));
+            __mealGuardInjectedIds = (_fmgResult.activities as any[])
+              .map((a: any) => a?.id)
+              .filter((id: any) => typeof id === 'string' && id.length > 0);
+            __mealGuardPool = _perDayPool.slice();
             console.warn(`[MEAL_AUDIT] day=${dayNumber} dest="${cityInfo?.cityName || destination}" mode=${_fmgPolicy.dayMode} required=[${_fmgPolicy.requiredMeals.join(',')}] detected=[${_detectedPre.join(',')}] missing=[${_missingPre.join(',')}] injected=[${_fmgResult.injectedMeals.join(',')}] pool=${_perDayPool.length} source="generate-trip-day:final-per-day"`);
             dayResult.metadata = dayResult.metadata || {};
             dayResult.metadata.quality = dayResult.metadata.quality || {};
@@ -2257,6 +2267,7 @@ async function _handleGenerateTripDayInner(
               pool_size: _perDayPool.length,
               source: 'generate-trip-day:final-per-day',
             };
+
 
             // Post-guard description backstop — meal guard injects empty-description
             // sentinels; refill before save so users never see blank dining blurbs.
