@@ -353,6 +353,7 @@ export function usePayableItems({
         // snapshot, then skip them in the per-row loop below to avoid duplicates.
         includeHotel,
         includeFlight,
+        travelers,
       });
 
       const transitByDay = new Map<number, { totalCents: number; subItems: PayableSubItem[] }>();
@@ -369,19 +370,22 @@ export function usePayableItems({
       const PLACEHOLDER_FLIGHT_TITLE_RE = /^\s*(departure|return|outbound|inbound)\s+flight\b/i;
 
       for (const row of canonical.rows) {
-        // Skip day-0 logistics rows here — already represented as hotel-selection
-        // / flight-selection rows. Their cents are still counted in the canonical
-        // total so the headline matches.
-        if (row.isLogisticsRow) continue;
-
         const cat = row.category;
         const name = row.name;
+
+        // Day-0 hotel/flight rows are already represented as hotel-selection
+        // / flight-selection rows. Non-hotel/flight logistics rows must flow
+        // through below; otherwise they are counted in the snapshot but hidden
+        // from Payments line items.
+        if (row.isLogisticsRow && (cat === 'hotel' || cat === 'flight' || cat === 'flights')) continue;
 
         // Group transit rows
         if (TRANSIT_CATEGORIES.has(cat)) {
           if (name && (isPlaceholderDepartureTransferTitle(name) || isUnconfirmedIntraCityTaxi({ title: name, category: cat }))) {
-            placeholderTransitDays.add(row.dayNumber);
-            continue;
+            if (row.cents <= 0) {
+              placeholderTransitDays.add(row.dayNumber);
+              continue;
+            }
           }
           const bucket = transitByDay.get(row.dayNumber) || { totalCents: 0, subItems: [] };
           bucket.subItems.push({
@@ -394,10 +398,10 @@ export function usePayableItems({
           continue;
         }
 
-        // Placeholder departure/return flight stub — skip emission so the
-        // line item matches the "Free" itinerary card. The canonical day-0
-        // flight chip remains the only priced flight row.
-        if (cat === 'flight' && name && PLACEHOLDER_FLIGHT_TITLE_RE.test(name)) {
+        // Placeholder departure/return flight stubs with $0 remain hidden, but
+        // a costed row can never be silently skipped — if it is counted in the
+        // snapshot, it must surface as a Payments line item.
+        if (cat === 'flight' && name && PLACEHOLDER_FLIGHT_TITLE_RE.test(name) && row.cents <= 0) {
           continue;
         }
 
