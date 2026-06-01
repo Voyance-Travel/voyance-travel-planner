@@ -55,6 +55,7 @@ import { nuclearCrossCitySweep, nuclearDiningStrip, nuclearWellnessSweep } from 
 import { noopTrace, attachTrace, withStage, type Trace } from '../../_shared/trace-recorder.ts';
 import { runDetectorRepairs } from './detector-repairs.ts';
 import { stampArrivalAnchorTruth } from '../../_shared/stamp-arrival-anchor-truth.ts';
+import { stampDepartureAnchorTruth } from '../../_shared/stamp-departure-anchor-truth.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -218,6 +219,25 @@ export async function handleGenerateTripDayV2(
         );
       }
     }
+
+    // ── 5b. STAMP DEPARTURE ANCHOR TRUTH (last day, post-LLM, pre-validate) ──
+    // Mirror of arrival stamper — overwrite hallucinated departure-flight
+    // card with the user's real return-departure time.
+    if (isLastDay && repairDepartureTime24) {
+      const stampDep = stampDepartureAnchorTruth(ai.day, {
+        isLastDay: true,
+        departureTime24: repairDepartureTime24,
+        departureAirport: (facts as any)?.departure?.airport || (dayFacts.flightContext as any)?.return?.departureAirport || null,
+        boardingLeadMins: 45,
+      });
+      if (stampDep.mutated) {
+        console.log(
+          `[STAMP_DEPARTURE_TRUTH] v2 day=${dayNumber} was=${stampDep.wasStart}-${stampDep.wasEnd} now=${stampDep.newStart}-${stampDep.newEnd} (truth=${repairDepartureTime24})`,
+        );
+      }
+    }
+
+
 
 
 

@@ -114,3 +114,40 @@ reconciles any LLM-emitted airport→hotel transit card (e.g. "Walk to The
 Shelbourne · 2hr 33min") to the authoritative duration (e.g. 30 min for
 Dublin DUB). Closes the recurring inflated airport→hotel walk leak on the
 chain path. Sentinel: `[Repair §3b] Reconciled LLM airport→hotel transfer …`.
+
+## Layer 7 (added 2026-06-01): Departure Anchor Truth Stamper
+
+Mirror of Layer 5 (arrival stamper) for the LAST day. Shared module
+`_shared/stamp-departure-anchor-truth.ts` (`stampDepartureAnchorTruth`)
+detects the departure-flight card via multi-signal lookup (`anchorSource`,
+`tags`, `category ∈ {flight,transport,logistics}` + title regex matching
+`departure|return|outbound|home flight`, `boarding flight`, or bare
+"Flight" on a last-day flight card), then overwrites
+`startTime = departureTime24 − boardingLeadMins` (default 45) and
+`endTime = departureTime24`. Stamps `isLocked=true`,
+`lockReason='flight-truth'`, `anchorSource='departure-flight'`,
+`source='stamp-departure-truth'`. Idempotent.
+
+**3 wiring sites** (mirror of arrival stamper sites, gated on
+`isLastDay && returnDepartureTime24`):
+- `action-generate-trip-day.ts` (~line 1672, immediately after the arrival
+  stamp block).
+- `action-generate-day.ts` (~line 1023, immediately after the arrival
+  stamp block).
+- `v2/generate-trip-day-v2.ts` (~line 220, alongside the v2 arrival stamp).
+
+**Closes** the recurring "Departure Flight 01:35 AM ghost on last day"
+pattern (e.g. Dublin trip `ab83230a-da60-47f1-94bf-61c11002d183` Day 4
+where the LLM emitted a pre-dawn departure card with a real 21:00 PM
+return flight). The 01:35 ghost starved meal repair because §9 saw a
+"flight at the start of the day" anchor and refused to inject breakfast /
+lunch / pre-departure dinner into the remaining window. Once the card
+moves to 20:15→21:00, the day frees up `checkout 7AM → 14h open → transfer
+~17:00 → flight 21:00` and existing meal-injection logic fills all 3
+meals unaided.
+
+Sentinel: `[STAMP_DEPARTURE_TRUTH] v2|trip-day|action-generate-day day=N was=… now=… (truth=HH:MM)`
+
+Tests: `_shared/__tests__/stamp-departure-anchor-truth.test.ts` (6 cases —
+no-op gating, overwrite, idempotency, detector signals).
+
