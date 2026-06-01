@@ -1398,7 +1398,9 @@ export function classifyItineraryCompleteness(days: any[]): {
   // whose costs sit in `activity_costs` / live as `~$N` strings rather than as
   // numeric `cost` fields on the activity object — leaving a sticky
   // `generation_failure_reason=incomplete_itinerary` stamp on healthy trips.
-  if (dayCount >= 2 && meaningfulCount < Math.max(2, dayCount)) {
+  // Tolerate ONE bare day (typically Day 1 late-arrival or departure day with
+  // only logistics — check-in, customs, taxi) by comparing against dayCount-1.
+  if (dayCount >= 2 && meaningfulCount < Math.max(2, dayCount - 1)) {
     return { status: 'incomplete', meaningfulCount, paidMeaningfulCount, dayCount };
   }
   return { status: 'ok', meaningfulCount, paidMeaningfulCount, dayCount };

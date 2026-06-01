@@ -1,9 +1,12 @@
-## Fix Raw Error Codes Showing in Draft Banner
+## Loosen "incomplete itinerary" threshold to allow one bare day
 
-**Problem:** Two integrity-contract codes (`NEIGHBORHOOD_ADDRESS_CONFLICT` and `FINAL_ORPHAN_TRANSIT`) are missing from the `CODE_COPY` dictionary in `src/components/itinerary/IntegrityContractBanner.tsx`. When these codes are returned by the backend, the UI falls back to rendering the raw internal constant name because `{CODE_COPY[c] || c}` has no human-readable mapping.
+**Problem:** The completeness gate flags any trip where even one day lacks a meaningful (non-logistics) activity. Day 1 with a late arrival (hotel check-in, customs, taxi only) reliably trips this, so trips that are actually complete get a red "missing activities" banner.
 
-**Fix:** Add two entries to `CODE_COPY`:
-- `NEIGHBORHOOD_ADDRESS_CONFLICT`: `"An activity is scheduled in a neighborhood that doesn't match the day's area."`
-- `FINAL_ORPHAN_TRANSIT`: `"A transit connection points to a venue that isn't scheduled that day."`
+**Fix:** Change the threshold from `meaningfulCount < Math.max(2, dayCount)` to `meaningfulCount < Math.max(2, dayCount - 1)` in both the frontend classifier and its backend mirror. Allows exactly one bare day (the arrival/departure logistics-only day) without false-positiving; still requires ≥2 meaningful days overall.
 
-**File changed:** `src/components/itinerary/IntegrityContractBanner.tsx` (one dictionary addition, two new keys).
+### Changes
+
+1. **`src/utils/itineraryCompleteness.ts`** (line 98) — update condition + update the comment so the rationale (one logistics-only day tolerated) is captured.
+2. **`supabase/functions/generate-itinerary/day-validation.ts`** (line 1401) — same change so the backend `incomplete_itinerary` stamp stays in lockstep with the frontend banner. Without this the backend would still mark trips failed.
+
+No DB migration. No behavioral change for trips that genuinely have multiple empty days.
