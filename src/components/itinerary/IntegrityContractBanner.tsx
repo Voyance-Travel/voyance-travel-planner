@@ -41,6 +41,8 @@ const CODE_COPY: Record<string, string> = {
   NO_SIGHTSEEING_CAPACITY: 'Your flight times leave no realistic time for the must-dos.',
   LOGISTICS_ONLY_CURATED_DAY: 'A day has only travel/hotel logistics.',
   MEAL_COVERAGE_MISSING: 'A day is missing one or more required meals.',
+  NEIGHBORHOOD_ADDRESS_CONFLICT: "An activity is scheduled in a neighborhood that doesn't match the day's area.",
+  FINAL_ORPHAN_TRANSIT: "A transit connection points to a venue that isn't scheduled that day.",
 };
 
 export function IntegrityContractBanner({ contract }: Props) {
