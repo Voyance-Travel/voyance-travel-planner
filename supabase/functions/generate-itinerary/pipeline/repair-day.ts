@@ -4611,16 +4611,28 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
       continue;
     }
     // Dining card that ends too close to the airport-bound window — drop it.
+    // EXEMPTION: a meal-guard-injected dining card whose endTime is on or
+    // before the transfer start is an intentional pre-transfer meal added to
+    // satisfy the late_departure meal policy (e.g. 17:00 dinner before a
+    // 21:45 flight). Without this exemption the meal-guard's work gets
+    // silently undone here and the user sees "Day 4 missing lunch + dinner".
     if (transferStartMin !== null && isDiningRow(a)) {
+      const tags: string[] = Array.isArray(a?.tags) ? a.tags.map((x: any) => String(x).toLowerCase()) : [];
+      const isMealGuardMeal = tags.includes('meal-guard');
       const e = pickEnd(a);
       if (e >= 0 && transferStartMin - e < DINING_NEAR_TRANSFER_MIN && s >= 0 && s < transferStartMin) {
-        repairs.push({
-          code: FAILURE_CODES.LOGISTICS_SEQUENCE,
-          action: 'final_enforce_dropped_meal_near_transfer',
-          before: `${a.title} @ ${a.startTime || a.start_time || a.time}-${a.endTime || a.end_time}`,
-        } as any);
-        console.log(`[DEPARTURE_MEAL_PRUNED] day=${dayNumber} dropped "${a.title}" ${a.startTime || a.start_time || a.time}-${a.endTime || a.end_time} (transferStart=${minutesToHHMM(transferStartMin)}, gap=${transferStartMin - e}m < ${DINING_NEAR_TRANSFER_MIN}m)`);
-        continue;
+        if (isMealGuardMeal && e <= transferStartMin) {
+          // Keep intentional pre-transfer meal.
+          console.log(`[DEPARTURE_MEAL_KEPT] day=${dayNumber} kept meal-guard pre-transfer meal "${a.title}" ${a.startTime || a.start_time || a.time}-${a.endTime || a.end_time} (transferStart=${minutesToHHMM(transferStartMin)})`);
+        } else {
+          repairs.push({
+            code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+            action: 'final_enforce_dropped_meal_near_transfer',
+            before: `${a.title} @ ${a.startTime || a.start_time || a.time}-${a.endTime || a.end_time}`,
+          } as any);
+          console.log(`[DEPARTURE_MEAL_PRUNED] day=${dayNumber} dropped "${a.title}" ${a.startTime || a.start_time || a.time}-${a.endTime || a.end_time} (transferStart=${minutesToHHMM(transferStartMin)}, gap=${transferStartMin - e}m < ${DINING_NEAR_TRANSFER_MIN}m)`);
+          continue;
+        }
       }
     }
     filtered.push(a);
