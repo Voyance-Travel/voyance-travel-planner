@@ -101,3 +101,16 @@ Sentinel: `[STAMP_ARRIVAL_TRUTH] v2|trip-day|action-generate-day day=N was=… n
 and `[COMMIT_GATE] … self-heal FLIGHT_ANCHOR_COMMIT_MISMATCH`.
 
 Tests: `_shared/__tests__/stamp-arrival-anchor-truth.test.ts` (6 cases).
+
+## Layer 6 (added 2026-06-01): Airport Transfer Duration Parity
+
+The chain generator (`action-generate-trip-day.ts`) now also threads
+`airportTransferMinutes` into `repairDay({...})` — computed via
+`getAirportTransferMinutes(supabase, destination)` for Day 1 and transition
+days. Previously only `action-generate-day.ts` (standalone path) carried the
+destination-specific value; the chain path fell back to a generic 45-min
+default. With both paths threading the real value, `repair-day.ts` §3b
+reconciles any LLM-emitted airport→hotel transit card (e.g. "Walk to The
+Shelbourne · 2hr 33min") to the authoritative duration (e.g. 30 min for
+Dublin DUB). Closes the recurring inflated airport→hotel walk leak on the
+chain path. Sentinel: `[Repair §3b] Reconciled LLM airport→hotel transfer …`.

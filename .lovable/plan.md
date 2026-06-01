@@ -1,39 +1,50 @@
-## Flight Arrival Truth Stamping in action-generate-day.ts
+# Post-Check-in Loop / Inflated Airport→Hotel Walk Duration
 
-### Problem
-`action-generate-day.ts` (single-day standalone generator) parses the LLM response, normalizes activities, runs filters and enrichment, then feeds the day into `validateDay` + `repairDay`. The integrity contract (`itinerary-integrity-contract.ts`) correctly detects when the LLM-emitted arrival card time disagrees with the user's flight truth and blocks the trip (`FLIGHT_ANCHOR_COMMIT_MISMATCH` → `status = 'partial'`). However, no code in `action-generate-day.ts` ever overwrites the LLM's arrival time with the user's ground truth — detection works, but the source is never fixed.
+## Root Cause
 
-`action-generate-trip-day.ts` (server-chain path) already calls `stampArrivalAnchorTruth` after the LLM response; `action-generate-day.ts` does not.
+`repair-day.ts` §3b (the "RECONCILE" branch around line 1146) already overwrites any LLM-emitted airport→hotel transit card with `transferMinutes = input.airportTransferMinutes || 45` and a `Transfer to <hotel>` title. So the fix already exists — for the **standalone** generator path (`action-generate-day.ts`, line 1314) which threads `airportTransferMinutes` through from `compile-day-facts.ts:685` (`getAirportTransferMinutes(supabase, destination)`).
 
-### Fix
-Add one post-processing pass in `action-generate-day.ts` that stamps the arrival-flight card with the user's actual arrival time before validation runs.
+But the **chain generator** (`action-generate-trip-day.ts`, used by every real trip) calls `repairDay({...})` at line 1706 **without** passing `airportTransferMinutes` at all. Result:
 
-### Files to change
-1. **`supabase/functions/generate-itinerary/action-generate-day.ts`**
-   - Import `stampArrivalAnchorTruth` from `../_shared/stamp-arrival-anchor-truth.ts`
-   - After all day construction is complete (after `normalizedActivities = generatedDay.activities` at line ~997 and before the "PIPELINE PHASE 3" block at line ~1147), call:
-     ```ts
-     stampArrivalAnchorTruth(generatedDay, {
-       isFirstDay,
-       arrivalTime24: (flightContext as any)?.arrivalTime24,
-       arrivalAirport: arrivalAirportDisplay || (flightContext as any)?.arrivalAirport,
-       airportProcessingMins: 45,
-       isHotelChange: facts.resolvedIsHotelChange,
-     });
-     ```
-   - Log the result so telemetry captures `[STAMP_ARRIVAL_TRUTH] action-generate-day day=N was=… now=…`
+- `input.airportTransferMinutes` is `undefined` → falls back to the generic **45-min** default.
+- For destinations where the real airport transfer is materially different (e.g. Dublin DUB→Shelbourne ≈ 30 min), §3b still overwrites the LLM's 2hr 33min walk to 45 min — survivable.
+- But the bigger gap: the chain path has **no destination-aware truth source**, so when the LLM emits a free-form transit card whose detection slips past `isAirportTransferCard` (idx > 3, oddly worded title), nothing else corrects it. The standalone path at least carried the real number forward.
 
-2. **`mem/index.md`**
-   - Append a cross-reference entry linking to the existing `mem://constraints/itinerary/flight-anchor-truth-parity.md` memory, noting that `action-generate-day.ts` now also stamps arrival truth (parity with `action-generate-trip-day.ts`).
+## Fix (one path, ~15 lines)
 
-### Why this location
-- After line ~997: all must-do backfill, transition-day fallback injection, and title cleanup are done — the activity list is in its final shape.
-- Before line ~1147: the pipeline validate/repair phase needs the arrival card to already match truth so `validateDay` and the integrity contract downstream see the correct value.
+### 1. `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
 
-### No other changes needed
-- `stampArrivalAnchorTruth` is already tested (`stamp-arrival-anchor-truth.test.ts` — 6 cases covering overwrite, idempotency, hotel-change no-op, etc.)
-- The integrity contract already verifies the stamped value and will continue to block if any future leak reappears.
-- No DB schema changes, no new dependencies, no frontend changes.
+a. Import `getAirportTransferMinutes` from `./generation-utils.ts` (top of file, alongside existing utility imports).
 
-### Deployment
-- Redeploy `generate-itinerary` edge function after the edit.
+b. Before the `repairDay({...})` call at line 1706, compute once per day:
+
+```ts
+const resolvedDestForTransfer = cityInfo?.cityName || destination;
+const airportTransferMinutes = isFirstDay && resolvedDestForTransfer
+  ? await getAirportTransferMinutes(supabase, resolvedDestForTransfer)
+  : 45;
+```
+
+c. Add `airportTransferMinutes` to the `repairDay({...})` input object (anywhere alongside the other anchor fields like `arrivalTime24`, `hotelName`).
+
+That's the entire surgical change. §3b in `repair-day.ts` already does the overwrite — it just needs the real number.
+
+### 2. Memory update
+
+Append to the **Flight Anchor Truth Parity** entry in `mem/constraints/itinerary/flight-anchor-truth-parity.md` a short note that the chain path now also threads `airportTransferMinutes` (via `getAirportTransferMinutes`) into `repairDay`, matching `action-generate-day.ts` and closing the "Walk to Hotel · 2hr 33min" leak on the chain path.
+
+## Why not broaden §3b detection too?
+
+Tempting, but out of scope. The user's request is explicitly: *"The function already exists. It's just not being applied at injection time."* If a follow-up leak appears (e.g. transit card at idx 4), we'd revisit `isAirportTransferCard` separately rather than expanding scope here.
+
+## Out of scope (intentionally not changed)
+
+- `repair-day.ts` §3b reconcile logic — already correct.
+- `action-generate-day.ts` — already threads `airportTransferMinutes`.
+- `getAirportTransferMinutes` itself — already returns destination-keyed minutes.
+- `stripPreDawnHotelReturns` / `clampAllBookends` — those handle a different class (post-checkin loops), correctly per the user's note.
+
+## Verification
+
+- Sentinel `[Repair §3b] Reconciled LLM airport→hotel transfer "Walk to The Shelbourne" (… , Xmin) → "Transfer to The Shelbourne" (… , Ymin)` should now fire with Y matching the destination's real transfer (e.g. 30 for Dublin) instead of 45.
+- Run existing test suite (`amsterdam.test.ts`, integrity-contract tests) — no behavioral change expected for cases that already passed 45.
