@@ -386,18 +386,16 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // backend persist boundary in `_shared/frozen-guard.ts`.
   // See mem://constraints/itinerary/frozen-after-ready.
   const allowFrozenWrite = params.allowFrozenWrite === true;
-  {
-    const { isUserSaveReason } = await import('../_shared/frozen-guard.ts');
-    const meta = (trip.metadata as Record<string, any>) || {};
-    const frozenAt = meta?.itinerary_frozen_at;
-    const status = String(trip.itinerary_status || '');
-    const isFrozen = !!frozenAt || status === 'ready' || status === 'generated';
-    if (isFrozen && !allowFrozenWrite && !isUserSaveReason(saveReason)) {
-      console.log(
-        `[save-itinerary] [FROZEN_BLOCKED] tripId=${tripId} reason=${saveReason} status=${status} frozenAt=${frozenAt || 'n/a'}`,
-      );
-      return okJson({ success: true, skipped: true, reason: 'frozen' });
-    }
+  const { isUserSaveReason } = await import('../_shared/frozen-guard.ts');
+  const _frozenMeta = (trip.metadata as Record<string, any>) || {};
+  const frozenAt = _frozenMeta?.itinerary_frozen_at;
+  const priorStatus = String(trip.itinerary_status || '');
+  const isFrozen = !!frozenAt || priorStatus === 'ready' || priorStatus === 'generated';
+  if (isFrozen && !allowFrozenWrite && !isUserSaveReason(saveReason)) {
+    console.log(
+      `[save-itinerary] [FROZEN_BLOCKED] tripId=${tripId} reason=${saveReason} status=${priorStatus} frozenAt=${frozenAt || 'n/a'}`,
+    );
+    return okJson({ success: true, skipped: true, reason: 'frozen' });
   }
 
 
