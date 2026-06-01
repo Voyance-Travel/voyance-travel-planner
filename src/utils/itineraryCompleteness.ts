@@ -95,7 +95,9 @@ export function classifyItineraryCompleteness(
   // Mirror of backend gate (day-validation.ts). Uses meaningfulCount, not
   // paidMeaningfulCount — approximate-cost activities (~$35) and ledger-only
   // costs leave numeric `cost` empty and were tripping a false 'incomplete'.
-  if (dayCount >= 2 && meaningfulCount < Math.max(2, dayCount)) {
+  // Tolerate ONE bare day (typically Day 1 late-arrival or departure day with
+  // only logistics — check-in, customs, taxi) by comparing against dayCount-1.
+  if (dayCount >= 2 && meaningfulCount < Math.max(2, dayCount - 1)) {
     return { status: 'incomplete', meaningfulCount, paidMeaningfulCount, dayCount };
   }
   return { status: 'ok', meaningfulCount, paidMeaningfulCount, dayCount };
