@@ -219,13 +219,18 @@ export default function ActivityAlternativesDrawer({
       if (fgRequestIdRef.current !== requestId) return;
 
       if (data?.alternatives) {
-        setSimilarAlternatives(
-          (data.alternatives as AlternativeActivity[]).map((a) => ({
-            ...a,
-            suggestionType: 'similar' as const,
-          }))
-        );
+        const list = (data.alternatives as AlternativeActivity[]).map((a) => ({
+          ...a,
+          suggestionType: 'similar' as const,
+        }));
+        setSimilarAlternatives(list);
+        if (list.length === 0) {
+          toast.info("Couldn't find similar options — try Different or use search.");
+        }
+      } else if (data && (data as { success?: boolean }).success === false) {
+        toast.error('Suggestions service unavailable — try again in a moment.');
       }
+
     } catch (error) {
       if (fgRequestIdRef.current !== requestId) return;
       console.error('Error fetching alternatives:', error);
