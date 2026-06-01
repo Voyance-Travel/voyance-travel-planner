@@ -6,6 +6,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -46,13 +47,10 @@ serve(async (req) => {
   }
 
   try {
+    const auth = await parseAuth(req);
+    if (auth instanceof Response) return auth;
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+
 
     const { tripId, destination, hotelName, hotelNeighborhood, days } = await req.json();
 

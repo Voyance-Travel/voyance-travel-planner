@@ -1,0 +1,1 @@
+REVOKE SELECT (email) ON public.trip_members FROM authenticated, anon, PUBLIC;

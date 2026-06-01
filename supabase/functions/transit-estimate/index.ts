@@ -8,6 +8,7 @@
 
 import { googleRoutes } from "../_shared/google-api.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -247,6 +248,11 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
+
 
   try {
     const { origin, destination, city } = await req.json();

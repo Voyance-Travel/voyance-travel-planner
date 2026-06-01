@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,6 +25,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
 
   try {
     const { destination, country, startDate, endDate, travelers, archetype, interests, hotelArea, tripId, forceRefresh } = await req.json() as TravelIntelRequest;

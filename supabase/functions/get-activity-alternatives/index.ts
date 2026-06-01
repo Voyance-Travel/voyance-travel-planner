@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { fetchTravelerDNA, buildCompactDNASummary, type TravelerDNA } from "../_shared/traveler-dna.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 // Inlined from generate-itinerary/fix-placeholders.ts (edge functions can't import across sibling function dirs at deploy time)
 const AI_STUB_VENUE_PATTERNS: RegExp[] = [
   /^(le |la |il |el )?(table|bistrot|brasserie|caf[eé]|comptoir|boulangerie|p[âa]tisserie|trattoria|osteria|taverna|restaurant|maison|petit|grand|bar|cave)\s+(du|de la|des|de|del|della|dei)\s+(quartier|march[ée]|coin|place|soir|midi|matin|gare|arts|jardin|vins|coeur|nord|sud|est|ouest|centre|village|port|pont)\b/i,
@@ -49,6 +50,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
   try {
     const body: RequestBody = await req.json();
     const { currentActivity, destination, searchQuery, excludeActivities, suggestionMode, tripId } = body;
@@ -57,20 +61,15 @@ serve(async (req) => {
 
     // Fetch Traveler DNA for personalized alternatives
     let travelerDNA: TravelerDNA | null = null;
-    
+
     const authHeader = req.headers.get("Authorization");
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       { global: { headers: { Authorization: authHeader || '' } } }
     );
-    let userId: string | null = null;
-    
-    if (authHeader) {
-      const token = authHeader.replace("Bearer ", "");
-      const { data: { user } } = await supabase.auth.getUser(token);
-      userId = user?.id || null;
-    }
+    let userId: string | null = auth.userId;
+
 
     if (!userId && tripId) {
       const { data: trip } = await supabase

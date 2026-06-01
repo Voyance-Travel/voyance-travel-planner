@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 /**
  * Generate Local Alternatives — AI-powered insider recommendations for ANY destination.
@@ -14,6 +15,10 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
 
   try {
     const { destination } = await req.json();
