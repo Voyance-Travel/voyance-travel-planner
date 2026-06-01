@@ -1703,12 +1703,29 @@ async function _handleGenerateTripDayInner(
       const isLastDayInCity = cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false;
       const isTransition = cityInfo?.isTransitionDay || false;
 
+      // Thread destination-specific airport→hotel transfer duration into repair-day so
+      // §3b reconciles LLM "Walk to <hotel> · 2h33m" to the real value (e.g. 30 for Dublin)
+      // instead of the generic 45-min fallback. Mirrors action-generate-day.ts parity.
+      let _airportTransferMinutes: number | undefined;
+      if (isFirstDay || isTransition) {
+        try {
+          const { getAirportTransferMinutes } = await import('./generation-utils.ts');
+          const _destForXfer = cityInfo?.cityName || destination;
+          _airportTransferMinutes = _destForXfer
+            ? await getAirportTransferMinutes(supabase, _destForXfer)
+            : 45;
+        } catch (e) {
+          console.warn(`[generate-trip-day] getAirportTransferMinutes failed day=${dayNumber}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
       const { day: repairedDay, repairs } = repairDay({
         day: dayMinimal,
         validationResults,
         dayNumber, isFirstDay, isLastDay,
         arrivalTime24: arrTime24,
         returnDepartureTime24: depTime24,
+        airportTransferMinutes: _airportTransferMinutes,
         hotelName: cityInfo?.hotelName || (isMultiCity ? undefined : tripHotelName) || undefined,
         hotelAddress: cityInfo?.hotelAddress || (isMultiCity ? '' : (tripHotelAddress || '')),
         hasHotel: !!(cityInfo?.hotelName || (!isMultiCity && tripHotelName)),
