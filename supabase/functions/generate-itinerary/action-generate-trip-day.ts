@@ -2155,8 +2155,16 @@ async function _handleGenerateTripDayInner(
   // guard across all days, but this per-day re-check ensures we never ship
   // a day without its required meals even when chain-mode partial returns
   // skip the multi-day loop.
+  // Outer-scope trackers for the final-final MEAL_FINAL_AUDIT block below.
+  // `__mealGuardInjectedIds` records IDs the guard added so we can detect
+  // if a later stage (validation-gate / orphan-transit / dedup / post-checkout
+  // prune) silently stripped them. `__mealGuardPool` is reused if we need
+  // one last retry after the schedule-executioner / hotel-return invariant.
+  let __mealGuardInjectedIds: string[] = [];
+  let __mealGuardPool: Array<{ name: string; address: string; mealType: string }> = [];
   if (dayResult?.activities?.length > 0) {
     try {
+
       const _fmgPolicy = (await import('./meal-policy.ts')).deriveMealPolicy({
         dayNumber, totalDays,
         isFirstDay: _isFirstDay, isLastDay: _isLastDay,
