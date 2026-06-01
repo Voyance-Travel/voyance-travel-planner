@@ -47,6 +47,7 @@ import {
 import { ensureDayDiningDescriptions } from '../../_shared/dining-description-backfill.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 import { pickTransitFallback, pickTransitTier, haversineMeters, extractCoords } from '../../_shared/transit-mode.ts';
+import { enforceAirportTransitOnDay } from '../../_shared/airport-transit-classifier.ts';
 import { enforceFreshenUpPosition } from '../../_shared/freshen-up-position.ts';
 
 // =============================================================================
@@ -4651,7 +4652,6 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
   //    survived §15b's coord-based recompute.
   //    See mem://constraints/itinerary/airport-transit-must-be-taxi
   try {
-    const { enforceAirportTransitOnDay } = await import('../../_shared/airport-transit-classifier.ts');
     const fixed = enforceAirportTransitOnDay(activities, {
       transferMinutes: transferMins,
       lockedIds,
