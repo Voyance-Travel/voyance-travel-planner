@@ -132,12 +132,16 @@ export async function resolveTripFacts(
   if (!tripId) throw new Error('resolveTripFacts: tripId required');
 
   // One trip read for trip-level fields.
+  // NOTE: Only select columns that actually exist on public.trips.
+  // Dietary restrictions and interests live on the user profile + metadata,
+  // not on the trips table — sourcing them from `trip.*` here would 500 the
+  // entire v2 chain with `column trips.<x> does not exist`.
   const { data: trip, error } = await supabase
     .from('trips')
     .select(
       'id, user_id, destination, destination_country, ' +
         'start_date, end_date, travelers, budget_tier, trip_type, ' +
-        'dietary_restrictions, interests, metadata, hotel_selection',
+        'metadata, hotel_selection',
     )
     .eq('id', tripId)
     .maybeSingle();
