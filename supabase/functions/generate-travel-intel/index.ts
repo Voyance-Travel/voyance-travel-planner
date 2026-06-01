@@ -26,6 +26,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
   try {
     const { destination, country, startDate, endDate, travelers, archetype, interests, hotelArea, tripId, forceRefresh } = await req.json() as TravelIntelRequest;
 
