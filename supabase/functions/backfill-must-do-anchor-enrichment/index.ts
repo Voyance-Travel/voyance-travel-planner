@@ -16,11 +16,14 @@
  */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
-import {
-  enrichAnchorActivities,
-  isAnchorNeedingEnrichment,
-} from '../generate-itinerary/pipeline/enrich-day.ts';
 import { fillMissingDescriptions } from '../_shared/description-fill.ts';
+
+// NOTE: Cross-function imports (../generate-itinerary/pipeline/enrich-day.ts)
+// don't survive Supabase's per-function bundler — only `_shared/*` is portable.
+// This backfill therefore handles the description-fill half only (the most
+// user-visible symptom of bare must-do anchors). Google-Places address
+// resolution requires extracting `enrichAnchorActivities` into `_shared` and
+// is tracked as follow-up work.
 
 interface ReqBody {
   tripId?: string;
