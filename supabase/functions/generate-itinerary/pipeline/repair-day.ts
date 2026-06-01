@@ -532,7 +532,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
   // Clone activities array to mutate
   let activities: any[] = [...(input.day.activities || [])];
-  const lockedIds = new Set(lockedActivities.map(l => l.id));
+  const lockedIds = new Set((lockedActivities || []).map(l => l.id));
 
   // --- 0. DAYTIME-ONLY VENUE GUARD (wildlife, zoos, parks, gardens, museums) ---
   // These venues close in the late afternoon/evening. AI sometimes schedules them at night.
