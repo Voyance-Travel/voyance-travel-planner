@@ -93,4 +93,20 @@ describe('composeDisplayedTripTotal — header/Payments/Budget parity', () => {
     expect(composeDisplayedTripTotal(snap(), bd({}, true)).loading).toBe(true);
     expect(composeDisplayedTripTotal(snap(), bd()).loading).toBe(false);
   });
+
+  it('excludes Day 0 from daysSubtotal even when explicit dayNumbers include it (header vs Payments parity)', () => {
+    // Reproduces the $231 vs $219 drift: header passed `days.map(d=>d.dayNumber)`
+    // (no >0 filter) → daysSubtotal swallowed Day-0 logistics → header clamped
+    // up to chipSum; PaymentsTab (default branch) excluded Day 0 and stayed
+    // at snapshot. Both branches MUST agree.
+    const snapshot = snap({ tripTotalCents: 21_900 });
+    const breakdown = bd({ 0: 1_200, 1: 1_000, 2: 11_100, 3: 6_800, 4: 4_200 });
+
+    const headerLike = composeDisplayedTripTotal(snapshot, breakdown, [0, 1, 2, 3, 4]);
+    const paymentsLike = composeDisplayedTripTotal(snapshot, breakdown);
+
+    expect(headerLike.daysSubtotalCents).toBe(23_100);
+    expect(paymentsLike.daysSubtotalCents).toBe(23_100);
+    expect(headerLike.displayedTotalCents).toBe(paymentsLike.displayedTotalCents);
+  });
 });
