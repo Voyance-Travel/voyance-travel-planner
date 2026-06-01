@@ -1653,8 +1653,22 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     warnings: persistVerdict.warnings,
   };
 
+  // User-initiated saves on an already-frozen trip MUST NOT advance or re-stamp
+  // status. The frozen gate above lets these writes through (AI note save,
+  // drag-reorder, lock toggle, chat edit), but status must only ever advance
+  // via the generation pipeline / commit gate — otherwise a metadata edit on a
+  // `partial` trip silently flips it to `ready` + stamps `itinerary_frozen_at`,
+  // permanently locking out future generation legs.
+  const preserveFrozenStatus =
+    isFrozen && isUserSaveReason(saveReason) &&
+    (priorStatus === 'ready' || priorStatus === 'generated' || priorStatus === 'partial');
   let nextStatus: 'ready' | 'generated' | 'partial' | 'failed' =
-    emptyItineraryDetected ? 'failed' : (persistVerdict.ok ? 'ready' : 'partial');
+    preserveFrozenStatus
+      ? (priorStatus as 'ready' | 'generated' | 'partial' | 'failed')
+      : emptyItineraryDetected ? 'failed' : (persistVerdict.ok ? 'ready' : 'partial');
+  if (preserveFrozenStatus) {
+    console.log(`[save-itinerary] [SAVE_STATUS_PRESERVED] tripId=${tripId} reason=${saveReason} status=${priorStatus}`);
+  }
 
   // ── CANONICAL COMMIT GATE ──
   // Single shared boundary (used by generation-core Stage 6 and
