@@ -63,6 +63,12 @@ export function composeDisplayedTripTotal(
   let daysSubtotalCents = 0;
   if (dayNumbers && dayNumbers.length > 0) {
     for (const d of dayNumbers) {
+      // Day 0 is logistics (hotel/flight/transfers) — already represented in
+      // the displayed total via `effectiveHotelCents` + `effectiveFlightCents`
+      // chips. Including it here would double-count and silently inflate
+      // `displayedTripTotal = max(snapshot, daysGroup + hotel + flight)`
+      // above the snapshot, causing header vs PaymentsTab drift.
+      if (d <= 0) continue;
       const b = breakdown.byDay[d];
       if (b) daysSubtotalCents += b.totalCents;
     }
