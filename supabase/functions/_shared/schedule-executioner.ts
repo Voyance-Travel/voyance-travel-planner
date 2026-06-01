@@ -1174,6 +1174,14 @@ export function toExecutionerAuditCodes(
       detail: `Dropped ${counters.orphanTransitsDropped} orphan transit card(s) with no destination`,
     });
   }
+  if (counters.checkoutOverlapsTrimmed > 0) {
+    out.push({
+      code: 'EXEC_CHECKOUT_OVERLAP_TRIMMED',
+      count: counters.checkoutOverlapsTrimmed,
+      dayNumber,
+      detail: `Trimmed ${counters.checkoutOverlapsTrimmed} pre-checkout overlap(s) against 15min travel buffer`,
+    });
+  }
   return out;
 }
 
