@@ -1,52 +1,39 @@
-# Plan: Checkout Backward-Anchor Enforcement
+## Flight Arrival Truth Stamping in action-generate-day.ts
 
-## Problem
+### Problem
+`action-generate-day.ts` (single-day standalone generator) parses the LLM response, normalizes activities, runs filters and enrichment, then feeds the day into `validateDay` + `repairDay`. The integrity contract (`itinerary-integrity-contract.ts`) correctly detects when the LLM-emitted arrival card time disagrees with the user's flight truth and blocks the trip (`FLIGHT_ANCHOR_COMMIT_MISMATCH` → `status = 'partial'`). However, no code in `action-generate-day.ts` ever overwrites the LLM's arrival time with the user's ground truth — detection works, but the source is never fixed.
 
-On the last day, `compile-day-schema.ts` writes a checkout time into the prompt but nothing enforces it deterministically. The LLM emits overlapping activities (e.g., church 10:05–11:05 over 11:00 checkout) and no downstream pass repairs the overlap. The Executioner has no checkout-aware rule.
+`action-generate-trip-day.ts` (server-chain path) already calls `stampArrivalAnchorTruth` after the LLM response; `action-generate-day.ts` does not.
 
-## Fix (3 layers)
+### Fix
+Add one post-processing pass in `action-generate-day.ts` that stamps the arrival-flight card with the user's actual arrival time before validation runs.
 
-### 1. Prompt hardening — `pipeline/compile-day-schema.ts`
-In each last-day branch that emits a checkout time (`checkoutEnd` / `checkout` / `checkoutTime` — the 4 existing blocks around lines 451, 580, 636, 694, 774), add an explicit **HARD CONSTRAINT** line:
+### Files to change
+1. **`supabase/functions/generate-itinerary/action-generate-day.ts`**
+   - Import `stampArrivalAnchorTruth` from `../_shared/stamp-arrival-anchor-truth.ts`
+   - After all day construction is complete (after `normalizedActivities = generatedDay.activities` at line ~997 and before the "PIPELINE PHASE 3" block at line ~1147), call:
+     ```ts
+     stampArrivalAnchorTruth(generatedDay, {
+       isFirstDay,
+       arrivalTime24: (flightContext as any)?.arrivalTime24,
+       arrivalAirport: arrivalAirportDisplay || (flightContext as any)?.arrivalAirport,
+       airportProcessingMins: 45,
+       isHotelChange: facts.resolvedIsHotelChange,
+     });
+     ```
+   - Log the result so telemetry captures `[STAMP_ARRIVAL_TRUTH] action-generate-day day=N was=… now=…`
 
-```
-HARD: Every non-checkout, non-bookend activity scheduled BEFORE checkout MUST have endTime ≤ {checkoutStart} − 15 min. Overlapping checkout is a defect.
-```
+2. **`mem/index.md`**
+   - Append a cross-reference entry linking to the existing `mem://constraints/itinerary/flight-anchor-truth-parity.md` memory, noting that `action-generate-day.ts` now also stamps arrival truth (parity with `action-generate-trip-day.ts`).
 
-Pure prompt text addition — no logic change.
+### Why this location
+- After line ~997: all must-do backfill, transition-day fallback injection, and title cleanup are done — the activity list is in its final shape.
+- Before line ~1147: the pipeline validate/repair phase needs the arrival card to already match truth so `validateDay` and the integrity contract downstream see the correct value.
 
-### 2. Executioner rule — `_shared/schedule-executioner.ts`
-- Add new `ExecutionerCode`: `CHECKOUT_OVERLAP_TRIMMED`.
-- Add counter `checkoutOverlapsTrimmed: number`.
-- Add a new pass `enforceCheckoutAnchor(day, ctx, counters)` that runs only when `ctx.isLastDay`:
-  1. Find the checkout activity (category `accommodation` + title regex `/check[\s-]?out/i`, or `subcategory === 'checkout'`).
-  2. Compute `checkoutStart` in minutes.
-  3. For every non-locked, non-bookend, non-checkout activity with `endTime > checkoutStart − 15`:
-     - If `startTime ≥ checkoutStart − 15` and not user-pinned → drop it (it would have to start after checkout, which the post-checkout sequence already covers via existing logic). Emit `CHECKOUT_OVERLAP_TRIMMED` with `repaired:true`.
-     - Else (activity starts earlier but ends inside the buffer) → clamp `endTime = checkoutStart − 15`; if resulting duration < 30 min, drop the activity instead. Emit `CHECKOUT_OVERLAP_TRIMMED`.
-  4. Locked / user / manual / extracted / pinned rows: flag with `repaired:false` (telemetry only), never mutate — consistent with existing Universal Locking.
-- Wire `enforceCheckoutAnchor` into `runScheduleExecutioner` right after the existing flight-anchor pass (1A) and before midnight-spill (1B), so cascade reflows operate on the corrected schedule.
-- Extend `toExecutionerAuditCodes` to surface `EXEC_CHECKOUT_OVERLAP_TRIMMED`.
+### No other changes needed
+- `stampArrivalAnchorTruth` is already tested (`stamp-arrival-anchor-truth.test.ts` — 6 cases covering overwrite, idempotency, hotel-change no-op, etc.)
+- The integrity contract already verifies the stamped value and will continue to block if any future leak reappears.
+- No DB schema changes, no new dependencies, no frontend changes.
 
-### 3. Validator audit code — `pipeline/validate-day.ts`
-- Add `FAILURE_CODES.CHECKOUT_OVERLAP` (warn, not critical — Executioner repairs deterministically).
-- Add `checkCheckoutOverlap(day, ctx)` on last day mirroring the executioner detection. Used for trace/telemetry parity (so audits surface legacy trips with un-repaired overlaps).
-
-## Tests
-
-New `supabase/functions/_shared/__tests__/checkout-anchor-enforcement.test.ts`:
-- Activity 10:05–11:05 with checkout 11:00 → endTime clamped to 10:45 (15 min buffer).
-- Activity 11:30–12:30 with checkout 11:00 → preserved (post-checkout window).
-- Activity 10:55–11:10 with checkout 11:00 → dropped (would clamp to <30 min).
-- Locked activity 10:05–11:05 → preserved, issue emitted with `repaired:false`.
-- Non-last-day → no-op.
-
-## Memory
-
-Add `mem://constraints/itinerary/checkout-backward-anchor.md` documenting the 15-min buffer rule, three layers, sentinels (`[EXEC_CHECKOUT_OVERLAP_TRIMMED]`), and Universal-Locking exemption. Add one-line index entry under Core.
-
-## Out of scope
-
-- Changing the 15-min buffer to a per-hotel travel-time estimate (would require Google Distance Matrix on every last-day repair — defer).
-- Re-running fill-dead-gaps after trim (existing executioner gap-refill already runs as final stage).
-- Modifying the 4 different last-day prompt branches' fundamental timeline templates.
+### Deployment
+- Redeploy `generate-itinerary` edge function after the edit.
