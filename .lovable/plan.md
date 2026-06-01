@@ -1,25 +1,32 @@
-## Root cause
+You’re right. The actual issue is a schema drift class of failures: the new v2 `resolveTripFacts` path is selecting fields that do not exist on the live `trips` table, causing the chain to die before Day 1 generation. The latest blocker is `trips.dietary_restrictions`, after the earlier `destination_iata` blocker.
 
-V2 day-chain (`generate-trip-day-v2`) fails on every day-1 call with:
+Plan:
+1. Audit the full v2 generation read path against the live `trips` schema.
+   - Use the actual live column list as the source of truth.
+   - Check `supabase/functions/_shared/trip-facts.ts` and the v2 generation files it feeds.
+   - Identify every selected or dereferenced `trips.*` field that is not present.
 
-```
-resolveTripFacts: trip fetch failed: column trips.destination_iata does not exist
-```
+2. Patch `resolveTripFacts` as the main fix.
+   - Remove all missing columns from the `trips.select(...)` call.
+   - Keep existing behavior by using already-loaded profile data and metadata fallbacks for dietary restrictions, interests, and any other missing trip-level preferences.
+   - Do not add schema columns just to satisfy stale code unless the product genuinely needs them.
 
-`supabase/functions/_shared/trip-facts.ts` line 138 selects `destination_iata` from `public.trips`, but that column was never added to the schema (verified: the table only has `destination`, `destination_country`). Postgres rejects the whole row read, `resolveTripFacts` throws, the launcher retries 3× and the trip stalls at day 1.
+3. Add a defensive helper inside `trip-facts.ts` for trip preferences.
+   - Normalize dietary restrictions and interests from safe sources only: profile fields and metadata if present.
+   - Avoid direct reads from optional/non-existent trip columns.
 
-This is the only blocker — planner + enrichment + invoke queueing all succeed in the logs; the failure is the very first DB read inside the day handler.
+4. Do a second pass for similar schema drift references in the v2 day-chain.
+   - Scan `generate-itinerary/v2/*`, `_shared/trip-facts.ts`, and immediate dependencies for risky `trips.select(...)` strings.
+   - Patch any remaining missing-column references found in this generation-critical path.
 
-## Fix
+5. Deploy `generate-itinerary`.
+   - This is needed because the shared helper is bundled into that edge function.
 
-In `supabase/functions/_shared/trip-facts.ts`:
+6. Verify with logs.
+   - Confirm `resolveTripFacts` no longer fails with `column trips.* does not exist`.
+   - Confirm Day 1 reaches the next pipeline stage instead of returning `Initial chain failed (status=500)`.
 
-1. Remove `destination_iata` from the `.select(...)` string at line 138.
-2. Simplify the IATA derivation at line 213 to just `flightHotel.arrivalAirport || null` (the `trip.destination_iata` fallback is dead — column never existed).
-
-No schema change, no other call sites affected (`TripFacts.destination.iata` already tolerates `null`). Deploy `generate-itinerary`, then the stuck trip `938369b4-…` can resume via the existing self-resume path.
-
-## Out of scope
-
-- No change to planner, enrichment, or any downstream stage.
-- Not adding a `destination_iata` column — IATA is correctly sourced from `flight_selection` / `flight_intelligence` via `flightHotel.arrivalAirport`.
+Out of scope for this pass:
+- The Day 4 transfer duration/window cosmetic issue.
+- Any database schema migration.
+- Frontend UI changes.
