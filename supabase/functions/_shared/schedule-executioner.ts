@@ -834,6 +834,183 @@ export function enforceImpossibleLogistics(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Pass — Checkout backward-anchor (last day only)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CHECKOUT_TITLE_RE = /\bcheck[\s-]?out\b/i;
+const CHECKOUT_TRAVEL_BUFFER_MIN = 15;
+const CHECKOUT_MIN_KEEP_DURATION_MIN = 30;
+
+/**
+ * Identifies the hotel checkout activity for the day.
+ *
+ * Match rules (any one suffices):
+ *   - category === 'accommodation' AND title matches /check[\s-]?out/i
+ *   - subcategory === 'checkout'
+ *   - tag/role === 'checkout'
+ */
+function isCheckoutActivity(a: any): boolean {
+  if (!a) return false;
+  const sub = String(a?.subcategory || a?.sub_category || '').toLowerCase();
+  if (sub === 'checkout' || sub === 'hotel_checkout') return true;
+  const role = String(a?.role || a?.kind || '').toLowerCase();
+  if (role === 'checkout') return true;
+  const tags = Array.isArray(a?.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
+  if (tags.includes('checkout')) return true;
+  const cat = String(a?.category || '').toLowerCase();
+  const t = title(a);
+  if ((cat === 'accommodation' || cat === 'stay' || cat === 'hotel' || cat === 'lodging') &&
+    CHECKOUT_TITLE_RE.test(t)) return true;
+  // Also accept logistics/transfer category combined with explicit checkout title.
+  if (CHECKOUT_TITLE_RE.test(t) && !/\bafter\s+check[\s-]?out\b/i.test(t)) return true;
+  return false;
+}
+
+function isBookendOrLateNightlife(a: any): boolean {
+  const src = String(a?.source || '').toLowerCase();
+  if (src.startsWith('bookend-') || src === 'late_nightlife_bookend') return true;
+  const tags = Array.isArray(a?.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
+  return tags.some((t: string) => t.startsWith('bookend-') || t === 'late_nightlife_bookend');
+}
+
+/**
+ * Treat the checkout time as a hard backward anchor on the last day.
+ *
+ * Every non-locked, non-bookend, non-checkout activity scheduled BEFORE
+ * checkout MUST have endTime ≤ checkoutStart − 15min. Overlaps are:
+ *   - dropped, when startTime ≥ checkoutStart − 15 (would force re-time
+ *     into the post-checkout window — the post-checkout sequence already
+ *     covers that slot)
+ *   - clamped, when startTime sits earlier but endTime bleeds into the
+ *     15-min travel buffer (endTime := checkoutStart − 15). If the trimmed
+ *     duration would drop below 30 min, the activity is dropped instead.
+ *
+ * Locked / user / manual / extracted / pinned rows are flagged (issue
+ * emitted with `repaired:false`) but never mutated.
+ */
+export function enforceCheckoutAnchor(
+  activities: any[],
+  ctx: ExecutionerContext,
+  counters: ExecutionerCounters,
+): any[] {
+  if (!ctx.isLastDay) return activities;
+  if (!Array.isArray(activities) || activities.length === 0) return activities;
+
+  const checkout = activities.find(isCheckoutActivity);
+  if (!checkout) return activities;
+  const checkoutStart = pickStart(checkout);
+  if (checkoutStart == null) return activities;
+
+  const cutoff = checkoutStart - CHECKOUT_TRAVEL_BUFFER_MIN;
+  const checkoutId = actId(checkout);
+  const survivors: any[] = [];
+
+  for (const a of activities) {
+    if (a === checkout || actId(a) === checkoutId) {
+      survivors.push(a);
+      continue;
+    }
+    if (isBookendOrLateNightlife(a)) {
+      survivors.push(a);
+      continue;
+    }
+    if (isCheckoutActivity(a)) {
+      survivors.push(a);
+      continue;
+    }
+
+    const s = pickStart(a);
+    const e = pickEnd(a);
+    if (s == null || e == null) {
+      survivors.push(a);
+      continue;
+    }
+    // Anything fully at/after checkoutStart is allowed (post-checkout window).
+    if (s >= checkoutStart) {
+      survivors.push(a);
+      continue;
+    }
+    // Activity ends within or before the buffer — fine.
+    if (e <= cutoff) {
+      survivors.push(a);
+      continue;
+    }
+
+    const locked = isLocked(a);
+    if (locked) {
+      counters.issues.push({
+        code: 'CHECKOUT_OVERLAP_TRIMMED',
+        activityId: actId(a),
+        title: title(a),
+        detail: `Locked activity "${title(a)}" ends ${fmtHM(e)} (≤${fmtHM(cutoff)} required for ${fmtHM(checkoutStart)} checkout) — not mutated.`,
+        repaired: false,
+      });
+      console.warn(
+        `[EXECUTIONER] CHECKOUT_OVERLAP_TRIMMED day=${ctx.dayNumber} locked title="${title(a)}" end=${fmtHM(e)} cutoff=${fmtHM(cutoff)} — preserved`
+      );
+      survivors.push(a);
+      continue;
+    }
+
+    // Starts inside the buffer / after-cutoff window → drop (post-checkout
+    // window covers this slot; we don't time-shift forward into it).
+    if (s >= cutoff) {
+      counters.checkoutOverlapsTrimmed++;
+      counters.droppedActivities++;
+      counters.issues.push({
+        code: 'CHECKOUT_OVERLAP_TRIMMED',
+        activityId: actId(a),
+        title: title(a),
+        detail: `Dropped "${title(a)}" (${fmtHM(s)}–${fmtHM(e)}) — would overlap ${fmtHM(checkoutStart)} checkout.`,
+        repaired: true,
+      });
+      console.log(
+        `[EXECUTIONER] CHECKOUT_OVERLAP_TRIMMED day=${ctx.dayNumber} dropped title="${title(a)}" ${fmtHM(s)}-${fmtHM(e)} cutoff=${fmtHM(cutoff)}`
+      );
+      continue;
+    }
+
+    // Starts earlier — clamp endTime; drop if remaining duration < 30 min.
+    const newEnd = cutoff;
+    if (newEnd - s < CHECKOUT_MIN_KEEP_DURATION_MIN) {
+      counters.checkoutOverlapsTrimmed++;
+      counters.droppedActivities++;
+      counters.issues.push({
+        code: 'CHECKOUT_OVERLAP_TRIMMED',
+        activityId: actId(a),
+        title: title(a),
+        detail: `Dropped "${title(a)}" (${fmtHM(s)}–${fmtHM(e)}) — trim to ${fmtHM(newEnd)} would leave <30min before ${fmtHM(checkoutStart)} checkout.`,
+        repaired: true,
+      });
+      console.log(
+        `[EXECUTIONER] CHECKOUT_OVERLAP_TRIMMED day=${ctx.dayNumber} dropped (too short after trim) title="${title(a)}"`
+      );
+      continue;
+    }
+    setEnd(a, fmtHM(newEnd));
+    counters.checkoutOverlapsTrimmed++;
+    counters.issues.push({
+      code: 'CHECKOUT_OVERLAP_TRIMMED',
+      activityId: actId(a),
+      title: title(a),
+      detail: `Clamped "${title(a)}" endTime ${fmtHM(e)} → ${fmtHM(newEnd)} (15min buffer before ${fmtHM(checkoutStart)} checkout).`,
+      repaired: true,
+    });
+    console.log(
+      `[EXECUTIONER] CHECKOUT_OVERLAP_TRIMMED day=${ctx.dayNumber} clamped title="${title(a)}" end ${fmtHM(e)}->${fmtHM(newEnd)}`
+    );
+    survivors.push(a);
+  }
+
+  if (survivors.length !== activities.length) {
+    activities.length = 0;
+    activities.push(...survivors);
+  }
+  return activities;
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Orchestrator
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -846,6 +1023,7 @@ export function runScheduleExecutioner(
 
   let working = activities;
   working = enforceFlightAnchors(working, ctx, counters);
+  working = enforceCheckoutAnchor(working, ctx, counters);
   working = enforceImpossibleLogistics(working, ctx, counters);
   working = enforceMidnightSpill(working, ctx, counters);
   working = enforceGeoCoherence(working, ctx, counters);
