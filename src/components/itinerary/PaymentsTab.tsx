@@ -443,7 +443,7 @@ export function PaymentsTab({
   const includeFlight = tripInclusion?.includeFlight ?? false;
 
   // Use the shared payable items hook — single source of truth for cost totals
-  const { items: payableItems, totalCents: payableTotalCents, essentialItems, activityItems } = usePayableItems({
+  const { items: payableItems, totalCents: payableTotalCents, essentialItems } = usePayableItems({
     days,
     flightSelection,
     hotelSelection,
@@ -465,23 +465,6 @@ export function PaymentsTab({
   // Copenhagen $1,124 vs $1,048 gap (header clamped UP to chipSum, Payments
   // read raw snapshot). See mem://constraints/finance/displayed-trip-total-single-source.
   const displayedTotal = useDisplayedTripTotal(tripId);
-  // Manually-added expenses live only in trip_payments (not in activity_costs),
-  // so the DB snapshot misses them. Sum them so we can fold them on top — BUT
-  // when a manual hotel/flight exists, treat it as an OVERRIDE of the canonical
-  // day-0 ledger row instead of an addition (otherwise we double-count the stay).
-  const hasCanonicalHotel = !!(activityCosts || []).find(
-    r => (r.category || '').toLowerCase() === 'hotel' && r.day_number === 0 && (r.cost_per_person_usd || 0) > 0
-  );
-  const hasCanonicalFlight = !!(activityCosts || []).find(
-    r => (r.category || '').toLowerCase() === 'flight' && r.day_number === 0 && (r.cost_per_person_usd || 0) > 0
-  );
-  const canonicalHotelCents = (activityCosts || [])
-    .filter(r => (r.category || '').toLowerCase() === 'hotel' && r.day_number === 0)
-    .reduce((s, r) => s + Math.round((r.cost_per_person_usd || 0) * (r.num_travelers || 1) * 100), 0);
-  const canonicalFlightCents = (activityCosts || [])
-    .filter(r => (r.category || '').toLowerCase() === 'flight' && r.day_number === 0)
-    .reduce((s, r) => s + Math.round((r.cost_per_person_usd || 0) * (r.num_travelers || 1) * 100), 0);
-
   // Manual payments are now folded into useTripFinancialSnapshot directly
   // (override-aware for hotel/flight, additive for others). No local delta needed.
   //
