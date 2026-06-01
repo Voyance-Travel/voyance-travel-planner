@@ -1499,25 +1499,40 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // Budget Coach to surface phantom suggestions.
   let emptyItineraryDetected = false;
   let failureReason: 'empty_itinerary' | 'incomplete_itinerary' | null = null;
-  try {
-    const { classifyItineraryCompleteness } = await import('./day-validation.ts');
-    const probe = classifyItineraryCompleteness((itinerary as any)?.days || []);
-    if (probe.status === 'empty') {
-      emptyItineraryDetected = true;
-      failureReason = 'empty_itinerary';
-      console.warn(
-        `[save-itinerary] EMPTY ITINERARY DETECTED — meaningfulCount=0, days=${probe.dayCount}, tripId=${tripId}`
-      );
-    } else if (probe.status === 'incomplete') {
-      emptyItineraryDetected = true;
-      failureReason = 'incomplete_itinerary';
-      console.warn(
-        `[save-itinerary] INCOMPLETE ITINERARY DETECTED — paid=${probe.paidMeaningfulCount} meaningful=${probe.meaningfulCount} days=${probe.dayCount}, tripId=${tripId}`
-      );
+  // Skip the completeness probe while any day is still a generation placeholder
+  // (status:'placeholder' rows are padded in by Stage 6 when a per-day call
+  // times out). Judging completeness mid-chain mis-stamps incomplete_itinerary;
+  // the next save after the retry lands will run the probe against real data.
+  const _daysForProbe = ((itinerary as any)?.days || []) as any[];
+  const _hasPlaceholderDay = _daysForProbe.some((d: any) => d?.status === 'placeholder');
+  if (_hasPlaceholderDay) {
+    console.warn(
+      `[save-itinerary] Skipping empty/incomplete probe — ${
+        _daysForProbe.filter((d: any) => d?.status === 'placeholder').length
+      } placeholder day(s) still present; tripId=${tripId}`
+    );
+  } else {
+    try {
+      const { classifyItineraryCompleteness } = await import('./day-validation.ts');
+      const probe = classifyItineraryCompleteness(_daysForProbe);
+      if (probe.status === 'empty') {
+        emptyItineraryDetected = true;
+        failureReason = 'empty_itinerary';
+        console.warn(
+          `[save-itinerary] EMPTY ITINERARY DETECTED — meaningfulCount=0, days=${probe.dayCount}, tripId=${tripId}`
+        );
+      } else if (probe.status === 'incomplete') {
+        emptyItineraryDetected = true;
+        failureReason = 'incomplete_itinerary';
+        console.warn(
+          `[save-itinerary] INCOMPLETE ITINERARY DETECTED — paid=${probe.paidMeaningfulCount} meaningful=${probe.meaningfulCount} days=${probe.dayCount}, tripId=${tripId}`
+        );
+      }
+    } catch (e) {
+      console.warn('[save-itinerary] empty-itinerary probe failed (non-blocking):', e);
     }
-  } catch (e) {
-    console.warn('[save-itinerary] empty-itinerary probe failed (non-blocking):', e);
   }
+
 
   let existingMetadataForEmpty: Record<string, any> = {};
   if (emptyItineraryDetected) {
