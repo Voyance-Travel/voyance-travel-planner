@@ -57,7 +57,7 @@ Deno.test('§8e repoints orphan transit to the next real activity', () => {
   const repointed = out.find((a: any) => /Taxi to/i.test(a.title));
   assert(repointed, 'transit card should be preserved (repointed, not removed)');
   assert(/Hugo'?s/i.test(repointed.title), `expected title to repoint to Hugo's, got "${repointed.title}"`);
-  assertEquals(repointed.metadata?.transit_unverified, true);
+  assertEquals((repointed as any).metadata?.transit_unverified, true);
   assertEquals(repointed.source, 'repair-orphan-repoint');
   assert(result.repairs.some(r => r.code === FAILURE_CODES.FINAL_ORPHAN_TRANSIT && r.action === 'repointed_orphan_transit'));
 });
