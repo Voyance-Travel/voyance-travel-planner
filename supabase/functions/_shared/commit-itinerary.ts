@@ -30,6 +30,7 @@ import {
   type IntegrityVerdict,
 } from './itinerary-integrity-contract.ts';
 import { mintCommitToken } from './commit-token.ts';
+import { stampArrivalAnchorTruth } from './stamp-arrival-anchor-truth.ts';
 
 export interface CommitGateInput {
   supabase: any;
