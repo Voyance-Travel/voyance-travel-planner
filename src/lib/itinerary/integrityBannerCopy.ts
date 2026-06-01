@@ -97,16 +97,16 @@ export function pickBannerVariant(opts: PickBannerVariantOpts): BannerVariant {
     ? Math.max(0, Number(opts.meaningfulActivityCount))
     : -1; // -1 = unknown; don't gate on it
 
-  // 1. Truly empty: LLM returned nothing OR explicit empty_itinerary tag.
-  if (reason === 'empty_itinerary' || meaningful === 0) {
-    return { kind: 'empty', title: EMPTY_TITLE, body: EMPTY_BODY };
+  // 1. Explicit incomplete_itinerary tag from the backend → degenerate
+  //    (hotel-only / hotel + single filler). Trust the tag even if a stray
+  //    activity slipped through, but never demote a truly empty plan.
+  if (reason === 'incomplete_itinerary' && meaningful !== 0) {
+    return { kind: 'incomplete', title: INCOMPLETE_TITLE, body: INCOMPLETE_BODY };
   }
 
-  // 2. Degenerate: explicit incomplete_itinerary tag AND we can confirm
-  //    there's basically nothing on the plan. If meaningful count is
-  //    unknown (-1) we still trust the backend tag.
-  if (reason === 'incomplete_itinerary' && meaningful <= 0) {
-    return { kind: 'incomplete', title: INCOMPLETE_TITLE, body: INCOMPLETE_BODY };
+  // 2. Truly empty: LLM returned nothing OR explicit empty_itinerary tag.
+  if (reason === 'empty_itinerary' || meaningful === 0) {
+    return { kind: 'empty', title: EMPTY_TITLE, body: EMPTY_BODY };
   }
 
   // 3. Soft integrity codes — only when trip has real content.
