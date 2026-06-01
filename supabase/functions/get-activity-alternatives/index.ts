@@ -49,6 +49,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
   try {
     const body: RequestBody = await req.json();
     const { currentActivity, destination, searchQuery, excludeActivities, suggestionMode, tripId } = body;
@@ -57,20 +60,15 @@ serve(async (req) => {
 
     // Fetch Traveler DNA for personalized alternatives
     let travelerDNA: TravelerDNA | null = null;
-    
+
     const authHeader = req.headers.get("Authorization");
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       { global: { headers: { Authorization: authHeader || '' } } }
     );
-    let userId: string | null = null;
-    
-    if (authHeader) {
-      const token = authHeader.replace("Bearer ", "");
-      const { data: { user } } = await supabase.auth.getUser(token);
-      userId = user?.id || null;
-    }
+    let userId: string | null = auth.userId;
+
 
     if (!userId && tripId) {
       const { data: trip } = await supabase
