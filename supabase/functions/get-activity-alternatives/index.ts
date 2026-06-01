@@ -119,21 +119,26 @@ serve(async (req) => {
           alternatives = await aiPromise;
           clearTimeout(timer);
           console.log('[alt] AI ok, %d results', alternatives.length);
+          if (alternatives.length === 0) {
+            console.warn('[alt] empty: ai_filtered_to_zero — falling back to templates (mode=%s)', suggestionMode);
+            alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery, suggestionMode);
+          }
         } catch (aiErr) {
           clearTimeout(timer);
           if (aiAbort.signal.aborted) {
-            console.warn('[alt] AI timed out, using templates');
+            console.warn('[alt] empty: ai_timed_out — falling back to templates');
           } else {
-            console.error('[alt] AI error, using templates:', aiErr);
+            console.error('[alt] empty: ai_threw — falling back to templates:', aiErr);
           }
           alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery, suggestionMode);
         }
       } catch (outerErr) {
-        console.error('[alt] Outer AI error:', outerErr);
+        console.error('[alt] empty: outer_catch — falling back to templates:', outerErr);
         alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery, suggestionMode);
       }
     } else {
       console.log('[alt] No API key, using templates');
+
       alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery, suggestionMode);
     }
 
