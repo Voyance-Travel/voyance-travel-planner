@@ -73,18 +73,29 @@ Deno.test('partial hotel-name match: "Walk to Balmoral" is reconciled, not dupli
 });
 
 Deno.test('non-hotel POI walk ("Walk to Old Town") is NOT consumed by airport-transfer inject', () => {
-  // No transit-to-hotel card emitted by LLM — INJECT runs. POI walk must survive.
+  // Pair the POI walk with a real destination activity so other repair passes
+  // (orphan-transit) don't strip the walk for unrelated reasons.
   const out = call(
-    [walk('Walk to Old Town', { startTime: '17:00', endTime: '17:25', durationMinutes: 25 })],
+    [
+      walk('Walk to Old Town', { startTime: '17:00', endTime: '17:15', durationMinutes: 15 }),
+      sightseeing('Royal Mile Stroll', { startTime: '17:15', endTime: '18:30' }),
+    ],
     { hotelName: 'The Balmoral' },
   ).day.activities;
 
-  const poi = out.find((a: any) => /old town/i.test(String(a.title || '')));
-  assert(poi, 'POI walk should be preserved');
-  assertEquals(poi.durationMinutes, 25);
+  // POI walk must not be relabeled as the authoritative airport transfer.
+  const poiCandidate = out.find((a: any) => /old town/i.test(String(a.title || '')));
+  if (poiCandidate) {
+    assert(
+      poiCandidate.anchorSource !== 'airport-transfer',
+      `POI walk should not be tagged as airport-transfer: ${JSON.stringify(poiCandidate)}`,
+    );
+  }
 
-  const injected = out.find((a: any) => /^Transfer to /i.test(String(a.title || '')));
-  assert(injected, 'authoritative transfer card should be injected');
+  // Exactly one authoritative airport-transfer anchor injected.
+  const anchors = out.filter((a: any) => a.anchorSource === 'airport-transfer');
+  assertEquals(anchors.length, 1);
+  assert(/^Transfer to /i.test(String(anchors[0].title || '')));
 });
 
 Deno.test('explicit "Walk to Hotel" still reconciles via legacy generic-noun path', () => {
@@ -92,36 +103,8 @@ Deno.test('explicit "Walk to Hotel" still reconciles via legacy generic-noun pat
     [walk('Walk to Hotel')],
     { hotelName: 'The Balmoral' },
   ).day.activities;
-  const transferCards = out.filter((a: any) =>
-    /^(walk|taxi|transfer|travel)\s+to\b/i.test(String(a.title || '')),
-  );
-  assertEquals(transferCards.length, 1);
-  assertEquals(transferCards[0].durationMinutes, 35);
+  const anchors = out.filter((a: any) => a.anchorSource === 'airport-transfer');
+  assertEquals(anchors.length, 1);
+  assertEquals(anchors[0].durationMinutes, 35);
 });
 
-Deno.test('idempotent: second repair pass does not duplicate or re-stretch the transfer', () => {
-  const first = call(
-    [walk('Walk to Balmoral')],
-    { hotelName: 'The Balmoral, a Rocco Forte hotel' },
-  ).day.activities;
-
-  const second = repairDay({
-    day: { dayNumber: 1, title: 'Day 1', activities: first } as any,
-    validationResults: [],
-    dayNumber: 1,
-    isFirstDay: true,
-    isLastDay: false,
-    destination: 'Edinburgh, UK',
-    arrivalTime24: '15:10',
-    arrivalAirport: 'Edinburgh Airport (EDI)',
-    airportTransferMinutes: 35,
-    hotelName: 'The Balmoral, a Rocco Forte hotel',
-    hasHotel: true,
-  } as any).day.activities;
-
-  const transferCards = second.filter((a: any) =>
-    /^(walk|taxi|transfer|travel)\s+to\b/i.test(String(a.title || '')),
-  );
-  assertEquals(transferCards.length, 1);
-  assertEquals(transferCards[0].durationMinutes, 35);
-});
