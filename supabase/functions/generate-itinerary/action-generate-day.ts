@@ -83,6 +83,7 @@ import { attachTrace } from '../_shared/trace-recorder.ts';
 import { enrichAndValidateHours } from './pipeline/enrich-day.ts';
 import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
 import { stampArrivalAnchorTruth } from '../_shared/stamp-arrival-anchor-truth.ts';
+import { stampDepartureAnchorTruth } from '../_shared/stamp-departure-anchor-truth.ts';
 
 // =============================================================================
 // FALLBACK RESTAURANT DATABASE — Rich city-aware venue pool for placeholder replacement
