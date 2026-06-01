@@ -151,3 +151,48 @@ Sentinel: `[STAMP_DEPARTURE_TRUTH] v2|trip-day|action-generate-day day=N was=…
 Tests: `_shared/__tests__/stamp-departure-anchor-truth.test.ts` (6 cases —
 no-op gating, overwrite, idempotency, detector signals).
 
+---
+
+## Layer 8 — Orphan-Transit Late Repair (repair-day §8e)
+
+The integrity contract emits `FINAL_ORPHAN_TRANSIT` when a transit card
+"Walk/Taxi/Tram/.../Transfer to <X>" has no same-day non-logistics activity
+whose title or venue contains `<X>`. The validate-day twin
+(`ORPHANED_TRANSIT_NODE` → repair-day §1b) only **removes**, and runs *before*
+the §7/§8/§8b/§8c/§8d injection steps add new targets.
+
+**`supabase/functions/generate-itinerary/pipeline/repair-day.ts` §8e** is the
+late post-injection net. It scans the final per-day shape and for each
+unlocked transit card whose target isn't already on the schedule:
+
+- **Repoint** (preferred) when the next non-logistics, non-bookend activity
+  starts within ±90 min of the transit's end. Rewrites `title` / `name` /
+  `transportation.to` / `location.name` to the next activity's venue,
+  stamps `metadata.transit_unverified=true` and `source='repair-orphan-repoint'`
+  so geometry-based `recomputeTransitCards` and the FE health panel know
+  the LLM-emitted duration is suspect.
+- **Remove** when no next activity exists, the transit resolves to a
+  hotel/airport bookend target, or the next activity sits >90 min later
+  with no gap-filler.
+- **Exempts** locked / user-pinned / manual / extracted rows, bookend-ish
+  sources (`bookend-*`, `late_nightlife_bookend`, hotel/rest tags,
+  `transportation.kind ∈ {departure, airport_transfer, flight_transfer}`),
+  and hotel/airport/station-targeted titles.
+
+After any repoint, §8e re-invokes `recomputeTransitCards` so the corrected
+destination name flows into the geometry recompute and durations self-heal
+when coords exist on the new target — no airport-only special case.
+
+Sentinel: `[ORPHAN_TRANSIT_REPAIR] day=N idx=i action=repoint|remove before="…" after="…"`
+Repair codes: `FINAL_ORPHAN_TRANSIT` with `action ∈ {repointed_orphan_transit, removed_orphan_transit_no_target}`.
+
+**Closes** the recurring "Taxi to The Shelbourne — 1 hr" orphan class
+(Dublin trip `ab83230a-…` Day 1 had a 60-min taxi to a hotel that wasn't
+on the schedule; the integrity contract flagged it, but no repair pass
+consumed `FINAL_ORPHAN_TRANSIT`, so it shipped as a draft violation).
+
+Tests: `generate-itinerary/__tests__/orphan-transit-repoint.test.ts` (6 cases —
+repoint, remove-no-target, hotel/airport exempt, matched-target no-op,
+locked exempt, next-too-far removal).
+
+
