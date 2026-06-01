@@ -386,18 +386,16 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // backend persist boundary in `_shared/frozen-guard.ts`.
   // See mem://constraints/itinerary/frozen-after-ready.
   const allowFrozenWrite = params.allowFrozenWrite === true;
-  {
-    const { isUserSaveReason } = await import('../_shared/frozen-guard.ts');
-    const meta = (trip.metadata as Record<string, any>) || {};
-    const frozenAt = meta?.itinerary_frozen_at;
-    const status = String(trip.itinerary_status || '');
-    const isFrozen = !!frozenAt || status === 'ready' || status === 'generated';
-    if (isFrozen && !allowFrozenWrite && !isUserSaveReason(saveReason)) {
-      console.log(
-        `[save-itinerary] [FROZEN_BLOCKED] tripId=${tripId} reason=${saveReason} status=${status} frozenAt=${frozenAt || 'n/a'}`,
-      );
-      return okJson({ success: true, skipped: true, reason: 'frozen' });
-    }
+  const { isUserSaveReason } = await import('../_shared/frozen-guard.ts');
+  const _frozenMeta = (trip.metadata as Record<string, any>) || {};
+  const frozenAt = _frozenMeta?.itinerary_frozen_at;
+  const priorStatus = String(trip.itinerary_status || '');
+  const isFrozen = !!frozenAt || priorStatus === 'ready' || priorStatus === 'generated';
+  if (isFrozen && !allowFrozenWrite && !isUserSaveReason(saveReason)) {
+    console.log(
+      `[save-itinerary] [FROZEN_BLOCKED] tripId=${tripId} reason=${saveReason} status=${priorStatus} frozenAt=${frozenAt || 'n/a'}`,
+    );
+    return okJson({ success: true, skipped: true, reason: 'frozen' });
   }
 
 
@@ -1655,8 +1653,22 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     warnings: persistVerdict.warnings,
   };
 
+  // User-initiated saves on an already-frozen trip MUST NOT advance or re-stamp
+  // status. The frozen gate above lets these writes through (AI note save,
+  // drag-reorder, lock toggle, chat edit), but status must only ever advance
+  // via the generation pipeline / commit gate — otherwise a metadata edit on a
+  // `partial` trip silently flips it to `ready` + stamps `itinerary_frozen_at`,
+  // permanently locking out future generation legs.
+  const preserveFrozenStatus =
+    isFrozen && isUserSaveReason(saveReason) &&
+    (priorStatus === 'ready' || priorStatus === 'generated' || priorStatus === 'partial');
   let nextStatus: 'ready' | 'generated' | 'partial' | 'failed' =
-    emptyItineraryDetected ? 'failed' : (persistVerdict.ok ? 'ready' : 'partial');
+    preserveFrozenStatus
+      ? (priorStatus as 'ready' | 'generated' | 'partial' | 'failed')
+      : emptyItineraryDetected ? 'failed' : (persistVerdict.ok ? 'ready' : 'partial');
+  if (preserveFrozenStatus) {
+    console.log(`[save-itinerary] [SAVE_STATUS_PRESERVED] tripId=${tripId} reason=${saveReason} status=${priorStatus}`);
+  }
 
   // ── CANONICAL COMMIT GATE ──
   // Single shared boundary (used by generation-core Stage 6 and
