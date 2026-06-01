@@ -1,80 +1,83 @@
-# Authoritative Day-1 Arrival Anchor
+# Orphaned Transit Node Detection & Repair
 
-The integrity contract already detects `FLIGHT_ANCHOR_COMMIT_MISMATCH` and the freeze gate already demotes the trip to `partial` when it fires. The actual leak is that the **LLM-emitted arrival time is still the value that gets persisted into the activity card**. `repair-day.ts §3b` tries to reconcile it, but it runs late in the pipeline, depends on a stack of optional inputs (`arrivalTime24 && !isHotelChange`), and any earlier mutating pass that touches the arrival card can re-introduce the wrong time. Result: the validator sees the mismatch, marks the trip `partial`, but the card the user sees still carries the LLM time.
+## Problem
 
-Root cause restated: **no single point in the pipeline owns the arrival time**. We have detection (integrity contract), best-effort repair (repair-day §3b), and runtime re-verification (schedule-executioner), but no deterministic, idempotent stamp the moment the LLM response lands.
+A transit card titled `Travel to Tasca do Chico` (or `Walk to X`, `Taxi to X`) survives generation even though Tasca do Chico has no scheduled activity block that day. The existing `checkPhantomEventRefs` validator only scans **description body text** for ghost event refs — it never inspects **transit-node titles or `transportation.to` targets** against the day's actual scheduled venues. Result: phantom transit nodes ship into the published itinerary.
 
-## What to build
+## Fix
 
-### 1. Single stamper module — `stampArrivalAnchorTruth`
+Add a new structural validator + repair handler that runs after the full day is compiled, matches each transit card's destination against the set of scheduled venue identities on that day, and removes (or flags for removal) any orphan.
 
-New file `supabase/functions/_shared/stamp-arrival-anchor-truth.ts`. Pure function, no I/O:
+### 1. New failure code
 
-```text
-stampArrivalAnchorTruth(day, {
-  isFirstDay,
-  arrivalTime24,        // ground truth from normalizeFlightSelection
-  arrivalAirport,
-  airportProcessingMins = AIRPORT_PROCESSING_MINS,
-}): { day, mutated, action }
+`supabase/functions/generate-itinerary/pipeline/types.ts` — add to `FAILURE_CODES`:
+
+```
+ORPHANED_TRANSIT_NODE: 'ORPHANED_TRANSIT_NODE',
 ```
 
-Behavior:
-- No-op when `!isFirstDay`, `!arrivalTime24`, or `isHotelChange`.
-- Locate the arrival-flight card using the same multi-signal detector already in `repair-day §3b` (`anchorSource==='arrival-flight'` OR title regex OR `tags.includes('arrival-flight')`).
-- If found: rewrite `startTime = arrivalTime24`, `endTime = arrivalTime24 + processingMins`, stamp `anchorSource='arrival-flight'`, `isLocked=true`, `lockReason='flight-truth'`, `source='stamp-arrival-truth'`. Preserve title/description/location.
-- If not found: do nothing here (injection still belongs to `repair-day §3b` — it has all the hotel/transfer context).
-- Returns `{ mutated: true, action: 'overwrote_arrival_anchor', wasStart, wasEnd, newStart, newEnd }` for tracing.
+### 2. New validator: `checkOrphanedTransitNodes`
 
-### 2. Call the stamper at every post-LLM boundary
+In `pipeline/validate-day.ts`, alongside `checkPhantomEventRefs`:
 
-Wire it as the **first** mutation on the LLM response in both generation paths, before validate/repair/enrich:
+- Build a `Set<string>` of normalized scheduled venue identities for the day: lowercased + diacritics-stripped name/title/venue/location.name for every **non-transit, non-bookend** activity (use existing `isTransitActivity` to exclude).
+- For each activity where `isTransitActivity(act)` is true, extract its destination target:
+  - Primary: `transportation.to` (string or `{name}`)
+  - Fallback: parse title via `/^\s*(?:travel|walk|walking|stroll|taxi|drive|ride|transfer|head|go)\s+(?:to|toward|over\s+to|back\s+to)\s+(.+?)\s*$/i` capture group
+- Normalize the target the same way. Skip when target is empty, generic ("hotel", "airport", "the station", "lunch", "dinner", a neighborhood-only string), or when the transit is a bookend (`source` starts with `bookend-` / `late_nightlife_bookend` / hotel-return).
+- If normalized target is NOT in the scheduled set AND not a fuzzy substring match against any scheduled identity (handle "Tasca do Chico" vs "Dinner at Tasca do Chico"), emit:
 
-- `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts` — right after the LLM returns `ai.day`, before `validate_day_pre_repair`.
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — right after the per-day LLM call resolves, before `validateDay`/`repairDay`.
+```ts
+results.push({
+  code: FAILURE_CODES.ORPHANED_TRANSIT_NODE,
+  severity: 'critical',
+  message: `Transit "${title}" targets "${target}" which is not scheduled on this day`,
+  activityIndex: i,
+  field: 'title',
+  autoRepairable: true,
+});
+```
 
-The stamper is idempotent, so calling it again later (defense in depth) is safe. Add a second call at the end of `repair-day.ts` (after §3b) and at the start of `schedule-executioner.enforceFlightAnchors` to harden the chain.
+Wire the call inside the existing validator orchestrator (same spot `checkPhantomEventRefs` is invoked).
 
-### 3. Anchor-guard immutability for `lockReason='flight-truth'`
+### 3. Repair handler in `repair-day.ts`
 
-Update `supabase/functions/generate-itinerary/anchor-guard.ts` and the executioner's `pruneOrphanTransits` / `enforceFlightAnchors` / repair-day's `lockedActivities` filter so any row carrying `lockReason==='flight-truth'` is treated identically to a user-owned lock: its `startTime` / `endTime` cannot be mutated by gap-fill, cascade, or vibe-clash passes. Add the same exemption to the FE `safeUpdateItineraryData` write path (no behavior change needed — locked rows already pass through).
+Add a deterministic handler keyed on `FAILURE_CODES.ORPHANED_TRANSIT_NODE` that:
 
-### 4. Promote the integrity check to a deterministic fixer
+- Splices out flagged orphan transit nodes (locked/user/manual/extracted/pinned exempt — re-use existing `isActivityLocked`).
+- Also drops the preceding `Walk to <orphan>` connector if present (mirrors `pruneOrphanTransits` pattern already used elsewhere — import + reuse if it exists, otherwise inline the same logic).
+- Stamps `repairs.push({ code: FAILURE_CODES.ORPHANED_TRANSIT_NODE, action: 'removed_orphan_transit', before: <title> })`.
+- Re-runs the existing buffer/cascade pass so neighboring times collapse.
 
-In `supabase/functions/_shared/commit-itinerary.ts::resolveCommitGate`, when the verdict carries `FLIGHT_ANCHOR_COMMIT_MISMATCH` and `arrivalTime24` is known:
-1. Run `stampArrivalAnchorTruth` over each affected day in `days`.
-2. Re-run `checkItineraryIntegrity` once.
-3. If the mismatch clears, ship `ready` with `metadata.integrity_contract.repaired_codes: ['FLIGHT_ANCHOR_COMMIT_MISMATCH']`. Persist the corrected `days` back (the gate already returns `days` indirectly via the metadata patch — extend the return to include `repairedDays` and have callers swap them in before `persistTripItinerary`).
-4. If it still fails (e.g., no arrival card at all), keep current `partial` demotion.
+### 4. Validation-gate default
 
-This means the validator becomes self-healing for this one class instead of just flagging.
+`pipeline/validation-gate.ts` — register `ORPHANED_TRANSIT_NODE` with a drop-not-blank handler so any survivor (e.g. repair-day bypassed) is force-removed at the gate before persist. Mirrors the existing logistics-sequence drop branch.
 
-### 5. Validator severity + repair handler
+### 5. Tests
 
-In `supabase/functions/generate-itinerary/pipeline/validate-day.ts`, keep the existing `FLIGHT_ANCHOR_COMMIT_MISMATCH` check but bump severity from `'warning'` to `'error'` AND register it in `repair-day.ts`'s validation-driven repair map so an in-pipeline mismatch triggers `stampArrivalAnchorTruth` directly (today repair-day §3b runs unconditionally; this just ensures the validator's signal flows into the same fixer instead of being silently swallowed).
+New `supabase/functions/generate-itinerary/__tests__/orphaned-transit-node.test.ts`:
 
-### 6. Tests
+- Detects `"Travel to Tasca do Chico"` when Tasca do Chico isn't scheduled.
+- Does NOT flag when Tasca do Chico IS scheduled (substring + diacritics).
+- Does NOT flag generic targets (`Walk to hotel`, `Transfer to airport`, `Stroll to lunch`).
+- Does NOT flag bookend hotel-return / late-nightlife bookend.
+- Repair handler removes the orphan + preceding `Walk to X` connector; keeps locked rows.
+- Validation gate drops survivors.
 
-- `_shared/__tests__/stamp-arrival-anchor-truth.test.ts` — overwrite, no-op when not first day, no-op when no arrival card, lock fields stamped.
-- `_shared/__tests__/integrity-contract.amsterdam.test.ts` — extend with a fixer test: contract reports mismatch → `resolveCommitGate` repairs → second integrity pass clears → status returns `ready`.
-- `generate-itinerary/anchor-guard.test.ts` — verify `lockReason='flight-truth'` survives gap-fill and cascade passes.
+### 6. Memory
+
+New `mem/constraints/itinerary/orphaned-transit-node-detection.md` capturing: detection layer, repair layer, gate layer, sentinel `[ORPHAN_TRANSIT_REMOVED]`. Add one-liner reference under "Memories" in `mem/index.md`.
+
+## Files
+
+- `pipeline/types.ts` — add code
+- `pipeline/validate-day.ts` — add `checkOrphanedTransitNodes` + wire call
+- `pipeline/repair-day.ts` — add handler
+- `pipeline/validation-gate.ts` — register drop handler
+- `__tests__/orphaned-transit-node.test.ts` — new
+- `mem/constraints/itinerary/orphaned-transit-node-detection.md` + `mem/index.md` — memory
 
 ## Out of scope
 
-- FE Payments/header parity (separate task already in flight).
-- Departure-flight anchor (mirror work for departure, but no current bug filed).
-- `flight_intelligence` reconciliation — the existing `[FLIGHT_TRUTH_DISAGREE]` log path stays as-is.
-- Changing how `normalizeFlightSelection` resolves the truth — we trust the value it returns; this plan is about persisting it faithfully.
-
-## Files touched
-
-- new: `supabase/functions/_shared/stamp-arrival-anchor-truth.ts`
-- edit: `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts`
-- edit: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-- edit: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
-- edit: `supabase/functions/generate-itinerary/pipeline/validate-day.ts`
-- edit: `supabase/functions/generate-itinerary/anchor-guard.ts`
-- edit: `supabase/functions/_shared/schedule-executioner.ts`
-- edit: `supabase/functions/_shared/commit-itinerary.ts`
-- edit: `supabase/functions/_shared/itinerary-integrity-contract.ts` (extend return shape — no rule changes)
-- new tests + memory update under `mem/constraints/itinerary/flight-anchor-truth-parity.md` to record the stamper as the new authoritative layer.
+- Re-routing the orphan to a different scheduled venue (delete-only — safer than fabricating intent).
+- Cross-day orphans (target IS scheduled but on a different day) — separate bug class; can be a follow-up if telemetry shows it.
