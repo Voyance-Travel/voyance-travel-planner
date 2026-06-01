@@ -2155,8 +2155,16 @@ async function _handleGenerateTripDayInner(
   // guard across all days, but this per-day re-check ensures we never ship
   // a day without its required meals even when chain-mode partial returns
   // skip the multi-day loop.
+  // Outer-scope trackers for the final-final MEAL_FINAL_AUDIT block below.
+  // `__mealGuardInjectedIds` records IDs the guard added so we can detect
+  // if a later stage (validation-gate / orphan-transit / dedup / post-checkout
+  // prune) silently stripped them. `__mealGuardPool` is reused if we need
+  // one last retry after the schedule-executioner / hotel-return invariant.
+  let __mealGuardInjectedIds: string[] = [];
+  let __mealGuardPool: Array<{ name: string; address: string; mealType: string }> = [];
   if (dayResult?.activities?.length > 0) {
     try {
+
       const _fmgPolicy = (await import('./meal-policy.ts')).deriveMealPolicy({
         dayNumber, totalDays,
         isFirstDay: _isFirstDay, isLastDay: _isLastDay,
@@ -2237,6 +2245,16 @@ async function _handleGenerateTripDayInner(
           );
           if (!_fmgResult.alreadyCompliant) {
             dayResult.activities = _fmgResult.activities as any;
+            // Snapshot the IDs the guard added so the MEAL_FINAL_AUDIT block
+            // (post-everything) can detect if a downstream pass silently
+            // stripped one (validation-gate / orphan-transit / dedup / etc.).
+            // Heuristic: any activity now present whose id wasn't in the
+            // pre-guard set is treated as a fresh injection.
+            const _preIds = new Set((dayResult.activities as any[]).filter(Boolean).map((a: any) => a?.id).filter(Boolean));
+            __mealGuardInjectedIds = (_fmgResult.activities as any[])
+              .map((a: any) => a?.id)
+              .filter((id: any) => typeof id === 'string' && id.length > 0);
+            __mealGuardPool = _perDayPool.slice();
             console.warn(`[MEAL_AUDIT] day=${dayNumber} dest="${cityInfo?.cityName || destination}" mode=${_fmgPolicy.dayMode} required=[${_fmgPolicy.requiredMeals.join(',')}] detected=[${_detectedPre.join(',')}] missing=[${_missingPre.join(',')}] injected=[${_fmgResult.injectedMeals.join(',')}] pool=${_perDayPool.length} source="generate-trip-day:final-per-day"`);
             dayResult.metadata = dayResult.metadata || {};
             dayResult.metadata.quality = dayResult.metadata.quality || {};
@@ -2249,6 +2267,7 @@ async function _handleGenerateTripDayInner(
               pool_size: _perDayPool.length,
               source: 'generate-trip-day:final-per-day',
             };
+
 
             // Post-guard description backstop — meal guard injects empty-description
             // sentinels; refill before save so users never see blank dining blurbs.
@@ -2610,6 +2629,108 @@ async function _handleGenerateTripDayInner(
       }
     } catch (_e) { /* non-blocking */ }
   }
+
+  // ── MEAL_FINAL_AUDIT — post-everything dinner survival check ─────────
+  // Closes the recurring "Day N dinner missing in persisted output" class
+  // (Lisbon Day 2 freshen-up sits in the dinner slot with no real dinner).
+  // Runs after EVERY downstream mutating stage (meal-guard, last-day lunch,
+  // orphan-transit, validation-gate, hotel-return invariant). Three outcomes:
+  //   1. No required meals OR all detected → no-op.
+  //   2. Missing meal AND injected IDs from earlier guard are gone →
+  //      `[MEAL_INJECTION_LOST]` telemetry + one last enforceRequiredMealsFinalGuard
+  //      retry with the same pool.
+  //   3. Missing meal AND no prior injection happened → `[MEAL_FINAL_AUDIT_MISSING]`
+  //      + one last guard invocation. If the retry still fails, stamp metadata
+  //      so the integrity contract's `MEAL_COVERAGE_MISSING` surfaces honestly.
+  // Idempotent and non-blocking.
+  if (Array.isArray(dayResult?.activities) && dayResult.activities.length > 0) {
+    try {
+      const _auditPolicy = (await import('./meal-policy.ts')).deriveMealPolicy({
+        dayNumber, totalDays,
+        isFirstDay: _isFirstDay, isLastDay: _isLastDay,
+        arrivalTime24: _isFirstDay ? savedArrTime24Hoisted : undefined,
+        departureTime24: _isLastDay ? savedDepTime24Hoisted : undefined,
+      });
+      if (_auditPolicy.requiredMeals.length > 0) {
+        const _detectedFinal = detectMealSlots(dayResult.activities as any[]);
+        const _missingFinal = _auditPolicy.requiredMeals.filter((m) => !_detectedFinal.includes(m));
+        const _currentIds = new Set((dayResult.activities as any[]).map((a: any) => a?.id).filter(Boolean));
+        const _lostInjectedIds = __mealGuardInjectedIds.filter((id) => !_currentIds.has(id));
+        if (_missingFinal.length > 0) {
+          if (_lostInjectedIds.length > 0) {
+            console.warn(`[MEAL_INJECTION_LOST] day=${dayNumber} dest="${cityInfo?.cityName || destination}" required=[${_auditPolicy.requiredMeals.join(',')}] missing=[${_missingFinal.join(',')}] lost_injected_ids=[${_lostInjectedIds.join(',')}] — a downstream pass stripped meal cards the guard added`);
+          } else {
+            console.warn(`[MEAL_FINAL_AUDIT_MISSING] day=${dayNumber} dest="${cityInfo?.cityName || destination}" required=[${_auditPolicy.requiredMeals.join(',')}] missing=[${_missingFinal.join(',')}] — meal-guard never resolved`);
+          }
+          // One last retry with whatever pool we collected earlier.
+          if (__mealGuardPool.length > 0) {
+            try {
+              const _isTrainRetry = departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(departureTransportType);
+              const _depBufRetry = _isTrainRetry ? 120 : 180;
+              const _earliestRetry = _isFirstDay && savedArrTime24Hoisted
+                ? (() => { const m = savedArrTime24Hoisted.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : undefined; })()
+                : undefined;
+              const _latestRetry = _isLastDay && savedDepTime24Hoisted
+                ? (() => { const m = savedDepTime24Hoisted.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) - _depBufRetry : undefined; })()
+                : undefined;
+              const _retry = enforceRequiredMealsFinalGuard(
+                dayResult.activities as any,
+                _auditPolicy.requiredMeals,
+                dayNumber,
+                cityInfo?.cityName || destination || 'the destination',
+                'USD',
+                _auditPolicy.dayMode,
+                __mealGuardPool,
+                {
+                  earliestTimeMins: _earliestRetry,
+                  latestTimeMins: _latestRetry,
+                  blockedRestaurants: usedRestaurants || [],
+                  departureTime24: _isLastDay ? savedDepTime24Hoisted : undefined,
+                },
+              );
+              if (!_retry.alreadyCompliant) {
+                dayResult.activities = _retry.activities as any;
+                console.warn(`[MEAL_FINAL_AUDIT_RETRY] day=${dayNumber} injected=[${_retry.injectedMeals.join(',')}] pool=${__mealGuardPool.length}`);
+                // Description backstop for newly injected sentinels.
+                try {
+                  const { fillAfterMealGuard } = await import('../_shared/post-meal-guard-fill.ts');
+                  await fillAfterMealGuard(
+                    dayResult.activities as any[],
+                    cityInfo?.cityName || destination,
+                    dayNumber,
+                    'meal-final-audit-retry',
+                  );
+                } catch (_e) { /* non-blocking */ }
+              }
+            } catch (retryErr) {
+              console.warn(`[MEAL_FINAL_AUDIT_RETRY] day=${dayNumber} retry failed:`, retryErr);
+            }
+          }
+          // Stamp result regardless of retry outcome — integrity contract reads this.
+          dayResult.metadata = dayResult.metadata || {};
+          dayResult.metadata.quality = dayResult.metadata.quality || {};
+          const _detectedAfterRetry = detectMealSlots(dayResult.activities as any[]);
+          const _missingAfterRetry = _auditPolicy.requiredMeals.filter((m) => !_detectedAfterRetry.includes(m));
+          dayResult.metadata.quality.meal_final_audit = {
+            required: _auditPolicy.requiredMeals,
+            detected: _detectedAfterRetry,
+            missing: _missingAfterRetry,
+            lost_injected_ids: _lostInjectedIds,
+            retry_pool_size: __mealGuardPool.length,
+            resolved: _missingAfterRetry.length === 0,
+          };
+        } else {
+          // Lightweight success telemetry — useful for confirming the fix
+          // is holding in production for the affected trips.
+          console.log(`[MEAL_FINAL_AUDIT_OK] day=${dayNumber} required=[${_auditPolicy.requiredMeals.join(',')}] detected=[${_detectedFinal.join(',')}]`);
+        }
+      }
+    } catch (auditErr) {
+      console.warn('[generate-trip-day] MEAL_FINAL_AUDIT block failed (non-blocking):', auditErr);
+    }
+  }
+
+
 
   // ── SCHEDULE EXECUTIONER — deterministic post-pipeline enforcement ───────
   // Single chokepoint for: flight-anchor mismatch (1A), midnight spill (1B),
