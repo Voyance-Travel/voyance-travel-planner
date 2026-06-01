@@ -201,6 +201,26 @@ export async function handleGenerateTripDayV2(
     const repairDepartureTime24 = dayFacts.flightContext?.returnDepartureTime24 || facts.departure.time24 || undefined;
     const mealPolicyForDay = facts.mealPolicy(dayNumber);
 
+    // ── 5a. STAMP ARRIVAL ANCHOR TRUTH (Day 1, post-LLM, pre-validate) ──
+    // Authoritative overwrite of the arrival-flight card's start/end to
+    // the user's ground-truth landing time, before any other pass can
+    // touch it. Idempotent — safe to call again later in the pipeline.
+    if (isFirstDay && repairArrivalTime24) {
+      const stamp = stampArrivalAnchorTruth(ai.day, {
+        isFirstDay: true,
+        arrivalTime24: repairArrivalTime24,
+        arrivalAirport: facts.arrival.airport || dayFacts.flightContext?.arrivalAirport || null,
+        isHotelChange: dayFacts.resolvedIsHotelChange,
+      });
+      if (stamp.mutated) {
+        console.log(
+          `[STAMP_ARRIVAL_TRUTH] v2 day=${dayNumber} was=${stamp.wasStart}-${stamp.wasEnd} now=${stamp.newStart}-${stamp.newEnd} (truth=${repairArrivalTime24})`,
+        );
+      }
+    }
+
+
+
     const { data: preRepairTripRow } = await supabase
       .from('trips')
       .select('itinerary_data')
