@@ -1,27 +1,25 @@
-## What's happening
+## Root cause
 
-The console error is **not** blocking generation. I checked the trip in the DB:
+V2 day-chain (`generate-trip-day-v2`) fails on every day-1 call with:
 
-- `e5eb9348-ceac-4d61-ae8e-27b4a741624f` → `itinerary_status: ready`, 4/4 days generated, zero failed days.
+```
+resolveTripFacts: trip fetch failed: column trips.destination_iata does not exist
+```
 
-The CORS error you're seeing comes from a different edge function: **`backfill-must-do-anchor-enrichment`**. It's a lazy post-mount cleanup helper (fills addresses/descriptions on injected must-do anchor cards). Source exists in `supabase/functions/backfill-must-do-anchor-enrichment/index.ts` with proper CORS handling, but the function was **never deployed** — `curl` returns `404 NOT_FOUND` and edge logs are empty. Browsers surface a 404 on a preflight as a "CORS policy" error, which is misleading.
+`supabase/functions/_shared/trip-facts.ts` line 138 selects `destination_iata` from `public.trips`, but that column was never added to the schema (verified: the table only has `destination`, `destination_country`). Postgres rejects the whole row read, `resolveTripFacts` throws, the launcher retries 3× and the trip stalls at day 1.
 
-So the user-visible problem is one noisy console error on TripDetail mount; the underlying trip is fine.
+This is the only blocker — planner + enrichment + invoke queueing all succeed in the logs; the failure is the very first DB read inside the day handler.
 
 ## Fix
 
-1. **Deploy `backfill-must-do-anchor-enrichment`.** One-shot deploy of the existing source — no code change. After this, the lazy mount call will return 200, stamp `metadata.must_do_enrichment_backfilled_at`, and never re-fire for that trip.
+In `supabase/functions/_shared/trip-facts.ts`:
 
-2. **Harden the caller in `TripDetail.tsx`** so a future missing-function / network blip never surfaces as a red console line: wrap the `supabase.functions.invoke('backfill-must-do-anchor-enrichment', …)` site in a quiet try/catch that routes through `classifyBackendError` + `console.warn` only (matches the Core "Backend Error Noise Policy" rule). This makes the contract honest: backfill is best-effort, never user-facing.
+1. Remove `destination_iata` from the `.select(...)` string at line 138.
+2. Simplify the IATA derivation at line 213 to just `flightHotel.arrivalAirport || null` (the `trip.destination_iata` fallback is dead — column never existed).
+
+No schema change, no other call sites affected (`TripFacts.destination.iata` already tolerates `null`). Deploy `generate-itinerary`, then the stuck trip `938369b4-…` can resume via the existing self-resume path.
 
 ## Out of scope
 
-- The earlier `spend-credits` / regenerate-day 403 work — already shipped and unrelated.
-- `Flight sync failed` console line — separate path, the trip generated cleanly so no functional impact.
-- The Day-4 transfer endTime cosmetic discrepancy from the prior pass.
-
-## Technical notes
-
-- No DB migration, no schema change.
-- The function source already has the correct `corsHeaders` import + OPTIONS handler — deploy is sufficient.
-- Frontend change is ~5 lines in the existing mount-effect that invokes the backfill.
+- No change to planner, enrichment, or any downstream stage.
+- Not adding a `destination_iata` column — IATA is correctly sourced from `flight_selection` / `flight_intelligence` via `flightHotel.arrivalAirport`.

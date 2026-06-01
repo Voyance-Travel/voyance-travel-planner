@@ -135,7 +135,7 @@ export async function resolveTripFacts(
   const { data: trip, error } = await supabase
     .from('trips')
     .select(
-      'id, user_id, destination, destination_country, destination_iata, ' +
+      'id, user_id, destination, destination_country, ' +
         'start_date, end_date, travelers, budget_tier, trip_type, ' +
         'dietary_restrictions, interests, metadata, hotel_selection',
     )
@@ -210,7 +210,7 @@ export async function resolveTripFacts(
     destination: {
       city: trip.destination || '',
       country: trip.destination_country || null,
-      iata: trip.destination_iata || flightHotel.arrivalAirport || null,
+      iata: flightHotel.arrivalAirport || null,
     },
     dates: {
       startDate: trip.start_date || null,
