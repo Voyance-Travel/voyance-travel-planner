@@ -56,6 +56,11 @@ export const FAILURE_CODES = {
   // Transit hard ceiling (validate-day → repair-day → validation-gate)
   WALK_OVER_THRESHOLD:       'WALK_OVER_THRESHOLD',
 
+  // Structural transit ghost: transit-card title/target points to a venue
+  // that has no scheduled activity block on the same day. Distinct from
+  // DESCRIPTION_GHOST_REFERENCE (which only scans description body text).
+  ORPHANED_TRANSIT_NODE:     'ORPHANED_TRANSIT_NODE',
+
   // Pricing sanity (B3, Barcelona Diagnosis 2026-05-10)
   PRICE_IMPLAUSIBLE:         'PRICE_IMPLAUSIBLE',
   PRICE_TOO_LOW:             'PRICE_TOO_LOW',
