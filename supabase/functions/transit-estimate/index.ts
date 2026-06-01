@@ -249,6 +249,11 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
+
+
   try {
     const { origin, destination, city } = await req.json();
 
