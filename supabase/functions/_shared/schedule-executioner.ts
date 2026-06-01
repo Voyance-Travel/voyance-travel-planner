@@ -281,6 +281,7 @@ function newCounters(): ExecutionerCounters {
     transfersClamped: 0,
     departureTransfersStripped: 0,
     orphanTransitsDropped: 0,
+    checkoutOverlapsTrimmed: 0,
     droppedActivities: 0,
     gapsRefilled: 0,
     issues: [],
