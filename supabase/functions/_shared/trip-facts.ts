@@ -210,7 +210,7 @@ export async function resolveTripFacts(
     destination: {
       city: trip.destination || '',
       country: trip.destination_country || null,
-      iata: trip.destination_iata || flightHotel.arrivalAirport || null,
+      iata: flightHotel.arrivalAirport || null,
     },
     dates: {
       startDate: trip.start_date || null,
