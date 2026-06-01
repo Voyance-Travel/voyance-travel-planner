@@ -621,6 +621,7 @@ DEPARTURE DAY ACTIVITIES: 1 maximum (near hotel only)
 ⚠️ DO NOT schedule activities across the city.
 ⚠️ DO NOT plan activities after ${latestSightseeing}.
 ⚠️ CHECKOUT (step 2) MUST have an earlier startTime than TRANSFER (step 4). This is auto-enforced by post-processing.
+⚠️ HARD: Every non-checkout, non-bookend activity scheduled BEFORE checkout MUST have endTime ≤ ${checkoutStart} − 15min (travel back to the hotel). Overlapping checkout is a defect and will be auto-trimmed.
 THE TRAVELER IS LEAVING. Make it a gentle goodbye, not a marathon.`;
 
         } else if (isAfternoonFlight) {
