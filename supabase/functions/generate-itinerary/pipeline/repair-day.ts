@@ -47,6 +47,7 @@ import {
 import { ensureDayDiningDescriptions } from '../../_shared/dining-description-backfill.ts';
 import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 import { pickTransitFallback, pickTransitTier, haversineMeters, extractCoords } from '../../_shared/transit-mode.ts';
+import { enforceAirportTransitOnDay } from '../../_shared/airport-transit-classifier.ts';
 import { enforceFreshenUpPosition } from '../../_shared/freshen-up-position.ts';
 
 // =============================================================================
@@ -4611,16 +4612,28 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
       continue;
     }
     // Dining card that ends too close to the airport-bound window — drop it.
+    // EXEMPTION: a meal-guard-injected dining card whose endTime is on or
+    // before the transfer start is an intentional pre-transfer meal added to
+    // satisfy the late_departure meal policy (e.g. 17:00 dinner before a
+    // 21:45 flight). Without this exemption the meal-guard's work gets
+    // silently undone here and the user sees "Day 4 missing lunch + dinner".
     if (transferStartMin !== null && isDiningRow(a)) {
+      const tags: string[] = Array.isArray(a?.tags) ? a.tags.map((x: any) => String(x).toLowerCase()) : [];
+      const isMealGuardMeal = tags.includes('meal-guard');
       const e = pickEnd(a);
       if (e >= 0 && transferStartMin - e < DINING_NEAR_TRANSFER_MIN && s >= 0 && s < transferStartMin) {
-        repairs.push({
-          code: FAILURE_CODES.LOGISTICS_SEQUENCE,
-          action: 'final_enforce_dropped_meal_near_transfer',
-          before: `${a.title} @ ${a.startTime || a.start_time || a.time}-${a.endTime || a.end_time}`,
-        } as any);
-        console.log(`[DEPARTURE_MEAL_PRUNED] day=${dayNumber} dropped "${a.title}" ${a.startTime || a.start_time || a.time}-${a.endTime || a.end_time} (transferStart=${minutesToHHMM(transferStartMin)}, gap=${transferStartMin - e}m < ${DINING_NEAR_TRANSFER_MIN}m)`);
-        continue;
+        if (isMealGuardMeal && e <= transferStartMin) {
+          // Keep intentional pre-transfer meal.
+          console.log(`[DEPARTURE_MEAL_KEPT] day=${dayNumber} kept meal-guard pre-transfer meal "${a.title}" ${a.startTime || a.start_time || a.time}-${a.endTime || a.end_time} (transferStart=${minutesToHHMM(transferStartMin)})`);
+        } else {
+          repairs.push({
+            code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+            action: 'final_enforce_dropped_meal_near_transfer',
+            before: `${a.title} @ ${a.startTime || a.start_time || a.time}-${a.endTime || a.end_time}`,
+          } as any);
+          console.log(`[DEPARTURE_MEAL_PRUNED] day=${dayNumber} dropped "${a.title}" ${a.startTime || a.start_time || a.time}-${a.endTime || a.end_time} (transferStart=${minutesToHHMM(transferStartMin)}, gap=${transferStartMin - e}m < ${DINING_NEAR_TRANSFER_MIN}m)`);
+          continue;
+        }
       }
     }
     filtered.push(a);
@@ -4633,6 +4646,27 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
     const tb = parseTimeToMinutes(b.startTime || b.start_time || b.time || '') ?? 99999;
     return ta - tb;
   });
+
+  // 5) Force airport-transit cards to method=taxi with capped duration.
+  //    Catches LLM-emitted "Walk to Transfer to Airport — 1h 46m" that
+  //    survived §15b's coord-based recompute.
+  //    See mem://constraints/itinerary/airport-transit-must-be-taxi
+  try {
+    const fixed = enforceAirportTransitOnDay(activities, {
+      transferMinutes: transferMins,
+      lockedIds,
+    });
+    if (fixed > 0) {
+      repairs.push({
+        code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+        action: 'airport_transit_method_enforced',
+        count: fixed,
+      } as any);
+      console.log(`[Repair §15z] day=${dayNumber} airport-transit method enforced on ${fixed} card(s)`);
+    }
+  } catch (e) {
+    console.warn(`[Repair §15z] airport-transit classifier failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
   return { activities, repairs };
 }

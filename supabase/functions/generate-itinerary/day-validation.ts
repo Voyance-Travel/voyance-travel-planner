@@ -840,7 +840,22 @@ export function enforceRequiredMealsFinalGuard(
   currency: string = 'USD',
   dayMode: string = 'unknown',
   fallbackVenues: Array<{ name: string; address: string; mealType: string }> = [],
-  options?: { earliestTimeMins?: number; latestTimeMins?: number; blockedRestaurants?: string[] },
+  options?: {
+    earliestTimeMins?: number;
+    latestTimeMins?: number;
+    blockedRestaurants?: string[];
+    /**
+     * Departure clock (HH:MM 24h). When set on a late-departure day
+     * (≥ 18:00), the dinner slot is shifted earlier so it ends before
+     * airport transfer instead of being silently skipped.
+     * See mem://constraints/itinerary/departure-day-no-rushed-meal
+     */
+    departureTime24?: string;
+    /** Airport transfer minutes (default 45). */
+    airportTransferMinutes?: number;
+    /** Flight pre-departure buffer in minutes (default 180). */
+    flightBufferMinutes?: number;
+  },
 ): MealGuardResult {
   if (requiredMeals.length === 0) {
     return { activities, injectedMeals: [], alreadyCompliant: true };
@@ -1061,6 +1076,62 @@ export function enforceRequiredMealsFinalGuard(
     lunch:     { start: '12:30', end: '13:30', cost: 18, startMins: 750 },
     dinner:    { start: '19:00', end: '20:15', cost: 30, startMins: 1140 },
   };
+
+  // ── Departure-aware meal-slot shifting ─────────────────────────────────
+  // On a late-departure day (e.g. 21:45 flight) the meal-guard's default
+  // 19:00 dinner slot collides with the airport-transfer cutoff (18:45 =
+  // departure − 180m buffer) and gets silently dropped. Shift dinner
+  // earlier so it ends ≥30m before transfer start, preserving the
+  // late_departure policy's "3 meals required" contract.
+  // See mem://constraints/itinerary/departure-day-no-rushed-meal
+  if (options?.departureTime24) {
+    const m = options.departureTime24.match(/(\d{1,2}):(\d{2})/);
+    if (m) {
+      const depMins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+      const bufferMins = Math.max(60, Number(options.flightBufferMinutes) || 180);
+      const transferMins = Math.max(15, Number(options.airportTransferMinutes) || 45);
+      const PRE_TRANSFER_PAD_MIN = 30; // breathing room between meal-end and leaving for airport
+      const transferStartMins = depMins - bufferMins - transferMins;
+      const latestMealEnd = transferStartMins - PRE_TRANSFER_PAD_MIN;
+
+      // Shift dinner: window must end by `latestMealEnd`, start ≥ 16:30,
+      // and be at least 60 minutes wide. Otherwise leave the default
+      // (which will be filtered by the "outside window" branch below).
+      const DINNER_DUR = 75;
+      const DINNER_MIN_START = 16 * 60 + 30;
+      const dinnerEnd = latestMealEnd;
+      const dinnerStart = dinnerEnd - DINNER_DUR;
+      if (dinnerStart >= DINNER_MIN_START && dinnerEnd - dinnerStart >= 60) {
+        const toHM = (mins: number) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+        fallbackTimes.dinner = {
+          start: toHM(dinnerStart),
+          end: toHM(dinnerEnd),
+          cost: 30,
+          startMins: dinnerStart,
+        };
+        console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: shifted dinner slot to ${fallbackTimes.dinner.start}-${fallbackTimes.dinner.end} (dep=${options.departureTime24}, transferStart=${toHM(transferStartMins)})`);
+      }
+
+      // Shift lunch earlier if the default 12:30 would land too close to
+      // an early-afternoon flight cutoff. Keep ≥11:30 start.
+      const LUNCH_DUR = 60;
+      const LUNCH_MIN_START = 11 * 60 + 30;
+      if (fallbackTimes.lunch.startMins + LUNCH_DUR > latestMealEnd) {
+        const lunchEnd = Math.min(latestMealEnd, 14 * 60);
+        const lunchStart = lunchEnd - LUNCH_DUR;
+        if (lunchStart >= LUNCH_MIN_START && lunchEnd - lunchStart >= 45) {
+          const toHM = (mins: number) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+          fallbackTimes.lunch = {
+            start: toHM(lunchStart),
+            end: toHM(lunchEnd),
+            cost: 18,
+            startMins: lunchStart,
+          };
+          console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: shifted lunch slot to ${fallbackTimes.lunch.start}-${fallbackTimes.lunch.end}`);
+        }
+      }
+    }
+  }
 
   // Track which venue names have been used to avoid duplicates within this guard call.
   // Seed with both raw titles AND canonical venue names + trip-wide blocked names so the

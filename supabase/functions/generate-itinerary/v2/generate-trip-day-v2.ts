@@ -436,6 +436,9 @@ export async function handleGenerateTripDayV2(
             'USD',
             mealPolicy.dayMode,
             [], // no per-day pool prefetch in v2 minimal port (fillAfterMealGuard re-describes)
+            {
+              departureTime24: dayNumber === totalDays ? (facts.departure?.time24 || undefined) : undefined,
+            },
           );
           if (!fmgResult.alreadyCompliant) {
             finalDay.activities = fmgResult.activities as any;

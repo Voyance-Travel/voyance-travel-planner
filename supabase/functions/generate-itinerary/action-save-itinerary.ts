@@ -764,7 +764,12 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           'USD',
           policy.dayMode,
           saveFallbackVenues,
-          { earliestTimeMins: arrMinsLoop, latestTimeMins: depMinsLoop, blockedRestaurants: saveTripBlocked },
+          {
+            earliestTimeMins: arrMinsLoop,
+            latestTimeMins: depMinsLoop,
+            blockedRestaurants: saveTripBlocked,
+            departureTime24: isLastDay ? savedDepartureTime24 : undefined,
+          },
         );
         if (!result.alreadyCompliant) {
           itineraryDays[i] = { ...day, activities: result.activities };
@@ -1076,6 +1081,31 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     } catch (netErr) {
       console.warn('[save-itinerary] STEP 2.65 departure-day net failed (non-blocking):', netErr);
     }
+  }
+
+  // ── STEP 2.67: AIRPORT-TRANSIT MODE NET ───────────────────────────
+  // Force any "Walk to Transfer to Airport — 1h 46m" class card to taxi
+  // with ≤45min duration. Runs on every day (not just the last) because
+  // multi-city trips have airport transfers on transition days too.
+  // See mem://constraints/itinerary/airport-transit-must-be-taxi
+  try {
+    const { enforceAirportTransitOnDay } = await import('../_shared/airport-transit-classifier.ts');
+    for (const day of itineraryDays) {
+      const acts = (day as any).activities;
+      if (!Array.isArray(acts) || acts.length === 0) continue;
+      const lockedIds = new Set<string>(
+        acts
+          .filter((a: any) => a?.locked === true || a?.isLocked === true || a?.is_locked === true || a?.lock_state === 'locked')
+          .map((a: any) => String(a.id))
+          .filter(Boolean)
+      );
+      const fixed = enforceAirportTransitOnDay(acts, { lockedIds });
+      if (fixed > 0) {
+        console.warn(`[SAVE_AIRPORT_TRANSIT] day=${(day as any).dayNumber} cards_fixed=${fixed}`);
+      }
+    }
+  } catch (atErr) {
+    console.warn('[save-itinerary] STEP 2.67 airport-transit net failed (non-blocking):', atErr);
   }
 
   // ── STEP 2.68: ORPHAN-TRANSIT SAFETY NET ──────────────────────────

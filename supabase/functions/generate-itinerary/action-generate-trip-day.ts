@@ -2187,7 +2187,12 @@ async function _handleGenerateTripDayInner(
             'USD',
             _fmgPolicy.dayMode,
             _perDayPool,
-            { earliestTimeMins: _earliestMins, latestTimeMins: _latestMins, blockedRestaurants: usedRestaurants || [] },
+            {
+              earliestTimeMins: _earliestMins,
+              latestTimeMins: _latestMins,
+              blockedRestaurants: usedRestaurants || [],
+              departureTime24: _isLastDay ? savedDepTime24Hoisted : undefined,
+            },
           );
           if (!_fmgResult.alreadyCompliant) {
             dayResult.activities = _fmgResult.activities as any;
