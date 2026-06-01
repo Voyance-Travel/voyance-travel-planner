@@ -131,9 +131,10 @@ Deno.test('repair-day removes flagged orphan', () => {
 });
 
 Deno.test('repair-day skips locked orphans', () => {
+  const lockedTransit = { ...transit('Travel to Tasca do Chico'), isLocked: true, locked: true, lockReason: 'user' };
   const day = makeDay([
     activity('Pastéis de Belém'),
-    { ...transit('Travel to Tasca do Chico'), isLocked: true, lockReason: 'user' },
+    lockedTransit,
     activity('Castelo de São Jorge'),
   ]);
   const validationResults = validateDay(baseInput(day));
@@ -143,6 +144,7 @@ Deno.test('repair-day skips locked orphans', () => {
     dayNumber: 2,
     isFirstDay: false,
     isLastDay: false,
+    lockedActivities: [{ id: lockedTransit.id }],
   } as any);
   // Locked orphan preserved.
   assert(result.day.activities.some((a: any) => /Travel to Tasca do Chico/i.test(a.title)));
