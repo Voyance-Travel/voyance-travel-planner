@@ -1,64 +1,27 @@
-## What's broken
+## What's happening
 
-Clicking **Regenerate Day** on the Barcelona trip fails:
+The console error is **not** blocking generation. I checked the trip in the DB:
 
-1. `spend-credits` charges `regenerate_day` successfully (30 credits debited via `credit_ledger`).
-2. `generate-itinerary` (action `generate-day`) immediately returns **403 GENERATION_NOT_AUTHORIZED** — "No proof-of-charge … action=generate-day".
-3. Frontend issues a refund, but the original spend never returned a `pendingChargeId`, so refund logs `refundAmount: 0` and the user is left charged with nothing generated.
-4. A follow-up `Duplicate spend request blocked` fires from React re-render — cosmetic side effect of the same failure.
+- `e5eb9348-ceac-4d61-ae8e-27b4a741624f` → `itinerary_status: ready`, 4/4 days generated, zero failed days.
 
-## Root cause
+The CORS error you're seeing comes from a different edge function: **`backfill-must-do-anchor-enrichment`**. It's a lazy post-mount cleanup helper (fills addresses/descriptions on injected must-do anchor cards). Source exists in `supabase/functions/backfill-must-do-anchor-enrichment/index.ts` with proper CORS handling, but the function was **never deployed** — `curl` returns `404 NOT_FOUND` and edge logs are empty. Browsers surface a 404 on a preflight as a "CORS policy" error, which is misleading.
 
-`spend-credits/index.ts` only writes a `pending_credit_charges` row for **HIGH_VALUE_ACTIONS**:
-
-```ts
-const HIGH_VALUE_ACTIONS = ['trip_generation', 'smart_finish', 'hotel_optimization', 'regenerate_trip'];
-```
-
-`regenerate_day` is **not** in that list, so no `pending_credit_charges` row is created — only a `credit_ledger` row with `metadata.status='committed'`.
-
-But the proof-of-charge gate in `generate-itinerary/index.ts` queries **only** `pending_credit_charges`:
-
-```ts
-.from('pending_credit_charges')
-.select('id, status, action, created_at')
-.in('action', allowedSpendActions)
-.in('status', ['pending','completed'])
-```
-
-The durable-ledger-proof fallback at L238 is gated on `action === 'generate-trip'` AND `isUnfinishedTrip`, so it doesn't help `generate-day` / `regenerate-day`. Result: every Regenerate Day click 403's after charging the user.
+So the user-visible problem is one noisy console error on TripDetail mount; the underlying trip is fine.
 
 ## Fix
 
-Extend the existing durable-ledger-proof branch to also cover `generate-day` and `regenerate-day` — accepting a `credit_ledger` row with:
-- `user_id` + `trip_id` match
-- `action_type` in `allowedSpendActions` (already includes `regenerate_day`, `unlock_day`, `regenerate_trip`, `trip_generation`)
-- `transaction_type='spend'`, `credits_delta < 0`
-- `metadata->>status = 'committed'`
-- `created_at >= now() - 10 minutes` (matches the existing pending-charge window)
+1. **Deploy `backfill-must-do-anchor-enrichment`.** One-shot deploy of the existing source — no code change. After this, the lazy mount call will return 200, stamp `metadata.must_do_enrichment_backfilled_at`, and never re-fire for that trip.
 
-This mirrors the pattern already shipped for `generate-trip` retry/resume and adds zero new tables, no new spend-credits writes, and no behavioral change for paths that already succeed.
+2. **Harden the caller in `TripDetail.tsx`** so a future missing-function / network blip never surfaces as a red console line: wrap the `supabase.functions.invoke('backfill-must-do-anchor-enrichment', …)` site in a quiet try/catch that routes through `classifyBackendError` + `console.warn` only (matches the Core "Backend Error Noise Policy" rule). This makes the contract honest: backfill is best-effort, never user-facing.
 
-### File edits
+## Out of scope
 
-**`supabase/functions/generate-itinerary/index.ts`** — proof-of-charge block (around L229–L277):
+- The earlier `spend-credits` / regenerate-day 403 work — already shipped and unrelated.
+- `Flight sync failed` console line — separate path, the trip generated cleanly so no functional impact.
+- The Day-4 transfer endTime cosmetic discrepancy from the prior pass.
 
-- Lift the durable-ledger fallback out of the `action === 'generate-trip'` + `isUnfinishedTrip` branch.
-- Run it for any `PAID_GENERATION_ACTIONS` when `chargeRes.data` is null.
-- Keep the existing trip-unfinished branch as-is (it's the broader umbrella for `generate-trip`); add a sibling branch for `generate-day` / `regenerate-day` that does NOT require unfinished-trip state (regenerating a day on a finished trip is the whole point).
-- Same 10-minute window, same `committed` filter, same log line shape.
+## Technical notes
 
-No frontend changes. No DB migration. No change to `spend-credits` (so `regenerate_day` stays a single-write ledger action — no spurious `pending_credit_charges` rows).
-
-### Out of scope
-
-- "Flight sync failed" console line — separate path (`FlightSyncWarning`), no user-visible failure tied to this trip; treat as a follow-up if it reproduces.
-- "Duplicate spend request blocked" — cosmetic side effect of the 403 retry path; goes away once the 403 is fixed. Will re-evaluate if it persists after deploy.
-- The `dedupeKey` in `useSpendCredits` missing `dayIndex` is a latent issue (back-to-back regen of different days could collide) but not what's biting here; logged for later.
-
-### Verification
-
-1. Deploy `generate-itinerary`.
-2. Click Regenerate Day on the Barcelona trip.
-3. Expect: 200 from `generate-itinerary`, day regenerates, no refund issued, console clean.
-4. Edge logs: `[generate-itinerary] Durable proof-of-charge OK via committed ledger=… action=regenerate_day` followed by normal generation logs.
+- No DB migration, no schema change.
+- The function source already has the correct `corsHeaders` import + OPTIONS handler — deploy is sufficient.
+- Frontend change is ~5 lines in the existing mount-effect that invokes the backfill.
