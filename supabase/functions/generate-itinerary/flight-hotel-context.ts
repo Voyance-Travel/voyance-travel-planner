@@ -333,9 +333,25 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
             : undefined;
           const intelArrRaw = ((firstDestEarly?.arrivalDatetime || (firstDestEarly as any)?.arrival_datetime) as string | undefined) ||
             ((firstDestEarly?.availableFrom || (firstDestEarly as any)?.available_from) as string | undefined);
-          const intelArr = intelArrRaw
-            ? (intelArrRaw.includes('T') ? normalizeTo24h(intelArrRaw.split('T')[1]?.substring(0, 5) || '') : normalizeTo24h(intelArrRaw))
-            : undefined;
+          // If intelArrRaw is an ISO timestamp with an explicit Z (UTC) or
+          // ±HH:MM offset, we cannot safely localize it to the destination
+          // without the IANA tz at this call site. Skip it in the cross-source
+          // comparison so picker's already-local time isn't falsely flagged as
+          // disagreeing (e.g. UTC 20:30 vs local 22:30 for BCN UTC+2). The
+          // downstream `flight_intelligence` precedence block has its own
+          // localization logic and is unaffected.
+          const intelArr = (() => {
+            if (!intelArrRaw) return undefined;
+            if (intelArrRaw.includes('T')) {
+              const timeStr = intelArrRaw.split('T')[1] ?? '';
+              // Explicit UTC marker or numeric offset → skip
+              if (/Z$/i.test(timeStr) || /[+-]\d{2}:?\d{2}$/.test(timeStr)) {
+                return undefined;
+              }
+              return normalizeTo24h(timeStr.substring(0, 5) || '');
+            }
+            return normalizeTo24h(intelArrRaw);
+          })();
           const flatArr = !Array.isArray((flightRaw as any).legs) && (flightRaw as any).arrivalTime
             ? normalizeTo24h(String((flightRaw as any).arrivalTime))
             : undefined;
