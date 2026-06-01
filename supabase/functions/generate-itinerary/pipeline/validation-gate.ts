@@ -184,6 +184,20 @@ export function applyValidationGate(
         }
         break;
       }
+      case FAILURE_CODES.ORPHANED_TRANSIT_NODE: {
+        // Structural transit ghost — repair-day already handles this, but if
+        // repair was bypassed (legacy path) drop the orphan as final safety net.
+        // Universal locking respected upstream — locked/user rows don't reach
+        // validation-gate critical branch.
+        if (!droppedIdx.has(idx)) {
+          droppedIdx.add(idx);
+          counters.droppedActivities++;
+          counters.forcedDowngrades++;
+          console.log(
+            `[VALIDATION_GATE] ORPHANED_TRANSIT_NODE day=${ctx.dayNumber} dropped "${(act?.title || act?.name || '').toString().slice(0, 80)}"`,
+          );
+        }
+        break;
       case FAILURE_CODES.SUSPICIOUS_DUPLICATE_PRICE: {
         // Final safety net mirroring repair-day §10d. The LLM duplicated a
         // price token across adjacent same-category cards; blank cost on the
