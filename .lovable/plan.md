@@ -1,66 +1,83 @@
+# Header Trip Total ≠ Payments Trip Total ($231 vs $219)
 
-## Problem
+## Root cause
 
-`itinerary-integrity-contract.ts` emits `FINAL_ORPHAN_TRANSIT` when a transit card titled `"Walk/Taxi/Tram/... to X"` has no same-day non-logistics activity whose title/venue contains `X`. This is detected and reported, but **no repair step consumes the code**. The Dublin case shipped as "Taxi to The Shelbourne — 1 hr" with no Shelbourne activity scheduled after it.
+Both surfaces already share `composeDisplayedTripTotal` (per the
+`displayed-trip-total-single-source` rule), so they read the same snapshot.
+The drift is in the **dayNumbers filter passed to the composer**:
 
-A parallel detector exists in `validate-day.ts` (`ORPHANED_TRANSIT_NODE`, repair at repair-day.ts §1b) but it only **removes** the orphan; it doesn't re-point. And it runs *before* the §7/§8 injection steps that can add new targets, so it misses cases where the right answer is "the transit was correct, just mislabeled."
+- `EditorialItinerary.tsx` (header) — `dayNumbersForStrip = days.map(d => d.dayNumber)`. No `> 0` filter. If `days` includes a Day 0 entry (logistics/arrival day), its `byDay[0].totalCents` gets folded into `daysSubtotalCents`.
+- `PaymentsTab.tsx` — `useDisplayedTripTotal(tripId)` with no dayNumbers. Composer falls through to the default branch (`useDisplayedTripTotal.ts:70-72`) which explicitly skips `Number(k) > 0`, i.e. excludes Day 0.
 
-## Fix — new repair step `§8e. ORPHAN TRANSIT REPOINT/REMOVE`
+Because the displayed total is `max(snapshot, daysGroup + hotel + flight)`,
+header `daysGroup` silently includes the Day-0 logistics cost (already
+captured by the hotel/flight chips and the snapshot's day-0 row policy).
+Header clamps UP to that inflated chipSum; Payments uses the clean
+`>0` sum, so it stays at the snapshot total.
 
-Insert into `repair-day.ts` immediately after §8d (`RE-RUN DEPARTURE SEQUENCE AFTER INJECTIONS`), so it sees the final post-injection day shape. Runs for **every day**, not just departure days.
+Symptom: header `$231` (= snapshot `$219` + Day-0 `$12`), Payments `$219`.
 
-For each non-locked transit card `T` at index `i` whose title matches `TRANSIT_TARGET_RE` (`/^(walk|taxi|tram|bus|metro|train|cab|uber|drive|ride|head|transfer) to (.+)$/i`):
+## Fix (frontend only, single surgical edit)
 
-1. **Skip exemptions** (mirror integrity-contract):
-   - Locked / user-pinned / manual / extracted.
-   - Bookend-ish: `source` starts with `bookend-`, is `late_nightlife_bookend`, tag includes `hotel`/`hotel-return`/`rest`, or destination matches `\b(hotel|airport|station|terminal|port|home|accommodation|stay|apartment|residence|riad|ryokan|hostel|guesthouse|villa)\b`.
+`src/components/itinerary/EditorialItinerary.tsx` around line 4044:
 
-2. **Find next non-logistics activity** `N` in chronological order at index `j > i` (skip transit/transport/logistics rows and other bookends).
+```ts
+const dayNumbersForStrip = useMemo(
+  () => days.map(d => d.dayNumber).filter(n => n > 0),
+  [days],
+);
+```
 
-3. **Decide action**:
-   - **Re-point** (preferred) when `N` exists, isn't a hotel/airport bookend, and starts within ±90 min of `T.endTime`:
-     - Rewrite `T.title` / `T.name` to `"<Verb> to <N.title-or-venue>"` preserving the original verb (Walk/Taxi/...).
-     - Update `T.transportation.to` (string or `{ name }`) to the resolved venue name.
-     - Update `T.location.name` to match.
-     - Set `T.metadata.transit_unverified = true` so the existing tight-transition health suppression applies (duration was LLM-guessed).
-     - Stamp `T.source = 'repair-orphan-repoint'`.
-     - Push repair `{ code: 'FINAL_ORPHAN_TRANSIT', action: 'repointed_orphan_transit', before, after }`.
-   - **Remove** when:
-     - No valid `N` exists after `T`, OR
-     - `T` resolves to a hotel/return target that already occurred earlier in the day (a non-bookend hotel-return earlier in `activities`), OR
-     - `N` exists but starts >90 min later AND there is no gap-filler between them (true dangling connector).
-   - Splice and push `{ code: 'FINAL_ORPHAN_TRANSIT', action: 'removed_orphan_transit_no_target' }`.
-   - Resort by `startTime` after any splice; iterate descending so indices stay valid.
+That makes the header's composer input match the PaymentsTab default
+branch exactly: both sum `byDay[k]` only for `k > 0`. Day-0 logistics
+remain represented through the hotel/flight chips (which the composer
+already adds via `effectiveHotelCents` + `effectiveFlightCents`), so the
+equation `Days + Hotel + Flight + Reserve = Trip Total` stays balanced
+and the "Matches itinerary" badge can latch.
 
-4. **Always** log `[ORPHAN_TRANSIT_REPAIR] day=N idx=i action=… before="…" after="…"`.
+## Defense-in-depth (same file, `useDisplayedTripTotal.ts`)
 
-5. After the loop, if any re-point fired, re-invoke the existing `recomputeTransitCards` from `_shared/timing-cascade.ts` on the day. Re-pointed cards now carry the real downstream venue name, so when coords exist (set by enrichment on `N`) the duration will be recomputed from real geometry — closing the "Taxi 1 hr for 10 min ride" inflation **without** a new airport-only special case. When coords are still missing, the `transit_unverified` stamp prevents the health panel from flagging a tight transition.
+Also harden `composeDisplayedTripTotal` so a future caller can't reintroduce
+the bug by passing a `dayNumbers` array that includes 0:
+
+```ts
+if (dayNumbers && dayNumbers.length > 0) {
+  for (const d of dayNumbers) {
+    if (d <= 0) continue;            // Day 0 is logistics — never in daysGroup
+    const b = breakdown.byDay[d];
+    if (b) daysSubtotalCents += b.totalCents;
+  }
+}
+```
+
+This mirrors the existing default-branch `Number(k) > 0` guard and means
+both branches behave identically with respect to Day 0.
 
 ## Out of scope
 
-- Touching `validate-day.ts` §ORPHANED_TRANSIT_NODE or its §1b repair (left as-is; covers the earlier-stage pure removal path; the new §8e is the late, post-injection, repoint-first net).
-- Adding non-airport per-mode duration heuristics. Geometry-based `recomputeTransitCards` is the right path and is already wired; we just feed it correct destinations.
-- Frontend changes — purely backend pipeline.
-
-## Files touched
-
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add §8e block + small helper `isOrphanTransitTarget(t)` colocated above the step.
-- `supabase/functions/generate-itinerary/pipeline/__tests__/orphan-transit-repoint.test.ts` — new test file:
-  - re-point case: `Taxi to The Shelbourne` followed by `Lunch at Hugo's` → title becomes `Taxi to Hugo's`, `transit_unverified=true`.
-  - remove case: `Walk to Cafe Chris` with no Cafe Chris on day → spliced.
-  - exemption: `Walk to Hotel` left untouched.
-  - hotel-already-returned: second `Taxi to The Shelbourne` after an earlier hotel-return → removed.
-
-## Memory
-
-Append a "Orphan-Transit Late Repair" subsection to `mem/constraints/itinerary/flight-anchor-truth-parity.md` noting:
-- New §8e in repair-day runs after §8d for every day.
-- Repoint-first, remove-fallback semantics.
-- Sentinel `[ORPHAN_TRANSIT_REPAIR]`.
-- Closes the `FINAL_ORPHAN_TRANSIT` detect-without-repair gap and feeds correct names into `recomputeTransitCards` so non-airport durations self-heal when coords are present.
+- No changes to `useTripFinancialSnapshot`, `useTripDayBreakdown`, or
+  `activity_costs` writers. The remaining $12 may still be a real
+  cost-inclusion mismatch worth investigating separately, but it must
+  NEVER again surface as a divergent number between two surfaces — that
+  was the user-visible bug.
+- No backend / migration changes.
+- No new memory entry needed; this is already covered by
+  `mem://constraints/finance/displayed-trip-total-single-source` and
+  `mem://constraints/finance/header-strip-mirrors-snapshot` — the fix
+  re-aligns the header to those existing contracts.
 
 ## Verification
 
-- Re-run on trip `ab83230a-…` (Dublin): "Taxi to The Shelbourne — 1 hr" should either re-point to the next real activity (and shrink once coords resolve) or be removed.
-- All new + existing repair-day tests pass.
-- Deploy `generate-itinerary` and tail logs for `[ORPHAN_TRANSIT_REPAIR]`.
+1. Reload the affected trip — header Trip Total should drop from $231 to
+   $219 and match the Payments tab.
+2. "Matches itinerary" badge in Payments should turn green (no longer
+   "Reconciling…").
+3. Existing parity tests in `src/hooks/__tests__/useDisplayedTripTotal.parity.test.ts`
+   should still pass; add one fixture where `breakdown.byDay[0]` is
+   non-zero and both code paths return the same `displayedTotalCents`.
+
+## Files touched
+
+- `src/components/itinerary/EditorialItinerary.tsx` (1-line filter on `dayNumbersForStrip`)
+- `src/hooks/useDisplayedTripTotal.ts` (`continue` guard in `composeDisplayedTripTotal`)
+- `src/hooks/__tests__/useDisplayedTripTotal.parity.test.ts` (new Day-0 parity fixture)
