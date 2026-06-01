@@ -97,6 +97,7 @@ export interface ExecutionerCounters {
   transfersClamped: number;
   departureTransfersStripped: number;
   orphanTransitsDropped: number;
+  checkoutOverlapsTrimmed: number;
   droppedActivities: number;
   gapsRefilled: number;
   issues: ExecutionerIssue[];
