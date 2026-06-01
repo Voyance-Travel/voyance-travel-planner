@@ -609,6 +609,38 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 1b. ORPHANED_TRANSIT_NODE (structural transit ghost) ---
+  // Validator emits one result per orphan transit card whose destination has
+  // no scheduled venue on the same day ("Travel to Tasca do Chico" while
+  // Tasca do Chico isn't anywhere). Splice them out, plus any immediately
+  // preceding short "Walk to <X>" connector for the same target. Locked /
+  // user-pinned rows exempt.
+  if (byCode.has(FAILURE_CODES.ORPHANED_TRANSIT_NODE)) {
+    const indices = (byCode.get(FAILURE_CODES.ORPHANED_TRANSIT_NODE) || [])
+      .map(vr => vr.activityIndex)
+      .filter((i): i is number => i !== undefined)
+      .sort((a, b) => b - a);
+    for (const idx of indices) {
+      if (idx < activities.length && !lockedIds.has(activities[idx]?.id)) {
+        const removed = activities[idx];
+        const isLockedFlag = removed?.locked || removed?.isLocked || removed?.userPinned;
+        if (isLockedFlag) continue;
+        activities.splice(idx, 1);
+        repairs.push({
+          code: FAILURE_CODES.ORPHANED_TRANSIT_NODE,
+          activityIndex: idx,
+          action: 'removed_orphan_transit',
+          before: removed?.title,
+        });
+        console.warn(
+          `[ORPHAN_TRANSIT_REMOVED] day=${dayNumber} idx=${idx} "${removed?.title || removed?.name}"`,
+        );
+      }
+    }
+  }
+
+
+
   // --- 2. CHAIN_RESTAURANT ---
   if (byCode.has(FAILURE_CODES.CHAIN_RESTAURANT)) {
     const indices = (byCode.get(FAILURE_CODES.CHAIN_RESTAURANT) || [])
