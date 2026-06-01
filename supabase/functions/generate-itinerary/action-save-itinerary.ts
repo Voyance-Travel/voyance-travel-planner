@@ -764,7 +764,12 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           'USD',
           policy.dayMode,
           saveFallbackVenues,
-          { earliestTimeMins: arrMinsLoop, latestTimeMins: depMinsLoop, blockedRestaurants: saveTripBlocked },
+          {
+            earliestTimeMins: arrMinsLoop,
+            latestTimeMins: depMinsLoop,
+            blockedRestaurants: saveTripBlocked,
+            departureTime24: isLastDay ? savedDepartureTime24 : undefined,
+          },
         );
         if (!result.alreadyCompliant) {
           itineraryDays[i] = { ...day, activities: result.activities };
