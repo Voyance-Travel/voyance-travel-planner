@@ -1,35 +1,64 @@
+## What's broken
 
-## Problem
+Clicking **Regenerate Day** on the Barcelona trip fails:
 
-Barcelona QA: actual itinerary correctly says "Landing at 22:30", but FlightSyncWarning fires "Day 1 shows arrival at 8:30 PM" and the stored anchor is 2h off.
+1. `spend-credits` charges `regenerate_day` successfully (30 credits debited via `credit_ledger`).
+2. `generate-itinerary` (action `generate-day`) immediately returns **403 GENERATION_NOT_AUTHORIZED** — "No proof-of-charge … action=generate-day".
+3. Frontend issues a refund, but the original spend never returned a `pendingChargeId`, so refund logs `refundAmount: 0` and the user is left charged with nothing generated.
+4. A follow-up `Duplicate spend request blocked` fires from React re-render — cosmetic side effect of the same failure.
 
-Root cause is in `supabase/functions/generate-itinerary/flight-hotel-context.ts` (lines 334–338). `intelArrRaw` comes from `flight_intelligence.destinationSchedule[0].arrivalDatetime`, which is stored as a UTC ISO string (e.g. `2026-06-15T20:30:00Z`). The current code naively splits on `T` and takes `substring(0,5)` → `"20:30"` UTC. The user-entered arrival (`22:30` BCN local, UTC+2) is local destination time. The cross-source check compares `20:30` vs `22:30`, sees >30m drift, logs `[FLIGHT_TRUTH_DISAGREE]`, and flips `arrivalTruthSource='flight_intelligence'` — which downstream consumers (the FE FlightSyncWarning detector + stored anchor) then trust as truth, corrupting Day 1.
+## Root cause
 
-We cannot safely convert UTC → local destination without the IANA timezone (which we don't have at this call site). The correct behavior is to exclude UTC-marked ISO values from the candidates list so picker (which already returned local destination time) wins unambiguously.
+`spend-credits/index.ts` only writes a `pending_credit_charges` row for **HIGH_VALUE_ACTIONS**:
 
-## Change
+```ts
+const HIGH_VALUE_ACTIONS = ['trip_generation', 'smart_finish', 'hotel_optimization', 'regenerate_trip'];
+```
 
-Single-file, single-block edit in `supabase/functions/generate-itinerary/flight-hotel-context.ts` around lines 336–338. Replace the one-liner `intelArr` computation with an IIFE that:
+`regenerate_day` is **not** in that list, so no `pending_credit_charges` row is created — only a `credit_ledger` row with `metadata.status='committed'`.
 
-1. Returns `undefined` when `intelArrRaw` ends in `Z` or carries an explicit `±HH:MM` offset after the `T` segment (UTC / offset-anchored — cannot be safely localized here).
-2. Otherwise, when the time segment is timezone-naive (`HH:mm[:ss]` with no `Z`/offset), normalizes it via `normalizeTo24h` as before (treated as already-local).
-3. When the value has no `T` at all (already a bare time string), normalizes it as before.
+But the proof-of-charge gate in `generate-itinerary/index.ts` queries **only** `pending_credit_charges`:
 
-Result: `flight_intelligence` drops out of the `candidates` array whenever it's a UTC ISO, so the picker's local time is the only entry and `disagree` stays false. The downstream `if (intelArr) arrivalTruthSource = 'flight_intelligence'` override branch can no longer fire on a UTC value, so the stored anchor + FE warning both read the correct local time.
+```ts
+.from('pending_credit_charges')
+.select('id, status, action, created_at')
+.in('action', allowedSpendActions)
+.in('status', ['pending','completed'])
+```
 
-No other call sites change. The `flight_intelligence` precedence block further down still runs on its own raw fields — this fix only affects the cross-source sanity comparator.
+The durable-ledger-proof fallback at L238 is gated on `action === 'generate-trip'` AND `isUnfinishedTrip`, so it doesn't help `generate-day` / `regenerate-day`. Result: every Regenerate Day click 403's after charging the user.
 
-## Verification
+## Fix
 
-- Unit test in `supabase/functions/_shared/__tests__/` covering:
-  - UTC ISO intel (`...T20:30:00Z`) + picker `22:30` → no disagree, `arrivalTruthSource='picker'`.
-  - Offset ISO (`...T20:30:00+00:00`) → same: excluded.
-  - Naive ISO (`...T22:30:00`) + picker `22:30` → included, no disagree.
-  - Bare `"22:30"` → included as today.
-- Re-run Barcelona fixture; confirm no `[FLIGHT_TRUTH_DISAGREE]` log and FlightSyncWarning suppressed.
+Extend the existing durable-ledger-proof branch to also cover `generate-day` and `regenerate-day` — accepting a `credit_ledger` row with:
+- `user_id` + `trip_id` match
+- `action_type` in `allowedSpendActions` (already includes `regenerate_day`, `unlock_day`, `regenerate_trip`, `trip_generation`)
+- `transaction_type='spend'`, `credits_delta < 0`
+- `metadata->>status = 'committed'`
+- `created_at >= now() - 10 minutes` (matches the existing pending-charge window)
 
-## Out of scope (flag separately)
+This mirrors the pattern already shipped for `generate-trip` retry/resume and adds zero new tables, no new spend-credits writes, and no behavioral change for paths that already succeed.
 
-- **Day 4 empty (departure day)**: distinct from this bug; needs its own investigation in the chain finalizer / departure-day logistics path before I touch it. I'll surface as a follow-up after this lands rather than bundling.
+### File edits
 
-Confirm and I'll implement.
+**`supabase/functions/generate-itinerary/index.ts`** — proof-of-charge block (around L229–L277):
+
+- Lift the durable-ledger fallback out of the `action === 'generate-trip'` + `isUnfinishedTrip` branch.
+- Run it for any `PAID_GENERATION_ACTIONS` when `chargeRes.data` is null.
+- Keep the existing trip-unfinished branch as-is (it's the broader umbrella for `generate-trip`); add a sibling branch for `generate-day` / `regenerate-day` that does NOT require unfinished-trip state (regenerating a day on a finished trip is the whole point).
+- Same 10-minute window, same `committed` filter, same log line shape.
+
+No frontend changes. No DB migration. No change to `spend-credits` (so `regenerate_day` stays a single-write ledger action — no spurious `pending_credit_charges` rows).
+
+### Out of scope
+
+- "Flight sync failed" console line — separate path (`FlightSyncWarning`), no user-visible failure tied to this trip; treat as a follow-up if it reproduces.
+- "Duplicate spend request blocked" — cosmetic side effect of the 403 retry path; goes away once the 403 is fixed. Will re-evaluate if it persists after deploy.
+- The `dedupeKey` in `useSpendCredits` missing `dayIndex` is a latent issue (back-to-back regen of different days could collide) but not what's biting here; logged for later.
+
+### Verification
+
+1. Deploy `generate-itinerary`.
+2. Click Regenerate Day on the Barcelona trip.
+3. Expect: 200 from `generate-itinerary`, day regenerates, no refund issued, console clean.
+4. Edge logs: `[generate-itinerary] Durable proof-of-charge OK via committed ledger=… action=regenerate_day` followed by normal generation logs.

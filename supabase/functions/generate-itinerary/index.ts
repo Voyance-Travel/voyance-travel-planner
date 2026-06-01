@@ -276,6 +276,40 @@ serve(async (req) => {
         }
       }
 
+      // Durable ledger proof for per-day regen paths (generate-day, regenerate-day).
+      // spend-credits does NOT write a pending_credit_charges row for low-value
+      // actions like regenerate_day (only HIGH_VALUE_ACTIONS get one), so the
+      // pending-charge query above always misses for these. Accept any committed
+      // ledger spend in the last 10 minutes that matches allowedSpendActions.
+      // Mirrors the pattern already shipped for generate-trip retry/resume.
+      if (!charge && (action === 'generate-day' || action === 'regenerate-day')) {
+        const { data: ledgerProof } = await supabase
+          .from('credit_ledger')
+          .select('id, action_type, created_at, metadata')
+          .eq('user_id', authResult.userId)
+          .eq('trip_id', tripId)
+          .in('action_type', allowedSpendActions)
+          .eq('transaction_type', 'spend')
+          .lt('credits_delta', 0)
+          .filter('metadata->>status', 'eq', 'committed')
+          .gte('created_at', tenMinAgo)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (ledgerProof) {
+          charge = {
+            id: ledgerProof.id,
+            status: 'ledger_committed',
+            action: ledgerProof.action_type,
+            created_at: ledgerProof.created_at,
+          } as any;
+          console.log(
+            `[generate-itinerary] Durable proof-of-charge OK via committed ledger=${ledgerProof.id} action=${ledgerProof.action_type}`
+          );
+        }
+      }
+
       if (!charge) {
         console.warn(
           `[generate-itinerary] No proof-of-charge for user=${authResult.userId} trip=${tripId} action=${action} ` +
