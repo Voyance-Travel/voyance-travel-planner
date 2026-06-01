@@ -1081,7 +1081,8 @@ export interface ExecutionerAuditCode {
     | 'EXEC_HOTEL_RETURN_LOOP_DROPPED'
     | 'EXEC_TRANSFER_CLAMPED'
     | 'EXEC_DEPARTURE_TRANSFER_FLAGGED'
-    | 'EXEC_ORPHAN_TRANSIT_DROPPED';
+    | 'EXEC_ORPHAN_TRANSIT_DROPPED'
+    | 'EXEC_CHECKOUT_OVERLAP_TRIMMED';
 
   count: number;
   dayNumber: number;
