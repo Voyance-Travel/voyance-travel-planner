@@ -248,11 +248,13 @@ export async function resolveTripFacts(
     preferences: {
       tripType: trip.trip_type || null,
       budgetTier: profile.budgetTier,
-      dietary: Array.isArray(trip.dietary_restrictions)
-        ? (trip.dietary_restrictions as string[])
+      dietary: Array.isArray((metadata as any).dietaryRestrictions)
+        ? ((metadata as any).dietaryRestrictions as string[])
         : profile.dietaryRestrictions || [],
-      interests: Array.isArray(trip.interests)
-        ? (trip.interests as string[])
+      interests: Array.isArray((metadata as any).interestCategories)
+        ? ((metadata as any).interestCategories as string[])
+        : Array.isArray((metadata as any).interests)
+        ? ((metadata as any).interests as string[])
         : profile.interests || [],
     },
     mustHaves,
