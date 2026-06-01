@@ -74,6 +74,15 @@ export interface DecomposeArgs {
   miscReserveContributionCents?: number;
 }
 
+export interface DecomposeResolvedArgs {
+  resolver: ResolveResult;
+  includeHotel: boolean;
+  includeFlight: boolean;
+  /** Misc-reserve contribution computed by `computeMiscReserve` — folded into
+   *  the headline by `useTripFinancialSnapshot`. */
+  miscReserveContributionCents?: number;
+}
+
 /**
  * Map a resolved row's category to a Payments-tab bucket key.
  *
@@ -107,16 +116,8 @@ function bucketForRow(row: ResolvedRow): BucketKey {
   }
 }
 
-export function decomposeTripCost(args: DecomposeArgs): DecompositionResult {
-  const resolver = resolveCanonicalCostRows({
-    costs: args.costs,
-    liveActivities: args.liveActivities,
-    includeHotel: args.includeHotel,
-    includeFlight: args.includeFlight,
-    manualPayments: args.manualPayments,
-    travelers: args.travelers,
-  });
-
+export function decomposeResolvedTripCost(args: DecomposeResolvedArgs): DecompositionResult {
+  const resolver = args.resolver;
   const reserveCents = Math.max(0, Math.round(args.miscReserveContributionCents || 0));
   const displayedTotalCents = Math.max(0, resolver.effectiveTotalCents + reserveCents);
 
@@ -197,4 +198,21 @@ export function decomposeTripCost(args: DecomposeArgs): DecompositionResult {
     rowsByBucket,
     resolver,
   };
+}
+
+export function decomposeTripCost(args: DecomposeArgs): DecompositionResult {
+  const resolver = resolveCanonicalCostRows({
+    costs: args.costs,
+    liveActivities: args.liveActivities,
+    includeHotel: args.includeHotel,
+    includeFlight: args.includeFlight,
+    manualPayments: args.manualPayments,
+    travelers: args.travelers,
+  });
+  return decomposeResolvedTripCost({
+    resolver,
+    includeHotel: args.includeHotel,
+    includeFlight: args.includeFlight,
+    miscReserveContributionCents: args.miscReserveContributionCents,
+  });
 }

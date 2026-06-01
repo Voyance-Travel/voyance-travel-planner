@@ -80,6 +80,7 @@ describe('usePayableItems — Flights & Hotels reconciliation', () => {
         payments: [],
         activityCosts: [],
         paymentsLoaded: true,
+        includeFlight: true,
       }),
     );
 
@@ -199,7 +200,7 @@ describe('usePayableItems — orphan-rescue dedupe', () => {
 });
 
 describe('usePayableItems — placeholder transit & flight visibility', () => {
-  it('emits a synthetic $0 transit group when only placeholder transit exists, so the Local Transit bucket card stays visible', () => {
+  it('folds a costed placeholder transit row into Local Transit so counted cents are visible', () => {
     const days = [
       {
         dayNumber: 1,
@@ -223,11 +224,11 @@ describe('usePayableItems — placeholder transit & flight visibility', () => {
     );
     const transit = result.current.items.find(i => i.groupKind === 'transit' && i.dayNumber === 1);
     expect(transit).toBeTruthy();
-    expect(transit?.amountCents).toBe(0);
-    expect(transit?.subItems?.[0].name).toMatch(/Estimated walking/i);
+    expect(transit?.amountCents).toBe(800);
+    expect(transit?.subItems?.[0].name).toBe('Transfer to Airport');
   });
 
-  it('does NOT emit a payable item for a "Departure Flight" placeholder card on a non-zero day', () => {
+  it('emits a costed "Departure Flight" placeholder card so counted cents are visible', () => {
     const days = [
       {
         dayNumber: 3,
@@ -247,9 +248,53 @@ describe('usePayableItems — placeholder transit & flight visibility', () => {
           { activity_id: 'f1', day_number: 3, category: 'flight', cost_per_person_usd: 50, num_travelers: 1 } as any,
         ],
         paymentsLoaded: true,
+        includeFlight: true,
       }),
     );
     const flightStub = result.current.items.find(i => i.name === 'Departure Flight');
-    expect(flightStub).toBeUndefined();
+    expect(flightStub).toBeTruthy();
+    expect(flightStub?.amountCents).toBe(5000);
+  });
+
+  it('keeps visible line items equal to the canonical snapshot row set (plus no reserve)', () => {
+    const days = [
+      {
+        dayNumber: 1,
+        activities: [
+          { id: 'lunch-1', title: 'Lunch at Casa', category: 'dining', cost: { amount: 30 } },
+          { id: 'taxi-1', title: 'Taxi to Museum', category: 'transport', cost: { amount: 20 } },
+        ],
+      },
+      {
+        dayNumber: 2,
+        activities: [
+          { id: 'museum-1', title: 'Museum Entry', category: 'activity', cost: { amount: 25 } },
+        ],
+      },
+    ];
+    const activityCosts = [
+      { id: 'c-hotel', activity_id: 'hotel-d0', day_number: 0, category: 'hotel', cost_per_person_usd: 100, num_travelers: 2 },
+      { id: 'c-lunch', activity_id: 'lunch-1', day_number: 1, category: 'dining', cost_per_person_usd: 30, num_travelers: 2 },
+      { id: 'c-taxi', activity_id: 'taxi-1', day_number: 1, category: 'transport', cost_per_person_usd: 20, num_travelers: 2 },
+      { id: 'c-museum', activity_id: 'museum-1', day_number: 2, category: 'activity', cost_per_person_usd: 25, num_travelers: 2 },
+    ];
+
+    const { result } = renderHook(() =>
+      usePayableItems({
+        days: days as any,
+        flightSelection: null,
+        hotelSelection: { name: 'Ledger Hotel' },
+        travelers: 2,
+        payments: [],
+        activityCosts: activityCosts as any,
+        paymentsLoaded: true,
+        includeHotel: true,
+      }),
+    );
+
+    expect(result.current.totalCents).toBe(35000);
+    expect(result.current.items.map(i => i.id)).toEqual(
+      expect.arrayContaining(['hotel-selection', 'lunch-1_d1', 'transit-d1', 'museum-1_d2']),
+    );
   });
 });

@@ -1,84 +1,74 @@
-## What the issue is
+# Fix: Payments $1,272 ≠ Header $964 ≠ Line Items $722
 
-The UI error is misleading. The launcher is not timing out because it is slow; Day 1 is crashing in the backend, then the launcher watchdog reports it as a timeout.
+## Root cause (confirmed)
 
-Current log root cause:
+Three surfaces sum from three different sets:
 
-```text
-TypeError: validationResults is not iterable
-at repairDay (.../pipeline/repair-day.ts)
-at handleGenerateTripDayV2 (.../v2/generate-trip-day-v2.ts)
-```
+| Surface | Reads | Filters applied |
+|---|---|---|
+| Payments tab `Trip Total` | `useTripFinancialSnapshot.tripTotalCents` → `decomposeTripCost` over raw `activity_costs` | none — every row counted |
+| EditorialItinerary header | `useDisplayedTripTotal` → `composeDisplayedTripTotal` (snapshot + day breakdown, then `max(snapshot, chipSum)`) | clamps to chip sum |
+| Payments line items (`usePayableItems`) | `resolveCanonicalCostRows` over `activity_costs` | drops day-0 logistics dupes, placeholder transit, placeholder departure/return flight stubs, rows that fail row-key match against live activities |
 
-## Why this keeps happening
+Result: a row can be **counted in `tripTotalCents` but not surfaced as a line item**, and the header can clamp to chip sum that excludes a third bucket. The transit-grouping path in `usePayableItems` already iterates `canonical.rows`, so anything `resolveCanonicalCostRows` drops disappears from the visible list — but the snapshot still adds the raw `activity_costs` row.
 
-The project recently switched itinerary generation to the new `v2` chain. That wrapper is calling older pipeline helpers (`repairDay`, validation, enrichment, etc.) but did not pass the full input contract those helpers require.
+The existing memory `displayed-trip-total-single-source` enforces parity between snapshot and the header composer, but it does not enforce parity with `usePayableItems`. That's the gap.
 
-The previous fix handled one missing v2 field: `lockedActivities`.
+## Fix — single canonical row set for all three surfaces
 
-The next crash is the same class of bug: `repairDay` requires `validationResults: ValidationResult[]`, but `v2/generate-trip-day-v2.ts` calls `repairDay()` before running `validateDay()` and passes no `validationResults`. So `repairDay` later does:
+Make `resolveCanonicalCostRows` the **only** definition of "what counts as a trip cost row", and have both `tripTotalCents` and `usePayableItems` consume it. No row is allowed to be in one and not the other.
 
-```ts
-for (const vr of validationResults)
-```
+### 1. Snapshot reads from the resolver, not from raw `costs`
 
-…but `validationResults` is `undefined`, causing the fatal crash.
+In `src/hooks/useTripFinancialSnapshot.ts`:
 
-## What we broke
+- Replace the `decomposeTripCost({ costs, ... })` input with the rows already produced by `resolveCanonicalCostRows({ costs, liveActivities, includeHotel, includeFlight })`.
+- `tripTotalCents` becomes `canonical.effectiveTotalCents` (which already folds manual hotel/flight) plus `miscReserveContributionCents`. Hotel/flight toggles continue to work because the resolver respects them.
+- Buckets (`buckets.transit`, `buckets.dining`, etc.) get recomputed from the same `canonical.rows` array.
+- The invariant log at line 547 (`snapshot vs decomposition`) becomes `snapshot vs canonical.effectiveTotalCents` and is upgraded from `console.error` to a hard `console.error` + telemetry event when they diverge by >$1.
 
-Not the frontend. Not the trip itself. The breakage is in the backend v2 generation orchestration contract:
+### 2. Line items surface every counted row
 
-```text
-v2 wrapper → old repair helper
-          → missing required fields
-          → runtime TypeError
-          → Day 1 returns 500
-          → launcher retries 3x
-          → watchdog surfaces “launcher timed out”
-```
+In `src/hooks/usePayableItems.ts`:
 
-## Fix plan
+- Continue iterating `canonical.rows`, but **never silently drop a costed row**. The three current drop branches (`row.isLogisticsRow`, `PLACEHOLDER_FLIGHT_TITLE_RE`, placeholder/unconfirmed transit) become "route to a different bucket" rather than "skip":
+  - Day-0 hotel/flight rows already render as the dedicated hotel-selection / flight-selection rows — keep that, but assert their cents equal the resolver's hotel/flight totals (parity check, not a second source).
+  - Placeholder departure/return flight stubs with cents > 0 emit a real line item (currently they're skipped entirely; if they have a cost it must show up).
+  - Placeholder/unconfirmed transit rows with cents > 0 get folded into the per-day "Local transit — Day N" group instead of producing the synthetic $0 informational row only. The "$0 informational" branch stays for days with zero transit cost.
 
-1. **Move validation before repair in v2**
-   - In `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts`, run `validateDay()` on `ai.day` before `repairDay()`.
-   - Pass the resulting `validationResults` into `repairDay()`.
-   - Keep the existing post-repair validation gate, but rename/reuse it as the second validation pass after repair.
+### 3. Reconciliation guard becomes blocking
 
-2. **Pass the full v1-compatible repair context from v2**
-   - Add the missing repair inputs already available from `facts`/`dayFacts`, including:
-     - `isFirstDay`, `isLastDay`
-     - `arrivalTime24`, `returnDepartureTime24`
-     - `hotelName`, `hotelAddress`, `hasHotel`, `hotelCoordinates`
-     - `lockedActivities: dayFacts.lockedActivities ?? []`
-     - `restaurantPool: []`, `usedRestaurants: []`
-     - `budgetTier`, destination context, transition flags where available
+`PaymentsTab.tsx` already has a `payableDrift` warn around line 590. Replace with a hard guard:
 
-3. **Add a defensive default in `repairDay`**
-   - Change the destructure so `validationResults` defaults to `[]`.
-   - This prevents future v2/v1 contract drift from turning into a fatal TypeError.
-   - This is a safety net, not the primary fix; v2 should still pass real validation results.
+- If `|sum(payableItems) + manualNonItemized − snapshot.tripTotalCents| > $1`, render an amber "Reconciling…" badge **and** log a structured `[PaymentsTab] drift` warning that names which row id(s) are in one set but not the other.
+- A regression test in `src/hooks/__tests__/useDisplayedTripTotal.parity.test.ts` (extended) and a new `usePayableItems.parity.test.ts` assert: for any fixture with N priced `activity_costs` rows, `sum(payableItems by amountCents) === snapshot.tripTotalCents` (modulo the misc reserve which is named explicitly).
 
-4. **Verify with logs and a direct function test**
-   - Redeploy only `generate-itinerary`.
-   - Trigger the generation path and confirm the old fatal log is gone:
-     - no `validationResults is not iterable`
-     - no `V2_FATAL` from `repair_day`
-     - no `LAUNCHER_TIMEOUT`
-   - If another required-field mismatch appears, fix that single mismatch in the same v2 wrapper contract rather than patching blindly.
+### 4. Memory + lint
 
-## Files to change
+- New memory: `mem://constraints/finance/payments-line-items-mirror-snapshot.md` — "Payments Trip Total, header displayed total, and sum of visible PayableItems MUST derive from the same `resolveCanonicalCostRows` call; no silent skip of a costed row is permitted."
+- Add to Core in `mem/index.md`.
+- ESLint rule (or test file scan) that fails CI if a new `continue` or filter branch is added inside the `usePayableItems` `for (const row of canonical.rows)` loop without a matching bucket emission.
 
-- `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts`
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
+## What this does NOT change
 
-## Expected outcome
+- Hotel/flight inclusion toggles, misc reserve math, manual hotel/flight folding — all already live in the resolver.
+- The "max(snapshot, chipSum)" clamp in `composeDisplayedTripTotal` stays; once snapshot and line items agree, the chip sum will too, and the clamp becomes a no-op rather than a divergence hider.
+- Backend `activity_costs` writes, generation pipeline, or any edge function. This is purely the FE single-resolver wiring.
 
-Day 1 should stop crashing after the AI call, so the launcher should actually start generation instead of retrying until the watchdog emits the timeout message.
+## Verification
 
-<presentation-actions>
-  <presentation-open-history>View History</presentation-open-history>
-</presentation-actions>
+1. Open the affected trip; confirm Payments Trip Total, header, and sum of line items all match to the dollar.
+2. Toggle Hotel / Flight inclusion — all three move together.
+3. Mark one transit group as paid — the paid figure on Payments and the Budget tab move by the same amount.
+4. Hard refresh — numbers do not change.
+5. `vitest run useDisplayedTripTotal.parity usePayableItems.parity` passes.
 
-<presentation-actions>
-<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
-</presentation-actions>
+## Files touched
+
+- `src/hooks/useTripFinancialSnapshot.ts`
+- `src/hooks/usePayableItems.ts`
+- `src/components/itinerary/PaymentsTab.tsx` (drift guard + badge)
+- `src/hooks/__tests__/useDisplayedTripTotal.parity.test.ts` (extend)
+- `src/hooks/__tests__/usePayableItems.parity.test.ts` (new)
+- `mem/constraints/finance/payments-line-items-mirror-snapshot.md` (new)
+- `mem/index.md` (add Core entry + reference)
