@@ -1,74 +1,80 @@
-# Fix: Payments $1,272 ≠ Header $964 ≠ Line Items $722
+# Authoritative Day-1 Arrival Anchor
 
-## Root cause (confirmed)
+The integrity contract already detects `FLIGHT_ANCHOR_COMMIT_MISMATCH` and the freeze gate already demotes the trip to `partial` when it fires. The actual leak is that the **LLM-emitted arrival time is still the value that gets persisted into the activity card**. `repair-day.ts §3b` tries to reconcile it, but it runs late in the pipeline, depends on a stack of optional inputs (`arrivalTime24 && !isHotelChange`), and any earlier mutating pass that touches the arrival card can re-introduce the wrong time. Result: the validator sees the mismatch, marks the trip `partial`, but the card the user sees still carries the LLM time.
 
-Three surfaces sum from three different sets:
+Root cause restated: **no single point in the pipeline owns the arrival time**. We have detection (integrity contract), best-effort repair (repair-day §3b), and runtime re-verification (schedule-executioner), but no deterministic, idempotent stamp the moment the LLM response lands.
 
-| Surface | Reads | Filters applied |
-|---|---|---|
-| Payments tab `Trip Total` | `useTripFinancialSnapshot.tripTotalCents` → `decomposeTripCost` over raw `activity_costs` | none — every row counted |
-| EditorialItinerary header | `useDisplayedTripTotal` → `composeDisplayedTripTotal` (snapshot + day breakdown, then `max(snapshot, chipSum)`) | clamps to chip sum |
-| Payments line items (`usePayableItems`) | `resolveCanonicalCostRows` over `activity_costs` | drops day-0 logistics dupes, placeholder transit, placeholder departure/return flight stubs, rows that fail row-key match against live activities |
+## What to build
 
-Result: a row can be **counted in `tripTotalCents` but not surfaced as a line item**, and the header can clamp to chip sum that excludes a third bucket. The transit-grouping path in `usePayableItems` already iterates `canonical.rows`, so anything `resolveCanonicalCostRows` drops disappears from the visible list — but the snapshot still adds the raw `activity_costs` row.
+### 1. Single stamper module — `stampArrivalAnchorTruth`
 
-The existing memory `displayed-trip-total-single-source` enforces parity between snapshot and the header composer, but it does not enforce parity with `usePayableItems`. That's the gap.
+New file `supabase/functions/_shared/stamp-arrival-anchor-truth.ts`. Pure function, no I/O:
 
-## Fix — single canonical row set for all three surfaces
+```text
+stampArrivalAnchorTruth(day, {
+  isFirstDay,
+  arrivalTime24,        // ground truth from normalizeFlightSelection
+  arrivalAirport,
+  airportProcessingMins = AIRPORT_PROCESSING_MINS,
+}): { day, mutated, action }
+```
 
-Make `resolveCanonicalCostRows` the **only** definition of "what counts as a trip cost row", and have both `tripTotalCents` and `usePayableItems` consume it. No row is allowed to be in one and not the other.
+Behavior:
+- No-op when `!isFirstDay`, `!arrivalTime24`, or `isHotelChange`.
+- Locate the arrival-flight card using the same multi-signal detector already in `repair-day §3b` (`anchorSource==='arrival-flight'` OR title regex OR `tags.includes('arrival-flight')`).
+- If found: rewrite `startTime = arrivalTime24`, `endTime = arrivalTime24 + processingMins`, stamp `anchorSource='arrival-flight'`, `isLocked=true`, `lockReason='flight-truth'`, `source='stamp-arrival-truth'`. Preserve title/description/location.
+- If not found: do nothing here (injection still belongs to `repair-day §3b` — it has all the hotel/transfer context).
+- Returns `{ mutated: true, action: 'overwrote_arrival_anchor', wasStart, wasEnd, newStart, newEnd }` for tracing.
 
-### 1. Snapshot reads from the resolver, not from raw `costs`
+### 2. Call the stamper at every post-LLM boundary
 
-In `src/hooks/useTripFinancialSnapshot.ts`:
+Wire it as the **first** mutation on the LLM response in both generation paths, before validate/repair/enrich:
 
-- Replace the `decomposeTripCost({ costs, ... })` input with the rows already produced by `resolveCanonicalCostRows({ costs, liveActivities, includeHotel, includeFlight })`.
-- `tripTotalCents` becomes `canonical.effectiveTotalCents` (which already folds manual hotel/flight) plus `miscReserveContributionCents`. Hotel/flight toggles continue to work because the resolver respects them.
-- Buckets (`buckets.transit`, `buckets.dining`, etc.) get recomputed from the same `canonical.rows` array.
-- The invariant log at line 547 (`snapshot vs decomposition`) becomes `snapshot vs canonical.effectiveTotalCents` and is upgraded from `console.error` to a hard `console.error` + telemetry event when they diverge by >$1.
+- `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts` — right after the LLM returns `ai.day`, before `validate_day_pre_repair`.
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — right after the per-day LLM call resolves, before `validateDay`/`repairDay`.
 
-### 2. Line items surface every counted row
+The stamper is idempotent, so calling it again later (defense in depth) is safe. Add a second call at the end of `repair-day.ts` (after §3b) and at the start of `schedule-executioner.enforceFlightAnchors` to harden the chain.
 
-In `src/hooks/usePayableItems.ts`:
+### 3. Anchor-guard immutability for `lockReason='flight-truth'`
 
-- Continue iterating `canonical.rows`, but **never silently drop a costed row**. The three current drop branches (`row.isLogisticsRow`, `PLACEHOLDER_FLIGHT_TITLE_RE`, placeholder/unconfirmed transit) become "route to a different bucket" rather than "skip":
-  - Day-0 hotel/flight rows already render as the dedicated hotel-selection / flight-selection rows — keep that, but assert their cents equal the resolver's hotel/flight totals (parity check, not a second source).
-  - Placeholder departure/return flight stubs with cents > 0 emit a real line item (currently they're skipped entirely; if they have a cost it must show up).
-  - Placeholder/unconfirmed transit rows with cents > 0 get folded into the per-day "Local transit — Day N" group instead of producing the synthetic $0 informational row only. The "$0 informational" branch stays for days with zero transit cost.
+Update `supabase/functions/generate-itinerary/anchor-guard.ts` and the executioner's `pruneOrphanTransits` / `enforceFlightAnchors` / repair-day's `lockedActivities` filter so any row carrying `lockReason==='flight-truth'` is treated identically to a user-owned lock: its `startTime` / `endTime` cannot be mutated by gap-fill, cascade, or vibe-clash passes. Add the same exemption to the FE `safeUpdateItineraryData` write path (no behavior change needed — locked rows already pass through).
 
-### 3. Reconciliation guard becomes blocking
+### 4. Promote the integrity check to a deterministic fixer
 
-`PaymentsTab.tsx` already has a `payableDrift` warn around line 590. Replace with a hard guard:
+In `supabase/functions/_shared/commit-itinerary.ts::resolveCommitGate`, when the verdict carries `FLIGHT_ANCHOR_COMMIT_MISMATCH` and `arrivalTime24` is known:
+1. Run `stampArrivalAnchorTruth` over each affected day in `days`.
+2. Re-run `checkItineraryIntegrity` once.
+3. If the mismatch clears, ship `ready` with `metadata.integrity_contract.repaired_codes: ['FLIGHT_ANCHOR_COMMIT_MISMATCH']`. Persist the corrected `days` back (the gate already returns `days` indirectly via the metadata patch — extend the return to include `repairedDays` and have callers swap them in before `persistTripItinerary`).
+4. If it still fails (e.g., no arrival card at all), keep current `partial` demotion.
 
-- If `|sum(payableItems) + manualNonItemized − snapshot.tripTotalCents| > $1`, render an amber "Reconciling…" badge **and** log a structured `[PaymentsTab] drift` warning that names which row id(s) are in one set but not the other.
-- A regression test in `src/hooks/__tests__/useDisplayedTripTotal.parity.test.ts` (extended) and a new `usePayableItems.parity.test.ts` assert: for any fixture with N priced `activity_costs` rows, `sum(payableItems by amountCents) === snapshot.tripTotalCents` (modulo the misc reserve which is named explicitly).
+This means the validator becomes self-healing for this one class instead of just flagging.
 
-### 4. Memory + lint
+### 5. Validator severity + repair handler
 
-- New memory: `mem://constraints/finance/payments-line-items-mirror-snapshot.md` — "Payments Trip Total, header displayed total, and sum of visible PayableItems MUST derive from the same `resolveCanonicalCostRows` call; no silent skip of a costed row is permitted."
-- Add to Core in `mem/index.md`.
-- ESLint rule (or test file scan) that fails CI if a new `continue` or filter branch is added inside the `usePayableItems` `for (const row of canonical.rows)` loop without a matching bucket emission.
+In `supabase/functions/generate-itinerary/pipeline/validate-day.ts`, keep the existing `FLIGHT_ANCHOR_COMMIT_MISMATCH` check but bump severity from `'warning'` to `'error'` AND register it in `repair-day.ts`'s validation-driven repair map so an in-pipeline mismatch triggers `stampArrivalAnchorTruth` directly (today repair-day §3b runs unconditionally; this just ensures the validator's signal flows into the same fixer instead of being silently swallowed).
 
-## What this does NOT change
+### 6. Tests
 
-- Hotel/flight inclusion toggles, misc reserve math, manual hotel/flight folding — all already live in the resolver.
-- The "max(snapshot, chipSum)" clamp in `composeDisplayedTripTotal` stays; once snapshot and line items agree, the chip sum will too, and the clamp becomes a no-op rather than a divergence hider.
-- Backend `activity_costs` writes, generation pipeline, or any edge function. This is purely the FE single-resolver wiring.
+- `_shared/__tests__/stamp-arrival-anchor-truth.test.ts` — overwrite, no-op when not first day, no-op when no arrival card, lock fields stamped.
+- `_shared/__tests__/integrity-contract.amsterdam.test.ts` — extend with a fixer test: contract reports mismatch → `resolveCommitGate` repairs → second integrity pass clears → status returns `ready`.
+- `generate-itinerary/anchor-guard.test.ts` — verify `lockReason='flight-truth'` survives gap-fill and cascade passes.
 
-## Verification
+## Out of scope
 
-1. Open the affected trip; confirm Payments Trip Total, header, and sum of line items all match to the dollar.
-2. Toggle Hotel / Flight inclusion — all three move together.
-3. Mark one transit group as paid — the paid figure on Payments and the Budget tab move by the same amount.
-4. Hard refresh — numbers do not change.
-5. `vitest run useDisplayedTripTotal.parity usePayableItems.parity` passes.
+- FE Payments/header parity (separate task already in flight).
+- Departure-flight anchor (mirror work for departure, but no current bug filed).
+- `flight_intelligence` reconciliation — the existing `[FLIGHT_TRUTH_DISAGREE]` log path stays as-is.
+- Changing how `normalizeFlightSelection` resolves the truth — we trust the value it returns; this plan is about persisting it faithfully.
 
 ## Files touched
 
-- `src/hooks/useTripFinancialSnapshot.ts`
-- `src/hooks/usePayableItems.ts`
-- `src/components/itinerary/PaymentsTab.tsx` (drift guard + badge)
-- `src/hooks/__tests__/useDisplayedTripTotal.parity.test.ts` (extend)
-- `src/hooks/__tests__/usePayableItems.parity.test.ts` (new)
-- `mem/constraints/finance/payments-line-items-mirror-snapshot.md` (new)
-- `mem/index.md` (add Core entry + reference)
+- new: `supabase/functions/_shared/stamp-arrival-anchor-truth.ts`
+- edit: `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts`
+- edit: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+- edit: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
+- edit: `supabase/functions/generate-itinerary/pipeline/validate-day.ts`
+- edit: `supabase/functions/generate-itinerary/anchor-guard.ts`
+- edit: `supabase/functions/_shared/schedule-executioner.ts`
+- edit: `supabase/functions/_shared/commit-itinerary.ts`
+- edit: `supabase/functions/_shared/itinerary-integrity-contract.ts` (extend return shape — no rule changes)
+- new tests + memory update under `mem/constraints/itinerary/flight-anchor-truth-parity.md` to record the stamper as the new authoritative layer.
