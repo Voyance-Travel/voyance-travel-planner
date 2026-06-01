@@ -3159,10 +3159,15 @@ export async function finalSaveItinerary(
       ...(context.blendedDnaSnapshot && { blended_dna: context.blendedDnaSnapshot }),
       metadata: {
         ...existingMetadata,
-        ...(emptyItineraryDetected && {
-          generation_failure_reason: failureReason,
-          empty_itinerary_detected_at: new Date().toISOString(),
-        }),
+        ...(emptyItineraryDetected
+          ? {
+              generation_failure_reason: failureReason,
+              empty_itinerary_detected_at: new Date().toISOString(),
+            }
+          : {
+              generation_failure_reason: null,
+              empty_itinerary_detected_at: null,
+            }),
         ...gateResult.metadataPatch,
         // Mark in-flight enrichment so UI can show Reconciling and arm beforeunload.
         ...(willBeReady ? { fully_persisted: false } : {}),

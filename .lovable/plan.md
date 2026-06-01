@@ -1,47 +1,77 @@
-## Fix: AI Note Save Re-Freezes Trip, Strands Future Generation
+# Plan: Stop the false "Itinerary is missing activities" banner
 
-### Root cause (confirmed in code)
+## What's actually wrong (confirmed by reading code)
 
-`action-save-itinerary.ts` line 1658–1659 unconditionally computes `nextStatus = 'ready'` whenever `persistVerdict.ok` is true — regardless of whether the call is a user metadata edit (AI note save, drag-reorder, lock toggle, chat edit) on an already-frozen trip. Line 1708 then stamps `metadata.itinerary_frozen_at` on first transition to `ready`. Result: the first AI note save on a `partial` trip flips it to `ready` + freezes it, after which the next `generate-trip` leg hits the frozen gate and silently drops days (3 of 4).
+Your analysis is right about the **classifier threshold**, but the user-facing trigger is one hop further back. Here's the precise chain:
 
-### Fix — one conditional in `action-save-itinerary.ts`
+1. **Backend** `supabase/functions/generate-itinerary/day-validation.ts:1397`
+   ```ts
+   if (dayCount >= 2 && paidMeaningfulCount <= 1) → 'incomplete'
+   ```
+   `paidMeaningfulCount` only counts activities whose `cost` is a numeric field (`cost: number` or `cost: {amount: number}`) AND title is not a placeholder. Approximate `~$35` strings, ledger-only costs, and costs that live only in `activity_costs` table all read as `0` here.
 
-Preserve existing status when a user-initiated save lands on an already-frozen trip. Status should only advance via the generation pipeline (or the commit gate downstream), never via metadata edits.
+2. `action-save-itinerary.ts:1511-1517` → on `'incomplete'`, stamps `metadata.generation_failure_reason = 'incomplete_itinerary'` and flips `itinerary_status` to `'failed'`.
 
-**Scope change:** `isFrozen` and `isUserSaveReason` currently live inside the block at lines 389–401 and go out of scope before line 1658. They need to be hoisted to function scope (declared with `let`/`const` outside the `{ }` block at 389) so the status computation at 1658 can read them. `isUserSaveReason` is already lazily `await import`ed — move that import up or duplicate it; preferred is hoisting the values computed at 391–394.
+3. `action-save-itinerary.ts:1734` only writes `generation_failure_reason` inside the `emptyItineraryDetected ?` branch — **nothing clears the stamp** on a subsequent healthy save.
 
-**Pseudocode at line 1658:**
+4. **Frontend** `EditorialItinerary.tsx:6259` → `pickBannerVariant` reads `generationFailureReason` from `trip.metadata` (`integrityBannerCopy.ts:103`):
+   ```ts
+   if (reason === 'incomplete_itinerary' && meaningful !== 0) → red banner
+   ```
+   So even a fully-populated 4-day trip with a stale tag from one bad earlier save shows the banner forever.
+
+The FE mirror in `src/utils/itineraryCompleteness.ts:95` has the same flaw but isn't the rendering trigger here — the metadata stamp is.
+
+## The fix — three small, scoped changes
+
+### Change 1: Loosen the classifier in both copies
+
+`supabase/functions/generate-itinerary/day-validation.ts:1395-1399` and `src/utils/itineraryCompleteness.ts:94-97`:
+
+Replace the paid-count gate with a meaningful-count gate that actually maps to "skeleton hotel-only trip":
+
 ```ts
-const preserveFrozenStatus =
-  isFrozen && isUserSaveReason(saveReason) &&
-  (status === 'ready' || status === 'generated' || status === 'partial');
-
-let nextStatus: 'ready' | 'generated' | 'partial' | 'failed' =
-  preserveFrozenStatus
-    ? (status as 'ready' | 'generated' | 'partial' | 'failed')
-    : emptyItineraryDetected ? 'failed' : (persistVerdict.ok ? 'ready' : 'partial');
+// Old:  if (dayCount >= 2 && paidMeaningfulCount <= 1) → 'incomplete'
+// New:  if (meaningfulCount < Math.max(2, dayCount))   → 'incomplete'
 ```
 
-The downstream commit gate (lines 1668–1699) still runs and may demote `ready → partial` if integrity fails — that's correct and we want to keep it. The freeze-stamp branch at 1708 then no-ops when `nextStatus` was preserved as `partial`, and is idempotent when preserved as `ready` (uses `existingFrozenAt || new Date().toISOString()`).
+Rationale: a real trip has at least ~1 meaningful activity per day; a skeleton has 0–1 total. This survives the approximate-cost / ledger-only-cost case completely. Keeps the original intent ("catch hotel-only output") without depending on cost shape.
 
-### Files
+### Change 2: Clear the stamp on a healthy save
 
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts`
-  - Hoist `isFrozen` + `status` (and `isUserSaveReason` import) out of the frozen-gate block at 389–401 to function scope.
-  - Wrap the `nextStatus` ternary at 1658–1659 with the `preserveFrozenStatus` guard.
-  - Add a `[SAVE_STATUS_PRESERVED]` console log when the branch fires, for telemetry.
+`action-save-itinerary.ts:1732-1743` — extend the metadata patch so a save whose probe returns `'ok'` actively nulls the stale fields:
 
-### Not changing
+```ts
+metadata: {
+  ...(callerExtraUpdate?.metadata || {}),
+  ...(emptyItineraryDetected
+    ? { ...existingMetadataForEmpty, generation_failure_reason: failureReason, empty_itinerary_detected_at: new Date().toISOString() }
+    : { generation_failure_reason: null, empty_itinerary_detected_at: null }),
+  …
+}
+```
 
-- `EditorialItinerary.tsx` — `skipContract: true` and `saveReason: 'user-ai-note-save'` stay (harmless, correct intent signal).
-- `_shared/persist-itinerary.ts`, `_shared/frozen-guard.ts` — unchanged.
-- Commit gate, freeze-stamp logic, no-shrink guard — unchanged.
+Same one-liner mirrored in `generation-core.ts:3160-3165` Stage-6 metadata patch so the chain-final write also self-heals legacy trips on next successful generation.
 
-### Why this is structural, not a patch
+### Change 3: One-shot backfill (optional but recommended)
 
-The frozen gate at line 395 already encodes "user edits may pass through frozen trips" via `isUserSaveReason`. That same intent must propagate to the status writer — otherwise a pass-through user edit silently re-freezes a partial trip. After this fix, every `user-*` / `chat-*` / `lock-*` / `drag-*` / etc. saveReason in `USER_SAVE_REASON_PREFIXES` is safe against this class of regression, not just AI notes.
+A single migration that nulls `metadata.generation_failure_reason` for trips where `itinerary_status IN ('ready','generated')` AND `(metadata->>'fully_persisted')::bool IS TRUE`. Heals already-stuck trips without waiting for the next save.
 
-### Verification
+## Files touched
 
-- Add a regression test alongside existing `action-save-itinerary` tests: given trip with `status='partial'`, save with `saveReason='user-ai-note-save'` + valid days → assert post-save `itinerary_status` is still `'partial'` and `metadata.itinerary_frozen_at` is unchanged (null).
-- Manual: reproduce the original repro — partial trip, save AI note, trigger next generation leg, confirm all days persist.
+- `supabase/functions/generate-itinerary/day-validation.ts` (1-line threshold)
+- `src/utils/itineraryCompleteness.ts` (1-line threshold, FE mirror)
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` (clear-on-ok branch)
+- `supabase/functions/generate-itinerary/generation-core.ts` (clear-on-ok branch, Stage 6)
+- One SQL migration (backfill)
+
+No FE banner-render code changes; no `EditorialItinerary.tsx` edits.
+
+## Out of scope (deliberately)
+
+You raised two other findings — they're real but they're separate root causes and shouldn't be bundled into this fix:
+
+- **Anne Frank House dropped.** Must-do coverage already exists (`mem://constraints/itinerary/must-do-coverage-injection`) with clock-gated scheduler + `injectMissingMustDos` + `MUST_DO_INJECTION_FAILED` health code. Either (a) the POI was seeded as a `should` not a `must`, or (b) `trip_day_intents` upsert silently wrote 0 rows (the JS dedupe bug closed earlier — `mem://constraints/itinerary/intent-upsert-expression-index`). Needs a trace of THIS trip's `metadata.quality.must_do_repair_attempted` + `trip_day_intents` rows before patching.
+- **"Walk to airport" on departure.** A shared airport-transit classifier (`_shared/airport-transit-classifier.ts`) is already wired at repair-day §15z AND save-time STEP 2.67 (see `mem://constraints/itinerary/airport-transit-must-be-taxi`). If a departure-day card slipped through, the classifier's `isAirportTransitCard` predicate didn't match it — needs the actual offending card's `{category, subcategory, title}` to see which signal it lacked. Patching blind risks over-broadening the predicate and re-firing on legit short walks to nearby transit hubs.
+
+Happy to spin both into their own plans once you confirm — they need 5–10 minutes of trace-reading first, not a guess.

@@ -1392,9 +1392,13 @@ export function classifyItineraryCompleteness(days: any[]): {
   if (meaningfulCount === 0) {
     return { status: 'empty', meaningfulCount, paidMeaningfulCount, dayCount };
   }
-  // Multi-day trips with zero or only one paid/non-placeholder activity in
-  // the entire plan are degenerate — almost certainly a broken generation.
-  if (dayCount >= 2 && paidMeaningfulCount <= 1) {
+  // Skeleton trips (hotel-only / hotel + single filler) have 0–1 meaningful
+  // activities total. Real trips have ≥1 per day. We used to gate on
+  // `paidMeaningfulCount <= 1`, but that mis-classified fully-populated trips
+  // whose costs sit in `activity_costs` / live as `~$N` strings rather than as
+  // numeric `cost` fields on the activity object — leaving a sticky
+  // `generation_failure_reason=incomplete_itinerary` stamp on healthy trips.
+  if (dayCount >= 2 && meaningfulCount < Math.max(2, dayCount)) {
     return { status: 'incomplete', meaningfulCount, paidMeaningfulCount, dayCount };
   }
   return { status: 'ok', meaningfulCount, paidMeaningfulCount, dayCount };

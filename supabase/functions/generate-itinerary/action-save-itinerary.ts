@@ -1731,7 +1731,9 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     ...(callerExtraUpdate && typeof callerExtraUpdate === 'object' ? callerExtraUpdate : {}),
     metadata: {
       ...(callerExtraUpdate?.metadata || {}),
-      ...(emptyItineraryDetected ? { ...existingMetadataForEmpty, generation_failure_reason: failureReason, empty_itinerary_detected_at: new Date().toISOString() } : {}),
+      ...(emptyItineraryDetected
+        ? { ...existingMetadataForEmpty, generation_failure_reason: failureReason, empty_itinerary_detected_at: new Date().toISOString() }
+        : { generation_failure_reason: null, empty_itinerary_detected_at: null }),
       persist_validation: persistValidationStamp,
       ...integrityMetadataPatch,
       ...(freezeStamp ? { itinerary_frozen_at: freezeStamp } : {}),
