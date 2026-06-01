@@ -83,28 +83,34 @@ async function backfillOne(
     if (bareCount === 0) continue;
     totalScanned += bareCount;
 
-    // Run anchor enrichment (uses the same predicate; bare anchors satisfy it
-    // because they have empty address/venue).
-    const res = await enrichAnchorActivities({
-      activities: acts,
-      destination,
-      supabaseUrl: env.supaUrl,
-      supabaseKey: env.supaKey,
-      googleMapsApiKey: env.gMapsKey,
-      lovableApiKey: env.lovableKey,
-      hotelCoordinates: hotelCoords,
-      timeBudgetMs: 8000,
-    });
-    totalAttempted += res.attempted;
-    totalResolved += res.resolved;
-    unresolved.push(...res.unresolvedTitles);
-
-    // Fill descriptions for the still-blank anchors.
+    // Google-Places address resolution is deferred (see top-of-file note).
+    // Fill descriptions for bare anchors — biggest visible win.
     try {
-      const before = acts.filter((a: any) => isAnchorNeedingEnrichment(a) || (String(a?.source || '') === 'must-do-injection' && !(a?.description || '').trim())).length;
+      const before = acts.filter(
+        (a: any) =>
+          String(a?.source || '') === 'must-do-injection' &&
+          !(a?.description || '').trim(),
+      ).length;
+      totalAttempted += before;
       await fillMissingDescriptions(acts, destination, env.lovableKey || undefined, Number(day?.dayNumber) || 0);
-      const after = acts.filter((a: any) => String(a?.source || '') === 'must-do-injection' && !(a?.description || '').trim()).length;
-      totalFilledDesc += Math.max(0, before - after);
+      const after = acts.filter(
+        (a: any) =>
+          String(a?.source || '') === 'must-do-injection' &&
+          !(a?.description || '').trim(),
+      ).length;
+      const filled = Math.max(0, before - after);
+      totalFilledDesc += filled;
+      totalResolved += filled;
+      // Track titles still bare for telemetry
+      for (const a of acts) {
+        if (
+          String(a?.source || '') === 'must-do-injection' &&
+          !(a?.description || '').trim()
+        ) {
+          const title = String(a?.title || a?.name || '').trim();
+          if (title) unresolved.push(title);
+        }
+      }
     } catch (descErr) {
       console.warn(`[backfill-must-do] description-fill failed day=${day?.dayNumber}:`, descErr instanceof Error ? descErr.message : String(descErr));
     }
