@@ -161,6 +161,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   if (isLastDay) {
     checkLogisticsSequence(activities, returnDepartureTime24, results);
     checkDepartureChronology(activities, isLastDay, results);
+    checkCheckoutOverlap(activities, results);
   }
 
   // --- DUPLICATE_CONCEPT (trip-wide) ---
