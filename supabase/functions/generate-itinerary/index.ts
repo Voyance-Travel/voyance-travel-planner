@@ -341,8 +341,37 @@ serve(async (req) => {
         return handleGenerateTripDayV2(supabase, authResult.userId, params);
       }
       console.log(`[generate-itinerary] Kill-switch active — routing to v1 for trip=${(params as any)?.tripId}`);
+      // Soak-telemetry stamp: mark this trip as having been served by the
+      // legacy v1 chain so the 7-day soak query can prove which trips never
+      // crossed the v2 boundary. Mirrors the v2 stamp in
+      // v2/generate-trip-day-v2.ts. Read-modify-write JSON merge; failures
+      // are swallowed (telemetry never blocks generation).
+      try {
+        const tid = (params as any)?.tripId;
+        if (tid) {
+          const { data: row } = await supabase
+            .from('trips')
+            .select('metadata')
+            .eq('id', tid)
+            .maybeSingle();
+          const priorMeta = (row?.metadata as any) || {};
+          const priorQuality = priorMeta.quality || {};
+          if (priorQuality.v1_chain_used !== true) {
+            await supabase
+              .from('trips')
+              .update({
+                metadata: { ...priorMeta, quality: { ...priorQuality, v1_chain_used: true } },
+              })
+              .eq('id', tid);
+            console.log(`[generate-itinerary] stamped metadata.quality.v1_chain_used=true tripId=${tid}`);
+          }
+        }
+      } catch (e) {
+        console.warn(`[generate-itinerary] v1_chain_used stamp failed (non-fatal):`, (e as Error)?.message);
+      }
       return handleGenerateTripDay(supabase, authResult.userId, params);
     }
+
 
     // Simple CRUD actions — use ActionContext interface
     const actCtx: ActionContext = { supabase, userId: authResult.userId, params };

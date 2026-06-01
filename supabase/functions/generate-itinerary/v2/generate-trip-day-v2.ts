@@ -96,6 +96,10 @@ export async function handleGenerateTripDayV2(
     })();
 
     // Cancel-flag guard — chain self-invoke writes generation_cancelled.
+    // Also: stamp `metadata.quality.v2_chain_used = true` unconditionally so
+    // the 7-day soak (before Phase E v1 deletion) produces real evidence that
+    // the v2 chain is actually serving trips. Mirrors the v1 stamp in
+    // generate-itinerary/index.ts kill-switch branch. See soak-telemetry note.
     {
       const { data: cancelRow } = await supabase
         .from('trips')
@@ -109,7 +113,27 @@ export async function handleGenerateTripDayV2(
           { status: 200, headers: jsonHeaders },
         );
       }
+      // Soak-telemetry stamp (read-modify-write JSON merge — matches the
+      // pattern used elsewhere in this file for metadata writes; safe to
+      // race with Phase-6 freeze because we only set a single quality key).
+      try {
+        const priorMeta = (cancelRow?.metadata as any) || {};
+        const priorQuality = priorMeta.quality || {};
+        if (priorQuality.v2_chain_used !== true) {
+          await supabase
+            .from('trips')
+            .update({
+              metadata: { ...priorMeta, quality: { ...priorQuality, v2_chain_used: true } },
+            })
+            .eq('id', tripId);
+          console.log(`[v2] stamped metadata.quality.v2_chain_used=true tripId=${tripId}`);
+        }
+      } catch (e) {
+        // Telemetry-only; never block generation on stamp failure.
+        console.warn(`[v2] v2_chain_used stamp failed (non-fatal):`, (e as Error)?.message);
+      }
     }
+
 
     // ── 2. Day-scoped facts (existing helper) ──────────────────────────
     const dayFacts = await withStage(trace, 'compile_facts', { dayNumber, inputs: { stage: 'day' } }, async () =>
