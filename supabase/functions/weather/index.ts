@@ -346,13 +346,17 @@ async function fetchOpenMeteo(
 
 const seasonalPatterns: Record<string, Record<string, { high: number; low: number; condition: string }>> = {
   'europe': { winter: { high: 46, low: 36, condition: 'Cloudy' }, spring: { high: 61, low: 46, condition: 'Partly Cloudy' }, summer: { high: 79, low: 64, condition: 'Clear' }, fall: { high: 57, low: 45, condition: 'Cloudy' } },
+  'british_isles': { winter: { high: 44, low: 36, condition: 'Cloudy' }, spring: { high: 54, low: 42, condition: 'Partly Cloudy' }, summer: { high: 64, low: 52, condition: 'Partly Cloudy' }, fall: { high: 54, low: 42, condition: 'Cloudy' } },
   'tropical': { winter: { high: 86, low: 75, condition: 'Clear' }, spring: { high: 90, low: 79, condition: 'Partly Cloudy' }, summer: { high: 91, low: 81, condition: 'Rain' }, fall: { high: 88, low: 77, condition: 'Partly Cloudy' } },
   'mediterranean': { winter: { high: 57, low: 46, condition: 'Partly Cloudy' }, spring: { high: 68, low: 54, condition: 'Clear' }, summer: { high: 90, low: 72, condition: 'Clear' }, fall: { high: 72, low: 57, condition: 'Clear' } },
   'default': { winter: { high: 50, low: 36, condition: 'Cloudy' }, spring: { high: 64, low: 50, condition: 'Partly Cloudy' }, summer: { high: 82, low: 64, condition: 'Clear' }, fall: { high: 61, low: 46, condition: 'Partly Cloudy' } },
 };
 
 const regionMapping: Record<string, string> = {
-  'paris': 'europe', 'london': 'europe', 'berlin': 'europe', 'amsterdam': 'europe',
+  'paris': 'europe', 'berlin': 'europe', 'amsterdam': 'europe',
+  'london': 'british_isles', 'edinburgh': 'british_isles', 'glasgow': 'british_isles',
+  'manchester': 'british_isles', 'birmingham': 'british_isles', 'liverpool': 'british_isles',
+  'dublin': 'british_isles',
   'rome': 'mediterranean', 'barcelona': 'mediterranean', 'lisbon': 'mediterranean', 'athens': 'mediterranean',
   'dubai': 'tropical', 'singapore': 'tropical', 'bangkok': 'tropical', 'bali': 'tropical', 'miami': 'tropical',
   'los angeles': 'mediterranean',
