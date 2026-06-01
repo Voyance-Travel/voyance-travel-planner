@@ -1,83 +1,69 @@
-# Header Trip Total ≠ Payments Trip Total ($231 vs $219)
+## Goal
 
-## Root cause
+Stop showing the generic red "Your itinerary is missing activities / Regenerate itinerary" banner for trips that have a full plan but failed a soft integrity check (flight-anchor mismatch, orphan transit, missing meal coverage). Show an accurate, code-specific message instead. Reserve the generic banner + Regenerate CTA for the one case it's actually correct: the LLM returned an empty activities array.
 
-Both surfaces already share `composeDisplayedTripTotal` (per the
-`displayed-trip-total-single-source` rule), so they read the same snapshot.
-The drift is in the **dayNumbers filter passed to the composer**:
+## Where the banner lives
 
-- `EditorialItinerary.tsx` (header) — `dayNumbersForStrip = days.map(d => d.dayNumber)`. No `> 0` filter. If `days` includes a Day 0 entry (logistics/arrival day), its `byDay[0].totalCents` gets folded into `daysSubtotalCents`.
-- `PaymentsTab.tsx` — `useDisplayedTripTotal(tripId)` with no dayNumbers. Composer falls through to the default branch (`useDisplayedTripTotal.ts:70-72`) which explicitly skips `Number(k) > 0`, i.e. excludes Day 0.
-
-Because the displayed total is `max(snapshot, daysGroup + hotel + flight)`,
-header `daysGroup` silently includes the Day-0 logistics cost (already
-captured by the hotel/flight chips and the snapshot's day-0 row policy).
-Header clamps UP to that inflated chipSum; Payments uses the clean
-`>0` sum, so it stays at the snapshot total.
-
-Symptom: header `$231` (= snapshot `$219` + Day-0 `$12`), Payments `$219`.
-
-## Fix (frontend only, single surgical edit)
-
-`src/components/itinerary/EditorialItinerary.tsx` around line 4044:
+`src/components/itinerary/EditorialItinerary.tsx` lines 6238–6267. Today its only gate is:
 
 ```ts
-const dayNumbersForStrip = useMemo(
-  () => days.map(d => d.dayNumber).filter(n => n > 0),
-  [days],
-);
+itineraryStatus === 'failed' &&
+(generationFailureReason === 'empty_itinerary' ||
+ generationFailureReason === 'incomplete_itinerary')
 ```
 
-That makes the header's composer input match the PaymentsTab default
-branch exactly: both sum `byDay[k]` only for `k > 0`. Day-0 logistics
-remain represented through the hotel/flight chips (which the composer
-already adds via `effectiveHotelCents` + `effectiveFlightCents`), so the
-equation `Days + Hotel + Flight + Reserve = Trip Total` stays balanced
-and the "Matches itinerary" badge can latch.
+The same metadata that drives the gate also carries `metadata.integrity_contract.codes: string[]` (written by `applyIntegrityContractToFreezeStamp` in `supabase/functions/_shared/itinerary-integrity-contract.ts`, and surfaced as `integrityContract` at EditorialItinerary line 3127). We'll consume it here.
 
-## Defense-in-depth (same file, `useDisplayedTripTotal.ts`)
+## What to build
 
-Also harden `composeDisplayedTripTotal` so a future caller can't reintroduce
-the bug by passing a `dayNumbers` array that includes 0:
+### 1. Code → copy map (new small helper)
 
-```ts
-if (dayNumbers && dayNumbers.length > 0) {
-  for (const d of dayNumbers) {
-    if (d <= 0) continue;            // Day 0 is logistics — never in daysGroup
-    const b = breakdown.byDay[d];
-    if (b) daysSubtotalCents += b.totalCents;
-  }
-}
-```
+New file `src/lib/itinerary/integrityBannerCopy.ts`:
 
-This mirrors the existing default-branch `Number(k) > 0` guard and means
-both branches behave identically with respect to Day 0.
+- `integrityCodeMessage(code: string): { title: string; body: string } | null` covering at minimum:
+  - `FLIGHT_ANCHOR_COMMIT_MISMATCH` → "Flight arrival time couldn't be confirmed" / "Your schedule may be slightly off near arrival — double-check the first activity's start time."
+  - `FINAL_ORPHAN_TRANSIT` → "One transit connection needs adjustment" / "A taxi or transfer doesn't line up with the next stop. You can edit or remove it from the day."
+  - `MEAL_COVERAGE_MISSING` → "Some meals couldn't be scheduled" / "One or more days are missing a breakfast, lunch, or dinner slot."
+- `pickBannerVariant(opts)` that, given `itineraryStatus`, `generationFailureReason`, `integrityCodes`, and `meaningfulActivityCount`, returns one of:
+  - `{ kind: 'empty', ... }` — only when `generationFailureReason === 'empty_itinerary'` OR `meaningfulActivityCount === 0`. Generic copy + Regenerate CTA. (Today's behavior, preserved.)
+  - `{ kind: 'incomplete', ... }` — only when `generationFailureReason === 'incomplete_itinerary'` AND `meaningfulActivityCount === 0` (degenerate hotel-only / single-filler trip). Generic copy + Regenerate CTA.
+  - `{ kind: 'integrity', items: Array<{ code, title, body }> }` — when status is `partial` OR `failed` with non-empty `integrity_contract.codes` AND meaningful activities exist. Amber, NO Regenerate CTA (these are soft, fixable inline).
+  - `null` — nothing to show.
+
+Drop unknown codes silently; if all codes are unknown, return `null` (don't render an empty amber box).
+
+### 2. EditorialItinerary wiring
+
+In `EditorialItinerary.tsx` near the existing banner (≈6238):
+
+- Pull `integrityCodes = (parsedMetadata?.integrity_contract?.codes ?? []) as string[]` and `meaningfulCount = days.reduce((n, d) => n + (d.activities?.filter(isMeaningful).length ?? 0), 0)` (reuse the existing `classifyItineraryCompleteness` count if convenient — call it once and memoize).
+- Replace the existing JSX block with a single `bannerVariant = pickBannerVariant(...)` switch:
+  - `empty` / `incomplete` → render the current red destructive banner verbatim (copy unchanged, Regenerate CTA unchanged).
+  - `integrity` → render an amber (`bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200`) banner listing each item's title; expand to body on first item, additional items as a compact list. No Regenerate CTA. Keep dismissible behavior consistent with other amber notices (no persistence required).
+  - `null` → render nothing.
+
+No other call sites change. `BudgetTab.tsx`'s `isEmptyItineraryFailure` / `isIncompleteItineraryFailure` paths stay as-is — they already gate on `tripStatus === 'failed'` and don't surface integrity codes.
+
+### 3. Tests
+
+New `src/lib/itinerary/__tests__/integrityBannerCopy.test.ts`:
+
+- empty itinerary → `kind: 'empty'`
+- incomplete + 0 meaningful → `kind: 'incomplete'`
+- partial + `['FLIGHT_ANCHOR_COMMIT_MISMATCH']` + 12 activities → `kind: 'integrity'` with one item
+- partial + `['FINAL_ORPHAN_TRANSIT', 'MEAL_COVERAGE_MISSING']` → two items, ordered as passed
+- partial + unknown code only → `null`
+- ready + no codes → `null`
 
 ## Out of scope
 
-- No changes to `useTripFinancialSnapshot`, `useTripDayBreakdown`, or
-  `activity_costs` writers. The remaining $12 may still be a real
-  cost-inclusion mismatch worth investigating separately, but it must
-  NEVER again surface as a divergent number between two surfaces — that
-  was the user-visible bug.
-- No backend / migration changes.
-- No new memory entry needed; this is already covered by
-  `mem://constraints/finance/displayed-trip-total-single-source` and
-  `mem://constraints/finance/header-strip-mirrors-snapshot` — the fix
-  re-aligns the header to those existing contracts.
-
-## Verification
-
-1. Reload the affected trip — header Trip Total should drop from $231 to
-   $219 and match the Payments tab.
-2. "Matches itinerary" badge in Payments should turn green (no longer
-   "Reconciling…").
-3. Existing parity tests in `src/hooks/__tests__/useDisplayedTripTotal.parity.test.ts`
-   should still pass; add one fixture where `breakdown.byDay[0]` is
-   non-zero and both code paths return the same `displayedTotalCents`.
+- No backend / integrity-contract changes.
+- No changes to commit-gate / freeze-stamp logic.
+- No changes to BudgetTab or PaymentsTab.
+- No new dismiss-state persistence (not requested).
 
 ## Files touched
 
-- `src/components/itinerary/EditorialItinerary.tsx` (1-line filter on `dayNumbersForStrip`)
-- `src/hooks/useDisplayedTripTotal.ts` (`continue` guard in `composeDisplayedTripTotal`)
-- `src/hooks/__tests__/useDisplayedTripTotal.parity.test.ts` (new Day-0 parity fixture)
+- New: `src/lib/itinerary/integrityBannerCopy.ts`
+- New: `src/lib/itinerary/__tests__/integrityBannerCopy.test.ts`
+- Edit: `src/components/itinerary/EditorialItinerary.tsx` (banner block ~6238–6267 + tiny memo for codes/meaningfulCount above it)
