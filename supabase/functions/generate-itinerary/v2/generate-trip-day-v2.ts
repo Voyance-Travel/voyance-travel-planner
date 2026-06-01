@@ -176,12 +176,10 @@ export async function handleGenerateTripDayV2(
       const r = await callAI({
         systemPrompt: compiled.systemPrompt,
         userPrompt: compiled.userPrompt,
-        schema,
-        LOVABLE_API_KEY,
-        action: 'generate-trip-day-v2',
-        tripId,
-        userId,
+        apiKey: LOVABLE_API_KEY,
         dayNumber,
+        trace,
+        tracePurpose: 'generate-trip-day-v2',
       } as any);
       ctx.outputs = { success: r.success, activities: r.day?.activities?.length || 0 };
       return r;
