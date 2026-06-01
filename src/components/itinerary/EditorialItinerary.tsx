@@ -4042,7 +4042,13 @@ export function EditorialItinerary({
   // See mem://constraints/finance/displayed-trip-total-single-source +
   // mem://constraints/finance/header-strip-mirrors-snapshot.
   const dayNumbersForStrip = useMemo(
-    () => days.map(d => d.dayNumber),
+    // Filter out Day 0 — it's logistics (hotel/flight/transfers) already
+    // captured by the hotel/flight chips and excluded by the PaymentsTab
+    // default branch in `composeDisplayedTripTotal`. Without this filter the
+    // header's `daysGroup` silently double-counts Day-0 logistics, inflating
+    // `displayedTripTotal = max(snapshot, chipSum)` above the snapshot the
+    // PaymentsTab "Trip Total" shows ($231 vs $219 drift).
+    () => days.map(d => d.dayNumber).filter(n => n > 0),
     [days],
   );
   const displayedTotal = useMemo(
