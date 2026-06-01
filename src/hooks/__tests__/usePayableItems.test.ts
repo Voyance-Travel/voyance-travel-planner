@@ -80,6 +80,7 @@ describe('usePayableItems — Flights & Hotels reconciliation', () => {
         payments: [],
         activityCosts: [],
         paymentsLoaded: true,
+        includeFlight: true,
       }),
     );
 
