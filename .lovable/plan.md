@@ -1,44 +1,33 @@
-Do I know what the issue is? Yes.
+## Finding
 
-The current Day 1 failure is no longer the missing `trips.*` schema-column issue. The backend now gets past trip facts, profile loading, prompt compilation, and day schema compilation. It fails only when calling the AI service:
+The backend itself is healthy, and `LOVABLE_API_KEY` exists in the project secrets list. The deployed `generate-itinerary` function is still failing because its runtime environment is not receiving that secret:
 
 ```text
-[ai-call] AI gateway error (attempt 1): 401
-Invalid API key format. Key must start with 'sk_' prefix.
+AICallError: LOVABLE_API_KEY missing
+Initial chain attempt 3/3 returned 500
 ```
 
-That means the deployed `generate-itinerary` function is using an invalid/malformed managed `LOVABLE_API_KEY`. Because Day 1 requires the AI call, every itinerary now dies at the same point and surfaces as `Initial chain failed (status=500)`.
+So this is no longer a schema issue or a Day 4 timing issue. It is an edge-function runtime/secret propagation problem.
 
-Plan:
+## Plan
 
-1. Rotate the managed Lovable AI gateway key
-   - Use the dedicated Lovable AI key rotation tool, not the generic secrets editor.
-   - This should replace the malformed key with a valid server-side key.
+1. **Re-provision the managed AI key**
+   - Run the dedicated Lovable AI key creation/repair tool so the managed `LOVABLE_API_KEY` is definitely attached to the project runtime, not just visible in the secrets list.
 
-2. Redeploy `generate-itinerary`
-   - Ensure the edge function picks up the refreshed backend environment.
-   - No database migration is needed.
+2. **Redeploy `generate-itinerary` immediately**
+   - Force a fresh deployment so the function runtime receives the repaired secret environment.
 
-3. Add a fail-fast guard around AI calls
-   - In `generate-itinerary/pipeline/ai-call.ts`, detect missing or obviously malformed AI gateway keys before attempting generation.
-   - Return/log a specific configuration error instead of retrying and collapsing into the generic `AI generation failed` / `Initial chain failed` toaster.
-   - This prevents future debugging loops where infrastructure auth problems look like itinerary logic bugs.
+3. **Verify with function logs, not assumptions**
+   - Re-check `generate-itinerary` logs for the exact error string `LOVABLE_API_KEY missing`.
+   - If gone, run a direct function call for the chain entrypoint and confirm it passes the AI-call stage.
 
-4. Keep the earlier schema fixes intact
-   - Do not add database columns just to satisfy stale code.
-   - Leave `dietary_restrictions`, `interests`, and `destination_iata` sourced from metadata/profile/flight-hotel fallbacks as already patched.
+4. **Only if the secret still does not propagate**
+   - Escalate to a runtime fallback: update the AI-call guard to also read the managed key through the standard Deno runtime secret name variants if this project’s deployment environment is using a different injection alias.
+   - Redeploy again and verify logs.
 
-5. Verify against the failing path
-   - Trigger or directly call the deployed `generate-itinerary` Day 1 path.
-   - Confirm logs no longer contain `Invalid API key format`.
-   - Confirm execution proceeds past `callAI` into validation/repair stages, or if it fails later, capture the new downstream error separately.
+## Not doing
 
-Out of scope for this recovery:
-- The Day 4 airport-transfer cosmetic timing window.
-- Any new database schema changes.
-- Frontend styling or toaster copy beyond clearer backend error propagation if needed.
-
-<presentation-actions>
-  <presentation-open-history>View History</presentation-open-history>
-  <presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
-</presentation-actions>
+- No new schema changes.
+- No Day 4 timing changes.
+- No frontend styling or unrelated itinerary logic changes.
+- No guessing; each step is validated against deployed function logs.
