@@ -1040,11 +1040,25 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       // the AI's free-form connector kept its raw 18km walk estimate and
       // §3b injected a *second* locked transfer card alongside it.
       const TRANSIT_VERB_RE = /^\s*(walk|stroll|walking|taxi|cab|uber|lyft|rideshare|ride|metro|train|bus|tram|shuttle|drive|driving|transit|transfer|travel)\b.*\bto\b/i;
+      // Titles that look like a transit verb but resolve to a non-hotel POI —
+      // never reclassify these as airport transfers.
+      const NON_HOTEL_POI_RE = /\b(tour|museum|gallery|landmark|park|garden|market|cathedral|church|temple|castle|palace|monument|square|bridge|beach|viewpoint|old town|city centre|city center|downtown|plaza|piazza)\b/i;
       const hotelNeedle = (hotelName || '').toLowerCase().trim();
       const matchesHotelDestination = (title: string): boolean => {
         const t = title.toLowerCase();
-        if (/\bto\s+(?:the\s+|your\s+)?(?:hotel|inn|resort|hostel|residence|apartments?|lodging)\b/.test(t)) return true;
+        if (/\bto\s+(?:the\s+|your\s+)?(?:hotel|inn|resort|hostel|residence|apartments?|lodging|riad|ryokan|guesthouse|b&b|airbnb)\b/.test(t)) return true;
         if (hotelNeedle && hotelNeedle.length >= 4 && t.includes(hotelNeedle)) return true;
+        // Partial hotel match: any meaningful token of hotelName ≥4 chars
+        // (e.g. "Balmoral" matches "The Balmoral, a Rocco Forte hotel" even
+        // when the LLM only emitted the short name).
+        if (hotelNeedle) {
+          const STOP = new Set(['hotel', 'resort', 'rocco', 'forte', 'grand', 'royal', 'palace', 'plaza', 'house']);
+          const tokens = hotelNeedle
+            .replace(/^(the|le|la|el|hotel|inn|resort)\s+/i, '')
+            .split(/[\s,.\-&]+/)
+            .filter((w) => w.length >= 4 && !STOP.has(w));
+          if (tokens.length && tokens.some((w) => t.includes(w))) return true;
+        }
         return false;
       };
       const isAirportTransferCard = (a: any, idx: number): boolean => {
@@ -1058,10 +1072,18 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
             (tl.includes('transfer to') || tl.includes('travel to') || tl.includes('airport pickup'))) {
           return true;
         }
-        // Free-form transit-to-hotel card in the first 3 slots
-        if (idx < 3 &&
-            (cat === 'transport' || cat === 'logistics' || cat === 'transit' || cat === 'transfer') &&
-            TRANSIT_VERB_RE.test(t) && matchesHotelDestination(t)) {
+        const isTransportish =
+          cat === 'transport' || cat === 'logistics' || cat === 'transit' || cat === 'transfer';
+        // Free-form transit-to-hotel card in the first 3 slots: hotel-name match.
+        if (idx < 3 && isTransportish && TRANSIT_VERB_RE.test(t) && matchesHotelDestination(t)) {
+          return true;
+        }
+        // Looser fallback: any transport-ish transit-verb card in the first 3
+        // slots that doesn't look like a POI walk. On Day 1 arrival there is
+        // exactly one airport→lodging transfer; anything else in those slots
+        // that fits this shape is almost certainly it (incl. LLM "Walk to
+        // Balmoral" with a hotel name we couldn't substring-match).
+        if (idx < 3 && isTransportish && TRANSIT_VERB_RE.test(t) && !NON_HOTEL_POI_RE.test(t)) {
           return true;
         }
         return false;
