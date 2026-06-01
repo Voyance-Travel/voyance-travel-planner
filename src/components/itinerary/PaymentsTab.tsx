@@ -570,7 +570,7 @@ export function PaymentsTab({
   const driftLastLogRef = useRef<Map<string, number>>(new Map());
   if (snapshotReady && estimatedTotal > 0) {
     const bucketDrift = Math.abs(bucketSumCents - estimatedTotal);
-    const payableDrift = Math.abs(payableTotalCents - financialSnapshot.tripTotalCents);
+    const payableDrift = Math.abs((payableTotalCents + reserveCents) - financialSnapshot.tripTotalCents);
     const paidDrift = Math.abs((totals.paid || 0) - financialSnapshot.paidCents);
     let path: 'A' | 'B' | 'C' | 'none' = 'none';
     // Bucket sum MUST equal headline within $1 — reserve lives inside miscItems
@@ -599,6 +599,9 @@ export function PaymentsTab({
           flightCents: financialSnapshot.effectiveFlightCents,
           bucketSum: bucketSumCents,
           payableTotal: payableTotalCents,
+          payablePlusReserve: payableTotalCents + reserveCents,
+          payableItemIds: payableItems.map(i => i.id).slice(0, 20),
+          activityCostRowIds: (activityCosts || []).map((r: any) => r.id || r.activity_id).slice(0, 20),
           tripPaymentsPaidSum: totals.paid,
           snapshotPaidCents: financialSnapshot.paidCents,
           reserveCents,
@@ -1291,6 +1294,8 @@ export function PaymentsTab({
               if (displayedTotal.displayedTotalCents <= 0) return null;
               const matchesHeader =
                 Math.abs(estimatedTotal - displayedTotal.displayedTotalCents) <= 100 &&
+                Math.abs(bucketSumCents - estimatedTotal) <= 100 &&
+                Math.abs((payableTotalCents + reserveCents) - financialSnapshot.tripTotalCents) <= 100 &&
                 !displayedTotal.snapshotUnderChips &&
                 !displayedTotal.snapshotOverChips;
               return (
