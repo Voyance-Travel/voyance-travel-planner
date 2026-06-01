@@ -1,47 +1,42 @@
-# Fix: 2h 59m "Walk to Hotel" survives airport-transfer repair
+## Problem
 
-## Root cause (confirmed)
+`OmittedMustDosBanner` reads `trips.metadata.omitted_must_dos`, but this field is only ever written by the upstream **Trip Planner LLM** in `action-generate-trip.ts` (line 1176). The per-day generation chain (`action-generate-trip-day.ts` Phase-6 freeze) computes `mustDoCoverage.missing` and stamps `metadata.must_do_repair_attempted.stillMissing`, plus pushes `MUST_DO_UNCOVERED` / `MUST_DO_INJECTION_FAILED` into generation health — but it never merges those into `omitted_must_dos`. Result: when the Trip Planner assigned "whisky tasting" to a day but the day-LLM + repair + injection all failed to place it, the banner stays empty.
 
-In `supabase/functions/generate-itinerary/pipeline/repair-day.ts` §3b (lines ~1036–1245):
+## Fix
 
-- `isAirportTransferCard(a, idx)` only treats a free-form transit card in the first 3 slots as the airport transfer when **both** `TRANSIT_VERB_RE` matches **and** `matchesHotelDestination(title)` returns true.
-- `matchesHotelDestination` requires either a generic word (`hotel|inn|resort|…`) after "to", or the full lowercased `hotelName` to appear as a substring (≥4 chars).
-- When the LLM emits `"Walk to Balmoral"` but the stored hotel is `"The Balmoral, a Rocco Forte hotel"`, the substring check fails. `existingTransferIdx === -1`, so the **INJECT** branch runs.
-- The INJECT branch (1218–1245) inserts a fresh locked transfer card at index 1 but — unlike the RECONCILE branch — has **no dedupe sweep**. The original AI walk card stays in the day with its 2h 59m duration. Both cards persist; the user sees the walk first.
+In `action-generate-trip-day.ts` Phase-6 freeze (the "Gate ok → freeze" branch around line 4592, and a parallel write in the "GATE BLOCKED" branch at line 4581 so partial trips also surface honesty), merge post-generation failures into `finalMeta.omitted_must_dos`:
 
-## Fix (frontend-of-pipeline / repair only — no behavior change for healthy days)
+1. Build a `postGenOmitted: OmittedMustDo[]` from:
+   - `mustDoCoverage.missing` (titles the coverage matcher couldn't find)
+   - `mustDoInjection.unscheduled` (titles the injector couldn't place)
+   - Reason mapping: injector failure with stillMissing → `no_compatible_slot`; coverage-only miss → `low_priority_after_anchors`; default → `other`.
+   - `detail`: short string (e.g. `"Day generator and repair couldn't place this — try extending the trip or swapping a lower-priority stop."`).
 
-Two surgical changes, both inside §3b in `repair-day.ts`:
+2. Merge with the existing `latestMeta.omitted_must_dos` (from Trip Planner) — dedupe by `mustDoTitle.toLowerCase()`, Trip Planner entries win (they have richer reason from the planner).
 
-1. **Broaden detection.** Replace the strict `matchesHotelDestination` gate with a looser "first-3-slots transit card sitting before any non-logistics activity" heuristic:
-   - Still require `idx < 3` and a transport-ish category + `TRANSIT_VERB_RE` title.
-   - Drop the hotel-name substring requirement. Day-1 arrival has exactly one airport→lodging transfer; any unlocked transit card in those slots that isn't already classified as something else (sightseeing, dining, etc.) is it.
-   - Keep an explicit **exclusion**: skip cards whose title resolves to a non-hotel POI (already covered by category gate, but add a guard for `tour|museum|gallery|landmark` in title to be safe).
-   - Keep the existing generic-word and full-hotel-name matches as fast paths so logs still attribute correctly.
+3. Write the merged array into `finalMeta.omitted_must_dos` before the `supabase.from('trips').update(...)` call. Do the same write in the GATE BLOCKED branch so users see honesty on partial trips too.
 
-2. **Symmetric dedupe in INJECT branch.** Mirror lines 1195–1210: after inserting the fresh transfer card at index 1, sweep the first ~5 slots and drop any other unlocked transit card whose title matches `TRANSIT_VERB_RE` (including the bogus walk). Skip locked rows except those already tagged `anchorSource === 'airport-transfer'`.
+4. Add a trace log: `console.log('[generate-trip-day] omitted_must_dos merged: planner=X postGen=Y final=Z')`.
 
-Add a `[Repair §3b]` log line per dropped duplicate so we can verify in edge-function logs.
+## Scope
 
-## Test
+**Edit:**
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — Phase-6 both branches (gate-blocked ~4581 and freeze ~4592). ~25 lines added.
 
-Add `supabase/functions/generate-itinerary/__tests__/airport-transfer-walk-dedupe.test.ts` covering:
-- LLM emits `"Walk to Balmoral"` (partial hotel name) + repair runs → reconciled, no second card.
-- LLM emits `"Walk to The Old Town"` (non-hotel POI) + arrival → INJECT runs, POI walk untouched.
-- LLM emits both `"Walk to Hotel"` and a separate dinner → reconcile path dedupes correctly (regression guard for the existing case).
-- Idempotent on second run.
+**Add (tests):**
+- `supabase/functions/_shared/__tests__/omitted-must-dos-merge.test.ts` — pure merge helper unit tests (planner-only / postgen-only / both with dedupe / empty cases).
 
-## Files
-
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — modify `matchesHotelDestination` / `isAirportTransferCard` and add dedupe to the INJECT branch (~30 lines).
-- `supabase/functions/generate-itinerary/__tests__/airport-transfer-walk-dedupe.test.ts` — new test file.
+**Extract:**
+- Pull the merge logic into `supabase/functions/_shared/omitted-must-dos-merge.ts` so it's testable and reusable (action-generate-trip.ts can also call it later if needed).
 
 ## Out of scope
 
-- `getAirportTransferMinutes()` lookup (works correctly).
-- Cascade clamp / save-time nets (already wired).
-- Bug 2 in the user's message is not addressed here — confirm before expanding scope.
+- Trip Planner LLM prompt changes (it already writes omitted_must_dos correctly).
+- Making must-do injection more aggressive — that's a separate "guarantee mechanism" effort. This plan only fixes the **honesty surface** so users see what failed instead of silent drop.
+- Banner UI / copy changes (already wired correctly).
+- Backfill for already-generated trips — only applies to new generations + regenerations.
 
-## Open question
+## Verification
 
-The user described "Bug 1" only. Should I also plan Bug 2 in the same pass, or ship this fix first? (No "Bug 2" details were included in this message.)
+- New unit tests pass.
+- Manually inspect `metadata.omitted_must_dos` shape post-generation on a trip with a known unfit must-do; confirm banner renders.
