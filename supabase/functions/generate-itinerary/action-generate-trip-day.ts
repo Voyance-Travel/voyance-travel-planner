@@ -8,6 +8,7 @@
  */
 
 import { corsHeaders } from './action-types.ts';
+import { buildPostGenOmitted, mergeOmittedMustDos, type OmittedMustDo } from '../_shared/omitted-must-dos-merge.ts';
 import { parseTimeToMinutes, enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
 import { GenerationTimer } from './generation-timer.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
@@ -4575,6 +4576,22 @@ async function _handleGenerateTripDayInner(
           label: 'generate-trip-day:phase-6',
         });
 
+        // Compute post-gen omitted-must-dos and merge with Trip Planner entries
+        // so the OmittedMustDosBanner surfaces honesty in BOTH branches below.
+        const postGenOmitted: OmittedMustDo[] = buildPostGenOmitted({
+          coverageMissing: mustDoCoverage?.missing || [],
+          injectionUnscheduled: mustDoInjection?.unscheduled || [],
+        });
+        const plannerOmitted = Array.isArray((latestMeta as any)?.omitted_must_dos)
+          ? ((latestMeta as any).omitted_must_dos as OmittedMustDo[])
+          : [];
+        const mergedOmitted = mergeOmittedMustDos(plannerOmitted, postGenOmitted);
+        if (postGenOmitted.length > 0 || plannerOmitted.length > 0) {
+          console.log(
+            `[generate-trip-day] omitted_must_dos merged: planner=${plannerOmitted.length} postGen=${postGenOmitted.length} final=${mergedOmitted.length} trip=${tripId}`,
+          );
+        }
+
         if (finalGateResult.status !== 'ready' && finalGateResult.status !== 'generated') {
           // Gate blocked freeze. Persist partial + integrity_contract codes
           // so the UI banner explains why; do NOT stamp frozen/fully_persisted.
@@ -4583,6 +4600,10 @@ async function _handleGenerateTripDayInner(
             ...finalGateResult.metadataPatch,
           };
           blockedMeta.quality = { ...(blockedMeta.quality || {}), final_gate_trace: { at: new Date().toISOString(), status: finalGateResult.status, codes: finalGateResult.verdict.codes, site: 'phase-6' } };
+          // Surface omitted-must-dos honesty even on partial trips.
+          if (mergedOmitted.length > 0) {
+            blockedMeta.omitted_must_dos = mergedOmitted;
+          }
           await supabase
             .from('trips')
             .update({ itinerary_status: 'partial' as any, metadata: blockedMeta, updated_at: new Date().toISOString() })
@@ -4608,6 +4629,11 @@ async function _handleGenerateTripDayInner(
               injected: mustDoInjection.injected,
               stillMissing: mustDoCoverage?.missing || [],
             };
+          }
+          // Surface omitted-must-dos honesty so OmittedMustDosBanner reflects
+          // BOTH Trip Planner pre-omission AND post-gen failures.
+          if (mergedOmitted.length > 0) {
+            finalMeta.omitted_must_dos = mergedOmitted;
           }
           await supabase
             .from('trips')
