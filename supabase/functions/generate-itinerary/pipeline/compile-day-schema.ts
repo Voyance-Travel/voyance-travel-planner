@@ -808,6 +808,7 @@ REALISTIC STRUCTURE:
 ⚠️ All post-checkout activities must be NEAR the hotel or en route to departure.
 ⚠️ Final activity should be LOW-STAKES (can be skipped if running late).
 ⚠️ CHECKOUT must happen BEFORE departure transfer. This is auto-enforced by post-processing.
+⚠️ HARD: Every non-checkout, non-bookend activity scheduled BEFORE checkout MUST have endTime ≤ ${checkout} − 15min (travel back to the hotel). Overlapping checkout is a defect and will be auto-trimmed.
 
 NOTE: Add your flight details to unlock more of the day if departing later.`;
 
