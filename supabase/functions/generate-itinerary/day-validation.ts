@@ -840,7 +840,22 @@ export function enforceRequiredMealsFinalGuard(
   currency: string = 'USD',
   dayMode: string = 'unknown',
   fallbackVenues: Array<{ name: string; address: string; mealType: string }> = [],
-  options?: { earliestTimeMins?: number; latestTimeMins?: number; blockedRestaurants?: string[] },
+  options?: {
+    earliestTimeMins?: number;
+    latestTimeMins?: number;
+    blockedRestaurants?: string[];
+    /**
+     * Departure clock (HH:MM 24h). When set on a late-departure day
+     * (≥ 18:00), the dinner slot is shifted earlier so it ends before
+     * airport transfer instead of being silently skipped.
+     * See mem://constraints/itinerary/departure-day-no-rushed-meal
+     */
+    departureTime24?: string;
+    /** Airport transfer minutes (default 45). */
+    airportTransferMinutes?: number;
+    /** Flight pre-departure buffer in minutes (default 180). */
+    flightBufferMinutes?: number;
+  },
 ): MealGuardResult {
   if (requiredMeals.length === 0) {
     return { activities, injectedMeals: [], alreadyCompliant: true };
