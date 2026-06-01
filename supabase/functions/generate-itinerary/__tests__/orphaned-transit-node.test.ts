@@ -53,6 +53,9 @@ const baseInput = (day: any) => ({
   day,
   destination: 'Lisbon, Portugal',
   budgetTier: 'standard',
+  requiredMeals: [] as any[],
+  isFirstDay: false,
+  isLastDay: false,
 });
 
 Deno.test('flags orphan transit whose target is not scheduled', () => {
