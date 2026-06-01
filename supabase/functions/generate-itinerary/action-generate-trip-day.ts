@@ -23,6 +23,7 @@ import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
 import { stripBookendsForPrompt, isCrossDayPromptNoise } from '../_shared/strip-bookends-for-prompt.ts';
 import { stampArrivalAnchorTruth } from '../_shared/stamp-arrival-anchor-truth.ts';
+import { stampDepartureAnchorTruth } from '../_shared/stamp-departure-anchor-truth.ts';
 import { startTrace, noopTrace, type Trace } from '../_shared/trace-recorder.ts';
 import { computeMatchVerdict } from '../_shared/match-verdict.ts';
 
