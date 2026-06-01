@@ -1264,7 +1264,35 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         activities.splice(1, 0, transferCard);
         if (transferCard.id) lockedIds.add(transferCard.id);
         repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_airport_transfer' });
+
+        // Symmetric dedupe (mirrors RECONCILE branch lines ~1196-1210):
+        // drop any *other* unlocked transit-verb card in the first 5 slots so
+        // a bogus AI "Walk to Hotel — 2h 59m" can't coexist with the injected
+        // authoritative transfer.
+        for (let j = activities.length - 1; j >= 0; j--) {
+          if (j === 1) continue;
+          const other = activities[j];
+          if (!other || other === transferCard) continue;
+          if (j > 4) continue;
+          if (lockedIds.has(other.id) && other.anchorSource !== 'airport-transfer') continue;
+          const otherTitle = String(other.title || '');
+          const otherCat = String(other.category || '').toLowerCase();
+          const isTransportish =
+            otherCat === 'transport' || otherCat === 'logistics' ||
+            otherCat === 'transit' || otherCat === 'transfer';
+          if (!isTransportish) continue;
+          if (!TRANSIT_VERB_RE.test(otherTitle)) continue;
+          if (NON_HOTEL_POI_RE.test(otherTitle)) continue;
+          activities.splice(j, 1);
+          repairs.push({
+            code: FAILURE_CODES.MISSING_SLOT,
+            action: 'deduped_extra_airport_transfer_inject',
+            before: `${otherTitle} @ ${other.startTime}-${other.endTime}`,
+          });
+          console.log(`[Repair §3b] Deduped stray transit card alongside injected airport transfer: "${otherTitle}" (${other.startTime}-${other.endTime})`);
+        }
       }
+
 
       // ── Collision sweep: nudge any non-locked, non-anchor activity that
       // would collide with the inbound block to start ≥ transferEnd + 15m.
