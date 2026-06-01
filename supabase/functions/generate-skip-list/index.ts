@@ -16,6 +16,10 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await parseAuth(req);
+  if (auth instanceof Response) return auth;
+
+
   try {
     const { destination } = await req.json();
     if (!destination) {
