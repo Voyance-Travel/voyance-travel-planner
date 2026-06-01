@@ -54,6 +54,7 @@ const baseInput = (day: any) => ({
   destination: 'Lisbon, Portugal',
   budgetTier: 'standard',
   requiredMeals: [] as any[],
+  previousDays: [] as any[],
   isFirstDay: false,
   isLastDay: false,
 });
