@@ -355,15 +355,15 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       );
     }
 
-    // is_paid mirror — count rows whose activity is still live and not
-    // already covered by a trip_payments paid row.
-    for (const row of costs || []) {
-      if (!row.is_paid) continue;
-      if (!shouldCountRow(row, includeHotel, includeFlight)) continue;
-      if (row.activity_id && paidActivityIds.has(stripDaySuffix(String(row.activity_id)))) continue;
-      const rowTotal = (row.cost_per_person_usd || 0) * (row.num_travelers || 1);
-      const paidUsd = row.paid_amount_usd != null ? row.paid_amount_usd : rowTotal;
-      paidTotal += Math.round(paidUsd * 100);
+    // is_paid mirror — count only rows that survived the canonical resolver,
+    // so paid totals cannot include orphan cost rows hidden from line items.
+    for (const row of canonical.rows) {
+      if (!row.isPaid) continue;
+      if (row.effectiveActivityId && paidActivityIds.has(stripDaySuffix(String(row.effectiveActivityId)))) continue;
+      const paidCents = row.paidAmountUsd != null
+        ? Math.round(row.paidAmountUsd * 100)
+        : row.cents;
+      paidTotal += paidCents;
     }
 
     // Manual hotel/flight/other fold is now handled inside the resolver.
