@@ -198,6 +198,7 @@ export function applyValidationGate(
           );
         }
         break;
+      }
       case FAILURE_CODES.SUSPICIOUS_DUPLICATE_PRICE: {
         // Final safety net mirroring repair-day §10d. The LLM duplicated a
         // price token across adjacent same-category cards; blank cost on the
