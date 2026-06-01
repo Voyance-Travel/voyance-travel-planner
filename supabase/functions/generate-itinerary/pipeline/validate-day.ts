@@ -161,6 +161,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   if (isLastDay) {
     checkLogisticsSequence(activities, returnDepartureTime24, results);
     checkDepartureChronology(activities, isLastDay, results);
+    checkCheckoutOverlap(activities, results);
   }
 
   // --- DUPLICATE_CONCEPT (trip-wide) ---
@@ -694,6 +695,70 @@ function checkDepartureChronology(activities: StrictActivityMinimal[], isLastDay
       });
     }
   }
+}
+
+/**
+ * Checkout backward-anchor (last day only).
+ *
+ * Every non-locked, non-bookend, non-checkout activity scheduled BEFORE
+ * checkout MUST have endTime ≤ checkoutStart − 15min. Mirrors the deterministic
+ * Executioner repair (`enforceCheckoutAnchor`) — emits warning only so
+ * legacy trips surface via the read-time auditor without forcing regen.
+ * See mem://constraints/itinerary/checkout-backward-anchor.
+ */
+const CHECKOUT_TRAVEL_BUFFER_MIN = 15;
+function checkCheckoutOverlap(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  if (!Array.isArray(activities) || activities.length < 2) return;
+
+  let checkoutIdx = -1;
+  let checkoutStart = -1;
+  for (let i = 0; i < activities.length; i++) {
+    const a: any = activities[i];
+    const t = String(a?.title || a?.name || '').toLowerCase();
+    const cat = String(a?.category || '').toLowerCase();
+    const sub = String(a?.subcategory || a?.sub_category || '').toLowerCase();
+    const isCheckout =
+      sub === 'checkout' || sub === 'hotel_checkout' ||
+      ((cat === 'accommodation' || cat === 'stay' || cat === 'hotel' || cat === 'lodging') &&
+        /\bcheck[\s-]?out\b/.test(t));
+    if (!isCheckout) continue;
+    const start = parseTime(a?.startTime || '');
+    if (start == null) continue;
+    checkoutIdx = i;
+    checkoutStart = start;
+    break;
+  }
+  if (checkoutIdx === -1) return;
+
+  const cutoff = checkoutStart - CHECKOUT_TRAVEL_BUFFER_MIN;
+  for (let i = 0; i < activities.length; i++) {
+    if (i === checkoutIdx) continue;
+    const a: any = activities[i];
+    const src = String(a?.source || '').toLowerCase();
+    if (src.startsWith('bookend-') || src === 'late_nightlife_bookend') continue;
+    const tags = Array.isArray(a?.tags) ? a.tags.map((x: any) => String(x).toLowerCase()) : [];
+    if (tags.some((t: string) => t.startsWith('bookend-') || t === 'late_nightlife_bookend')) continue;
+
+    const s = parseTime(a?.startTime || '');
+    const e = parseTime(a?.endTime || '');
+    if (s == null || e == null) continue;
+    if (s >= checkoutStart) continue; // post-checkout window, fine
+    if (e <= cutoff) continue;
+
+    results.push({
+      code: FAILURE_CODES.CHECKOUT_OVERLAP,
+      severity: 'warning',
+      message: `Activity "${a?.title || a?.name}" ends at ${a?.endTime} — must end by ${formatHM(cutoff)} (15min buffer before ${a?.startTime ?? ''} → ${formatHM(checkoutStart)} checkout)`,
+      activityIndex: i,
+      field: 'endTime',
+      autoRepairable: true,
+    });
+  }
+}
+
+function formatHM(min: number): string {
+  const m = ((min % (24 * 60)) + 24 * 60) % (24 * 60);
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
 function checkLogisticsSequence(activities: StrictActivityMinimal[], depTime24: string | undefined, results: ValidationResult[]): void {

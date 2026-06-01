@@ -621,6 +621,7 @@ DEPARTURE DAY ACTIVITIES: 1 maximum (near hotel only)
 ⚠️ DO NOT schedule activities across the city.
 ⚠️ DO NOT plan activities after ${latestSightseeing}.
 ⚠️ CHECKOUT (step 2) MUST have an earlier startTime than TRANSFER (step 4). This is auto-enforced by post-processing.
+⚠️ HARD: Every non-checkout, non-bookend activity scheduled BEFORE checkout MUST have endTime ≤ ${checkoutStart} − 15min (travel back to the hotel). Overlapping checkout is a defect and will be auto-trimmed.
 THE TRAVELER IS LEAVING. Make it a gentle goodbye, not a marathon.`;
 
         } else if (isAfternoonFlight) {
@@ -676,6 +677,7 @@ DEPARTURE DAY ACTIVITIES: 1-2 maximum (morning only, near hotel)
 ⚠️ NO activities scheduled after ${latestSightseeing}.
 ⚠️ Stay near hotel. Do not go across the city.
 ⚠️ CHECKOUT (step 4) MUST have an earlier startTime than TRANSFER (step 5). This is auto-enforced by post-processing.
+⚠️ HARD: Every non-checkout, non-bookend activity scheduled BEFORE checkout MUST have endTime ≤ ${checkoutStart} − 15min (travel back to the hotel). Overlapping checkout is a defect and will be auto-trimmed.
 THE TRAVELER IS LEAVING. Make it relaxed.`;
 
         } else {
@@ -742,6 +744,7 @@ DEPARTURE DAY ACTIVITIES: 2-3 maximum, but CONDENSED
 ⚠️ Final activity should be LOW-STAKES (can be skipped if running late).
 ⚠️ No reservations that can't be cancelled.
 ⚠️ CHECKOUT must happen BEFORE luggage collection/transfer. This is auto-enforced by post-processing.
+⚠️ HARD: Every non-checkout, non-bookend activity scheduled BEFORE checkout MUST have endTime ≤ ${checkoutTime} − 15min (travel back to the hotel). Overlapping checkout is a defect and will be auto-trimmed.
 THE TRAVELER IS LEAVING. A gentle goodbye, not a marathon.`;
         }
 
@@ -805,6 +808,7 @@ REALISTIC STRUCTURE:
 ⚠️ All post-checkout activities must be NEAR the hotel or en route to departure.
 ⚠️ Final activity should be LOW-STAKES (can be skipped if running late).
 ⚠️ CHECKOUT must happen BEFORE departure transfer. This is auto-enforced by post-processing.
+⚠️ HARD: Every non-checkout, non-bookend activity scheduled BEFORE checkout MUST have endTime ≤ ${checkout} − 15min (travel back to the hotel). Overlapping checkout is a defect and will be auto-trimmed.
 
 NOTE: Add your flight details to unlock more of the day if departing later.`;
 
