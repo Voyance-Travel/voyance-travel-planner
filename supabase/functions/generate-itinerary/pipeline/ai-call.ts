@@ -28,6 +28,9 @@ export interface AICallInput {
 export interface AICallResult {
   /** The full parsed response from the AI gateway */
   data: any;
+  /** Convenience parse for v2 callers that expect a day payload directly */
+  success?: boolean;
+  day?: any;
   /** Token usage from the response */
   usage?: { prompt_tokens?: number; completion_tokens?: number };
   /** Model that actually served the response */
@@ -259,6 +262,21 @@ export async function callAI(input: AICallInput): Promise<AICallResult> {
     const message = data.choices?.[0]?.message;
     const toolCall = message?.tool_calls?.[0];
     const responseSnapshot = toolCall?.function?.arguments ?? message?.content ?? JSON.stringify(data).slice(0, 50_000);
+    let parsedDay: any = undefined;
+    if (toolCall?.function?.arguments) {
+      try {
+        parsedDay = JSON.parse(toolCall.function.arguments);
+      } catch (parseErr) {
+        console.warn(`[ai-call] Day ${dayNumber}: tool_call arguments were not parseable for convenience payload:`, (parseErr as Error)?.message);
+      }
+    } else if (typeof message?.content === 'string' && message.content.trim()) {
+      try {
+        const cleaned = message.content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        parsedDay = JSON.parse(cleaned);
+      } catch (parseErr) {
+        console.warn(`[ai-call] Day ${dayNumber}: content was not parseable for convenience payload:`, (parseErr as Error)?.message);
+      }
+    }
     if (trace) {
       trace.llm({
         dayNumber, purpose: tracePurpose ?? 'day-generation',
@@ -274,6 +292,8 @@ export async function callAI(input: AICallInput): Promise<AICallResult> {
     console.log(`[ai-call] ✓ Day ${dayNumber}: model=${data.model || model}, tokens=${usage.prompt_tokens || 0}+${usage.completion_tokens || 0}, attempt=${attempt}`);
     return {
       data,
+      success: !!parsedDay,
+      day: parsedDay,
       usage,
       model: data.model || model,
     };
