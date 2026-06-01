@@ -1,70 +1,84 @@
+## What the issue is
 
-## Real cause (from edge function logs)
+The UI error is misleading. The launcher is not timing out because it is slow; Day 1 is crashing in the backend, then the launcher watchdog reports it as a timeout.
 
-The "launcher timed out" toast is a downstream symptom. The actual error in every Day 1 attempt is:
+Current log root cause:
 
+```text
+TypeError: validationResults is not iterable
+at repairDay (.../pipeline/repair-day.ts)
+at handleGenerateTripDayV2 (.../v2/generate-trip-day-v2.ts)
 ```
-[v2] generate-trip-day fatal: TypeError: Cannot read properties of undefined (reading 'map')
-    at repairDay (pipeline/repair-day.ts:1029:46)   ← deployed line offset
-    at v2/generate-trip-day-v2.ts:213
-```
 
-That maps to source line 535 of `repair-day.ts`:
+## Why this keeps happening
+
+The project recently switched itinerary generation to the new `v2` chain. That wrapper is calling older pipeline helpers (`repairDay`, validation, enrichment, etc.) but did not pass the full input contract those helpers require.
+
+The previous fix handled one missing v2 field: `lockedActivities`.
+
+The next crash is the same class of bug: `repairDay` requires `validationResults: ValidationResult[]`, but `v2/generate-trip-day-v2.ts` calls `repairDay()` before running `validateDay()` and passes no `validationResults`. So `repairDay` later does:
 
 ```ts
-const lockedIds = new Set(lockedActivities.map(l => l.id));
+for (const vr of validationResults)
 ```
 
-The v2 entrypoint `v2/generate-trip-day-v2.ts` calls `repairDay({...})` (around line 196) **without** passing `lockedActivities`, `restaurantPool`, `usedRestaurants`, `hotelName`, `hasHotel`, etc. — so the destructure leaves those `undefined` and `.map()` throws on the very first day. Day 1 never returns → the 90s watchdog fires → the frontend shows "Generation could not start (launcher timed out)". This is the only failure mode in the logs for trip `1b5bba8d-…`.
+…but `validationResults` is `undefined`, causing the fatal crash.
 
-## Fix (minimal, two surgical edits)
+## What we broke
 
-### 1. Make `repairDay` defensive on optional collection inputs
+Not the frontend. Not the trip itself. The breakage is in the backend v2 generation orchestration contract:
 
-In `supabase/functions/generate-itinerary/pipeline/repair-day.ts` line 535, default the value at the call site so a missing caller field can never crash the whole chain:
-
-```ts
-const lockedIds = new Set((lockedActivities || []).map(l => l.id));
+```text
+v2 wrapper → old repair helper
+          → missing required fields
+          → runtime TypeError
+          → Day 1 returns 500
+          → launcher retries 3x
+          → watchdog surfaces “launcher timed out”
 ```
 
-Also default `restaurantPool` and `usedRestaurants` to `[]` where they are first dereferenced (these are the other optional arrays the v2 caller does not pass yet — leaving them `undefined` will produce the same class of fatal once the lockedIds line is fixed).
+## Fix plan
 
-This is the same defensive shape already used elsewhere in the file (e.g. `(usedRestaurants || []).map(...)` at lines 636/1239/1371/1668).
+1. **Move validation before repair in v2**
+   - In `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts`, run `validateDay()` on `ai.day` before `repairDay()`.
+   - Pass the resulting `validationResults` into `repairDay()`.
+   - Keep the existing post-repair validation gate, but rename/reuse it as the second validation pass after repair.
 
-### 2. Pass the fields v2 actually has
+2. **Pass the full v1-compatible repair context from v2**
+   - Add the missing repair inputs already available from `facts`/`dayFacts`, including:
+     - `isFirstDay`, `isLastDay`
+     - `arrivalTime24`, `returnDepartureTime24`
+     - `hotelName`, `hotelAddress`, `hasHotel`, `hotelCoordinates`
+     - `lockedActivities: dayFacts.lockedActivities ?? []`
+     - `restaurantPool: []`, `usedRestaurants: []`
+     - `budgetTier`, destination context, transition flags where available
 
-In `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts` at the `repairDay({...})` call (around line 197), forward the locked activities + hotel context that the v1 path already computes from `facts`/`compiled`:
+3. **Add a defensive default in `repairDay`**
+   - Change the destructure so `validationResults` defaults to `[]`.
+   - This prevents future v2/v1 contract drift from turning into a fatal TypeError.
+   - This is a safety net, not the primary fix; v2 should still pass real validation results.
 
-```ts
-repairDay({
-  day: ai.day,
-  dayNumber,
-  destination: facts.destination.city,
-  destinationCountry: facts.destination.country,
-  facts: dayFacts,
-  compiled,
-  mealPolicy: facts.mealPolicy(dayNumber),
-  lockedActivities: dayFacts?.lockedActivities ?? [],
-  hotelName: facts?.hotel?.name,
-  hasHotel: !!facts?.hotel,
-  hotelAddress: facts?.hotel?.address,
-  restaurantPool: [],
-  usedRestaurants: [],
-} as any)
-```
+4. **Verify with logs and a direct function test**
+   - Redeploy only `generate-itinerary`.
+   - Trigger the generation path and confirm the old fatal log is gone:
+     - no `validationResults is not iterable`
+     - no `V2_FATAL` from `repair_day`
+     - no `LAUNCHER_TIMEOUT`
+   - If another required-field mismatch appears, fix that single mismatch in the same v2 wrapper contract rather than patching blindly.
 
-(Exact field names will be confirmed against `dayFacts` / `facts` shape during implementation — the defensive default in step 1 is the actual crash-blocker; step 2 just stops sending `undefined` where empty arrays make sense.)
+## Files to change
 
-## Verification
+- `supabase/functions/generate-itinerary/v2/generate-trip-day-v2.ts`
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
 
-1. Redeploy `generate-itinerary` immediately after the edit.
-2. Curl the v2 chain entrypoint directly (`action: 'generate-trip-day'`, day 1) and confirm it returns `success: true` instead of `V2_FATAL`.
-3. Re-check `generate-itinerary` logs for the exact string `Cannot read properties of undefined (reading 'map')` — must be gone.
-4. Watch `[GENTRACE] phase=launcher_day_1_invoke_returned status=ok` and absence of `LAUNCHER_TIMEOUT`.
+## Expected outcome
 
-## Out of scope
+Day 1 should stop crashing after the AI call, so the launcher should actually start generation instead of retrying until the watchdog emits the timeout message.
 
-- No schema changes.
-- No Day 4 timing changes.
-- No frontend/UI changes.
-- No new pipeline stages — only the missing-input crash that has blocked every Day 1 since the v2 wiring landed.
+<presentation-actions>
+  <presentation-open-history>View History</presentation-open-history>
+</presentation-actions>
+
+<presentation-actions>
+<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
+</presentation-actions>

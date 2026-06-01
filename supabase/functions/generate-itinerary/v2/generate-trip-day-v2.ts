@@ -192,16 +192,83 @@ export async function handleGenerateTripDayV2(
       );
     }
 
-    // ── 5. Repair + validation gate ────────────────────────────────────
+    // ── 5. Validation + repair + validation gate ───────────────────────
+    const repairHotelName = dayFacts.resolvedHotelOverride?.name || dayFacts.flightContext?.hotelName || facts.hotel.name || undefined;
+    const repairHotelAddress = dayFacts.resolvedHotelOverride?.address || dayFacts.flightContext?.hotelAddress || facts.hotel.address || '';
+    const repairHasHotel = !!(repairHotelName || repairHotelAddress);
+    const repairArrivalTime24 = dayFacts.flightContext?.arrivalTime24 || facts.arrival.time24 || undefined;
+    const repairDepartureTime24 = dayFacts.flightContext?.returnDepartureTime24 || facts.departure.time24 || undefined;
+    const mealPolicyForDay = facts.mealPolicy(dayNumber);
+
+    const { data: preRepairTripRow } = await supabase
+      .from('trips')
+      .select('itinerary_data')
+      .eq('id', tripId)
+      .maybeSingle();
+    const previousDaysForValidation: any[] = Array.isArray(preRepairTripRow?.itinerary_data?.days)
+      ? preRepairTripRow.itinerary_data.days.filter((d: any) => (d?.dayNumber ?? 0) !== dayNumber)
+      : [];
+
+    const preRepairValidations = await withStage(trace, 'validate_day_pre_repair', { dayNumber }, (ctx) => {
+      const v = validateDay({
+        day: ai.day,
+        dayNumber,
+        isFirstDay,
+        isLastDay,
+        totalDays,
+        destination: facts.destination.city,
+        hasHotel: repairHasHotel,
+        hotelName: repairHotelName,
+        arrivalTime24: repairArrivalTime24,
+        returnDepartureTime24: repairDepartureTime24,
+        requiredMeals: mealPolicyForDay.requiredMeals || [],
+        previousDays: previousDaysForValidation,
+        dietaryRestrictions: facts.preferences.dietary || [],
+        mustDoActivities: facts.mustHaves?.map((m: any) => m.title || m.name || '').filter(Boolean) || [],
+        isHotelChange: dayFacts.resolvedIsHotelChange,
+        previousHotelName: dayFacts.resolvedPreviousHotelName,
+        budgetTier: facts.preferences.budgetTier,
+      } as any);
+      ctx.outputs = { issues: v.length };
+      return v;
+    });
+
     const repaired = await withStage(trace, 'repair_day', { dayNumber }, () =>
       repairDay({
         day: ai.day,
+        validationResults: preRepairValidations,
         dayNumber,
+        isFirstDay,
+        isLastDay,
+        arrivalTime24: repairArrivalTime24,
+        returnDepartureTime24: repairDepartureTime24,
+        arrivalAirport: facts.arrival.airport || undefined,
+        airportTransferMinutes: dayFacts.airportTransferMinutes,
+        hotelName: repairHotelName,
+        hotelAddress: repairHotelAddress,
+        hasHotel: repairHasHotel,
+        lockedActivities: dayFacts.lockedActivities ?? [],
+        restaurantPool: [],
+        usedRestaurants: [],
+        isTransitionDay: dayFacts.resolvedIsTransitionDay,
+        isMultiCity: dayFacts.resolvedIsMultiCity,
+        isLastDayInCity: dayFacts.resolvedIsLastDayInCity,
+        resolvedDestination: dayFacts.resolvedDestination || facts.destination.city,
+        nextLegTransport: dayFacts.resolvedNextLegTransport,
+        nextLegCity: dayFacts.resolvedNextLegCity,
+        nextLegTransportDetails: dayFacts.resolvedNextLegTransportDetails,
+        hotelOverride: dayFacts.resolvedHotelOverride,
+        isHotelChange: dayFacts.resolvedIsHotelChange,
+        previousHotelName: dayFacts.resolvedPreviousHotelName,
+        previousHotelAddress: dayFacts.resolvedPreviousHotelAddress,
+        earliestStart: facts.arrival.earliestFirstActivityTime || undefined,
+        budgetTier: facts.preferences.budgetTier,
+        paceScore: facts.travelers.profile?.traitScores?.pace,
         destination: facts.destination.city,
         destinationCountry: facts.destination.country,
         facts: dayFacts,
         compiled,
-        mealPolicy: facts.mealPolicy(dayNumber),
+        mealPolicy: mealPolicyForDay,
       } as any)
     );
 
@@ -209,10 +276,23 @@ export async function handleGenerateTripDayV2(
       const v = validateDay({
         day: repaired.day,
         dayNumber,
+        isFirstDay,
+        isLastDay,
+        totalDays,
         destination: facts.destination.city,
-        mealPolicy: facts.mealPolicy(dayNumber),
+        hasHotel: repairHasHotel,
+        hotelName: repairHotelName,
+        arrivalTime24: repairArrivalTime24,
+        returnDepartureTime24: repairDepartureTime24,
+        requiredMeals: mealPolicyForDay.requiredMeals || [],
+        previousDays: previousDaysForValidation,
+        dietaryRestrictions: facts.preferences.dietary || [],
+        mustDoActivities: facts.mustHaves?.map((m: any) => m.title || m.name || '').filter(Boolean) || [],
+        isHotelChange: dayFacts.resolvedIsHotelChange,
+        previousHotelName: dayFacts.resolvedPreviousHotelName,
+        budgetTier: facts.preferences.budgetTier,
       } as any);
-      ctx.outputs = { codes: (v as any)?.codes?.length || 0 };
+      ctx.outputs = { issues: v.length };
       return v;
     });
 
