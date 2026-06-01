@@ -190,6 +190,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkWalkOverThreshold(activities, results, budgetTier);
   checkCategoryVenueCoherence(activities, results);
   checkPhantomEventRefs(activities, results);
+  checkOrphanedTransitNodes(activities, results);
   checkSameDayDuplicateVenues(activities, results);
   checkVenueDescriptionCoherence(activities, results);
 
