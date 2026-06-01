@@ -1193,6 +1193,115 @@ function checkPhantomEventRefs(activities: StrictActivityMinimal[], results: Val
   });
 }
 
+// =============================================================================
+// ORPHANED_TRANSIT_NODE
+// =============================================================================
+// Structural transit ghost: a transit card titled "Travel to <Venue>" (or
+// `transportation.to = <Venue>`) whose target has no scheduled activity block
+// on the same day. Distinct from DESCRIPTION_GHOST_REFERENCE (which only
+// scans body text). Critical severity so the validation gate force-removes
+// any survivor that repair-day couldn't.
+//
+// Bookend / hotel-return / airport / station / generic targets exempt — they
+// legitimately point at non-activity destinations (the hotel card may not be
+// a scheduled block; the flight is in trip metadata).
+//
+// See: mem://constraints/itinerary/orphaned-transit-node-detection
+// =============================================================================
+
+const ORPHAN_TRANSIT_TITLE_RE =
+  /^\s*(?:travel|walk|walking|stroll|taxi|drive|ride|transfer|head|go)\s+(?:to|toward|over\s+to|back\s+to)\s+(.+?)\s*$/i;
+
+const ORPHAN_GENERIC_TARGETS = new Set([
+  'hotel', 'the hotel', 'your hotel', 'home', 'the apartment', 'apartment',
+  'airport', 'the airport', 'station', 'the station', 'train station',
+  'terminal', 'the terminal', 'port', 'the port', 'cruise terminal',
+  'lunch', 'dinner', 'breakfast', 'brunch', 'the restaurant',
+  'next stop', 'next activity', 'the venue',
+]);
+
+function normalizeOrphanKey(s: string): string {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} ]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractTransitDestination(act: any): string | null {
+  const to = act?.transportation?.to;
+  if (to) {
+    if (typeof to === 'string' && to.trim()) return to.trim();
+    if (typeof to === 'object' && typeof to.name === 'string' && to.name.trim()) return to.name.trim();
+  }
+  const title = String(act?.title || act?.name || '');
+  const m = title.match(ORPHAN_TRANSIT_TITLE_RE);
+  if (m && m[1]) return m[1].trim();
+  return null;
+}
+
+function isBookendishTransit(act: any): boolean {
+  const src = String(act?.source || '').toLowerCase();
+  if (src.startsWith('bookend-') || src === 'late_nightlife_bookend' || src === 'bookend-validator') return true;
+  const tags = Array.isArray(act?.tags) ? act.tags.map((t: any) => String(t).toLowerCase()) : [];
+  if (tags.includes('hotel') || tags.includes('rest') || tags.includes('hotel-return')) return true;
+  const kind = String(act?.transportation?.kind || act?.transport?.kind || '').toLowerCase();
+  if (kind === 'departure' || kind === 'airport_transfer' || kind === 'flight_transfer') return true;
+  return false;
+}
+
+function checkOrphanedTransitNodes(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  if (!Array.isArray(activities) || activities.length === 0) return;
+
+  // Build set of normalized scheduled venue identities (non-transit only).
+  const scheduled: string[] = [];
+  for (const a of activities as any[]) {
+    if (!a || isTransitActivity(a)) continue;
+    const candidates = [
+      a.title, a.name,
+      a.venue_name, a.venueName,
+      a?.location?.name,
+    ].filter(Boolean);
+    for (const c of candidates) {
+      const n = normalizeOrphanKey(String(c));
+      if (n) scheduled.push(n);
+    }
+  }
+
+  for (let i = 0; i < activities.length; i++) {
+    const act = activities[i] as any;
+    if (!act || !isTransitActivity(act)) continue;
+    if (isBookendishTransit(act)) continue;
+
+    const targetRaw = extractTransitDestination(act);
+    if (!targetRaw) continue;
+
+    const targetNorm = normalizeOrphanKey(targetRaw);
+    if (!targetNorm) continue;
+    if (ORPHAN_GENERIC_TARGETS.has(targetNorm)) continue;
+    // "the airport" / "the station" → normalize strips "the" punctuation? No, it keeps words. Match suffixes too.
+    if (/\b(airport|station|terminal|port|gare|stazione|hbf|hauptbahnhof)\b/.test(targetNorm)) continue;
+    if (/\b(hotel|apartment|residence|riad|ryokan|hostel|guesthouse|villa)\b/.test(targetNorm)) continue;
+
+    // Fuzzy match: substring either way handles "Tasca do Chico" vs "Dinner at Tasca do Chico".
+    const matched = scheduled.some(s => s === targetNorm || s.includes(targetNorm) || targetNorm.includes(s));
+    if (matched) continue;
+
+    results.push({
+      code: FAILURE_CODES.ORPHANED_TRANSIT_NODE,
+      severity: 'critical',
+      message: `Transit "${act.title || act.name}" targets "${targetRaw}" which is not scheduled on this day`,
+      activityIndex: i,
+      field: 'title',
+      autoRepairable: true,
+    });
+  }
+}
+
+
+
 function getActivityCostAmount(act: any): number | null {
   const c = act?.cost ?? act?.estimatedCost;
   if (!c || typeof c !== 'object') return null;
