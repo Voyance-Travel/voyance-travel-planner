@@ -61,6 +61,13 @@ export const FAILURE_CODES = {
   // DESCRIPTION_GHOST_REFERENCE (which only scans description body text).
   ORPHANED_TRANSIT_NODE:     'ORPHANED_TRANSIT_NODE',
 
+  // Late-stage orphan transit (integrity-contract): transit destination
+  // doesn't match any same-day non-logistics activity post-injection.
+  // Repaired in repair-day §8e by re-pointing to the next activity or
+  // removing when no valid target exists.
+  // See: mem://constraints/itinerary/orphan-transit-late-repair
+  FINAL_ORPHAN_TRANSIT:      'FINAL_ORPHAN_TRANSIT',
+
   // Pricing sanity (B3, Barcelona Diagnosis 2026-05-10)
   PRICE_IMPLAUSIBLE:         'PRICE_IMPLAUSIBLE',
   PRICE_TOO_LOW:             'PRICE_TOO_LOW',

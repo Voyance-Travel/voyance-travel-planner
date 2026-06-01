@@ -32,7 +32,7 @@ import {
 } from '../flight-hotel-context.ts';
 import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-utils.ts';
 import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../fix-placeholders.ts';
-import { enforceTimingAndBuffers, pruneOrphanLateNightlifeBookend } from '../../_shared/timing-cascade.ts';
+import { enforceTimingAndBuffers, pruneOrphanLateNightlifeBookend, recomputeTransitCards } from '../../_shared/timing-cascade.ts';
 import { clampBookendEndTime, clampAllBookends } from '../../_shared/clamp-bookend.ts';
 import { scrubBodyPromptLeaks, scrubTitleLeaks, buildDayScheduleSummary } from '../../_shared/prompt-leak-scrub.ts';
 import { scrubActivity, formatOps, opsHadChange } from '../../_shared/scrub-activity.ts';
@@ -2712,6 +2712,206 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     const seqRepairs2 = repairDepartureSequence(activities, returnDepartureTime24, hotelName, lockedIds);
     if (seqRepairs2.length > 0) {
       repairs.push(...seqRepairs2);
+      activities.sort((a: any, b: any) => {
+        const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+        const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+        return ta - tb;
+      });
+    }
+  }
+
+  // --- 8e. FINAL_ORPHAN_TRANSIT (repoint or remove) ---
+  // Late net for integrity-contract's FINAL_ORPHAN_TRANSIT class: a transit
+  // card "Walk/Taxi/.../Transfer to <X>" where <X> has no scheduled
+  // non-logistics activity on the same day after upstream injections (§7/§8/§8b/§8c/§8d)
+  // have all settled. Repoint to the next real activity when possible;
+  // remove when there is no valid target. Runs for every day, not just
+  // departure days. See mem://constraints/itinerary/orphan-transit-late-repair.
+  {
+    const VERB_RE = /^\s*(walk|walking|stroll|taxi|tram|bus|metro|train|cab|uber|drive|ride|head|transfer|travel|go)\s+(?:to|toward|over\s+to|back\s+to)\s+(.+?)\s*$/i;
+    const HOTEL_AIRPORT_RE = /\b(hotel|inn|resort|hostel|guesthouse|riad|ryokan|villa|apartment|residence|airport|terminal|station|gare|stazione|hbf|hauptbahnhof|port|home|accommodation|stay)\b/i;
+    const LOGISTICS_CAT_RE = /^(transport|logistics|transfer|transit|flight|intercity_transport)$/i;
+
+    const normKey = (s: string): string =>
+      String(s || '')
+        .normalize('NFD')
+        .replace(/\p{M}+/gu, '')
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N} ]+/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const isBookendish = (a: any): boolean => {
+      const src = String(a?.source || '').toLowerCase();
+      if (src.startsWith('bookend-') || src === 'late_nightlife_bookend' || src === 'bookend-validator') return true;
+      const tags = Array.isArray(a?.tags) ? a.tags.map((t: any) => String(t).toLowerCase()) : [];
+      if (tags.includes('hotel') || tags.includes('rest') || tags.includes('hotel-return')) return true;
+      const kind = String(a?.transportation?.kind || a?.transport?.kind || '').toLowerCase();
+      if (kind === 'departure' || kind === 'airport_transfer' || kind === 'flight_transfer') return true;
+      return false;
+    };
+
+    const isLogisticsCard = (a: any): boolean => {
+      if (!a) return true;
+      if (LOGISTICS_CAT_RE.test(String(a.category || ''))) return true;
+      if (VERB_RE.test(String(a.title || a.name || ''))) return true;
+      return false;
+    };
+
+    const titleVenueOf = (a: any): string => {
+      const t = String(a?.title || a?.name || '');
+      // Strip "Lunch at X" / "Dinner at X" prefixes so the venue tail dominates.
+      const stripped = t.replace(/^\s*(?:breakfast|brunch|lunch|dinner|coffee|drinks|aperitif|nightcap|visit|tour|stop|stroll|explore)\s+(?:at|to|in)\s+/i, '');
+      const loc = String(a?.location?.name || a?.venue_name || a?.venueName || '');
+      return loc || stripped || t;
+    };
+
+    let repointCount = 0;
+    let removedCount = 0;
+
+    for (let i = activities.length - 1; i >= 0; i--) {
+      const T = activities[i] as any;
+      if (!T || lockedIds.has(T?.id)) continue;
+      if (T?.locked || T?.isLocked || T?.userPinned || T?.manual || T?.extracted) continue;
+      if (isBookendish(T)) continue;
+
+      const ttitle = String(T?.title || T?.name || '').trim();
+      const m = ttitle.match(VERB_RE);
+      if (!m) continue;
+      const verb = m[1] || 'Walk';
+      const verbCap = verb.charAt(0).toUpperCase() + verb.slice(1).toLowerCase();
+      const targetRaw = String(m[2] || '')
+        .replace(/[.,;!?].*$/, '')
+        .replace(/\s+(for|to|on|in|at)\s+.*$/i, '')
+        .trim();
+      if (!targetRaw) continue;
+      const targetNorm = normKey(targetRaw);
+      if (!targetNorm || targetNorm.length < 3) continue;
+
+      // Exempt hotel/airport-like targets — covered by bookend/logistics passes.
+      if (HOTEL_AIRPORT_RE.test(targetRaw)) continue;
+
+      // Already matches a scheduled non-logistics activity? leave it alone.
+      let matched = false;
+      let nextActIdx = -1;
+      for (let j = 0; j < activities.length; j++) {
+        if (j === i) continue;
+        const o = activities[j];
+        if (!o) continue;
+        if (isLogisticsCard(o) || isBookendish(o)) continue;
+        const otn = normKey(String(o.title || o.name || ''));
+        const ovn = normKey(String(o?.location?.name || o?.venue_name || ''));
+        if (otn.includes(targetNorm) || ovn.includes(targetNorm) || targetNorm.includes(otn)) {
+          matched = true;
+          break;
+        }
+        if (j > i && nextActIdx < 0) nextActIdx = j;
+      }
+      if (matched) continue;
+
+      // Resolve next non-logistics, non-bookend activity in chronological order.
+      if (nextActIdx < 0) {
+        for (let j = i + 1; j < activities.length; j++) {
+          const o = activities[j];
+          if (!o) continue;
+          if (isLogisticsCard(o) || isBookendish(o)) continue;
+          nextActIdx = j;
+          break;
+        }
+      }
+
+      // Decide repoint vs remove.
+      let action: 'repoint' | 'remove' = 'remove';
+      let removeReason = 'no_target';
+      if (nextActIdx >= 0) {
+        const N = activities[nextActIdx];
+        const transitEnd = parseTimeToMinutes(String(T?.endTime || T?.startTime || '')) ?? null;
+        const nStart = parseTimeToMinutes(String(N?.startTime || '')) ?? null;
+        if (transitEnd === null || nStart === null || Math.abs(nStart - transitEnd) <= 90) {
+          action = 'repoint';
+        } else {
+          removeReason = 'next_too_far';
+        }
+      }
+
+      const before = ttitle;
+      if (action === 'repoint') {
+        const N = activities[nextActIdx];
+        const newDest = titleVenueOf(N).trim() || String(N?.title || N?.name || '').trim();
+        if (!newDest) {
+          // Fall back to remove if we can't extract a clean dest.
+          activities.splice(i, 1);
+          removedCount++;
+          repairs.push({
+            code: FAILURE_CODES.FINAL_ORPHAN_TRANSIT,
+            activityIndex: i,
+            action: 'removed_orphan_transit_no_target',
+            before,
+          } as any);
+          console.log(`[ORPHAN_TRANSIT_REPAIR] day=${dayNumber} idx=${i} action=remove reason=empty_repoint before="${before}"`);
+          continue;
+        }
+        const newTitle = `${verbCap} to ${newDest}`;
+        T.title = newTitle;
+        T.name = newTitle;
+        // Update transportation.to (string or object form).
+        if (T.transportation && typeof T.transportation === 'object') {
+          const to = T.transportation.to;
+          if (to && typeof to === 'object') {
+            T.transportation = { ...T.transportation, to: { ...to, name: newDest } };
+          } else {
+            T.transportation = { ...T.transportation, to: newDest };
+          }
+        }
+        // Update location.name to match (don't invent address).
+        if (T.location && typeof T.location === 'object') {
+          T.location = { ...T.location, name: newDest };
+        } else {
+          T.location = { name: newDest, address: '' };
+        }
+        // Mark unverified so recomputeTransitCards + health panel know the
+        // LLM-emitted duration is suspect.
+        T.metadata = { ...(T.metadata || {}), transit_unverified: true };
+        T.source = 'repair-orphan-repoint';
+        repointCount++;
+        repairs.push({
+          code: FAILURE_CODES.FINAL_ORPHAN_TRANSIT,
+          activityIndex: i,
+          action: 'repointed_orphan_transit',
+          before,
+          after: newTitle,
+        } as any);
+        console.log(`[ORPHAN_TRANSIT_REPAIR] day=${dayNumber} idx=${i} action=repoint before="${before}" after="${newTitle}"`);
+      } else {
+        activities.splice(i, 1);
+        removedCount++;
+        repairs.push({
+          code: FAILURE_CODES.FINAL_ORPHAN_TRANSIT,
+          activityIndex: i,
+          action: 'removed_orphan_transit_no_target',
+          before,
+        } as any);
+        console.log(`[ORPHAN_TRANSIT_REPAIR] day=${dayNumber} idx=${i} action=remove reason=${removeReason} before="${before}"`);
+      }
+    }
+
+    // If we re-pointed any cards, feed the corrected destination names back
+    // through the existing geometry-based transit recompute so durations
+    // self-heal whenever coords are present on the new target.
+    if (repointCount > 0) {
+      try {
+        const recompute = recomputeTransitCards(activities as any, lockedIds);
+        if (recompute && (recompute.recomputed || recompute.unverified)) {
+          console.log(
+            `[ORPHAN_TRANSIT_REPAIR] day=${dayNumber} post-repoint cascade: transit_recomputed=${recompute.recomputed} transit_unverified=${recompute.unverified}`,
+          );
+        }
+      } catch (e) {
+        console.warn(`[ORPHAN_TRANSIT_REPAIR] day=${dayNumber} recompute failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    if (repointCount || removedCount) {
       activities.sort((a: any, b: any) => {
         const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
         const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
