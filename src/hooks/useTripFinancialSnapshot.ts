@@ -28,7 +28,7 @@ import { toast } from 'sonner';
 import { shouldCountRow } from '@/services/tripBudgetService';
 import { computeMiscReserve } from '@/services/budgetReserve';
 import { resolveCanonicalCostRows, type CanonicalLiveActivity } from '@/services/canonicalCostRows';
-import { decomposeTripCost, type BucketCents } from '@/services/tripCostDecomposition';
+import { decomposeResolvedTripCost, type BucketCents } from '@/services/tripCostDecomposition';
 import { TRIP_PERSISTED_EVENT } from '@/lib/itinerary/resyncItineraryFromDb';
 
 const EMPTY_BUCKETS: BucketCents = {
@@ -523,13 +523,10 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     //    via `residualFoldedCents` for telemetry. This is the contract that
     //    closes the Bali "$900 + $480 + $200 = $1,580 vs $1,322" pattern.
     //    See mem://constraints/finance/single-cost-decomposition.
-    const decomposition = decomposeTripCost({
-      costs: (costs || []) as any,
-      liveActivities,
+    const decomposition = decomposeResolvedTripCost({
+      resolver: canonical,
       includeHotel,
       includeFlight,
-      manualPayments: (allPayments || []) as any,
-      travelers: tripTravelers,
       miscReserveContributionCents,
     });
     if (Math.abs(decomposition.residualFoldedCents) > 200) {
@@ -546,10 +543,20 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // the guard. See mem://constraints/finance/displayed-trip-total-single-source.
     if (Math.abs(decomposition.displayedTotalCents - totalCents) > 100) {
       console.error(
-        `[useTripFinancialSnapshot] resolver invariant broken: snapshot=$${(totalCents / 100).toFixed(2)} ` +
-        `vs decomposition=$${(decomposition.displayedTotalCents / 100).toFixed(2)}. tripId=${tripId} ` +
+        `[useTripFinancialSnapshot] canonical invariant broken: snapshot=$${(totalCents / 100).toFixed(2)} ` +
+        `vs canonical=$${(decomposition.displayedTotalCents / 100).toFixed(2)}. tripId=${tripId} ` +
         `reserveCents=${miscReserveContributionCents}`
       );
+      try {
+        window.dispatchEvent(new CustomEvent('voyance:financial-invariant-broken', {
+          detail: {
+            tripId,
+            snapshotCents: totalCents,
+            canonicalCents: decomposition.displayedTotalCents,
+            reserveCents: miscReserveContributionCents,
+          },
+        }));
+      } catch {}
     }
 
 
