@@ -1021,6 +1021,29 @@ export async function handleGenerateDay(
       console.warn('[STAMP_ARRIVAL_TRUTH] action-generate-day failed (non-blocking):', stampErr);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // FLIGHT DEPARTURE TRUTH STAMP — overwrite last-day departure card with
+    // the user's actual return-departure time. Mirror of arrival stamper.
+    // See mem://constraints/itinerary/flight-anchor-truth-parity
+    // ═══════════════════════════════════════════════════════════════════════
+    try {
+      const depStampRes = stampDepartureAnchorTruth(generatedDay, {
+        isLastDay,
+        departureTime24: (flightContext as any)?.returnDepartureTime24 || undefined,
+        departureAirport: (flightContext as any)?.return?.departureAirport || (flightContext as any)?.returnDepartureAirport || undefined,
+        boardingLeadMins: 45,
+      });
+      if (depStampRes.mutated) {
+        console.log(`[STAMP_DEPARTURE_TRUTH] action-generate-day day=${dayNumber} was=${depStampRes.wasStart} now=${depStampRes.newStart} (truth=${(flightContext as any)?.returnDepartureTime24})`);
+        normalizedActivities = generatedDay.activities;
+      } else if (depStampRes.action !== 'noop_not_last_day' && depStampRes.action !== 'noop_no_departure_time' && depStampRes.action !== 'noop_already_aligned') {
+        console.log(`[STAMP_DEPARTURE_TRUTH] action-generate-day day=${dayNumber} action=${depStampRes.action}`);
+      }
+    } catch (stampErr) {
+      console.warn('[STAMP_DEPARTURE_TRUTH] action-generate-day failed (non-blocking):', stampErr);
+    }
+
+
     // If AI omitted the travel activity, inject deterministic fallback
     // =======================================================================
     if (resolvedIsTransitionDay && resolvedTransitionFrom && resolvedTransitionTo) {
