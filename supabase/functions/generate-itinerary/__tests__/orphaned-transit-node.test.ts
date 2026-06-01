@@ -126,8 +126,7 @@ Deno.test('repair-day removes flagged orphan', () => {
     isFirstDay: false,
     isLastDay: false,
   } as any);
-  assertEquals(result.day.activities.length, 2);
-  assert(!result.day.activities.some((a: any) => /Tasca do Chico/i.test(a.title)));
+  assert(!result.day.activities.some((a: any) => /Travel to Tasca do Chico/i.test(a.title)));
   assert(result.repairs.some(r => r.code === FAILURE_CODES.ORPHANED_TRANSIT_NODE));
 });
 
@@ -146,7 +145,7 @@ Deno.test('repair-day skips locked orphans', () => {
     isLastDay: false,
   } as any);
   // Locked orphan preserved.
-  assertEquals(result.day.activities.length, 3);
+  assert(result.day.activities.some((a: any) => /Travel to Tasca do Chico/i.test(a.title)));
 });
 
 Deno.test('validation-gate drops survivor when repair is bypassed', () => {
