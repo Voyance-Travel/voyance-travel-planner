@@ -289,7 +289,7 @@ For a Culinary Cartographer in Rome, mustDo should include "Testaccio Market" no
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${aiGatewayKey}`,
+        'Lovable-API-Key': aiGatewayKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

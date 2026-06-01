@@ -116,7 +116,7 @@ export async function refillDroppedSlots(
   try {
     const resp = await fetchImpl(GATEWAY_URL, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers: { 'Lovable-API-Key': apiKey, 'Content-Type': 'application/json' },
       signal: controller.signal,
       body: JSON.stringify({
         model,
