@@ -219,6 +219,25 @@ export async function handleGenerateTripDayV2(
       }
     }
 
+    // ── 5b. STAMP DEPARTURE ANCHOR TRUTH (last day, post-LLM, pre-validate) ──
+    // Mirror of arrival stamper — overwrite hallucinated departure-flight
+    // card with the user's real return-departure time.
+    if (isLastDay && repairDepartureTime24) {
+      const stampDep = stampDepartureAnchorTruth(ai.day, {
+        isLastDay: true,
+        departureTime24: repairDepartureTime24,
+        departureAirport: (facts as any)?.departure?.airport || (dayFacts.flightContext as any)?.return?.departureAirport || null,
+        boardingLeadMins: 45,
+      });
+      if (stampDep.mutated) {
+        console.log(
+          `[STAMP_DEPARTURE_TRUTH] v2 day=${dayNumber} was=${stampDep.wasStart}-${stampDep.wasEnd} now=${stampDep.newStart}-${stampDep.newEnd} (truth=${repairDepartureTime24})`,
+        );
+      }
+    }
+
+
+
 
 
     const { data: preRepairTripRow } = await supabase
