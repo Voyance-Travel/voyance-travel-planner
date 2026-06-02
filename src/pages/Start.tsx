@@ -2484,7 +2484,7 @@ export default function Start() {
           end_date: format(endDate, 'yyyy-MM-dd'),
           travelers,
           trip_type: tripType,
-          budget_tier: budgetAmount ? (budgetAmount < 750 ? 'budget' : budgetAmount < 2000 ? 'moderate' : budgetAmount < 4000 ? 'premium' : 'luxury') : (dnaBudgetTier || 'moderate'),
+          budget_tier: budgetAmount ? (budgetAmount < 750 ? 'budget' : budgetAmount < 2000 ? 'moderate' : budgetAmount < 4000 ? 'premium' : 'luxury') : null,
           budget_total_cents: budgetAmount ? budgetAmount * 100 : null,
           flight_selection: flightSelection as any,
           hotel_selection: hotelSelection,
