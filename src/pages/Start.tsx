@@ -2245,19 +2245,12 @@ export default function Start() {
   const [selectedCategories] = useState<string[]>([]); // Kept for backward compat with saved metadata
   const [customMustDos, setCustomMustDos] = useState<string[]>([]);
 
-  // Fetch user's DNA budget preference for smart defaults
-  const [dnaBudgetTier, setDnaBudgetTier] = useState<string | null>(null);
-  useEffect(() => {
-    if (!user?.id) return;
-    supabase
-      .from('user_preferences')
-      .select('budget_tier')
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.budget_tier) setDnaBudgetTier(data.budget_tier);
-      });
-  }, [user?.id]);
+  // NOTE: We intentionally do NOT inherit user_preferences.budget_tier as a
+  // fallback for new trips. If the user didn't pick a budget in the builder,
+  // we write budget_tier=null so downstream consumers fall back to 'moderate'
+  // rather than silently stamping the trip with the user's DNA tier (e.g.
+  // 'luxury'), which poisoned pricing for trips where no budget was selected.
+
 
   // Always sync flight dates from trip dates — ensures Step 2 fields reflect Step 1 selections
   useEffect(() => {
@@ -2491,7 +2484,7 @@ export default function Start() {
           end_date: format(endDate, 'yyyy-MM-dd'),
           travelers,
           trip_type: tripType,
-          budget_tier: budgetAmount ? (budgetAmount < 750 ? 'budget' : budgetAmount < 2000 ? 'moderate' : budgetAmount < 4000 ? 'premium' : 'luxury') : (dnaBudgetTier || 'moderate'),
+          budget_tier: budgetAmount ? (budgetAmount < 750 ? 'budget' : budgetAmount < 2000 ? 'moderate' : budgetAmount < 4000 ? 'premium' : 'luxury') : null,
           budget_total_cents: budgetAmount ? budgetAmount * 100 : null,
           flight_selection: flightSelection as any,
           hotel_selection: hotelSelection,
@@ -2924,7 +2917,7 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                             end_date: format(chatEndDate, 'yyyy-MM-dd'),
                             travelers: chatTravelers,
                             trip_type: chatTripType,
-                            budget_tier: chatBudget ? (chatBudget < 750 ? 'budget' : chatBudget < 2000 ? 'moderate' : chatBudget < 4000 ? 'premium' : 'luxury') : (dnaBudgetTier || 'moderate'),
+                            budget_tier: chatBudget ? (chatBudget < 750 ? 'budget' : chatBudget < 2000 ? 'moderate' : chatBudget < 4000 ? 'premium' : 'luxury') : null,
                             budget_total_cents: chatBudget ? chatBudget * 100 : null,
                             hotel_selection: hotelSelection,
                             flight_selection: flightSelection,
