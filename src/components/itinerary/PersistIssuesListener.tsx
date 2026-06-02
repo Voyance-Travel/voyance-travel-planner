@@ -63,6 +63,13 @@ function isSilentSource(source: string | undefined): boolean {
   return false;
 }
 
+/** Informational codes that confirm a logistics-only day is correct by design.
+ *  Surfacing them as "Day N needs regeneration" is a UI lie. */
+const BENIGN_INFORMATIONAL_CODES = new Set<string>([
+  'DEPARTURE_DAY_LIGHT',
+  'ARRIVAL_DAY_LIGHT',
+]);
+
 // Module-scoped so the buffer survives re-renders/unmounts within the session.
 const loadedTrips = new Set<string>();
 
