@@ -3617,6 +3617,28 @@ export default function TripDetail() {
                     {statusLabel}
                   </Badge>
                 ) : null}
+                {!isPreviewMode && (() => {
+                  const gs = trip.itinerary_status as string | undefined;
+                  if (!gs || gs === 'ready' || gs === 'generated' || gs === 'complete') return null;
+                  const map: Record<string, { label: string; cls: string; pulse?: boolean }> = {
+                    generating: { label: 'Generating', cls: 'bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400', pulse: true },
+                    queued:     { label: 'Queued',     cls: 'bg-muted text-muted-foreground border-border' },
+                    not_started:{ label: 'Not started',cls: 'bg-muted text-muted-foreground border-border' },
+                    partial:    { label: 'Partial',    cls: 'bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-400' },
+                    failed:     { label: 'Failed',     cls: 'bg-destructive/10 text-destructive border-destructive/30' },
+                  };
+                  const m = map[gs] ?? { label: gs, cls: 'bg-muted text-muted-foreground border-border' };
+                  return (
+                    <span
+                      title={`Itinerary generation status: ${m.label}`}
+                      className={`inline-flex items-center gap-1 shrink-0 text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${m.cls}`}
+                    >
+                      {m.pulse && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
+                      {m.label}
+                    </span>
+                  );
+                })()}
+
                 {/* Edit/Preview Toggle — only for trip owners */}
                 {canToggleViewMode && (
                   <div className="ml-auto shrink-0">
