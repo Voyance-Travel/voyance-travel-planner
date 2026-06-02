@@ -2917,7 +2917,7 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                             end_date: format(chatEndDate, 'yyyy-MM-dd'),
                             travelers: chatTravelers,
                             trip_type: chatTripType,
-                            budget_tier: chatBudget ? (chatBudget < 750 ? 'budget' : chatBudget < 2000 ? 'moderate' : chatBudget < 4000 ? 'premium' : 'luxury') : (dnaBudgetTier || 'moderate'),
+                            budget_tier: chatBudget ? (chatBudget < 750 ? 'budget' : chatBudget < 2000 ? 'moderate' : chatBudget < 4000 ? 'premium' : 'luxury') : null,
                             budget_total_cents: chatBudget ? chatBudget * 100 : null,
                             hotel_selection: hotelSelection,
                             flight_selection: flightSelection,
