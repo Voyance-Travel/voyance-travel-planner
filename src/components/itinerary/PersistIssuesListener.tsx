@@ -79,8 +79,13 @@ export function PersistIssuesListener() {
 
   useEffect(() => {
     function showToastsFor(detail: PersistIssuesEventDetail) {
-      const errors = detail.errors || [];
-      const warnings = detail.warnings || [];
+      const rawErrors = detail.errors || [];
+      const rawWarnings = detail.warnings || [];
+      // Filter out benign informational codes that confirm a logistics-only
+      // day is correct by design — they must never trigger a "needs
+      // regeneration" toast.
+      const errors = rawErrors.filter((i) => !BENIGN_INFORMATIONAL_CODES.has(i.code));
+      const warnings = rawWarnings.filter((i) => !BENIGN_INFORMATIONAL_CODES.has(i.code));
       const all: PersistIssue[] = [...errors, ...warnings];
       if (all.length === 0) return;
 
