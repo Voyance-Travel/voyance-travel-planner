@@ -1,45 +1,40 @@
-## Root cause
+## Decision
 
-Not a hardcoded `'luxury'` default. In `src/pages/Start.tsx` (lines 2494 + 2927), when the user doesn't pick a budget in the builder, the trip insert falls back to `dnaBudgetTier || 'moderate'`, where `dnaBudgetTier` is read from `user_preferences.budget_tier` (line 2258).
+No new changes needed for the Draft-status symptom.
 
-Any user whose DNA / onboarding quiz set their preference to `luxury` will therefore have every new "no-budget" trip silently written as `budget_tier='luxury'`, even though they made no budget selection in the trip-builder. This poisons downstream pricing (luxury floors, premium dinners, transit-mode tier, prompt directives) and explains the DB row the user is staring at.
+## Why
 
-## Fix
+The chain is correctly diagnosed:
 
-Treat "no budget selected" as truly unset — don't inherit DNA.
+```
+Missing Day 2 dinner
+  → MEAL_COVERAGE_MISSING integrity code
+  → resolveCommitGate returns persistVerdict.ok = false
+  → itinerary_status = 'partial'
+  → status stays 'draft'
+  → UI shows "Draft" badge
+```
 
-**`src/pages/Start.tsx`**
+The root cause is upstream (Day 2 dinner). The status field is behaving exactly as designed — it is a faithful signal that the commit gate did not pass.
 
-1. Line 2494 (main itinerary insert) — change:
-   ```
-   budget_tier: budgetAmount ? (…tier-from-amount…) : (dnaBudgetTier || 'moderate'),
-   ```
-   to:
-   ```
-   budget_tier: budgetAmount ? (…tier-from-amount…) : null,
-   ```
+## What happens once the dinner fix lands
 
-2. Line 2927 (chat-planner insert) — same change, with `chatBudget` instead of `budgetAmount`.
+The dinner-coverage repair already drafted in an earlier turn (freshen-up-without-dinner test + repair-day step) will make `persistVerdict.ok = true` on the next generation. The cascade:
 
-3. Lines 2249–2260 — remove the now-unused `dnaBudgetTier` state + `user_preferences` fetch (`grep` confirms only the two write sites consume it).
+1. `MEAL_COVERAGE_MISSING` no longer fires
+2. `resolveCommitGate` returns ok
+3. `nextStatus` evaluates to `'ready'` at the existing line ~1680
+4. `status` flips off `'draft'` via the existing finalizer
 
-## Why this is safe
+No additional code changes, no migration, no soft-gate relaxation, no historical backfill. Existing trips stuck in `'partial'/'draft'` will heal the next time they are regenerated.
 
-- DB column is already `string | null` (`src/integrations/supabase/types.ts:9734` etc.), so `null` is a first-class value.
-- All downstream consumers already coalesce to `'moderate'` at read-time when `budget_tier` is null:
-  - `useLovableItinerary.ts:282`, `TripDetail.tsx:958/1165/1255`, `EditorialItinerary.tsx`, `enrich-manual-trip`, `sync-trip-cost-table`, `useTripFinancialSnapshot`, `useDNAHotelRecommendations`, etc. all use `|| 'moderate'`.
-  - `profile-loader.ts::normalizeBudgetTier` returns `'moderate'` in its `default` branch.
-- So a no-budget trip now renders/generates as `moderate` (the intended neutral baseline) instead of the user's DNA tier.
+## Out of scope (explicitly rejected)
 
-## What is intentionally NOT changed
+- Relaxing `resolveCommitGate` to treat `MEAL_COVERAGE_MISSING` as a warning — would let trips with genuinely missing dinners ship as `'ready'`.
+- One-shot backfill flipping historical `'draft'` → `'ready'` — same risk, and only safe after we trust the dinner fix in production.
 
-- The amount→tier mapping when the user DOES pick a budget stays identical.
-- `dnaBudgetTier` is still used elsewhere in the app for hotel ranking, DNA scoring, etc. — only the trip-creation fallback is dropped.
-- Backend defaults (`'moderate'` fallback in profile-loader, generation context, etc.) stay as-is.
-- No DB migration; existing rows already stamped `'luxury'` are not retro-fixed here. (If the user wants a backfill — e.g. for trips < N days old with `budget_total_cents IS NULL AND budget_tier='luxury'` reset to `NULL` — that's a separate one-shot we can layer on.)
+## Verification after dinner fix ships
 
-## Files
-
-- `src/pages/Start.tsx` — 3 edits (2 write-sites + remove dead state/effect).
-
-No tests touch this exact fallback; existing budget-tier tests assert the amount→tier mapping which is unchanged.
+- Generate a fresh Lisbon-style trip; confirm Day 2 has a dinner card after repair-day.
+- Confirm `itinerary_status = 'ready'` and `status` is no longer `'draft'` on the resulting `trips` row.
+- Spot-check the trip page: no yellow "draft" banner, no red "missing activities" banner.
