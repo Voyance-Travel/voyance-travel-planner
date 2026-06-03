@@ -28,6 +28,10 @@ const MIN_GAP_MIN = 180;
 const LAST_DAY_MIN_GAP_MIN = 75;
 const MIN_USABLE_OVERLAP_MIN = 60;
 
+// Meal-slot windows for steering filler when the gap overlaps a missing meal.
+const LUNCH_WIN = { fromMins: 11 * 60, toMins: 15 * 60 };
+
+
 const LOGISTICS_KEYWORDS = ['check-in', 'check in', 'checkin', 'check-out', 'check out', 'checkout', 'arrival', 'departure', 'flight', 'airport', 'transfer to', 'transfer from', 'luggage drop', 'freshen up', 'return to', 'settle in'];
 
 interface GapWindow {
@@ -82,7 +86,15 @@ export interface FillDeadGapsOptions {
    * pass 'dining' so the AI picks a dinner restaurant when one fits.
    */
   preferCategory?: 'dining' | 'culture' | 'activity';
+  /**
+   * Required meals for this day. When set and the detected gap overlaps a
+   * still-missing meal's window by ≥60min, the filler is steered to dining
+   * with the appropriate mealSlot hint. Closes the recurring "3h afternoon
+   * gap filled with sightseeing while lunch slot stays empty" pattern.
+   */
+  requiredMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
 }
+
 
 export interface FillDeadGapsResult {
   activities: any[];
@@ -204,8 +216,23 @@ async function fillDeadGapsForWindow(
       return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     })();
 
-    console.log(`[fill-dead-gaps][${win.label}] Detected ${Math.round(gap / 60)}h${gap % 60 ? (gap % 60) + 'm' : ''} gap between "${curr.title}" (${curr.endTime}) and "${next.title}" (${next.startTime})${opts.isLastDay ? ' [last-day, clamped to ' + clampedEndHHMM + ']' : ''} — requesting filler`);
-    console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=request_fill gap_min=${gap} between="${curr.title}"->"${next.title}" effectiveEnd=${clampedEndHHMM}`);
+    // Lunch-overlap steering: when the gap overlaps the lunch window
+    // (11:00–15:00) by ≥60min AND the day still requires lunch, force
+    // preferCategory='dining' so the filler picks a real lunch venue
+    // instead of a sightseeing card that leaves the midday slot empty.
+    let effectivePrefer = opts.preferCategory;
+    let lunchSteered = false;
+    if (
+      Array.isArray(opts.requiredMeals) &&
+      opts.requiredMeals.includes('lunch') &&
+      Math.min(clampedNextStart, LUNCH_WIN.toMins) - Math.max(currEnd, LUNCH_WIN.fromMins) >= MIN_USABLE_OVERLAP_MIN
+    ) {
+      effectivePrefer = 'dining';
+      lunchSteered = true;
+    }
+
+    console.log(`[fill-dead-gaps][${win.label}] Detected ${Math.round(gap / 60)}h${gap % 60 ? (gap % 60) + 'm' : ''} gap between "${curr.title}" (${curr.endTime}) and "${next.title}" (${next.startTime})${opts.isLastDay ? ' [last-day, clamped to ' + clampedEndHHMM + ']' : ''} — requesting filler${lunchSteered ? ' [lunch-steered]' : ''}`);
+    console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=request_fill gap_min=${gap} between="${curr.title}"->"${next.title}" effectiveEnd=${clampedEndHHMM}${lunchSteered ? ' prefer=dining mealSlot=lunch' : ''}`);
 
     let proposed: any = null;
     try {
@@ -220,8 +247,9 @@ async function fillDeadGapsForWindow(
         dietaryRestrictions: opts.dietaryRestrictions,
         budgetTier: opts.budgetTier,
         tripCurrency: opts.tripCurrency,
-        preferCategory: opts.preferCategory,
+        preferCategory: effectivePrefer,
       }, { source: opts.isLastDay ? `gap-filler-lastday-${win.label}` : `gap-filler-auto-${win.label}` });
+
     } catch (e) {
       console.warn(`[fill-dead-gaps][${win.label}] proposeGapFiller threw:`, e);
       console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_pair reason=filler_threw err="${e instanceof Error ? e.message : String(e)}"`);
