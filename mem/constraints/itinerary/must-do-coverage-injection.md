@@ -8,7 +8,7 @@ type: constraint
 
 ## Pipeline (chain finalization, `dayNumber >= totalDays`)
 
-1. `extractMustDoVenues(meta)` — single source of truth for user-selected venues.
+1. `extractMustDoVenues(meta)` — single source of truth for user-selected **venues**. Excludes descriptive experience phrases ("Watch the sunset from a rooftop overlooking the Bosphorus") — those have no venue identity to match, so feeding them to the coverage gate forced every Istanbul-class trip to `itinerary_status='partial'`. Classifier (`isExperiencePhrase`): leading experience verb (watch/see/experience/enjoy/explore/…), OR experience noun (sunset/rooftop/nightlife/…) without a proper-noun token, OR >7 words without a proper noun. Sibling `extractMustDoExperiences(meta)` exposes the excluded phrases for the preference spine (soft USER WISHES only, never hard coverage).
 2. `assertMustDoCoverage(days, mustDos)` — whole-word identity-field match.
 3. `injectMissingMustDos(days, missing, ctx)` →
    - `scheduleMustDos` (clock-gated 17:00 museum / 21:00 after-dark ceilings; long-haul ≥360min skips Day 1 morning-arrival + last-day departure)
