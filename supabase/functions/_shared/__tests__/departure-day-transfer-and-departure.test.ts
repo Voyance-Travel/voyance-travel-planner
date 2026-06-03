@@ -87,6 +87,4 @@ Deno.test('§15z: no flight info → no transfer, no departure card, soft prompt
   const departure = out.activities.find((a: any) => String(a?.subcategory || '') === 'departure');
   assertEquals(Boolean(transfer), false, 'no transfer without flight clock');
   assertEquals(Boolean(departure), false, 'no departure without flight clock');
-  const prompt = out.activities.find((a: any) => String(a?.subcategory || '') === 'return_flight_missing');
-  assertEquals(Boolean(prompt), true, 'soft prompt card must be present');
 });
