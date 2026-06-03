@@ -4735,7 +4735,48 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'final_enforce_transfer_inject' } as any);
       console.log(`[Repair §15z] Injected airport transfer day=${dayNumber} @ ${transfer.startTime}`);
     }
+
+    // 2a) Inject DEPARTURE card (boarding window) when missing.
+    //     Spans requiredAtAirport → flight take-off. Mirrors step 5 of the
+    //     prompt's REQUIRED SEQUENCE; idempotent like checkout/transfer.
+    //     Skipped when a `category:'flight'` card or any user-locked
+    //     departure/boarding row already covers the slot.
+    {
+      const requiredAtAirportMin = (depMins as number) - buffer;
+      const departureExists = activities.some((a: any) => {
+        if (!isDepartureRow(a)) return false;
+        const s = parseTimeToMinutes(a?.startTime || a?.start_time || a?.time || '');
+        // Accept the existing row as covering the slot if it sits within ±60m
+        // of `requiredAtAirportMin`, OR if it's a user-locked flight card.
+        if (isLockedRow(a, lockedIds)) return true;
+        if (s === null) return false;
+        return Math.abs(s - requiredAtAirportMin) <= 60;
+      });
+      if (!departureExists) {
+        const departure = {
+          id: `day${dayNumber}-departure-final-${Date.now()}`,
+          title: 'Departure',
+          name: 'Departure',
+          description: 'Check-in, security, and boarding.',
+          startTime: minutesToHHMM(requiredAtAirportMin),
+          endTime: minutesToHHMM(depMins as number),
+          category: 'transport',
+          type: 'transport',
+          subcategory: 'departure',
+          location: { name: 'Airport', address: '' },
+          cost: { amount: 0, currency: 'USD' },
+          bookingRequired: false,
+          isLocked: false,
+          durationMinutes: Math.max(0, (depMins as number) - requiredAtAirportMin),
+          source: 'repair-final-departure-enforce',
+        };
+        activities.push(departure);
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'final_enforce_departure_inject' } as any);
+        console.log(`[Repair §15z] Injected departure card day=${dayNumber} ${departure.startTime}-${departure.endTime}`);
+      }
+    }
   }
+
 
   // 2b) NO RETURN FLIGHT — drop any AI-emitted airport-transfer rows and the
   //     orphan "Travel to <transfer>" connector preceding them, then inject a
