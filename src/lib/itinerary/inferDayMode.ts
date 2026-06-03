@@ -131,8 +131,14 @@ export function inferDayModeFallback({
       // Brunch band — explicitly NO breakfast required
       return { dayMode: 'morning_arrival', requiredMeals: ['lunch', 'dinner'] };
     }
-    // ≥ 12:00 — lunch first, no breakfast
-    return { dayMode: 'midday_arrival', requiredMeals: ['lunch', 'dinner'] };
+    if (arrivalMin < 13 * 60) {
+      // 12:00–12:59 — a sit-down lunch can still fit before check-in
+      return { dayMode: 'midday_arrival', requiredMeals: ['lunch', 'dinner'] };
+    }
+    // ≥ 13:00 — too late to fit lunch before check-in; dinner only.
+    // Mirrors backend meal-policy.ts (arrival ≥ 13:00 ⇒ dinner only) so the UI
+    // stops flagging "missing lunch" on a mid-afternoon arrival.
+    return { dayMode: 'afternoon_arrival', requiredMeals: ['dinner'] };
   }
 
   // Last day — departure

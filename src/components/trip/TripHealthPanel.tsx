@@ -685,12 +685,19 @@ const DRINKS_ONLY_RE = /\b(nightcap|cocktail|aperitif|aperitivo|drinks?|bar|spea
 const NON_MEAL_CAT_RE = /(transit|transport|transfer|flight|accommodation|hotel|check[\s-]?in|check[\s-]?out|return|shopping|museum|gallery|park|garden|wellness|spa|nightlife|entertainment|sightseeing|culture|tour)/i;
 const NON_MEAL_TITLE_RE = /\b(museum|park|garden|temple|shrine|gallery|palace|castle|cathedral|basilica|tour|market visit|walking tour|guided tour|monument|memorial|observatory|aquarium|zoo|theatre|theater|concert|show)\b/i;
 const VENUE_SUFFIX_RE = /\b(restaurant|trattoria|osteria|ristorante|bistro|brasserie|kaiseki|ramen|sushi|izakaya|honten|honke|tonkatsu|teppanyaki|yakitori|robatayaki|cafe|café|cantina|taqueria|cevicheria|asador|paladar|mes[oó]n|bouchon|maison|patisserie|p[âa]tisserie|boulangerie|konditorei|bakery|deli|gastropub|chophouse|steakhouse|pizzeria|enoteca|wine bar|brewpub|tavern|tapas)\b/i;
+// Food halls / gourmet food markets are eating venues even when the model tags
+// them as an "activity" (e.g. "Social Hour at Time Out Market") — mirrors
+// _shared/meal-detection.ts so the UI Trip Health panel agrees with the gate.
+const FOOD_HALL_RE = /\b(food\s?halls?|food\s?courts?|food\s?markets?|gourmet\s?markets?|street\s?food|time\s?out\s?market|mercado|eataly|borough\s?market)\b/i;
+const MARKET_SIGHTSEEING_RE = /\b(market\s?visit|visit(?:ing)?\s+(?:the\s+)?market|market\s?tour|tour\s+of\s+(?:the\s+)?market|flower\s?market|christmas\s?market|flea\s?market|antiques?\s?market)\b/i;
 
 function looksLikeMealVenue(a: any): boolean {
   const cat = String(a?.category || a?.type || '').toLowerCase();
   if (NON_MEAL_CAT_RE.test(cat)) return false;
   const title = String(a?.title || a?.name || '').toLowerCase();
   if (NON_MEAL_TITLE_RE.test(title)) return false;
+  // Food hall / gourmet market = an eating venue (not a sightseeing market visit).
+  if (FOOD_HALL_RE.test(title) && !MARKET_SIGHTSEEING_RE.test(title)) return true;
   const meta = a?.metadata || {};
   if (a?.cuisine || a?.cuisineType || meta.cuisine || meta.cuisineType) return true;
   if (meta.is_meal === true || meta.isMeal === true) return true;
