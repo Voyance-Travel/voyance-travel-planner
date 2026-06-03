@@ -319,7 +319,7 @@ function activityMatchesFuzzy(act: any, venueText: string): boolean {
   return fuzzyVenueMatch(venueText, activityIdentityHaystack(act));
 }
 
-interface ActivityWithDay { act: any; dayNumber: number }
+
 
 function parseHHMM(t: any): number | null {
   if (typeof t !== 'string') return null;
