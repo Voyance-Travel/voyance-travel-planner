@@ -30,6 +30,12 @@ export interface CoverageResult {
   total: number;
 }
 
+interface ActivityWithDay {
+  act: any;
+  dayNumber: number;
+}
+
+
 // Canonical aliases — landmarks the AI/user might phrase multiple ways.
 // Each entry: canonical → list of matcher tokens (lowercase). Matchers are
 // applied with `\b…\b` word boundaries against the activity venue/title.
