@@ -255,12 +255,9 @@ const FUZZY_CATEGORY_NOUNS = new Set([
 ]);
 
 function coreTokens(s: string): string[] {
-  const toks = normalize(s).split(/\s+/).filter(Boolean);
-  const t1 = toks.filter((t) =>
+  return normalize(s).split(/\s+/).filter((t) =>
     t.length >= 3 && !FUZZY_STOPS.has(t) && !FUZZY_GENERIC_WRAPPERS.has(t)
   );
-  const t2 = t1.filter((t) => !FUZZY_CATEGORY_NOUNS.has(t));
-  return t2.length > 0 ? t2 : t1; // never strip down to nothing
 }
 
 function editDistance(a: string, b: string): number {
@@ -292,13 +289,17 @@ function fuzzyVenueMatch(venueText: string, actHaystack: string): boolean {
 
   if (hasDistinctive) {
     const minCores = Math.min(vCores.length, aCores.length);
+    // Single-core on either side — the shared distinctive token suffices
+    // ("Pantheon" ≈ "Pantheon Visit", "Eat at Roscioli" ≈ "Dinner at Roscioli").
     if (minCores === 1) return true;
+    // Multi-core on BOTH sides — require ≥2 shared tokens so divergent
+    // qualifiers ("Galata Tower" vs "Galata Bridge", "Recoleta Cemetery"
+    // vs "Recoleta Neighborhood Walk", "Park Güell" vs "Park Ciutadella")
+    // can't collide on a single shared word.
     if (shared.length >= 2) return true;
-    // Single shared token across multi-core names — only accept if it's
-    // very distinctive (≥7 chars). Prevents "Galata Tower" ≈ "Galata Bridge".
-    if (shared.some((t) => t.length >= 7)) return true;
     return false;
   }
+
 
   // Edit-distance fallback for transliterations / minor spelling drift.
   for (const v of vCores) {
