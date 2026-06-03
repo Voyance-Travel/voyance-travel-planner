@@ -324,14 +324,18 @@ export function validateItineraryForPersist(
     if (!isLastDay) {
       const lastReal = acts
         .filter(a => isRealActivity(a) || isHotelReturnish(a))
-        .map(a => ({ a, e: parseHM(a.endTime || a.end_time) }))
+        // Rank by endTime, but FALL BACK to startTime. A hotel-return card is a
+        // point-in-time with a start and often NO end; ranking on endTime alone
+        // dropped it, letting an earlier nightcap rank "last" and falsely
+        // trigger MISSING_HOTEL_RETURN on a day that DOES end with a return.
+        .map(a => ({ a, e: parseHM(a.endTime || a.end_time) ?? parseHM(a.startTime || a.start_time) }))
         .filter(x => x.e !== null)
         .sort((a, b) => (a.e as number) - (b.e as number))
         .pop();
       if (lastReal && (lastReal.e as number) >= 19 * 60 && !isHotelReturnish(lastReal.a) && !isLogistics(lastReal.a)) {
         push({
           code: 'MISSING_HOTEL_RETURN', severity: 'warning', dayNumber,
-          detail: `Day ${dayNumber} ends at ${lastReal.a.endTime} with no return-to-hotel card.`,
+          detail: `Day ${dayNumber} ends at ${lastReal.a.endTime || lastReal.a.startTime} with no return-to-hotel card.`,
         });
       }
     }
