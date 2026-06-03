@@ -470,7 +470,7 @@ TIMELINE:
 - Leave for ${depStation}: ${leaveForStation}
 - Board ${modeLabel}: ${depTime}
 
-DEPARTURE DAY ACTIVITIES: 1-2 maximum (breakfast + farewell only)
+DEPARTURE DAY ACTIVITIES: breakfast + checkout + transfer + ${modeLabel} departure are ALL REQUIRED (steps 1-4 below). No sightseeing. Do NOT skip the transfer or the departure card — the count below is the full required sequence, not a maximum.
 
 REQUIRED SEQUENCE:
 1. "Breakfast at ${flightContext.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
