@@ -182,28 +182,138 @@ function isNonQualifyingActivity(act: any): boolean {
 }
 
 /**
- * Check whether an activity's identity fields match any matcher.
- *
- * Restricted haystack: title | name | venue | location.name. We DO NOT
- * search description / location.address — those frequently mention a
- * landmark in narrative prose without scheduling it (e.g. "near the
- * Pantheon, …"), which was the source of the Rome false-positive.
- *
- * Non-qualifying categories ("transport", "Travel to …") are filtered
- * upstream by the caller.
+ * Build the identity haystack for an activity. Restricted to title | name |
+ * venue | venue_name | location.name. We DO NOT search description /
+ * location.address — those frequently mention a landmark in narrative prose
+ * without scheduling it (e.g. "near the Pantheon, …").
  */
-function activityMatches(act: any, matchers: string[]): boolean {
-  if (!act || typeof act !== 'object') return false;
-  if (isNonQualifyingActivity(act)) return false;
-  const haystack = normalize(
+function activityIdentityHaystack(act: any): string {
+  return normalize(
     [act.title, act.name, act.venue, act.venue_name, act.location?.name]
       .filter(Boolean)
       .join(' | ')
   );
+}
+
+/**
+ * Exact/alias matcher pass. Non-qualifying categories ("transport",
+ * "Travel to …") are filtered up front so they can't satisfy a venue.
+ */
+function activityMatches(act: any, matchers: string[]): boolean {
+  if (!act || typeof act !== 'object') return false;
+  if (isNonQualifyingActivity(act)) return false;
+  const haystack = activityIdentityHaystack(act);
   return matchers.some(m => matchesWord(haystack, m));
 }
 
-interface ActivityWithDay { act: any; dayNumber: number }
+// =============================================================================
+// FUZZY VENUE MATCHING (conservative fallback)
+// =============================================================================
+//
+// The exact/alias matcher above misses when the AI schedules the user's
+// venue under a wrapper-style title ("Dinner at Roscioli" vs the user's
+// "Eat at Roscioli"), a transliteration ("Topkapı Sarayı" vs "Topkapi
+// Palace"), or a shortened form ("Topkapi" vs "Topkapi Palace"). Those are
+// the systematic source of `itinerary_status='partial'` even when the trip
+// is honestly complete.
+//
+// This layer extracts "core" identity tokens — dropping generic wrappers
+// (tour/visit/dinner/…) and stop words — then requires either:
+//   - shared distinctive tokens (≥1 token of length ≥5 shared exactly), AND
+//   - if both venue and activity contribute ≥2 cores, ≥2 shared OR ≥7-char
+//     shared token (to keep "Galata Tower" from matching "Galata Bridge"), OR
+//   - close edit-distance on the venue's anchor token (transliterations).
+//
+// Refuses to fire on description/address fields or on non-qualifying
+// categories — same defenses as the exact pass.
+
+const FUZZY_STOPS = new Set([
+  'the', 'of', 'at', 'in', 'on', 'to', 'for', 'and', 'with', 'by', 'from',
+  'a', 'an', 'st', 'de', 'la', 'le', 'el', 'di',
+]);
+
+const FUZZY_GENERIC_WRAPPERS = new Set([
+  // activity verbs/wrappers
+  'tour', 'tours', 'guided', 'private', 'visit', 'visits', 'visiting',
+  'experience', 'experiences', 'reservation', 'reservations',
+  'walk', 'stroll', 'exploration', 'exploring', 'wander', 'wandering',
+  'morning', 'afternoon', 'evening', 'night', 'nightly',
+  'early', 'late', 'leisurely', 'scenic', 'exclusive', 'priority',
+  'skip', 'line', 'self', 'free', 'roam',
+  // dining wrappers (so "Eat at Roscioli" ≈ "Dinner at Roscioli")
+  'eat', 'dine', 'dining', 'meal', 'meals', 'taste', 'tasting', 'tastings',
+  'sample', 'attend', 'dinner', 'lunch', 'breakfast', 'brunch', 'drinks',
+  'reservation', 'reservations',
+]);
+
+
+function coreTokens(s: string): string[] {
+  return normalize(s).split(/\s+/).filter((t) =>
+    t.length >= 3 && !FUZZY_STOPS.has(t) && !FUZZY_GENERIC_WRAPPERS.has(t)
+  );
+}
+
+function editDistance(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + cost);
+      }
+    }
+  }
+  return dp[m][n];
+}
+
+function fuzzyVenueMatch(venueText: string, actHaystack: string): boolean {
+  const vCores = coreTokens(venueText);
+  const aCores = coreTokens(actHaystack);
+  if (vCores.length === 0 || aCores.length === 0) return false;
+  const aSet = new Set(aCores);
+  const shared = vCores.filter((t) => aSet.has(t));
+  const hasDistinctive = shared.some((t) => t.length >= 5);
+
+  if (hasDistinctive) {
+    const minCores = Math.min(vCores.length, aCores.length);
+    // Single-core on either side — the shared distinctive token suffices
+    // ("Pantheon" ≈ "Pantheon Visit", "Eat at Roscioli" ≈ "Dinner at Roscioli").
+    if (minCores === 1) return true;
+    // Multi-core on BOTH sides — require ≥2 shared tokens so divergent
+    // qualifiers ("Galata Tower" vs "Galata Bridge", "Recoleta Cemetery"
+    // vs "Recoleta Neighborhood Walk", "Park Güell" vs "Park Ciutadella")
+    // can't collide on a single shared word.
+    if (shared.length >= 2) return true;
+    return false;
+  }
+
+
+  // Edit-distance fallback for transliterations / minor spelling drift.
+  for (const v of vCores) {
+    if (v.length < 5) continue;
+    for (const a of aCores) {
+      if (a.length < 5) continue;
+      if (Math.abs(a.length - v.length) > 2) continue;
+      const allowed = Math.max(1, Math.floor(v.length / 6));
+      if (editDistance(v, a) <= allowed) return true;
+    }
+  }
+  return false;
+}
+
+function activityMatchesFuzzy(act: any, venueText: string): boolean {
+  if (!act || typeof act !== 'object') return false;
+  if (isNonQualifyingActivity(act)) return false;
+  return fuzzyVenueMatch(venueText, activityIdentityHaystack(act));
+}
+
+
 
 function parseHHMM(t: any): number | null {
   if (typeof t !== 'string') return null;
@@ -272,21 +382,40 @@ export function assertMustDoCoverage(
   for (const venue of mustDos) {
     if (!venue || typeof venue !== 'string') continue;
     const { matchers } = canonicalize(venue);
-    // Find the BEST candidate: prefer viable (non-overlapping) matches.
+    // Pass 1: exact/alias matcher. Prefer viable (non-overlapping) hits.
     let viable: ActivityWithDay | null = null;
     let anyHit: ActivityWithDay | null = null;
+    let matchMode: 'exact' | 'fuzzy' | null = null;
     for (const entry of allWithDay) {
       if (!activityMatches(entry.act, matchers)) continue;
-      if (!anyHit) anyHit = entry;
+      if (!anyHit) { anyHit = entry; matchMode = 'exact'; }
       if (isVenueViableOnDay(entry.act, entry.dayNumber, allWithDay)) {
         viable = entry;
         break;
+      }
+    }
+    // Pass 2: conservative fuzzy match (wrapper-stripped token overlap +
+    // edit-distance). Only runs when the exact pass finds nothing — never
+    // overrides a known overlap demotion.
+    if (!viable && !anyHit) {
+      for (const entry of allWithDay) {
+        if (!activityMatchesFuzzy(entry.act, venue)) continue;
+        if (!anyHit) { anyHit = entry; matchMode = 'fuzzy'; }
+        if (isVenueViableOnDay(entry.act, entry.dayNumber, allWithDay)) {
+          viable = entry;
+          break;
+        }
       }
     }
     const hit = viable || null;
     if (hit) {
       scheduled.push(venue);
       matchedActivityIds[venue] = typeof hit.act.id === 'string' ? hit.act.id : null;
+      if (matchMode === 'fuzzy') {
+        console.info(
+          `[MUST_DO_FUZZY_MATCH] venue="${venue}" matched day=${hit.dayNumber} title="${hit.act?.title || hit.act?.name}"`,
+        );
+      }
     } else {
       missing.push(venue);
       matchedActivityIds[venue] = null;
@@ -302,4 +431,4 @@ export function assertMustDoCoverage(
 }
 
 // Re-export for tests
-export const __test__ = { canonicalize, activityMatches, normalize, matchesWord, isNonQualifyingActivity, isVenueViableOnDay };
+export const __test__ = { canonicalize, activityMatches, activityMatchesFuzzy, fuzzyVenueMatch, coreTokens, normalize, matchesWord, isNonQualifyingActivity, isVenueViableOnDay };
