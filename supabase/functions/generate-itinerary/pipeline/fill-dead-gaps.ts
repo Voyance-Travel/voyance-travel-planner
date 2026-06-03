@@ -28,6 +28,10 @@ const MIN_GAP_MIN = 180;
 const LAST_DAY_MIN_GAP_MIN = 75;
 const MIN_USABLE_OVERLAP_MIN = 60;
 
+// Meal-slot windows for steering filler when the gap overlaps a missing meal.
+const LUNCH_WIN = { fromMins: 11 * 60, toMins: 15 * 60 };
+
+
 const LOGISTICS_KEYWORDS = ['check-in', 'check in', 'checkin', 'check-out', 'check out', 'checkout', 'arrival', 'departure', 'flight', 'airport', 'transfer to', 'transfer from', 'luggage drop', 'freshen up', 'return to', 'settle in'];
 
 interface GapWindow {
