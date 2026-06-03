@@ -4418,6 +4418,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       hotelName: hotelName || hotelOverride?.name || 'Your Hotel',
       hotelAddress: hotelAddress || hotelOverride?.address || '',
       returnDepartureTime24,
+      arrivalTime24, // signal: trip uses flights → guarantee transfer even if return clock is unresolved
       airportTransferMinutes: input.airportTransferMinutes || 45,
       isLastDay,
       lockedIds,
@@ -4540,6 +4541,16 @@ interface EnforceDepartureDayInput {
   hotelName: string;
   hotelAddress: string;
   returnDepartureTime24?: string;
+  /**
+   * The outbound/destination ARRIVAL clock. Used only as a signal that the
+   * trip USES FLIGHTS (the traveler flew in). When the return-flight clock is
+   * unresolved but arrival is set, we still guarantee the airport transfer +
+   * departure scaffold against an estimated departure rather than silently
+   * skipping — closes "Day 4 missing airport transit" for round-trip flights
+   * whose return leg didn't parse. Absent ⇒ treated as a non-flight trip and
+   * no airport logistics are fabricated.
+   */
+  arrivalTime24?: string;
   airportTransferMinutes: number;
   isLastDay: boolean;
   lockedIds: Set<string>;
@@ -4550,6 +4561,12 @@ const FLIGHT_BUFFER_MIN = 180;          // international/default
 const TRAIN_BUFFER_MIN = 120;           // intercity rail
 const CHECKOUT_DUR_MIN = 30;
 const PRE_TRANSFER_BUFFER_MIN = 60;     // checkout → transfer slack
+// Conservative estimated return-departure used ONLY when a flight trip's
+// return-leg clock didn't resolve. Noon keeps checkout/transfer in the late
+// morning (reasonable for the common morning/midday-departure case) without
+// being so early it forces an absurd pre-dawn checkout. Cards built off this
+// are flagged `isEstimated` so the user can confirm against their real flight.
+const ESTIMATED_RETURN_DEPARTURE_MIN = 12 * 60; // 12:00 PM
 
 const isLockedRow = (a: any, lockedIds: Set<string>): boolean =>
   Boolean(lockedIds.has(a?.id) || a?.isLocked || a?.userAdded || a?.userEdited
@@ -4606,7 +4623,7 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
   const transferMins = Math.max(15, input.airportTransferMinutes || 45);
   const buffer = input.isLastDay ? FLIGHT_BUFFER_MIN : TRAIN_BUFFER_MIN;
   let depMins = returnDepartureTime24 ? parseTimeToMinutes(returnDepartureTime24) ?? null : null;
-  let depRecoveredFrom: 'input' | 'flight-card' | 'none' = depMins !== null ? 'input' : 'none';
+  let depRecoveredFrom: 'input' | 'flight-card' | 'estimated-default' | 'none' = depMins !== null ? 'input' : 'none';
 
   // Flight-clock recovery: when the caller didn't pass `returnDepartureTime24`
   // (chat-planner trips, multi-city legs, save-time net), recover from an
@@ -4626,9 +4643,22 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
       }
     }
   }
+  // Arrival-gated guarantee: the trip clearly USES FLIGHTS (the traveler flew
+  // in — arrivalTime24 is set) but no return-flight clock reached us and the
+  // AI emitted no flight card. Rather than silently skip the airport transfer
+  // and ship "checkout then nothing", inject the logistics scaffold against a
+  // conservative estimated departure. Marked estimated so the user confirms.
+  // Non-flight trips (no arrival) are untouched — no airport cards fabricated.
+  let isEstimatedDeparture = false;
+  if (depMins === null && input.arrivalTime24) {
+    depMins = ESTIMATED_RETURN_DEPARTURE_MIN;
+    depRecoveredFrom = 'estimated-default';
+    isEstimatedDeparture = true;
+    console.log(`[Repair §15z] missing_flight_clock_recovered_from=estimated-default day=${dayNumber} depTime=${minutesToHHMM(depMins)} — trip uses flights (arrival=${input.arrivalTime24}) but return clock unresolved; injecting estimated transfer+departure`);
+  }
   const hasFlight = depMins !== null;
   if (!hasFlight) {
-    console.log(`[Repair §15z] missing_flight_clock_recovered_from=none day=${dayNumber} — no transfer/departure injection`);
+    console.log(`[Repair §15z] missing_flight_clock_recovered_from=none day=${dayNumber} — no transfer/departure injection (non-flight trip)`);
   }
 
   // Compute target checkout (HARD cap regardless of any other path).
@@ -4718,7 +4748,9 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
         id: `day${dayNumber}-airport-transfer-final-${Date.now()}`,
         title: `Transfer to Airport`,
         name: `Transfer to Airport`,
-        description: 'Depart for the airport ahead of your flight.',
+        description: isEstimatedDeparture
+          ? 'Head to the airport for your return flight. Estimated timing — confirm against your actual flight.'
+          : 'Depart for the airport ahead of your flight.',
         startTime: minutesToHHMM(transferStartMin),
         endTime: minutesToHHMM(requiredAtAirportMin),
         category: 'transport',
@@ -4729,11 +4761,12 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
         bookingRequired: false,
         isLocked: false,
         durationMinutes: transferMins,
-        source: 'repair-final-transfer-enforce',
+        isEstimated: isEstimatedDeparture || undefined,
+        source: isEstimatedDeparture ? 'repair-final-transfer-estimated' : 'repair-final-transfer-enforce',
       };
       activities.push(transfer);
-      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'final_enforce_transfer_inject' } as any);
-      console.log(`[Repair §15z] Injected airport transfer day=${dayNumber} @ ${transfer.startTime}`);
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: isEstimatedDeparture ? 'final_enforce_transfer_inject_estimated' : 'final_enforce_transfer_inject' } as any);
+      console.log(`[Repair §15z] Injected airport transfer day=${dayNumber} @ ${transfer.startTime}${isEstimatedDeparture ? ' (estimated)' : ''}`);
     }
 
     // 2a) Inject DEPARTURE card (boarding window) when missing.
@@ -4755,9 +4788,11 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
       if (!departureExists) {
         const departure = {
           id: `day${dayNumber}-departure-final-${Date.now()}`,
-          title: 'Departure',
-          name: 'Departure',
-          description: 'Check-in, security, and boarding.',
+          title: isEstimatedDeparture ? 'Departure (estimated)' : 'Departure',
+          name: isEstimatedDeparture ? 'Departure (estimated)' : 'Departure',
+          description: isEstimatedDeparture
+            ? 'Return flight check-in, security, and boarding. Estimated timing — confirm against your actual flight.'
+            : 'Check-in, security, and boarding.',
           startTime: minutesToHHMM(requiredAtAirportMin),
           endTime: minutesToHHMM(depMins as number),
           category: 'transport',
@@ -4768,7 +4803,8 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
           bookingRequired: false,
           isLocked: false,
           durationMinutes: Math.max(0, (depMins as number) - requiredAtAirportMin),
-          source: 'repair-final-departure-enforce',
+          isEstimated: isEstimatedDeparture || undefined,
+          source: isEstimatedDeparture ? 'repair-final-departure-estimated' : 'repair-final-departure-enforce',
         };
         activities.push(departure);
         repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'final_enforce_departure_inject' } as any);
@@ -4863,9 +4899,15 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
   //    a sit-down meal that close to leaving for the airport is unrealistic
   //    and contradicts the "head to the airport" framing the user expects on
   //    departure days.
-  const cutoffMin = transferStartMin !== null
-    ? transferStartMin
-    : (12 * 60); // no-flight: noon cutoff for any leisure
+  // Estimated departures are a GUESS — never drop the user's real activities
+  // on a guess. Keep everything timed; only the always-buggy untimed-dining
+  // drop (s < 0 branch) still applies. With a real/known clock, use the
+  // transfer start (or noon for the no-flight legacy path) as the cutoff.
+  const cutoffMin = isEstimatedDeparture
+    ? Number.POSITIVE_INFINITY
+    : (transferStartMin !== null
+        ? transferStartMin
+        : (12 * 60)); // no-flight: noon cutoff for any leisure
   const DINING_NEAR_TRANSFER_MIN = 90;
   const isDiningRow = (a: any): boolean => {
     const cat = String(a?.category || a?.type || '').toLowerCase();
@@ -4945,7 +4987,7 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
     // satisfy the late_departure meal policy (e.g. 17:00 dinner before a
     // 21:45 flight). Without this exemption the meal-guard's work gets
     // silently undone here and the user sees "Day 4 missing lunch + dinner".
-    if (transferStartMin !== null && isDiningRow(a)) {
+    if (!isEstimatedDeparture && transferStartMin !== null && isDiningRow(a)) {
       const tags: string[] = Array.isArray(a?.tags) ? a.tags.map((x: any) => String(x).toLowerCase()) : [];
       const isMealGuardMeal = tags.includes('meal-guard');
       const e = pickEnd(a);
