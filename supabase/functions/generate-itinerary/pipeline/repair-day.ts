@@ -5010,6 +5010,36 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
   }
   activities = filtered;
 
+  // 3z) Normalize departure-day flight card end-times.
+  // A flight card's endTime is meant to be the local DEPARTURE window, not a
+  // naive same-day "landing" — an 11:00 AM long-haul that the model stamps
+  // ending at 23:30 renders as "11:00 AM → 11:30 PM", which is wrong (the
+  // flight lands days later in another timezone). Clamp any flight card whose
+  // span exceeds a sane departure window to start + 120m so the itinerary
+  // never shows a bogus same-day late-night flight end.
+  const FLIGHT_CARD_MAX_SPAN_MIN = 180;
+  const FLIGHT_CARD_WINDOW_MIN = 120;
+  for (const a of activities) {
+    const cat = String(a?.category || a?.type || '').toLowerCase();
+    if (cat !== 'flight') continue;
+    if (isLockedRow(a, lockedIds)) continue;
+    const s = parseTimeToMinutes(a?.startTime || a?.start_time || a?.time || '');
+    const e = parseTimeToMinutes(a?.endTime || a?.end_time || '');
+    if (s === null || e === null) continue;
+    if (e - s > FLIGHT_CARD_MAX_SPAN_MIN) {
+      const before = `${a.startTime || a.start_time}-${a.endTime || a.end_time}`;
+      a.endTime = minutesToHHMM(s + FLIGHT_CARD_WINDOW_MIN);
+      a.durationMinutes = FLIGHT_CARD_WINDOW_MIN;
+      repairs.push({
+        code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+        action: 'final_enforce_flight_endtime_clamped',
+        before,
+        after: `${a.startTime || a.start_time}-${a.endTime}`,
+      } as any);
+      console.log(`[Repair §15z] Clamped flight card end-time day=${dayNumber} "${a.title}" ${before} → ${a.startTime || a.start_time}-${a.endTime} (was a misleading same-day landing)`);
+    }
+  }
+
   // 4) Final chronological sort.
   activities.sort((a: any, b: any) => {
     const ta = parseTimeToMinutes(a.startTime || a.start_time || a.time || '') ?? 99999;
