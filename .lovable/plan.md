@@ -1,37 +1,31 @@
-# Close the overlap-discard gap in must-do coverage
+## Goal
 
-## Problem
+Force a fresh deploy of the `generate-itinerary` edge function so today's seven backend fixes (must-do gate, meal-slot timing, fuzzy coverage matcher, §15z flight-clock recovery + departure card injection, must-do overlap accept, and the two merged GitHub PRs) replace the 2-day-old bundle currently serving production.
 
-In `supabase/functions/_shared/assert-must-do-coverage.ts` (line 410), a must-do venue is reported missing whenever `viable` is null — even if `anyHit` found a real card on a day. The viability check (`isVenueViableOnDay`, line 334) demotes a hit when ≥50% of its duration AND ≥20 min overlaps another non-transit activity on the same day.
+## Scope
 
-Consequence: a correctly scheduled must-do (e.g. Ichiran Ramen 12:30–13:40) that happens to sit next to an overlapping lunch card is reported missing → `itinerary_status='partial'` → "Partial" badge — even though the card is in the itinerary and visible to the user. This is exactly the residual risk the user flagged.
+In scope:
+- One deploy action against `generate-itinerary`.
+- Confirm the new deployment timestamp + version.
+- Verify the function still boots (smoke check: `get-itinerary` action on an existing trip should return 200).
 
-## Fix
+Out of scope (deferred to a follow-up turn per your answer):
+- "Day 3 needs regeneration" false-positive toast.
+- "11:30 PM vs 11:30 AM" return-flight display bug.
+- Generating a fresh test trip and verifying Fix #3/#4 end-to-end (you'll do this manually after redeploy).
 
-Treat overlap as a soft signal, not a hard demotion, for coverage accounting.
+## Steps
 
-1. **`assertMustDoCoverage` (line 410)**: when `viable` is null but `anyHit` is set, accept `anyHit` as scheduled. Push to `scheduled`, record `matchedActivityIds[venue]`, and emit a structured telemetry log `[MUST_DO_OVERLAP_ACCEPTED] venue=… day=… title=… mode=exact|fuzzy` so we can still surface the scheduling conflict elsewhere (TripHealthPanel already detects activity overlaps independently).
-2. **Keep `isVenueViableOnDay` intact** — it still prioritizes a viable hit over an overlapping one in the inner loop (preferring a clean card when both exist across multiple days).
-3. **Inject-missing-must-dos parity check**: confirm `inject-missing-must-dos.ts` does not separately re-flag an accepted-but-overlapping venue (read-only audit; only change if it does).
+1. Call `supabase--deploy_edge_functions` with `["generate-itinerary"]`. Lovable-managed edge functions normally auto-deploy on file change, but this forces a clean rebuild regardless of cache state — addresses the "Last updated 2 days ago" symptom directly.
 
-## Tests
+2. Confirm deploy succeeded (tool returns success + new deployment ID).
 
-Extend `supabase/functions/_shared/__tests__/assert-must-do-coverage.fuzzy.test.ts` (or a new sibling file):
+3. Smoke-test with `supabase--curl_edge_functions` calling `action: 'get-itinerary'` against any existing trip ID — verifies the new bundle boots without import errors. (Pure read action; no mutation, no credits, no risk to existing data.)
 
-- Exact match present but overlapping → `scheduled` contains venue, `missing` empty.
-- Fuzzy match present but overlapping → same outcome with `mode=fuzzy` log.
-- Two days, one viable and one overlapping → viable still preferred (existing behavior preserved).
-- No hits at all → still reported missing (no regression).
+4. Report back: new deployment timestamp, smoke-test status, and confirmation that the 7 fixes are now live. You can then create the fresh test trip and verify Bangkok-class behavior.
 
-## Out of scope
+## Notes
 
-- Frontend changes (Partial badge logic in `TripDetail.tsx` is already correct).
-- Backfill of existing trips like the Tokyo one — user already confirmed regeneration is the verification path.
-- Changes to overlap detection in `TripHealthPanel` (it correctly surfaces overlapping cards as a separate warning).
-
-## Files
-
-- `supabase/functions/_shared/assert-must-do-coverage.ts` — single accept-anyHit branch + log.
-- `supabase/functions/_shared/__tests__/assert-must-do-coverage.fuzzy.test.ts` — 4 new cases.
-- `mem/constraints/itinerary/must-do-coverage-injection.md` — note overlap-acceptance rule.
-- `mem/index.md` — one-line update to the Must-Do Coverage core entry.
+- No code changes. No DB migrations. No frontend changes.
+- If the deploy fails, the most common cause is a `deno.lock` drift in `_shared/` — I'll re-read the deploy error and patch only if needed.
+- The two remaining bugs (Day 3 regeneration toast, AM/PM display) will be addressed in a separate plan once redeploy is confirmed and we have a fresh test trip to reproduce against.
