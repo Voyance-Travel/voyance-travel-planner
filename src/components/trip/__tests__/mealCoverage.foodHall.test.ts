@@ -40,3 +40,17 @@ describe('inferDayModeFallback — arrival lunch threshold matches backend', () 
     expect(out?.requiredMeals).toEqual(['breakfast', 'lunch', 'dinner']);
   });
 });
+
+describe('inferDayModeFallback — departure breakfast only when it fits', () => {
+  const base = { day: {}, dayIndex: 1, totalDays: 2 };
+
+  it('an 11 AM departure does NOT require breakfast (no airport-window)', () => {
+    const out = inferDayModeFallback({ ...base, tripFlightSelection: { return: { departureTime: '11:00' } } });
+    expect(out?.requiredMeals).toEqual([]);
+  });
+
+  it('a 1 PM departure requires breakfast (+ lunch)', () => {
+    const out = inferDayModeFallback({ ...base, tripFlightSelection: { return: { departureTime: '13:00' } } });
+    expect(out?.requiredMeals).toContain('breakfast');
+  });
+});

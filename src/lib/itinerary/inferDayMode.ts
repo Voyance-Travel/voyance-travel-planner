@@ -157,5 +157,11 @@ export function inferDayModeFallback({
   if (departureMin >= 12 * 60) {
     return { dayMode: 'midday_departure', requiredMeals: ['breakfast', 'lunch'] };
   }
-  return { dayMode: 'early_departure', requiredMeals: ['breakfast'] };
+  // Early departure (< noon): breakfast only fits if there's a real morning
+  // window before leaving for the airport. An ~11 AM intl flight means leaving
+  // ~07:15, so a sit-down breakfast can't fit and must NOT be required (it would
+  // make the traveler late). Mirrors backend meal-policy.ts.
+  const leaveForAirportMin = departureMin - 180 /* check-in buffer */ - 45 /* transfer */;
+  const breakfastFits = (leaveForAirportMin - 7 * 60) >= 45;
+  return { dayMode: 'early_departure', requiredMeals: breakfastFits ? ['breakfast'] : [] };
 }

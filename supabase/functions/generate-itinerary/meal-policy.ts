@@ -180,15 +180,33 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
     const depMins = departureTime24 ? timeToMins(departureTime24) : undefined;
 
     if (depMins !== undefined) {
+      // Airport-timing gate for breakfast: a sit-down breakfast only fits if
+      // there's a real morning window BEFORE the traveler must leave for the
+      // airport. For an ~11 AM international flight you check out and head
+      // straight to security (leave ≈ 07:15), so breakfast can't fit — forcing
+      // it would make people late. Only require breakfast when it genuinely
+      // fits. leaveForAirport ≈ departure − check-in buffer − transfer.
+      const AIRPORT_PREP_MINS = 180;    // intl check-in / security buffer
+      const TRANSFER_MINS = 45;         // hotel → airport
+      const EARLIEST_MORNING_MINS = 7 * 60; // realistic checkout/wake on departure day
+      const MIN_BREAKFAST_WINDOW = 45;
+      const leaveForAirportMins = depMins - AIRPORT_PREP_MINS - TRANSFER_MINS;
+      const breakfastFits = (leaveForAirportMins - EARLIEST_MORNING_MINS) >= MIN_BREAKFAST_WINDOW;
+
       if (depMins < 600) {
         // Before 10 AM — very early departure
         return meal('early_departure', [], usableHours,
           'Very early departure — no scheduled meals. Just checkout and transit to airport.');
       }
       if (depMins < 720) {
-        // 10 AM - noon — morning departure
-        return meal('early_departure', ['breakfast'], usableHours,
-          'Morning departure — breakfast only, then checkout and airport.');
+        // 10 AM - noon — morning departure. Require breakfast ONLY when it
+        // physically fits before the airport run (see breakfastFits above);
+        // otherwise no scheduled meals so the traveler isn't made late.
+        const meals: RequiredMeal[] = breakfastFits ? ['breakfast'] : [];
+        return meal('early_departure', meals, usableHours,
+          breakfastFits
+            ? 'Morning departure — breakfast only, then checkout and airport.'
+            : 'Early departure — no time for a sit-down breakfast before the airport run. No scheduled meals; checkout and head straight to the airport.');
       }
       if (depMins < 900) {
         // Noon - 3 PM — midday departure
