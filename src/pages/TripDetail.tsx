@@ -4232,7 +4232,7 @@ export default function TripDetail() {
                       </div>
                     )}
 
-                    <ErrorBoundary>
+                    <ErrorBoundary compact resetKeys={[trip.itinerary_data, trip.itinerary_status]}>
                    <EditorialItinerary
                    tripId={trip.id}
                   destination={trip.destination}
