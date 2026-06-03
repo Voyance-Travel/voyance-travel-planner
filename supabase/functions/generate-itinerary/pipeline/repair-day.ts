@@ -4605,8 +4605,31 @@ export function enforceDepartureDayLogistics(input: EnforceDepartureDayInput): {
   const { dayNumber, hotelName, hotelAddress, returnDepartureTime24, lockedIds } = input;
   const transferMins = Math.max(15, input.airportTransferMinutes || 45);
   const buffer = input.isLastDay ? FLIGHT_BUFFER_MIN : TRAIN_BUFFER_MIN;
-  const depMins = returnDepartureTime24 ? parseTimeToMinutes(returnDepartureTime24) ?? null : null;
+  let depMins = returnDepartureTime24 ? parseTimeToMinutes(returnDepartureTime24) ?? null : null;
+  let depRecoveredFrom: 'input' | 'flight-card' | 'none' = depMins !== null ? 'input' : 'none';
+
+  // Flight-clock recovery: when the caller didn't pass `returnDepartureTime24`
+  // (chat-planner trips, multi-city legs, save-time net), recover from an
+  // existing `category:'flight'` card on the same day. Closes the silent
+  // skip-injection branch behind "Day 4 missing airport transit".
+  if (depMins === null) {
+    const flightCard = activities.find((a: any) => {
+      const cat = String(a?.category || '').toLowerCase();
+      return cat === 'flight' && (a?.startTime || a?.start_time || a?.time);
+    });
+    if (flightCard) {
+      const t = parseTimeToMinutes(flightCard.startTime || flightCard.start_time || flightCard.time || '');
+      if (t !== null) {
+        depMins = t;
+        depRecoveredFrom = 'flight-card';
+        console.log(`[Repair §15z] missing_flight_clock_recovered_from=flight-card day=${dayNumber} depTime=${minutesToHHMM(depMins)}`);
+      }
+    }
+  }
   const hasFlight = depMins !== null;
+  if (!hasFlight) {
+    console.log(`[Repair §15z] missing_flight_clock_recovered_from=none day=${dayNumber} — no transfer/departure injection`);
+  }
 
   // Compute target checkout (HARD cap regardless of any other path).
   let targetCheckoutMin = HARD_CHECKOUT_CAP_MIN;
