@@ -542,7 +542,7 @@ HARD CONSTRAINTS:
 - Checkout: ${hotelCheckout}
 - Leave for airport: ${leaveHotelBy}
 
-DEPARTURE DAY ACTIVITIES: NONE or just breakfast
+DEPARTURE DAY ACTIVITIES: checkout + transfer + departure are REQUIRED; an optional breakfast may precede them. Do NOT skip the transfer or departure cards.
 
 REQUIRED SEQUENCE:
 1. "Wake up & Final Pack" (if including)
@@ -590,7 +590,7 @@ LUGGAGE REALITY:
 - Return to collect luggage
 - Leave for airport
 
-DEPARTURE DAY ACTIVITIES: 1 maximum (near hotel only)
+DEPARTURE DAY ACTIVITIES: breakfast + checkout + transfer + departure are REQUIRED. AT MOST 1 optional light activity near the hotel (step 3 below). Do NOT skip steps 4 and 5.
 
 ⚠️ CRITICAL SEQUENCE - CHECKOUT MUST HAPPEN BEFORE AIRPORT TRANSFER:
 1. "Breakfast at ${flightContext.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
@@ -646,7 +646,7 @@ LUGGAGE REALITY:
 - Activities in hotel neighborhood ONLY
 - No cross-city travel with bags
 
-DEPARTURE DAY ACTIVITIES: 1-2 maximum (morning only, near hotel)
+DEPARTURE DAY ACTIVITIES: breakfast + checkout + transfer + departure are REQUIRED. AT MOST 1-2 morning activities near the hotel (steps 2-3 below). Do NOT skip steps 5 and 6.
 
 ⚠️ CRITICAL SEQUENCE - CHECKOUT MUST HAPPEN BEFORE AIRPORT TRANSFER:
 1. "Breakfast"
@@ -708,7 +708,7 @@ LUGGAGE REALITY:
 - Return to hotel with time to spare
 - Collect luggage and leave
 
-DEPARTURE DAY ACTIVITIES: 2-3 maximum, but CONDENSED
+DEPARTURE DAY ACTIVITIES: checkout + transfer + departure are REQUIRED. AT MOST 2-3 leisure activities (condensed, near hotel). Do NOT skip the transfer or departure cards.
 
 ⚠️ CRITICAL SEQUENCE - ALL ACTIVITIES MUST BE CHRONOLOGICALLY ORDERED:
 1. "Breakfast"
