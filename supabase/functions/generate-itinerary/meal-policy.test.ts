@@ -64,6 +64,32 @@ Deno.test('meal policy: midday arrival only requires lunch and dinner', () => {
   assertEquals(policy.requiredMeals, ['lunch', 'dinner']);
 });
 
+Deno.test('meal policy: 11 AM departure does NOT require breakfast (no time before airport)', () => {
+  // An 11:00 intl flight ⇒ leave ~07:15 ⇒ no breakfast window. Requiring it
+  // would make the traveler late. Closes the false "Day N missing breakfast".
+  const policy = deriveMealPolicy({
+    dayNumber: 4, totalDays: 4, isFirstDay: false, isLastDay: true,
+    departureTime24: '11:00',
+  });
+  assertEquals(policy.requiredMeals, []);
+});
+
+Deno.test('meal policy: late-morning departure (11:45) still allows breakfast when it fits', () => {
+  const policy = deriveMealPolicy({
+    dayNumber: 4, totalDays: 4, isFirstDay: false, isLastDay: true,
+    departureTime24: '11:45',
+  });
+  assertEquals(policy.requiredMeals, ['breakfast']);
+});
+
+Deno.test('meal policy: midday departure (12:30) requires breakfast', () => {
+  const policy = deriveMealPolicy({
+    dayNumber: 4, totalDays: 4, isFirstDay: false, isLastDay: true,
+    departureTime24: '12:30',
+  });
+  assertEquals(policy.requiredMeals, ['breakfast']);
+});
+
 // Day 1 arrival brunch band — closes Milan/Mallorca/Faro/Bruges Day-1 breakfast gap.
 // See mem://constraints/itinerary/day1-arrival-brunch-band
 Deno.test('meal policy: arrival before 10:30 keeps traditional breakfast', () => {
@@ -103,7 +129,10 @@ Deno.test('meal policy: arrival 12:00+ stays lunch-first (no brunch)', () => {
   assertEquals(policy.requiredMeals, ['lunch', 'dinner']);
 });
 
-Deno.test('meal policy: early departure requires only breakfast', () => {
+Deno.test('meal policy: 10:30 departure has no breakfast window (leave ~06:45) → no required meals', () => {
+  // Updated for the airport-timing rule: a 10:30 intl flight means leaving for
+  // the airport ~06:45, so a sit-down breakfast can't fit and must NOT be
+  // required (it would make the traveler late). See departure breakfastFits.
   const policy = deriveMealPolicy({
     dayNumber: 4,
     totalDays: 4,
@@ -112,7 +141,7 @@ Deno.test('meal policy: early departure requires only breakfast', () => {
     departureTime24: '10:30',
   });
 
-  assertEquals(policy.requiredMeals, ['breakfast']);
+  assertEquals(policy.requiredMeals, []);
 });
 
 Deno.test('meal policy: late departure requires all 3 meals', () => {

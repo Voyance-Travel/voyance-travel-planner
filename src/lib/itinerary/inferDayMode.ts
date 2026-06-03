@@ -131,8 +131,14 @@ export function inferDayModeFallback({
       // Brunch band — explicitly NO breakfast required
       return { dayMode: 'morning_arrival', requiredMeals: ['lunch', 'dinner'] };
     }
-    // ≥ 12:00 — lunch first, no breakfast
-    return { dayMode: 'midday_arrival', requiredMeals: ['lunch', 'dinner'] };
+    if (arrivalMin < 13 * 60) {
+      // 12:00–12:59 — a sit-down lunch can still fit before check-in
+      return { dayMode: 'midday_arrival', requiredMeals: ['lunch', 'dinner'] };
+    }
+    // ≥ 13:00 — too late to fit lunch before check-in; dinner only.
+    // Mirrors backend meal-policy.ts (arrival ≥ 13:00 ⇒ dinner only) so the UI
+    // stops flagging "missing lunch" on a mid-afternoon arrival.
+    return { dayMode: 'afternoon_arrival', requiredMeals: ['dinner'] };
   }
 
   // Last day — departure
@@ -151,5 +157,11 @@ export function inferDayModeFallback({
   if (departureMin >= 12 * 60) {
     return { dayMode: 'midday_departure', requiredMeals: ['breakfast', 'lunch'] };
   }
-  return { dayMode: 'early_departure', requiredMeals: ['breakfast'] };
+  // Early departure (< noon): breakfast only fits if there's a real morning
+  // window before leaving for the airport. An ~11 AM intl flight means leaving
+  // ~07:15, so a sit-down breakfast can't fit and must NOT be required (it would
+  // make the traveler late). Mirrors backend meal-policy.ts.
+  const leaveForAirportMin = departureMin - 180 /* check-in buffer */ - 45 /* transfer */;
+  const breakfastFits = (leaveForAirportMin - 7 * 60) >= 45;
+  return { dayMode: 'early_departure', requiredMeals: breakfastFits ? ['breakfast'] : [] };
 }
