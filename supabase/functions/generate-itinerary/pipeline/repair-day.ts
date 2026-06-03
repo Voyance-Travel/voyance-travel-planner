@@ -4570,6 +4570,20 @@ const isAirportTransferRow = (a: any): boolean => {
     || /head to airport|taxi to airport|departure transfer/.test(t);
 };
 
+// "Departure" / boarding card — step 5 of the prompt's REQUIRED SEQUENCE.
+// Distinct from the transfer (which ENDS at airport-arrival); the departure
+// card spans airport-arrival → flight take-off ("check-in, security, boarding").
+const isDepartureRow = (a: any): boolean => {
+  if (isAirportTransferRow(a)) return false;
+  const cat = String(a?.category || '').toLowerCase();
+  const sub = String(a?.subcategory || '').toLowerCase();
+  if (sub === 'departure') return true;
+  if (cat === 'flight') return true; // user-added flight row counts
+  if (!(cat === 'transport' || cat === 'transit' || cat === 'logistics')) return false;
+  const t = String(a?.title || a?.name || '').toLowerCase();
+  return /\bdeparture\b|\bboarding\b|check[\s-]?in (?:and )?security|security (?:and|&) boarding/.test(t);
+};
+
 const isLogisticsRow = (a: any): boolean => {
   const cat = String(a?.category || '').toLowerCase();
   if (cat === 'flight') return true;
