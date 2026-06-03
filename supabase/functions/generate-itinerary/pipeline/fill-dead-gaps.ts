@@ -216,8 +216,23 @@ async function fillDeadGapsForWindow(
       return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     })();
 
-    console.log(`[fill-dead-gaps][${win.label}] Detected ${Math.round(gap / 60)}h${gap % 60 ? (gap % 60) + 'm' : ''} gap between "${curr.title}" (${curr.endTime}) and "${next.title}" (${next.startTime})${opts.isLastDay ? ' [last-day, clamped to ' + clampedEndHHMM + ']' : ''} — requesting filler`);
-    console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=request_fill gap_min=${gap} between="${curr.title}"->"${next.title}" effectiveEnd=${clampedEndHHMM}`);
+    // Lunch-overlap steering: when the gap overlaps the lunch window
+    // (11:00–15:00) by ≥60min AND the day still requires lunch, force
+    // preferCategory='dining' so the filler picks a real lunch venue
+    // instead of a sightseeing card that leaves the midday slot empty.
+    let effectivePrefer = opts.preferCategory;
+    let lunchSteered = false;
+    if (
+      Array.isArray(opts.requiredMeals) &&
+      opts.requiredMeals.includes('lunch') &&
+      Math.min(clampedNextStart, LUNCH_WIN.toMins) - Math.max(currEnd, LUNCH_WIN.fromMins) >= MIN_USABLE_OVERLAP_MIN
+    ) {
+      effectivePrefer = 'dining';
+      lunchSteered = true;
+    }
+
+    console.log(`[fill-dead-gaps][${win.label}] Detected ${Math.round(gap / 60)}h${gap % 60 ? (gap % 60) + 'm' : ''} gap between "${curr.title}" (${curr.endTime}) and "${next.title}" (${next.startTime})${opts.isLastDay ? ' [last-day, clamped to ' + clampedEndHHMM + ']' : ''} — requesting filler${lunchSteered ? ' [lunch-steered]' : ''}`);
+    console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=request_fill gap_min=${gap} between="${curr.title}"->"${next.title}" effectiveEnd=${clampedEndHHMM}${lunchSteered ? ' prefer=dining mealSlot=lunch' : ''}`);
 
     let proposed: any = null;
     try {
@@ -232,8 +247,9 @@ async function fillDeadGapsForWindow(
         dietaryRestrictions: opts.dietaryRestrictions,
         budgetTier: opts.budgetTier,
         tripCurrency: opts.tripCurrency,
-        preferCategory: opts.preferCategory,
+        preferCategory: effectivePrefer,
       }, { source: opts.isLastDay ? `gap-filler-lastday-${win.label}` : `gap-filler-auto-${win.label}` });
+
     } catch (e) {
       console.warn(`[fill-dead-gaps][${win.label}] proposeGapFiller threw:`, e);
       console.log(`[DEAD_GAP_DECISION] day=${dayN} window=${win.label} decision=skip_pair reason=filler_threw err="${e instanceof Error ? e.message : String(e)}"`);
