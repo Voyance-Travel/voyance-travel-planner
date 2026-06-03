@@ -4,6 +4,10 @@
 
 import { isRecurringEvent } from './currency-utils.ts';
 import type { RequiredMeal } from './meal-policy.ts';
+// The meal slot detector is shared verbatim with the integrity GATE so the two
+// can never disagree (root fix for "Partial on every trip"). See
+// _shared/meal-detection.ts.
+import { detectMealSlots as detectMealSlotsCanonical } from '../_shared/meal-detection.ts';
 import { getRandomFallbackRestaurant, resolveAnyMealFallback } from './fix-placeholders.ts';
 import { detectCrossCityMention } from './cross-city-filter.ts';
 import { extractRestaurantVenueName, venueNamesMatch } from './generation-utils.ts';
@@ -133,8 +137,6 @@ const MEAL_KEYWORDS: Record<RequiredMeal, string[]> = {
   dinner: ['dinner', 'supper', 'evening meal'],
 };
 
-const DINING_CATEGORIES = ['dining', 'restaurant', 'food', 'cafe', 'meal'];
-
 // Sentinel patterns that mean "we don't have a real venue here yet". Any
 // activity matching these is NOT counted as a real meal — the guard must
 // replace it with a named venue. This is the load-bearing fix that keeps
@@ -161,77 +163,10 @@ function isPlaceholderMealActivity(activity: any): boolean {
 export function detectMealSlots(
   activities: Array<Pick<StrictActivityMinimal, 'title' | 'category'> & { startTime?: string }>
 ): RequiredMeal[] {
-  const detected = new Set<RequiredMeal>();
-
-  // Reject titles where the meal keyword is preceded by a temporal modifier
-  // (e.g. "Freshen Up before anniversary dinner", "Heading to brunch", "Prep for dinner").
-  // Such cards are NOT actual meals and must not satisfy meal-guard compliance.
-  const TEMPORAL_MEAL_MODIFIER_RE = /\b(before|after|for|prep|prepare|preparing|ahead\s+of|en\s+route\s+to|on\s+the\s+way\s+to|heading\s+to|towards?)\s+\w*\s*(breakfast|brunch|lunch|dinner|supper)\b/i;
-
-  // Time windows for each meal — a "Lunch at X" card at 15:55 must NOT credit
-  // lunch (the actual lunch slot is empty, leaving a midday hole). Mirrors
-  // the time-based detector windows below.
-  const MEAL_WINDOWS: Record<RequiredMeal, { fromMins: number; toMins: number }> = {
-    breakfast: { fromMins: 6 * 60,  toMins: 11 * 60 },   // 06:00–11:00
-    lunch:     { fromMins: 11 * 60, toMins: 15 * 60 },   // 11:00–15:00
-    dinner:    { fromMins: 17 * 60, toMins: 22 * 60 + 1 }, // 17:00–22:00 (incl.)
-  };
-
-  for (const activity of activities) {
-    // Skip placeholder/unverified slots — they must NEVER satisfy meal compliance.
-    if (isPlaceholderMealActivity(activity)) continue;
-
-    const rawTitle = (activity.title || '').toString();
-    const title = rawTitle.toLowerCase();
-    const category = (activity.category || '').toLowerCase();
-    const isDining = DINING_CATEGORIES.some(c => category.includes(c));
-    const hasTemporalModifier = TEMPORAL_MEAL_MODIFIER_RE.test(rawTitle);
-    const startMins = parseTimeToMinutesLocal(((activity as any).startTime || '').toString());
-
-    for (const mealType of Object.keys(MEAL_KEYWORDS) as RequiredMeal[]) {
-      const titleHit = MEAL_KEYWORDS[mealType].some(keyword => title.includes(keyword));
-      const categoryHit = MEAL_KEYWORDS[mealType].some(keyword => category.includes(keyword));
-
-      if (titleHit && (!isDining || hasTemporalModifier)) {
-        console.log(`[detectMealSlots] Rejected false-positive "${rawTitle}" — temporal modifier before meal keyword OR non-dining category`);
-        continue;
-      }
-      if (isDining && (titleHit || categoryHit)) {
-        // Out-of-window title-hit guard: a dining card titled "Lunch at X"
-        // starting at 15:55 must NOT satisfy the lunch requirement, since
-        // the actual midday slot is still empty. Category-only hits (no
-        // meal keyword in title) fall through to the time-based detector.
-        if (titleHit && startMins !== null) {
-          const w = MEAL_WINDOWS[mealType];
-          if (startMins < w.fromMins || startMins >= w.toMins) {
-            console.log(`[MEAL_FALSE_POSITIVE] rejected "${rawTitle}" at ${(activity as any).startTime} reason=out_of_window meal=${mealType}`);
-            continue;
-          }
-        }
-        detected.add(mealType);
-      }
-    }
-
-    // Time-based meal detection for dining-category activities (e.g. "De Kas" at 19:00)
-    // Cocktail bars / lounges / nightcap venues do NOT count as dinner
-    const DRINKS_ONLY_RE = /\b(cocktails?|nightcap|drinks?|bar|lounge|aperitifs?|speakeasy|aperitivo)\b/i;
-    if (isDining) {
-      const minutes = startMins;
-      if (minutes !== null) {
-        if (minutes >= 6 * 60 && minutes < 11 * 60) detected.add('breakfast');
-        else if (minutes >= 11 * 60 && minutes < 15 * 60) detected.add('lunch');
-        else if (minutes >= 17 * 60 && minutes <= 22 * 60) {
-          if (!DRINKS_ONLY_RE.test(title)) {
-            detected.add('dinner');
-          } else {
-            console.log(`[detectMealSlots] Skipping drinks-only venue as dinner: "${title}"`);
-          }
-        }
-      }
-    }
-  }
-
-  return (['breakfast', 'lunch', 'dinner'] as RequiredMeal[]).filter(meal => detected.has(meal));
+  // Delegates to the canonical detector shared with the integrity gate, so the
+  // meal GUARD (which injects) and the integrity GATE (which flags
+  // MEAL_COVERAGE_MISSING) use byte-identical logic and can never disagree.
+  return detectMealSlotsCanonical(activities) as RequiredMeal[];
 }
 
 

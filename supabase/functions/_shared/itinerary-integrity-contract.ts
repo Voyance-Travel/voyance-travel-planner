@@ -30,6 +30,11 @@
  * every prior layer and shipped to users.
  */
 
+// Meal detection is shared with the generation-time meal GUARD so the gate
+// can never flag a meal the guard considered present (the "Partial on every
+// trip" false-positive). See _shared/meal-detection.ts.
+import { detectMealSlots } from './meal-detection.ts';
+
 export type IntegrityCode =
   | 'TEMPORAL_ROLE_TIME_MISMATCH'
   | 'NIGHTLIFE_BEFORE_EVENING'
@@ -239,37 +244,12 @@ function feasibleActivityMinutes(arrivalMin: number | null, departureMin: number
   return Math.max(0, dayEnd - dayStart);
 }
 
-// ── meal classification (mirrors meal-policy windows) ────────────────────
-const MEAL_BANDS: Record<'breakfast' | 'lunch' | 'dinner', [number, number]> = {
-  breakfast: [5 * 60, 11 * 60],        // 05:00 – 11:00 (brunch counts)
-  lunch:     [11 * 60, 15 * 60 + 30],  // 11:00 – 15:30
-  dinner:    [17 * 60 + 30, 23 * 60 + 30], // 17:30 – 23:30
-};
-const DRINKS_ONLY_RE = /\b(nightcap|cocktail|aperitif|aperitivo|drinks|wine\s+bar|speakeasy|rooftop\s+bar|pub|bar\s+crawl)\b/i;
+// Meal classification now lives in _shared/meal-detection.ts (detectMealSlots),
+// shared verbatim with the generation-time meal guard. The previous local copy
+// used EXACT category matching + slightly different windows than the guard,
+// which produced false MEAL_COVERAGE_MISSING on real venues tagged
+// "fine_dining" / "casual_dining" etc. — the "Partial on every trip" bug.
 
-function isMealCard(a: any): boolean {
-  if (!a) return false;
-  const cat = String(a?.category || '').toLowerCase();
-  if (['dining', 'restaurant', 'food', 'meal', 'cafe', 'breakfast', 'brunch', 'lunch', 'dinner'].includes(cat)) return true;
-  const title = String(a?.title || a?.name || '');
-  return /\b(breakfast|brunch|lunch|dinner|supper)\b/i.test(title);
-}
-
-function classifyMealSlot(a: any): 'breakfast' | 'lunch' | 'dinner' | null {
-  if (!isMealCard(a)) return null;
-  const title = String(a?.title || a?.name || '').toLowerCase();
-  if (DRINKS_ONLY_RE.test(title)) return null; // drinks-only NEVER satisfies dinner
-  if (/\b(breakfast|brunch)\b/.test(title)) return 'breakfast';
-  if (/\b(lunch)\b/.test(title)) return 'lunch';
-  if (/\b(dinner|supper)\b/.test(title)) return 'dinner';
-  // Fall back to time-band when title is neutral (e.g. "Roscioli")
-  const start = pickStart(a);
-  if (start === null) return null;
-  if (start >= MEAL_BANDS.breakfast[0] && start <= MEAL_BANDS.breakfast[1]) return 'breakfast';
-  if (start >= MEAL_BANDS.lunch[0] && start <= MEAL_BANDS.lunch[1]) return 'lunch';
-  if (start >= MEAL_BANDS.dinner[0] && start <= MEAL_BANDS.dinner[1]) return 'dinner';
-  return null;
-}
 export function checkItineraryIntegrity(
   days: readonly any[] | null | undefined,
   ctx: IntegrityContext = {},
@@ -352,12 +332,10 @@ export function checkItineraryIntegrity(
     // scheduled (or drinks-only cards are masquerading), block ready.
     const required = ctx.requiredMealsByDay?.[dayNumber] || [];
     if (required.length > 0) {
-      const scheduledSet = new Set<'breakfast' | 'lunch' | 'dinner'>();
-      for (const a of acts) {
-        const slot = classifyMealSlot(a);
-        if (slot) scheduledSet.add(slot);
-      }
-      const scheduled = Array.from(scheduledSet);
+      // Use the SAME detector the generation-time meal guard uses, so the gate
+      // can never flag a meal the guard considered satisfied.
+      const scheduled = detectMealSlots(acts);
+      const scheduledSet = new Set(scheduled);
       const missing = required.filter((m) => !scheduledSet.has(m));
       mealCoverage.push({ dayNumber, required, scheduled, missing });
       if (missing.length > 0) {
