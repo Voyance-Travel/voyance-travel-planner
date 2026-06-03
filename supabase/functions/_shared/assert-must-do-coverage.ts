@@ -182,25 +182,141 @@ function isNonQualifyingActivity(act: any): boolean {
 }
 
 /**
- * Check whether an activity's identity fields match any matcher.
- *
- * Restricted haystack: title | name | venue | location.name. We DO NOT
- * search description / location.address — those frequently mention a
- * landmark in narrative prose without scheduling it (e.g. "near the
- * Pantheon, …"), which was the source of the Rome false-positive.
- *
- * Non-qualifying categories ("transport", "Travel to …") are filtered
- * upstream by the caller.
+ * Build the identity haystack for an activity. Restricted to title | name |
+ * venue | venue_name | location.name. We DO NOT search description /
+ * location.address — those frequently mention a landmark in narrative prose
+ * without scheduling it (e.g. "near the Pantheon, …").
  */
-function activityMatches(act: any, matchers: string[]): boolean {
-  if (!act || typeof act !== 'object') return false;
-  if (isNonQualifyingActivity(act)) return false;
-  const haystack = normalize(
+function activityIdentityHaystack(act: any): string {
+  return normalize(
     [act.title, act.name, act.venue, act.venue_name, act.location?.name]
       .filter(Boolean)
       .join(' | ')
   );
+}
+
+/**
+ * Exact/alias matcher pass. Non-qualifying categories ("transport",
+ * "Travel to …") are filtered up front so they can't satisfy a venue.
+ */
+function activityMatches(act: any, matchers: string[]): boolean {
+  if (!act || typeof act !== 'object') return false;
+  if (isNonQualifyingActivity(act)) return false;
+  const haystack = activityIdentityHaystack(act);
   return matchers.some(m => matchesWord(haystack, m));
+}
+
+// =============================================================================
+// FUZZY VENUE MATCHING (conservative fallback)
+// =============================================================================
+//
+// The exact/alias matcher above misses when the AI schedules the user's
+// venue under a wrapper-style title ("Dinner at Roscioli" vs the user's
+// "Eat at Roscioli"), a transliteration ("Topkapı Sarayı" vs "Topkapi
+// Palace"), or a shortened form ("Topkapi" vs "Topkapi Palace"). Those are
+// the systematic source of `itinerary_status='partial'` even when the trip
+// is honestly complete.
+//
+// This layer extracts "core" identity tokens — dropping generic wrappers
+// (tour/visit/dinner/…) and stop words — then requires either:
+//   - shared distinctive tokens (≥1 token of length ≥5 shared exactly), AND
+//   - if both venue and activity contribute ≥2 cores, ≥2 shared OR ≥7-char
+//     shared token (to keep "Galata Tower" from matching "Galata Bridge"), OR
+//   - close edit-distance on the venue's anchor token (transliterations).
+//
+// Refuses to fire on description/address fields or on non-qualifying
+// categories — same defenses as the exact pass.
+
+const FUZZY_STOPS = new Set([
+  'the', 'of', 'at', 'in', 'on', 'to', 'for', 'and', 'with', 'by', 'from',
+  'a', 'an', 'st', 'de', 'la', 'le', 'el', 'di',
+]);
+
+const FUZZY_GENERIC_WRAPPERS = new Set([
+  // activity verbs/wrappers
+  'tour', 'tours', 'guided', 'private', 'visit', 'visits', 'visiting',
+  'experience', 'experiences', 'reservation', 'reservations',
+  'walk', 'stroll', 'exploration', 'exploring', 'wander', 'wandering',
+  'morning', 'afternoon', 'evening', 'night', 'nightly',
+  'early', 'late', 'leisurely', 'scenic', 'exclusive', 'priority',
+  'skip', 'line', 'self', 'free', 'roam',
+  // dining wrappers (so "Eat at Roscioli" ≈ "Dinner at Roscioli")
+  'eat', 'dine', 'dining', 'meal', 'meals', 'taste', 'tasting', 'tastings',
+  'sample', 'attend', 'dinner', 'lunch', 'breakfast', 'brunch', 'drinks',
+  'reservation', 'reservations',
+]);
+
+// Conditionally-stripped: drop only if at least one stronger core remains.
+const FUZZY_CATEGORY_NOUNS = new Set([
+  'museum', 'museums', 'palace', 'cathedral', 'basilica', 'church', 'market',
+  'fountain', 'square', 'park', 'gardens', 'garden', 'gallery', 'mosque',
+  'temple', 'tower', 'bridge', 'castle', 'monastery', 'ruins', 'plaza',
+  'district', 'quarter', 'neighborhood', 'area',
+]);
+
+function coreTokens(s: string): string[] {
+  const toks = normalize(s).split(/\s+/).filter(Boolean);
+  const t1 = toks.filter((t) =>
+    t.length >= 3 && !FUZZY_STOPS.has(t) && !FUZZY_GENERIC_WRAPPERS.has(t)
+  );
+  const t2 = t1.filter((t) => !FUZZY_CATEGORY_NOUNS.has(t));
+  return t2.length > 0 ? t2 : t1; // never strip down to nothing
+}
+
+function editDistance(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + cost);
+      }
+    }
+  }
+  return dp[m][n];
+}
+
+function fuzzyVenueMatch(venueText: string, actHaystack: string): boolean {
+  const vCores = coreTokens(venueText);
+  const aCores = coreTokens(actHaystack);
+  if (vCores.length === 0 || aCores.length === 0) return false;
+  const aSet = new Set(aCores);
+  const shared = vCores.filter((t) => aSet.has(t));
+  const hasDistinctive = shared.some((t) => t.length >= 5);
+
+  if (hasDistinctive) {
+    const minCores = Math.min(vCores.length, aCores.length);
+    if (minCores === 1) return true;
+    if (shared.length >= 2) return true;
+    // Single shared token across multi-core names — only accept if it's
+    // very distinctive (≥7 chars). Prevents "Galata Tower" ≈ "Galata Bridge".
+    if (shared.some((t) => t.length >= 7)) return true;
+    return false;
+  }
+
+  // Edit-distance fallback for transliterations / minor spelling drift.
+  for (const v of vCores) {
+    if (v.length < 5) continue;
+    for (const a of aCores) {
+      if (a.length < 5) continue;
+      if (Math.abs(a.length - v.length) > 2) continue;
+      const allowed = Math.max(1, Math.floor(v.length / 6));
+      if (editDistance(v, a) <= allowed) return true;
+    }
+  }
+  return false;
+}
+
+function activityMatchesFuzzy(act: any, venueText: string): boolean {
+  if (!act || typeof act !== 'object') return false;
+  if (isNonQualifyingActivity(act)) return false;
+  return fuzzyVenueMatch(venueText, activityIdentityHaystack(act));
 }
 
 interface ActivityWithDay { act: any; dayNumber: number }
