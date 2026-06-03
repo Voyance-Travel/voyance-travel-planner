@@ -78,6 +78,7 @@ import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import { useActivityImageWriteback } from '@/hooks/useActivityImageWriteback';
 import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
+import { sanitizeEditorialDays } from '@/utils/itinerarySanitize';
 import { resolveActivityDisplayDescription } from '@/lib/itinerary/diningDescriptionFallback';
 import { getDisplayDayTitle } from '@/utils/dayTitleCoherence';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
@@ -1400,33 +1401,19 @@ export function EditorialItinerary({
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
 
   const [rawDays, setRawDays] = useState<EditorialDay[]>(() =>
-    initialDays.map(day => ({
-      ...day,
-      activities: (day.activities || [])
-        .filter(a => a != null)
-        .map(a => {
-          const raw = a as any;
-          const safeTitle = a.title || raw.name || raw.venue || 'Untitled Activity';
-          return { ...a, title: safeTitle };
-        }),
-    }))
+    sanitizeEditorialDays<EditorialDay>(initialDays)
   );
 
-  // Sanitize wrapper: ensures every activity has a valid title and filters out
-  // completely empty/null activity objects that slip through from edge functions.
+  // Sanitize wrapper: coerces every string field the renderer calls string
+  // methods on (title/category/startTime/location.name/…) to a guaranteed
+  // string and drops null/empty activity objects that slip through from the
+  // edge functions during partial generation. This is the single data
+  // boundary that makes the "Small Detour" render crash structurally
+  // impossible — see utils/itinerarySanitize.ts.
   const setDays: typeof setRawDays = useCallback((update) => {
     setRawDays(prev => {
       const next = typeof update === 'function' ? update(prev) : update;
-      return next.map(day => ({
-        ...day,
-        activities: (day.activities || [])
-          .filter(a => a != null)
-          .map(a => {
-            const raw = a as any;
-            const safeTitle = a.title || raw.name || raw.venue || 'Untitled Activity';
-            return { ...a, title: safeTitle };
-          }),
-      }));
+      return sanitizeEditorialDays<EditorialDay>(next);
     });
   }, []);
 
