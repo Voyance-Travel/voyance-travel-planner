@@ -246,13 +246,6 @@ const FUZZY_GENERIC_WRAPPERS = new Set([
   'reservation', 'reservations',
 ]);
 
-// Conditionally-stripped: drop only if at least one stronger core remains.
-const FUZZY_CATEGORY_NOUNS = new Set([
-  'museum', 'museums', 'palace', 'cathedral', 'basilica', 'church', 'market',
-  'fountain', 'square', 'park', 'gardens', 'garden', 'gallery', 'mosque',
-  'temple', 'tower', 'bridge', 'castle', 'monastery', 'ruins', 'plaza',
-  'district', 'quarter', 'neighborhood', 'area',
-]);
 
 function coreTokens(s: string): string[] {
   return normalize(s).split(/\s+/).filter((t) =>
