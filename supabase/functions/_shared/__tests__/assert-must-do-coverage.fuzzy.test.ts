@@ -99,7 +99,10 @@ Deno.test("coreTokens: strips generic wrappers + stop words", () => {
   assertEquals(__test__.coreTokens('Morning Visit to the Pantheon'), ['pantheon']);
 });
 
-Deno.test("coreTokens: keeps category noun when it's the only distinctive token", () => {
-  // "Tower" alone would otherwise strip to nothing; safety net keeps it.
-  assertEquals(__test__.coreTokens('The Tower'), ['tower']);
+Deno.test("coreTokens: preserves category nouns (so divergent qualifiers can disagree)", () => {
+  // 'tower' / 'bridge' / 'cemetery' stay so single-shared-token matches across
+  // multi-core names get rejected by the ≥2-shared rule.
+  assertEquals(__test__.coreTokens('Galata Tower'), ['galata', 'tower']);
+  assertEquals(__test__.coreTokens('Recoleta Cemetery'), ['recoleta', 'cemetery']);
 });
+
