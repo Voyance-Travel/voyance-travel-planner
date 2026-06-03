@@ -407,7 +407,10 @@ export function assertMustDoCoverage(
         }
       }
     }
-    const hit = viable || null;
+    // Accept overlapping hit as scheduled (the card IS in the itinerary; the
+    // overlap is independently surfaced by TripHealthPanel). Prevents bogus
+    // "Partial" badge when a must-do happens to sit next to another card.
+    const hit = viable || anyHit || null;
     if (hit) {
       scheduled.push(venue);
       matchedActivityIds[venue] = typeof hit.act.id === 'string' ? hit.act.id : null;
@@ -416,14 +419,14 @@ export function assertMustDoCoverage(
           `[MUST_DO_FUZZY_MATCH] venue="${venue}" matched day=${hit.dayNumber} title="${hit.act?.title || hit.act?.name}"`,
         );
       }
+      if (!viable && anyHit) {
+        console.info(
+          `[MUST_DO_OVERLAP_ACCEPTED] venue="${venue}" day=${anyHit.dayNumber} title="${anyHit.act?.title || anyHit.act?.name}" mode=${matchMode}`,
+        );
+      }
     } else {
       missing.push(venue);
       matchedActivityIds[venue] = null;
-      if (anyHit) {
-        console.warn(
-          `[MUST_DO_OVERLAP_DEMOTE] venue="${venue}" matched day=${anyHit.dayNumber} title="${anyHit.act?.title || anyHit.act?.name}" overlaps a real activity → marking missing`,
-        );
-      }
     }
   }
 
