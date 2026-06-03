@@ -82,7 +82,15 @@ export interface FillDeadGapsOptions {
    * pass 'dining' so the AI picks a dinner restaurant when one fits.
    */
   preferCategory?: 'dining' | 'culture' | 'activity';
+  /**
+   * Required meals for this day. When set and the detected gap overlaps a
+   * still-missing meal's window by ≥60min, the filler is steered to dining
+   * with the appropriate mealSlot hint. Closes the recurring "3h afternoon
+   * gap filled with sightseeing while lunch slot stays empty" pattern.
+   */
+  requiredMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
 }
+
 
 export interface FillDeadGapsResult {
   activities: any[];
