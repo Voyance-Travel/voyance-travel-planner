@@ -106,3 +106,58 @@ Deno.test("coreTokens: preserves category nouns (so divergent qualifiers can dis
   assertEquals(__test__.coreTokens('Recoleta Cemetery'), ['recoleta', 'cemetery']);
 });
 
+// ── Overlap-acceptance regression (Ichiran Ramen Shibuya class) ──────────
+// A must-do that DOES schedule but overlaps another non-transit card on the
+// same day must still count as scheduled — the card is in the itinerary and
+// the user sees it. Independent overlap detection lives in TripHealthPanel.
+Deno.test("overlap-accept: exact match overlapping a lunch card is still scheduled", () => {
+  const r = assertMustDoCoverage(
+    days([[
+      { id: 'lunch', title: 'Lunch in Shibuya', category: 'dining', startTime: '12:30', endTime: '13:30' },
+      { id: 'ich', title: 'Lunch at Ichiran Ramen Shibuya', category: 'dining', startTime: '12:30', endTime: '13:40' },
+    ]]),
+    ['Ichiran Ramen Shibuya'],
+  );
+  assertEquals(r.missing, []);
+  assertEquals(r.scheduled, ['Ichiran Ramen Shibuya']);
+  assertEquals(r.matchedActivityIds?.['Ichiran Ramen Shibuya'], 'ich');
+});
+
+Deno.test("overlap-accept: fuzzy match overlapping another card is still scheduled", () => {
+  const r = assertMustDoCoverage(
+    days([[
+      { id: 'other', title: 'Coffee break', category: 'dining', startTime: '15:00', endTime: '16:00' },
+      { id: 'pan', title: 'Pantheon Visit', category: 'sightseeing', startTime: '15:00', endTime: '16:10' },
+    ]]),
+    ['Pantheon'],
+  );
+  assertEquals(r.missing, []);
+  assertEquals(r.matchedActivityIds?.['Pantheon'], 'pan');
+});
+
+Deno.test("overlap-accept: viable hit on another day is still preferred over overlapping hit", () => {
+  const r = assertMustDoCoverage(
+    days([
+      [
+        { id: 'clash', title: 'Lunch in Shibuya', category: 'dining', startTime: '12:30', endTime: '13:30' },
+        { id: 'd1', title: 'Lunch at Ichiran Ramen Shibuya', category: 'dining', startTime: '12:30', endTime: '13:40' },
+      ],
+      [
+        { id: 'd2', title: 'Dinner at Ichiran Ramen Shibuya', category: 'dining', startTime: '19:00', endTime: '20:00' },
+      ],
+    ]),
+    ['Ichiran Ramen Shibuya'],
+  );
+  assertEquals(r.missing, []);
+  // Viable (non-overlapping) day-2 hit wins.
+  assertEquals(r.matchedActivityIds?.['Ichiran Ramen Shibuya'], 'd2');
+});
+
+Deno.test("overlap-accept: still reports missing when no hit at all", () => {
+  const r = assertMustDoCoverage(
+    days([[{ id: 'x', title: 'Walk through Asakusa', category: 'sightseeing', startTime: '10:00', endTime: '11:00' }]]),
+    ['Ichiran Ramen Shibuya'],
+  );
+  assertEquals(r.missing, ['Ichiran Ramen Shibuya']);
+});
+
