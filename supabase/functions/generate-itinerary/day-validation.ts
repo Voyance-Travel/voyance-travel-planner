@@ -168,6 +168,15 @@ export function detectMealSlots(
   // Such cards are NOT actual meals and must not satisfy meal-guard compliance.
   const TEMPORAL_MEAL_MODIFIER_RE = /\b(before|after|for|prep|prepare|preparing|ahead\s+of|en\s+route\s+to|on\s+the\s+way\s+to|heading\s+to|towards?)\s+\w*\s*(breakfast|brunch|lunch|dinner|supper)\b/i;
 
+  // Time windows for each meal — a "Lunch at X" card at 15:55 must NOT credit
+  // lunch (the actual lunch slot is empty, leaving a midday hole). Mirrors
+  // the time-based detector windows below.
+  const MEAL_WINDOWS: Record<RequiredMeal, { fromMins: number; toMins: number }> = {
+    breakfast: { fromMins: 6 * 60,  toMins: 11 * 60 },   // 06:00–11:00
+    lunch:     { fromMins: 11 * 60, toMins: 15 * 60 },   // 11:00–15:00
+    dinner:    { fromMins: 17 * 60, toMins: 22 * 60 + 1 }, // 17:00–22:00 (incl.)
+  };
+
   for (const activity of activities) {
     // Skip placeholder/unverified slots — they must NEVER satisfy meal compliance.
     if (isPlaceholderMealActivity(activity)) continue;
@@ -177,6 +186,7 @@ export function detectMealSlots(
     const category = (activity.category || '').toLowerCase();
     const isDining = DINING_CATEGORIES.some(c => category.includes(c));
     const hasTemporalModifier = TEMPORAL_MEAL_MODIFIER_RE.test(rawTitle);
+    const startMins = parseTimeToMinutesLocal(((activity as any).startTime || '').toString());
 
     for (const mealType of Object.keys(MEAL_KEYWORDS) as RequiredMeal[]) {
       const titleHit = MEAL_KEYWORDS[mealType].some(keyword => title.includes(keyword));
@@ -187,6 +197,17 @@ export function detectMealSlots(
         continue;
       }
       if (isDining && (titleHit || categoryHit)) {
+        // Out-of-window title-hit guard: a dining card titled "Lunch at X"
+        // starting at 15:55 must NOT satisfy the lunch requirement, since
+        // the actual midday slot is still empty. Category-only hits (no
+        // meal keyword in title) fall through to the time-based detector.
+        if (titleHit && startMins !== null) {
+          const w = MEAL_WINDOWS[mealType];
+          if (startMins < w.fromMins || startMins >= w.toMins) {
+            console.log(`[MEAL_FALSE_POSITIVE] rejected "${rawTitle}" at ${(activity as any).startTime} reason=out_of_window meal=${mealType}`);
+            continue;
+          }
+        }
         detected.add(mealType);
       }
     }
@@ -195,8 +216,7 @@ export function detectMealSlots(
     // Cocktail bars / lounges / nightcap venues do NOT count as dinner
     const DRINKS_ONLY_RE = /\b(cocktails?|nightcap|drinks?|bar|lounge|aperitifs?|speakeasy|aperitivo)\b/i;
     if (isDining) {
-      const startTime = (activity as any).startTime || '';
-      const minutes = parseTimeToMinutesLocal(startTime);
+      const minutes = startMins;
       if (minutes !== null) {
         if (minutes >= 6 * 60 && minutes < 11 * 60) detected.add('breakfast');
         else if (minutes >= 11 * 60 && minutes < 15 * 60) detected.add('lunch');
@@ -213,6 +233,7 @@ export function detectMealSlots(
 
   return (['breakfast', 'lunch', 'dinner'] as RequiredMeal[]).filter(meal => detected.has(meal));
 }
+
 
 
 function resolveRequiredMealsForValidation(
