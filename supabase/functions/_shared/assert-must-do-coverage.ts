@@ -388,21 +388,40 @@ export function assertMustDoCoverage(
   for (const venue of mustDos) {
     if (!venue || typeof venue !== 'string') continue;
     const { matchers } = canonicalize(venue);
-    // Find the BEST candidate: prefer viable (non-overlapping) matches.
+    // Pass 1: exact/alias matcher. Prefer viable (non-overlapping) hits.
     let viable: ActivityWithDay | null = null;
     let anyHit: ActivityWithDay | null = null;
+    let matchMode: 'exact' | 'fuzzy' | null = null;
     for (const entry of allWithDay) {
       if (!activityMatches(entry.act, matchers)) continue;
-      if (!anyHit) anyHit = entry;
+      if (!anyHit) { anyHit = entry; matchMode = 'exact'; }
       if (isVenueViableOnDay(entry.act, entry.dayNumber, allWithDay)) {
         viable = entry;
         break;
+      }
+    }
+    // Pass 2: conservative fuzzy match (wrapper-stripped token overlap +
+    // edit-distance). Only runs when the exact pass finds nothing — never
+    // overrides a known overlap demotion.
+    if (!viable && !anyHit) {
+      for (const entry of allWithDay) {
+        if (!activityMatchesFuzzy(entry.act, venue)) continue;
+        if (!anyHit) { anyHit = entry; matchMode = 'fuzzy'; }
+        if (isVenueViableOnDay(entry.act, entry.dayNumber, allWithDay)) {
+          viable = entry;
+          break;
+        }
       }
     }
     const hit = viable || null;
     if (hit) {
       scheduled.push(venue);
       matchedActivityIds[venue] = typeof hit.act.id === 'string' ? hit.act.id : null;
+      if (matchMode === 'fuzzy') {
+        console.info(
+          `[MUST_DO_FUZZY_MATCH] venue="${venue}" matched day=${hit.dayNumber} title="${hit.act?.title || hit.act?.name}"`,
+        );
+      }
     } else {
       missing.push(venue);
       matchedActivityIds[venue] = null;
@@ -418,4 +437,4 @@ export function assertMustDoCoverage(
 }
 
 // Re-export for tests
-export const __test__ = { canonicalize, activityMatches, normalize, matchesWord, isNonQualifyingActivity, isVenueViableOnDay };
+export const __test__ = { canonicalize, activityMatches, activityMatchesFuzzy, fuzzyVenueMatch, coreTokens, normalize, matchesWord, isNonQualifyingActivity, isVenueViableOnDay };
