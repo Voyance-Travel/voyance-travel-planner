@@ -8,7 +8,7 @@
 // Mirrors the pattern in `weather/index.ts` (auth.getClaims on the bearer
 // token) so any future change happens in one place.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

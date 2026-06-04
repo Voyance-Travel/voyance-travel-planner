@@ -12,7 +12,7 @@
 // All writes are best-effort and never throw — instrumentation must never
 // break generation.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 
 type AnyJson = unknown;
 
@@ -98,12 +98,15 @@ class NoopTrace {
 class TraceRecorder {
   id: string;
   enabled = true;
-  private client: ReturnType<typeof createClient>;
+  // Loosely typed (matches the previous esm.sh client): the pinned npm
+  // supabase-js has stricter insert/update overloads that reject our untyped
+  // table writes. This is a tracing client only; runtime behavior is identical.
+  private client: any;
   private stageOrder = 0;
   private mutationBuffer: MutationArgs[] = [];
   private startedAt: number;
 
-  constructor(id: string, client: ReturnType<typeof createClient>) {
+  constructor(id: string, client: any) {
     this.id = id;
     this.client = client;
     this.startedAt = Date.now();
