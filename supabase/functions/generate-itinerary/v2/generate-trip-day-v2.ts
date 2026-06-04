@@ -59,10 +59,38 @@ import { ledgerCheck } from '../ledger-check.ts';
 import { nuclearCrossCitySweep, nuclearDiningStrip, nuclearWellnessSweep } from '../fix-placeholders.ts';
 import { noopTrace, attachTrace, withStage, type Trace } from '../../_shared/trace-recorder.ts';
 import { runDetectorRepairs } from './detector-repairs.ts';
+import { findEmptyDays, mapTableRowsToActivities, applyHealedDay } from './completeness-gate.ts';
 import { stampArrivalAnchorTruth } from '../../_shared/stamp-arrival-anchor-truth.ts';
 import { stampDepartureAnchorTruth } from '../../_shared/stamp-departure-anchor-truth.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
+
+/**
+ * Read a day's persisted activities from the authoritative
+ * `itinerary_days` → `itinerary_activities` tables (written by persistDay,
+ * step 7) and map them back to the in-memory JSON shape. Used by the
+ * final-day completeness gate to recover a day whose JSON merge was lost.
+ * Returns [] when the day row or its activities are absent.
+ */
+async function readDayActivitiesFromTable(
+  supabase: any,
+  tripId: string,
+  dayNumber: number,
+): Promise<any[]> {
+  const { data: dayRow } = await supabase
+    .from('itinerary_days')
+    .select('id')
+    .eq('trip_id', tripId)
+    .eq('day_number', dayNumber)
+    .maybeSingle();
+  if (!dayRow?.id) return [];
+  const { data: rows } = await supabase
+    .from('itinerary_activities')
+    .select('*')
+    .eq('itinerary_day_id', dayRow.id)
+    .order('sort_order', { ascending: true });
+  return mapTableRowsToActivities(rows || []);
+}
 
 export async function handleGenerateTripDayV2(
   supabase: any,
@@ -71,6 +99,11 @@ export async function handleGenerateTripDayV2(
 ): Promise<Response> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
   const { tripId, dayNumber, traceId } = params;
+  // `heal` marks a re-entrant regeneration fired by the final-day completeness
+  // gate to fill a genuinely-empty day. A heal run skips the chain self-invoke
+  // (no cascade) and skips the completeness gate (no nested recursion) — it
+  // only re-generates + persists its own day, then returns.
+  const heal = params.heal === true;
 
   if (!tripId || typeof dayNumber !== 'number') {
     return new Response(
@@ -740,6 +773,79 @@ export async function handleGenerateTripDayV2(
       );
     } catch (e) { console.warn('[v2] bookend-verification failed:', e); }
 
+    // ── 8f.5 FINAL-DAY COMPLETENESS GATE ───────────────────────────────
+    // ROOT-CAUSE FIX (issue #1, "Day N shipped empty → Partial despite ready"):
+    // the table↔JSON divergence can leave a day with a title but no activities
+    // in trips.itinerary_data, and every per-day gate skips an empty day. On
+    // the LAST day (non-heal run) verify all days 1..N are non-empty and heal
+    // any that aren't — table backfill (free, recovers the divergence) → regen
+    // (genuine miss) → the null-safe 8g meal floor below (never literally
+    // empty). See completeness-gate.ts. Best-effort: never block the write.
+    if (isLastDay && !heal) {
+      const dayDateFor = (n: number): string | null => {
+        if (!facts.dates.startDate) return null;
+        const dd = new Date(facts.dates.startDate + 'T00:00:00Z');
+        dd.setUTCDate(dd.getUTCDate() + (n - 1));
+        return dd.toISOString().slice(0, 10);
+      };
+      try {
+        let empties = findEmptyDays(mergedDays, totalDays);
+        if (empties.length > 0) {
+          console.error(`[v2] [COMPLETENESS_GATE] last-day check found EMPTY days=[${empties.join(',')}] — healing`);
+
+          // ── Tier 1: backfill from the authoritative itinerary_activities table ──
+          for (const dn of empties) {
+            try {
+              const acts = await readDayActivitiesFromTable(supabase, tripId, dn);
+              if (acts.length > 0) {
+                applyHealedDay(mergedDays, dn, acts, dayDateFor(dn));
+                console.log(`[v2] [COMPLETENESS_HEAL_TABLE] day=${dn} recovered ${acts.length} activities from itinerary_activities`);
+              }
+            } catch (e) {
+              console.warn(`[v2] [COMPLETENESS_HEAL_TABLE] day=${dn} failed:`, (e as Error)?.message);
+            }
+          }
+
+          // ── Tier 2: regenerate any day the table couldn't recover (genuine miss) ──
+          empties = findEmptyDays(mergedDays, totalDays);
+          for (const dn of empties) {
+            try {
+              console.warn(`[v2] [COMPLETENESS_HEAL_REGEN] day=${dn} empty in table too — regenerating (heal)`);
+              await handleGenerateTripDayV2(supabase, userId, {
+                ...params, tripId, dayNumber: dn, totalDays, traceId, heal: true,
+              });
+              const acts = await readDayActivitiesFromTable(supabase, tripId, dn);
+              if (acts.length > 0) {
+                applyHealedDay(mergedDays, dn, acts, dayDateFor(dn));
+                console.log(`[v2] [COMPLETENESS_HEAL_REGEN] day=${dn} recovered ${acts.length} activities after regen`);
+              }
+            } catch (e) {
+              console.error(`[v2] [COMPLETENESS_HEAL_REGEN] day=${dn} regen failed:`, (e as Error)?.message);
+            }
+          }
+
+          // ── Tier 3 floor + honest flag: anything still empty gets the 8g meal
+          // floor below; record it so the integrity gate/health panel stay honest. ──
+          const stillEmpty = findEmptyDays(mergedDays, totalDays);
+          if (stillEmpty.length > 0) {
+            console.error(`[v2] [COMPLETENESS_GATE] days STILL empty after heal=[${stillEmpty.join(',')}] — meal floor applies; flagging incomplete`);
+            for (const dn of stillEmpty) {
+              const d = mergedDays.find((x: any) => (x?.dayNumber ?? x?.day_number) === dn);
+              if (d) {
+                d.metadata = d.metadata || {};
+                d.metadata.quality = d.metadata.quality || {};
+                d.metadata.quality.incomplete_day = true;
+              }
+            }
+          } else {
+            console.log(`[v2] [COMPLETENESS_GATE] all ${totalDays} days non-empty after heal`);
+          }
+        }
+      } catch (e) {
+        console.error('[v2] [COMPLETENESS_GATE] failed (non-blocking):', (e as Error)?.message);
+      }
+    }
+
     // ── 8g. FINAL meal-coverage gate — the LAST thing before the write ──
     // ROOT-CAUSE FIX (Day-N-missing-dinner): the 6c meal guard runs
     // mid-pipeline, BEFORE the step-8 mutating passes. ledger-check
@@ -753,8 +859,11 @@ export async function handleGenerateTripDayV2(
     for (const d of mergedDays) {
       const dNum = d?.dayNumber;
       if (typeof dNum !== 'number') continue;
-      const acts = Array.isArray(d?.activities) ? d.activities : null;
-      if (!acts) continue;
+      // Null-safe: an empty/absent-activities day must NOT be skipped — it's
+      // exactly the day that needs the meal floor. Normalize to [] so the
+      // guard can inject required meals (completeness-gate floor, issue #1).
+      if (!Array.isArray(d.activities)) d.activities = [];
+      const acts = d.activities;
       try {
         const policy = facts.mealPolicy(dNum);
         if (!policy.requiredMeals.length) continue;
@@ -857,7 +966,7 @@ export async function handleGenerateTripDayV2(
     // Mirrors v1 action-generate-trip-day:4684 — uses EdgeRuntime.waitUntil
     // so the response returns immediately while the next day generates
     // server-side. Cancel-aware via metadata.generation_cancelled.
-    if (dayNumber < totalDays) {
+    if (dayNumber < totalDays && !heal) {
       try {
         const generateUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-itinerary`;
         const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
