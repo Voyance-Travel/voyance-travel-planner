@@ -775,12 +775,23 @@ export async function handleGenerateTripDayV2(
 
     // ── 8f.5 FINAL-DAY COMPLETENESS GATE ───────────────────────────────
     // ROOT-CAUSE FIX (issue #1, "Day N shipped empty → Partial despite ready"):
-    // the table↔JSON divergence can leave a day with a title but no activities
-    // in trips.itinerary_data, and every per-day gate skips an empty day. On
-    // the LAST day (non-heal run) verify all days 1..N are non-empty and heal
-    // any that aren't — table backfill (free, recovers the divergence) → regen
-    // (genuine miss) → the null-safe 8g meal floor below (never literally
-    // empty). See completeness-gate.ts. Best-effort: never block the write.
+    // an intermittent LLM miss (or a table↔JSON divergence) can leave a day with
+    // a title but no activities, and every per-day gate skips an empty day. On
+    // the LAST day (non-heal run) verify all days 1..N are non-empty.
+    //   Tier 1 — table backfill (cheap, in-request): recovers the divergence
+    //     case (table rows committed but JSON merge lost) at zero LLM cost.
+    //   Tier 2 — background regen: days still empty after backfill are queued in
+    //     `pendingHeals` and re-generated via a FIRE-AND-FORGET self-invoke fired
+    //     AFTER this request's JSON write (see step 11b). This MUST NOT be awaited
+    //     here: a synchronous regen makes the final-day request overrun the edge
+    //     wall-clock budget, the heartbeat goes stale, and the launcher watchdog
+    //     (correctly) flags "Generation paused" — converting a healable gap into
+    //     a hard stall. The background heal is its own request with its own budget
+    //     and heartbeat.
+    //   Tier 3 — null-safe 8g meal floor (below) keeps a pending-heal day
+    //     non-empty in THIS write until the background heal upgrades it; an
+    //     `incomplete_day` flag keeps the health panel honest in the interim.
+    let pendingHeals: number[] = [];
     if (isLastDay && !heal) {
       const dayDateFor = (n: number): string | null => {
         if (!facts.dates.startDate) return null;
@@ -789,7 +800,7 @@ export async function handleGenerateTripDayV2(
         return dd.toISOString().slice(0, 10);
       };
       try {
-        let empties = findEmptyDays(mergedDays, totalDays);
+        const empties = findEmptyDays(mergedDays, totalDays);
         if (empties.length > 0) {
           console.error(`[v2] [COMPLETENESS_GATE] last-day check found EMPTY days=[${empties.join(',')}] — healing`);
 
@@ -806,30 +817,11 @@ export async function handleGenerateTripDayV2(
             }
           }
 
-          // ── Tier 2: regenerate any day the table couldn't recover (genuine miss) ──
-          empties = findEmptyDays(mergedDays, totalDays);
-          for (const dn of empties) {
-            try {
-              console.warn(`[v2] [COMPLETENESS_HEAL_REGEN] day=${dn} empty in table too — regenerating (heal)`);
-              await handleGenerateTripDayV2(supabase, userId, {
-                ...params, tripId, dayNumber: dn, totalDays, traceId, heal: true,
-              });
-              const acts = await readDayActivitiesFromTable(supabase, tripId, dn);
-              if (acts.length > 0) {
-                applyHealedDay(mergedDays, dn, acts, dayDateFor(dn));
-                console.log(`[v2] [COMPLETENESS_HEAL_REGEN] day=${dn} recovered ${acts.length} activities after regen`);
-              }
-            } catch (e) {
-              console.error(`[v2] [COMPLETENESS_HEAL_REGEN] day=${dn} regen failed:`, (e as Error)?.message);
-            }
-          }
-
-          // ── Tier 3 floor + honest flag: anything still empty gets the 8g meal
-          // floor below; record it so the integrity gate/health panel stay honest. ──
-          const stillEmpty = findEmptyDays(mergedDays, totalDays);
-          if (stillEmpty.length > 0) {
-            console.error(`[v2] [COMPLETENESS_GATE] days STILL empty after heal=[${stillEmpty.join(',')}] — meal floor applies; flagging incomplete`);
-            for (const dn of stillEmpty) {
+          // ── Tier 2: queue days still empty for a background regen (step 11b) ──
+          pendingHeals = findEmptyDays(mergedDays, totalDays);
+          if (pendingHeals.length > 0) {
+            console.error(`[v2] [COMPLETENESS_GATE] days needing background regen=[${pendingHeals.join(',')}] — queued; meal floor applies; flagging incomplete`);
+            for (const dn of pendingHeals) {
               const d = mergedDays.find((x: any) => (x?.dayNumber ?? x?.day_number) === dn);
               if (d) {
                 d.metadata = d.metadata || {};
@@ -838,7 +830,7 @@ export async function handleGenerateTripDayV2(
               }
             }
           } else {
-            console.log(`[v2] [COMPLETENESS_GATE] all ${totalDays} days non-empty after heal`);
+            console.log(`[v2] [COMPLETENESS_GATE] all ${totalDays} days recovered from table — non-empty`);
           }
         }
       } catch (e) {
@@ -960,6 +952,53 @@ export async function handleGenerateTripDayV2(
       }).eq('id', tripId);
     } catch (e) {
       console.warn(`[v2] heartbeat/progress refresh failed (non-blocking) day=${dayNumber}:`, (e as Error)?.message);
+    }
+
+    // ── 11b. Background completeness heal (fire-and-forget) ────────────
+    // Re-generate any day the table backfill could not recover, as its OWN
+    // request (own wall-clock budget + heartbeat). Fired AFTER step 9's JSON
+    // write so the heal's later write lands on top and is never clobbered by
+    // this request. heal=true (forwarded via `...params` in the router) makes
+    // the heal run skip the day-chain self-invoke (no cascade) and the
+    // completeness gate (no recursion). NOT awaited — keeping the final-day
+    // request short is exactly what prevents the watchdog false-pause.
+    if (isLastDay && !heal && pendingHeals.length > 0) {
+      try {
+        const healUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-itinerary`;
+        const healKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const eRTHeal = (globalThis as any).EdgeRuntime;
+        for (const dn of pendingHeals) {
+          const healBody = JSON.stringify({
+            action: 'generate-trip-day', tripId, userId,
+            dayNumber: dn, totalDays, traceId, heal: true,
+          });
+          const healPromise = (async () => {
+            for (let attempt = 1; attempt <= 2; attempt++) {
+              try {
+                const resp = await fetch(healUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${healKey}` },
+                  body: healBody,
+                });
+                if (resp.ok) return;
+                await resp.text().catch(() => null);
+                if (resp.status >= 400 && resp.status < 500) {
+                  console.error(`[v2] [COMPLETENESS_HEAL_REGEN] day=${dn} client error ${resp.status} — not retrying`);
+                  return;
+                }
+              } catch (err) {
+                console.error(`[v2] [COMPLETENESS_HEAL_REGEN] day=${dn} attempt ${attempt} error:`, err);
+              }
+              if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
+            }
+            console.error(`[v2] [COMPLETENESS_HEAL_REGEN] day=${dn} background heal failed after retries`);
+          })();
+          if (eRTHeal && typeof eRTHeal.waitUntil === 'function') eRTHeal.waitUntil(healPromise);
+          console.log(`[v2] [COMPLETENESS_HEAL_REGEN] day=${dn} background heal dispatched`);
+        }
+      } catch (e) {
+        console.warn('[v2] [COMPLETENESS_HEAL_REGEN] dispatch setup failed (non-blocking):', e);
+      }
     }
 
     // ── 11. Chain self-invoke for next day (fire-and-forget) ───────────
