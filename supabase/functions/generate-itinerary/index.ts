@@ -4,16 +4,18 @@ import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 // =============================================================================
 // EXTRACTED ACTION HANDLERS
 // =============================================================================
-// NOTE: get-trip / get-itinerary / save-itinerary / toggle-activity-lock /
-// sync-itinerary-tables / repair-trip-costs were moved to the sibling
-// `itinerary-ops` function to keep this bundle under Supabase's 5 MB deploy
-// ceiling. Callers using those actions now invoke `itinerary-ops` directly.
+import { handleGetTrip } from './action-get-trip.ts';
+import { handleSaveItinerary } from './action-save-itinerary.ts';
+import { handleGetItinerary } from './action-get-itinerary.ts';
+import { handleToggleActivityLock } from './action-toggle-lock.ts';
+import { handleSyncItineraryTables } from './action-sync-tables.ts';
+import { handleRepairTripCosts } from './action-repair-costs.ts';
 import { handleGenerateTrip } from './action-generate-trip.ts';
 import { handleGenerateTripDay } from './action-generate-trip-day.ts';
 import { handleGenerateTripDayV2, shouldUseV2Chain } from './v2/generate-trip-day-v2.ts';
 import { handleGenerateDay } from './action-generate-day.ts';
 import { handleGenerateFull } from './action-generate-full.ts';
-import { corsHeaders } from './action-types.ts';
+import { corsHeaders, type ActionContext } from './action-types.ts';
 
 // =============================================================================
 // RATE LIMITING - Database-backed (survives cold starts)
