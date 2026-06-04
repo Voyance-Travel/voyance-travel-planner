@@ -15,9 +15,11 @@
  * with v1. Trace recorder runs in noop mode unless a `traceId` is threaded
  * in via params — same contract as v1.
  *
- * DEPLOY MARKER: v2-meal-coverage-gate-2026-06-04 — forces a fresh edge
- * deployment artifact so the 8g final meal-coverage gate (PR #11) goes live
- * (a prior "Deployed" reported no new artifact / unchanged deploy count).
+ * DEPLOY MARKER: v2-completeness-heal-background-2026-06-04 — forces a fresh
+ * edge deployment artifact so the final-day completeness gate (#17) + its
+ * fire-and-forget background heal (#18) go live. Triggers Lovable's bundler
+ * directly on code push (no AI-chat credit needed) when the AI deploy prompt
+ * is unavailable. (Prior precedent: the PR #11→#12 no-op-deploy marker.)
  *
  * ──────────────────────────────────────────────────────────────────────────
  * STATUS — PHASE D CUTOVER (DEFAULT-ON)
