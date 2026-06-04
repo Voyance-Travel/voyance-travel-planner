@@ -91,6 +91,13 @@ export async function handleGenerateTrip(
     const existingMeta = (currentTrip?.metadata as Record<string, unknown>) || {};
     await supabase.from('trips').update({
       itinerary_status: 'generating',
+      // Persist the destination to the canonical column at kickoff. The
+      // generation params always carry it (validated above), but the column
+      // was left empty for wizard-created trips — so resolveTripFacts (which
+      // reads trips.destination) saw '' during the per-day chain and the meal
+      // guard fell back to "find a local spot in the destination" placeholders
+      // instead of the real city venue. See _shared/trip-facts.ts:215.
+      ...(destination ? { destination } : {}),
       metadata: {
         ...existingMeta,
         generation_started_at: new Date().toISOString(),
@@ -455,6 +462,11 @@ async function handleGenerateTripBackground(
   
   const updatePayload: Record<string, unknown> = {
     itinerary_status: 'generating',
+    // Persist destination (+country) to the canonical column so the per-day
+    // chain's resolveTripFacts reads the real city, not '' → the meal guard
+    // resolves real venues instead of "find a local spot" placeholders.
+    ...(destination ? { destination } : {}),
+    ...(destinationCountry ? { destination_country: destinationCountry } : {}),
     metadata: {
       ...existingMeta,
       generation_started_at: new Date().toISOString(),

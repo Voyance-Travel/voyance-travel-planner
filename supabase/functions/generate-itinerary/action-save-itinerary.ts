@@ -7,6 +7,7 @@ import { type ActionContext, okJson, errorJson } from './action-types.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
 import { isProtectedMeal, stampMealProtection, collapseRedundantInjectedMeals } from '../_shared/meal-protection.ts';
+import { resolveAnyMealFallback } from './fix-placeholders.ts';
 import { applyAnchorsWin as sharedApplyAnchorsWin } from './anchor-guard.ts';
 import { buildDayLedger, type DayLedger } from './day-ledger.ts';
 import { ledgerCheck } from './ledger-check.ts';
@@ -992,11 +993,41 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           }
         }
         if (stillMissing.length === 0) continue;
-        console.warn(`[MEAL_PERSIST_FAIL] day=${dayNumber} missing=[${stillMissing.join(',')}] dest="${destForInvariant}" — injecting preserveAsManualPick sentinels`);
+        console.warn(`[MEAL_PERSIST_FAIL] day=${dayNumber} missing=[${stillMissing.join(',')}] dest="${destForInvariant}" — resolving real venues / sentinels`);
+        // Names already in play this day so the resolver doesn't repeat a venue.
+        const _usedNames = new Set<string>(
+          (day.activities || [])
+            .filter((a: any) => /dining|food|restaurant/i.test(String(a?.category || a?.type || '')))
+            .map((a: any) => String(a?.location?.name || a?.title || a?.name || '').toLowerCase())
+            .filter((s: string) => s.length > 2),
+        );
         for (const meal of stillMissing) {
           const label = meal.charAt(0).toUpperCase() + meal.slice(1);
           const slot = SLOT_TIMES[meal];
-          const invariantCard = {
+          // Prefer a REAL city venue from the fallback DB (e.g. Madrid →
+          // "Casa Lucio") before emitting a bare "find a local spot" sentinel.
+          // resolveAnyMealFallback only ever returns a city-matched venue or a
+          // needsVenuePick sentinel — never a wrong-city venue.
+          let fb: any = null;
+          try { fb = resolveAnyMealFallback(destForInvariant, meal as any, _usedNames); } catch (_e) { /* fall through to sentinel */ }
+          const isReal = !!fb && fb.needsVenuePick !== true && !!fb.name;
+          if (isReal) _usedNames.add(String(fb.name).toLowerCase());
+          const invariantCard = isReal ? {
+            id: crypto.randomUUID(),
+            title: `${label} at ${fb.name}`,
+            startTime: slot.start,
+            endTime: slot.end,
+            category: 'dining',
+            location: { name: fb.name, address: fb.address || `${fb.name}, ${destForInvariant}` },
+            cost: { amount: fb.price || 0, currency: 'USD', source: 'meal_persist_invariant' },
+            cost_per_person: fb.price || 0,
+            description: fb.description || '',
+            tags: ['dining', meal, 'meal-guard'],
+            bookingRequired: false,
+            transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+            tips: '',
+            needsRefinement: false,
+          } as any : {
             id: crypto.randomUUID(),
             title: `${label} — find a local spot in ${destForInvariant}`,
             startTime: slot.start,
