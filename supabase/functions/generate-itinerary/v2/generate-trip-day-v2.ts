@@ -439,9 +439,17 @@ export async function handleGenerateTripDayV2(
       }
     }
 
-    // ── 6c. Meal-guard + post-fill + Step 8 retry ──────────────────────
+    // ── 6c. Meal-guard + post-fill ─────────────────────────────────────
     // Per mem://constraints/itinerary/day-end-hotel-return-bookend +
     //     mem://constraints/itinerary/dining-description-persist-net.
+    //
+    // The meal guard is PRIMARY — it guarantees breakfast/lunch/dinner
+    // coverage. Its failure must NEVER be silently swallowed: a thrown guard
+    // (or one that doesn't fully resolve) means a genuine meal gap ships and
+    // the user sees "Day N missing dinner" with no record of why. We keep
+    // generation alive (no rethrow — a crashed day is worse than a logged
+    // gap) but RECORD every outcome in metadata.quality.meal_audit so the
+    // integrity gate + flight recorder see it instead of a silent hole.
     try {
       const mealPolicy = facts.mealPolicy(dayNumber);
       if (mealPolicy.requiredMeals.length > 0) {
@@ -472,11 +480,55 @@ export async function handleGenerateTripDayV2(
               source: 'v2:final-per-day',
             };
             console.warn(`[v2] [MEAL_AUDIT] day=${dayNumber} required=[${mealPolicy.requiredMeals.join(',')}] injected=[${fmgResult.injectedMeals.join(',')}]`);
-            await fillAfterMealGuard(finalDay.activities, facts.destination.city, dayNumber, 'v2:final-per-day');
+            // Description backfill is SECONDARY — wrap it separately so its
+            // failure can never discard the meal cards the guard just injected.
+            try {
+              await fillAfterMealGuard(finalDay.activities, facts.destination.city, dayNumber, 'v2:final-per-day');
+            } catch (fillErr) {
+              console.warn(`[v2] fillAfterMealGuard failed (non-blocking, injected meals retained) day=${dayNumber}:`, fillErr);
+            }
           }
         }
+        // POST-VERIFY: the guard must leave every required meal present. If any
+        // are STILL missing, that's a real coverage gap (guard threw inside,
+        // a downstream pass stripped a card, or the window skipped a slot).
+        // Record it loudly so it is diagnosable AND so the integrity gate can
+        // demote to 'partial' honestly — never ship the gap silently.
+        const detectedPost = detectMealSlots(finalDay.activities || []);
+        const stillMissing = mealPolicy.requiredMeals.filter((m) => !detectedPost.includes(m));
+        if (stillMissing.length > 0) {
+          finalDay.metadata = finalDay.metadata || {};
+          finalDay.metadata.quality = finalDay.metadata.quality || {};
+          finalDay.metadata.quality.meal_audit = {
+            ...(finalDay.metadata.quality.meal_audit || {}),
+            required: mealPolicy.requiredMeals,
+            detected_post: detectedPost,
+            unresolved_missing: stillMissing,
+            source: 'v2:final-per-day:post-verify',
+          };
+          console.error(`[v2] [MEAL_GUARD_INCOMPLETE] day=${dayNumber} required=[${mealPolicy.requiredMeals.join(',')}] STILL missing=[${stillMissing.join(',')}] — meal guard did not resolve coverage`);
+        }
       }
-      // Step 8 retry — unconditional, idempotent (per Predawn-Strip Allowlist memory).
+    } catch (e) {
+      // The guard threw — record the gap in metadata so it is never silent,
+      // then continue (generation stays alive).
+      try {
+        finalDay.metadata = finalDay.metadata || {};
+        finalDay.metadata.quality = finalDay.metadata.quality || {};
+        finalDay.metadata.quality.meal_audit = {
+          ...(finalDay.metadata.quality.meal_audit || {}),
+          error: e instanceof Error ? e.message : String(e),
+          source: 'v2:final-per-day:threw',
+        };
+      } catch { /* metadata stamp is best-effort */ }
+      console.error(`[v2] [MEAL_GUARD_FAILED] day=${dayNumber} meal guard threw — meal coverage NOT enforced:`, e);
+    }
+
+    // ── 6d. Step 8 retry (hotel-return bookend) — independent of the guard ──
+    // Separated into its own try/catch so a meal-guard failure can't skip the
+    // bookend, and a bookend failure can't suppress the meal_audit above.
+    // Unconditional, idempotent (per Predawn-Strip Allowlist memory).
+    try {
       if (dayNumber < totalDays) {
         const beforeLen = (finalDay.activities || []).length;
         runStep8(finalDay.activities, dayNumber - 1, facts.hotel.name || undefined);
@@ -488,7 +540,7 @@ export async function handleGenerateTripDayV2(
         }
       }
     } catch (e) {
-      console.warn('[v2] meal-guard / Step 8 retry failed (non-blocking):', e);
+      console.warn(`[v2] Step 8 (hotel-return) retry failed (non-blocking) day=${dayNumber}:`, e);
     }
 
     // ── 7. Persist tables (itinerary_days + itinerary_activities) ──────
