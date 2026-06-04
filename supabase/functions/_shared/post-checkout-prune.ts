@@ -9,6 +9,8 @@
  * See mem://constraints/itinerary/post-checkout-save-time-sweep
  */
 
+import { isProtectedMeal } from './meal-protection.ts';
+
 const DEPARTURE_ROLES = new Set(['flight', 'airport-transport', 'airport-security']);
 
 function classify(a: any): string {
@@ -42,7 +44,10 @@ function isCheckoutRow(a: any): boolean {
 
 function isLocked(a: any): boolean {
   return Boolean(
-    a?.isLocked || a?.userAdded || a?.userEdited || a?.extracted || a?.pinned || a?.isManual,
+    a?.isLocked || a?.userAdded || a?.userEdited || a?.extracted || a?.pinned || a?.isManual ||
+    a?.lock_state === 'locked' ||
+    // KEYSTONE: a guard-guaranteed meal is never silently pruned.
+    isProtectedMeal(a),
   );
 }
 

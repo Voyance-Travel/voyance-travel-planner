@@ -12,6 +12,7 @@ import { getRandomFallbackRestaurant, resolveAnyMealFallback } from './fix-place
 import { detectCrossCityMention } from './cross-city-filter.ts';
 import { extractRestaurantVenueName, venueNamesMatch } from './generation-utils.ts';
 import { pruneOrphanTransits } from '../_shared/orphan-transit.ts';
+import { stampMealProtection } from '../_shared/meal-protection.ts';
 
 // =============================================================================
 // CHAIN RESTAURANT BLOCKLIST — prevents chain restaurants from appearing
@@ -1239,6 +1240,10 @@ export function enforceRequiredMealsFinalGuard(
       };
       injected.cost_per_person = 0;
     }
+    // KEYSTONE: stamp the protected-meal invariant so no downstream strip pass
+    // can silently delete this guaranteed meal. The single injector → every
+    // guard call site inherits protection. See _shared/meal-protection.ts.
+    stampMealProtection(injected);
     result.push(injected as StrictActivityMinimal);
   }
 
