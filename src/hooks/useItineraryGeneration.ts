@@ -550,7 +550,7 @@ export function useItineraryGeneration() {
 
   const saveItinerary = useCallback(async (tripId: string, days: GeneratedDay[]): Promise<boolean> => {
     try {
-      const { error } = await supabase.functions.invoke('generate-itinerary', {
+      const { error } = await supabase.functions.invoke('itinerary-ops', {
         body: {
           action: 'save-itinerary',
           tripId,

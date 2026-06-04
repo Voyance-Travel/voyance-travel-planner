@@ -220,7 +220,7 @@ export async function safeUpdateItineraryData(
 
     const merged = { ...nextItinerary, days: prunedDays };
 
-    const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+    const { data, error } = await supabase.functions.invoke('itinerary-ops', {
       body: {
         action: 'save-itinerary',
         tripId,

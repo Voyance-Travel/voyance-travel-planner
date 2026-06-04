@@ -1176,7 +1176,7 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
     };
 
     // Route through backend save-itinerary for normalization, meal guard, and table sync
-    const { error: saveError } = await supabase.functions.invoke('generate-itinerary', {
+    const { error: saveError } = await supabase.functions.invoke('itinerary-ops', {
       body: {
         action: 'save-itinerary',
         tripId,

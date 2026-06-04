@@ -431,7 +431,7 @@ export function useLovableItinerary(tripId: string | null, options: UseLovableIt
 
       // Step 1: Fetch trip details (5%)
       // Fetching trip details
-      const { data: tripResponse, error: tripError } = await supabase.functions.invoke('generate-itinerary', {
+      const { data: tripResponse, error: tripError } = await supabase.functions.invoke('itinerary-ops', {
         body: { action: 'get-trip', tripId }
       });
 
@@ -597,7 +597,7 @@ export function useLovableItinerary(tripId: string | null, options: UseLovableIt
             destination: tripDetails.destination,
             partial: dayNum < daysToGenerate,
           };
-          await supabase.functions.invoke('generate-itinerary', {
+          await supabase.functions.invoke('itinerary-ops', {
             body: { action: 'save-itinerary', tripId, itinerary: partialItinerary },
           });
         } catch (saveErr) {
@@ -622,7 +622,7 @@ export function useLovableItinerary(tripId: string | null, options: UseLovableIt
         destination: tripDetails.destination,
       };
 
-      const { error: saveError } = await supabase.functions.invoke('generate-itinerary', {
+      const { error: saveError } = await supabase.functions.invoke('itinerary-ops', {
         body: {
           action: 'save-itinerary',
           tripId,

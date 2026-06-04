@@ -252,7 +252,7 @@ export function useUnlockTrip() {
         isPreview: false, // Clear preview flag
       };
 
-      const { data: saveResult, error: saveError } = await supabase.functions.invoke('generate-itinerary', {
+      const { data: saveResult, error: saveError } = await supabase.functions.invoke('itinerary-ops', {
         body: {
           action: 'save-itinerary',
           tripId: params.tripId,

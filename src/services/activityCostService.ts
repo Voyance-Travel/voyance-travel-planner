@@ -606,7 +606,7 @@ export interface RepairResult {
  */
 export async function repairTripCosts(tripId: string): Promise<RepairResult> {
   try {
-    const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+    const { data, error } = await supabase.functions.invoke('itinerary-ops', {
       body: { action: 'repair-trip-costs', tripId },
     });
 

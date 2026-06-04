@@ -511,7 +511,7 @@ export default function ItineraryPreview({
     if (tripId) {
       try {
         const { supabase } = await import('@/integrations/supabase/client');
-        const { error } = await supabase.functions.invoke('generate-itinerary', {
+        const { error } = await supabase.functions.invoke('itinerary-ops', {
           body: {
             action: 'toggle-activity-lock',
             tripId,

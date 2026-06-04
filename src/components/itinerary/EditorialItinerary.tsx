@@ -2963,7 +2963,7 @@ export function EditorialItinerary({
       const { data: existingTrip } = await supabase
         .from('trips').select('id').eq('id', tripId).maybeSingle();
       if (existingTrip) {
-        const { error } = await supabase.functions.invoke('generate-itinerary', {
+        const { error } = await supabase.functions.invoke('itinerary-ops', {
           body: {
             action: 'save-itinerary',
             tripId,
@@ -4365,7 +4365,7 @@ export function EditorialItinerary({
         if (existingTrip && !checkError) {
           // Trip exists in database - save through backend for normalization + meal guard
           try {
-            const { error } = await supabase.functions.invoke('generate-itinerary', {
+            const { error } = await supabase.functions.invoke('itinerary-ops', {
               body: {
                 action: 'save-itinerary',
                 tripId,
@@ -4440,7 +4440,7 @@ export function EditorialItinerary({
 
       if (existingTrip) {
         // Save through backend for normalization + meal guard + table sync
-        const { error } = await supabase.functions.invoke('generate-itinerary', {
+        const { error } = await supabase.functions.invoke('itinerary-ops', {
           body: {
             action: 'save-itinerary',
             tripId,
@@ -4616,7 +4616,7 @@ export function EditorialItinerary({
 
             // Auto-save after each day
             try {
-              await supabase.functions.invoke('generate-itinerary', {
+              await supabase.functions.invoke('itinerary-ops', {
                 body: {
                   action: 'save-itinerary',
                   tripId,
@@ -4933,7 +4933,7 @@ export function EditorialItinerary({
     if (tripId) {
       try {
         const activityStartTime = (currentActivity as any).startTime ?? (currentActivity as any).time;
-        const { error } = await supabase.functions.invoke('generate-itinerary', {
+        const { error } = await supabase.functions.invoke('itinerary-ops', {
           body: {
             action: 'toggle-activity-lock',
             tripId,
