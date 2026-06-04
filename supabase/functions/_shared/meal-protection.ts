@@ -29,6 +29,42 @@
 /** Tag the meal guard stamps on every injected dining card. */
 export const MEAL_GUARD_TAG = 'meal-guard';
 
+// Meal-slot windows (minutes from midnight) for dedup classification.
+const MEAL_SLOT_WINDOWS: Array<[string, number, number]> = [
+  ['breakfast', 6 * 60, 11 * 60],   // 06:00–10:59
+  ['lunch', 11 * 60, 15 * 60],      // 11:00–14:59
+  ['dinner', 17 * 60, 22 * 60 + 1], // 17:00–22:00
+];
+
+function parseMinutes(s: unknown): number | null {
+  if (typeof s !== 'string') return null;
+  const m = s.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const p = m[3]?.toUpperCase();
+  if (p === 'PM' && h !== 12) h += 12;
+  if (p === 'AM' && h === 12) h = 0;
+  return h * 60 + min;
+}
+
+function mealSlotOf(a: any): string | null {
+  const mins = parseMinutes(a?.startTime ?? a?.start_time ?? a?.time);
+  if (mins === null) return null;
+  for (const [slot, lo, hi] of MEAL_SLOT_WINDOWS) if (mins >= lo && mins < hi) return slot;
+  return null;
+}
+
+/** A meal-guard "find a local spot" placeholder (no resolved venue yet). */
+function isSentinelMeal(a: any): boolean {
+  const meta = (a?.metadata || {}) as Record<string, unknown>;
+  return meta.needsVenuePick === true || meta.preserveAsManualPick === true;
+}
+
+function isDiningCard(a: any): boolean {
+  return /dining|food|restaurant/i.test(String(a?.category || a?.type || ''));
+}
+
 /** Cost sources used by the two meal injectors. */
 const PROTECTED_MEAL_COST_SOURCES = new Set([
   'meal_guard_fallback',     // enforceRequiredMealsFinalGuard (day-validation.ts)
@@ -71,4 +107,54 @@ export function stampMealProtection(activity: any): void {
   // Ensure the meal-guard tag is present so tag-based detectors agree.
   if (!Array.isArray(activity.tags)) activity.tags = [];
   if (!activity.tags.includes(MEAL_GUARD_TAG)) activity.tags.push(MEAL_GUARD_TAG);
+}
+
+/**
+ * Collapse REDUNDANT injected meal sentinels so a slot never shows two meals.
+ *
+ * Side-effect of the protected-meal invariant: a guard injects a "find a local
+ * spot" sentinel (which doesn't satisfy meal-detection because it's
+ * needsVenuePick), so a later injector still sees the slot as "missing" and
+ * adds a SECOND sentinel — and now both are protected, so the dedup that used
+ * to delete one can't. This collapses that: per meal slot, if a real
+ * (non-sentinel) dining card exists the sentinel is redundant and dropped; if
+ * only sentinels exist, keep exactly one. It ONLY ever removes injected
+ * sentinels — real/LLM dining cards are never touched (a tapas crawl with two
+ * real dinner-time venues is left intact). Mutates `activities` in place;
+ * returns the number removed.
+ */
+export function collapseRedundantInjectedMeals(activities: any[]): number {
+  if (!Array.isArray(activities) || activities.length < 2) return 0;
+
+  const sentinelIdxBySlot: Record<string, number[]> = {};
+  const realMealInSlot: Record<string, boolean> = {};
+
+  for (let i = 0; i < activities.length; i++) {
+    const a = activities[i];
+    const slot = mealSlotOf(a);
+    if (!slot) continue;
+    if (isProtectedMeal(a) && isSentinelMeal(a)) {
+      (sentinelIdxBySlot[slot] ||= []).push(i);
+    } else if (isDiningCard(a) && !isSentinelMeal(a)) {
+      realMealInSlot[slot] = true;
+    }
+  }
+
+  const toRemove = new Set<number>();
+  for (const slot of Object.keys(sentinelIdxBySlot)) {
+    const idxs = sentinelIdxBySlot[slot];
+    if (realMealInSlot[slot]) {
+      // A real meal already covers this slot — every injected sentinel is redundant.
+      for (const i of idxs) toRemove.add(i);
+    } else if (idxs.length > 1) {
+      // Only sentinels — keep the first, drop the duplicates.
+      for (let k = 1; k < idxs.length; k++) toRemove.add(idxs[k]);
+    }
+  }
+
+  if (toRemove.size === 0) return 0;
+  const kept = activities.filter((_, i) => !toRemove.has(i));
+  activities.length = 0;
+  activities.push(...kept);
+  return toRemove.size;
 }
