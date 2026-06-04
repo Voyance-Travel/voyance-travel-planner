@@ -153,6 +153,7 @@ export default function TripDetail() {
   const [navigateToSection, setNavigateToSection] = useState<string | null>(null);
   const [refreshDayRequest, setRefreshDayRequest] = useState<{ dayNumber: number; nonce: number } | null>(null);
   const [fixTimingRequest, setFixTimingRequest] = useState<{ dayNumber: number; nonce: number } | null>(null);
+  const [regenerateDayRequest, setRegenerateDayRequest] = useState<{ dayNumber: number; nonce: number } | null>(null);
   const [refreshingDayNumber, setRefreshingDayNumber] = useState<number | null>(null);
   const [refreshResultsByDay, setRefreshResultsByDay] = useState<Record<number, { errorCount: number; warningCount: number }>>({});
   const [autoStartGeneration, setAutoStartGeneration] = useState(false);
@@ -4267,6 +4268,7 @@ export default function TripDetail() {
                   navigateToSection={navigateToSection}
                   refreshDayRequest={refreshDayRequest}
                   fixTimingRequest={fixTimingRequest}
+                  regenerateDayRequest={regenerateDayRequest}
                   onRefreshingDayChange={setRefreshingDayNumber}
                   onRefreshResultsChange={setRefreshResultsByDay}
                   parsedMetadata={(() => {
@@ -4392,6 +4394,13 @@ export default function TripDetail() {
                         } else if (action === 'fix_timing') {
                           if (ctx?.dayNumber) {
                             setFixTimingRequest({ dayNumber: ctx.dayNumber as number, nonce: Date.now() });
+                          }
+                        } else if (action === 'regenerate_day') {
+                          // Real AI day-regeneration (spends credits, re-runs the
+                          // meal guard). Used by the "missing meal" quick-fix so the
+                          // button actually adds the course instead of a no-op timing check.
+                          if (ctx?.dayNumber) {
+                            setRegenerateDayRequest({ dayNumber: ctx.dayNumber as number, nonce: Date.now() });
                           }
                         } else if (action === 'generate_day') {
                           toast.info(`Use the day toolbar to generate Day ${ctx?.dayNumber || ''}`);

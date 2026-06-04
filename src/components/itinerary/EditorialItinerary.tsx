@@ -550,6 +550,8 @@ export interface EditorialItineraryProps {
   refreshDayRequest?: { dayNumber: number; nonce: number } | null;
   /** Parent dispatches a deterministic timing-fix request for a day */
   fixTimingRequest?: { dayNumber: number; nonce: number } | null;
+  /** Parent dispatches a real AI day-regeneration request (e.g. Trip Health "missing meal" quick-fix) */
+  regenerateDayRequest?: { dayNumber: number; nonce: number } | null;
   /** Notify parent when a day re-check starts/finishes */
   onRefreshingDayChange?: (dayNumber: number | null) => void;
   /** Notify parent of per-day refresh issue counts */
@@ -1392,6 +1394,7 @@ export function EditorialItinerary({
   cityCount = 1,
   refreshDayRequest,
   fixTimingRequest,
+  regenerateDayRequest,
   onRefreshingDayChange,
   onRefreshResultsChange,
   viewMode = 'edit',
@@ -5591,6 +5594,24 @@ export function EditorialItinerary({
 
   // Alias for backwards compatibility
   const handleDayRegenerate = requestDayRegenerate;
+
+  // External regenerate-day requests (e.g. Trip Health "missing meal" quick-fix).
+  // Unlike refreshDayRequest (timing-only validator), this runs the real AI
+  // day-regeneration so a flagged missing meal actually gets injected by the
+  // meal guard. Placed AFTER requestDayRegenerate's declaration to avoid TDZ.
+  useEffect(() => {
+    if (!regenerateDayRequest?.dayNumber) return;
+    const idx = days.findIndex((d: any) => d.dayNumber === regenerateDayRequest.dayNumber);
+    if (idx < 0) {
+      console.warn('[regenerate_day] day not found in editor', { dayNumber: regenerateDayRequest.dayNumber, available: days.map((d: any) => d.dayNumber) });
+      toast.error(`Day ${regenerateDayRequest.dayNumber} is not loaded - try reopening the trip.`);
+      return;
+    }
+    setSelectedDayIndex(idx);
+    setActiveTab('itinerary');
+    requestDayRegenerate(idx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regenerateDayRequest?.nonce]);
 
   // ── Flight Sync: deterministic cascade instead of AI regeneration ──
   const handleSyncFlightToDay = useCallback(async () => {
