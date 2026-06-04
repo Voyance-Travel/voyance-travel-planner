@@ -479,7 +479,7 @@ export async function generateItinerary(
   
   // Save via the backend `save-itinerary` action so persist-day contract,
   // prompt-artifact strip, and cross-city sweep run on every write path.
-  const { error: saveError } = await supabase.functions.invoke('itinerary-ops', {
+  const { error: saveError } = await supabase.functions.invoke('generate-itinerary', {
     body: {
       action: 'save-itinerary',
       tripId,
@@ -545,7 +545,7 @@ export async function saveItinerary(
     lastModified: new Date().toISOString(),
   };
   
-  const { error } = await supabase.functions.invoke('itinerary-ops', {
+  const { error } = await supabase.functions.invoke('generate-itinerary', {
     body: {
       action: 'save-itinerary',
       tripId,
@@ -702,7 +702,7 @@ export async function regenerateDay(
   }
 
   const updatedItinerary = { ...existingItinerary, days: updatedDays };
-  await supabase.functions.invoke('itinerary-ops', {
+  await supabase.functions.invoke('generate-itinerary', {
     body: {
       action: 'save-itinerary',
       tripId,

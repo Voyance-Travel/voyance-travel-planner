@@ -2375,7 +2375,7 @@ export default function TripDetail() {
                       console.log(`[TripDetail] Self-heal version-restore no-op: payload identical to current state (fp=${nextFp}), skipping write`);
                     } else {
                       try {
-                        await supabase.functions.invoke('itinerary-ops', {
+                        await supabase.functions.invoke('generate-itinerary', {
                           body: {
                             action: 'save-itinerary',
                             tripId: tripId!,
@@ -2437,7 +2437,7 @@ export default function TripDetail() {
                       setIncompleteDays(unresolvedDays);
                     } else {
                       try {
-                        await supabase.functions.invoke('itinerary-ops', {
+                        await supabase.functions.invoke('generate-itinerary', {
                           body: {
                             action: 'save-itinerary',
                             tripId: tripId!,
