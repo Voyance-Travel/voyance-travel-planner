@@ -3,13 +3,13 @@
  * Saves itinerary data with ownership verification and no-shrink guard.
  */
 
-import { type ActionContext, okJson, errorJson } from './action-types.ts';
-import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
-import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
-import { applyAnchorsWin as sharedApplyAnchorsWin } from './anchor-guard.ts';
-import { buildDayLedger, type DayLedger } from './day-ledger.ts';
-import { ledgerCheck } from './ledger-check.ts';
-import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
+import { type ActionContext, okJson, errorJson } from '../generate-itinerary/action-types.ts';
+import { deriveMealPolicy, type RequiredMeal } from '../generate-itinerary/meal-policy.ts';
+import { enforceRequiredMealsFinalGuard, detectMealSlots } from '../generate-itinerary/day-validation.ts';
+import { applyAnchorsWin as sharedApplyAnchorsWin } from '../generate-itinerary/anchor-guard.ts';
+import { buildDayLedger, type DayLedger } from '../generate-itinerary/day-ledger.ts';
+import { ledgerCheck } from '../generate-itinerary/ledger-check.ts';
+import { preserveLedgerCosts } from '../generate-itinerary/_shared/preserve-ledger-costs.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 import { normalizePredawnCascade } from '../_shared/predawn-cascade-normalize.ts';
 import { clampAllBookends } from '../_shared/clamp-bookend.ts';
@@ -25,7 +25,7 @@ import { enforceFreshenUpPosition } from '../_shared/freshen-up-position.ts';
 import { fillMissingStartTimes, assignFloatingMealTimes, dayChronoKey, pruneOrphanLateNightlifeBookend } from '../_shared/timing-cascade.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
-export { applyAnchorsWin } from './anchor-guard.ts';
+export { applyAnchorsWin } from '../generate-itinerary/anchor-guard.ts';
 
 /** Compact per-day activity + dining count snapshot for erosion-pattern observability. */
 const countDays = (days: any[]) =>
@@ -578,7 +578,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
 
   if (totalDays > 0) {
     // Trip-wide blocked-restaurants accumulator (canonical names)
-    const { extractRestaurantVenueName: _extractSave } = await import('./generation-utils.ts');
+    const { extractRestaurantVenueName: _extractSave } = await import('../generate-itinerary/generation-utils.ts');
     const saveTripBlocked: string[] = [];
     const _harvestSave = (acts: any[]) => {
       const MEAL_RE_S = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
@@ -801,7 +801,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       // force-replaced by a real named venue before persistence. Previously
       // this was first/last-only, which let middle-day sentinels leak through.
       try {
-        const { terminalCleanup } = await import('./universal-quality-pass.ts');
+        const { terminalCleanup } = await import('../generate-itinerary/universal-quality-pass.ts');
         const cityForCleanup =
           day.city ||
           day.destination ||
@@ -835,7 +835,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           // guard: a nightcap/relaxation-only day (Florence Day 2 pattern)
           // still needs a bookend, and runStep8 is idempotent.
           try {
-            const { runStep8 } = await import('./universal-quality-pass.ts');
+            const { runStep8 } = await import('../generate-itinerary/universal-quality-pass.ts');
             const _beforeLen = acts.length;
             runStep8(acts, dayNumber - 1, savedHotelName);
             if (acts.length > _beforeLen) {
@@ -1030,7 +1030,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // See mem://constraints/itinerary/departure-day-save-time-enforcement
   if (totalDays > 0 && itineraryDays.length > 0) {
     try {
-      const { enforceDepartureDayLogistics } = await import('./pipeline/repair-day.ts');
+      const { enforceDepartureDayLogistics } = await import('../generate-itinerary/pipeline/repair-day.ts');
       const tripMetaForNet = ((trip as any)?.metadata || {}) as Record<string, any>;
       const hotelNameNet: string =
         tripMetaForNet?.selected_hotel?.name ||
@@ -1513,7 +1513,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     );
   } else {
     try {
-      const { classifyItineraryCompleteness } = await import('./day-validation.ts');
+      const { classifyItineraryCompleteness } = await import('../generate-itinerary/day-validation.ts');
       const probe = classifyItineraryCompleteness(_daysForProbe);
       if (probe.status === 'empty') {
         emptyItineraryDetected = true;
@@ -1812,7 +1812,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   let syncSuccess = false;
   try {
     const syncCtx: ActionContext = { supabase, userId, params: { tripId } };
-    const { handleSyncItineraryTables } = await import('./action-sync-tables.ts');
+    const { handleSyncItineraryTables } = await import('../generate-itinerary/action-sync-tables.ts');
     const syncResult = await handleSyncItineraryTables(syncCtx);
     const syncBody = await syncResult.json().catch(() => null);
     if (syncBody && syncBody.success === false) {

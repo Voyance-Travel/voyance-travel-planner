@@ -3,7 +3,7 @@
  * Retrieves trip data with ownership verification.
  */
 
-import { type ActionContext, okJson, errorJson } from './action-types.ts';
+import { type ActionContext, okJson, errorJson } from '../generate-itinerary/action-types.ts';
 
 export async function handleGetTrip(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;
