@@ -24,12 +24,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 
-import { handleGetTrip } from '../generate-itinerary/action-get-trip.ts';
-import { handleSaveItinerary } from '../generate-itinerary/action-save-itinerary.ts';
-import { handleGetItinerary } from '../generate-itinerary/action-get-itinerary.ts';
-import { handleToggleActivityLock } from '../generate-itinerary/action-toggle-lock.ts';
+import { handleGetTrip } from './action-get-trip.ts';
+import { handleSaveItinerary } from './action-save-itinerary.ts';
+import { handleGetItinerary } from './action-get-itinerary.ts';
+import { handleToggleActivityLock } from './action-toggle-lock.ts';
 import { handleSyncItineraryTables } from '../generate-itinerary/action-sync-tables.ts';
-import { handleRepairTripCosts } from '../generate-itinerary/action-repair-costs.ts';
+import { handleRepairTripCosts } from './action-repair-costs.ts';
 import { corsHeaders, type ActionContext } from '../generate-itinerary/action-types.ts';
 
 import { checkDbRateLimit, type RateLimitRule } from "../_shared/db-rate-limiter.ts";
