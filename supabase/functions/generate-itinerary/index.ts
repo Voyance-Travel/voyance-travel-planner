@@ -407,21 +407,15 @@ serve(async (req) => {
     }
 
 
-    // get-trip / get-itinerary / save-itinerary / toggle-activity-lock /
-    // sync-itinerary-tables / repair-trip-costs now live in the sibling
-    // `itinerary-ops` edge function. Reject here so a stale caller sees a
-    // clear migration signal instead of silently mis-routing.
-    const MOVED_ACTIONS = new Set([
-      'get-trip', 'get-itinerary', 'save-itinerary',
-      'toggle-activity-lock', 'sync-itinerary-tables', 'repair-trip-costs',
-    ]);
-    if (MOVED_ACTIONS.has(action)) {
-      console.warn(`[generate-itinerary] Action "${action}" moved to itinerary-ops`);
-      return new Response(
-        JSON.stringify({ error: `Action "${action}" moved to itinerary-ops edge function`, code: "ACTION_MOVED" }),
-        { status: 410, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Simple CRUD actions — use ActionContext interface
+    const actCtx: ActionContext = { supabase, userId: authResult.userId, params };
+
+    if (action === 'get-trip') return handleGetTrip(actCtx);
+    if (action === 'save-itinerary') return handleSaveItinerary(actCtx);
+    if (action === 'get-itinerary') return handleGetItinerary(actCtx);
+    if (action === 'toggle-activity-lock') return handleToggleActivityLock(actCtx);
+    if (action === 'sync-itinerary-tables') return handleSyncItineraryTables(actCtx);
+    if (action === 'repair-trip-costs') return handleRepairTripCosts(actCtx);
 
     return new Response(
       JSON.stringify({ error: "Unknown action" }),
