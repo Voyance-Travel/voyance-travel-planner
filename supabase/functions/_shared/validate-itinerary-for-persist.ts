@@ -19,8 +19,8 @@
  *   - EMPTY_DAY                 (error)   no real activities at all
  */
 
-import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
-import { detectMealSlots } from './day-validation.ts';
+import { deriveMealPolicy, type RequiredMeal } from '../generate-itinerary/meal-policy.ts';
+import { detectMealSlots } from '../generate-itinerary/day-validation.ts';
 import { isDiningActivity } from './dining-description-backfill.ts';
 
 export type PersistValidationCode =
