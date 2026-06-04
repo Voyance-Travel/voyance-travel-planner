@@ -126,18 +126,22 @@ export async function handleGenerateTripDayV2(
       try {
         const priorMeta = (cancelRow?.metadata as any) || {};
         const priorQuality = priorMeta.quality || {};
-        if (priorQuality.v2_chain_used !== true) {
-          await supabase
-            .from('trips')
-            .update({
-              metadata: { ...priorMeta, quality: { ...priorQuality, v2_chain_used: true } },
-            })
-            .eq('id', tripId);
-          console.log(`[v2] stamped metadata.quality.v2_chain_used=true tripId=${tripId}`);
-        }
+        // Start-of-day heartbeat — keeps the launcher watchdog fresh even when a
+        // single day's generation is slow (issue #1). Always written; the
+        // v2_chain_used soak stamp piggybacks on the same merge.
+        await supabase
+          .from('trips')
+          .update({
+            metadata: {
+              ...priorMeta,
+              generation_heartbeat: new Date().toISOString(),
+              quality: { ...priorQuality, v2_chain_used: true },
+            },
+          })
+          .eq('id', tripId);
       } catch (e) {
-        // Telemetry-only; never block generation on stamp failure.
-        console.warn(`[v2] v2_chain_used stamp failed (non-fatal):`, (e as Error)?.message);
+        // Telemetry/heartbeat only; never block generation on stamp failure.
+        console.warn(`[v2] start-of-day heartbeat/stamp failed (non-fatal):`, (e as Error)?.message);
       }
     }
 
@@ -821,6 +825,33 @@ export async function handleGenerateTripDayV2(
         budgetTier: facts.preferences.budgetTier,
       })
     );
+
+    // ── 10b. Refresh generation heartbeat + progress ───────────────────
+    // ROOT-CAUSE FIX (issue #1, "Generation paused at Day N"): the launcher
+    // watchdog (src/hooks/useGenerationPoller.ts) treats a generation_heartbeat
+    // older than STALE_THRESHOLD_MS (5 min) as a dead/zombie run and shows
+    // "Generation paused" — even when generation is actively progressing. The
+    // v1 chain refreshed the heartbeat per day; the v2 cutover dropped it, so
+    // the heartbeat stayed frozen at the kickoff time and any v2 run longer
+    // than 5 min (4-day trips, slow LLM days, or a slow final-day hop) was
+    // falsely flagged paused despite having finished. Refresh heartbeat +
+    // completed-day count after each day persists (high-water mark; never
+    // decreases). Best-effort — never block generation on the stamp.
+    try {
+      const { data: progRow } = await supabase
+        .from('trips').select('metadata').eq('id', tripId).maybeSingle();
+      const progMeta = (progRow?.metadata as any) || {};
+      const priorCompleted = Number(progMeta.generation_completed_days) || 0;
+      await supabase.from('trips').update({
+        metadata: {
+          ...progMeta,
+          generation_heartbeat: new Date().toISOString(),
+          generation_completed_days: Math.max(priorCompleted, dayNumber),
+        },
+      }).eq('id', tripId);
+    } catch (e) {
+      console.warn(`[v2] heartbeat/progress refresh failed (non-blocking) day=${dayNumber}:`, (e as Error)?.message);
+    }
 
     // ── 11. Chain self-invoke for next day (fire-and-forget) ───────────
     // Mirrors v1 action-generate-trip-day:4684 — uses EdgeRuntime.waitUntil
