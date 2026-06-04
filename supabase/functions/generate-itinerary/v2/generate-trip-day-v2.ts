@@ -15,6 +15,10 @@
  * with v1. Trace recorder runs in noop mode unless a `traceId` is threaded
  * in via params — same contract as v1.
  *
+ * DEPLOY MARKER: v2-meal-coverage-gate-2026-06-04 — forces a fresh edge
+ * deployment artifact so the 8g final meal-coverage gate (PR #11) goes live
+ * (a prior "Deployed" reported no new artifact / unchanged deploy count).
+ *
  * ──────────────────────────────────────────────────────────────────────────
  * STATUS — PHASE D CUTOVER (DEFAULT-ON)
  * ──────────────────────────────────────────────────────────────────────────
