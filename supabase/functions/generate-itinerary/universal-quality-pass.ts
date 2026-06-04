@@ -16,6 +16,7 @@
  */
 
 import { enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
+import { isProtectedMeal } from '../_shared/meal-protection.ts';
 import { clampBookendEndTime } from '../_shared/clamp-bookend.ts';
 import { enforceFreshenUpPosition } from '../_shared/freshen-up-position.ts';
 import { fixPlaceholdersForDay, nuclearPlaceholderSweep, nuclearWellnessSweep, nuclearCrossCitySweep, nuclearDiningStrip } from './fix-placeholders.ts';
@@ -720,6 +721,9 @@ export function terminalCleanup(
           result.push(act);
           continue;
         }
+        // KEYSTONE: a guard-guaranteed meal is never silently dropped. The
+        // meal injector is arrival-aware, so a protected meal here is feasible.
+        if (isProtectedMeal(act)) { result.push(act); continue; }
         const startStr = act.startTime || act.start_time || '';
         const startMins = parseTimeMins(startStr);
         if (startMins !== null && startMins < arrivalMins) {
@@ -769,7 +773,9 @@ export function terminalCleanup(
         const result: any[] = [];
         for (const act of activities) {
           // Always preserve user-locked items — never silently delete them.
-          if (act.locked || act.isLocked) { result.push(act); continue; }
+          // KEYSTONE: also preserve guard-guaranteed meals (departure-aware
+          // injector ⇒ feasible) and any lock_state-locked card.
+          if (act.locked || act.isLocked || act.lock_state === 'locked' || isProtectedMeal(act)) { result.push(act); continue; }
           const cat = (act.category || '').toLowerCase();
           // Keep all true logistics categories
           if (['transport', 'transit', 'flight', 'accommodation', 'logistics'].includes(cat)) {

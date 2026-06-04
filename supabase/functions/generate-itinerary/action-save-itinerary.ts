@@ -6,6 +6,7 @@
 import { type ActionContext, okJson, errorJson } from './action-types.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
+import { isProtectedMeal, stampMealProtection } from '../_shared/meal-protection.ts';
 import { applyAnchorsWin as sharedApplyAnchorsWin } from './anchor-guard.ts';
 import { buildDayLedger, type DayLedger } from './day-ledger.ts';
 import { ledgerCheck } from './ledger-check.ts';
@@ -995,7 +996,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         for (const meal of stillMissing) {
           const label = meal.charAt(0).toUpperCase() + meal.slice(1);
           const slot = SLOT_TIMES[meal];
-          day.activities.push({
+          const invariantCard = {
             id: crypto.randomUUID(),
             title: `${label} — find a local spot in ${destForInvariant}`,
             startTime: slot.start,
@@ -1011,7 +1012,11 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
             tips: `Ask the concierge or a local for a great ${meal} spot nearby.`,
             needsRefinement: true,
             metadata: { needsVenuePick: true, unverified_venue: true, preserveAsManualPick: true },
-          } as any);
+          } as any;
+          // KEYSTONE: the save-time meal-persist invariant is the last-resort
+          // injector — protect it from any strip pass that runs after this.
+          stampMealProtection(invariantCard);
+          day.activities.push(invariantCard);
         }
         // Re-sort by startTime so the new card lands in the right place.
         day.activities.sort((a: any, b: any) => parseTimeToMinutes(a.startTime || a.start_time || a.time)
