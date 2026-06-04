@@ -145,6 +145,32 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           typeof m === 'string' && (m === 'breakfast' || m === 'lunch' || m === 'dinner')
         );
       }
+      // ── Bookend days: flight/schedule-aware inference BEFORE the coarse map ──
+      // The persisted `dayMode` is a COARSE band label that is ambiguous about
+      // which meals actually fit:
+      //   • 'early_departure'  → breakfast-only OR no-meal, depending on whether
+      //     a sit-down breakfast fits before the airport run (an ~11:00 flight
+      //     means leaving ~07:15, so it does NOT fit — backend requires []).
+      //   • 'midday_arrival'   → lunch+dinner OR dinner-only, depending on
+      //     whether arrival clears 13:00 (after which lunch can't fit pre-check-in).
+      // The backend encodes the real answer in `requiredMeals`, but that array
+      // is NOT persisted onto the served day metadata (only `dayMode` survives),
+      // so trusting the coarse map below produces false "missing lunch" on a
+      // mid-afternoon arrival and false "missing breakfast" on a tight morning
+      // departure — the exact false-positives that flip a complete trip to
+      // "Partial". For the first/last day, prefer the flight/schedule-aware
+      // inference (mirrors backend meal-policy.ts; reads the flight clock or,
+      // lacking that, the first/last real activity time). Falls through to the
+      // coarse map only when inference can't form a clock (returns null).
+      if (dayIndex === 0 || dayIndex === totalDays - 1) {
+        const inferredBookend = inferDayModeFallback({
+          day,
+          dayIndex,
+          totalDays,
+          tripFlightSelection: opts?.tripFlightSelection,
+        });
+        if (inferredBookend) return inferredBookend.requiredMeals;
+      }
       if (dayMode === 'late_arrival' || dayMode === 'full_day_event' || dayMode === 'early_departure_no_meal') return [];
       if (dayMode === 'early_departure') return ['breakfast'];
       if (dayMode === 'midday_arrival') return ['lunch', 'dinner'];

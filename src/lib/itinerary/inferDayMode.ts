@@ -69,6 +69,30 @@ function parseHHMM(s: unknown): number | null {
   }
   return null;
 }
+// Departure-day clock = the flight's DEPARTURE (start) time, NOT its arrival
+// endTime. A departure flight card commonly carries start=wheels-up and
+// end=wheels-down-at-home (e.g. 11:00 → 13:00); using the endTime would push a
+// genuinely early departure into the midday/afternoon band and wrongly demand
+// lunch. The transit "Departure"/"Taxi to Airport" cards are intentionally NOT
+// matched here (their clock is the leave-for-airport time, which the
+// breakfastFits math derives separately) — only the actual flight counts.
+function departureFlightStart(day: any): number | null {
+  const acts = day?.activities;
+  if (!Array.isArray(acts)) return null;
+  let earliest: number | null = null;
+  for (const a of acts) {
+    if (!a || typeof a !== 'object') continue;
+    const cat = String((a as any).category || (a as any).type || '').toLowerCase();
+    const title = String((a as any).title || (a as any).name || '');
+    const isFlight = cat === 'flight' || /\bflight\b/i.test(title);
+    if (!isFlight) continue;
+    const m = parseHHMM((a as any).startTime || (a as any).start_time || (a as any).time);
+    if (m === null || m <= 0) continue;
+    if (earliest === null || m < earliest) earliest = m;
+  }
+  return earliest;
+}
+
 function lastNonBookendEnd(day: any): number | null {
   const acts = day?.activities;
   if (!Array.isArray(acts)) return null;
@@ -145,7 +169,8 @@ export function inferDayModeFallback({
   const departureRaw =
     ret.departure_time ?? ret.departureTime ?? ret.departure ??
     fs.departure_time ?? fs.departureTime;
-  const departureMin = parseClockToMinutes(departureRaw) ?? lastNonBookendEnd(day);
+  const departureMin =
+    parseClockToMinutes(departureRaw) ?? departureFlightStart(day) ?? lastNonBookendEnd(day);
   if (departureMin === null) return null;
 
   if (departureMin >= 18 * 60) {
