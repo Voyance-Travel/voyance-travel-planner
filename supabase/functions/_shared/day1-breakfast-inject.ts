@@ -20,7 +20,7 @@
  * Memory: see plan §1 in .lovable/plan.md and the breakfast guarantor entry.
  */
 
-import { detectCrossCityMention } from './cross-city-filter.ts';
+import { detectCrossCityMention } from '../generate-itinerary/cross-city-filter.ts';
 
 export interface Day1BreakfastInjectInput {
   activities: any[];
