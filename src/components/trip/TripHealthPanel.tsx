@@ -216,8 +216,12 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
           message: sparseJsonLikely
             ? `Day ${dayNum} meals not yet loaded - recovering from saved data`
             : `Day ${dayNum} missing ${missingMeals.join(', ')}`,
+          // A missing MEAL cannot be added by `refresh_day` (that only
+          // re-validates timing/buffers and reports "looks clean" while the
+          // meal is still gone). Route to a real AI day-regeneration that
+          // re-runs the meal guard and injects the missing course.
           fixLabel: sparseJsonLikely ? undefined : 'Regenerate Day',
-          fixAction: sparseJsonLikely ? undefined : 'refresh_day',
+          fixAction: sparseJsonLikely ? undefined : 'regenerate_day',
           dayNumber: dayNum,
         });
       }
