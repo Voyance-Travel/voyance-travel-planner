@@ -731,6 +731,62 @@ export async function handleGenerateTripDayV2(
       );
     } catch (e) { console.warn('[v2] bookend-verification failed:', e); }
 
+    // ── 8g. FINAL meal-coverage gate — the LAST thing before the write ──
+    // ROOT-CAUSE FIX (Day-N-missing-dinner): the 6c meal guard runs
+    // mid-pipeline, BEFORE the step-8 mutating passes. ledger-check
+    // (vibe-clash / repeated-venue removal, e.g. the same restaurant used on
+    // 3 days) and nuclearDiningStrip can REMOVE or downgrade a meal the guard
+    // already approved — turning a 19:00 dinner into a mis-timed afternoon
+    // "lunch" — and nothing re-verified coverage afterward, so the day shipped
+    // without dinner. Re-detect every day here, as the final step, and
+    // re-inject anything the late passes dropped. Idempotent: only fires when
+    // a required meal is genuinely absent.
+    for (const d of mergedDays) {
+      const dNum = d?.dayNumber;
+      if (typeof dNum !== 'number') continue;
+      const acts = Array.isArray(d?.activities) ? d.activities : null;
+      if (!acts) continue;
+      try {
+        const policy = facts.mealPolicy(dNum);
+        if (!policy.requiredMeals.length) continue;
+        const detected = detectMealSlots(acts);
+        const missing = policy.requiredMeals.filter((m) => !detected.includes(m));
+        if (missing.length === 0) continue;
+        const res = enforceRequiredMealsFinalGuard(
+          acts,
+          policy.requiredMeals,
+          dNum,
+          facts.destination.city || 'the destination',
+          'USD',
+          policy.dayMode,
+          [],
+          { departureTime24: dNum === totalDays ? (facts.departure?.time24 || undefined) : undefined },
+        );
+        if (!res.alreadyCompliant) {
+          d.activities = res.activities;
+          d.metadata = d.metadata || {};
+          d.metadata.quality = d.metadata.quality || {};
+          d.metadata.quality.meal_audit = {
+            ...(d.metadata.quality.meal_audit || {}),
+            required: policy.requiredMeals,
+            missing_after_passes: missing,
+            reinjected: res.injectedMeals,
+            source: 'v2:final-coverage-gate',
+          };
+          console.warn(
+            `[v2] [MEAL_FINAL_GATE] day=${dNum} late passes dropped=[${missing.join(',')}] reinjected=[${res.injectedMeals.join(',')}]`,
+          );
+          try {
+            await fillAfterMealGuard(acts, facts.destination.city, dNum, 'v2:final-coverage-gate');
+          } catch (fillErr) {
+            console.warn(`[v2] final-gate fillAfterMealGuard failed (non-blocking) day=${dNum}:`, fillErr);
+          }
+        }
+      } catch (e) {
+        console.warn(`[v2] final meal-coverage gate failed (non-blocking) day=${dNum}:`, e);
+      }
+    }
+
     // ── 9. Single write of merged JSON ─────────────────────────────────
     const persistResult = await withStage(trace, 'persist_written', { dayNumber }, () =>
       persistTripItinerary(
