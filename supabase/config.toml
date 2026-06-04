@@ -89,6 +89,8 @@ project_id = "jsxplunjjvxuejeouwob"
     verify_jwt = false
   [functions.generate-itinerary]
     verify_jwt = false
+  [functions.itinerary-ops]
+    verify_jwt = false
   [functions.generate-travel-blog]
     verify_jwt = false
   [functions.generate-quick-preview]
