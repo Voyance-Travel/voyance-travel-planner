@@ -20,7 +20,7 @@
  */
 
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
-import { detectMealSlots } from '../generate-itinerary/day-validation.ts';
+import { detectMealSlots } from './day-validation.ts';
 import { isDiningActivity } from './dining-description-backfill.ts';
 
 export type PersistValidationCode =
