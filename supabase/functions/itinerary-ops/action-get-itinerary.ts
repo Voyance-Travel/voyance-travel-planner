@@ -3,7 +3,7 @@
  * Retrieves itinerary data with ownership verification.
  */
 
-import { type ActionContext, okJson, errorJson } from '../generate-itinerary/action-types.ts';
+import { type ActionContext, okJson, errorJson } from './action-types.ts';
 
 export async function handleGetItinerary(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;

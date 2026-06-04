@@ -28,9 +28,9 @@ import { handleGetTrip } from './action-get-trip.ts';
 import { handleSaveItinerary } from './action-save-itinerary.ts';
 import { handleGetItinerary } from './action-get-itinerary.ts';
 import { handleToggleActivityLock } from './action-toggle-lock.ts';
-import { handleSyncItineraryTables } from '../generate-itinerary/action-sync-tables.ts';
+import { handleSyncItineraryTables } from './action-sync-tables.ts';
 import { handleRepairTripCosts } from './action-repair-costs.ts';
-import { corsHeaders, type ActionContext } from '../generate-itinerary/action-types.ts';
+import { corsHeaders, type ActionContext } from './action-types.ts';
 
 import { checkDbRateLimit, type RateLimitRule } from "../_shared/db-rate-limiter.ts";
 
