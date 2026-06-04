@@ -10,6 +10,7 @@ import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.t
 import {
   isProtectedMeal,
   stampMealProtection,
+  collapseRedundantInjectedMeals,
 } from "../../../supabase/functions/_shared/meal-protection.ts";
 import {
   pruneNonLogisticsAfterAirportTransfer,
@@ -39,6 +40,49 @@ Deno.test("stampMealProtection sets the lock_state + flag + tag", () => {
   assertEquals(a.metadata.protectedMeal, true);
   assert(Array.isArray(a.tags) && a.tags.includes("meal-guard"));
   assert(isProtectedMeal(a));
+});
+
+function sentinelDinner(start: string): any {
+  const a: any = {
+    category: "dining",
+    title: `Dinner — find a local spot`,
+    startTime: start,
+    metadata: { needsVenuePick: true, preserveAsManualPick: true },
+  };
+  stampMealProtection(a);
+  return a;
+}
+
+Deno.test("DEDUP: two injected dinner sentinels collapse to one", () => {
+  const acts = [
+    { category: "sightseeing", title: "Museum", startTime: "10:00" },
+    sentinelDinner("19:00"),
+    sentinelDinner("19:30"),
+  ];
+  const removed = collapseRedundantInjectedMeals(acts);
+  assertEquals(removed, 1);
+  assertEquals(acts.filter((a) => /dinner/i.test(a.title)).length, 1);
+});
+
+Deno.test("DEDUP: an injected sentinel is dropped when a real meal already covers the slot", () => {
+  const acts = [
+    { category: "dining", title: "Dinner at Casa Botín", startTime: "20:30" }, // real, unprotected
+    sentinelDinner("19:00"), // redundant injected sentinel in the dinner slot
+  ];
+  const removed = collapseRedundantInjectedMeals(acts);
+  assertEquals(removed, 1);
+  assert(acts.some((a) => a.title === "Dinner at Casa Botín"), "real meal must be kept");
+  assert(!acts.some((a) => /find a local spot/i.test(a.title)), "sentinel must be dropped");
+});
+
+Deno.test("DEDUP: two REAL dinner-time venues (tapas crawl) are NOT collapsed", () => {
+  const acts = [
+    { category: "dining", title: "Tapas at Bar A", startTime: "19:00" },
+    { category: "dining", title: "Tapas at Bar B", startTime: "20:30" },
+  ];
+  const removed = collapseRedundantInjectedMeals(acts);
+  assertEquals(removed, 0);
+  assertEquals(acts.length, 2);
 });
 
 Deno.test("KEYSTONE: a protected meal survives the airport-transfer prune; an unprotected one is dropped", () => {

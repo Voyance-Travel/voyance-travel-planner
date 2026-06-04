@@ -53,6 +53,7 @@ import { injectMissingMustDos } from '../../_shared/inject-missing-must-dos.ts';
 import { extractMustDoVenues } from '../../_shared/extract-must-dos.ts';
 import { fillAfterMealGuard } from '../../_shared/post-meal-guard-fill.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from '../day-validation.ts';
+import { collapseRedundantInjectedMeals } from '../../_shared/meal-protection.ts';
 import { runStep8 } from '../universal-quality-pass.ts';
 import { ledgerCheck } from '../ledger-check.ts';
 import { nuclearCrossCitySweep, nuclearDiningStrip, nuclearWellnessSweep } from '../fix-placeholders.ts';
@@ -789,6 +790,13 @@ export async function handleGenerateTripDayV2(
       } catch (e) {
         console.warn(`[v2] final meal-coverage gate failed (non-blocking) day=${dNum}:`, e);
       }
+      // Collapse any duplicate injected meal sentinels (6c + 8g can each add one
+      // since a needsVenuePick sentinel doesn't satisfy meal-detection) into one
+      // per slot before the JSON write.
+      try {
+        const removed = collapseRedundantInjectedMeals(d.activities);
+        if (removed > 0) console.log(`[v2] [MEAL_DEDUP] day=${dNum} removed ${removed} redundant injected meal sentinel(s)`);
+      } catch (_e) { /* non-blocking */ }
     }
 
     // ── 9. Single write of merged JSON ─────────────────────────────────
