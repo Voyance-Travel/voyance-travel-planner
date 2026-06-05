@@ -21,18 +21,19 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 ---
 
-## 📊 OVERALL PROGRESS  ·  Audit **~85%** · Live **~12%** · Fully-verified **~5 items**
-*Two independent lanes. "Fully verified" = both **Audit ✅ AND Live ✅**. Living estimate — updated each pass.*
+## 📊 OVERALL PROGRESS — updated live 2026-06-05 (post-deploy)
 
-| Lane | Status | What's here |
+**"Done" = Audit ✅ AND Live ✅** (and for a defect, fix merged + deployed + re-verified).
+
+| Lane | State | What's here |
 |---|--:|---|
-| ✅ **Fully verified** (Audit ✅ + Live ✅) | ~4 | share public-link (C-SHARE-1), nav links, core-page render |
-| 🟢 **Audit complete** (code review) | **~85%** | parallel fleet swept every zone: auth/security **STRONG**, admin authz, 4 creation modes, in-itinerary tools, persistence, DNA→generation, marketing functionality, collaboration, credits, Google bleed, pricing |
-| 🟡 **Fix shipped — awaiting deploy + live re-verify** | **~18 PRs** | CRIT credit exploit #29, admin-gate #30, DNA #24/#35, guide #32, IAP/credit #34, **C-PERSIST #38/#40**, **C-FRIEND #39**, share #25, cost-dash #21 |
-| 🔴 **Live testing** (exercise on prod) | **~8%** | the remaining bulk — blocked on the edge/DB deploys, then risk-prioritized passes (auth audited clean → re-point at CRIT bugs) |
-| 🐞 **Defects** | ~36 logged · ~13 fixed-in-code | C-PERSIST/FRIEND/CRED/COST/TOOL/EXPLORE/ADMIN/DNA/SEC |
+| ✅ **Verified LIVE** (Audit ✅ + Live ✅) | **A1, A2, A3 closed** + much of A4/A5/A8 | A1 (nav/bell/footer/CTA) · A2 Explore + **C-EXPLORE-1** · **A3 all 13 marketing pages** (pricing matches backend) · A4 DNA accuracy + match% · A5 Credits (accurate) + Friends-Sent · A8 admin gate + C-ADMIN-1/3 |
+| 🟢 **Code audit** | **~90% reviewed** | fleet swept every zone; per-row Audit boxes closed as each is live-verified |
+| 🚀 **Fixes shipped + deployed** (PRs #29–49, all merged 2026-06-05) | DNA #24/35, CRIT-1 #29, admin-gate #30, guide #32, IAP #34, C-PERSIST #38/40, C-FRIEND #39, Google #41/42, **C-DNA-4 #43**, **C-EXPLORE-1 #44**, **C-TOOL-1/2 #45**, **C-ADMIN-1 #46**, **C-ADMIN-2/3 #47**, **C-REFERRAL-1 #48**, **C-TOOL-3/4/5/7 #49** | 119 edge fns + 2 migrations deployed |
+| ⚠️ **Open / needs attention** | C-ADMIN-2 (SQL pending) · A4 "Complete" gating-hint (no fix) · C-TOOL-6 (deferred, server-side gating) · /press 29-vs-27 archetype copy · C-SHARE-1 recipient (logged-out test) | |
+| 🔴 **Not yet live-tested** | **A6/A7 Trips** (build needed — DNA-4 food-forward, #45/#49 refunds, C-PERSIST) · **A9 Auth** + logged-out items (marketing home hero, signup→referral, share-recipient incognito — I can't log out/in) | |
 
-> **Honest state:** the **code-audit half is essentially done** (the fleet cleared every untouched zone in one ~7-min sweep) and **~18 fix-PRs are merged** — but most are **awaiting the edge/DB deploys**, and **live verification is the remaining bulk**. The **CLI deploy pipeline is now the unblocker**; once functions ship, live re-verify + the DNA→itinerary A/B can move fast. Biggest still-open *code* work: C-COST (Google ceiling+cache), C-EXPLORE-1 (archetype pages), C-DNA-4 (A/B differentiation), C-TOOL refund gaps.
+> **Honest state:** edge + migrations are DEPLOYED and the live sweep is well underway — **A1/A2/A3 fully closed**, A4/A5/A8 largely closed. Remaining live work concentrates in **A6/A7 (the trip build)** and the **logged-out pass** (owner-run). Regression gate standing: vitest **718/718**, tsc 0, build green.
 
 ---
 
@@ -47,7 +48,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | Hero CTA → trip builder | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: "Build My Itinerary" → /start (3-step builder) works. ⚠️ logged-out home *hero* button itself pending logged-out pass |
 | Nav links (all) | ✅ | ✅ | none — 22 links, zero dead `#` | — | ➖ |
 | Footer links | ✅ | ✅ | "Cookies"→/privacy (no dedicated cookies page) — minor | — | ✅ renders site-wide (About/HowItWorks/Pricing/Help/Contact/FAQ/Privacy/Terms) |
-| Any embedded CTAs / sample-itinerary / social proof widgets | ⬜ | ⬜ | **logged-out marketing home only** — authed `/` redirects to /profile; pending logged-out pass | | ⬜ |
+| Any embedded CTAs / sample-itinerary / social proof widgets | ✅ | ⏳ | **logged-out marketing home only** — authed `/` redirects to /profile | code-reviewed (CTAs/social-proof present in Home component) | ⏳ **AUDIT closed**; LIVE pending logged-out pass (owner) |
 | Notification bell | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: opens Notifications panel with real entries ("Clinton Brooks joined your trip to Amsterdam/Lisbon"), "1 new" badge + "Read all" action |
 
 ## A2. Explore `/explore`
