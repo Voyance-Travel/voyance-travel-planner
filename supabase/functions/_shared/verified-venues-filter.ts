@@ -7,7 +7,7 @@
  * Comptoir Paris, All'Antico Vinaio Florence) can leak into a Venice meal
  * guard fallback. This module is the last shared chokepoint.
  */
-import { detectCrossCityMention } from '../generate-itinerary/cross-city-filter.ts';
+import { detectCrossCityMention } from './cross-city-filter.ts';
 
 export interface VenueLike {
   name?: string | null;

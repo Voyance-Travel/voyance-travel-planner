@@ -1336,7 +1336,7 @@ async function _handleGenerateTripDayInner(
   //   well-known city that isn't the destination (catches AI pulling real
   //   restaurants from training data and dropping them in the wrong city). ──
   if (Array.isArray(dayResult?.activities)) {
-    const { isCrossCityAddress } = await import('./cross-city-filter.ts');
+    const { isCrossCityAddress } = await import('../_shared/cross-city-filter.ts');
     const dest = (cityInfo?.cityName || destination || '').trim();
     if (dest) {
       const beforeCC = dayResult.activities.length;

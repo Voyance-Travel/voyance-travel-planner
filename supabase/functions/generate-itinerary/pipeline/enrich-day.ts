@@ -142,7 +142,7 @@ async function enrichActivities(
 
   // Cross-city hallucination filter — drop activities whose Google Places match
   // resolved to a different city than the destination (real venue, wrong city).
-  const { isCrossCityAddress } = await import('../cross-city-filter.ts');
+  const { isCrossCityAddress } = await import('../../_shared/cross-city-filter.ts');
   let crossCityRemovedFromEnrichment = 0;
   let crossCityRemovedFromAddress = 0;
   const enrichedKept = enrichedActivities.filter((a: any) => {
