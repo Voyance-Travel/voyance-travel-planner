@@ -17,7 +17,7 @@ import { getAppUrl } from '@/utils/getAppUrl';
 import { archetypeIdToSlug } from '@/utils/archetypeSlug';
 
 interface ArchetypeDetailSheetProps {
-  archetype: ArchetypeDetail | null;
+  archetype: (ArchetypeDetail & { narrativeId?: string }) | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -29,7 +29,7 @@ export default function ArchetypeDetailSheet({ archetype, open, onOpenChange }: 
 
   const handleShare = async () => {
     const shareText = `I might be a ${archetype.name}! "${archetype.tagline}" - Discover your Travel DNA on Voyance`;
-    const slugSource = (archetype as any).narrativeId || archetype.id;
+    const slugSource = archetype.narrativeId || archetype.id;
     const shareUrl = `${getAppUrl()}/archetypes/${archetypeIdToSlug(slugSource)}`;
 
     if (navigator.share) {
@@ -70,118 +70,141 @@ export default function ArchetypeDetailSheet({ archetype, open, onOpenChange }: 
             </section>
 
             {/* Core Traits */}
-            <section className="mb-8">
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3">Core Traits</h3>
-              <div className="flex flex-wrap gap-2">
-                {archetype.coreTraits.map(trait => (
-                  <Badge key={trait} variant="secondary" className="text-xs">
-                    {trait}
-                  </Badge>
-                ))}
-              </div>
-            </section>
-
-            <Separator className="mb-8" />
+            {archetype.coreTraits?.length > 0 && (
+              <section className="mb-8">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3">Core Traits</h3>
+                <div className="flex flex-wrap gap-2">
+                  {archetype.coreTraits.map(trait => (
+                    <Badge key={trait} variant="secondary" className="text-xs">
+                      {trait}
+                    </Badge>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* What Drives You */}
-            <section className="mb-8">
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-4">
-                <Sparkles className="w-4 h-4 inline mr-1.5 text-primary" />
-                What Drives You
-              </h3>
-              <div className="space-y-3">
-                {archetype.drivers.map(driver => (
-                  <div key={driver.name} className="bg-muted/50 rounded-lg p-3">
-                    <p className="text-sm font-medium text-foreground mb-0.5">{driver.name}</p>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{driver.description}</p>
+            {archetype.drivers?.length > 0 && (
+              <>
+                <Separator className="mb-8" />
+                <section className="mb-8">
+                  <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-4">
+                    <Sparkles className="w-4 h-4 inline mr-1.5 text-primary" />
+                    What Drives You
+                  </h3>
+                  <div className="space-y-3">
+                    {archetype.drivers.map(driver => (
+                      <div key={driver.name} className="bg-muted/50 rounded-lg p-3">
+                        <p className="text-sm font-medium text-foreground mb-0.5">{driver.name}</p>
+                        {driver.description && (
+                          <p className="text-xs text-muted-foreground leading-relaxed">{driver.description}</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </section>
-
-            <Separator className="mb-8" />
+                </section>
+              </>
+            )}
 
             {/* Travel Style Preferences */}
-            <section className="mb-8">
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-4">Travel Style</h3>
-              <div className="bg-card border border-border rounded-lg overflow-hidden">
-                {archetype.travelPreferences.map((pref, i) => (
-                  <div key={pref.aspect} className={`flex justify-between items-center px-4 py-2.5 text-sm ${i > 0 ? 'border-t border-border' : ''}`}>
-                    <span className="text-muted-foreground">{pref.aspect}</span>
-                    <span className="text-foreground font-medium text-right">{pref.preference}</span>
+            {archetype.travelPreferences?.length > 0 && (
+              <>
+                <Separator className="mb-8" />
+                <section className="mb-8">
+                  <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-4">Travel Style</h3>
+                  <div className="bg-card border border-border rounded-lg overflow-hidden">
+                    {archetype.travelPreferences.map((pref, i) => (
+                      <div key={pref.aspect} className={`flex justify-between items-center px-4 py-2.5 text-sm ${i > 0 ? 'border-t border-border' : ''}`}>
+                        <span className="text-muted-foreground">{pref.aspect}</span>
+                        <span className="text-foreground font-medium text-right">{pref.preference}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </section>
-
-            <Separator className="mb-8" />
+                </section>
+              </>
+            )}
 
             {/* You Love / You Avoid */}
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              <section>
-                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                  <Heart className="w-3.5 h-3.5 text-emerald-500" />
-                  You Love
-                </h3>
-                <ul className="space-y-1.5">
-                  {archetype.youLove.map(item => (
-                    <li key={item} className="text-xs text-foreground/70 flex items-start gap-1.5">
-                      <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-              <section>
-                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                  <ShieldX className="w-3.5 h-3.5 text-red-400" />
-                  You Avoid
-                </h3>
-                <ul className="space-y-1.5">
-                  {archetype.youAvoid.map(item => (
-                    <li key={item} className="text-xs text-foreground/70 flex items-start gap-1.5">
-                      <span className="text-red-400 mt-0.5 shrink-0">✗</span>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            </div>
-
-            <Separator className="mb-8" />
+            {(archetype.youLove?.length > 0 || archetype.youAvoid?.length > 0) && (
+              <>
+                <Separator className="mb-8" />
+                <div className={`grid ${archetype.youLove?.length > 0 && archetype.youAvoid?.length > 0 ? 'grid-cols-2' : 'grid-cols-1'} gap-4 mb-8`}>
+                  {archetype.youLove?.length > 0 && (
+                    <section>
+                      <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                        <Heart className="w-3.5 h-3.5 text-emerald-500" />
+                        You Love
+                      </h3>
+                      <ul className="space-y-1.5">
+                        {archetype.youLove.map(item => (
+                          <li key={item} className="text-xs text-foreground/70 flex items-start gap-1.5">
+                            <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+                  {archetype.youAvoid?.length > 0 && (
+                    <section>
+                      <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                        <ShieldX className="w-3.5 h-3.5 text-red-400" />
+                        You Avoid
+                      </h3>
+                      <ul className="space-y-1.5">
+                        {archetype.youAvoid.map(item => (
+                          <li key={item} className="text-xs text-foreground/70 flex items-start gap-1.5">
+                            <span className="text-red-400 mt-0.5 shrink-0">✗</span>
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Ideal Destinations */}
-            <section className="mb-8">
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-primary" />
-                Ideal Destinations
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {archetype.idealDestinations.map(dest => (
-                  <Badge key={dest} variant="outline" className="text-xs">
-                    {dest}
-                  </Badge>
-                ))}
-              </div>
-            </section>
-
-            <Separator className="mb-8" />
+            {archetype.idealDestinations?.length > 0 && (
+              <>
+                <Separator className="mb-8" />
+                <section className="mb-8">
+                  <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-primary" />
+                    Ideal Destinations
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {archetype.idealDestinations.map(dest => (
+                      <Badge key={dest} variant="outline" className="text-xs">
+                        {dest}
+                      </Badge>
+                    ))}
+                  </div>
+                </section>
+              </>
+            )}
 
             {/* Profile Scores */}
-            <section className="mb-8">
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-4">Travel Profile</h3>
-              <div className="space-y-3">
-                {archetype.profileScores.map(score => (
-                  <div key={score.label}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-muted-foreground">{score.label}</span>
-                      <span className="font-medium text-foreground">{score.value}%</span>
-                    </div>
-                    <Progress value={score.value} className="h-1.5" />
+            {archetype.profileScores?.length > 0 && (
+              <>
+                <Separator className="mb-8" />
+                <section className="mb-8">
+                  <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-4">Travel Profile</h3>
+                  <div className="space-y-3">
+                    {archetype.profileScores.map(score => (
+                      <div key={score.label}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-muted-foreground">{score.label}</span>
+                          <span className="font-medium text-foreground">{score.value}%</span>
+                        </div>
+                        <Progress value={score.value} className="h-1.5" />
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </section>
+                </section>
+              </>
+            )}
 
             {/* Planning Advice / Key Needs / Strategies / Considerations */}
             {(archetype.planningAdvice || archetype.keyNeeds || archetype.keyStrategies || archetype.keyConsiderations) && (
