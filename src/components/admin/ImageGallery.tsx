@@ -145,10 +145,16 @@ export default function ImageGallery() {
   // Blacklist single
   const handleBlacklist = async (id: string) => {
     try {
-      await supabase.from('curated_images').update({ is_blacklisted: true }).eq('id', id);
+      // C-ADMIN-1: the Supabase client RESOLVES (not rejects) on RLS/DB errors —
+      // it returns { error }. Without checking it, a blocked write fell through to
+      // the optimistic UI update + success toast, faking success while the DB row
+      // was untouched. Check the error so failures actually surface.
+      const { error } = await supabase.from('curated_images').update({ is_blacklisted: true }).eq('id', id);
+      if (error) throw error;
       setImages(prev => prev.filter(img => img.id !== id));
       toast({ title: 'Image blacklisted' });
-    } catch {
+    } catch (err) {
+      console.error('[ImageGallery] Blacklist failed:', err);
       toast({ title: 'Blacklist failed', variant: 'destructive' });
     }
   };
@@ -158,11 +164,15 @@ export default function ImageGallery() {
     if (selected.size === 0) return;
     try {
       const ids = [...selected];
-      await supabase.from('curated_images').update({ is_blacklisted: true }).in('id', ids);
+      // C-ADMIN-1: check the returned error (see handleBlacklist) so a blocked
+      // bulk write surfaces instead of silently faking success in the UI.
+      const { error } = await supabase.from('curated_images').update({ is_blacklisted: true }).in('id', ids);
+      if (error) throw error;
       setImages(prev => prev.filter(img => !selected.has(img.id)));
       setSelected(new Set());
       toast({ title: `${ids.length} images blacklisted` });
-    } catch {
+    } catch (err) {
+      console.error('[ImageGallery] Bulk blacklist failed:', err);
       toast({ title: 'Bulk blacklist failed', variant: 'destructive' });
     }
   };
@@ -207,10 +217,11 @@ export default function ImageGallery() {
             },
           });
           if (!error && data?.url) {
-            await supabase.from('curated_images')
+            // C-ADMIN-1: only count a heal when the DB write actually committed.
+            const { error: updErr } = await supabase.from('curated_images')
               .update({ image_url: data.url, source: 'admin_healed', updated_at: new Date().toISOString() })
               .eq('id', img.id);
-            healed++;
+            if (!updErr) healed++;
           }
         } catch (e) {
           console.warn(`[Heal] Failed for ${img.entity_key}:`, e);
