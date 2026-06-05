@@ -21,7 +21,22 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 ---
 
+## 📊 OVERALL PROGRESS  ·  ~3 / ~150 items fully verified  ·  **~2%**
+*"Fully verified" = both **Audit ✅ AND Live ✅** (or a defect fixed **and** verified). Most "render ✅" marks are one-sided and do NOT count. Living estimate — updated each pass.*
+
+| Status | Count | What's here |
+|---|--:|---|
+| ✅ **Fully verified** (both sides) | ~3 | Share public-link (C-SHARE-1), nav links, core-page render |
+| 🟡 **Fix shipped — awaiting deploy / re-verify** | 5 | DNA accuracy #24, share-durability #25, cost-dashboard #21, **CRIT credit exploit #29**, **admin-gate #30** |
+| 🔵 **Audited (code) — not live-tested** | ~22 | credits core (PASS items), Google cost-bleed, pricing math, DNA root-causes |
+| ⬜ **Untouched** (no audit, no live) | ~120 | most of **Itinerary deep (Table D)**, **Auth/user-types/end-to-end (Table E)**, admin pages, the 4 creation modes, free-text & preferences DNA paths |
+
+> **Reality check:** the deepest, highest-value surface — the **itinerary build flow + in-itinerary tools (Table D)** — and the **entire auth / user-type / end-to-end layer (Table E)** are essentially untested. The original 5 generation fixes have **not been re-verified** in this pass (Table D4). We are early — that's the honest picture.
+
+---
+
 # TABLE A — Pages × Features
+*(Itinerary, creation modes, and in-itinerary tools are detailed in **Table D**; auth/user-types in **Table E**.)*
 *Not just "does it render" — do the links work, do the in-page features actually function.*
 
 ## A1. Home `/`
@@ -99,7 +114,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | UnitEconomics / cost dashboard — accuracy | ✅ | ⬜ | Google read ~2× low (price/place-details/retries) | fix PR #21 (useRealCostMetrics) | ⏳ awaiting live open-dashboard verify |
 | Admin — traffic / performance panels | ⬜ | ⬜ | | | ⬜ |
 | Admin — fixed-cost / projected-cost inputs | ⬜ | ⬜ | | | ⬜ |
-| Admin — access control (only founders see it) | ⬜ | ⬜ | | | ⬜ |
+| Admin — access control (only founders see it) | ❌→✅ | ⬜ | all 8 `/admin/*` routes were auth-only (no role check) | `AdminRoute`+`useIsAdmin` gate on all 8 (PR #30) | ⏳ |
 
 ## A9. Auth / login
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
@@ -159,6 +174,134 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 ---
 
+# TABLE D — Itinerary (the deep core)
+*The itinerary is the product. Every build path, every wizard step, every preference, every in-itinerary tool — each gets Audit + Live.*
+
+## D1. Build paths (entry → fully generated trip)
+| Path | Audit | Live | What went wrong | Resolution | Fix verified |
+|---|:--:|:--:|---|---|---|
+| Single City | ⬜ | ⬜ | | | ⬜ |
+| Multi-City | ⬜ | ⬜ | | | ⬜ |
+| Just Tell Us (free-text → parse) | ⬜ | ⬜ | | | ⬜ |
+| Build Myself (manual) | ⬜ | ⬜ | | | ⬜ |
+| Free version | ⬜ | ⬜ | | | ⬜ |
+| Each path → complete itinerary, no fallback, DNA applied | ⬜ | ⬜ | | | ⬜ |
+
+## D2. Build wizard — steps & inputs (each step: renders, validates, persists, back/forward, resume draft)
+| Step / input | Audit | Live | What went wrong | Resolution | Fix verified |
+|---|:--:|:--:|---|---|---|
+| Destination select (search/autocomplete) | ⬜ | ⬜ | | | ⬜ |
+| Dates / duration | ⬜ | ⬜ | | | ⬜ |
+| Travelers / party size | ⬜ | ⬜ | | | ⬜ |
+| Interests | ⬜ | ⬜ | | | ⬜ |
+| Dietary | ⬜ | ⬜ | | | ⬜ |
+| Pace | ⬜ | ⬜ | | | ⬜ |
+| Budget level | ⬜ | ⬜ | | | ⬜ |
+| Accommodation | ⬜ | ⬜ | | | ⬜ |
+| Must-dos / avoids | ⬜ | ⬜ | | | ⬜ |
+| Accessibility | ⬜ | ⬜ | | | ⬜ |
+| DNA auto-applied from profile | ⬜ | ⬜ | | | ⬜ |
+| Cost preview + credit gate (correct cost shown) | ⬜ | ⬜ | (cross-ref C-CRED-4) | | ⬜ |
+| Step validation / resume incomplete draft | ⬜ | ⬜ | | | ⬜ |
+| Generation kickoff + progress/heartbeat | ⬜ | ⬜ | (cross-ref D4 #1) | | ⬜ |
+
+## D3. Preferences RESPECTED in output (the integrity test — cross-ref C-DNA-5)
+| Preference | Audit | Live | What went wrong | Resolution | Fix verified |
+|---|:--:|:--:|---|---|---|
+| Interests → activities reflect them | ⬜ | ⬜ | | | ⬜ |
+| Dietary → restaurant picks respect it | ⬜ | ⬜ | | | ⬜ |
+| Pace → day density matches | ⬜ | ⬜ | | | ⬜ |
+| Budget → venue price tier matches | ⬜ | ⬜ | | | ⬜ |
+| DNA archetype → itinerary character matches | ⬜ | ⬜ | (= Table B3 A/B) | | ⬜ |
+| Must-dos included / avoids excluded | ⬜ | ⬜ | | | ⬜ |
+
+## D4. Generation correctness — RE-VERIFY the original 5 fixes still hold (fresh gen)
+| Original bug (already fixed) | Audit | Live | What went wrong | Resolution | Fix verified |
+|---|:--:|:--:|---|---|---|
+| #1 launcher timeout / "generation paused" / heartbeat | ✅ | ⬜ | (fixed PRs #16–19) | shipped | ⏳ **re-verify live** |
+| #2 Small Detour crash-proof renderer | ✅ | ⬜ | | shipped | ⏳ **re-verify live** |
+| #3 Partial badge false-positives + backfill | ✅ | ⬜ | | shipped | ⏳ **re-verify live** |
+| #4 meal coverage (no missing meals) | ✅ | ⬜ | | shipped | ⏳ **re-verify live** |
+| #5 departure airport transit / Day-N transit | ✅ | ⬜ | | shipped | ⏳ **re-verify live** |
+
+## D5. In-itinerary features (there are many — each: works, persists, reflects immediately, charges correct credits)
+| Feature | Audit | Live | What went wrong | Resolution | Fix verified |
+|---|:--:|:--:|---|---|---|
+| Regenerate day | ⬜ | ⬜ | | | ⬜ |
+| Swap / replace activity | ⬜ | ⬜ | | | ⬜ |
+| Reorder / move (drag) | ⬜ | ⬜ | | | ⬜ |
+| Add activity (search → add) | ⬜ | ⬜ | | | ⬜ |
+| Add booking / flight / hotel | ⬜ | ⬜ | | | ⬜ |
+| Lock activity | ⬜ | ⬜ | | | ⬜ |
+| Day-unlock (locked days) | ⬜ | ⬜ | | | ⬜ |
+| Smart Finish | ⬜ | ⬜ | | | ⬜ |
+| Mystery activity | ⬜ | ⬜ | | | ⬜ |
+| Route optimization | ⬜ | ⬜ | (cross-ref C-COST-5) | | ⬜ |
+| Restaurant recommendations | ⬜ | ⬜ | (cross-ref C-COST-6) | | ⬜ |
+| Hotel optimization | ⬜ | ⬜ | | | ⬜ |
+| AI chat / trip-planner (itinerary-chat) | ⬜ | ⬜ | | | ⬜ |
+| Notes / personalization | ⬜ | ⬜ | | | ⬜ |
+| Edit ↔ Preview toggle | ⬜ | ⬜ | | | ⬜ |
+| Trip Health panel (Intelligence / Completion) | ⬜ | ✅ renders | | | ⬜ |
+| Day-by-day cost display | ⬜ | ⬜ | | | ⬜ |
+| Export / print / PDF | ⬜ | ⬜ | | | ⬜ |
+| Maps (Apple MapKit) render | ⬜ | ⬜ | | | ⬜ |
+| Share public link | ✅ | ✅ | (C-SHARE-1 closed) | PR #25 | ✅ |
+| Collaborator invite link | ⬜ | ⬜ | | | ⬜ |
+| Each tool charges correct credits + refunds on fail | ⬜ | ⬜ | (cross-ref C-CRED-2/5) | | ⬜ |
+
+## D6. Persistence / data integrity
+| Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
+|---|:--:|:--:|---|---|---|
+| `itinerary_activities` table ↔ `trips.itinerary_data` JSON stay in sync | ⬜ | ⬜ | (known to diverge — persistDay vs persistTripItinerary) | | ⬜ |
+| Refresh / re-open reloads same itinerary | ⬜ | ⬜ | | | ⬜ |
+| Edits persist across sessions | ⬜ | ⬜ | | | ⬜ |
+| No divergence after regen / swap / move | ⬜ | ⬜ | | | ⬜ |
+
+---
+
+# TABLE E — User types & Auth / end-to-end flow
+
+## E1. User-type matrix (what each can do / what's gated)
+| User type | Audit | Live | What went wrong | Resolution | Fix verified |
+|---|:--:|:--:|---|---|---|
+| Anonymous / guest (browse, sample, gen blocked) | ⬜ | ⬜ | | | ⬜ |
+| Free user (free-version limits enforced) | ⬜ | ⬜ | | | ⬜ |
+| Paid user (purchased credits) | ⬜ | ⬜ | | | ⬜ |
+| Voyance Club member (perks / priority) | ⬜ | ⬜ | | | ⬜ |
+| Admin / founder (admin pages) | ❌→✅ | ⬜ | routes were auth-only | AdminRoute gate (PR #30) | ⏳ |
+
+## E2. Auth flows
+| Flow | Audit | Live | What went wrong | Resolution | Fix verified |
+|---|:--:|:--:|---|---|---|
+| Sign up (email) | ⬜ | ⬜ | | | ⬜ |
+| Sign in | ⬜ | ⬜ | | | ⬜ |
+| OAuth (Google / Apple) | ⬜ | ⬜ | | | ⬜ |
+| Email verification | ⬜ | ⬜ | | | ⬜ |
+| Password reset | ⬜ | ⬜ | | | ⬜ |
+| Session persistence / refresh | ⬜ | ⬜ | | | ⬜ |
+| Logout | ⬜ | ⬜ | | | ⬜ |
+| Return-path after login (deep link) | ⬜ | ⬜ | | | ⬜ |
+| Quiz-gating (`requireQuiz` routes) | ⬜ | ⬜ | | | ⬜ |
+
+## E3. End-to-end journeys (per user type)
+| Journey | Audit | Live | What went wrong | Resolution | Fix verified |
+|---|:--:|:--:|---|---|---|
+| New user: land → signup → quiz → DNA → build → itinerary → share | ⬜ | ⬜ | | | ⬜ |
+| Free user: login → build (free) → upgrade prompt | ⬜ | ⬜ | | | ⬜ |
+| Paying user: login → buy credits → build → tools | ⬜ | ⬜ | (buy = real Stripe; test carefully) | | ⬜ |
+| Admin: login → admin dashboards | ⬜ | ⬜ | | | ⬜ |
+
+## E4. Security posture
+| Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
+|---|:--:|:--:|---|---|---|
+| RLS on key tables (trips, credits, dna, user_roles) | ⬜ | ⬜ | | | ⬜ |
+| Edge functions auth-gated | ⬜ | ⬜ | | | ⬜ |
+| No exposed secrets in bundle (beyond known Maps key) | ⬜ | ⬜ | (cross-ref C-COST-4) | | ⬜ |
+| Admin route gating | ✅ | ⬜ | was auth-only | PR #30 | ⏳ |
+
+---
+
 # TABLE C — Concerns / Findings (open defects)
 *Every defect carries its own two checkboxes + resolution + verify.*
 
@@ -178,9 +321,9 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | C-COST-5 | MED | cost | geocoding/routes/distance-matrix uncached (optimize/transit/transfers/airport) | ✅ | ⬜ | add `cachedGoogleGeocode/Routes/DistanceMatrix` wrappers | ⬜ |
 | C-COST-6 | MED | cost | `recommend-restaurants`/`hotels`(×3)/`fetch-reviews` uncached text search — scales with ENGAGEMENT not trip count (traffic-unbounded) | ✅ | ⬜ | cached search | ⬜ |
 | C-COST-7 | LOW | cost | SKU recorded even on network/abort error; retries (`enrichActivityWithRetry`) can double-bill a venue | ✅ | ⬜ | don't bill on abort; cache-before-retry | ⬜ |
-| C-CRED-1 | **CRIT** | credits/security | **Pay $9, mint up to 100k credits** — `create-embedded-checkout` + `stripe-webhook` grant client-supplied `credits` with no priceId↔credits check (flex products only; club packs safe) | ✅ | ⬜ | derive credits server-side from priceId map; assert amount paid; mirror IAP pattern | ⬜ |
+| C-CRED-1 | **CRIT** | credits/security | **Pay $9, mint up to 100k credits** — `create-embedded-checkout` + `stripe-webhook` grant client-supplied `credits` with no priceId↔credits check (flex + group-pool paths; club packs safe) | ✅ | ⬜ | ✅ **FIX SHIPPED (PR #29)** — webhook derives credits from priceId via FLEX_PRICE_MAP + asserts charge; both flex & group-pool paths. Awaiting owner merge + edge deploy | ⏳ |
 | C-CRED-2 | HIGH | credits | Guide gen (`generate-travel-guide`) charges hardcoded **15** vs displayed **20**, charges before deliver, **no refund + no idempotency** (double-charge on dup POST, lost credits on failure) | ✅ | ⬜ | route via `spend-credits` (add `generate_blog` to FIXED_COSTS); reconcile cost | ⬜ |
-| C-CRED-3 | HIGH | security/leak | `/admin/dashboard` (UnitEconomics) **auth-gated only, not admin-gated**; per-action cost/margin table hardcoded in client bundle → any logged-in user sees internal costs | ✅ | ⬜ | add admin-role route gate; move cost table behind admin fetch | ⬜ |
+| C-CRED-3 | HIGH | security/leak | **ALL 8 admin routes** (`/admin/*`) were auth-gated only, not admin-gated → any logged-in user loads admin pages incl. UnitEconomics' hardcoded cost/margin table | ✅ | ⬜ | ✅ **FIX SHIPPED (PR #30)** — new `AdminRoute` + `useIsAdmin` (server `user_roles` check) on all 8 routes. Follow-up: move cost table out of client bundle | ⏳ |
 | C-CRED-4 | MED | credits | Trip-gen cost under-validated server-side — client can skip multi-city fee + complexity multiplier (undercharge) | ✅ | ⬜ | recompute authoritative cost server-side from days/cities/dna | ⬜ |
 | C-CRED-5 | MED | credits | Trip refund can **double-refund** — `issueRefund` (ItineraryGenerator) sends no `pendingChargeId`/`originalIdempotencyKey`, bypasses dedup | ✅ | ⬜ | pass original idempotencyKey through all refund paths | ⬜ |
 | C-CRED-6 | MED | credits | Monthly free-grant check-then-act race → concurrent 2× 150cr | ✅ | ⬜ | atomic conditional UPDATE / unique (user, month) | ⬜ |

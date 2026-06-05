@@ -32,6 +32,7 @@ import { OutOfCreditsModal } from "@/components/checkout/OutOfCreditsModal";
 
 // Layouts
 import ProtectedRoute from "@/components/layout/ProtectedRoute";
+import AdminRoute from "@/components/layout/AdminRoute";
 
 // Eagerly loaded: landing + auth (frequent first-paint targets, kept small)
 import Home from "./pages/Home";
@@ -280,15 +281,15 @@ function AnimatedRoutes() {
           <Route path="/payment-success" element={<PaymentSuccess />} />
 
           {/* Admin Routes - Protected */}
-          <Route path="/admin/bulk-import" element={<ProtectedRoute><BulkImport /></ProtectedRoute>} />
-          <Route path="/admin/data-cleanup" element={<ProtectedRoute><DataCleanup /></ProtectedRoute>} />
-          <Route path="/admin/image-curation" element={<ProtectedRoute><ImageCuration /></ProtectedRoute>} />
-          <Route path="/admin/dashboard" element={<ProtectedRoute><UnitEconomics /></ProtectedRoute>} />
+          <Route path="/admin/bulk-import" element={<AdminRoute><BulkImport /></AdminRoute>} />
+          <Route path="/admin/data-cleanup" element={<AdminRoute><DataCleanup /></AdminRoute>} />
+          <Route path="/admin/image-curation" element={<AdminRoute><ImageCuration /></AdminRoute>} />
+          <Route path="/admin/dashboard" element={<AdminRoute><UnitEconomics /></AdminRoute>} />
           <Route path="/admin/margins" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="/admin/test-suites" element={<ProtectedRoute><TestSuites /></ProtectedRoute>} />
-          <Route path="/admin/user-tracking" element={<ProtectedRoute><UserTracking /></ProtectedRoute>} />
-          <Route path="/admin/session-explorer" element={<ProtectedRoute><SessionExplorer /></ProtectedRoute>} />
-          <Route path="/admin/logs" element={<ProtectedRoute><GenerationLogs /></ProtectedRoute>} />
+          <Route path="/admin/test-suites" element={<AdminRoute><TestSuites /></AdminRoute>} />
+          <Route path="/admin/user-tracking" element={<AdminRoute><UserTracking /></AdminRoute>} />
+          <Route path="/admin/session-explorer" element={<AdminRoute><SessionExplorer /></AdminRoute>} />
+          <Route path="/admin/logs" element={<AdminRoute><GenerationLogs /></AdminRoute>} />
 
           {/* Agent CRM Routes */}
           <Route path="/agent" element={<ProtectedRoute><AgentDashboard /></ProtectedRoute>} />
