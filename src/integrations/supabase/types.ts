@@ -4254,6 +4254,33 @@ export type Database = {
         }
         Relationships: []
       }
+      google_api_budget: {
+        Row: {
+          breaker_open: boolean
+          call_count: number
+          cost_usd: number
+          created_at: string
+          day: string
+          updated_at: string
+        }
+        Insert: {
+          breaker_open?: boolean
+          call_count?: number
+          cost_usd?: number
+          created_at?: string
+          day?: string
+          updated_at?: string
+        }
+        Update: {
+          breaker_open?: boolean
+          call_count?: number
+          cost_usd?: number
+          created_at?: string
+          day?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       google_places_search_cache: {
         Row: {
           cache_key: string
@@ -11651,6 +11678,10 @@ export type Database = {
       cleanup_stale_intel_locks: { Args: never; Returns: undefined }
       complete_quiz: { Args: { _prefs: Json }; Returns: undefined }
       consume_free_edit: { Args: { p_user_id: string }; Returns: Json }
+      consume_google_budget: {
+        Args: { p_cost?: number; p_limit?: number }
+        Returns: number
+      }
       deduct_credits_fifo: {
         Args: { p_cost: number; p_user_id: string }
         Returns: Json
