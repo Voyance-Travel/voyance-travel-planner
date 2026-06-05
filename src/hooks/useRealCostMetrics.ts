@@ -79,9 +79,14 @@ export interface RealCostMetrics {
    other: 'Other',
  };
 
-// Google API pricing (per call)
+// Google API pricing (per call).
+// MUST mirror the authoritative backend table in
+// supabase/functions/_shared/cost-tracker.ts → GOOGLE_API_PRICING.
+// (Gross of free tier — the conservative figure for projecting spend at scale,
+// where the monthly free allotment is negligible.)
 const GOOGLE_PRICING = {
-  places: 0.017,
+  places: 0.032,        // places_text_search — Advanced SKU (was 0.017, which under-reported by ~2x)
+  place_details: 0.017, // Basic Place Details SKU (was omitted entirely)
   geocoding: 0.005,
   photos: 0.007,
   routes: 0.005,
@@ -124,6 +129,10 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
         .from('trip_cost_tracking')
         .select('*')
         .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+        // Exclude retries from cost totals — a retried call records a fresh row
+        // stamped with retry_of; counting them double-bills the dashboard.
+        // (cost-tracker.ts documents: "Cost totals: WHERE retry_of IS NULL".)
+        .is('retry_of', null)
         .order('created_at', { ascending: false }),
       supabase
         .from('trips')
@@ -171,6 +180,7 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
     // Aggregate metrics
     let totalCost = 0;
     let googlePlacesCalls = 0;
+    let googlePlaceDetailsCalls = 0;
     let googleGeocodingCalls = 0;
     let googlePhotosCalls = 0;
     let googleRoutesCalls = 0;
@@ -189,6 +199,7 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
 
       // Google calls
       googlePlacesCalls += entry.google_places_calls || 0;
+      googlePlaceDetailsCalls += entry.google_place_details_calls || 0;
       googleGeocodingCalls += entry.google_geocoding_calls || 0;
       googlePhotosCalls += entry.google_photos_calls || 0;
       googleRoutesCalls += entry.google_routes_calls || 0;
@@ -239,13 +250,14 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
     }
 
     // Calculate Google costs
-    const googleTotalCost = 
+    const googleTotalCost =
       googlePlacesCalls * GOOGLE_PRICING.places +
+      googlePlaceDetailsCalls * GOOGLE_PRICING.place_details +
       googleGeocodingCalls * GOOGLE_PRICING.geocoding +
       googlePhotosCalls * GOOGLE_PRICING.photos +
       googleRoutesCalls * GOOGLE_PRICING.routes;
 
-    const googleTotalCalls = googlePlacesCalls + googleGeocodingCalls + googlePhotosCalls + googleRoutesCalls;
+    const googleTotalCalls = googlePlacesCalls + googlePlaceDetailsCalls + googleGeocodingCalls + googlePhotosCalls + googleRoutesCalls;
 
     // Perplexity cost ($0.005/call estimate)
     const perplexityCost = perplexityCalls * 0.005;

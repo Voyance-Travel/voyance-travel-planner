@@ -518,7 +518,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 9] },
     ],
     fineGrained: [
-      { trait: 'food_focus', min: 0.4, weight: 20, sweetSpot: 0.85 },  // CORE: must love food (lowered min from 0.5 for sparse trait)
+      { trait: 'food_focus', min: 0.4, weight: 26, sweetSpot: 0.85 },  // CORE: must love food. Weight 20→26 so a dominant food signal wins over broad multi-criteria archetypes (e.g. Urban Nomad). See QA DNA-accuracy fix.
       { trait: 'cultural_depth', min: 0.3, weight: 6, sweetSpot: 0.7 },  // Bonus for cultural interest
       { trait: 'status_seeking', max: 0.7, weight: 4 },  // Mild penalty if too status-driven (raised from 0.6)
     ],

@@ -269,7 +269,7 @@
           "traits": {
             "cultural_depth": 0.8,
             "novelty_seeking": 0.7,
-            "food_focus": 0.5,
+            "food_focus": 0.75,
             "art_focus": 0.35
           }
         }
@@ -1264,6 +1264,7 @@
           "id": "q21b",
           "label": "Some. I choose local restaurants over chains and try to be respectful, but I'm not rigid about it.",
           "traits": {
+            "food_focus": 0.55,
             "ethics_focus": 0.5,
             "cultural_depth": 0.5
           }
@@ -1754,7 +1755,7 @@
       "name": "Culinary Cartographer",
       "category": "CURATOR",
       "required": {
-        "food_focus": { "min": 0.75 }
+        "food_focus": { "min": 0.4 }
       },
       "boosters": {
         "food_focus": 2.0,
