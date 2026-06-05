@@ -1,4 +1,4 @@
-// deploy-marker: pr24-pr25 (DNA fix #2 food-weight/urban-guard + share-RPC durability) — forces Lovable bundler to redeploy edge functions
+// deploy-marker: pr29-pr32 (bundles #24 DNA fix, #25 share-RPC, #29 Stripe credit security, #32 guide-gen charge) — forces Lovable bundler to redeploy edge functions
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 
