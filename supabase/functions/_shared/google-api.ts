@@ -695,7 +695,10 @@ export async function cachedGooglePlacesTextSearch(
           response_data: result.data,
           result_count: Array.isArray(result.data?.places) ? result.data.places.length : 0,
           created_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          // C-COST-3 (Phase 2): 60-day TTL — place coords/photos are stable, so a
+          // popular venue is fetched from Google ~once every 2 months and reused
+          // across all users/trips.
+          expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
         },
         { onConflict: "cache_key" },
       );

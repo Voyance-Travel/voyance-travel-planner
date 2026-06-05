@@ -3,7 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { getCachedPhotoUrl, getCachedPlacesPhotoByResource } from "../_shared/photo-storage.ts";
 import { trackCost, type CostTracker } from "../_shared/cost-tracker.ts";
 import { checkVenueCache, cacheVenueResult } from "../_shared/venue-cache.ts";
-import { googlePlacesTextSearch } from "../_shared/google-api.ts";
+import { cachedGooglePlacesTextSearch } from "../_shared/google-api.ts";
 import { isGoogleBillableUrl } from "../_shared/is-google-billable.ts";
 import { detectCrossCityMention } from "../_shared/cross-city-filter.ts";
 
@@ -534,7 +534,10 @@ async function getGooglePlacesPhoto(
     const MIN_MATCH_SCORE = 0.55;
 
     try {
-      const searchResult = await googlePlacesTextSearch(
+      // C-COST-3b (Phase 2): route the per-activity image search through the
+      // shared 60-day place cache (separate cache entry from verify due to the
+      // photos fieldMask, but still reused across all users/trips).
+      const searchResult = await cachedGooglePlacesTextSearch(
         {
           textQuery,
           fieldMask: "places.id,places.displayName,places.photos,places.types,places.formattedAddress",
