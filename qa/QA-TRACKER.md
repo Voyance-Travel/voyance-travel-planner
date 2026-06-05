@@ -21,17 +21,18 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 ---
 
-## 📊 OVERALL PROGRESS  ·  ~3 / ~150 items fully verified  ·  **~2%**
-*"Fully verified" = both **Audit ✅ AND Live ✅** (or a defect fixed **and** verified). Most "render ✅" marks are one-sided and do NOT count. Living estimate — updated each pass.*
+## 📊 OVERALL PROGRESS  ·  Audit **~85%** · Live **~8%** · Fully-verified **~4 items**
+*Two independent lanes. "Fully verified" = both **Audit ✅ AND Live ✅**. Living estimate — updated each pass.*
 
-| Status | Count | What's here |
+| Lane | Status | What's here |
 |---|--:|---|
-| ✅ **Fully verified** (both sides) | ~3 | Share public-link (C-SHARE-1), nav links, core-page render |
-| 🟡 **Fix shipped — awaiting deploy / re-verify** | 5 | DNA accuracy #24, share-durability #25, cost-dashboard #21, **CRIT credit exploit #29**, **admin-gate #30** |
-| 🔵 **Audited (code) — not live-tested** | ~22 | credits core (PASS items), Google cost-bleed, pricing math, DNA root-causes |
-| ⬜ **Untouched** (no audit, no live) | ~120 | most of **Itinerary deep (Table D)**, **Auth/user-types/end-to-end (Table E)**, admin pages, the 4 creation modes, free-text & preferences DNA paths |
+| ✅ **Fully verified** (Audit ✅ + Live ✅) | ~4 | share public-link (C-SHARE-1), nav links, core-page render |
+| 🟢 **Audit complete** (code review) | **~85%** | parallel fleet swept every zone: auth/security **STRONG**, admin authz, 4 creation modes, in-itinerary tools, persistence, DNA→generation, marketing functionality, collaboration, credits, Google bleed, pricing |
+| 🟡 **Fix shipped — awaiting deploy + live re-verify** | **~18 PRs** | CRIT credit exploit #29, admin-gate #30, DNA #24/#35, guide #32, IAP/credit #34, **C-PERSIST #38/#40**, **C-FRIEND #39**, share #25, cost-dash #21 |
+| 🔴 **Live testing** (exercise on prod) | **~8%** | the remaining bulk — blocked on the edge/DB deploys, then risk-prioritized passes (auth audited clean → re-point at CRIT bugs) |
+| 🐞 **Defects** | ~36 logged · ~13 fixed-in-code | C-PERSIST/FRIEND/CRED/COST/TOOL/EXPLORE/ADMIN/DNA/SEC |
 
-> **Reality check:** the deepest, highest-value surface — the **itinerary build flow + in-itinerary tools (Table D)** — and the **entire auth / user-type / end-to-end layer (Table E)** are essentially untested. The original 5 generation fixes have **not been re-verified** in this pass (Table D4). We are early — that's the honest picture.
+> **Honest state:** the **code-audit half is essentially done** (the fleet cleared every untouched zone in one ~7-min sweep) and **~18 fix-PRs are merged** — but most are **awaiting the edge/DB deploys**, and **live verification is the remaining bulk**. The **CLI deploy pipeline is now the unblocker**; once functions ship, live re-verify + the DNA→itinerary A/B can move fast. Biggest still-open *code* work: C-COST (Google ceiling+cache), C-EXPLORE-1 (archetype pages), C-DNA-4 (A/B differentiation), C-TOOL refund gaps.
 
 ---
 
@@ -315,7 +316,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | C-DNA-5 | HIGH | preferences | `profile.interests`/`dietary` computed but **never injected into compile-prompt** | ✅ | ⬜ | inject prefs into generation — not done | ⬜ |
 | C-DNA-6 | LOW | latent | `signatureAnswers` no-op in V3 quiz path (legacy IDs); flat penalty ignores distance | ✅ | ➖ | follow-up | ⬜ |
 | C-COST-1 | HIGH | cost | Admin dashboard read ~2× low on Google | ✅ | ⬜ | PR #21 | ⏳ live verify |
-| C-COST-2 | CRIT | cost | **No global daily Google ceiling / circuit breaker** (confirmed: none anywhere) | ✅ | ⬜ | `google_api_budget` + `consume_google_budget` RPC + breaker in google-api.ts wrappers (~200/day, degrade to stale/placeholder) | ⬜ |
+| C-COST-2 | CRIT | cost | **No global daily Google ceiling / circuit breaker** (confirmed: none anywhere) | ✅ | ⬜ | ✅ **PHASE 1 SHIPPED (PR #41)** — `google_api_budget` table + atomic `consume_google_budget` RPC + breaker gate in ALL 6 `google-api.ts` wrappers (≤200/day, fail-open, degrades to no-result). Needs edge deploy + DB apply. Phase 2 = shared place-cache | ⏳ |
 | C-COST-3 | **CRIT** | cost | **SEV-1:** per-activity venue-verify (`venue-enrichment.ts:218`) uses UNCACHED `googlePlacesTextSearch` → ~20–30 searches/trip ($0.64–0.96) | swap to `cachedGooglePlacesTextSearch` + place_id cache | ⬜ |
 | C-COST-3b | **CRIT** | cost | **SEV-1 (biggest):** image path (`venue-enrichment.ts:657`→`destination-images:537`) runs a SECOND independent uncached search + photo/activity, in parallel, regardless of venue cache hit ($0.78–1.17/trip) | share resolved place_id between verify+image; cached search; photo cache by place_id | ⬜ |
 | C-COST-4 | MED | cost | **CORRECTED:** frontend Google call is NOT per-keystroke (keystrokes = free Nominatim). Only on explicit "Search with Google" button — but untracked + exposed key + ceiling-bypass | server `places-search-proxy`; drop `VITE_GOOGLE_MAPS_API_KEY` path | ⬜ |
