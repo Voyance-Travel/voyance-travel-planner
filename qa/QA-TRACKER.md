@@ -21,18 +21,44 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 ---
 
-## 📊 OVERALL PROGRESS  ·  Audit **~85%** · Live **~12%** · Fully-verified **~5 items**
-*Two independent lanes. "Fully verified" = both **Audit ✅ AND Live ✅**. Living estimate — updated each pass.*
+## 📊 OVERALL PROGRESS — read this honestly
 
-| Lane | Status | What's here |
+**"Done" = Audit ✅ AND Live ✅** — and if the item had a defect, its fix is **merged + deployed + re-tested green**. **Shipping a PR is NOT "done."**
+
+| Lane | Count | Honest note |
 |---|--:|---|
-| ✅ **Fully verified** (Audit ✅ + Live ✅) | ~4 | share public-link (C-SHARE-1), nav links, core-page render |
-| 🟢 **Audit complete** (code review) | **~85%** | parallel fleet swept every zone: auth/security **STRONG**, admin authz, 4 creation modes, in-itinerary tools, persistence, DNA→generation, marketing functionality, collaboration, credits, Google bleed, pricing |
-| 🟡 **Fix shipped — awaiting deploy + live re-verify** | **~18 PRs** | CRIT credit exploit #29, admin-gate #30, DNA #24/#35, guide #32, IAP/credit #34, **C-PERSIST #38/#40**, **C-FRIEND #39**, share #25, cost-dash #21 |
-| 🔴 **Live testing** (exercise on prod) | **~8%** | the remaining bulk — blocked on the edge/DB deploys, then risk-prioritized passes (auth audited clean → re-point at CRIT bugs) |
-| 🐞 **Defects** | ~36 logged · ~13 fixed-in-code | C-PERSIST/FRIEND/CRED/COST/TOOL/EXPLORE/ADMIN/DNA/SEC |
+| ✅ **Fully verified** (Audit ✅ + Live ✅) | **~6** | DNA accuracy (re-quiz → *Culinary Cartographer*), C-FRIEND sent-names, nav links, core-page render, CRIT-1 Stripe (code-verified-live), C-PERSIST/Google (code-verified-live) |
+| 🟡 **Code *reviewed*** (breadth — NOT a pass rate) | ~85% of zones | the fleet *read* most zones — but "reviewed" ≠ "passing". These reviews are exactly what **surfaced the ~40 defects** below. Per-row Audit boxes get a ✅ only as each item is fix-and-verified, which is why few are green. |
+| 🔧 **Fix shipped — NOT yet verified** | **6 PRs (this session)** | #43 C-DNA-4 · #44 C-EXPLORE-1 · #45 C-TOOL-1/2 · #46 C-ADMIN-1 · #47 C-ADMIN-2/3 · #48 C-REFERRAL-1. Awaiting **merge → deploy → regression-retest → behavioral verify**. Still counted as open defects until green. |
+| 🐞 **Open defects** | ~40 logged | most have a fix-in-code, but **0 are verified-fixed-live** yet — that's the gap the "85%" hid. |
+| 🔴 **Live testing** | early | the real remaining work; **gated on clearing the fix backlog first** (see protocol below). |
 
-> **Honest state:** the **code-audit half is essentially done** (the fleet cleared every untouched zone in one ~7-min sweep) and **~18 fix-PRs are merged** — but most are **awaiting the edge/DB deploys**, and **live verification is the remaining bulk**. The **CLI deploy pipeline is now the unblocker**; once functions ship, live re-verify + the DNA→itinerary A/B can move fast. Biggest still-open *code* work: C-COST (Google ceiling+cache), C-EXPLORE-1 (archetype pages), C-DNA-4 (A/B differentiation), C-TOOL refund gaps.
+> **Why "85% audit" showed almost no green checks (you were right):** that number measured how much code the review *swept*, not how much *passes*. Green needs Audit ✅ **and** Live ✅ **and** (for a defect) a fix that's merged + deployed + re-tested. Nothing in the fix backlog has been deployed + re-tested yet, so the honest green count is **~6, not ~85%**.
+
+---
+
+## 🔧 FIX-AND-VERIFY BACKLOG — clear this BEFORE broad testing
+
+**Regression-safe protocol (owner-set 2026-06-05) — every fix follows this, no exceptions:**
+1. **Fix** the defect (root cause, not symptom).
+2. **Regression gate:** `npx vitest run` must stay green (**baseline: 85 files / 718 tests passing**) + `tsc --noEmit` + `eslint` add **0 new** errors. This is the guard against *"fixed it here, broke it there."*
+3. **Merge → deploy** (edge fns via CLI; migrations applied).
+4. **Behavioral verify** on prod (the actual user flow).
+5. **Only then** flip the row to ✅ and update the count. Never mark fixed on "shipped" alone.
+
+| PR | Item | Sev | Fix shipped | Regression-gate | Merged | Deployed | Behavioral-verified |
+|---|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| #43 | C-DNA-4 differentiation | HIGH | ✅ | ✅ vitest/tsc green, 0 new lint | ⬜ | ⬜ edge | ⬜ A/B culinary≠cultural |
+| #44 | C-EXPLORE-1 archetype pages | CRIT | ✅ | ✅ | ⬜ | ⬜ build | ⬜ Story-Seeker body matches title |
+| #45 | C-TOOL-1/2 credit refunds | HIGH | ✅ | ✅ | ⬜ | ⬜ build | ⬜ force fail → balance restored |
+| #46 | C-ADMIN-1 ImageCuration errors | HIGH | ✅ | ✅ | ⬜ | ⬜ build | ⬜ blacklist persists / honest error |
+| #47 | C-ADMIN-2/3 tiers RLS + dead button | MED | ✅ | ✅ | ⬜ | ⬜ migration | ⬜ all tiers list; no dead button |
+| #48 | C-REFERRAL-1 referral grant | HIGH | ✅ | ✅ | ⬜ | ⬜ migration+edge | ⬜ both +150; self/repeat blocked |
+| — | **C-SHARE-1 RECIPIENT** (RE-OPENED) | **CRIT** | n/a code looks correct | — | — | — | ⬜ **logged-out/incognito recipient opens link & views — never tested as a recipient; needs a trip + incognito** |
+
+> **C-SHARE-1 correction:** previously marked ✅ on *generation* + "public URL loads" (tested as the logged-in owner, NOT a recipient). Owner reports the real pain was **the recipient side — "it would never let them log in."** Recipient code path now looks sound (public `/trip-share/:token` route, `get_consumer_shared_trip` granted to `anon`, no `extensions` dependency, checks `share_enabled`) — likely fixed by the earlier `gen_random_bytes`/grant work — **but unverified as a recipient.** Re-opened until a logged-out incognito open is confirmed.
+
+> **Still-open code defects after this backlog:** C-TOOL-3…7 (refund/charge family — best after #45 merges so they reuse `refundCredits`), C-DNA-2 (divergent matchers), C-COST Phase 2.5 cache swaps, plus the per-table Audit boxes to fill as each is verified.
 
 ---
 
