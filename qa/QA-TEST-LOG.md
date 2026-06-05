@@ -144,7 +144,7 @@ Methodology: each issue is verified in **two places** — the **code audit** (re
 | 9 | MED | DNA | Differentiation flatteners: "30-40% trait moderation" rule + generic fallback archetype | ✅ | ⬜ | re-verify live (A/B itineraries) | open |
 | 10 | MED | DNA | profile.interests/dietary computed but never injected into compile-prompt | ✅ | ⬜ | re-verify live | open |
 | 11 | MED | reliability | Client self-heal retry storm on a permanently-failed trip (100s of identical FunctionsFetchError cycles) | ⬜ | ✅ | re-verify in code | open |
-| 12 | **CRIT** | share | **"Sharing always broken"** — Public-link toggle → `rpc('toggle_consumer_trip_share')` returns **404** (function missing from prod DB; defined in repo migrations 20260406/20260509 but never applied). Toast "Could not update sharing." | ✅ | ✅ | **CONFIRMED (both)** | **FIX migration written** (20260605120000) — needs apply-to-prod |
+| 12 | **CRIT** | share | **"Sharing always broken"** — Public-link toggle → `rpc('toggle_consumer_trip_share')` returns **404**. Real root cause: body calls `gen_random_bytes()` (in `extensions` schema) under `search_path=public` only → runtime "function does not exist" → PostgREST 404. | ✅ | ✅ | **CONFIRMED (both)** | ✅ **FIXED & VERIFIED LIVE** — DB patched (`ALTER … SET search_path=public,extensions`); toggle on/off + public URL load all 200; repo migration made durable (PR #25) |
 | 13 | HIGH | friends | Friends "Sent" tab badge says **3** but only **1** invite renders (count/list mismatch); invite stuck "Pending" | ⬜ | ✅ | re-verify in code | open |
 
 ## 7b. DNA accuracy — LIVE RE-QUIZ (fix #1 FAILED, fix #2 applied)
