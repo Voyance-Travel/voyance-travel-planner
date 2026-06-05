@@ -24,5 +24,9 @@ export const supabasePublic = createClient<Database>(SUPABASE_URL, SUPABASE_PUBL
     persistSession: false,
     autoRefreshToken: false,
     detectSessionInUrl: false,
+    // Distinct storage key so this client does NOT share the default client's
+    // GoTrueClient storage/lock — avoids the "Multiple GoTrueClient instances
+    // detected ... same storage key" warning and any navigator.locks contention.
+    storageKey: 'sb-voyance-public-noauth',
   },
 });
