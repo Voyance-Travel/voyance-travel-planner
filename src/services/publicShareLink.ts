@@ -12,12 +12,22 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getAppUrl } from '@/utils/getAppUrl';
 
+export type SharePermission = 'view' | 'edit';
+export type ShareCreditPolicy = 'owner' | 'collaborator' | 'free';
+
+export interface ShareConfig {
+  permission?: SharePermission;
+  creditPolicy?: ShareCreditPolicy;
+}
+
 export interface PublicShareResult {
   success: boolean;
   reason?: string;
   link?: string;
   token?: string;
   enabled?: boolean;
+  permission?: SharePermission;
+  creditPolicy?: ShareCreditPolicy;
 }
 
 function buildLink(token: string): string {
@@ -34,7 +44,7 @@ export async function getPublicTripShareLink(
   try {
     const { data, error } = await supabase
       .from('trips')
-      .select('share_enabled, share_token')
+      .select('share_enabled, share_token, share_permission, share_credit_policy')
       .eq('id', tripId)
       .maybeSingle();
 
@@ -43,16 +53,21 @@ export async function getPublicTripShareLink(
       return { success: false, reason: 'read_failed' };
     }
 
+    const permission = (data?.share_permission as SharePermission) ?? 'view';
+    const creditPolicy = (data?.share_credit_policy as ShareCreditPolicy) ?? 'collaborator';
+
     if (data?.share_enabled && data?.share_token) {
       return {
         success: true,
         enabled: true,
         token: data.share_token,
         link: buildLink(data.share_token),
+        permission,
+        creditPolicy,
       };
     }
 
-    return { success: true, enabled: false };
+    return { success: true, enabled: false, permission, creditPolicy };
   } catch (e) {
     console.error('[publicShareLink] unexpected read error:', e);
     return { success: false, reason: 'network_error' };
@@ -65,6 +80,7 @@ export async function getPublicTripShareLink(
  */
 export async function getOrCreatePublicTripShareLink(
   tripId: string,
+  config?: ShareConfig,
 ): Promise<PublicShareResult> {
   const existing = await getPublicTripShareLink(tripId);
   if (existing.success && existing.enabled && existing.link) {
@@ -75,6 +91,8 @@ export async function getOrCreatePublicTripShareLink(
     const { data, error } = await supabase.rpc('toggle_consumer_trip_share', {
       p_trip_id: tripId,
       p_enabled: true,
+      p_permission: config?.permission ?? null,
+      p_credit_policy: config?.creditPolicy ?? null,
     });
 
     if (error) {
@@ -86,6 +104,8 @@ export async function getOrCreatePublicTripShareLink(
       success: boolean;
       share_enabled?: boolean;
       share_token?: string;
+      share_permission?: SharePermission;
+      share_credit_policy?: ShareCreditPolicy;
       reason?: string;
     } | null;
 
@@ -101,9 +121,57 @@ export async function getOrCreatePublicTripShareLink(
       enabled: !!result.share_enabled,
       token: result.share_token,
       link: buildLink(result.share_token),
+      permission: result.share_permission,
+      creditPolicy: result.share_credit_policy,
     };
   } catch (e) {
     console.error('[publicShareLink] unexpected toggle error:', e);
+    return { success: false, reason: 'network_error' };
+  }
+}
+
+/**
+ * Owner action: update the collaboration config (permission + credit policy)
+ * on an already-shared trip. Re-affirms share_enabled=true and persists the new
+ * config via the toggle RPC. Use when the owner changes a selector after the
+ * link already exists (getOrCreate early-returns and won't re-apply config).
+ */
+export async function setPublicShareConfig(
+  tripId: string,
+  config: ShareConfig,
+): Promise<PublicShareResult> {
+  try {
+    const { data, error } = await supabase.rpc('toggle_consumer_trip_share', {
+      p_trip_id: tripId,
+      p_enabled: true,
+      p_permission: config.permission ?? null,
+      p_credit_policy: config.creditPolicy ?? null,
+    });
+    if (error) {
+      console.error('[publicShareLink] config update failed:', error);
+      return { success: false, reason: 'toggle_failed' };
+    }
+    const result = data as unknown as {
+      success: boolean;
+      share_enabled?: boolean;
+      share_token?: string;
+      share_permission?: SharePermission;
+      share_credit_policy?: ShareCreditPolicy;
+      reason?: string;
+    } | null;
+    if (!result?.success || !result.share_token) {
+      return { success: false, reason: result?.reason || 'toggle_failed' };
+    }
+    return {
+      success: true,
+      enabled: !!result.share_enabled,
+      token: result.share_token,
+      link: buildLink(result.share_token),
+      permission: result.share_permission,
+      creditPolicy: result.share_credit_policy,
+    };
+  } catch (e) {
+    console.error('[publicShareLink] unexpected config error:', e);
     return { success: false, reason: 'network_error' };
   }
 }
