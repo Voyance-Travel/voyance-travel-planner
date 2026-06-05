@@ -137,22 +137,25 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | A culinary vs B cultural vs C adventure — outputs measurably DIFFERENT (≥40% venues differ, dining-ratio Δ≥15pts, no fallback) | ⬜ | ⬜ | blocked until DNA accuracy + preferences fixes land | | ⬜ |
 | D culinary + dietary/prefs variation respected | ⬜ | ⬜ | | | ⬜ |
 
-## B4. Credits / charging
+## B4. Credits / charging — AUDIT COMPLETE
 | Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| Cost display == backend charge | ⏳ | ⬜ | audit running | | ⬜ |
-| Server-side enforcement (can't gen w/o credits) | ⏳ | ⬜ | audit running | | ⬜ |
-| Charge timing + refund-on-failure + double-charge | ⏳ | ⬜ | audit running | | ⬜ |
-| Packages/bonuses math; bonus re-claim guard | ⏳ | ⬜ | audit running | | ⬜ |
-| No cost/margin leak to non-admin | ⏳ | ⬜ | audit running | | ⬜ |
+| Stripe flex purchase integrity | ❌ | ⬜ | **CRIT: client controls credits granted** — pay $9, request 100,000cr, webhook mints them (no price↔credits check) | derive credits server-side from priceId map; reject mismatch | ⬜ |
+| Cost display == backend charge | ❌ | ⬜ | guide gen charges **15** vs displayed **20**; admin table shows stale 10 for regen (real 30) | reconcile to one value | ⬜ |
+| Server-side enforcement (can't gen w/o credits) | ✅ | ⬜ | **PASS** — `deduct_credits_fifo` SECURITY DEFINER, row-locked, REVOKEd from anon/authenticated; client checks advisory only | — | ➖ |
+| Charge timing + refund-on-failure + double-charge | ⚠️ | ⬜ | core path robust (idempotency unique index); BUT guide-gen has no refund/idempotency; trip refund can double-refund (un-keyed `issueRefund`) | route guide via spend-credits; key all refunds | ⬜ |
+| Trip-gen server cost validation | ❌ | ⬜ | server only checks `days×60×0.9`; client can skip multi-city fee + complexity multiplier (3-city 10-day: pay 540 not 900) | recompute authoritative cost server-side | ⬜ |
+| Packages/bonuses math; bonus re-claim guard | ✅ | ⬜ | **PASS** — `UNIQUE(user_id,bonus_type)` blocks re-claim; bonuses server-verified; club/top-up math correct; IAP correct | (LOW: IAP adventurer split 2400/800 vs Stripe 2500/700) | ⬜ |
+| Monthly free-grant idempotency | ⚠️ | ⬜ | check-then-act race → concurrent 2× 150cr grant | atomic conditional UPDATE / unique (user,month) | ⬜ |
+| No cost/margin leak to non-admin | ❌ | ⬜ | `/admin/dashboard` auth-gated only (no role check); per-action cost/margin table hardcoded in client bundle | add admin-role gate + move cost table behind admin fetch | ⬜ |
 
-## B5. Cost / Google budget
+## B5. Cost / Google budget — AUDIT COMPLETE
 | Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| Full call-site inventory + per-trip count | ⏳ | ⬜ | audit running (~$5/trip suspected) | | ⬜ |
-| Global daily ceiling (~200/day) / circuit breaker | ✅ | ⬜ | **NONE exists** (Concern C-COST-2) | design in Google audit | ⬜ |
-| Shared place-level cache, 1–2mo+ TTL, across users | ⏳ | ⬜ | per-trip re-pulls suspected | | ⬜ |
-| Frontend per-keystroke autocomplete (client key, untracked) | ✅ | ⬜ | suspected bleed (C-COST-4) | | ⬜ |
+| Full call-site inventory + per-trip count | ✅ | ⬜ | ~$2.5–3.3/trip cold (→~$5 w/ retries+browsing). Dominant driver = **2 uncached text searches/activity** (verify + image) ≈ $1.60/trip = 50–65% | route both through shared cache | ⬜ |
+| Global daily ceiling (~200/day) / circuit breaker | ✅ | ⬜ | **CONFIRMED: NONE exists** anywhere (all 429 handlers are for the AI gateway, not Google) | `google_api_budget` table + atomic `consume_google_budget` RPC + breaker in google-api.ts wrappers | ⬜ |
+| Shared place-level cache, 1–2mo+ TTL, across users | ✅ | ⬜ | `cachedGooglePlacesTextSearch` (30-day shared cache) EXISTS but hot paths bypass it; venue-cache & image-cache miss INDEPENDENTLY → same venue hits Google twice | new `google_place_cache` (place_id-keyed, 60-day TTL; photos ~permanent); share resolved place_id between verify+image | ⬜ |
+| Frontend Google Places call (client key, untracked) | ✅ | ⬜ | **CORRECTION: NOT per-keystroke** (keystrokes use free Nominatim). Google fires only on explicit "Search with Google" button (`useAddressSearch.ts:87`) — but uncapped, untracked, exposed key | route via server `places-search-proxy` (cache+ceiling+tracked); drop browser key | ⬜ |
 
 ---
 
@@ -168,10 +171,21 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | C-DNA-5 | HIGH | preferences | `profile.interests`/`dietary` computed but **never injected into compile-prompt** | ✅ | ⬜ | inject prefs into generation — not done | ⬜ |
 | C-DNA-6 | LOW | latent | `signatureAnswers` no-op in V3 quiz path (legacy IDs); flat penalty ignores distance | ✅ | ➖ | follow-up | ⬜ |
 | C-COST-1 | HIGH | cost | Admin dashboard read ~2× low on Google | ✅ | ⬜ | PR #21 | ⏳ live verify |
-| C-COST-2 | CRIT | cost | **No global daily Google ceiling / circuit breaker** | ✅ | ⬜ | design in Google audit → implement | ⬜ |
-| C-COST-3 | HIGH | cost | Full-gen venue-verify bypasses Places cache (uncached/activity) | ✅ | ⬜ | route through shared cache | ⬜ |
-| C-COST-4 | HIGH | cost | Frontend address autocomplete per-keystroke, untracked, client key | ✅ | ⬜ | debounce + cache + track (or server proxy) | ⬜ |
-| C-COST-5 | MED | cost | geocoding/routes/distance-matrix uncached | ✅ | ⬜ | cache | ⬜ |
+| C-COST-2 | CRIT | cost | **No global daily Google ceiling / circuit breaker** (confirmed: none anywhere) | ✅ | ⬜ | `google_api_budget` + `consume_google_budget` RPC + breaker in google-api.ts wrappers (~200/day, degrade to stale/placeholder) | ⬜ |
+| C-COST-3 | **CRIT** | cost | **SEV-1:** per-activity venue-verify (`venue-enrichment.ts:218`) uses UNCACHED `googlePlacesTextSearch` → ~20–30 searches/trip ($0.64–0.96) | swap to `cachedGooglePlacesTextSearch` + place_id cache | ⬜ |
+| C-COST-3b | **CRIT** | cost | **SEV-1 (biggest):** image path (`venue-enrichment.ts:657`→`destination-images:537`) runs a SECOND independent uncached search + photo/activity, in parallel, regardless of venue cache hit ($0.78–1.17/trip) | share resolved place_id between verify+image; cached search; photo cache by place_id | ⬜ |
+| C-COST-4 | MED | cost | **CORRECTED:** frontend Google call is NOT per-keystroke (keystrokes = free Nominatim). Only on explicit "Search with Google" button — but untracked + exposed key + ceiling-bypass | server `places-search-proxy`; drop `VITE_GOOGLE_MAPS_API_KEY` path | ⬜ |
+| C-COST-5 | MED | cost | geocoding/routes/distance-matrix uncached (optimize/transit/transfers/airport) | ✅ | ⬜ | add `cachedGoogleGeocode/Routes/DistanceMatrix` wrappers | ⬜ |
+| C-COST-6 | MED | cost | `recommend-restaurants`/`hotels`(×3)/`fetch-reviews` uncached text search — scales with ENGAGEMENT not trip count (traffic-unbounded) | ✅ | ⬜ | cached search | ⬜ |
+| C-COST-7 | LOW | cost | SKU recorded even on network/abort error; retries (`enrichActivityWithRetry`) can double-bill a venue | ✅ | ⬜ | don't bill on abort; cache-before-retry | ⬜ |
+| C-CRED-1 | **CRIT** | credits/security | **Pay $9, mint up to 100k credits** — `create-embedded-checkout` + `stripe-webhook` grant client-supplied `credits` with no priceId↔credits check (flex products only; club packs safe) | ✅ | ⬜ | derive credits server-side from priceId map; assert amount paid; mirror IAP pattern | ⬜ |
+| C-CRED-2 | HIGH | credits | Guide gen (`generate-travel-guide`) charges hardcoded **15** vs displayed **20**, charges before deliver, **no refund + no idempotency** (double-charge on dup POST, lost credits on failure) | ✅ | ⬜ | route via `spend-credits` (add `generate_blog` to FIXED_COSTS); reconcile cost | ⬜ |
+| C-CRED-3 | HIGH | security/leak | `/admin/dashboard` (UnitEconomics) **auth-gated only, not admin-gated**; per-action cost/margin table hardcoded in client bundle → any logged-in user sees internal costs | ✅ | ⬜ | add admin-role route gate; move cost table behind admin fetch | ⬜ |
+| C-CRED-4 | MED | credits | Trip-gen cost under-validated server-side — client can skip multi-city fee + complexity multiplier (undercharge) | ✅ | ⬜ | recompute authoritative cost server-side from days/cities/dna | ⬜ |
+| C-CRED-5 | MED | credits | Trip refund can **double-refund** — `issueRefund` (ItineraryGenerator) sends no `pendingChargeId`/`originalIdempotencyKey`, bypasses dedup | ✅ | ⬜ | pass original idempotencyKey through all refund paths | ⬜ |
+| C-CRED-6 | MED | credits | Monthly free-grant check-then-act race → concurrent 2× 150cr | ✅ | ⬜ | atomic conditional UPDATE / unique (user, month) | ⬜ |
+| C-CRED-7 | LOW | credits | IAP Adventurer split 2400/800 vs Stripe 2500/700 (bonus expires, base doesn't); admin table stale regen value (10 vs 30) | ✅ | ⬜ | align IAP split; fix admin display | ⬜ |
+| ✅ PASS | — | credits | **Confirmed correct:** server-enforced FIFO debit (REVOKEd, row-locked), idempotency unique index, bonus re-claim hard-blocked, club/top-up math, IAP fulfillment, auditable ledger, 3-layer trip refund safety net | ✅ | ⬜ | — | ➖ |
 | C-UX-1 | MED | quiz UX | Next not gated on all answers; Complete silently disabled w/ no guidance | ⬜ | ✅ | re-verify in code + fix | ⬜ |
 | C-UX-2 | LOW | quiz UX | Result-card match% blank on new archetype | ⬜ | ✅ | re-verify in code + fix | ⬜ |
 | C-REL-1 | MED | reliability | Client self-heal retry storm on permanently-failed trip (100s of identical fetch errors) | ⬜ | ✅ | bound retries / backoff | ⬜ |
