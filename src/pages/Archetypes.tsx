@@ -9,46 +9,55 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
 import { ARCHETYPE_NARRATIVES, CATEGORY_DESCRIPTIONS, type ArchetypeNarrative } from '@/data/archetypeNarratives';
-import { ARCHETYPE_DETAILS, type ArchetypeDetail } from '@/data/archetypeDetailContent';
+import { type ArchetypeDetail } from '@/data/archetypeDetailContent';
 import ArchetypeDetailSheet from '@/components/archetypes/ArchetypeDetailSheet';
 import { archetypeIdToSlug, slugToArchetypeId } from '@/utils/archetypeSlug';
 import React from 'react';
 
 /**
- * Maps existing narrative IDs to detail content IDs.
- * Not all narrative IDs have a 1:1 match; we do best-effort mapping.
+ * Per-category accent color (hex) for the detail-sheet badge border.
  */
-const NARRATIVE_TO_DETAIL: Record<string, string> = {
-  cultural_anthropologist: 'culture_collector',
-  urban_nomad: 'voyager',
-  wilderness_pioneer: 'nature_purist',
-  digital_explorer: 'workationer',
-  social_butterfly: 'connector',
-  family_architect: 'family_captain',
-  romantic_curator: 'romantic',
-  story_seeker: 'photographer',
-  bucket_list_conqueror: 'bucket_lister',
-  adrenaline_architect: 'explorer',
-  collection_curator: 'curator',
-  status_seeker: 'luxurian',
-  zen_seeker: 'restorer',
-  slow_traveler: 'wanderer',
-  beach_therapist: 'restorer',
-  sanctuary_seeker: 'restorer',
-  escape_artist: 'solo_seeker',
-  retreat_regular: 'restorer',
-  culinary_cartographer: 'epicurean',
-  luxury_luminary: 'luxurian',
-  art_aficionado: 'curator',
-  eco_ethicist: 'eco_traveler',
-  gap_year_graduate: 'wanderer',
-  midlife_explorer: 'celebrator',
-  healing_journeyer: 'restorer',
-  sabbatical_scholar: 'voyager',
-  retirement_ranger: 'bucket_lister',
-  community_builder: 'connector',
-  flexible_wanderer: 'wanderer',
+const CATEGORY_HEX: Record<ArchetypeNarrative['category'], string> = {
+  EXPLORER: '#0d9488',
+  CONNECTOR: '#fb7185',
+  ACHIEVER: '#8b5cf6',
+  RESTORER: '#34d399',
+  CURATOR: '#d97706',
+  TRANSFORMER: '#6366f1',
 };
+
+/**
+ * C-EXPLORE-1 fix: build the detail sheet DIRECTLY from the authoritative
+ * scorer-aligned narrative, so the title and the body ALWAYS describe the
+ * same archetype. The previous lossy narrative→detail mapping borrowed a
+ * different (generic) archetype's body — e.g. "Story Seeker" rendered
+ * photography copy, and five Restorer archetypes all shared one body.
+ * Sections the narrative doesn't supply (travel-style table, ideal
+ * destinations, profile %) are intentionally omitted by the sheet rather
+ * than filled with another archetype's data.
+ */
+function buildDetailFromNarrative(n: ArchetypeNarrative): ArchetypeDetail {
+  return {
+    id: n.id,
+    number: 0,
+    name: n.name,
+    category: CATEGORY_DESCRIPTIONS[n.category]?.name ?? n.category,
+    color: CATEGORY_HEX[n.category] ?? 'hsl(var(--primary))',
+    icon: n.emoji,
+    tagline: n.hookLine,
+    oneLiner: n.coreDescription,
+    fullDescription: n.revealParagraph || n.coreDescription,
+    coreTraits: n.superpowers ?? [],
+    drivers: (n.whatThisMeans ?? []).map((name) => ({ name, description: '' })),
+    travelPreferences: [],
+    youLove: n.itineraryPreview ?? n.youProbably ?? [],
+    youAvoid: [],
+    idealDestinations: [],
+    profileScores: [],
+    keyConsiderations: n.growthEdges && n.growthEdges.length > 0 ? n.growthEdges : undefined,
+    isPrimary: false,
+  };
+}
 
 const CATEGORY_ORDER = ['EXPLORER', 'CONNECTOR', 'ACHIEVER', 'RESTORER', 'CURATOR', 'TRANSFORMER'] as const;
 
@@ -214,19 +223,16 @@ export default function Archetypes() {
   const [detailOpen, setDetailOpen] = useState(false);
 
   const handleSelectArchetype = useCallback((narrativeId: string) => {
-    const detailId = NARRATIVE_TO_DETAIL[narrativeId];
     const narrative = ARCHETYPE_NARRATIVES[narrativeId];
-    if (detailId && ARCHETYPE_DETAILS[detailId]) {
-      setDetailArchetype({
-        ...ARCHETYPE_DETAILS[detailId],
-        name: narrative?.name || ARCHETYPE_DETAILS[detailId].name,
-        narrativeId,
-      });
-      setDetailOpen(true);
-      const targetSlug = archetypeIdToSlug(narrativeId);
-      if (slug !== targetSlug) {
-        navigate(`/archetypes/${targetSlug}`, { replace: true });
-      }
+    if (!narrative) return;
+    setDetailArchetype({
+      ...buildDetailFromNarrative(narrative),
+      narrativeId,
+    });
+    setDetailOpen(true);
+    const targetSlug = archetypeIdToSlug(narrativeId);
+    if (slug !== targetSlug) {
+      navigate(`/archetypes/${targetSlug}`, { replace: true });
     }
   }, [navigate, slug]);
 
