@@ -339,9 +339,48 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 ---
 
+# TABLE F — Audit Fleet Results (2026-06-05, 7/8 subagents)
+*Parallel read-only code audit of the untouched zones. Audit column now ✅ for these areas.*
+
+### ✅ CLEAN (audit passed — strong)
+- **Auth / security / RLS** — STRONG. Auth flows ✅, all 9 `/admin/*` routes use AdminRoute ✅, RLS enabled+correct on every key table (credit tables RESTRICTIVE-deny, `user_roles` can't self-grant admin) ✅, edge fns self-verify JWT ✅, no secrets in bundle ✅, free-version limits enforced SERVER-SIDE ✅.
+- **Admin pages backend authz** — all 8 pages: no non-admin can perform destructive/bulk writes; PII/revenue reads are admin-gated via RLS. (UI issues below.)
+- **Creation modes** — Single City ✅, Multi-City ✅ (genuine per-city path), Build Myself ✅.
+- **Marketing pages** — /contact form sends real email ✅; /help, /faq, /destinations, /guides functional ✅.
+- **Collaboration** — collaborator invite flow (resolve_or_rotate_invite → accept_trip_invite) correct ✅; friendship/collaborator RLS correct ✅.
+- **Preferences→prompt** — REFUTED C-DNA-5's worst claim: interests + dietary + must-dos DO reach the live compile-prompt (`pipeline/compile-prompt.ts`). DNA reloads from DB across the HTTP hop ✅.
+
+### New concerns found by the fleet
+| ID | Sev | Area | What went wrong | Fix |
+|---|---|---|---|---|
+| C-PERSIST-1 | **CRIT** | itinerary | Single-day **regenerate** writes the TABLE only; JSON (what UI reads) is frozen-gate-blocked → **regenerate silently reverts on refresh**. Most common edit op. | pass `allowFrozenWrite`/whitelisted `saveReason` on the regen persist |
+| C-PERSIST-2 | **CRIT** | itinerary | Editor **autosave + manual Save button** omit the frozen bypass → on a ready/frozen trip, edits land in neither JSON nor table → **lost on refresh** | route through `safeUpdateItineraryData` |
+| C-PERSIST-3 | MED | itinerary | **Lock toggle**: table `is_locked` updates but JSON lock is frozen-blocked → lock reverts on refresh | pass `saveReason:'lock-toggle'` |
+| C-EXPLORE-1 | **CRIT** | content | Explore archetype detail sheet shows **mismatched body** — title says one archetype, body+profile% describe a different generic one (e.g. "Story Seeker"→photography copy). Owner's specific concern, confirmed | author detail content per real scorer archetype; render from archetypeNarratives |
+| C-DNA-4 | **HIGH** | DNA A/B | CONFIRMED: "30-40% archetype seasoning" rule + archetype demoted to "voice not selection" + zero-trait fallback → **differentiation ~4.5/10**. Dining differs (Michelin req vs optional) but ~60-70% of each day converges generic | raise moderation ceiling for high-confidence DNA; promote archetype to selection; concrete extra food slot for culinary |
+| C-DNA-5 | MED | DNA | (downgraded) dietary strong-block only written at trip kickoff — a single-day regen with empty `generation_context` drops it to a weak one-liner | recompute dietary block in compile-prompt when absent |
+| C-CRED-4 | HIGH | credits | CONFIRMED + worse: `spend-credits` trip_generation is **floor-only** (`days*60*0.9`), trusts client `creditsAmount` → undercharge | recompute canonical cost server-side from trip row |
+| C-CRED-8 | MED | credits | DNA complexity multiplier (1.15×/1.30×) + must-include add-ons **never charged** — `authorize()` called without `dna`/`mustIncludes` | thread DNA+mustIncludes into estimate & authorize |
+| C-REFERRAL-1 | HIGH | growth | "Friends get 150 bonus credits" is **non-functional** — no referral bonus type, no `?ref=` consumption at signup; pays nobody | implement referral attribution + grant |
+| C-ADMIN-1 | HIGH | admin | **ImageCuration page is dead** — all `curated_images` writes RLS-blocked to service_role, fail silently | route writes through admin edge fn |
+| C-ADMIN-2 | MED | admin | UnitEconomics "User Tiers"/"Group Pools" show only the admin's OWN row (missing admin SELECT on user_tiers/group_budgets) | add admin RLS SELECT |
+| C-ADMIN-3 | MED | admin | BulkImport "Delete All Users" button dead (empty body → 400) | remove or implement explicitly |
+| C-CREATE-1 | MED | create | "Just Tell Us" mode has no end≥start date guard → could create a zero/negative-day trip | add isBefore(end,start) check |
+| C-SEC-1 | MED | security | `verify_jwt = false` default on ~all edge fns (compensated by self-verify, but a future un-gated fn would be exposed) | flip to true for non-public fns |
+| C-FRIEND-1 | HIGH | friends | ROOT CAUSE: RLS gap — `profiles` SELECT has no outgoing-pending branch (regression from a dropped policy) → Sent invites render as blank "Unknown" rows, look stuck Pending | add profiles SELECT policy for outgoing pending |
+| C-TOOL-1 | HIGH | itinerary tools | **Day-unlock**: charges 60, but if generate-day throws there's NO refund → 60 credits lost (`useUnlockDay.ts` catch only toasts) | add REFUND in catch (unlock_day is refundable) |
+| C-TOOL-2 | HIGH | itinerary tools | **AI-chat InlineModifier** applies (swap/rewrite/regen) charge before execute with NO refund-on-failure | mirror ItineraryAssistant.refundOnFailure |
+| C-TOOL-3 | MED | itinerary tools | **Hotel optimization** charges 100 before apply; no refund if apply throws → 100 lost | refund on apply failure |
+| C-TOOL-4 | MED | itinerary tools | **Add-activity** charges 5 before cascade-overflow dialog; if user cancels, 5 not refunded | charge after cascade confirm |
+| C-TOOL-5 | MED | itinerary tools | Charge/config drift: `RESTAURANT_REC` action never dispatched (dead, consumes swap cap); chat pace/filter advertised-paid but FREE; chat prompt misquotes regen price (says 10, charges 30) | reconcile actions + prompt |
+| C-TOOL-6 | MED | itinerary tools | AI-feature edge fns (recommend-restaurants, hotels, optimize, itinerary-chat, mystery) are auth'd but NOT credit-gated server-side — trust client to charge; mystery delivers result then fire-and-forget charges → free if spend fails | server-side proof-of-charge like generate-itinerary |
+| C-TOOL-7 | MED | itinerary tools | **Route optimization** writes `trips.itinerary_data` via raw `.update()` bypassing persistTripItinerary (no contract/frozen guard, table left stale) + non-idempotent refund | route through persist + key the refund (ties to C-PERSIST) |
+
+---
+
 # Rollup
-- **Closed (both ✅):** original 5 generation bugs, CI green, Share public-link, core-page render + navigation links.
-- **Awaiting verify (fix shipped):** DNA accuracy (PR #24 — deploy+re-quiz), admin cost dashboard (PR #21 — live open).
-- **In progress (audit running):** pricing/credits, Google cost-bleed.
-- **Untouched zones:** Auth/security, admin pages (beyond cost), trip-creation modes, in-itinerary tools, DNA→itinerary A/B, free-text & preferences DNA paths, most in-page functionality on marketing pages, Explore DNA-type pages.
-- **Biggest open risk to owner goals:** C-COST-2/3/4 (Google bleed), C-DNA-5 (preferences ignored), C-DNA-1/2/3 (accuracy) — all must land before the A/B test is meaningful or affordable.
+- **Closed (both ✅):** original 5 generation bugs, CI green, Share public-link, core-page render + navigation.
+- **Audit ✅ this sweep:** auth/security (STRONG), admin authz, creation modes, marketing functionality, collaboration, preferences→prompt.
+- **Awaiting verify (fix shipped):** DNA accuracy (PR #24/#35 — needs calculate-travel-dna deploy + re-quiz), admin cost dashboard (PR #21), credit batch (#34).
+- **Biggest NEW risks surfaced:** C-PERSIST-1/2 (in-itinerary edits silently don't persist — CRIT), C-EXPLORE-1 (archetype pages mislabeled — CRIT), C-DNA-4 (A/B differentiation flattened — HIGH), C-CRED-4 (server undercharge), C-REFERRAL-1 (referral pays nobody).
+- **Still owed:** in-itinerary-tools audit (1 agent running); Live testing of all the above (auth first per owner); Google bleed + DNA-A/B fixes before the A/B test.
