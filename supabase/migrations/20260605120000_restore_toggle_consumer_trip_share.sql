@@ -1,16 +1,23 @@
 -- FIX: public-link trip sharing was broken in production — the Share dialog's
 -- "Public link" toggle called rpc('toggle_consumer_trip_share') which returned
--- 404 (function missing from the prod DB) → toast "Could not update sharing".
--- The function is defined in earlier migrations (20260406/20260509) but was
--- never applied to prod. This migration re-asserts the canonical definition so
--- it is present, and reloads the PostgREST schema cache so the RPC resolves.
+-- 404 → toast "Could not update sharing".
+--
+-- Two distinct problems were behind the 404:
+--   1. The function defined in earlier migrations (20260406/20260509) was never
+--      applied to prod. This migration re-asserts the canonical definition.
+--   2. ROOT CAUSE of the runtime 404 (even once present): the body calls
+--      gen_random_bytes(), which lives in the `extensions` schema, but the
+--      function had `SET search_path = public` only. At execution time Postgres
+--      could not resolve gen_random_bytes → "function does not exist", which
+--      PostgREST surfaces as a 404. Fix: include `extensions` in search_path so
+--      gen_random_bytes resolves at runtime.
 -- (CREATE OR REPLACE is idempotent — safe if the function already exists.)
 
 CREATE OR REPLACE FUNCTION public.toggle_consumer_trip_share(p_trip_id uuid, p_enabled boolean)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path TO 'public'
+SET search_path TO 'public', 'extensions'  -- `extensions` required: gen_random_bytes() lives there
 AS $$
 DECLARE
   v_user_id uuid;
