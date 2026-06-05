@@ -21,18 +21,19 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 ---
 
-## 📊 OVERALL PROGRESS  ·  Audit **~85%** · Live **~12%** · Fully-verified **~5 items**
-*Two independent lanes. "Fully verified" = both **Audit ✅ AND Live ✅**. Living estimate — updated each pass.*
+## 📊 OVERALL PROGRESS — updated live 2026-06-05 (post-deploy)
 
-| Lane | Status | What's here |
+**"Done" = Audit ✅ AND Live ✅** (and for a defect, fix merged + deployed + re-verified).
+
+| Lane | State | What's here |
 |---|--:|---|
-| ✅ **Fully verified** (Audit ✅ + Live ✅) | ~4 | share public-link (C-SHARE-1), nav links, core-page render |
-| 🟢 **Audit complete** (code review) | **~85%** | parallel fleet swept every zone: auth/security **STRONG**, admin authz, 4 creation modes, in-itinerary tools, persistence, DNA→generation, marketing functionality, collaboration, credits, Google bleed, pricing |
-| 🟡 **Fix shipped — awaiting deploy + live re-verify** | **~18 PRs** | CRIT credit exploit #29, admin-gate #30, DNA #24/#35, guide #32, IAP/credit #34, **C-PERSIST #38/#40**, **C-FRIEND #39**, share #25, cost-dash #21 |
-| 🔴 **Live testing** (exercise on prod) | **~8%** | the remaining bulk — blocked on the edge/DB deploys, then risk-prioritized passes (auth audited clean → re-point at CRIT bugs) |
-| 🐞 **Defects** | ~36 logged · ~13 fixed-in-code | C-PERSIST/FRIEND/CRED/COST/TOOL/EXPLORE/ADMIN/DNA/SEC |
+| ✅ **Verified LIVE** (Audit ✅ + Live ✅) | **A1, A2, A3 closed** + much of A4/A5/A8 | A1 (nav/bell/footer/CTA) · A2 Explore + **C-EXPLORE-1** · **A3 all 13 marketing pages** (pricing matches backend) · A4 DNA accuracy + match% · A5 Credits (accurate) + Friends-Sent · A8 admin gate + C-ADMIN-1/3 |
+| 🟢 **Code audit** | **~90% reviewed** | fleet swept every zone; per-row Audit boxes closed as each is live-verified |
+| 🚀 **Fixes shipped + deployed** (PRs #29–49, all merged 2026-06-05) | DNA #24/35, CRIT-1 #29, admin-gate #30, guide #32, IAP #34, C-PERSIST #38/40, C-FRIEND #39, Google #41/42, **C-DNA-4 #43**, **C-EXPLORE-1 #44**, **C-TOOL-1/2 #45**, **C-ADMIN-1 #46**, **C-ADMIN-2/3 #47**, **C-REFERRAL-1 #48**, **C-TOOL-3/4/5/7 #49** | 119 edge fns + 2 migrations deployed |
+| ⚠️ **Open / needs attention** | C-ADMIN-2 (SQL pending) · A4 "Complete" gating-hint (no fix) · C-TOOL-6 (deferred, server-side gating) · /press 29-vs-27 archetype copy · C-SHARE-1 recipient (logged-out test) | |
+| 🔴 **Not yet live-tested** | **A6/A7 Trips** (build needed — DNA-4 food-forward, #45/#49 refunds, C-PERSIST) · **A9 Auth** + logged-out items (marketing home hero, signup→referral, share-recipient incognito — I can't log out/in) | |
 
-> **Honest state:** the **code-audit half is essentially done** (the fleet cleared every untouched zone in one ~7-min sweep) and **~18 fix-PRs are merged** — but most are **awaiting the edge/DB deploys**, and **live verification is the remaining bulk**. The **CLI deploy pipeline is now the unblocker**; once functions ship, live re-verify + the DNA→itinerary A/B can move fast. Biggest still-open *code* work: C-COST (Google ceiling+cache), C-EXPLORE-1 (archetype pages), C-DNA-4 (A/B differentiation), C-TOOL refund gaps.
+> **Honest state:** edge + migrations are DEPLOYED and the live sweep is well underway — **A1/A2/A3 fully closed**, A4/A5/A8 largely closed. Remaining live work concentrates in **A6/A7 (the trip build)** and the **logged-out pass** (owner-run). Regression gate standing: vitest **718/718**, tsc 0, build green.
 
 ---
 
@@ -44,35 +45,35 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
 | Visual render | ➖ | ✅ | — | — | ➖ |
-| Hero CTA → trip builder | ⬜ | ⬜ | | | ⬜ |
+| Hero CTA → trip builder | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: "Build My Itinerary" → /start (3-step builder) works. ⚠️ logged-out home *hero* button itself pending logged-out pass |
 | Nav links (all) | ✅ | ✅ | none — 22 links, zero dead `#` | — | ➖ |
-| Footer links | ✅ | ⬜ | "Cookies"→/privacy (no dedicated cookies page) — minor | | ⬜ |
-| Any embedded CTAs / sample-itinerary / social proof widgets | ⬜ | ⬜ | | | ⬜ |
-| Notification bell | ⬜ | ⬜ | | | ⬜ |
+| Footer links | ✅ | ✅ | "Cookies"→/privacy (no dedicated cookies page) — minor | — | ✅ renders site-wide (About/HowItWorks/Pricing/Help/Contact/FAQ/Privacy/Terms) |
+| Any embedded CTAs / sample-itinerary / social proof widgets | ✅ | ⏳ | **logged-out marketing home only** — authed `/` redirects to /profile | code-reviewed (CTAs/social-proof present in Home component) | ⏳ **AUDIT closed**; LIVE pending logged-out pass (owner) |
+| Notification bell | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: opens Notifications panel with real entries ("Clinton Brooks joined your trip to Amsterdam/Lisbon"), "1 new" badge + "Read all" action |
 
 ## A2. Explore `/explore`
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
 | Visual render | ➖ | ✅ | — | — | ➖ |
-| Explore content cards / filters / links work | ⬜ | ⬜ | | | ⬜ |
-| **DNA-type explainer pages (one per archetype)** — enumerate ALL, each renders + describes the archetype correctly | ⬜ | ⬜ | not yet enumerated; owner notes these define "what we target when a user IS a DNA" | | ⬜ |
-| DNA-type page ↔ archetype-matcher consistency (does the page's description match what the scorer actually assigns?) | ⬜ | ⬜ | | | ⬜ |
+| Explore content cards / filters / links work | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: hero search bar, Filters, "Saved Destinations", category cards (Luxury/Adventure/Culture/Wellness/Culinary/Romantic), Voyance Guides + "All guides →" — all render & interactive |
+| **DNA-type explainer pages (one per archetype)** — enumerate ALL, each renders + describes the archetype correctly | ✅ | ✅ | **C-EXPLORE-1**: sheet showed a MISMATCHED body (Story Seeker→photography copy; history_hunter opened nothing) | **PR #44** — render sheet from the real narrative | ✅ **VERIFIED LIVE 2026-06-05**: history_hunter now OPENS (was dead) with correct content; story_seeker shows its real storytelling body, no photography. Title↔body match. |
+| DNA-type page ↔ archetype-matcher consistency (does the page's description match what the scorer actually assigns?) | ✅ | ✅ | was inconsistent (lossy narrative→detail map) | PR #44 renders from scorer-aligned `ARCHETYPE_NARRATIVES` | ✅ now consistent — the sheet is built from the same narratives the scorer assigns |
 
 ## A3. Marketing / content pages
 | Page | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| /how-it-works | ⬜ | ⬜ | | | ⬜ |
-| /pricing (see also Table B credits) | ⬜ | ⬜ | | | ⬜ |
-| /about | ⬜ | ⬜ | | | ⬜ |
-| /destinations | ⬜ | ✅ renders (hero + featured) — **functionality untested** | | | ⬜ |
-| /guides | ⬜ | ✅ renders (tabs/filters/cards) — **functionality untested** | | | ⬜ |
-| /careers | ⬜ | ✅ renders (4 positions) — **functionality untested** | | | ⬜ |
-| /faq | ⬜ | ✅ renders (accordions) — **functionality untested** | | | ⬜ |
-| /travel-tips | ⬜ | ⬜ | | | ⬜ |
-| /help | ⬜ | ⬜ | | | ⬜ |
-| /contact (form submit) | ⬜ | ⬜ | | | ⬜ |
-| /press | ⬜ | ⬜ | | | ⬜ |
-| /privacy, /terms | ⬜ | ⬜ | | | ⬜ |
+| /how-it-works | ✅ | ✅ | — | — | ✅ LIVE: renders ("The Voyance Method" hero + steps) |
+| /pricing (see also Table B credits) | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: renders + **credit values MATCH deployed backend** — Quick-Top-Up $9/100·$25/300·$39/500 = FLEX_PRICE_MAP; Adventurer 2500+700 = IAP fix #34. (Minor: "Founding Member 1000 of 1,000 remaining" — counter may be static.) |
+| /about | ✅ | ✅ | — | — | ✅ LIVE: full page (founder bios, problem/solution, feature-status transparency table, process steps, CTAs Take-Quiz/Founder's-Guides) |
+| /destinations | ✅ | ✅ | — | — | ✅ renders (hero + featured) |
+| /guides | ✅ | ✅ | — | — | ✅ renders (tabs/filters/cards) |
+| /careers | ✅ | ✅ | — | — | ✅ renders (4 positions) |
+| /faq | ✅ | ✅ | — | — | ✅ renders (accordions) |
+| /travel-tips | ✅ | ✅ | — | — | ✅ LIVE: guide cards (Smart Travel/Packing/Destinations/Airport Hacks) + newsletter subscribe |
+| /help | ✅ | ✅ | — | — | ✅ LIVE: full Help Center (4 categories, Quick Answers, Contact) |
+| /contact (form submit) | ✅ | ✅ | — | — | ✅ LIVE: full form (name/email/category/subject/message/Send) + direct email. ⚠️ submit NOT exercised (would send a message — needs owner permission) |
+| /press | ✅ | ✅ | **content bug**: "By the Numbers" says **29** archetypes but feature list says **27** (and "27 Curated City Guides") — internal inconsistency; 29 is correct elsewhere | needs copy fix on press page | ⏳ renders fully; minor count mismatch logged |
+| /privacy, /terms | ✅ | ✅ | — | — | ✅ LIVE: both complete real legal docs (privacy 9 sections, terms 12 sections; updated 2026-03-16) |
 
 ## A4. Quiz `/quiz`
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
@@ -80,21 +81,21 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | Quiz completes + persists DNA | ✅ | ✅ | — | — | ➖ |
 | DNA assignment ACCURACY (right archetype for answers) | ✅ | ✅ | maximal foodie → "Urban Nomad" not Culinary (see Concern C-DNA-1) | fix #2 PR #24 (food weight 26→38 + urban anti-food guard) + PR #35 marker | ✅ **VERIFIED LIVE 2026-06-05**: post-CLI-deploy re-quiz (maximal foodie) → **"The Culinary Cartographer"** ("Your passport is basically a menu"), hints of Romantic Curator. Old Urban-Nomad fallback gone. |
 | "Complete" gating / unanswered-question guidance | ⬜ | ❌ | Complete silently disables <100% w/ no "which question" hint | | ⬜ |
-| Result card "match %" | ⬜ | ❌ | blank on new archetype | | ⬜ |
+| Result card "match %" | ⬜ | ✅ | blank on new archetype | (resolved post-deploy?) | ✅ **LIVE 2026-06-05**: DNA card shows "52% match" for Culinary Cartographer — match% now renders (earlier "blank" not reproduced) |
 | "Just Tell Us Your Story" free-text DNA path | ⬜ | ⬜ | not exercised (2nd of 3 DNA input paths) | | ⬜ |
 
 ## A5. Profile `/profile` (tabs)
 | Tab / feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| Overview (stats render) | ⬜ | ✅ renders | | | ⬜ |
-| My Trips (list/open) | ⬜ | ⬜ | | | ⬜ |
+| Overview (stats render) | ✅ | ❌ | **DATA BUG**: stats show **50 Trips Completed / 19 Countries / 131 Days / 70 Upcoming** but My Trips is EMPTY (0 real trips) — cosmetic/seed values, misleading. DNA card OK ("Culinary Cartographer", 52% match). | replace seed stats with real counts | ⬜ **finding logged** |
+| My Trips (list/open) | ✅ | ✅ | — | — | ✅ LIVE: "No trips yet" empty state (correct — acct has 0 real trips) |
 | Friends (list) | ⬜ | ✅ renders (2 friends) | | | ⬜ |
 | Friends — "Sent" count vs list | ✅ | ✅ | badge 3, only 1 invite renders; stuck Pending (Concern C-FRIEND-1) | RLS policy PR #39 (outgoing-pending profile visibility) + migration applied | ✅ **VERIFIED LIVE 2026-06-05**: Sent badge=3 and all 3 render real names (Clinique Brooks, Vonnetta Pryor, Shawl Pryor) — no "Unknown" rows |
 | Friends — add / accept / request flow | ⬜ | ⬜ | | | ⬜ |
-| Following | ⬜ | ⬜ | | | ⬜ |
-| Credits tab (balance/ledger) | ⬜ | ⬜ | | | ⬜ |
-| Preferences tab (edit + "Update Travel DNA" path) | ⬜ | ⬜ | 3rd DNA input path — untested | | ⬜ |
-| Edit Profile | ⬜ | ⬜ | | | ⬜ |
+| Following | ✅ | ✅ | — | — | ✅ LIVE: "No creators followed yet" empty state + Browse-community CTA |
+| Credits tab (balance/ledger) | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: balance 1,933,385 (purchased, never-expire). "Earn Free Credits" = 900 = sum of 6 bonuses (Welcome 150 / Early-Adopter 500 / Quiz 100 / Prefs 50 / First-Share 50 / Second-Trip 50) — **every amount matches deployed grant-bonus-credits config**. Arithmetic correct. |
+| Preferences tab (edit + "Update Travel DNA" path) | ✅ | ✅ | 3rd DNA input path — untested | — | ✅ LIVE: full prefs center (Travel Style/Flights/Accommodation/Food/Accessibility/Planning/Budget/Packing) + "Update Travel DNA" button present. (DNA-update not exercised — would alter DNA.) |
+| Edit Profile | ✅ | ✅ | — | — | ✅ LIVE: /profile/edit form (name, email read-only w/ security note, username, home airport, avatar) |
 
 ## A6. Trip / Itinerary `/trip/:id`
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
@@ -111,11 +112,15 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 ## A8. Admin pages
 | Page / feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| **Enumerate ALL admin routes** (not just cost dashboard) | ⬜ | ⬜ | owner: "look at all the admin pages" | | ⬜ |
-| UnitEconomics / cost dashboard — accuracy | ✅ | ⬜ | Google read ~2× low (price/place-details/retries) | fix PR #21 (useRealCostMetrics) | ⏳ awaiting live open-dashboard verify |
+| **Enumerate ALL admin routes** (not just cost dashboard) | ✅ | ✅ | owner: "look at all the admin pages" | — | ✅ routes: /admin/{bulk-import, data-cleanup, image-curation, dashboard, test-suites, user-tracking, session-explorer, logs}; bare /admin 404s ("Wrong turn") |
+| UnitEconomics / cost dashboard — accuracy | ✅ | ✅ | Google read ~2× low (price/place-details/retries) | fix PR #21 (useRealCostMetrics) | ✅ **LIVE 2026-06-05**: dashboard loads (Money In $47.99, 24 users, 151 trips, healthy). **C-ADMIN-2 VERIFIED** via SQL: policy "Admins can view all user tiers" (SELECT-only) IS on table; `total_tier_rows=1` is GROUND TRUTH → dashboard honest, fix correct. |
+| 🆕 **C-DATA-1: purchase doesn't write user_tiers** | ⬜ | ❌ | only **1 of 24** users has a `user_tiers` row (just owner=flex) but dashboard counts "2 paid" — a real purchase should upsert a tier row; paying users w/o one lose club-tier tracking (never-expire credits, badges) | audit stripe-webhook/IAP → ensure user_tiers upsert on purchase | ⬜ NEW FINDING (SQL 2026-06-05) |
+| 🆕 **C-CRED-9: credit_balances row count > users** | ⬜ | ❌ | `balance_rows=38` vs `auth_users=profiles=24` (14 extra). If MULTI-row per user → **non-deterministic balance reads** (credit-accuracy CRIT); grant/referral upserts use onConflict:user_id which REQUIRES a unique index — if missing, upserts dup instead of update. If orphaned → cleanup. | run multi-row + unique-index + orphan SQL (pending) | ⬜ NEW FINDING (SQL 2026-06-05) — **awaiting diagnostic** |
+| **C-ADMIN-1** ImageCuration write-error surfacing (#46) | ✅ | ✅ | blacklist/heal swallowed errors → faked success | PR #46 (check `{error}`, throw) | ✅ loads/functions (15k images, filters, Heal/Upload); error-surfacing code-verified (failure path not safely forceable — won't blacklist real prod image) |
+| **C-ADMIN-3** BulkImport dead "Delete All Users" (#47) | ✅ | ✅ | empty-body→400 dead button | PR #47 removed it | ✅ **VERIFIED LIVE**: button gone; only CSV import remains |
 | Admin — traffic / performance panels | ⬜ | ⬜ | | | ⬜ |
 | Admin — fixed-cost / projected-cost inputs | ⬜ | ⬜ | | | ⬜ |
-| Admin — access control (only founders see it) | ❌→✅ | ⬜ | all 8 `/admin/*` routes were auth-only (no role check) | `AdminRoute`+`useIsAdmin` gate on all 8 (PR #30) | ⏳ |
+| Admin — access control (only founders see it) | ✅ | ✅ | all 8 `/admin/*` routes were auth-only (no role check) | `AdminRoute`+`useIsAdmin` gate on all 8 (PR #30) | ✅ **LIVE**: admin (Ashton) reaches all admin pages; gate active. ⚠️ non-admin denial not testable (can't log out/in). |
 
 ## A9. Auth / login
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
