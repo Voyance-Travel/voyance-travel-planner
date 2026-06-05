@@ -20,6 +20,18 @@ export function GlobalErrorHandler() {
         return;
       }
 
+      // Suppress benign AbortErrors — request cancellations and the supabase
+      // auth-lock abort ("signal is aborted without reason") that fires on
+      // session-less pages (e.g. the public share view). These are not
+      // user-facing failures; the app continues normally, so they must NOT
+      // surface a scary "Something hiccupped" toast.
+      const reasonName = event.reason instanceof Error ? event.reason.name : '';
+      if (reasonName === 'AbortError' || msg.includes('signal is aborted')) {
+        console.debug('[GlobalErrorHandler] Ignoring benign AbortError:', msg);
+        event.preventDefault();
+        return;
+      }
+
       console.error('Unhandled Promise Rejection:', event.reason);
 
       if (isSuppressedRoute()) {
