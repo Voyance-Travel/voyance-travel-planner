@@ -42,6 +42,7 @@ async function issueRefund(
   creditsAmount: number,
   reason: string,
   errorMessage?: string,
+  originalIdempotencyKey?: string,
 ) {
   const maxRetries = 3;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -51,6 +52,9 @@ async function issueRefund(
           action: 'REFUND',
           tripId,
           creditsAmount,
+          // C-CRED-5: key the refund so the server dedups it against the defensive/sweep paths
+          // (which refund the same charge). Without this the un-keyed refund double-credited.
+          originalIdempotencyKey,
           metadata: { originalAction: 'trip_generation', reason, errorMessage },
         },
       });
@@ -625,6 +629,7 @@ export function ItineraryGenerator({
           ...gateResult,
           mode: 'full',
           creditsCharged: data.spent ?? partialCost,
+          idempotencyKey: `trip_generation:${tripId}:partial:${overrideDays}`, // partial charge key — for deduped refunds (C-CRED-5)
           currentBalance: data.newBalance?.total ?? (gateResult.currentBalance - partialCost),
           generateDays: overrideDays,
         };
@@ -736,7 +741,7 @@ export function ItineraryGenerator({
         if (refundAmount > 0) {
           const errMsg = err instanceof Error ? err.message : 'Unknown error';
           console.log(`[ItineraryGenerator] Partial refund: ${daysCompleted}/${totalTrip} days done, refunding ${refundAmount} of ${gr.creditsCharged} credits`);
-          const ok = await issueRefund(tripId, refundAmount, 'generation_failed_partial', `${daysCompleted}/${totalTrip} days completed. ${errMsg}`);
+          const ok = await issueRefund(tripId, refundAmount, 'generation_failed_partial', `${daysCompleted}/${totalTrip} days completed. ${errMsg}`, gr.idempotencyKey);
           if (ok) {
             toast.info(
               daysCompleted > 0

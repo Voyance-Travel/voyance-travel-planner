@@ -20,7 +20,7 @@ const PRODUCT_CONFIG: Record<string, {
   'com.voyancetravel.credits.flex500': { credits: 500, bonusCredits: 0, type: 'flexible' },
   'com.voyancetravel.club.voyager':    { credits: 500, bonusCredits: 100, type: 'club', tier: 'voyager' },
   'com.voyancetravel.club.explorer':   { credits: 1200, bonusCredits: 400, type: 'club', tier: 'explorer' },
-  'com.voyancetravel.club.adventurer': { credits: 2400, bonusCredits: 800, type: 'club', tier: 'adventurer' },
+  'com.voyancetravel.club.adventurer': { credits: 2500, bonusCredits: 700, type: 'club', tier: 'adventurer' },
 };
 
 // Apple status code → user-friendly message + retryability hint for the FE
