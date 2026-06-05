@@ -2188,7 +2188,7 @@ export default function TripDetail() {
                   (tripData?.itinerary_status as any) === 'generated';
                 if (isFrozenTrip && !recoveryUsed) {
                   console.log(
-                    `[TripDetail] Self-heal: frozen trip and rebuild matched JSON — skipping setTrip swap`,
+                    `[TripDetail] Self-heal: frozen trip and rebuild matched JSON - skipping setTrip swap`,
                   );
                 } else {
                   const reason = recoveryUsed
@@ -2225,7 +2225,7 @@ export default function TripDetail() {
                       // (server-side) is the only authority that can promote
                       // to ready/fully_persisted/frozen.
                       console.log(
-                        `[TripDetail] Self-heal: status '${__status}' kept partial after rebuild (${realDayCount}/${expectedTotal} days) — commit gate decides ready.`,
+                        `[TripDetail] Self-heal: status '${__status}' kept partial after rebuild (${realDayCount}/${expectedTotal} days) - commit gate decides ready.`,
                       );
                       const promotedMeta: Record<string, any> = {
                         ...meta,
@@ -3706,7 +3706,7 @@ export default function TripDetail() {
                     <h3 className="text-xl font-serif font-semibold">Generation paused</h3>
                     <p className="text-muted-foreground">
                       Generation paused at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
-                      Click below to resume — your existing days are preserved.
+                      Click below to resume - your existing days are preserved.
                     </p>
                     {generationPoller.totalDays > 0 && (
                       <div className="w-64 mx-auto">

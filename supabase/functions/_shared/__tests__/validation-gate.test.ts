@@ -50,7 +50,7 @@ Deno.test('Gate: blanks punctuation-only field on persist_forced', () => {
   assertEquals(gate.counters.blankedFields, 1);
 });
 
-Deno.test('TRUNCATED_SENTENCE: mid-sentence cutoff in description → error', () => {
+Deno.test('TRUNCATED_SENTENCE: mid-sentence cutoff in description → critical', () => {
   const acts = [{
     id: 'a1', title: 'Wine tasting', startTime: '15:00', endTime: '17:00',
     category: 'activity', location: { name: 'Cantina' },
@@ -59,7 +59,7 @@ Deno.test('TRUNCATED_SENTENCE: mid-sentence cutoff in description → error', ()
   const results = validateDay(baseInput(acts));
   const hit = results.find(r => r.code === FAILURE_CODES.TRUNCATED_SENTENCE);
   assert(hit, 'expected TRUNCATED_SENTENCE');
-  assertEquals(hit!.severity, 'error');
+  assertEquals(hit!.severity, 'critical');
 });
 
 Deno.test('TRUNCATED_SENTENCE: complete sentence does NOT flag', () => {
@@ -72,7 +72,7 @@ Deno.test('TRUNCATED_SENTENCE: complete sentence does NOT flag', () => {
   assertEquals(results.find(r => r.code === FAILURE_CODES.TRUNCATED_SENTENCE), undefined);
 });
 
-Deno.test('SUSPICIOUS_DUPLICATE_PRICE: identical adjacent dining costs → warning', () => {
+Deno.test('SUSPICIOUS_DUPLICATE_PRICE: identical adjacent dining costs → critical', () => {
   const acts = [
     { id: 'a1', title: 'Lunch', startTime: '13:00', endTime: '14:30',
       category: 'dining', location: { name: 'Trattoria' },
@@ -84,7 +84,7 @@ Deno.test('SUSPICIOUS_DUPLICATE_PRICE: identical adjacent dining costs → warni
   const results = validateDay(baseInput(acts));
   const hit = results.find(r => r.code === FAILURE_CODES.SUSPICIOUS_DUPLICATE_PRICE);
   assert(hit, 'expected SUSPICIOUS_DUPLICATE_PRICE');
-  assertEquals(hit!.severity, 'warning');
+  assertEquals(hit!.severity, 'critical');
 });
 
 Deno.test('SUSPICIOUS_DUPLICATE_PRICE: bar_cap_repair source is exempt', () => {

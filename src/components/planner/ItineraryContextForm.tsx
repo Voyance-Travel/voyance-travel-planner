@@ -42,7 +42,7 @@ export interface ItineraryContextData {
   preBookedCommitments?: PreBookedCommitment[]; // Fixed events that can't be moved
   mustDoActivities?: string; // User's must-do list as comma-separated string
   perDayActivities?: Array<{ dayNumber: number; activities: string }>; // Per-day structured activities from Just Tell Us
-  additionalNotes?: string; // Freeform "Anything else?" — feeds metadata.additionalNotes (prompt TRIP PURPOSE block)
+  additionalNotes?: string; // Freeform "Anything else?" - feeds metadata.additionalNotes (prompt TRIP PURPOSE block)
 }
 
 interface ItineraryContextFormProps {
@@ -456,7 +456,7 @@ export default function ItineraryContextForm({
             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-1 dark:border-amber-900/40 dark:bg-amber-950/20">
               <div className="flex items-center gap-1.5 text-xs font-medium text-amber-800 dark:text-amber-200">
                 <AlertCircle className="w-3.5 h-3.5" />
-                Couldn't parse — please reword:
+                Couldn't parse - please reword:
               </div>
               <ul className="text-xs text-amber-700 dark:text-amber-300 list-disc list-inside">
                 {unparsedLines.slice(0, 5).map((line, i) => (
@@ -481,7 +481,7 @@ export default function ItineraryContextForm({
             className="min-h-[80px] resize-none"
           />
           <p className="text-xs text-muted-foreground">
-            We'll weave this into how the trip feels — not as a separate activity.
+            We'll weave this into how the trip feels - not as a separate activity.
           </p>
         </div>
 

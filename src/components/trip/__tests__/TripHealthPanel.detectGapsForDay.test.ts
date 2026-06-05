@@ -24,7 +24,7 @@ describe('detectGapsForDay — day-boundary invariant', () => {
     ];
     const gaps = detectGapsForDay(acts, 3);
     expect(gaps).toHaveLength(1);
-    expect(gaps[0].message).toMatch(/7h gap before Dinner/);
+    expect(gaps[0].message).toMatch(/7h\+ of open time before Dinner/);
   });
 
   it('does NOT emit a synthetic gap before the first activity', () => {
@@ -69,7 +69,7 @@ describe('detectGapsForDay — day-boundary invariant', () => {
     expect(d2).toHaveLength(0);
     const d1 = detectGapsForDay(flat, 1);
     expect(d1).toHaveLength(1);
-    expect(d1[0].message).toMatch(/10h gap before D1 evening/);
+    expect(d1[0].message).toMatch(/10h\+ of open time before D1 evening/);
   });
 
   it('accepts snake_case day_number alias', () => {

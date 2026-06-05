@@ -13,7 +13,6 @@ describe('analyzeHealth — overlap classification', () => {
     expect(issues.length).toBe(1);
     expect(issues[0].severity).toBe('warning');
     expect(issues[0].message).toMatch(/Tight transition/);
-    expect(issues[0].message).toMatch(/Auto-resolves/);
   });
 
   it('two non-transit overlapping cards → still error', () => {

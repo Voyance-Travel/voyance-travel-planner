@@ -64,11 +64,14 @@ Deno.test('resolveTripFacts: composes core resolvers and exposes documented shap
       travelers: 2,
       budget_tier: 'luxury',
       trip_type: 'romantic',
-      dietary_restrictions: ['vegetarian'],
-      interests: ['food', 'art'],
       metadata: {
         mustHaves: [{ label: 'Eat at Roscioli', notes: 'Sunday lunch ideally' }],
         additionalNotes: '',
+        // dietary/interests are sourced from metadata (or the traveler
+        // profile) — NOT from trips.* columns, which don't exist on the
+        // table. See resolveTripFacts preferences resolution.
+        dietaryRestrictions: ['vegetarian'],
+        interests: ['food', 'art'],
       },
       hotel_selection: {
         name: 'Hotel Eden',
@@ -77,7 +80,19 @@ Deno.test('resolveTripFacts: composes core resolvers and exposes documented shap
         checkIn: '2026-06-01',
         checkOut: '2026-06-05',
       },
-      flight_selection: null,
+      // destination IATA is sourced from the flight selection's arrival
+      // airport (via getFlightHotelContext), NOT from a trips.destination_iata
+      // column — see trip-facts.ts TripFactsDestination contract.
+      flight_selection: {
+        legs: [
+          {
+            isDestinationArrival: true,
+            arrival: { airport: 'FCO', time: '2026-06-01T14:30:00' },
+            departure: { airport: 'JFK', time: '2026-06-01T07:00:00' },
+          },
+        ],
+        arrivalAirport: 'FCO',
+      },
       flight_intelligence: null,
       is_multi_city: false,
     },

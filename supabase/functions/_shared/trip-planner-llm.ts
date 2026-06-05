@@ -19,7 +19,7 @@
 // - Phase 4 (slot-fill) will consume `trip_plan.dayAssignments` to constrain
 //   the Filler LLM. Until then, the assignments are observable data only.
 
-import { z } from 'npm:zod@3.23.8';
+import { z } from 'npm:zod@3.25.76';
 import type { SkeletonDay, OmittedMustDo } from './schema-generation.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -42,7 +42,7 @@ export function RefreshDaySheet({
         className="w-full sm:max-w-lg overflow-y-auto p-0"
       >
         <SheetHeader className="px-5 pt-5 pb-3 border-b border-border">
-          <SheetTitle>Day {result.dayNumber} — Timeline check</SheetTitle>
+          <SheetTitle>Day {result.dayNumber} - Timeline check</SheetTitle>
           <SheetDescription>
             {result.issues.length === 0
               ? 'No issues found.'

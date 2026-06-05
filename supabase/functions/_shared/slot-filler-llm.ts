@@ -15,7 +15,7 @@
 // Same fetch-based call pattern as `trip-planner-llm.ts` to stay aligned with
 // the existing codebase convention (AI SDK migration is Phase 6).
 
-import { z } from 'npm:zod@3.23.8';
+import { z } from 'npm:zod@3.25.76';
 import type {
   SkeletonDay,
   SkeletonSlot,

@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { parseAuth } from "../_shared/require-auth.ts";
+import { isGoogleBillableUrl } from "../_shared/is-google-billable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,6 +9,11 @@ const corsHeaders = {
 };
 
 // Exact-match allowlist (case-insensitive on hostname).
+// Note: Google Maps/Places billable image hosts (e.g. the Static Maps /
+// Places photo CDN) are NOT listed here as literals — they are recognized
+// via the shared `isGoogleBillableUrl` predicate in `validateImageUrl` so the
+// "what counts as a Google host" definition stays centralized (see
+// _shared/is-google-billable.ts and the no-direct-google lint guard).
 const ALLOWED_HOSTS_EXACT = new Set<string>([
   "images.unsplash.com",
   "plus.unsplash.com",
@@ -15,7 +21,6 @@ const ALLOWED_HOSTS_EXACT = new Set<string>([
   "lh4.googleusercontent.com",
   "lh5.googleusercontent.com",
   "lh6.googleusercontent.com",
-  "maps.googleapis.com",
 ]);
 
 // Wildcard suffixes (must endsWith, with leading dot to prevent eviltarget-amazonaws.com).
@@ -63,6 +68,8 @@ function validateImageUrl(raw: string): { ok: true } | { ok: false; reason: stri
   if (isPrivateIp(host)) return { ok: false, reason: "private_ip" };
   if (ALLOWED_HOSTS_EXACT.has(host)) return { ok: true };
   if (ALLOWED_HOST_SUFFIXES.some((s) => host.endsWith(s))) return { ok: true };
+  // Google Maps/Places billable image hosts (Static Maps / Places photo CDN).
+  if (isGoogleBillableUrl(`https://${host}/`)) return { ok: true };
   return { ok: false, reason: "host_not_allowed" };
 }
 

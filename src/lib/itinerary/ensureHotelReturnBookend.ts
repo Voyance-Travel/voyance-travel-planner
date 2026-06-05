@@ -67,6 +67,12 @@ function isTerminalAlready(a: any): boolean {
   if (!a) return false;
   const cat = String(a.category || '').toUpperCase();
   const title = String(a.title || a.name || '');
+  // A TRANSPORT/TRANSIT leg titled "Return to <hotel> for Check-in" is the
+  // afternoon check-in transfer, NOT the day's terminal hotel return. Treating
+  // it as terminal short-circuited the bookend and left the mis-titled transport
+  // card as the day's last row (Osaka regression). Fall through so a generic
+  // end-of-day bookend is synthesized after it.
+  if (TRANSPORT_CAT_RE.test(cat) && TRAILING_CHECK_CLAUSE_RE.test(title)) return false;
   // True return / checkout titles always count.
   if (TRUE_RETURN_RE.test(title) || CHECKOUT_RE.test(title)) return true;
   // Late-evening hotel check-in / settle-in / bag-drop IS the terminal

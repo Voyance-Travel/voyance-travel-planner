@@ -89,9 +89,32 @@ export function getDisplayEndTime(
  * See mem://constraints/itinerary/health-warning-rendered-times.
  */
 export function getRenderedStartTime(a: any): string {
-  return a?.startTime || a?.start_time || a?.time || '';
+  // Prefer a buffered/cascade-adjusted display value when one has been stamped
+  // onto the record, mirroring getDisplayStartTime and the health engine's
+  // own line-284 precedence (displayStartTime || startTime || time). In
+  // production these forward-compat fields are not yet written, so for every
+  // current record this is identical to startTime — but when a renderer does
+  // stamp displayStartTime (e.g. a 12:55 buffered value over a stale 12:30
+  // source), the rendered/overlap logic now matches the card instead of
+  // drifting (the HEALTH_RENDERED_VS_CARD_DRIFT case).
+  return (
+    a?.displayStartTime ||
+    a?.adjustedStartTime ||
+    a?.metadata?.displayStart ||
+    a?.startTime ||
+    a?.start_time ||
+    a?.time ||
+    ''
+  );
 }
 
 export function getRenderedEndTime(a: any): string {
-  return a?.endTime || a?.end_time || '';
+  return (
+    a?.displayEndTime ||
+    a?.adjustedEndTime ||
+    a?.metadata?.displayEnd ||
+    a?.endTime ||
+    a?.end_time ||
+    ''
+  );
 }

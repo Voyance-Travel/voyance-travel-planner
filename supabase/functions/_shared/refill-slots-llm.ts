@@ -10,7 +10,7 @@
 // caller decides what to do with unfilled slots (typically display as
 // "free time" — safer than a hallucination).
 
-import { z } from 'npm:zod@3.23.8';
+import { z } from 'npm:zod@3.25.76';
 import type { NeedsRefillEntry } from './itinerary-cleanup.ts';
 
 export const RefillSchema = z

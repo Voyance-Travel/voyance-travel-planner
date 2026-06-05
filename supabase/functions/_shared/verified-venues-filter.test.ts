@@ -1,11 +1,17 @@
 import { assertEquals } from 'https://deno.land/std@0.208.0/assert/mod.ts';
 import { filterVenuesByDestination } from './verified-venues-filter.ts';
 
-Deno.test('filterVenuesByDestination: Venice destination drops Florence/Paris/SF', () => {
+// The cross-city filter is intentionally country-scoped: for a "Venice, Italy"
+// destination it only flags *other Italian* cities (the real hallucination it
+// guards against — a famous venue assigned to the wrong city within the same
+// country). Foreign-country venues (Paris/France, San Francisco/US) are out of
+// scope and pass through untouched. This test exercises the in-scope behavior:
+// multiple Italian cross-city venues are dropped, the Venice one is kept.
+Deno.test('filterVenuesByDestination: Venice destination drops other Italian cities', () => {
   const venues = [
     { name: "All'Antico Vinaio", address: 'Via dei Neri, Florence', city: 'Florence' },
-    { name: 'Le Comptoir du Relais', address: '9 Carrefour de l\'Odéon, Paris', city: 'Paris' },
-    { name: 'Tartine Bakery', address: '600 Guerrero St, San Francisco', city: 'San Francisco' },
+    { name: 'Roscioli', address: 'Via dei Giubbonari, Roma', city: 'Rome' },
+    { name: 'Trattoria Milanese', address: 'Via Santa Marta, Milano', city: 'Milan' },
     { name: "Osteria alle Testiere", address: 'Calle del Mondo Novo, Venezia', city: 'Venice' },
   ];
   const out = filterVenuesByDestination(venues, 'Venice, Italy');

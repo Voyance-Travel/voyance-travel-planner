@@ -665,7 +665,7 @@ export function BudgetCoach({
               <CheckCircle className="h-5 w-5 mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
               <div className="flex-1 space-y-1">
                 <p className="font-medium text-emerald-900 dark:text-emerald-100">
-                  Budget raised — you're on target
+                  Budget raised - you're on target
                 </p>
                 <p className="text-sm text-emerald-800/90 dark:text-emerald-200/90">
                   Raised from {formatCurrency(lastRaise!.fromCents)} to {formatCurrency(lastRaise!.toCents)}.
@@ -710,7 +710,7 @@ export function BudgetCoach({
                 <p className="font-medium text-amber-900 dark:text-amber-100">You're close to your budget</p>
                 <p className="text-sm text-amber-800/90 dark:text-amber-200/90">
                   Only {formatCurrency(remainingCents)} ({Math.round(headroomPct)}%) of your {formatCurrency(budgetTargetCents)} budget is left.
-                  Nice work staying on plan — keep an eye out for new bookings.
+                  Nice work staying on plan - keep an eye out for new bookings.
                 </p>
                 {onEditBudget && (
                   <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-amber-900 dark:text-amber-100 hover:bg-amber-100/60 dark:hover:bg-amber-900/40 -ml-2 mt-1" onClick={onEditBudget}>
@@ -976,7 +976,7 @@ export function BudgetCoach({
               {/* Misc reserve nudge moved below suggestions — see end of CardContent. */}
 
 
-              {/* "Bump tier" CTA — turn a complaint into an action when the
+              {/* "Bump tier" CTA - turn a complaint into an action when the
                   plan has clearly outgrown the preset (food-heavy + luxury anchors). */}
               {showBumpCta && (
                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
@@ -1057,7 +1057,7 @@ export function BudgetCoach({
                 </div>
               )}
 
-              {/* Structural transit warning — when the Transit overrun exceeds
+              {/* Structural transit warning - when the Transit overrun exceeds
                   what every taxi-to-metro swap could plausibly save, no amount
                   of swap suggestions will turn the bar green. Tell the user
                   honestly and route them to raise the transit allocation. */}
@@ -1413,7 +1413,7 @@ export function BudgetCoach({
                 <div className="text-center py-6 space-y-3">
                   {suggestableCount === 0 ? (
                     <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                      Your itinerary looks empty — add activities to get personalized savings advice.
+                      Your itinerary looks empty - add activities to get personalized savings advice.
                     </p>
                   ) : allProtected || (protectedCategories.length > 0 && dismissedIds.length === 0) ? (
                     <>
@@ -1450,7 +1450,7 @@ export function BudgetCoach({
                 </div>
               )}
 
-              {/* Misc reserve nudge — secondary meta-task. Rendered LAST so
+              {/* Misc reserve nudge - secondary meta-task. Rendered LAST so
                   actionable swap suggestions own the prime slot. Suppressed
                   while loading/erroring or when the structural restructuring
                   panel is already addressing a much larger overrun. */}
@@ -1466,7 +1466,7 @@ export function BudgetCoach({
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium">Set aside spending money</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Your spending-money reserve is {formatCurrency(miscReserveCents)}. Log your first cash expense (tip, SIM, snack) so this category reflects reality — the itinerary doesn't auto-fill it.
+                          Your spending-money reserve is {formatCurrency(miscReserveCents)}. Log your first cash expense (tip, SIM, snack) so this category reflects reality - the itinerary doesn't auto-fill it.
                         </p>
                         <div className="flex flex-wrap gap-2 mt-2">
                           <Button

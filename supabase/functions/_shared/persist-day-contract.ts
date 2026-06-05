@@ -38,6 +38,7 @@ export const PLACEHOLDER_NAME_RE = new RegExp(
     'needsvenuepick',
     'spa\\s+time\\s*(?:[—\\-:]\\s*find)',
     '\\btbd\\b|t\\.b\\.d\\.',
+    '\\(\\s*(?:[a-z0-9 _-]+\\s+)?slot\\s*\\)',
   ].join('|'),
   'i',
 );
