@@ -99,9 +99,14 @@ Verdict so far: **navigation healthy, no dead ends found.** (Live ✅ for the sp
 ---
 
 ## 4. Pricing / credits
-| Test | Expected | Actual | Verdict |
-|---|---|---|---|
-| | | | |
+Account is **seeded with 1,933,385 purchased credits** (test/admin acct) → generations feel free here. "Purchased credits never expire."
+- **Quick top-up:** 100cr/$9 ($0.090/cr), 300cr/$25 ($0.083/cr), 500cr/$39 ($0.078/cr).
+- **Voyance Club:** Voyager $49.99→600cr ($0.083), Explorer $89.99→1,600cr ($0.056, "Popular"+priority support), Adventurer $149.99→3,200cr ($0.047, Founding badge first 1,000).
+- **Earn Free Credits:** Welcome +150, Early Adopter +500, Quiz Complete +100, "travel pro" +50. "Available to Earn: 0" (bonuses appear one-time/claimed).
+- 4-day trip = 240cr (60/day); day-unlocks "charged separately".
+
+Verdict: per-credit pricing internally consistent (volume discount); healthy margin over ~$0.065 AI/trip (margin erodes if uncached Google balloons — see cost findings). **No pricing display errors found.**
+NOT live-tested (would require exploiting the financial/credit system): re-claimable earn-bonuses (does re-quiz re-award +100?), server-side spend enforcement (charge before/after value?), double-charge on regen/heal, day-unlock without credits. → **defer to pricing code audit; verify in code, not by live exploit.** "Buy" = real Stripe checkout, not tested (financial action).
 
 ---
 
@@ -139,3 +144,12 @@ Methodology: each issue is verified in **two places** — the **code audit** (re
 | 9 | MED | DNA | Differentiation flatteners: "30-40% trait moderation" rule + generic fallback archetype | ✅ | ⬜ | re-verify live (A/B itineraries) | open |
 | 10 | MED | DNA | profile.interests/dietary computed but never injected into compile-prompt | ✅ | ⬜ | re-verify live | open |
 | 11 | MED | reliability | Client self-heal retry storm on a permanently-failed trip (100s of identical FunctionsFetchError cycles) | ⬜ | ✅ | re-verify in code | open |
+| 12 | **CRIT** | share | **"Sharing always broken"** — Public-link toggle → `rpc('toggle_consumer_trip_share')` returns **404** (function missing from prod DB; defined in repo migrations 20260406/20260509 but never applied). Toast "Could not update sharing." | ✅ | ✅ | **CONFIRMED (both)** | **FIX migration written** (20260605120000) — needs apply-to-prod |
+| 13 | HIGH | friends | Friends "Sent" tab badge says **3** but only **1** invite renders (count/list mismatch); invite stuck "Pending" | ⬜ | ✅ | re-verify in code | open |
+
+## 8. Share / Friends (live)
+- ✅ Friend data layer works: Friends(2) Clinton Brooks + Layne Lightfoot render; Requests empty-state renders; "Trip Together blend" copy present.
+- 🐞 **[CRIT] Public-link share BROKEN** — toggling "Public link" in Share dialog → toast **"Could not update sharing. Please try again."** Network: `POST /rest/v1/rpc/toggle_consumer_trip_share` → **404**. Root cause: the RPC (signature `(p_trip_id uuid, p_enabled boolean)`, matches the frontend call exactly) is defined in repo migrations + types.ts but **does not exist in the prod database** — the migration was never applied. **Fix:** `supabase/migrations/20260605120000_restore_toggle_consumer_trip_share.sql` re-asserts the function (CREATE OR REPLACE, idempotent) + `NOTIFY pgrst 'reload schema'`. ⚠️ Only fixes prod IF the deploy applies migrations; otherwise run the SQL in the Supabase SQL editor.
+- 🐞 **[HIGH] Friends "Sent" count/list mismatch** — badge says 3, only 1 row renders ("Clinique Brooks — Pending"). Likely the "always broken" friend-invite symptom (invites stuck/under-rendering). Root-cause in code (separate from the RPC).
+- Share dialog otherwise renders well: Public link / Copy / Share / WhatsApp / X, "Invite to collaborate" (email + generate link), "Friends get 150 bonus credits" promo.
+- NOT tested (side-effectful, needs care/permission): actually sending a friend-invite email to a third party; the collaborator invite link.
