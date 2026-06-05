@@ -80,7 +80,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | Quiz completes + persists DNA | ✅ | ✅ | — | — | ➖ |
 | DNA assignment ACCURACY (right archetype for answers) | ✅ | ✅ | maximal foodie → "Urban Nomad" not Culinary (see Concern C-DNA-1) | fix #2 PR #24 (food weight 26→38 + urban anti-food guard) + PR #35 marker | ✅ **VERIFIED LIVE 2026-06-05**: post-CLI-deploy re-quiz (maximal foodie) → **"The Culinary Cartographer"** ("Your passport is basically a menu"), hints of Romantic Curator. Old Urban-Nomad fallback gone. |
 | "Complete" gating / unanswered-question guidance | ⬜ | ❌ | Complete silently disables <100% w/ no "which question" hint | | ⬜ |
-| Result card "match %" | ⬜ | ❌ | blank on new archetype | | ⬜ |
+| Result card "match %" | ⬜ | ✅ | blank on new archetype | (resolved post-deploy?) | ✅ **LIVE 2026-06-05**: DNA card shows "52% match" for Culinary Cartographer — match% now renders (earlier "blank" not reproduced) |
 | "Just Tell Us Your Story" free-text DNA path | ⬜ | ⬜ | not exercised (2nd of 3 DNA input paths) | | ⬜ |
 
 ## A5. Profile `/profile` (tabs)
@@ -92,7 +92,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | Friends — "Sent" count vs list | ✅ | ✅ | badge 3, only 1 invite renders; stuck Pending (Concern C-FRIEND-1) | RLS policy PR #39 (outgoing-pending profile visibility) + migration applied | ✅ **VERIFIED LIVE 2026-06-05**: Sent badge=3 and all 3 render real names (Clinique Brooks, Vonnetta Pryor, Shawl Pryor) — no "Unknown" rows |
 | Friends — add / accept / request flow | ⬜ | ⬜ | | | ⬜ |
 | Following | ⬜ | ⬜ | | | ⬜ |
-| Credits tab (balance/ledger) | ⬜ | ⬜ | | | ⬜ |
+| Credits tab (balance/ledger) | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: balance 1,933,385 (purchased, never-expire). "Earn Free Credits" = 900 = sum of 6 bonuses (Welcome 150 / Early-Adopter 500 / Quiz 100 / Prefs 50 / First-Share 50 / Second-Trip 50) — **every amount matches deployed grant-bonus-credits config**. Arithmetic correct. |
 | Preferences tab (edit + "Update Travel DNA" path) | ⬜ | ⬜ | 3rd DNA input path — untested | | ⬜ |
 | Edit Profile | ⬜ | ⬜ | | | ⬜ |
 
@@ -111,11 +111,13 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 ## A8. Admin pages
 | Page / feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| **Enumerate ALL admin routes** (not just cost dashboard) | ⬜ | ⬜ | owner: "look at all the admin pages" | | ⬜ |
-| UnitEconomics / cost dashboard — accuracy | ✅ | ⬜ | Google read ~2× low (price/place-details/retries) | fix PR #21 (useRealCostMetrics) | ⏳ awaiting live open-dashboard verify |
+| **Enumerate ALL admin routes** (not just cost dashboard) | ✅ | ✅ | owner: "look at all the admin pages" | — | ✅ routes: /admin/{bulk-import, data-cleanup, image-curation, dashboard, test-suites, user-tracking, session-explorer, logs}; bare /admin 404s ("Wrong turn") |
+| UnitEconomics / cost dashboard — accuracy | ✅ | 🟧 | Google read ~2× low (price/place-details/retries) | fix PR #21 (useRealCostMetrics) | 🟧 **LIVE 2026-06-05**: dashboard loads (Money In $47.99, 24 users, 151 trips, "All systems healthy"). ⚠️ **C-ADMIN-2**: User-Tier Distribution shows only **1 Flex** row vs **2 paid users**; + "With Balance 38 > Total Users 24" oddity → **needs SQL count** (could be sparse user_tiers OR admin-SELECT not returning all rows) |
+| **C-ADMIN-1** ImageCuration write-error surfacing (#46) | ✅ | ✅ | blacklist/heal swallowed errors → faked success | PR #46 (check `{error}`, throw) | ✅ loads/functions (15k images, filters, Heal/Upload); error-surfacing code-verified (failure path not safely forceable — won't blacklist real prod image) |
+| **C-ADMIN-3** BulkImport dead "Delete All Users" (#47) | ✅ | ✅ | empty-body→400 dead button | PR #47 removed it | ✅ **VERIFIED LIVE**: button gone; only CSV import remains |
 | Admin — traffic / performance panels | ⬜ | ⬜ | | | ⬜ |
 | Admin — fixed-cost / projected-cost inputs | ⬜ | ⬜ | | | ⬜ |
-| Admin — access control (only founders see it) | ❌→✅ | ⬜ | all 8 `/admin/*` routes were auth-only (no role check) | `AdminRoute`+`useIsAdmin` gate on all 8 (PR #30) | ⏳ |
+| Admin — access control (only founders see it) | ✅ | ✅ | all 8 `/admin/*` routes were auth-only (no role check) | `AdminRoute`+`useIsAdmin` gate on all 8 (PR #30) | ✅ **LIVE**: admin (Ashton) reaches all admin pages; gate active. ⚠️ non-admin denial not testable (can't log out/in). |
 
 ## A9. Auth / login
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
