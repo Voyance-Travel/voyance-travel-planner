@@ -20,6 +20,32 @@ const CLUB_PRODUCT_MAP: Record<string, { tier: string; baseCredits: number; bonu
   'prod_TwpdxFwT7d6EIc': { tier: 'adventurer', baseCredits: 2500, bonusCredits: 700 },
 };
 
+// Flex credit-pack price IDs → AUTHORITATIVE credits + expected charge (cents).
+// SECURITY (CRIT-1): credits granted for a flex purchase MUST be derived from the
+// priceId (which Stripe binds to the real charge) — NEVER from client-supplied
+// metadata.credits, which is attacker-controlled (pay $9, claim 100k). Mirror of
+// the IAP product map. Keep in sync with src/config/pricing.ts flex_100/300/500.
+const FLEX_PRICE_MAP: Record<string, { credits: number; cents: number }> = {
+  'price_1Syc68JytioXyqq9KfhrbugR': { credits: 100, cents: 900 },   // flex_100  $9
+  'price_1Syc69JytioXyqq9RyuXQAQm': { credits: 300, cents: 2500 },  // flex_300  $25
+  'price_1Syc6AJytioXyqq98l10fqXn': { credits: 500, cents: 3900 },  // flex_500  $39
+};
+
+/**
+ * Resolve the authoritative credit amount for a non-club (flex) purchase from the
+ * priceId, asserting the amount Stripe actually charged matches the expected price.
+ * Returns null to REJECT (unknown price or charge mismatch) — refuse to mint rather
+ * than trust the client. amountCents===0 (rare/edge) skips the charge assert but
+ * still requires a known priceId.
+ */
+function resolveFlexCredits(priceId: string | undefined, amountCents: number): number | null {
+  if (!priceId) return null;
+  const tier = FLEX_PRICE_MAP[priceId];
+  if (!tier) return null;
+  if (amountCents > 0 && amountCents !== tier.cents) return null;
+  return tier.credits;
+}
+
 // Group unlock product IDs → tier mapping
 const GROUP_PRODUCT_MAP: Record<string, { tier: string; caps: Record<string, number> }> = {
   'prod_TwpdLWc2OUADWF': { tier: 'small', caps: { swap_activity: 15, regenerate_day: 8, ai_message: 30, restaurant_rec: 10 } },
@@ -457,15 +483,46 @@ serve(async (req) => {
 
             const clubInfo = productId ? CLUB_PRODUCT_MAP[productId] : null;
 
+            // SECURITY (CRIT-1): for flex (non-club) purchases, derive the credit
+            // amount from the priceId — NOT the client-supplied metadata.credits.
+            // Club packs already resolve server-side via CLUB_PRODUCT_MAP.
+            let grantBase: number;
+            let grantBonus: number;
+            let grantType: string;
+            let grantClubTier: string | null;
+            if (clubInfo) {
+              grantBase = clubInfo.baseCredits;
+              grantBonus = clubInfo.bonusCredits;
+              grantType = 'club_base';
+              grantClubTier = clubInfo.tier;
+            } else {
+              const flexCredits = resolveFlexCredits(priceId, amountCents);
+              if (flexCredits === null) {
+                logError("SECURITY: flex credit_purchase REJECTED — unknown priceId or charge mismatch (refusing to mint)", {
+                  priceId, amountCents, claimedCredits: creditsToAdd, sessionId: session.id,
+                });
+                break;
+              }
+              if (flexCredits !== creditsToAdd) {
+                log("Flex credits derived from priceId differ from client claim — using authoritative value", {
+                  priceId, derived: flexCredits, claimed: creditsToAdd, sessionId: session.id,
+                });
+              }
+              grantBase = flexCredits;
+              grantBonus = 0;
+              grantType = 'flex';
+              grantClubTier = null;
+            }
+
             // Atomic fulfillment via single transactional RPC
             const { data: fulfillResult, error: fulfillErr } = await supabaseAdmin.rpc('fulfill_credit_purchase', {
               p_user_id: userId,
-              p_credits: clubInfo ? clubInfo.baseCredits : creditsToAdd,
-              p_bonus_credits: clubInfo ? clubInfo.bonusCredits : 0,
-              p_credit_type: clubInfo ? 'club_base' : 'flex',
+              p_credits: grantBase,
+              p_bonus_credits: grantBonus,
+              p_credit_type: grantType,
               p_stripe_session_id: session.id,
               p_amount_cents: amountCents,
-              p_club_tier: clubInfo?.tier ?? null,
+              p_club_tier: grantClubTier,
               p_product_id: productId ?? null,
               p_price_id: priceId ?? null,
             });
@@ -502,12 +559,21 @@ serve(async (req) => {
         if (metadata.type === "group_pool_credit_purchase") {
           const userId = metadata.user_id;
           const tripId = metadata.trip_id;
-          const creditsToAdd = parseInt(metadata.credits || "0", 10);
           const amountCents = session.amount_total || 0;
+          // SECURITY (CRIT-1): derive pool credits from the priceId, not metadata.credits.
+          const claimedCredits = parseInt(metadata.credits || "0", 10);
+          const creditsToAdd = resolveFlexCredits(metadata.price_id, amountCents);
 
-          if (!userId || !tripId || !creditsToAdd || creditsToAdd <= 0) {
-            logError("CRITICAL: group_pool_credit_purchase missing required fields", { metadata, sessionId: session.id });
+          if (!userId || !tripId || creditsToAdd === null || creditsToAdd <= 0) {
+            logError("SECURITY: group_pool_credit_purchase REJECTED — missing fields, unknown priceId, or charge mismatch", {
+              metadata, priceId: metadata.price_id, amountCents, claimedCredits, sessionId: session.id,
+            });
             break;
+          }
+          if (creditsToAdd !== claimedCredits) {
+            log("Group-pool credits derived from priceId differ from client claim — using authoritative value", {
+              priceId: metadata.price_id, derived: creditsToAdd, claimed: claimedCredits, sessionId: session.id,
+            });
           }
 
           // IDEMPOTENCY — credit_ledger has unique(stripe_session_id, transaction_type)
