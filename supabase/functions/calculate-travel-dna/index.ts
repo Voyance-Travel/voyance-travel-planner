@@ -1,3 +1,5 @@
+// DEPLOY MARKER: dna-archetype-accuracy-2026-06-05 — force a fresh edge artifact
+// for the food_focus weighting fix (#21) when the AI deploy prompt is unavailable.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost } from "../_shared/cost-tracker.ts";
