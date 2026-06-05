@@ -15,7 +15,9 @@ import Head from '@/components/common/Head';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { supabase } from '@/integrations/supabase/client';
+// Public share view: use the auth-less client so the anonymous recipient fetch
+// never depends on the auth-token lock (which can abort and false-fail the page).
+import { supabasePublic } from '@/integrations/supabase/publicClient';
 import { cn } from '@/lib/utils';
 import { EditorialItinerary, type EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import TripChat from '@/components/chat/TripChat';
@@ -75,7 +77,7 @@ export default function TripShare() {
   const loadSharedTrip = async () => {
     try {
       // Use secure RPC that returns sanitized payload (filters internal items server-side)
-      const { data, error } = await supabase
+      const { data, error } = await supabasePublic
         .rpc('get_shared_trip_payload', { p_share_token: shareToken });
 
       if (error) throw error;

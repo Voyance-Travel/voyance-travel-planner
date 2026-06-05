@@ -16,7 +16,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { supabase } from '@/integrations/supabase/client';
+// Public share view: use the auth-less client so the anonymous recipient fetch
+// never depends on the auth-token lock (which can abort and false-fail the page).
+import { supabasePublic } from '@/integrations/supabase/publicClient';
 import { cn } from '@/lib/utils';
 import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
@@ -90,7 +92,7 @@ export default function ConsumerTripShare() {
     const fetchTrip = async () => {
       setLoading(true);
       try {
-        const { data, error: rpcError } = await supabase.rpc('get_consumer_shared_trip', {
+        const { data, error: rpcError } = await supabasePublic.rpc('get_consumer_shared_trip', {
           p_share_token: token,
         });
 
