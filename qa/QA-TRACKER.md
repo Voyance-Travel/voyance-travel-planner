@@ -99,7 +99,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | UnitEconomics / cost dashboard — accuracy | ✅ | ⬜ | Google read ~2× low (price/place-details/retries) | fix PR #21 (useRealCostMetrics) | ⏳ awaiting live open-dashboard verify |
 | Admin — traffic / performance panels | ⬜ | ⬜ | | | ⬜ |
 | Admin — fixed-cost / projected-cost inputs | ⬜ | ⬜ | | | ⬜ |
-| Admin — access control (only founders see it) | ⬜ | ⬜ | | | ⬜ |
+| Admin — access control (only founders see it) | ❌→✅ | ⬜ | all 8 `/admin/*` routes were auth-only (no role check) | `AdminRoute`+`useIsAdmin` gate on all 8 (PR #30) | ⏳ |
 
 ## A9. Auth / login
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
@@ -178,9 +178,9 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | C-COST-5 | MED | cost | geocoding/routes/distance-matrix uncached (optimize/transit/transfers/airport) | ✅ | ⬜ | add `cachedGoogleGeocode/Routes/DistanceMatrix` wrappers | ⬜ |
 | C-COST-6 | MED | cost | `recommend-restaurants`/`hotels`(×3)/`fetch-reviews` uncached text search — scales with ENGAGEMENT not trip count (traffic-unbounded) | ✅ | ⬜ | cached search | ⬜ |
 | C-COST-7 | LOW | cost | SKU recorded even on network/abort error; retries (`enrichActivityWithRetry`) can double-bill a venue | ✅ | ⬜ | don't bill on abort; cache-before-retry | ⬜ |
-| C-CRED-1 | **CRIT** | credits/security | **Pay $9, mint up to 100k credits** — `create-embedded-checkout` + `stripe-webhook` grant client-supplied `credits` with no priceId↔credits check (flex products only; club packs safe) | ✅ | ⬜ | derive credits server-side from priceId map; assert amount paid; mirror IAP pattern | ⬜ |
+| C-CRED-1 | **CRIT** | credits/security | **Pay $9, mint up to 100k credits** — `create-embedded-checkout` + `stripe-webhook` grant client-supplied `credits` with no priceId↔credits check (flex + group-pool paths; club packs safe) | ✅ | ⬜ | ✅ **FIX SHIPPED (PR #29)** — webhook derives credits from priceId via FLEX_PRICE_MAP + asserts charge; both flex & group-pool paths. Awaiting owner merge + edge deploy | ⏳ |
 | C-CRED-2 | HIGH | credits | Guide gen (`generate-travel-guide`) charges hardcoded **15** vs displayed **20**, charges before deliver, **no refund + no idempotency** (double-charge on dup POST, lost credits on failure) | ✅ | ⬜ | route via `spend-credits` (add `generate_blog` to FIXED_COSTS); reconcile cost | ⬜ |
-| C-CRED-3 | HIGH | security/leak | `/admin/dashboard` (UnitEconomics) **auth-gated only, not admin-gated**; per-action cost/margin table hardcoded in client bundle → any logged-in user sees internal costs | ✅ | ⬜ | add admin-role route gate; move cost table behind admin fetch | ⬜ |
+| C-CRED-3 | HIGH | security/leak | **ALL 8 admin routes** (`/admin/*`) were auth-gated only, not admin-gated → any logged-in user loads admin pages incl. UnitEconomics' hardcoded cost/margin table | ✅ | ⬜ | ✅ **FIX SHIPPED (PR #30)** — new `AdminRoute` + `useIsAdmin` (server `user_roles` check) on all 8 routes. Follow-up: move cost table out of client bundle | ⏳ |
 | C-CRED-4 | MED | credits | Trip-gen cost under-validated server-side — client can skip multi-city fee + complexity multiplier (undercharge) | ✅ | ⬜ | recompute authoritative cost server-side from days/cities/dna | ⬜ |
 | C-CRED-5 | MED | credits | Trip refund can **double-refund** — `issueRefund` (ItineraryGenerator) sends no `pendingChargeId`/`originalIdempotencyKey`, bypasses dedup | ✅ | ⬜ | pass original idempotencyKey through all refund paths | ⬜ |
 | C-CRED-6 | MED | credits | Monthly free-grant check-then-act race → concurrent 2× 150cr | ✅ | ⬜ | atomic conditional UPDATE / unique (user, month) | ⬜ |
