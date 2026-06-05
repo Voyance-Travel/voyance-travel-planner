@@ -234,7 +234,20 @@ export default function Profile() {
             ratingMap.set(l.trip_id, l.overall_rating);
           }
         });
-        if (data) setTrips(data.map(t => transformTrip(t, ratingMap)));
+        if (data) {
+          // C-TRIPS-1: transform each trip independently. A single malformed trip
+          // (bad date, missing field) must NOT throw the whole .map() and leave
+          // "No trips yet" while 100+ valid trips exist — skip the bad one instead.
+          const transformed: DisplayTrip[] = [];
+          for (const t of data) {
+            try {
+              transformed.push(transformTrip(t, ratingMap));
+            } catch (e) {
+              console.warn('[Profile] skipped a trip that failed to transform:', (t as { id?: string })?.id, e);
+            }
+          }
+          setTrips(transformed);
+        }
       } catch (error) {
         console.error('Failed to load trips:', error);
       } finally {
