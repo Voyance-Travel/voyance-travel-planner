@@ -32,6 +32,8 @@ export interface GateResult {
   mode: GenerationMode;
   tripCost: number;
   creditsCharged: number;
+  /** Idempotency key of the original charge — passed to REFUND so every refund path (component, defensive, sweep) dedups on one key (C-CRED-5). */
+  idempotencyKey?: string;
   currentBalance: number;
   shortfall: number;
   recommendedPack: ReturnType<typeof getRecommendedPackForEstimate>;
@@ -303,6 +305,7 @@ export function useGenerationGate() {
         mode: 'full',
         tripCost,
         creditsCharged: creditsSpent,
+        idempotencyKey, // original charge key — for deduped refunds (C-CRED-5)
         currentBalance: data.newBalance?.total ?? (currentBalance - tripCost),
         shortfall: 0,
         recommendedPack: null,

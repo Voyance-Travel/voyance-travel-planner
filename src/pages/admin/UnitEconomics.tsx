@@ -83,7 +83,7 @@ const CREDIT_ACTIONS = [
   { action: 'Hotel Search', credits: 40, cost: 0.020, freeCap: '-', category: 'core', what: 'AI hotel suggestions per city' },
   { action: 'Route Optimization', credits: 20, cost: 0.015, freeCap: '-', category: 'core', what: 'Google Routes + AI reorder per day' },
   { action: 'Mystery Getaway', credits: 15, cost: 0.025, freeCap: '-', category: 'discovery', what: 'AI surprise destination suggestions' },
-  { action: 'Regenerate Day', credits: 10, cost: 0.018, freeCap: '1-5/trip', category: 'editing', what: 'Full day regeneration with new venues' },
+  { action: 'Regenerate Day', credits: 30, cost: 0.018, freeCap: '1-5/trip', category: 'editing', what: 'Full day regeneration with new venues' },
   { action: 'Swap Activity', credits: 5, cost: 0.009, freeCap: '3-15/trip', category: 'editing', what: 'Replace one activity with alternative' },
   { action: 'Add Activity', credits: 5, cost: 0.009, freeCap: '2-10/trip', category: 'editing', what: 'Add new activity to a day' },
   { action: 'Restaurant Rec', credits: 5, cost: 0.015, freeCap: '1-5/trip', category: 'dining', what: 'Perplexity-powered restaurant suggestion' },
