@@ -87,15 +87,15 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 ## A5. Profile `/profile` (tabs)
 | Tab / feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| Overview (stats render) | ⬜ | ✅ renders | | | ⬜ |
-| My Trips (list/open) | ⬜ | ⬜ | | | ⬜ |
+| Overview (stats render) | ✅ | ❌ | **DATA BUG**: stats show **50 Trips Completed / 19 Countries / 131 Days / 70 Upcoming** but My Trips is EMPTY (0 real trips) — cosmetic/seed values, misleading. DNA card OK ("Culinary Cartographer", 52% match). | replace seed stats with real counts | ⬜ **finding logged** |
+| My Trips (list/open) | ✅ | ✅ | — | — | ✅ LIVE: "No trips yet" empty state (correct — acct has 0 real trips) |
 | Friends (list) | ⬜ | ✅ renders (2 friends) | | | ⬜ |
 | Friends — "Sent" count vs list | ✅ | ✅ | badge 3, only 1 invite renders; stuck Pending (Concern C-FRIEND-1) | RLS policy PR #39 (outgoing-pending profile visibility) + migration applied | ✅ **VERIFIED LIVE 2026-06-05**: Sent badge=3 and all 3 render real names (Clinique Brooks, Vonnetta Pryor, Shawl Pryor) — no "Unknown" rows |
 | Friends — add / accept / request flow | ⬜ | ⬜ | | | ⬜ |
-| Following | ⬜ | ⬜ | | | ⬜ |
+| Following | ✅ | ✅ | — | — | ✅ LIVE: "No creators followed yet" empty state + Browse-community CTA |
 | Credits tab (balance/ledger) | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: balance 1,933,385 (purchased, never-expire). "Earn Free Credits" = 900 = sum of 6 bonuses (Welcome 150 / Early-Adopter 500 / Quiz 100 / Prefs 50 / First-Share 50 / Second-Trip 50) — **every amount matches deployed grant-bonus-credits config**. Arithmetic correct. |
-| Preferences tab (edit + "Update Travel DNA" path) | ⬜ | ⬜ | 3rd DNA input path — untested | | ⬜ |
-| Edit Profile | ⬜ | ⬜ | | | ⬜ |
+| Preferences tab (edit + "Update Travel DNA" path) | ✅ | ✅ | 3rd DNA input path — untested | — | ✅ LIVE: full prefs center (Travel Style/Flights/Accommodation/Food/Accessibility/Planning/Budget/Packing) + "Update Travel DNA" button present. (DNA-update not exercised — would alter DNA.) |
+| Edit Profile | ✅ | ✅ | — | — | ✅ LIVE: /profile/edit form (name, email read-only w/ security note, username, home airport, avatar) |
 
 ## A6. Trip / Itinerary `/trip/:id`
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
