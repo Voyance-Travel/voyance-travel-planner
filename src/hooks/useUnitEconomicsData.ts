@@ -277,6 +277,16 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   const trips = tripResult.data || [];
 
   // ---- COSTS (from server-side RPC aggregation) ----
+  // Surface RPC failures instead of silently rendering $0 — an errored cost
+  // summary (e.g. admin-guard rejection, schema-cache miss) must NOT masquerade
+  // as "zero spend", which is indistinguishable from a genuinely empty table.
+  if (costSummaryResult.error) {
+    warnings.push(
+      `Cost summary unavailable — get_unit_economics_summary failed (${costSummaryResult.error.message}). ` +
+      `MONEY OUT figures are not loaded (this is NOT $0 spend).`
+    );
+    console.error('[unit-economics] get_unit_economics_summary RPC error:', costSummaryResult.error);
+  }
   const cs = costSummaryResult.data as any || {};
   
   const googlePlacesCalls = Number(cs.google_places_calls) || 0;
