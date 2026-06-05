@@ -1060,7 +1060,7 @@ export function TripHealthPanel({
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-[220px] text-xs">
-                Setup progress — flights, hotel, days planned, transport.
+                Setup progress - flights, hotel, days planned, transport.
               </TooltipContent>
             </Tooltip>
 
@@ -1097,7 +1097,7 @@ export function TripHealthPanel({
               </div>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="max-w-[240px] text-xs">
-              Plan quality — timing, pacing, gaps, missing meals. Independent of Setup %.
+              Plan quality - timing, pacing, gaps, missing meals. Independent of Setup %.
             </TooltipContent>
           </Tooltip>
           <ChevronDown className={cn(
@@ -1122,12 +1122,12 @@ export function TripHealthPanel({
               {/* ── Reconciliation hint when the two metrics diverge ── */}
               {healthScore >= 95 && completionPct < 100 && (
                 <p className="text-xs text-muted-foreground italic">
-                  Everything you've added looks good — finish the checklist below to reach 100%.
+                  Everything you've added looks good - finish the checklist below to reach 100%.
                 </p>
               )}
               {completionPct === 100 && healthScore < 95 && (
                 <p className="text-xs text-muted-foreground italic">
-                  Setup complete — fix the issues below to raise plan quality.
+                  Setup complete - fix the issues below to raise plan quality.
                 </p>
               )}
 

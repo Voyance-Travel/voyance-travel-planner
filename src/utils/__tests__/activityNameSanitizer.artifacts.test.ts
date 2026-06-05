@@ -3,8 +3,11 @@ import { sanitizeActivityName, sanitizeActivityText } from '../activityNameSanit
 
 describe('sanitizeActivityName / sanitizeActivityText – prompt-artifact stripping', () => {
   it('strips bare ALLCAPS-with-underscore tokens like (INTEREST_SLOT)', () => {
-    expect(sanitizeActivityName('Anniversary Wellness Ritual (INTEREST_SLOT)'))
-      .toBe('Anniversary Wellness Ritual');
+    // Note: the test subject must NOT itself be a generic-wellness title, or
+    // the wellness-integrity mask ("Spa Time — find a venue") fires AFTER the
+    // token is stripped. This case isolates the (INTEREST_SLOT) token strip.
+    expect(sanitizeActivityName('Anniversary Dinner Cruise (INTEREST_SLOT)'))
+      .toBe('Anniversary Dinner Cruise');
     expect(sanitizeActivityName('Open Afternoon - Wander Castello (FLEX_WINDOW)'))
       .toBe('Open Afternoon - Wander Castello');
     expect(sanitizeActivityName('Stroll San Marco (NARRATIVE_MOOD)'))

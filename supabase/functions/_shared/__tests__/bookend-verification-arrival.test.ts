@@ -37,7 +37,10 @@ Deno.test("bookend-verify: Day-1 pre-dawn arrival flight is NOT the chronologica
     },
   ];
 
-  const res = await runBookendVerification(days, { label: "test" });
+  // expectedTotalDays > 1: this fixture models Day-1 of a multi-day trip, so
+  // the single-day departure shortcut must stay suppressed (Day 1 is not the
+  // trip's departure day).
+  const res = await runBookendVerification(days, { label: "test", expectedTotalDays: 2 });
 
   // Day 1 has a real terminal hotel-return → must be marked persisted=true,
   // not "isDepartureDay" or "terminal_departure_logistics".
@@ -63,7 +66,8 @@ Deno.test("bookend-verify: arrival logistics WITHOUT a real bookend correctly fl
     },
   ];
 
-  await runBookendVerification(days, { label: "test" });
+  // Day-1 of a multi-day trip (see note above): suppress single-day shortcut.
+  await runBookendVerification(days, { label: "test", expectedTotalDays: 2 });
   const trace = (days[0] as any).metadata?.quality?.bookend_trace;
   assertEquals(trace?.isDepartureDay, false);
   assertEquals(trace?.expected, true, "non-departure day with non-terminal last card expects a bookend");

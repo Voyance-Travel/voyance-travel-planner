@@ -81,7 +81,7 @@ export function BudgetRaisedBanner({
               Reset budget to {formatCurrency(originalCents)}?
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Your itinerary stays the same — only the budget target changes.
+              Your itinerary stays the same - only the budget target changes.
             </p>
             <div className="mt-2 flex gap-2">
               <Button

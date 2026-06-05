@@ -392,7 +392,7 @@ export default function GuestLinkModal({
                 <div className="flex items-start gap-2 text-[11px] text-muted-foreground bg-muted/30 p-2.5 rounded-lg">
                   <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
                   <p>
-                    Email invites are <strong>coming soon</strong>. For now, add companions from the <strong>My Friends</strong> tab — they'll get access as soon as you confirm.
+                    Email invites are <strong>coming soon</strong>. For now, add companions from the <strong>My Friends</strong> tab - they'll get access as soon as you confirm.
                   </p>
                 </div>
               </TabsContent>

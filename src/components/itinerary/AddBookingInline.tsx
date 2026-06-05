@@ -558,7 +558,7 @@ export function AddFlightInline({
                       </div>
                     </div>
 
-                    {/* Destination arrival/departure markers — only shown when ambiguous.
+                    {/* Destination arrival/departure markers - only shown when ambiguous.
                         Round-trip outbound/return is auto-tagged by direction; we hide the
                         button that can't logically apply to that leg. */}
                     {(() => {

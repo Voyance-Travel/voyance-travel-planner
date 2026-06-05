@@ -88,7 +88,7 @@ export function IntegrityContractBanner({ contract }: Props) {
                 {omitted.map((o, i) => (
                   <li key={i}>
                     {o.title}
-                    {o.reason === 'infeasible_time' ? ' — not enough time on this trip' : ' — not scheduled'}
+                    {o.reason === 'infeasible_time' ? ' - not enough time on this trip' : ' - not scheduled'}
                   </li>
                 ))}
               </ul>

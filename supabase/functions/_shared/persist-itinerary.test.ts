@@ -81,8 +81,10 @@ Deno.test('persistTripItinerary calls trips.update with cleaned days', async () 
   });
   assertEquals(error, null);
   const days = updated.itinerary_data.days;
-  // Dinner kept (artifact stripped), Spa placeholder dropped, Doge kept
+  // Dinner kept (artifact stripped), Spa placeholder dropped, Doge kept.
+  // The chronology validator sorts surviving activities by start time, so
+  // Doge's Palace (10:00) precedes Dinner (19:00) in the persisted output.
   assertEquals(days[0].activities.length, 2);
-  assertEquals(days[0].activities[0].title, 'Dinner');
-  assertEquals(days[0].activities[1].title, 'Doge\'s Palace');
+  assertEquals(days[0].activities[0].title, 'Doge\'s Palace');
+  assertEquals(days[0].activities[1].title, 'Dinner');
 });

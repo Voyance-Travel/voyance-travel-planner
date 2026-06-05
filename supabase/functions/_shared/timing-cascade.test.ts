@@ -63,15 +63,21 @@ Deno.test('locked card cannot be moved', () => {
   assertEquals(activities[1].startTime, '11:00');
 });
 
-Deno.test('past-midnight cards are dropped', () => {
+Deno.test('past-cutoff cards are clamped back, never dropped', () => {
+  // Content-preservation: cards pushed past the 23:30 cutoff are clamped back
+  // to 23:29 rather than deleted (users paid for these activities). droppedIds
+  // is always empty now; the card stays visible with an overbooked warning.
   const acts = [
     { id: 'a', title: 'A', startTime: '23:00', endTime: '23:50' },
     { id: 'b', title: 'B', startTime: '23:45', endTime: '24:30' },
   ];
-  const { activities, droppedIds, repairs } = enforceTimingAndBuffers(acts);
-  // B got pushed past 23:30 cutoff and dropped
-  assert(droppedIds.includes('b') || activities.length === 1);
-  assert(repairs.some(r => r.type === 'dropped_past_midnight'));
+  const { activities, droppedIds } = enforceTimingAndBuffers(acts);
+  // Nothing is dropped — both cards survive.
+  assertEquals(droppedIds.length, 0);
+  assertEquals(activities.length, 2);
+  // B was pushed past the 23:30 cutoff, so it is clamped back to ≤ 23:29.
+  const b = activities.find(x => x.id === 'b')!;
+  assert(parseTime(b.startTime)! <= 23 * 60 + 29, `expected B clamped to ≤23:29, got ${b.startTime}`);
 });
 
 Deno.test('transit overlap: pulls "Transfer to Marriott" past Breakfast', () => {

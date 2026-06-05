@@ -46,6 +46,7 @@ function chainFor(table: string) {
     },
     like: (col: string, val: any) => { filters[col] = val; return chain; },
     ilike: (col: string, val: any) => { filters[col] = val; return chain; },
+    is: (col: string, val: any) => { filters[col] = val; return chain; },
     limit: (_n: number) => {
       // Terminal for the manual-hotel probe
       if (table === 'trip_payments') {

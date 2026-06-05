@@ -239,7 +239,7 @@ function SortableFlightCard({
               </div>
             )}
 
-            {/* Mark buttons — only for multi-leg trips in edit mode.
+            {/* Mark buttons - only for multi-leg trips in edit mode.
                 Hide the button that can't logically apply to this leg
                 (outbound never "departs from destination"; return never "arrives"). */}
             {totalLegs > 1 && isEditable && (() => {

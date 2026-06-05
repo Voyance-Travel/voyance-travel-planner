@@ -873,8 +873,17 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       activities = activities.filter((act: any) => {
         const actStart = parseTimeToMinutes(act.startTime || '00:00');
         if (actStart === null) return true;
-        const isArrivalActivity = (act.category === 'transport' || act.category === 'logistics') &&
-          ((act.title || '').toLowerCase().includes('arrival') || (act.title || '').toLowerCase().includes('airport'));
+        const _cat = (act.category || '').toLowerCase();
+        const _title = (act.title || '').toLowerCase();
+        // An LLM-emitted arrival flight/airport card (incl. a legitimate pre-dawn
+        // "Arrival Flight" at category=flight) must NOT be stripped here — §3b
+        // below reconciles it to the authoritative landing time. Keep this guard
+        // in sync with §3b's existingFlightIdx detection (cat flight|transport).
+        const isArrivalActivity =
+          _cat === 'flight' ||
+          act.anchorSource === 'arrival-flight' || act.anchorSource === 'airport-transfer' ||
+          ((_cat === 'transport' || _cat === 'logistics') &&
+            (_title.includes('arrival') || _title.includes('airport')));
         if (actStart < arrivalMins && !isArrivalActivity && !lockedIds.has(act.id)) {
           repairs.push({
             code: FAILURE_CODES.CHRONOLOGY,

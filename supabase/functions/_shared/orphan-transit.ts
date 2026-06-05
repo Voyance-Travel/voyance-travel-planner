@@ -25,6 +25,22 @@ const TRANSIT_TO_TARGET_RE = /^\s*(?:walk|travel|transfer|drive|ride|taxi|train|
  */
 const LOGISTICS_TARGET_RE = /\b(airport|station|terminal|port|cruise terminal|ferry terminal|train station|gare|stazione|hbf|hauptbahnhof)\b/i;
 
+/**
+ * A source/tag-tagged end-of-day bookend (`source: 'bookend-*'` or
+ * `'late_nightlife_bookend'`) is a legitimate end-of-day hotel-return card,
+ * NOT an orphaned transit connector pointing at a pruned venue. The rest of
+ * the executioner pipeline already treats these as protected (see
+ * schedule-executioner.ts `isBookendOrLateNightlife`); the orphan-transit
+ * end-of-day drop must honor the same exemption or it silently removes a
+ * bookend that every upstream pass deliberately preserved.
+ */
+function isBookendSourced(act: any): boolean {
+  const src = String(act?.source || '').toLowerCase();
+  if (src.startsWith('bookend-') || src === 'late_nightlife_bookend') return true;
+  const tags = Array.isArray(act?.tags) ? act.tags.map((t: any) => String(t).toLowerCase()) : [];
+  return tags.some((t: string) => t.startsWith('bookend-') || t === 'late_nightlife_bookend');
+}
+
 /** Extract the "to <X>" destination name from a transit card title. Returns null when not present. */
 export function extractTransitTarget(act: any): string | null {
   const title = String(act?.title || '');
@@ -67,6 +83,10 @@ export function pruneOrphanTransits(activities: any[]): number {
     const act = activities[i];
     if (!act) continue;
     if (act.locked || act.isLocked || act.userPinned) continue;
+    // Source-tagged end-of-day bookends are legitimate hotel-return cards,
+    // not orphaned transit connectors — preserve them (parity with the rest
+    // of the executioner pipeline).
+    if (isBookendSourced(act)) continue;
     if (!isTransitActivity(act)) continue;
 
     const target = extractTransitTarget(act);

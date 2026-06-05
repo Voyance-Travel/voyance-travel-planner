@@ -613,7 +613,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6 py-6"
     >
-      {/* Original-vs-current budget banner — surfaces budget raises so they
+      {/* Original-vs-current budget banner - surfaces budget raises so they
           don't silently persist across regenerations. */}
       {(() => {
         const alloc = settings?.budget_allocations as unknown as Record<string, unknown> | undefined;
@@ -1128,7 +1128,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Discretionary</span>
                           {discretionaryRows.some((r) => r.discretionaryUnderwater) && (
                             <p className="text-xs text-muted-foreground mt-1">
-                              Fixed costs have absorbed your full trip budget. Targets below are calculated against your original total — raise it or toggle a fixed cost off to free up the discretionary pool.
+                              Fixed costs have absorbed your full trip budget. Targets below are calculated against your original total - raise it or toggle a fixed cost off to free up the discretionary pool.
                             </p>
                           )}
                         </div>
@@ -1242,7 +1242,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                 </>
               );
             })()}
-            {/* Authoritative trip-total footer — explicit about scope so users
+            {/* Authoritative trip-total footer - explicit about scope so users
                 don't mistake it for a discretionary subtotal. Mirrors the
                 Trip Expenses headline above; both read the same
                 tripTotalCents (resolveCanonicalCostRows already
@@ -1407,7 +1407,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         </Card>
       )}
 
-      {/* All Costs — derived from the same payable-items source as the Payments tab,
+      {/* All Costs - derived from the same payable-items source as the Payments tab,
           so item count, names, and totals match exactly. */}
       {!isManualMode && unifiedCostList.length > 0 && (
         <Card>

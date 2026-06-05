@@ -42,13 +42,17 @@ describe('TripDetail — recovers partial/failed trips from normalized tables', 
     expect(SRC).toMatch(/perDayDriftSuspected\s*=\s*jsonEmptyButTablesExist/);
   });
 
-  it('promotes status to ready and clears failed_day_numbers after successful rebuild', () => {
-    // Status flip + failure metadata cleared.
-    expect(SRC).toMatch(/promoting status[^\n]+ready/);
+  it('settles status to partial and clears failed_day_numbers after successful rebuild', () => {
+    // Status settled + failure metadata cleared. The frontend deliberately
+    // does NOT flip to 'ready'/'fully_persisted' itself — the server-side
+    // commit gate is the sole authority for that promotion. After a rebuild
+    // from tables it settles the trip to 'partial' and clears stale failure
+    // metadata so the poller exits and the UI stops spinning.
+    expect(SRC).toMatch(/itinerary_status:\s*'partial'/);
     expect(SRC).toMatch(/failed_day_numbers:\s*\[\]/);
-    expect(SRC).toMatch(/fully_persisted:\s*true/);
+    expect(SRC).toMatch(/final_gate_bypassed:\s*true/);
     expect(SRC).toMatch(/recovered_from_tables_at/);
-    // Honesty: only promote when ALL expected days have real activities.
+    // Honesty: only settle when ALL expected days have real activities.
     expect(SRC).toMatch(/realDayCount\s*>=\s*expectedTotal/);
   });
 

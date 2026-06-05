@@ -413,7 +413,7 @@ export function BudgetSetupDialog({
                   step={5}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Cash reserve for tips, pharmacy, SIMs, market finds. Not auto-filled by the itinerary — log expenses as you go.
+                  Cash reserve for tips, pharmacy, SIMs, market finds. Not auto-filled by the itinerary - log expenses as you go.
                 </p>
               </div>
 
@@ -484,7 +484,7 @@ export function BudgetSetupDialog({
                   <div className="flex items-start gap-2 mt-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
                     <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
                     <span>
-                      Your selected hotel alone is <span className="font-medium">{formatCurrency(hotelCents)}</span>{totalNights > 0 ? <> ({totalNights} night{totalNights !== 1 ? 's' : ''})</> : null} — about <span className="font-medium">{ratio.toFixed(1)}×</span> this budget. Consider <span className="font-medium">{formatCurrency(suggested)}+</span> so the preset can fund dining and experiences on top, or toggle "Include Hotel" off below.
+                      Your selected hotel alone is <span className="font-medium">{formatCurrency(hotelCents)}</span>{totalNights > 0 ? <> ({totalNights} night{totalNights !== 1 ? 's' : ''})</> : null} - about <span className="font-medium">{ratio.toFixed(1)}×</span> this budget. Consider <span className="font-medium">{formatCurrency(suggested)}+</span> so the preset can fund dining and experiences on top, or toggle "Include Hotel" off below.
                     </span>
                   </div>
                 );

@@ -37,7 +37,7 @@ Deno.test("BA: 'Recoleta Neighborhood Walk' does NOT satisfy Recoleta Cemetery",
   assertEquals(r.missing, ['Recoleta Cemetery']);
 });
 
-Deno.test("BA: injected card overlapping breakfast is demoted to missing", () => {
+Deno.test("BA: injected card overlapping breakfast is still counted as scheduled (overlap surfaced separately)", () => {
   const r = assertMustDoCoverage(
     days([
       [],
@@ -49,8 +49,14 @@ Deno.test("BA: injected card overlapping breakfast is demoted to missing", () =>
     ]),
     ['San Telmo Market']
   );
-  // Overlaps breakfast 10:35-11:20 → not viable, no other match → missing.
-  assertEquals(r.missing, ['San Telmo Market']);
+  // The card overlaps breakfast 10:35-11:20 (no viable, non-overlapping slot),
+  // but it IS present in the itinerary. Current contract accepts the overlapping
+  // hit as scheduled to avoid a bogus "Partial" badge — the overlap itself is
+  // independently surfaced by TripHealthPanel. See assert-must-do-coverage.ts
+  // "Accept overlapping hit as scheduled" block.
+  assertEquals(r.missing, []);
+  assertEquals(r.scheduled, ['San Telmo Market']);
+  assertEquals(r.matchedActivityIds?.['San Telmo Market'], 'must-do-d2-2-x');
 });
 
 Deno.test("BA: non-overlapping injected card counts as scheduled", () => {
@@ -90,8 +96,10 @@ Deno.test("BA: full reproduction — 4 selected, partial coverage honestly repor
     ]),
     ['Teatro Colón', 'Recoleta Cemetery', 'Caminito', 'San Telmo Market']
   );
-  // Recoleta 09:00–10:30 overlaps bike 07:10–09:25 by 25m / 90m = 27% → still scheduled.
-  // San Telmo 10:30–12:00 overlaps breakfast 10:35–11:20 by 45m / 90m = 50% → demoted.
-  assertEquals(r.scheduled.sort(), ['Caminito', 'Recoleta Cemetery', 'Teatro Colón'].sort());
-  assertEquals(r.missing.sort(), ['San Telmo Market'].sort());
+  // Recoleta 09:00–10:30 overlaps bike 07:10–09:25 by 25m / 90m = 27% → viable, scheduled.
+  // San Telmo 10:30–12:00 overlaps breakfast 10:35–11:20 by 45m / 90m = 50% → overlapping,
+  // but the current contract still counts it as scheduled (overlap is surfaced separately,
+  // not demoted to missing). All four user-selected venues are present.
+  assertEquals(r.scheduled.sort(), ['Caminito', 'Recoleta Cemetery', 'San Telmo Market', 'Teatro Colón'].sort());
+  assertEquals(r.missing.sort(), []);
 });

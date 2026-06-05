@@ -6250,7 +6250,7 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
-             {/* Itinerary recovery / integrity banner — Itinerary tab is the
+             {/* Itinerary recovery / integrity banner - Itinerary tab is the
                  primary surface so users immediately see something needs
                  attention. Generic red + Regenerate is reserved for the one
                  case it's correct (LLM returned an empty plan). Soft
@@ -6459,7 +6459,7 @@ export function EditorialItinerary({
                     </span>
                   )}
                 </div>
-                {/* Unified reconciliation strip — itemised equation so the
+                {/* Unified reconciliation strip - itemised equation so the
                     sum of day-card badges (group cost) plus hotel/flights/reserve
                     visibly equals Trip Total. Renders whenever there's a trip
                     total OR a multi-traveler /pp ↔ group bridge to explain. */}
@@ -6553,14 +6553,14 @@ export function EditorialItinerary({
                         tripId={tripId}
                       />
                       {/* Pricing 3A: don't let hotel/flight silently disappear when the
-                          Budget Visibility toggle excludes them — surface a muted note
+                          Budget Visibility toggle excludes them - surface a muted note
                           so users never see a Trip Total that's missing a known cost. */}
                       {stripValues.hasExcludedLogistics && (
                         <div className="text-[11px] text-amber-700 dark:text-amber-300 text-center mt-1">
                           {excludedBreakdownLabel(stripValues, (usd) =>
                             formatCurrency(displayCost(usd), tripCurrency),
                           )}{' '}
-                          excluded from Trip Total — toggle on in Budget Visibility to include
+                          excluded from Trip Total - toggle on in Budget Visibility to include
                         </div>
                       )}
                       {travelers > 1 && (
@@ -7703,7 +7703,7 @@ export function EditorialItinerary({
                 </div>
                 <h3 className="text-lg font-semibold mb-2">Budget didn't load</h3>
                 <p className="text-sm text-muted-foreground mb-6">
-                  Something went wrong loading your budget. Your itinerary is safe — try switching tabs or refreshing.
+                  Something went wrong loading your budget. Your itinerary is safe - try switching tabs or refreshing.
                 </p>
                 <Button onClick={() => window.location.reload()} size="sm">
                   Refresh
@@ -12434,11 +12434,11 @@ function ActivityRow({
                         <span className="leading-snug line-clamp-2 sm:line-clamp-none">{address}</span>
                       </div>
                     )}
-                    {/* Description — also rendered in the venue branch so dining cards
+                    {/* Description - also rendered in the venue branch so dining cards
                         with a known restaurant still show their blurb. Mirrors the
                         no-venue branch (resolveActivityDisplayDescription handles
                         existing description, whyThisFits, and dining fallback).
-                        Dining cards bypass the `compact` gate — for restaurants the
+                        Dining cards bypass the `compact` gate - for restaurants the
                         blurb (signature dish, what to order) is the whole point of
                         the card and was the user-visible "no descriptions" symptom
                         in compact / smart-finish / manual layouts. */}
@@ -12505,7 +12505,7 @@ function ActivityRow({
                   {/* High-cost booking guidance helper */}
                   {!compact && (activity as any)?.metadata?.booking_guidance_required && (
                     <p className="text-xs italic text-amber-700 dark:text-amber-300 mt-1">
-                      High-value experience — confirm booking before you go.
+                      High-value experience - confirm booking before you go.
                     </p>
                   )}
 

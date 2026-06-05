@@ -1486,7 +1486,7 @@ export function PaymentsTab({
             </Card>
           )}
 
-          {/* Category cards — mirror Budget by Category buckets so totals agree.
+          {/* Category cards - mirror Budget by Category buckets so totals agree.
               Bucket header total reads from `financialSnapshot.buckets[key]`
               (authoritative; sums to displayedTotal by construction) instead of
               re-summing items locally. Closes the Bali "$900+$480+$200=$1,580
