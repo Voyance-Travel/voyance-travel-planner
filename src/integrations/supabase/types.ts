@@ -11685,6 +11685,7 @@ export type Database = {
         Args: { acts: Json }
         Returns: Json
       }
+      accept_shared_trip: { Args: { p_share_token: string }; Returns: Json }
       accept_trip_invite: { Args: { p_token: string }; Returns: Json }
       add_to_group_budget: {
         Args: { p_budget_id: string; p_credits: number }
