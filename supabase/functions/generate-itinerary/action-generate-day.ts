@@ -519,7 +519,7 @@ export async function handleGenerateDay(
     // ── CROSS-CITY ADDRESS FILTER — drop activities whose address points to a
     //   different well-known city than the destination. ──
     if (Array.isArray(normalizedActivities)) {
-      const { isCrossCityAddress } = await import('./cross-city-filter.ts');
+      const { isCrossCityAddress } = await import('../_shared/cross-city-filter.ts');
       const dest = (destination || '').trim();
       if (dest) {
         const beforeCC = normalizedActivities.length;

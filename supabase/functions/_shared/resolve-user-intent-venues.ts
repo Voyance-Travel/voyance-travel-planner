@@ -24,7 +24,7 @@ import {
   getRandomFallbackRestaurant,
   type FallbackRestaurant,
 } from '../generate-itinerary/fix-placeholders.ts';
-import { detectCrossCityMention } from '../generate-itinerary/cross-city-filter.ts';
+import { detectCrossCityMention } from './cross-city-filter.ts';
 
 // ---------------------------------------------------------------------------
 // Intent classification

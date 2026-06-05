@@ -252,7 +252,7 @@ export async function verifyVenueWithGooglePlaces(
       if (distKm > 50) {
         const enrichedDisplayName = place.displayName?.text || '';
         const overlap = computeNameOverlap(venueName, enrichedDisplayName);
-        const { extractCityFromFormattedAddress } = await import('./cross-city-filter.ts');
+        const { extractCityFromFormattedAddress } = await import('../_shared/cross-city-filter.ts');
         const resolvedCity = extractCityFromFormattedAddress(place.formattedAddress) || undefined;
         // High name overlap + far away = AI hallucinated a real venue from another city.
         if (overlap >= 0.6) {

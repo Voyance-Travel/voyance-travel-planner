@@ -9,7 +9,7 @@ import type { RequiredMeal } from './meal-policy.ts';
 // _shared/meal-detection.ts.
 import { detectMealSlots as detectMealSlotsCanonical } from '../_shared/meal-detection.ts';
 import { getRandomFallbackRestaurant, resolveAnyMealFallback } from './fix-placeholders.ts';
-import { detectCrossCityMention } from './cross-city-filter.ts';
+import { detectCrossCityMention } from '../_shared/cross-city-filter.ts';
 import { extractRestaurantVenueName, venueNamesMatch } from './generation-utils.ts';
 import { pruneOrphanTransits } from '../_shared/orphan-transit.ts';
 import { stampMealProtection } from '../_shared/meal-protection.ts';

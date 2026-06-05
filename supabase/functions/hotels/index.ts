@@ -5,7 +5,7 @@ import { trackCost } from "../_shared/cost-tracker.ts";
 import { cachedGooglePlacesTextSearch as googlePlacesTextSearch } from "../_shared/google-api.ts";
 import { parseAuth } from "../_shared/require-auth.ts";
 import { detectCountryMismatch } from "../_shared/address-city-resolve.ts";
-import { detectCrossCityMention } from "../generate-itinerary/cross-city-filter.ts";
+import { detectCrossCityMention } from "../_shared/cross-city-filter.ts";
 
 /**
  * Hotel destination guard.
