@@ -82,7 +82,7 @@ export default function BulkImport() {
     setResult(null);
     setStatus(null);
     setUserImportResult(null);
-    setDeleteResult(null);
+    
 
     try {
       toast.info(`Reading ${file.name}...`);
