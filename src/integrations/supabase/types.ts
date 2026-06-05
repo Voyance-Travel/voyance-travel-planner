@@ -6052,6 +6052,36 @@ export type Database = {
         }
         Relationships: []
       }
+      referrals: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          referee_credited: boolean
+          referee_id: string
+          referrer_credited: boolean
+          referrer_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          referee_credited?: boolean
+          referee_id: string
+          referrer_credited?: boolean
+          referrer_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          referee_credited?: boolean
+          referee_id?: string
+          referrer_credited?: boolean
+          referrer_id?: string
+        }
+        Relationships: []
+      }
       route_cache: {
         Row: {
           cache_key: string | null
