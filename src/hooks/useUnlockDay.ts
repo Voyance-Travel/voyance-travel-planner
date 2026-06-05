@@ -16,6 +16,7 @@ import { CREDIT_COSTS } from '@/config/pricing';
 import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
 import { toast } from 'sonner';
 import { toFriendlyError } from '@/utils/friendlyErrors';
+import { refundCredits } from '@/utils/refundCredits';
 
 export type UnlockDayStep = 'idle' | 'spending' | 'enriching' | 'saving' | 'complete' | 'error';
 
@@ -81,9 +82,12 @@ export function useUnlockDay() {
       error: null,
     });
 
+    // Idempotency key prevents duplicate charges from rapid taps. Hoisted to the
+    // function scope so a LATER enrichment failure (Step 2) can refund THIS exact
+    // charge by key (C-TOOL-1).
+    const idempotencyKey = `unlock_day_${params.tripId}_d${params.dayNumber}_${Date.now()}`;
+
     try {
-      // Idempotency key prevents duplicate charges from rapid taps
-      const idempotencyKey = `unlock_day_${params.tripId}_d${params.dayNumber}_${Date.now()}`;
       const { data: spendData, error: spendError } = await supabase.functions.invoke('spend-credits', {
         body: {
           action: 'unlock_day',
@@ -192,8 +196,26 @@ export function useUnlockDay() {
       return true;
     } catch (err: any) {
       console.error(`[UnlockDay] Day ${params.dayNumber} enrichment failed:`, err);
+      // C-TOOL-1: the charge committed in Step 1 but enrichment failed — refund it
+      // so the user is never billed for a day they didn't get. Keyed by the
+      // original idempotencyKey so the server dedups against any sweep refund.
+      const refunded = await refundCredits({
+        tripId: params.tripId,
+        originalAction: 'unlock_day',
+        originalIdempotencyKey: idempotencyKey,
+        creditsAmount: CREDIT_COSTS.UNLOCK_DAY,
+        reason: 'enrichment_failed',
+        errorMessage: err?.message,
+      });
+      if (refunded) {
+        queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
+        queryClient.invalidateQueries({ queryKey: ['credits'] });
+      }
       setState({ step: 'error', dayNumber: params.dayNumber, message: '', error: err.message });
-      toast.error(toFriendlyError(err?.message) || `Failed to enrich Day ${params.dayNumber}. Credits were charged - please retry.`);
+      toast.error(
+        (toFriendlyError(err?.message) || `Failed to enrich Day ${params.dayNumber}.`) +
+        (refunded ? ' Your credits were refunded.' : ' If you were charged, it will be auto-refunded shortly.')
+      );
       return false;
     }
   }, [user, canAfford, totalCredits, queryClient, showOutOfCredits]);

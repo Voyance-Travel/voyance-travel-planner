@@ -12,6 +12,7 @@ import { cascadeFixOverlaps } from '@/utils/injectHotelActivities';
 import { toFriendlyError } from '@/utils/friendlyErrors';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
+import { refundCredits } from '@/utils/refundCredits';
 
 import { CREDIT_COSTS } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
@@ -170,13 +171,15 @@ export function InlineModifier({
 
     setIsApplying(true);
 
-    try {
-      // Spend credits for credit-costing actions BEFORE executing
-      const creditAction = pendingChange.action.type === 'suggest_activity_swap' ? 'SWAP_ACTIVITY'
-        : pendingChange.action.type === 'rewrite_day' ? 'REGENERATE_DAY'
-        : pendingChange.action.type === 'regenerate_day' ? 'REGENERATE_DAY'
-        : null;
+    // Spend credits for credit-costing actions BEFORE executing.
+    const creditAction = pendingChange.action.type === 'suggest_activity_swap' ? 'SWAP_ACTIVITY'
+      : pendingChange.action.type === 'rewrite_day' ? 'REGENERATE_DAY'
+      : pendingChange.action.type === 'regenerate_day' ? 'REGENERATE_DAY'
+      : null;
+    // Captured so a later execution failure (or throw) can refund THIS charge (C-TOOL-2).
+    let charge: { idempotencyKey?: string; pendingChargeId?: string | null } | null = null;
 
+    try {
       if (creditAction) {
         const creditResult = await spendCredits.mutateAsync({
           action: creditAction,
@@ -190,6 +193,7 @@ export function InlineModifier({
         if (!creditResult.success) {
           throw new Error('Insufficient credits');
         }
+        charge = { idempotencyKey: creditResult.idempotencyKey, pendingChargeId: creditResult.pendingChargeId };
       }
 
       const result: ActionExecutionResult = await executeAction(
@@ -215,10 +219,34 @@ export function InlineModifier({
         setInput('');
         setIsExpanded(false);
       } else {
+        // C-TOOL-2: execution failed after we charged — refund so the user isn't billed for a no-op.
+        if (creditAction && charge) {
+          await refundCredits({
+            tripId,
+            originalAction: creditAction,
+            originalIdempotencyKey: charge.idempotencyKey,
+            pendingChargeId: charge.pendingChargeId,
+            reason: 'execution_failed',
+            errorMessage: result.error,
+          });
+        }
         toast.error(toFriendlyError(result.error));
       }
     } catch (error) {
       console.error('[InlineModifier] Apply error:', error);
+      // C-TOOL-2: refund if we charged before the throw (skip insufficient-credits,
+      // which throws BEFORE a successful charge is recorded).
+      const isInsufficient = error instanceof Error && error.message === 'Insufficient credits';
+      if (creditAction && charge && !isInsufficient) {
+        await refundCredits({
+          tripId,
+          originalAction: creditAction,
+          originalIdempotencyKey: charge.idempotencyKey,
+          pendingChargeId: charge.pendingChargeId,
+          reason: 'execution_threw',
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
       toast.error('Failed to apply changes. Please try again.');
     } finally {
       setIsApplying(false);
