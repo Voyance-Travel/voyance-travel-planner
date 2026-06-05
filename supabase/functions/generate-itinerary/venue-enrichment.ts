@@ -7,7 +7,7 @@
 
 import type { StrictActivity, StrictDay, VenueVerification, CachedVenue, EnrichmentStats } from './generation-types.ts';
 import { normalizeVenueName, haversineDistanceKm } from './generation-utils.ts';
-import { googleGeocode, googlePlacesTextSearch } from '../_shared/google-api.ts';
+import { googleGeocode, cachedGooglePlacesTextSearch } from '../_shared/google-api.ts';
 import { isWeakAddress } from '../_shared/address-quality.ts';
 
 // =============================================================================
@@ -215,7 +215,10 @@ export async function verifyVenueWithGooglePlaces(
         }
       : undefined;
 
-    const result = await googlePlacesTextSearch(
+    // C-COST-3 (Phase 2): route the per-activity venue-verify search through the
+    // shared 60-day place cache so popular venues are fetched from Google ~once
+    // and reused across ALL users/trips (cache hits also skip the daily ceiling).
+    const result = await cachedGooglePlacesTextSearch(
       {
         textQuery,
         maxResultCount: 1,
