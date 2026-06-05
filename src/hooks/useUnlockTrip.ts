@@ -257,6 +257,9 @@ export function useUnlockTrip() {
           action: 'save-itinerary',
           tripId: params.tripId,
           itinerary: itineraryToSave,
+          // C-PERSIST: day-unlock is a user action; must bypass the frozen gate
+          // so the unlocked days persist to JSON instead of reverting.
+          saveReason: 'unlock-day',
         },
       });
 

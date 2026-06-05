@@ -4373,6 +4373,11 @@ export function EditorialItinerary({
                 action: 'save-itinerary',
                 tripId,
                 itinerary: itineraryData,
+                // C-PERSIST-1/2: this autosave only fires on genuine user edits
+                // (hasChanges). Without a whitelisted saveReason the frozen gate
+                // silently blocks the JSON write on ready/generated trips, so the
+                // edit (incl. a single-day regenerate) reverts on refresh.
+                saveReason: 'user-editor-autosave',
               },
             });
 
@@ -4448,6 +4453,8 @@ export function EditorialItinerary({
             action: 'save-itinerary',
             tripId,
             itinerary: itineraryData,
+            // C-PERSIST-2: explicit user Save must bypass the frozen gate.
+            saveReason: 'user-editor-save',
           },
         });
 
@@ -4628,6 +4635,8 @@ export function EditorialItinerary({
                     status: generatedDays.length < totalDays ? 'generating' : 'ready',
                     generatedAt: new Date().toISOString(),
                   },
+                  // C-PERSIST-1: per-day regenerate persist must bypass the frozen gate.
+                  saveReason: 'regenerate-day-autosave',
                 },
               });
             } catch (saveErr) {
