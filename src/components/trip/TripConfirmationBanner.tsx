@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { SwapReviewDialog, type SwapSuggestion } from './SwapReviewDialog';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
+import { refundCredits } from '@/utils/refundCredits';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { differenceInDays } from 'date-fns';
 
@@ -207,22 +208,38 @@ export function TripConfirmationBanner({
 
   const handleApplySwaps = async (approvedSwaps: SwapSuggestion[]) => {
     setIsApplyingSwaps(true);
+    // Captured so a later apply failure can refund THIS charge (C-TOOL-3).
+    let charge: { idempotencyKey?: string; pendingChargeId?: string | null } | null = null;
     try {
-      await spendCredits.mutateAsync({
+      const creditResult = await spendCredits.mutateAsync({
         action: 'HOTEL_OPTIMIZATION',
         tripId,
         metadata: {
           idempotencyKey: `hotel_optimization:${tripId}:${Date.now()}`,
         },
       });
+      charge = { idempotencyKey: creditResult.idempotencyKey, pendingChargeId: creditResult.pendingChargeId };
 
-      onApplySwaps(approvedSwaps);
+      // Await in case the apply callback is async — so a rejection is caught here.
+      await Promise.resolve(onApplySwaps(approvedSwaps));
       toast.success(`Applied ${approvedSwaps.length} optimization${approvedSwaps.length > 1 ? 's' : ''} to your itinerary!`);
       setShowSwapReview(false);
       setDismissed(true);
     } catch (err: any) {
-      if (!err?.message?.startsWith('Not enough credits')) {
-        toast.error('Failed to apply optimizations');
+      const isInsufficient = err?.message?.startsWith('Not enough credits');
+      // C-TOOL-3: charge committed but applying the optimization failed — refund it.
+      if (charge && !isInsufficient) {
+        await refundCredits({
+          tripId,
+          originalAction: 'hotel_optimization',
+          originalIdempotencyKey: charge.idempotencyKey,
+          pendingChargeId: charge.pendingChargeId,
+          reason: 'apply_failed',
+          errorMessage: err?.message,
+        });
+      }
+      if (!isInsufficient) {
+        toast.error('Failed to apply optimizations. Your credits were refunded.');
       }
     } finally {
       setIsApplyingSwaps(false);
