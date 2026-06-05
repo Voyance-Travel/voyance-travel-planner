@@ -3,6 +3,7 @@ import App from "./App.tsx";
 import "./index.css";
 import { normalizeUnsplashUrl, PLACEHOLDER_TRAVEL_SRC } from "./utils/unsplash";
 import { registerOAuthDeepLinkHandler } from "@/lib/native/oauthDeepLink";
+import { captureReferralCode } from "@/utils/referralAttribution";
 
 function installUnsplashSrcNormalizer() {
   const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
@@ -91,5 +92,9 @@ if ('caches' in window) {
 
 // Register once at app startup.
 registerOAuthDeepLinkHandler();
+
+// C-REFERRAL-1: capture ?ref=<code> from the landing URL before the SPA
+// navigates away; the claim fires later, once the user signs up + verifies.
+captureReferralCode();
 
 createRoot(document.getElementById("root")!).render(<App />);

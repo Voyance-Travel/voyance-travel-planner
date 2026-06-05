@@ -3,6 +3,7 @@ import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { logLogin, logSignup, logLogout, logOAuthLogin } from '@/services/authAuditAPI';
 import { toast } from 'sonner';
+import { claimPendingReferral } from '@/utils/referralAttribution';
 
 export interface User {
   id: string;
@@ -329,7 +330,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             await syncProfile(newSession.user);
             await migrateLocalTripsToAccount(newSession.user);
-            
+            // C-REFERRAL-1: if this user arrived via a ?ref= link and their email
+            // is verified, attribute + pay out the referral (server-side, idempotent).
+            claimPendingReferral(newSession.user).catch(() => { /* non-blocking */ });
+
             const provider = newSession.user.app_metadata?.provider;
             if (provider && provider !== 'email') {
               logOAuthLogin(provider).catch(console.error);
