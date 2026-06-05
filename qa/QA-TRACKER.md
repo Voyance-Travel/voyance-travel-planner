@@ -89,7 +89,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | Overview (stats render) | ⬜ | ✅ renders | | | ⬜ |
 | My Trips (list/open) | ⬜ | ⬜ | | | ⬜ |
 | Friends (list) | ⬜ | ✅ renders (2 friends) | | | ⬜ |
-| Friends — "Sent" count vs list | ⬜ | ❌ | badge 3, only 1 invite renders; stuck Pending (Concern C-FRIEND-1) | | ⬜ |
+| Friends — "Sent" count vs list | ✅ | ✅ | badge 3, only 1 invite renders; stuck Pending (Concern C-FRIEND-1) | RLS policy PR #39 (outgoing-pending profile visibility) + migration applied | ✅ **VERIFIED LIVE 2026-06-05**: Sent badge=3 and all 3 render real names (Clinique Brooks, Vonnetta Pryor, Shawl Pryor) — no "Unknown" rows |
 | Friends — add / accept / request flow | ⬜ | ⬜ | | | ⬜ |
 | Following | ⬜ | ⬜ | | | ⬜ |
 | Credits tab (balance/ledger) | ⬜ | ⬜ | | | ⬜ |
@@ -368,7 +368,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | C-ADMIN-3 | MED | admin | BulkImport "Delete All Users" button dead (empty body → 400) | remove or implement explicitly |
 | C-CREATE-1 | MED | create | "Just Tell Us" mode has no end≥start date guard → could create a zero/negative-day trip | add isBefore(end,start) check |
 | C-SEC-1 | MED | security | `verify_jwt = false` default on ~all edge fns (compensated by self-verify, but a future un-gated fn would be exposed) | flip to true for non-public fns |
-| C-FRIEND-1 | HIGH | friends | ROOT CAUSE: RLS gap — `profiles` SELECT has no outgoing-pending branch (regression from a dropped policy) → Sent invites render as blank "Unknown" rows, look stuck Pending | ✅ **FIX SHIPPED (PR #39, migration)** — narrow additive `profiles` SELECT policy for outgoing-pending addressee. ⚠️ needs DB apply (migrations don't auto-deploy) |
+| C-FRIEND-1 | HIGH | friends | ROOT CAUSE: RLS gap — `profiles` SELECT has no outgoing-pending branch (regression from a dropped policy) → Sent invites render as blank "Unknown" rows, look stuck Pending | ✅ **RESOLVED — VERIFIED LIVE 2026-06-05** (PR #39 migration applied): narrow additive `profiles` SELECT policy for outgoing-pending addressee. Sent tab now renders all 3 real names (Clinique Brooks / Vonnetta Pryor / Shawl Pryor), zero "Unknown". |
 | C-TOOL-1 | HIGH | itinerary tools | **Day-unlock**: charges 60, but if generate-day throws there's NO refund → 60 credits lost (`useUnlockDay.ts` catch only toasts) | add REFUND in catch (unlock_day is refundable) |
 | C-TOOL-2 | HIGH | itinerary tools | **AI-chat InlineModifier** applies (swap/rewrite/regen) charge before execute with NO refund-on-failure | mirror ItineraryAssistant.refundOnFailure |
 | C-TOOL-3 | MED | itinerary tools | **Hotel optimization** charges 100 before apply; no refund if apply throws → 100 lost | refund on apply failure |
