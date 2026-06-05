@@ -34,6 +34,7 @@ import {
   Footprints, Navigation2, History as HistoryIcon, Lightbulb, CheckCircle2,
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
+import { refundCredits } from '@/utils/refundCredits';
 import { convertFromUSD, convertToUSD, formatCurrency, rateDisclosure } from '@/lib/currency';
 import { toFriendlyError } from '@/utils/friendlyErrors';
 import { enrichAttraction, lookupActivityUrl } from '@/services/enrichmentService';
@@ -2483,6 +2484,10 @@ export function EditorialItinerary({
     truncated: EditorialActivity[];
     kept: EditorialActivity[];
     source: 'time_edit' | 'add_activity';
+    // C-TOOL-4: for add_activity, the charge committed BEFORE this dialog — carried
+    // here so a cancel/dismiss can refund it (server-idempotent, so safe to call
+    // from multiple dismiss paths).
+    charge?: { idempotencyKey?: string; pendingChargeId?: string | null };
   } | null>(null);
   const [discoverDrawerOpen, setDiscoverDrawerOpen] = useState(false);
   const [hotelGalleryOpen, setHotelGalleryOpen] = useState(false);
@@ -4783,15 +4788,20 @@ export function EditorialItinerary({
     setOptimizePrefs(prefs);
     setShowOptimizeDialog(false);
     setIsOptimizing(true);
+    // C-TOOL-7: capture the charge so the zero-change AND failure refunds can be
+    // keyed to it — the server then dedups, making the refund idempotent (a retry
+    // can no longer double-refund free credits).
+    let routeCharge: { idempotencyKey?: string; pendingChargeId?: string | null } | null = null;
     try {
       // Spend credits first (skip for first-trip users)
       if (!routeOptCost.isFirstTrip && routeOptCost.cost > 0) {
-        await spendCredits.mutateAsync({
+        const routeSpend = await spendCredits.mutateAsync({
           action: 'ROUTE_OPTIMIZATION',
           tripId,
           creditsAmount: routeOptCost.cost,
-          metadata: { optimizeCount: routeOptCost.optimizeCount },
+          metadata: { optimizeCount: routeOptCost.optimizeCount, idempotencyKey: `route_optimization:${tripId}:${Date.now()}` },
         });
+        routeCharge = { idempotencyKey: routeSpend.idempotencyKey, pendingChargeId: routeSpend.pendingChargeId };
       }
 
       toast.info('Optimizing routes and fetching real costs...', { duration: 3000 });
@@ -4850,23 +4860,19 @@ export function EditorialItinerary({
         const meta = data.metadata?.stats || {};
         const hasChanges = (meta.routesChanged || 0) > 0 || (meta.transportCalculated || 0) > 0 || (meta.costsLookedUp || 0) > 0;
 
-        // If no meaningful changes occurred, refund the credits
+        // If no meaningful changes occurred, refund the credits (idempotent — keyed
+        // to the original charge so a retry can't double-refund).
         if (!hasChanges && !routeOptCost.isFirstTrip && routeOptCost.cost > 0) {
-          try {
-            await supabase.functions.invoke('spend-credits', {
-              body: {
-                action: 'REFUND',
-                tripId,
-                creditsAmount: routeOptCost.cost,
-                metadata: { reason: 'zero_optimization_changes' },
-              },
-            });
-            // Invalidate credit caches
-            setNeedsOptimization(false);
-            toast.info('Routes are already optimized!', { duration: 3000 });
-          } catch (refundErr) {
-            console.error('Failed to refund optimization credits:', refundErr);
-          }
+          await refundCredits({
+            tripId,
+            originalAction: 'route_optimization',
+            originalIdempotencyKey: routeCharge?.idempotencyKey,
+            pendingChargeId: routeCharge?.pendingChargeId,
+            creditsAmount: routeOptCost.cost,
+            reason: 'zero_optimization_changes',
+          });
+          setNeedsOptimization(false);
+          toast.info('Routes are already optimized!', { duration: 3000 });
         } else {
           // Update days with optimized data — match by dayNumber since we only sent unlocked days
           setDays(prev => prev.map((day) => {
@@ -4898,21 +4904,21 @@ export function EditorialItinerary({
     } catch (err) {
       console.error('Optimize error:', err);
       toast.error('Failed to optimize itinerary');
-      // Refund credits if paid optimization failed
-      if (!routeOptCost.isFirstTrip && routeOptCost.cost > 0) {
-        try {
-          await supabase.functions.invoke('spend-credits', {
-            body: {
-              action: 'REFUND',
-              tripId,
-              creditsAmount: routeOptCost.cost,
-              metadata: { reason: 'optimize_runtime_failure' },
-            },
-          });
-          console.log('[optimize] Refunded credits after optimization failure');
-        } catch (refundErr) {
-          console.error('[optimize] Failed to refund credits after failure:', refundErr);
-        }
+      // C-TOOL-7: refund ONLY if the charge actually committed (routeCharge set).
+      // If the spend itself threw (insufficient credits), routeCharge is null and
+      // refunding would mint credits that were never debited. Keyed → idempotent,
+      // so this can't double-refund alongside a retry.
+      if (routeCharge) {
+        await refundCredits({
+          tripId,
+          originalAction: 'route_optimization',
+          originalIdempotencyKey: routeCharge.idempotencyKey,
+          pendingChargeId: routeCharge.pendingChargeId,
+          creditsAmount: routeOptCost.cost,
+          reason: 'optimize_runtime_failure',
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+        console.log('[optimize] Refunded route-optimization charge after failure');
       }
     } finally {
       setIsOptimizing(false);
@@ -5685,6 +5691,8 @@ export function EditorialItinerary({
   }, []);
 
   const handleAddActivity = useCallback(async (dayIndex: number, activity: Partial<EditorialActivity>) => {
+    // C-TOOL-4: captured so an overflow-cascade CANCEL can refund this charge.
+    let addCharge: { idempotencyKey?: string; pendingChargeId?: string | null } | null = null;
     // Skip credit charge in manual builder mode (pre-Smart Finish) — user is curating their own research
     if (!aiLocked) {
       // Spend credits for adding an activity (server handles free caps)
@@ -5698,6 +5706,7 @@ export function EditorialItinerary({
             day_number: days[dayIndex]?.dayNumber || dayIndex + 1,
           },
         });
+        addCharge = { idempotencyKey: addCreditResult.idempotencyKey, pendingChargeId: addCreditResult.pendingChargeId };
         console.log('[AddActivity] Credit spend result:', addCreditResult);
       } catch (err) {
         console.error('[AddActivity] Credit spend failed:', err);
@@ -5749,6 +5758,7 @@ export function EditorialItinerary({
         truncated,
         kept: [...kept, ...truncated],
         source: 'add_activity',
+        charge: addCharge ?? undefined,
       });
       return; // Wait for user confirmation
     }
@@ -8548,7 +8558,23 @@ export function EditorialItinerary({
       />
 
       {/* Cascade Overflow Confirmation Dialog */}
-      <AlertDialog open={!!pendingCascade} onOpenChange={(open) => { if (!open) setPendingCascade(null); }}>
+      <AlertDialog open={!!pendingCascade} onOpenChange={(open) => {
+        if (!open) {
+          // C-TOOL-4: dismissing the dialog (Esc / click-away) also cancels the add —
+          // refund the charge. Idempotent server-side, safe alongside the Cancel button.
+          const c = pendingCascade;
+          if (c?.source === 'add_activity' && c.charge) {
+            refundCredits({
+              tripId,
+              originalAction: 'add_activity',
+              originalIdempotencyKey: c.charge.idempotencyKey,
+              pendingChargeId: c.charge.pendingChargeId,
+              reason: 'cascade_dismissed',
+            }).catch(() => { /* best-effort */ });
+          }
+          setPendingCascade(null);
+        }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Schedule overflow</AlertDialogTitle>
@@ -8584,7 +8610,22 @@ export function EditorialItinerary({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPendingCascade(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => {
+              // C-TOOL-4: refund the add-activity charge on cancel — the activity is NOT
+              // added, so the user must not be billed. Server dedups by pendingChargeId,
+              // so the parallel onOpenChange dismiss can't double-refund.
+              const c = pendingCascade;
+              if (c?.source === 'add_activity' && c.charge) {
+                refundCredits({
+                  tripId,
+                  originalAction: 'add_activity',
+                  originalIdempotencyKey: c.charge.idempotencyKey,
+                  pendingChargeId: c.charge.pendingChargeId,
+                  reason: 'cascade_cancelled',
+                }).catch(() => { /* best-effort */ });
+              }
+              setPendingCascade(null);
+            }}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={async () => {
