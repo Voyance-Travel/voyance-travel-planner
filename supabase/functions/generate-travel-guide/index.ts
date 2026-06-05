@@ -53,54 +53,27 @@ serve(async (req) => {
     const { tripId, selectedActivityIds, includeNotes, includeHotel, includeFlights } = await req.json();
     if (!tripId) return jsonResponse({ error: 'tripId is required' }, 400);
 
-    // Deduct credits
+    // ── Credits (C-CRED-2 fix) ────────────────────────────────────────────────
+    // Cost reconciled to 20 (was 15, but display/config GENERATE_BLOG = 20).
+    // The authoritative charge happens AFTER the guide is generated & persisted
+    // (see end of handler) so a failed/AI-errored generation NEVER costs credits
+    // (fixes "charge-before, no refund, lost on failure"). Here we only pre-check
+    // affordability up front to avoid doing AI work the user can't pay for.
+    const GUIDE_COST = 20; // keep in sync with src/config/pricing.ts GENERATE_BLOG
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    const { data: deductResult, error: deductError } = await adminClient.rpc('deduct_credits_fifo', {
-      p_user_id: userId,
-      p_cost: 15,
-    });
-
-    if (deductError) {
-      const msg = deductError.message || '';
-      if (msg.includes('INSUFFICIENT_CREDITS')) {
-        return jsonResponse({ error: 'Insufficient credits', required: 15 }, 402);
-      }
-      throw deductError;
+    const { data: balanceRow } = await adminClient
+      .from('credit_balances')
+      .select('purchased_credits, free_credits')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const availableCredits = (balanceRow?.purchased_credits || 0) + (balanceRow?.free_credits || 0);
+    if (availableCredits < GUIDE_COST) {
+      return jsonResponse({ error: 'Insufficient credits', required: GUIDE_COST }, 402);
     }
-
-    // Log credit spend
-    await adminClient.from('credit_ledger').insert({
-      user_id: userId,
-      transaction_type: 'spend',
-      action_type: 'generate_travel_guide',
-      credits_delta: -15,
-      is_free_credit: false,
-      notes: `Travel guide generation for trip ${tripId}`,
-    });
-
-    // Sync balance cache
-    const now = new Date().toISOString();
-    await adminClient.from('credit_balances').update({
-      purchased_credits: (await adminClient.from('credit_purchases')
-        .select('remaining')
-        .eq('user_id', userId)
-        .gt('remaining', 0)
-        .neq('credit_type', 'free')
-        .or(`expires_at.is.null,expires_at.gt.${now}`)
-      ).data?.reduce((sum: number, r: any) => sum + r.remaining, 0) || 0,
-      free_credits: (await adminClient.from('credit_purchases')
-        .select('remaining')
-        .eq('user_id', userId)
-        .gt('remaining', 0)
-        .eq('credit_type', 'free')
-        .or(`expires_at.is.null,expires_at.gt.${now}`)
-      ).data?.reduce((sum: number, r: any) => sum + r.remaining, 0) || 0,
-      updated_at: now,
-    }).eq('user_id', userId);
 
     // Fetch trip data
     const { data: trip } = await supabase
@@ -300,6 +273,44 @@ Keep it personal and authentic. Use the activity descriptions and my notes to ad
         .single();
       if (insertErr) throw insertErr;
       guideId = newGuide.id;
+    }
+
+    // ── Charge AFTER success (C-CRED-2) ───────────────────────────────────────
+    // Guide is generated and persisted above; only now do we debit credits, so
+    // any earlier failure (trip missing, AI 429/402/500, DB error) costs nothing.
+    const { error: chargeError } = await adminClient.rpc('deduct_credits_fifo', {
+      p_user_id: userId,
+      p_cost: GUIDE_COST,
+    });
+    if (chargeError) {
+      // The user already has their guide; do not fail the request. Log loudly —
+      // this should be rare (we pre-checked affordability before generating).
+      console.error('[generate-travel-guide] CRITICAL: post-generation charge failed (guide delivered free):',
+        chargeError.message, { userId, tripId, guideId });
+    } else {
+      await adminClient.from('credit_ledger').insert({
+        user_id: userId,
+        transaction_type: 'spend',
+        action_type: 'generate_travel_guide',
+        credits_delta: -GUIDE_COST,
+        is_free_credit: false,
+        notes: `Travel guide generation for trip ${tripId}`,
+      });
+      // Resync balance cache from source of truth (credit_purchases).
+      const nowIso = new Date().toISOString();
+      const [{ data: purchasedRows }, { data: freeRows }] = await Promise.all([
+        adminClient.from('credit_purchases').select('remaining')
+          .eq('user_id', userId).gt('remaining', 0).neq('credit_type', 'free')
+          .or(`expires_at.is.null,expires_at.gt.${nowIso}`),
+        adminClient.from('credit_purchases').select('remaining')
+          .eq('user_id', userId).gt('remaining', 0).eq('credit_type', 'free')
+          .or(`expires_at.is.null,expires_at.gt.${nowIso}`),
+      ]);
+      await adminClient.from('credit_balances').update({
+        purchased_credits: (purchasedRows || []).reduce((s: number, r: any) => s + r.remaining, 0),
+        free_credits: (freeRows || []).reduce((s: number, r: any) => s + r.remaining, 0),
+        updated_at: nowIso,
+      }).eq('user_id', userId);
     }
 
     return jsonResponse({ success: true, guideId, slug, content, title });
