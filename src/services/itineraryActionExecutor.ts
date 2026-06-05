@@ -1181,6 +1181,9 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
         action: 'save-itinerary',
         tripId,
         itinerary: itineraryPayload,
+        // C-PERSIST: chat/AI tool-call applications are user-initiated edits and
+        // must bypass the frozen gate, else they silently revert on refresh.
+        saveReason: 'apply-action',
       },
     });
 
