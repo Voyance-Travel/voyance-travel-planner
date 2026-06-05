@@ -20,6 +20,7 @@
  */
 
 import { CostTracker, trackCost } from "./cost-tracker.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 
 // ============================================================================
 // Types
@@ -51,6 +52,69 @@ interface InternalCallMeta {
   ctx: GoogleCallContext;
   ownsTracker: boolean;
   tracker: CostTracker;
+}
+
+// ============================================================================
+// Global daily Google-API ceiling + circuit breaker (C-COST-2, Phase 1)
+// ============================================================================
+// Hard cap on TOTAL live Google calls/day across all SKUs and all users. The
+// breaker lives here — the single ingress for every billable Google fetch — so
+// nothing can bypass it. Cache hits never reach these wrappers, so they don't
+// consume budget. When the ceiling is hit, wrappers degrade (return a no-result)
+// instead of calling Google. Fails OPEN: a budget-check failure must never break
+// the product (worst case we lose the cap for that call, never the feature).
+const GOOGLE_DAILY_CALL_CEILING = Number(Deno.env.get("GOOGLE_DAILY_CALL_CEILING") ?? "200");
+
+// Per-call $ (informational, for the budget table's cost_usd). Keep roughly in
+// sync with cost-tracker GOOGLE_API_PRICING; exact figures don't affect the cap.
+const GOOGLE_SKU_PRICE_USD: Record<GoogleSku, number> = {
+  places_text_search: 0.032,
+  places_details: 0.017,
+  places_photo: 0.007,
+  geocoding: 0.005,
+  routes: 0.005,
+  distance_matrix: 0.005,
+};
+
+let _budgetClient: ReturnType<typeof createClient> | null = null;
+function budgetClient() {
+  if (_budgetClient) return _budgetClient;
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return null;
+  _budgetClient = createClient(url, key, { auth: { persistSession: false } });
+  return _budgetClient;
+}
+
+/**
+ * Atomically consume one slot of today's global Google budget.
+ * @returns true → within ceiling, proceed with the live call.
+ *          false → ceiling reached; caller must degrade and NOT call Google.
+ * Fails OPEN on any error.
+ */
+async function consumeGoogleBudget(sku: GoogleSku): Promise<boolean> {
+  const client = budgetClient();
+  if (!client) return true; // no service client → can't gate; fail open
+  try {
+    const { data, error } = await client.rpc("consume_google_budget", {
+      p_cost: GOOGLE_SKU_PRICE_USD[sku] ?? 0,
+      p_limit: GOOGLE_DAILY_CALL_CEILING,
+    });
+    if (error) {
+      console.error("[google-api] budget RPC error — failing open:", error.message);
+      return true;
+    }
+    if (data === null || data === undefined) {
+      console.warn(
+        `[google-api] 🛑 DAILY GOOGLE CEILING reached (${GOOGLE_DAILY_CALL_CEILING}/day) — blocking ${sku}`,
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[google-api] budget check threw — failing open:", err);
+    return true;
+  }
 }
 
 // ============================================================================
@@ -178,6 +242,12 @@ export async function googlePlacesTextSearch(
   if (params.locationBias) body.locationBias = params.locationBias;
 
   try {
+    // C-COST-2: global daily ceiling guard — degrade before the live call.
+    if (!(await consumeGoogleBudget("places_text_search"))) {
+      logAudit(meta, false, { blocked: "daily_ceiling" });
+      await finalizeIfOwned(meta);
+      return { ok: false, status: 429, data: null, errorText: "google_daily_ceiling" };
+    }
     const resp = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
       headers: {
@@ -254,6 +324,11 @@ export async function googlePlacesPhoto(
   const url = `https://places.googleapis.com/v1/${params.photoResource}/media?${qs.join("&")}`;
 
   try {
+    if (!(await consumeGoogleBudget("places_photo"))) {
+      logAudit(meta, false, { blocked: "daily_ceiling" });
+      await finalizeIfOwned(meta);
+      return { ok: false, status: 429, errorText: "google_daily_ceiling" };
+    }
     const resp = await fetch(url, { headers: { Accept: "image/*" }, redirect: "follow" });
     recordSku(tracker, "places_photo", 1);
 
@@ -306,6 +381,11 @@ export async function googleGeocode(
   if (params.language) qs.set("language", params.language);
 
   try {
+    if (!(await consumeGoogleBudget("geocoding"))) {
+      logAudit(meta, false, { blocked: "daily_ceiling" });
+      await finalizeIfOwned(meta);
+      return { ok: false, status: 429, data: null, errorText: "google_daily_ceiling" };
+    }
     const resp = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?${qs.toString()}`);
     recordSku(tracker, "geocoding", 1);
 
@@ -356,6 +436,11 @@ export async function googleRoutes(
   const meta: InternalCallMeta = { sku: "routes", start: Date.now(), ctx, ownsTracker, tracker };
 
   try {
+    if (!(await consumeGoogleBudget("routes"))) {
+      logAudit(meta, false, { blocked: "daily_ceiling" });
+      await finalizeIfOwned(meta);
+      return { ok: false, status: 429, data: null, errorText: "google_daily_ceiling" };
+    }
     const resp = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
       method: "POST",
       headers: {
@@ -424,6 +509,11 @@ export async function googleDistanceMatrix(
   if (params.departureTime !== undefined) qs.set("departure_time", String(params.departureTime));
 
   try {
+    if (!(await consumeGoogleBudget("distance_matrix"))) {
+      logAudit(meta, false, { blocked: "daily_ceiling" });
+      await finalizeIfOwned(meta);
+      return { ok: false, status: 429, data: null, errorText: "google_daily_ceiling" };
+    }
     const resp = await fetch(`https://maps.googleapis.com/maps/api/distancematrix/json?${qs.toString()}`);
     recordSku(tracker, "distance_matrix", 1);
 
@@ -483,6 +573,11 @@ export async function googleDirections(
   if (params.departureTime !== undefined) qs.set("departure_time", String(params.departureTime));
 
   try {
+    if (!(await consumeGoogleBudget("routes"))) {
+      logAudit(meta, false, { blocked: "daily_ceiling" });
+      await finalizeIfOwned(meta);
+      return { ok: false, status: 429, data: null, errorText: "google_daily_ceiling" };
+    }
     const resp = await fetch(`https://maps.googleapis.com/maps/api/directions/json?${qs.toString()}`);
     recordSku(tracker, "routes", 1);
 
