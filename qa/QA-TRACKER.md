@@ -118,15 +118,16 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | 🆕 **C-CRED-9: credit_balances row count > users** | ⬜ | ❌ | `balance_rows=38` vs `auth_users=profiles=24` (14 extra). If MULTI-row per user → **non-deterministic balance reads** (credit-accuracy CRIT); grant/referral upserts use onConflict:user_id which REQUIRES a unique index — if missing, upserts dup instead of update. If orphaned → cleanup. | run multi-row + unique-index + orphan SQL (pending) | ⬜ NEW FINDING (SQL 2026-06-05) — **awaiting diagnostic** |
 | **C-ADMIN-1** ImageCuration write-error surfacing (#46) | ✅ | ✅ | blacklist/heal swallowed errors → faked success | PR #46 (check `{error}`, throw) | ✅ loads/functions (15k images, filters, Heal/Upload); error-surfacing code-verified (failure path not safely forceable — won't blacklist real prod image) |
 | **C-ADMIN-3** BulkImport dead "Delete All Users" (#47) | ✅ | ✅ | empty-body→400 dead button | PR #47 removed it | ✅ **VERIFIED LIVE**: button gone; only CSV import remains |
-| Admin — traffic / performance panels | ⬜ | ⬜ | | | ⬜ |
-| Admin — fixed-cost / projected-cost inputs | ⬜ | ⬜ | | | ⬜ |
+| Admin — Costs / Credit-Econ tabs | ✅ | ❌ | **🆕 C-COST-3 (NEW FINDING)**: Costs tab = "0 tracked entries · $0.00" despite **151 trips created** + Money-Out(30d) $0.00. Real API-cost tracking not recording OR admin can't read the cost table (RLS). Credit-Econ "Our Cost" figures are therefore **config estimates, not actuals** → margins unverified against real spend. Also feeds Google-budget enforcement. | diagnostic SQL pending (cost-table row count + google_api_budget + RLS) | ⬜ **NEW — awaiting diagnostic** |
+| Admin — Credit Econ table (per-action costs/margins) | ✅ | ✅ | — | — | ✅ LIVE: renders; credit costs MATCH backend (Unlock 60/SmartFinish 50/Hotel 40/RouteOpt 20/Regen 30/Swap·Add 5). ⚠️ costs are estimates (see C-COST-3) |
+| Admin — traffic / performance / forecast / projections panels | ⬜ | ⏳ | Revenue/Forecast/Projections sub-tabs not yet opened | | ⬜ |
 | Admin — access control (only founders see it) | ✅ | ✅ | all 8 `/admin/*` routes were auth-only (no role check) | `AdminRoute`+`useIsAdmin` gate on all 8 (PR #30) | ✅ **LIVE**: admin (Ashton) reaches all admin pages; gate active. ⚠️ non-admin denial not testable (can't log out/in). |
 
 ## A9. Auth / login
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| **Entire area** — login, signup, session, logout, password reset, OAuth | ⬜ | ⬜ | **UNTOUCHED ZONE** — no audit, no test yet | | ⬜ |
-| Security posture (RLS, exposed keys, auth gating on edge fns) | ⬜ | ⬜ | | | ⬜ |
+| **Entire area** — login, signup, session, logout, password reset, OAuth | ✅ | 🟧 | — | — | 🟧 **PARTIAL**: logged-in **session works**; account menu + **Sign Out control present** (not clicked — I can't re-login, password entry blocked). **signup / login / password-reset / OAuth = OWNER logged-out pass** |
+| Security posture (RLS, exposed keys, auth gating on edge fns) | ✅ | 🟧 | — | fleet audit: auth **STRONG**; this session hardened CRIT-1 (Stripe), admin-gate, C-FRIEND/C-ADMIN-2 RLS, claim-referral anti-abuse | 🟧 code-audit strong + multiple RLS/auth fixes shipped+deployed; full pen-style live test = owner |
 
 ---
 
