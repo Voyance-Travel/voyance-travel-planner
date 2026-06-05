@@ -9831,6 +9831,8 @@ export type Database = {
           price_lock_expires_at: string | null
           share_enabled: boolean | null
           share_token: string | null
+          share_permission: string
+          share_credit_policy: string
           smart_finish_purchased: boolean
           smart_finish_purchased_at: string | null
           start_date: string
@@ -9899,6 +9901,8 @@ export type Database = {
           price_lock_expires_at?: string | null
           share_enabled?: boolean | null
           share_token?: string | null
+          share_permission?: string
+          share_credit_policy?: string
           smart_finish_purchased?: boolean
           smart_finish_purchased_at?: string | null
           start_date: string
@@ -9967,6 +9971,8 @@ export type Database = {
           price_lock_expires_at?: string | null
           share_enabled?: boolean | null
           share_token?: string | null
+          share_permission?: string
+          share_credit_policy?: string
           smart_finish_purchased?: boolean
           smart_finish_purchased_at?: string | null
           start_date?: string
@@ -11809,6 +11815,8 @@ export type Database = {
           price_lock_expires_at: string | null
           share_enabled: boolean | null
           share_token: string | null
+          share_permission: string
+          share_credit_policy: string
           smart_finish_purchased: boolean
           smart_finish_purchased_at: string | null
           start_date: string
@@ -11982,7 +11990,12 @@ export type Database = {
       sweep_stale_pending_charges: { Args: never; Returns: Json }
       sync_expired_credit_balances: { Args: never; Returns: number }
       toggle_consumer_trip_share: {
-        Args: { p_enabled: boolean; p_trip_id: string }
+        Args: {
+          p_enabled: boolean
+          p_trip_id: string
+          p_permission?: string
+          p_credit_policy?: string
+        }
         Returns: Json
       }
       transition_booking_state: {

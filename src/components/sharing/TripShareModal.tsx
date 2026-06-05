@@ -34,7 +34,10 @@ import {
   getPublicTripShareLink,
   getOrCreatePublicTripShareLink,
   disablePublicTripShareLink,
+  setPublicShareConfig,
   getPublicShareErrorMessage,
+  type SharePermission,
+  type ShareCreditPolicy,
 } from '@/services/publicShareLink';
 
 interface TripShareModalProps {
@@ -67,6 +70,10 @@ export function TripShareModal({
   const [publicCopied, setPublicCopied] = useState(false);
   const [isTogglingPublic, setIsTogglingPublic] = useState(false);
   const [isPreparingPublicLink, setIsPreparingPublicLink] = useState(false);
+  // Collaboration config (owner-chosen, applied to the public link)
+  const [sharePermission, setSharePermission] = useState<SharePermission>('view');
+  const [shareCreditPolicy, setShareCreditPolicy] = useState<ShareCreditPolicy>('collaborator');
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
@@ -109,6 +116,8 @@ export function TripShareModal({
     setInviteCopied(false);
     setPublicShareEnabled(false);
     setPublicShareUrl('');
+    setSharePermission('view');
+    setShareCreditPolicy('collaborator');
   }, [tripId]);
 
   // Load (and auto-enable) the public share link when the modal opens.
@@ -128,6 +137,8 @@ export function TripShareModal({
         if (existing.success && existing.enabled && existing.link) {
           setPublicShareEnabled(true);
           setPublicShareUrl(existing.link);
+          if (existing.permission) setSharePermission(existing.permission);
+          if (existing.creditPolicy) setShareCreditPolicy(existing.creditPolicy);
           return;
         }
 
@@ -140,6 +151,8 @@ export function TripShareModal({
         if (created.success && created.link) {
           setPublicShareEnabled(true);
           setPublicShareUrl(created.link);
+          if (created.permission) setSharePermission(created.permission);
+          if (created.creditPolicy) setShareCreditPolicy(created.creditPolicy);
         } else {
           setPublicShareEnabled(false);
           setPublicShareUrl('');
@@ -159,10 +172,15 @@ export function TripShareModal({
     setIsTogglingPublic(true);
     try {
       if (next) {
-        const result = await getOrCreatePublicTripShareLink(tripId);
+        const result = await getOrCreatePublicTripShareLink(tripId, {
+          permission: sharePermission,
+          creditPolicy: shareCreditPolicy,
+        });
         if (result.success && result.link) {
           setPublicShareEnabled(true);
           setPublicShareUrl(result.link);
+          if (result.permission) setSharePermission(result.permission);
+          if (result.creditPolicy) setShareCreditPolicy(result.creditPolicy);
           toast.success('Public link enabled');
         } else {
           toast.error(getPublicShareErrorMessage(result.reason));
@@ -178,6 +196,36 @@ export function TripShareModal({
       }
     } finally {
       setIsTogglingPublic(false);
+    }
+  };
+
+  // Persist a config change (permission / credit policy) on the public link.
+  // Optimistically reflects the choice, then saves; reverts on failure.
+  const updateShareConfig = async (patch: {
+    permission?: SharePermission;
+    creditPolicy?: ShareCreditPolicy;
+  }) => {
+    const prevPermission = sharePermission;
+    const prevCreditPolicy = shareCreditPolicy;
+    const nextPermission = patch.permission ?? sharePermission;
+    const nextCreditPolicy = patch.creditPolicy ?? shareCreditPolicy;
+    setSharePermission(nextPermission);
+    setShareCreditPolicy(nextCreditPolicy);
+    setIsSavingConfig(true);
+    try {
+      const result = await setPublicShareConfig(tripId, {
+        permission: nextPermission,
+        creditPolicy: nextCreditPolicy,
+      });
+      if (!result.success) {
+        setSharePermission(prevPermission);
+        setShareCreditPolicy(prevCreditPolicy);
+        toast.error(getPublicShareErrorMessage(result.reason));
+        return;
+      }
+      if (result.link) setPublicShareUrl(result.link);
+    } finally {
+      setIsSavingConfig(false);
     }
   };
 
@@ -390,6 +438,75 @@ export function TripShareModal({
                     <Copy className="h-4 w-4" />
                   )}
                 </Button>
+              </div>
+            )}
+
+            {publicShareEnabled && (
+              <div className="space-y-3 pt-3 border-t border-border/50">
+                {/* Permission level */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">What can people do?</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { key: 'view', label: 'View only' },
+                      { key: 'edit', label: 'View & edit' },
+                    ] as { key: SharePermission; label: string }[]).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        disabled={isSavingConfig}
+                        onClick={() => updateShareConfig({ permission: opt.key })}
+                        className={cn(
+                          'px-3 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                          sharePermission === opt.key
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'bg-background text-foreground border-input hover:bg-secondary',
+                          isSavingConfig && 'opacity-60 cursor-not-allowed',
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {sharePermission === 'edit'
+                      ? 'People sign in, then can add & edit activities and use the planning chat.'
+                      : 'People can preview the itinerary. Sign-in optional.'}
+                  </p>
+                </div>
+
+                {/* Credit policy — only relevant when collaborators can edit */}
+                {sharePermission === 'edit' && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Who pays for AI edits?</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        { key: 'collaborator', label: 'Each pays own' },
+                        { key: 'owner', label: 'I pay' },
+                        { key: 'free', label: 'No AI edits' },
+                      ] as { key: ShareCreditPolicy; label: string }[]).map((opt) => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          disabled={isSavingConfig}
+                          onClick={() => updateShareConfig({ creditPolicy: opt.key })}
+                          className={cn(
+                            'px-2 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                            shareCreditPolicy === opt.key
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-background text-foreground border-input hover:bg-secondary',
+                            isSavingConfig && 'opacity-60 cursor-not-allowed',
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Manual edits (add/move) are always free. This only controls paid AI chat &amp; day regeneration.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
