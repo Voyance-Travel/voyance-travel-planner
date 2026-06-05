@@ -6,11 +6,11 @@
  * Completely separate from agency /share/:shareToken route.
  */
 
-import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useEffect, useState, useCallback } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
-import { MapPin, Calendar, Users, Clock, Compass } from 'lucide-react';
+import { MapPin, Calendar, Users, Clock, Compass, Loader2, UserPlus } from 'lucide-react';
 import Head from '@/components/common/Head';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -19,9 +19,17 @@ import { Separator } from '@/components/ui/separator';
 // Public share view: use the auth-less client so the anonymous recipient fetch
 // never depends on the auth-token lock (which can abort and false-fail the page).
 import { supabasePublic } from '@/integrations/supabase/publicClient';
+// Auth client + context for the "Join to collaborate" flow (accept_shared_trip
+// requires an authenticated caller; the public client cannot run it).
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
+
+// sessionStorage key so a join survives the sign-in round-trip for anon recipients.
+const PENDING_JOIN_KEY = 'voyance_pending_share_join';
 
 interface SharedActivity {
   id: string;
@@ -117,6 +125,46 @@ export default function ConsumerTripShare() {
     fetchTrip();
   }, [token]);
 
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const [joining, setJoining] = useState(false);
+
+  // Join the trip as a collaborator. Anonymous recipients are sent through
+  // sign-in first (the token is persisted so the join auto-resumes on return).
+  const handleJoin = useCallback(async () => {
+    if (!token) return;
+    if (!isAuthenticated) {
+      try { sessionStorage.setItem(PENDING_JOIN_KEY, token); } catch { /* ignore */ }
+      navigate(`/signin?next=${encodeURIComponent(`/trip-share/${token}`)}`);
+      return;
+    }
+    setJoining(true);
+    try {
+      const { data, error: joinError } = await supabase.rpc('accept_shared_trip', {
+        p_share_token: token,
+      });
+      const res = data as { success?: boolean; trip_id?: string; reason?: string } | null;
+      if (joinError || !res?.success || !res.trip_id) {
+        toast.error('Could not join this trip. The link may be invalid or sharing is off.');
+        return;
+      }
+      try { sessionStorage.removeItem(PENDING_JOIN_KEY); } catch { /* ignore */ }
+      navigate(`/trip/${res.trip_id}`);
+    } finally {
+      setJoining(false);
+    }
+  }, [token, isAuthenticated, navigate]);
+
+  // Auto-resume a pending join once the recipient is authenticated and back here.
+  useEffect(() => {
+    if (!isAuthenticated || !token) return;
+    let pending: string | null = null;
+    try { pending = sessionStorage.getItem(PENDING_JOIN_KEY); } catch { /* ignore */ }
+    if (pending === token) {
+      handleJoin();
+    }
+  }, [isAuthenticated, token, handleJoin]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -206,6 +254,20 @@ export default function ConsumerTripShare() {
                   <Users className="h-4 w-4" /> {trip.travelers} traveler{trip.travelers > 1 ? 's' : ''}
                 </span>
               )}
+            </div>
+
+            <div className="mt-6">
+              <Button onClick={handleJoin} disabled={joining} size="lg" className="gap-2">
+                {joining ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <UserPlus className="h-4 w-4" />
+                )}
+                {isAuthenticated ? 'Join this trip' : 'Sign in to collaborate'}
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Join to add ideas, edit the plan together, and chat with the group.
+              </p>
             </div>
           </div>
         </div>
