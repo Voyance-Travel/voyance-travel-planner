@@ -37,6 +37,19 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 ---
 
+## 🆕 DEEP-DIVE FINDINGS — SQL-confirmed 2026-06-05 (5 items)
+
+| # | Finding | Sev | Status / Next step |
+|---|---|---|---|
+| **C-CRED-9** | `credit_balances.user_id` had **no FK** to auth.users → 20 orphan rows on account deletion (UNIQUE index holds, so balances NOT non-deterministic — low sev). | LOW | ✅ **FIXED — PR #52** (orphan cleanup + add `ON DELETE CASCADE`). Needs DB apply. |
+| **C-DATA-1** | Only 1/24 users has a `user_tiers` row. Stripe webhook writes it; the **IAP path** (`fulfill_credit_purchase` RPC) never did → IAP purchasers untracked. | MED | ✅ **FIXED — PR #53** (RPC upserts user_tiers, `ON CONFLICT DO NOTHING`, no downgrade). **PAYMENT-PATH — owner review** + DB apply. |
+| **C-COST-3a** | Admin Costs/Money-Out shows **$0** but `trip_cost_tracking` has **43,331 rows** (10K/mo). Writes fine → the **dashboard read RPC `get_unit_economics_summary` returns 0** (date/aggregation bug). | MED | 🔬 needs RPC fix (migration `20260215153101`). |
+| **C-COST-3b** | **`google_api_budget` table = 0 rows.** Nothing ever wrote to it → the **Google daily ceiling (#41) is NOT enforcing in prod** (`consume_google_budget` never increments — likely failing-open silently or hot path bypasses the gate). | **HIGH** | 🔬 **investigate FIRST** — deployed `_shared/google-api.ts` gate + RPC. The whole point of #41 (cost control) is inert. |
+| **C-TRIPS-1** | **My Trips shows "No trips yet" despite 108 trips** (all `status='draft'`, 77 `itinerary_status='ready'`). `loadTrips` has NO status filter + `transformTrip` date-buckets — so the simple "status filter" theory is WRONG. `getTripStats` reads the 108 fine (Overview 50/19/131/70 are REAL); `loadTrips` returns empty. | MED | 🔬 needs focused debug — add error logging to `loadTrips`, compare to `getTripStats` live. (Overview stats are NOT fake — correction to earlier note.) |
+| **C-POLL-1 🆕** | **Runaway `useGenerationPoller`**: console floods with `Silent timeout detected: heartbeat ~22min stale` **every ~8s**, re-parsing a 4-day itinerary each cycle (**10,000 log msgs**). A stuck-generation poller never terminates (acct has 4 `generating`+2 `not_started` trips). | MED | 🔬 terminate poller after N stale heartbeats. CPU/log churn. |
+
+---
+
 # TABLE A — Pages × Features
 *(Itinerary, creation modes, and in-itinerary tools are detailed in **Table D**; auth/user-types in **Table E**.)*
 *Not just "does it render" — do the links work, do the in-page features actually function.*
