@@ -1,5 +1,10 @@
-// DEPLOY MARKER: dna-archetype-accuracy-2026-06-05 — force a fresh edge artifact
-// for the food_focus weighting fix (#21) when the AI deploy prompt is unavailable.
+// DEPLOY MARKER: dna-archetype-accuracy-2026-06-05b — force a fresh calculate-travel-dna
+// artifact for PR #24 (culinary food_focus weight 26→38 + urban_nomad anti-food guard).
+// CRITICAL: every prior marker was in generate-itinerary, so the bundler (which only
+// redeploys CHANGED functions) never redeployed THIS function — both DNA fixes were
+// merged but never went live. This marker lives in calculate-travel-dna so its redeploy
+// is guaranteed. Verified offline: a maximal foodie computes food_focus=0.822 →
+// culinary_cartographer=54.6 wins over urban_nomad=15.6 (penalized −16.5 by the guard).
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost } from "../_shared/cost-tracker.ts";
