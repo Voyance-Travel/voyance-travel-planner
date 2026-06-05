@@ -851,10 +851,10 @@ export async function generateSingleDayWithRetry(
       
       const generationHierarchy = `
 ${'='.repeat(70)}
-🎯 TRAIT MODERATION — THE MOST IMPORTANT RULE
+🎯 ARCHETYPE INFLUENCE — THE MOST IMPORTANT RULE
 ${'='.repeat(70)}
 
-Archetype traits are SEASONING, not the entire meal. The dominant archetype trait should influence ~30-40% of activities. The remaining 60-70% should be well-rounded travel anyone would enjoy. Do NOT max out any single trait. Every day should feel different.
+A distinct archetype (from a completed DNA quiz) is a PRIMARY driver — it shapes WHICH activities are chosen AND how they're described, for ~50-60% of activities. Use a lighter ~30-40% touch only when the traveler's DNA is mild/balanced. The remaining share should be well-rounded travel anyone would enjoy. Don't max a single trait into monotony, but each archetype's days must look genuinely different from another archetype's — never converge to a generic template. Every day should still feel different.
 
 FREE ACTIVITIES ARE VALID FOR ALL ARCHETYPES. A sunset walk is luxury, a park is adventurous, a market is cultural.
 
@@ -878,9 +878,9 @@ When rules conflict, follow this priority order (1 = highest):
    → First-time visitors MUST see iconic landmarks (Colosseum in Rome, Eiffel Tower in Paris)
    → These are non-negotiable unless user explicitly says "skip"
 
-3. ARCHETYPE NARRATIVE TONE (defines HOW activities are described, NOT what activities to include)
-   → The archetype determines writing style, pacing feel, and descriptive tone
-   → Interpreted through TRAIT MODERATION: 30-40% trait-aligned, 60-70% varied
+3. ARCHETYPE-DRIVEN SELECTION & TONE (shapes BOTH which activities appear AND how they're described)
+   → For a distinct archetype, the archetype drives the trait-aligned share of activity SELECTION as well as the writing style, pacing feel, and tone
+   → Interpreted through the INFLUENCE RULE: ~50-60% trait-aligned (selection + tone) for a distinct archetype, ~30-40% for mild/balanced DNA; the rest varied
    → Archetype "avoid" list applies ONLY when it doesn't conflict with the user's explicit interests
 
 4. EXPERIENCE AFFINITY (secondary guidance)
@@ -895,7 +895,7 @@ When rules conflict, follow this priority order (1 = highest):
 8. TRAIT MODIFIERS (lowest priority — fine-tuning only)
 
 CRITICAL: User's explicit profile interests and pasted research ALWAYS outrank archetype defaults.
-The archetype shapes the narrative VOICE, not the activity SELECTION.
+Beyond those, a distinct archetype shapes BOTH the activity SELECTION and the narrative voice — so a Culinary Cartographer's days look and read differently from a Cultural traveler's, not merely described differently.
 
 ${'='.repeat(70)}
 
@@ -1027,9 +1027,9 @@ ${'='.repeat(70)}
 IMPORTANT — ARCHETYPE NAMES: When referring to the traveler's archetype or style, use ONLY the exact archetype name from their Travel DNA profile. Do not invent, modify, or embellish archetype names. If the profile says 'Luxury Seeker', write 'Luxury Seeker' — never 'Luxury Luminary', 'Luxury Connoisseur', 'Luxury Maven', or any creative variation. The archetype name must match exactly what exists in the system.
 
 ${'='.repeat(70)}
-⚖️ ARCHETYPE BALANCE — SEASONING NOT THE MEAL
+⚖️ ARCHETYPE BALANCE — PRIMARY DRIVER, NOT THE WHOLE TRIP
 ${'='.repeat(70)}
-IMPORTANT — ARCHETYPE BALANCE: The traveler's archetype influences 30-40% of the itinerary. It is seasoning, NOT the entire meal. Every day must include a MIX of archetype-aligned and universally enjoyable activities.
+IMPORTANT — ARCHETYPE BALANCE: A distinct archetype drives ~50-60% of the itinerary's activity SELECTION and tone (a lighter ~30-40% for mild/balanced DNA) — so different archetypes produce genuinely different trips. It is the PRIMARY driver, but not the ENTIRE trip: every day must still include a MIX of archetype-aligned and universally enjoyable activities, and all hard limits below (budget ceilings, variety caps, pacing, required meals) still apply.
 
 Rules:
 - Luxury Seeker: Quality experiences, but NOT helicopters, limos, VIP everything, or $500 dinners at every meal. A nice hotel, a great restaurant for dinner, and then they walk through a market, visit a free park, grab street food for lunch. Total trip budget ceiling: ~$4,000 for 15 days.

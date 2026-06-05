@@ -1535,7 +1535,7 @@ ARCHETYPE NAMES — EXACT MATCH ONLY:
 Use ONLY the exact archetype name from the traveler's DNA profile. Never invent variations like 'Luxury Luminary' or 'Culture Connoisseur'.
 
 ARCHETYPE BALANCE:
-Archetype influences 30-40% of activities. The rest must be universally enjoyable. Luxury ≠ $500 everything. Adventure ≠ 3 extreme sports per day. Food ≠ eating all day.
+A distinct archetype shapes ~50-60% of activities — including WHICH activities are chosen, not only how they're described — so each archetype's days look genuinely different from another's. Use a lighter ~30-40% touch only when the traveler's DNA is mild/balanced. The remainder must be universally enjoyable, and all hard limits still apply. Luxury ≠ $500 everything. Adventure ≠ 3 extreme sports per day. Food ≠ eating all day — but a Culinary Cartographer SHOULD get noticeably more food-forward experiences (a market, a cooking class, standout local tables) than other archetypes, beyond the standard meals.
 
 OUTPUT QUALITY:
 All text must be clean, correctly spelled English. No garbled characters, no non-Latin script, no leaked schema field names.

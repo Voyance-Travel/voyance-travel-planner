@@ -283,14 +283,16 @@ ${'='.repeat(70)}
 🎯 TRAIT MODERATION — THE MOST IMPORTANT RULE IN THIS ENTIRE PROMPT
 ${'='.repeat(70)}
 
-Archetype traits are SEASONING, not the entire meal.
+A traveler's archetype comes from a completed DNA quiz — treat a distinct archetype as a PRIMARY driver of the trip, not faint seasoning.
 
-A traveler's archetype tells you their PREFERENCES. It does NOT mean they want that preference to consume every minute of every day. People are multidimensional. Plan like a smart friend who knows the traveler — not like an algorithm that saw one keyword and went all-in.
+The archetype tells you their PREFERENCES, and those preferences should shape WHICH activities you choose, not only how you describe them. People are still multidimensional — vary each day — but a Culinary Cartographer's itinerary must look and read distinctly different from a Cultural or Adventure traveler's. Plan like a smart friend who actually knows this person, and never let two different archetypes converge to the same generic template.
 
-THE 30-40% RULE:
-- The dominant archetype trait should influence ~30-40% of activities
-- The remaining 60-70% should be well-rounded travel anyone would enjoy
-- Every day MUST feel different — mix high and low, active and restful, trait-aligned and universal
+THE INFLUENCE RULE (scales with how distinct the archetype is):
+- DISTINCT archetype (e.g. Culinary Cartographer, Adventure Seeker, Luxury Luminary, Cultural Curator) → it shapes ~50-60% of activities, including SELECTION and tone
+- MILD / balanced DNA → a lighter touch, ~30-40% trait-aligned
+- The remaining share is well-rounded travel anyone would enjoy
+- Every day MUST still feel different — mix high and low, active and restful, trait-aligned and universal — and ALL hard limits (budget ceilings, variety caps, pacing, required meals) still apply
+- The user's explicit profile interests and pasted research ALWAYS outrank archetype defaults
 
 WHAT EACH ARCHETYPE ACTUALLY MEANS IN PRACTICE:
 
@@ -349,12 +351,12 @@ When rules conflict, follow this priority order (1 = highest):
 
 2. ARCHETYPE IDENTITY (critical - defines WHO the traveler is)
    → The archetype's meaning, avoid list, and day structure are LAW
-   → BUT: interpreted through the TRAIT MODERATION rules above (30-40%, not 100%)
+   → Interpreted through the INFLUENCE RULE above: a distinct archetype drives ~50-60% of selection + tone (not 100%, not a faint 30-40%)
 
 3. EXPERIENCE AFFINITY (what TO prioritize - the "pull" side)
    → Each archetype has HIGH/MEDIUM/LOW/NEVER experience categories
-   → PRIORITIZE experiences from HIGH categories for 30-40% of slots
-   → Fill remaining 60-70% with varied, well-rounded experiences
+   → PRIORITIZE experiences from HIGH categories for ~50-60% of slots for a distinct archetype (~30-40% for mild/balanced DNA)
+   → Fill the remaining slots with varied, well-rounded experiences
    → AVOID experiences from NEVER categories (hard block)
 
 4. DESTINATION-SPECIFIC GUIDE (city × archetype recommendations)
