@@ -307,7 +307,8 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 | ID | Sev | Area | What went wrong | Audit | Live | Resolution | Fix verified |
 |---|---|---|---|:--:|:--:|---|:--:|
-| C-DNA-1 | HIGH | DNA accuracy | Maximal foodie quiz → "Urban Nomad" (generalist out-scores specialist) | ✅ | ❌ | fix #2 PR #24 (food 26→38 + urban anti-food guard; 192/192) | ⏳ deploy+re-quiz |
+| C-DNA-1 | HIGH | DNA accuracy | Maximal foodie quiz → "Urban Nomad" ×2. **Root cause = DEPLOY GAP**: every marker lived in generate-itinerary; bundler only redeploys changed fns → calculate-travel-dna never redeployed after PR #24. Fix merged but never live. Offline recompute: food_focus=0.822 → culinary=54.6 wins (urban=15.6, penalized −16.5). | ✅ | ❌ | fix #2 PR #24 (validated correct) + **PR #35 marker IN calculate-travel-dna to actually ship it** | ⏳ deploy #35 + final re-quiz |
+| C-DNA-2b | HIGH | DNA matchers | 2nd divergent matcher: `recalculateArchetype.ts` uses V3-JSON `archetypeProfiles` (UNFIXED) AND feeds V2 −10..10 scores into a 0–1 matcher → wrong/unstable archetype on recalc path (gated by `dna_recalc_needed_at`, latent) | ✅ | ⬜ | port fix into quiz JSON + persist fine-grained vector / route recalc through matchArchetypesV2 — next | ⬜ |
 | C-DNA-2 | HIGH | DNA defs | Client gate `food_focus≥0.75` (hard) vs edge `0.4` (soft) — preview can disagree w/ result | ✅ | ⬜ | **pick ONE source of truth** — not done | ⬜ |
 | C-DNA-3 | HIGH | DNA traits | Culinary answers leak to cultural_depth/ethics not food_focus (36 vs 16) | ✅ | ⬜ | rebalance answer→trait weights — partial only | ⬜ |
 | C-DNA-4 | MED | DNA diff | Differentiation flatteners: "30–40% trait moderation" + generic fallback archetype | ✅ | ⬜ | verify in A/B + de-flatten | ⬜ |
