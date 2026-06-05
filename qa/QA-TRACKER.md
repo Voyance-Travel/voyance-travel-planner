@@ -44,35 +44,35 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
 | Visual render | ➖ | ✅ | — | — | ➖ |
-| Hero CTA → trip builder | ⬜ | ⬜ | | | ⬜ |
+| Hero CTA → trip builder | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: "Build My Itinerary" → /start (3-step builder) works. ⚠️ logged-out home *hero* button itself pending logged-out pass |
 | Nav links (all) | ✅ | ✅ | none — 22 links, zero dead `#` | — | ➖ |
-| Footer links | ✅ | ⬜ | "Cookies"→/privacy (no dedicated cookies page) — minor | | ⬜ |
-| Any embedded CTAs / sample-itinerary / social proof widgets | ⬜ | ⬜ | | | ⬜ |
-| Notification bell | ⬜ | ⬜ | | | ⬜ |
+| Footer links | ✅ | ✅ | "Cookies"→/privacy (no dedicated cookies page) — minor | — | ✅ renders site-wide (About/HowItWorks/Pricing/Help/Contact/FAQ/Privacy/Terms) |
+| Any embedded CTAs / sample-itinerary / social proof widgets | ⬜ | ⬜ | **logged-out marketing home only** — authed `/` redirects to /profile; pending logged-out pass | | ⬜ |
+| Notification bell | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: opens Notifications panel with real entries ("Clinton Brooks joined your trip to Amsterdam/Lisbon"), "1 new" badge + "Read all" action |
 
 ## A2. Explore `/explore`
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
 | Visual render | ➖ | ✅ | — | — | ➖ |
-| Explore content cards / filters / links work | ⬜ | ⬜ | | | ⬜ |
-| **DNA-type explainer pages (one per archetype)** — enumerate ALL, each renders + describes the archetype correctly | ⬜ | ⬜ | not yet enumerated; owner notes these define "what we target when a user IS a DNA" | | ⬜ |
-| DNA-type page ↔ archetype-matcher consistency (does the page's description match what the scorer actually assigns?) | ⬜ | ⬜ | | | ⬜ |
+| Explore content cards / filters / links work | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: hero search bar, Filters, "Saved Destinations", category cards (Luxury/Adventure/Culture/Wellness/Culinary/Romantic), Voyance Guides + "All guides →" — all render & interactive |
+| **DNA-type explainer pages (one per archetype)** — enumerate ALL, each renders + describes the archetype correctly | ✅ | ✅ | **C-EXPLORE-1**: sheet showed a MISMATCHED body (Story Seeker→photography copy; history_hunter opened nothing) | **PR #44** — render sheet from the real narrative | ✅ **VERIFIED LIVE 2026-06-05**: history_hunter now OPENS (was dead) with correct content; story_seeker shows its real storytelling body, no photography. Title↔body match. |
+| DNA-type page ↔ archetype-matcher consistency (does the page's description match what the scorer actually assigns?) | ✅ | ✅ | was inconsistent (lossy narrative→detail map) | PR #44 renders from scorer-aligned `ARCHETYPE_NARRATIVES` | ✅ now consistent — the sheet is built from the same narratives the scorer assigns |
 
 ## A3. Marketing / content pages
 | Page | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| /how-it-works | ⬜ | ⬜ | | | ⬜ |
-| /pricing (see also Table B credits) | ⬜ | ⬜ | | | ⬜ |
-| /about | ⬜ | ⬜ | | | ⬜ |
-| /destinations | ⬜ | ✅ renders (hero + featured) — **functionality untested** | | | ⬜ |
-| /guides | ⬜ | ✅ renders (tabs/filters/cards) — **functionality untested** | | | ⬜ |
-| /careers | ⬜ | ✅ renders (4 positions) — **functionality untested** | | | ⬜ |
-| /faq | ⬜ | ✅ renders (accordions) — **functionality untested** | | | ⬜ |
-| /travel-tips | ⬜ | ⬜ | | | ⬜ |
-| /help | ⬜ | ⬜ | | | ⬜ |
-| /contact (form submit) | ⬜ | ⬜ | | | ⬜ |
-| /press | ⬜ | ⬜ | | | ⬜ |
-| /privacy, /terms | ⬜ | ⬜ | | | ⬜ |
+| /how-it-works | ✅ | ✅ | — | — | ✅ LIVE: renders ("The Voyance Method" hero + steps) |
+| /pricing (see also Table B credits) | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: renders + **credit values MATCH deployed backend** — Quick-Top-Up $9/100·$25/300·$39/500 = FLEX_PRICE_MAP; Adventurer 2500+700 = IAP fix #34. (Minor: "Founding Member 1000 of 1,000 remaining" — counter may be static.) |
+| /about | ✅ | ✅ | — | — | ✅ LIVE: full page (founder bios, problem/solution, feature-status transparency table, process steps, CTAs Take-Quiz/Founder's-Guides) |
+| /destinations | ✅ | ✅ | — | — | ✅ renders (hero + featured) |
+| /guides | ✅ | ✅ | — | — | ✅ renders (tabs/filters/cards) |
+| /careers | ✅ | ✅ | — | — | ✅ renders (4 positions) |
+| /faq | ✅ | ✅ | — | — | ✅ renders (accordions) |
+| /travel-tips | ✅ | ✅ | — | — | ✅ LIVE: guide cards (Smart Travel/Packing/Destinations/Airport Hacks) + newsletter subscribe |
+| /help | ✅ | ✅ | — | — | ✅ LIVE: full Help Center (4 categories, Quick Answers, Contact) |
+| /contact (form submit) | ✅ | ✅ | — | — | ✅ LIVE: full form (name/email/category/subject/message/Send) + direct email. ⚠️ submit NOT exercised (would send a message — needs owner permission) |
+| /press | ✅ | ✅ | **content bug**: "By the Numbers" says **29** archetypes but feature list says **27** (and "27 Curated City Guides") — internal inconsistency; 29 is correct elsewhere | needs copy fix on press page | ⏳ renders fully; minor count mismatch logged |
+| /privacy, /terms | ✅ | ✅ | — | — | ✅ LIVE: both complete real legal docs (privacy 9 sections, terms 12 sections; updated 2026-03-16) |
 
 ## A4. Quiz `/quiz`
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
