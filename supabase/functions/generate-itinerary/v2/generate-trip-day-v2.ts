@@ -907,12 +907,18 @@ export async function handleGenerateTripDayV2(
     }
 
     // ── 9. Single write of merged JSON ─────────────────────────────────
+    // C-PERSIST-1: saveReason MUST be a whitelisted prefix or the frozen gate
+    // silently drops this write on an already-ready trip (regenerate-a-day and
+    // the background completeness-heal both run on frozen trips). 'v2-day-write'
+    // was NOT whitelisted → table updated but JSON didn't → reverted on refresh.
+    // This write only ever merges onto current itinerary_data (no stale clobber),
+    // so bypassing the freeze here is correct. 'regenerate-' is whitelisted.
     const persistResult = await withStage(trace, 'persist_written', { dayNumber }, () =>
       persistTripItinerary(
         supabase,
         tripId,
         { ...(tripRow?.itinerary_data || {}), days: mergedDays },
-        { label: 'v2-generate-trip-day', saveReason: 'v2-day-write' },
+        { label: 'v2-generate-trip-day', saveReason: 'regenerate-day-v2' },
       )
     );
 

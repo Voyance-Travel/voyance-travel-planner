@@ -353,7 +353,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 ### New concerns found by the fleet
 | ID | Sev | Area | What went wrong | Fix |
 |---|---|---|---|---|
-| C-PERSIST-1 | **CRIT** | itinerary | Single-day **regenerate** writes the TABLE only; JSON (what UI reads) is frozen-gate-blocked → **regenerate silently reverts on refresh**. Most common edit op. | ✅ **FIX SHIPPED (PR #38, frontend)** — autosave + regen-autosave now pass whitelisted `saveReason` |
+| C-PERSIST-1 | **CRIT** | itinerary | Single-day **regenerate** writes the TABLE only; JSON (what UI reads) is frozen-gate-blocked → **regenerate silently reverts on refresh**. Most common edit op. **EDGE root cause:** `generate-trip-day-v2.ts:915` persisted JSON with non-whitelisted `saveReason:'v2-day-write'` → server-side blocked. | ✅ **FIXED** — frontend saveReasons (PR #38) **+ edge fix PR #40** (`v2-day-write`→`regenerate-day-v2`). Edge needs deploy (generate-itinerary) |
 | C-PERSIST-2 | **CRIT** | itinerary | Editor **autosave + manual Save button** omit the frozen bypass → on a ready/frozen trip, edits land in neither JSON nor table → **lost on refresh** | ✅ **FIX SHIPPED (PR #38)** — autosave/Save + chat-action executor + day-unlock all carry `saveReason` now |
 | C-PERSIST-3 | MED | itinerary | **Lock toggle**: table `is_locked` updates but JSON lock is frozen-blocked → lock reverts on refresh | pass `saveReason:'lock-toggle'` |
 | C-EXPLORE-1 | **CRIT** | content | Explore archetype detail sheet shows **mismatched body** — title says one archetype, body+profile% describe a different generic one (e.g. "Story Seeker"→photography copy). Owner's specific concern, confirmed | author detail content per real scorer archetype; render from archetypeNarratives |
