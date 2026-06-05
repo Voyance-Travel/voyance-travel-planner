@@ -21,7 +21,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 ---
 
-## 📊 OVERALL PROGRESS  ·  Audit **~85%** · Live **~8%** · Fully-verified **~4 items**
+## 📊 OVERALL PROGRESS  ·  Audit **~85%** · Live **~12%** · Fully-verified **~5 items**
 *Two independent lanes. "Fully verified" = both **Audit ✅ AND Live ✅**. Living estimate — updated each pass.*
 
 | Lane | Status | What's here |
@@ -78,7 +78,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
 | Quiz completes + persists DNA | ✅ | ✅ | — | — | ➖ |
-| DNA assignment ACCURACY (right archetype for answers) | ✅ | ❌ | maximal foodie → "Urban Nomad" not Culinary (see Concern C-DNA-1) | fix #2 PR #24 (food weight 26→38 + urban anti-food guard) | ⏳ awaiting edge deploy + re-quiz |
+| DNA assignment ACCURACY (right archetype for answers) | ✅ | ✅ | maximal foodie → "Urban Nomad" not Culinary (see Concern C-DNA-1) | fix #2 PR #24 (food weight 26→38 + urban anti-food guard) + PR #35 marker | ✅ **VERIFIED LIVE 2026-06-05**: post-CLI-deploy re-quiz (maximal foodie) → **"The Culinary Cartographer"** ("Your passport is basically a menu"), hints of Romantic Curator. Old Urban-Nomad fallback gone. |
 | "Complete" gating / unanswered-question guidance | ⬜ | ❌ | Complete silently disables <100% w/ no "which question" hint | | ⬜ |
 | Result card "match %" | ⬜ | ❌ | blank on new archetype | | ⬜ |
 | "Just Tell Us Your Story" free-text DNA path | ⬜ | ⬜ | not exercised (2nd of 3 DNA input paths) | | ⬜ |
@@ -308,7 +308,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 | ID | Sev | Area | What went wrong | Audit | Live | Resolution | Fix verified |
 |---|---|---|---|:--:|:--:|---|:--:|
-| C-DNA-1 | HIGH | DNA accuracy | Maximal foodie quiz → "Urban Nomad" ×2. **Root cause = DEPLOY GAP**: every marker lived in generate-itinerary; bundler only redeploys changed fns → calculate-travel-dna never redeployed after PR #24. Fix merged but never live. Offline recompute: food_focus=0.822 → culinary=54.6 wins (urban=15.6, penalized −16.5). | ✅ | ❌ | fix #2 PR #24 (validated correct) + **PR #35 marker IN calculate-travel-dna to actually ship it** | ⏳ deploy #35 + final re-quiz |
+| C-DNA-1 | HIGH | DNA accuracy | Maximal foodie quiz → "Urban Nomad" ×2. **Root cause = DEPLOY GAP**: every marker lived in generate-itinerary; bundler only redeploys changed fns → calculate-travel-dna never redeployed after PR #24. Fix merged but never live. Offline recompute: food_focus=0.822 → culinary=54.6 wins (urban=15.6, penalized −16.5). | ✅ | ✅ | fix #2 PR #24 (validated correct) + PR #35 marker + **CLI deploy of 118 fns (incl. calculate-travel-dna)** | ✅ **RESOLVED — VERIFIED LIVE 2026-06-05**: re-quiz as maximal foodie → **"The Culinary Cartographer"** ("You eat your way through every destination. Food isn't fuel, it's the reason you travel."), hints of Romantic Curator. The deploy gap was the true root cause; scorer now live & correct. |
 | C-DNA-2b | HIGH | DNA matchers | 2nd divergent matcher: `recalculateArchetype.ts` uses V3-JSON `archetypeProfiles` (UNFIXED) AND feeds V2 −10..10 scores into a 0–1 matcher → wrong/unstable archetype on recalc path (gated by `dna_recalc_needed_at`, latent) | ✅ | ⬜ | port fix into quiz JSON + persist fine-grained vector / route recalc through matchArchetypesV2 — next | ⬜ |
 | C-DNA-2 | HIGH | DNA defs | Client gate `food_focus≥0.75` (hard) vs edge `0.4` (soft) — preview can disagree w/ result | ✅ | ⬜ | **pick ONE source of truth** — not done | ⬜ |
 | C-DNA-3 | HIGH | DNA traits | Culinary answers leak to cultural_depth/ethics not food_focus (36 vs 16) | ✅ | ⬜ | rebalance answer→trait weights — partial only | ⬜ |
