@@ -210,6 +210,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'novelty_seeking', min: 0.65, weight: 10, sweetSpot: 0.85 },  // Genuinely novelty-driven
       { trait: 'social_energy', min: 0.55, weight: 8, sweetSpot: 0.75 },  // City-social energy
       { trait: 'flexibility', min: 0.6, weight: 6, sweetSpot: 0.8 },  // Spontaneous urban explorer
+      { trait: 'food_focus', max: 0.6, weight: 22 },  // NOT a food archetype: a food-dominant profile (>0.6) is penalized so it lands on Culinary Cartographer, not here. Mirrors art_aficionado's food guard. See QA DNA-accuracy fix #2.
     ],
     hardNo: [
       { trait: 'social', range: [-10, -3], penalty: -10 },
@@ -520,7 +521,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 9] },
     ],
     fineGrained: [
-      { trait: 'food_focus', min: 0.4, weight: 26, sweetSpot: 0.85 },  // CORE: must love food. Weight 20→26 so a dominant food signal wins over broad multi-criteria archetypes (e.g. Urban Nomad). See QA DNA-accuracy fix.
+      { trait: 'food_focus', min: 0.4, weight: 38, sweetSpot: 0.85 },  // CORE: must love food. Weight 20→26→38: a dominant food signal must out-score broad multi-criteria generalists (e.g. Urban Nomad, which stacks 3 primaryTraits + 4 fineGrained). 26 was insufficient (live foodie quiz still returned Urban Nomad); 38 + the urban_nomad food guard win the food-dominant band 192/192. See QA DNA-accuracy fix #2.
       { trait: 'cultural_depth', min: 0.3, weight: 6, sweetSpot: 0.7 },  // Bonus for cultural interest
       { trait: 'status_seeking', max: 0.7, weight: 4 },  // Mild penalty if too status-driven (raised from 0.6)
     ],
