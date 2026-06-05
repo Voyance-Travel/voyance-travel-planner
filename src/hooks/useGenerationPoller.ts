@@ -90,6 +90,12 @@ export function useGenerationPoller({
   
   // Track whether we already fired onStalled (one notification per stall cycle)
   const stalledFiredRef = useRef(false);
+  // C-POLL-1: once a stall is CONFIRMED (still stalled on a later poll), stop the
+  // 8s fallback interval so we don't re-detect + re-log + re-render a dead
+  // generation forever (the 10K-log-message runaway). Realtime + the visibility
+  // handler still call poll() directly, so a genuine server-side revival is caught
+  // and this ref is reset.
+  const terminallyStalledRef = useRef(false);
   // Guard: only fire onReady once per generation cycle
   const onReadyCalledRef = useRef(false);
   // High-water mark: completedDays should never decrease during a generation cycle
@@ -349,8 +355,9 @@ export function useGenerationPoller({
           if (referenceTime) {
             const elapsed = Date.now() - new Date(referenceTime).getTime();
             if (elapsed > STALE_THRESHOLD_MS) {
-              // Detect silent timeout: stale heartbeat + no chain_error = platform killed the function
-              if (!meta.chain_error && !meta.chain_broken_at_day) {
+              // Detect silent timeout: stale heartbeat + no chain_error = platform killed the function.
+              // Gate on !stalledFiredRef so this logs ONCE per stall episode (C-POLL-1), not every 8s.
+              if (!meta.chain_error && !meta.chain_broken_at_day && !stalledFiredRef.current) {
                 console.warn(`[useGenerationPoller] Silent timeout detected: heartbeat ${elapsed}ms stale, no chain_error recorded`);
               }
               isStalled = true;
@@ -425,12 +432,19 @@ export function useGenerationPoller({
         if (!stalledFiredRef.current) {
           stalledFiredRef.current = true;
           onStalledRef.current?.();
+        } else {
+          // C-POLL-1: still stalled on a subsequent poll → confirmed dead.
+          // Stop the fallback interval (realtime + visibility still poll on a
+          // genuine revival, which resets this). No auto-resume — the user opts
+          // in via the Regenerate button.
+          terminallyStalledRef.current = true;
         }
         return;
       }
 
       // Active generation — progress detected, reset stall tracking
       stalledFiredRef.current = false;
+      terminallyStalledRef.current = false;
       consecutiveErrorsRef.current = 0; // Reset on success
       setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
     } catch (err) {
@@ -444,6 +458,7 @@ export function useGenerationPoller({
     if (!enabled || !tripId) {
       setState(prev => prev.status === 'idle' ? prev : { ...prev, status: 'idle' });
       stalledFiredRef.current = false;
+      terminallyStalledRef.current = false;
       onReadyCalledRef.current = false;
       lastFailedErrorRef.current = null;
       completedDaysHWM.current = 0;
@@ -460,6 +475,10 @@ export function useGenerationPoller({
     // Interval-based polling as fallback (8s instead of 2s — realtime handles instant updates)
     const fallbackInterval = Math.max(interval, 8000);
     const timer = setInterval(() => {
+      // C-POLL-1: skip the fallback poll once a stall is confirmed dead — avoids
+      // re-detecting/re-logging/re-rendering forever. Realtime + visibility still
+      // poll() directly and reset this on a genuine revival.
+      if (terminallyStalledRef.current) return;
       poll();
     }, fallbackInterval);
 
