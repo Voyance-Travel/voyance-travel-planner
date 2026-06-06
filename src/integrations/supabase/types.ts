@@ -9829,10 +9829,10 @@ export type Database = {
           origin_city: string | null
           owner_plan_tier: string | null
           price_lock_expires_at: string | null
-          share_enabled: boolean | null
-          share_token: string | null
-          share_permission: string
           share_credit_policy: string
+          share_enabled: boolean | null
+          share_permission: string
+          share_token: string | null
           smart_finish_purchased: boolean
           smart_finish_purchased_at: string | null
           start_date: string
@@ -9899,10 +9899,10 @@ export type Database = {
           origin_city?: string | null
           owner_plan_tier?: string | null
           price_lock_expires_at?: string | null
-          share_enabled?: boolean | null
-          share_token?: string | null
-          share_permission?: string
           share_credit_policy?: string
+          share_enabled?: boolean | null
+          share_permission?: string
+          share_token?: string | null
           smart_finish_purchased?: boolean
           smart_finish_purchased_at?: string | null
           start_date: string
@@ -9969,10 +9969,10 @@ export type Database = {
           origin_city?: string | null
           owner_plan_tier?: string | null
           price_lock_expires_at?: string | null
-          share_enabled?: boolean | null
-          share_token?: string | null
-          share_permission?: string
           share_credit_policy?: string
+          share_enabled?: boolean | null
+          share_permission?: string
+          share_token?: string | null
           smart_finish_purchased?: boolean
           smart_finish_purchased_at?: string | null
           start_date?: string
@@ -11814,10 +11814,10 @@ export type Database = {
           origin_city: string | null
           owner_plan_tier: string | null
           price_lock_expires_at: string | null
-          share_enabled: boolean | null
-          share_token: string | null
-          share_permission: string
           share_credit_policy: string
+          share_enabled: boolean | null
+          share_permission: string
+          share_token: string | null
           smart_finish_purchased: boolean
           smart_finish_purchased_at: string | null
           start_date: string
@@ -11992,10 +11992,10 @@ export type Database = {
       sync_expired_credit_balances: { Args: never; Returns: number }
       toggle_consumer_trip_share: {
         Args: {
-          p_enabled: boolean
-          p_trip_id: string
-          p_permission?: string
           p_credit_policy?: string
+          p_enabled: boolean
+          p_permission?: string
+          p_trip_id: string
         }
         Returns: Json
       }
