@@ -450,8 +450,11 @@ export async function persistTripItinerary(
   try {
     const { auditTimingViolations } = await import('./audit-timing.ts');
     const result = auditTimingViolations(days, {
-      arrivalTime24: (callerMetaSuccess as any)?.savedArrivalTime24 ?? null,
-      departureTime24: (callerMetaSuccess as any)?.savedDepartureTime24 ?? null,
+      // BUGFIX: callerMetaSuccess isn't in scope here (only declared later at ~L900);
+      // referencing it threw ReferenceError if this audit branch ran. Read the
+      // caller metadata directly from the in-scope options.
+      arrivalTime24: (options.extraUpdate?.metadata as any)?.savedArrivalTime24 ?? null,
+      departureTime24: (options.extraUpdate?.metadata as any)?.savedDepartureTime24 ?? null,
     });
     if (result.violations.length > 0) {
       auditSummary = {

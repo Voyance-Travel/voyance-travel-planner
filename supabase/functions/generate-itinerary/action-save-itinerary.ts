@@ -1328,7 +1328,10 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         else if (typeof dietary === 'string' && dietary.trim()) userConstraints.dietary = [dietary.trim()];
         const mobility = (prefs as any)?.mobility || (tripMeta as any)?.mobility;
         if (mobility && typeof mobility === 'string') userConstraints.mobility = mobility;
-        const tripWideMerged = [...tripWideFromTable, ...parsedFineTune.tripWide];
+        // BUGFIX: parsedFineTune is undefined here (stale ref from a removed parse
+        // step) — it threw ReferenceError if this branch ran. tripWideFromTable
+        // already holds the merged trip-wide notes (see merge.tripWideNotes above).
+        const tripWideMerged = [...tripWideFromTable];
         if (tripWideMerged.length > 0) userConstraints.tripWideNotes = tripWideMerged;
 
         return buildDayLedger({
