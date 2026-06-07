@@ -1052,14 +1052,21 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         // Re-sort by startTime so the new card lands in the right place.
         day.activities.sort((a: any, b: any) => parseTimeToMinutes(a.startTime || a.start_time || a.time)
           - parseTimeToMinutes(b.startTime || b.start_time || b.time));
-      }
-      // Collapse duplicate injected meal sentinels created across injectors
-      // (e.g. guard dinner@19:00 + STEP-2.6 dinner@19:30) into one per slot, or
-      // drop them entirely when a real meal already covers the slot. The
-      // protection invariant keeps these alive, so without this they pile up.
-      const _dedup = collapseRedundantInjectedMeals(day.activities);
-      if (_dedup > 0) {
-        console.log(`[save-itinerary] [MEAL_DEDUP] day=${dayNumber} removed ${_dedup} redundant injected meal sentinel(s)`);
+        // Collapse duplicate injected meal sentinels created across injectors
+        // (e.g. guard dinner@19:00 + STEP-2.6 dinner@19:30) into one per slot, or
+        // drop them entirely when a real meal already covers the slot. The
+        // protection invariant keeps these alive, so without this they pile up.
+        // ── BUGFIX: this dedup is per-day and references `day`/`dayNumber`, so it
+        // MUST run INSIDE the loop. A stray `}` previously closed the loop before
+        // this block, so on every real (multi-day) itinerary it threw
+        // `ReferenceError: day is not defined`, crashing the save-itinerary action
+        // (500, no CORS → client "FunctionsFetchError: Failed to send a request").
+        // That silently broke ALL in-itinerary edit persistence (reorder, autosave,
+        // AI-notes, lock-toggle) on any generated trip.
+        const _dedup = collapseRedundantInjectedMeals(day.activities);
+        if (_dedup > 0) {
+          console.log(`[save-itinerary] [MEAL_DEDUP] day=${dayNumber} removed ${_dedup} redundant injected meal sentinel(s)`);
+        }
       }
       (itinerary as any).days = itineraryDays;
     }
