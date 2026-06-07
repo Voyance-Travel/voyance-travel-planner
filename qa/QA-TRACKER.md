@@ -26,7 +26,9 @@ The app moved to a **new stack** (owned Supabase + OpenRouter + Vercel) and the 
   - ✅ **A1 Home** — renders clean; nav links verified (valid targets, no dead #); zero console errors *(footer + Explore-dropdown click-through still pending)*
   - ✅ **A2 Explore** — **deep-tested**: search "Tokyo" → 1 result → `/destination/tokyo` loads with real content + images (validates content port). *Open: off-catalog search behavior, Filters*
   - ✅ **A3 Pricing** — renders + image loads *(credit-value match vs backend not yet scrolled/verified)*
-  - ✅ **A4 "Complete" gating FIXED** (commit b3a0f4e50) — now shows "Answer N more questions to continue" instead of silently disabling
+  - ✅ **A4 "Complete" gating FIXED + VERIFIED LIVE** (commit b3a0f4e50) — quiz shows "Answer 2 more questions to continue" on the live new stack
+  - ✅ **A9 session/auth VERIFIED LIVE** — signed in (avatar + logged-in nav); fresh account correctly routes to /quiz onboarding (test data not migrated, expected)
+  - ✅ **A4 Quiz** renders + flows live (10 questions, progress bar, free-text "Just Tell Us Your Story" path present)
   - ⏳ **Live-test-dependent red items remaining** (need a logged-in session on the new stack to reproduce + verify): A4 free-text DNA path · A5 Overview stats vs My Trips · A5 friends add/accept · A9 signup/password-reset/logout (OAuth login ✅ already) · A8 admin cost-RPC ($0) + user_tiers writes
 - **Left:** the full sheet below, re-tested on the new stack — trip generation, 4 creation modes, in-itinerary tools, credits/pricing, DNA→itinerary proof, security, admin.
 
