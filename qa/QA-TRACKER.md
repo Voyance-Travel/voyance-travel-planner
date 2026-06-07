@@ -199,8 +199,8 @@
 | Single City | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — paid Barcelona (−210, charge==display) |
 | Multi-City | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — Lisbon→Porto (2 cities, 5 days, 52 acts, Day-3 transition); wizard (cities/nights/dates/transport/fine-tune) all work; real inter-city transport compare (CP train/FlixBus/TAP/car); **cost 360 display == −360 charged** (5×60 + 60 multi-city fee); **fresh-trip costs CLEAN** ($35–155/pp/day, no doubling) |
 | Just Tell Us (free-text) | ⬜ | ⬜ | | | ⬜ |
-| Build Myself (= the FREE version, per owner — manual build, no generation charge) | ⬜ | ⬜ | | | ⬜ |
-| Free version | ⬜ | ⬜ | **= Build Myself** (owner-clarified) — verify it's genuinely free (no credit charge) | | ⬜ |
+| Build Myself (= the FREE version, per owner — paste-research organizer, no AI generation) | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — pasted a 2-day Lisbon plan → parsed to 2 days/8 activities; **balance UNCHANGED (5600), 0 charges**, `unlocked_day_count=2` (fully unlocked). "Free – all content stays unlocked" accurate |
+| Free version | ✅ | ✅ | **= Build Myself** (owner-clarified) | — | ✅ **genuinely free** (0 credit charge, fully unlocked) |
 <!-- QA test-state 2026-06-07: owner-authorized test top-up → balance 5600 (qa_test_topup manual_grant, NOT real revenue). first_trip_used=true. -->
 
 ## B2. In-itinerary tools
@@ -251,8 +251,8 @@
 | Single City | ✅ | ✅ | | | ✅ paid Barcelona verified |
 | Multi-City | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — Lisbon→Porto, 5 days/52 acts/2 cities, transition day, fresh costs clean |
 | Just Tell Us (free-text → parse) | ⬜ | ⬜ | | | ⬜ |
-| Build Myself (manual) | ⬜ | ⬜ | | | ⬜ |
-| Free version | ⬜ | ⬜ | | | ⬜ |
+| Build Myself (manual, = Free version) | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — paste-organize → 2 days/8 acts, free (0 charge), fully unlocked |
+| Free version | ✅ | ✅ | = Build Myself | | ✅ free + unlocked verified |
 | Each path → complete itinerary, no fallback, DNA applied | 🟡 | 🟡 | | | 🟡 Single+Multi ✅; DNA-character A/B still unproven (Table B3) |
 
 ## D2. Build wizard — steps & inputs (each step: renders, validates, persists, back/forward, resume draft)
