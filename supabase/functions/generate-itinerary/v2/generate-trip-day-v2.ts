@@ -99,7 +99,7 @@ export async function handleGenerateTripDayV2(
   userId: string,
   params: Record<string, any>,
 ): Promise<Response> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
+  const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY')!;
   const { tripId, dayNumber, traceId } = params;
   // `heal` marks a re-entrant regeneration fired by the final-day completeness
   // gate to fill a genuinely-empty day. A heal run skips the chain self-invoke
@@ -199,7 +199,7 @@ export async function handleGenerateTripDayV2(
 
     // ── 3. Compile prompt + schema ─────────────────────────────────────
     const compiled = await withStage(trace, 'compile_prompt', { dayNumber }, async () =>
-      compilePrompt(supabase, userId, LOVABLE_API_KEY, {
+      compilePrompt(supabase, userId, OPENROUTER_API_KEY, {
         ...params,
         tripId,
         dayNumber,
@@ -222,7 +222,7 @@ export async function handleGenerateTripDayV2(
       const r = await callAI({
         systemPrompt: compiled.systemPrompt,
         userPrompt: compiled.userPrompt,
-        apiKey: LOVABLE_API_KEY,
+        apiKey: OPENROUTER_API_KEY,
         dayNumber,
         trace,
         tracePurpose: 'generate-trip-day-v2',

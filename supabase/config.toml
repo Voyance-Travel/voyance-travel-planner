@@ -59,8 +59,6 @@ project_id = "jsxplunjjvxuejeouwob"
     verify_jwt = false
   [functions.destination-images]
     verify_jwt = false
-  [functions.discover-hidden-gems]
-    verify_jwt = false
   [functions.discover-proactive]
     verify_jwt = false
   [functions.dna-feedback-chat]
@@ -71,15 +69,11 @@ project_id = "jsxplunjjvxuejeouwob"
     verify_jwt = false
   [functions.enrich-manual-trip]
     verify_jwt = false
-  [functions.enrich-preferences]
-    verify_jwt = false
   [functions.explain-recommendation]
     verify_jwt = false
   [functions.fetch-reviews]
     verify_jwt = false
   [functions.flight-status]
-    verify_jwt = false
-  [functions.flights]
     verify_jwt = false
   [functions.generate-full-preview]
     verify_jwt = false
@@ -88,8 +82,6 @@ project_id = "jsxplunjjvxuejeouwob"
   [functions.generate-travel-guide]
     verify_jwt = false
   [functions.generate-itinerary]
-    verify_jwt = false
-  [functions.generate-travel-blog]
     verify_jwt = false
   [functions.generate-quick-preview]
     verify_jwt = false
@@ -147,25 +139,17 @@ project_id = "jsxplunjjvxuejeouwob"
     verify_jwt = false
   [functions.parse-trip-input]
     verify_jwt = false
-  [functions.post-trip-cron]
-    verify_jwt = false
   [functions.post-trip-email]
     verify_jwt = false
   [functions.profile-ideal-hotel]
     verify_jwt = false
   [functions.purchase-group-unlock]
     verify_jwt = false
-  [functions.purchase-smart-finish]
-    verify_jwt = false
   [functions.purchase-trip-pass]
     verify_jwt = false
   [functions.recommend-restaurants]
     verify_jwt = false
   [functions.refresh-day]
-    verify_jwt = false
-  [functions.score-image-quality]
-    verify_jwt = false
-  [functions.seed-demo-user]
     verify_jwt = false
   [functions.send-contact-email]
     verify_jwt = false
@@ -174,8 +158,6 @@ project_id = "jsxplunjjvxuejeouwob"
   [functions.send-trip-reminders]
     verify_jwt = false
   [functions.spend-credits]
-    verify_jwt = false
-  [functions.spend-group-credits]
     verify_jwt = false
   [functions.stripe-connect-onboard]
     verify_jwt = false
@@ -228,8 +210,6 @@ project_id = "jsxplunjjvxuejeouwob"
   [functions.enrich-destination]
     verify_jwt = false
   [functions.activity-concierge]
-    verify_jwt = false
-  [functions.generation-canary]
     verify_jwt = false
   [functions.moderate-guide-content]
     verify_jwt = false

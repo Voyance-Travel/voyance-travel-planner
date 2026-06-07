@@ -356,7 +356,7 @@ export async function verifyVenueWithDualAI(
   supabaseUrl: string,
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
-  LOVABLE_API_KEY: string | undefined,
+  OPENROUTER_API_KEY: string | undefined,
   hotelCoordinates?: { lat: number; lng: number }
 ): Promise<VenueVerification | null> {
   const venueName = activity.location?.name || activity.title;
@@ -400,12 +400,12 @@ export async function verifyVenueWithDualAI(
 
   let semanticConfidence = googleResult.confidence;
 
-  if (!skipSemanticCheck && LOVABLE_API_KEY && googleResult.formattedAddress) {
+  if (!skipSemanticCheck && OPENROUTER_API_KEY && googleResult.formattedAddress) {
     try {
-      const semanticResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const semanticResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Lovable-API-Key': LOVABLE_API_KEY,
+          'Lovable-API-Key': OPENROUTER_API_KEY,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -619,7 +619,7 @@ export async function enrichActivity(
   supabaseUrl: string,
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
-  LOVABLE_API_KEY: string | undefined,
+  OPENROUTER_API_KEY: string | undefined,
   hotelCoordinates?: { lat: number; lng: number }
 ): Promise<StrictActivity> {
   const enriched = { ...activity };
@@ -651,7 +651,7 @@ export async function enrichActivity(
   try {
     const [venueData, photoResult, viatorMatch] = await Promise.race([
       Promise.all([
-        verifyVenueWithDualAI(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY, hotelCoordinates)
+        verifyVenueWithDualAI(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, OPENROUTER_API_KEY, hotelCoordinates)
           .catch((e) => {
             console.log(`[Stage 4] Venue verify timeout/error for "${activity.title}":`, e.message);
             return null;
@@ -799,7 +799,7 @@ export async function enrichActivityWithRetry(
   supabaseUrl: string,
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
-  LOVABLE_API_KEY: string | undefined,
+  OPENROUTER_API_KEY: string | undefined,
   maxRetries: number = 1,
   hotelCoordinates?: { lat: number; lng: number }
 ): Promise<{ activity: StrictActivity; success: boolean; retried: boolean }> {
@@ -813,7 +813,7 @@ export async function enrichActivityWithRetry(
         supabaseUrl,
         supabaseKey,
         GOOGLE_MAPS_API_KEY,
-        LOVABLE_API_KEY,
+        OPENROUTER_API_KEY,
         hotelCoordinates
       );
       return { activity: enriched, success: true, retried };
@@ -844,7 +844,7 @@ export async function enrichItinerary(
   supabaseUrl: string,
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
-  LOVABLE_API_KEY: string | undefined,
+  OPENROUTER_API_KEY: string | undefined,
   hotelCoordinates?: { lat: number; lng: number }
 ): Promise<{ days: StrictDay[]; stats: EnrichmentStats }> {
   console.log(`[Stage 4] Starting enrichment for ${days.length} days with real photos + dual-AI venue verification`);
@@ -881,7 +881,7 @@ export async function enrichItinerary(
       const batch = day.activities.slice(i, i + BATCH_SIZE);
       const enrichedBatch = await Promise.all(
         batch.map((act) =>
-          enrichActivityWithRetry(act, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY, 1, hotelCoordinates)
+          enrichActivityWithRetry(act, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, OPENROUTER_API_KEY, 1, hotelCoordinates)
         )
       );
 

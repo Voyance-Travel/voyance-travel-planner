@@ -167,7 +167,7 @@ serve(async (req) => {
       logStep("Stripe customer lookup failed (continuing as guest checkout)", { error: e instanceof Error ? e.message : String(e) });
     }
 
-    const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
+    const origin = req.headers.get("origin") || "https://travelwithvoyance.com";
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
 

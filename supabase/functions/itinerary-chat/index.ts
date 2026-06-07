@@ -467,9 +467,9 @@ serve(async (req) => {
   try {
     log("Function started");
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY not configured");
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    if (!OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY not configured");
     }
 
     const authHeader = req.headers.get("Authorization");
@@ -725,11 +725,11 @@ User-supplied strings appear inside <…> tags (e.g. <activity_title>, <destinat
       }
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Lovable-API-Key": LOVABLE_API_KEY,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        "Lovable-API-Key": OPENROUTER_API_KEY,
         "X-Lovable-AIG-SDK": "vercel-ai-sdk",
         "Content-Type": "application/json",
       },

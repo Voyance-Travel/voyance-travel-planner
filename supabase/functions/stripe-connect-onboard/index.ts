@@ -63,7 +63,7 @@ serve(async (req) => {
       log("Error fetching preferences", prefError);
     }
 
-    const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
+    const origin = req.headers.get("origin") || "https://travelwithvoyance.com";
 
     switch (action) {
       // ========================================

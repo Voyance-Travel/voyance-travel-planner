@@ -73,7 +73,7 @@ serve(async (req) => {
       customerId = customers.data[0].id;
     }
 
-    const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
+    const origin = req.headers.get("origin") || "https://travelwithvoyance.com";
 
     // Deterministic idempotency key — collapses duplicate clicks within the same minute,
     // but lets a deliberate later top-up of the same amount go through.

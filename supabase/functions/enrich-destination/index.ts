@@ -105,8 +105,8 @@ serve(async (req) => {
     const isRefresh = !!dest.enriched_at && isExpired;
     log(isRefresh ? "Refreshing (TTL expired)" : "First enrichment", { destinationId });
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    if (!OPENROUTER_API_KEY) {
       return json({ success: false, error: "AI key not configured", code: "CONFIG_ERROR" }, 500);
     }
 
@@ -149,10 +149,10 @@ IMPORTANT: Return ONLY valid JSON, no markdown, no code fences.`;
     // ---------- 3. COST TRACKING ----------
     const tracker = trackCost("enrich_destination", "google/gemini-2.5-flash").setUserId(user.id);
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

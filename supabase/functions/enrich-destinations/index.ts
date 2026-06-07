@@ -57,11 +57,11 @@ serve(async (req) => {
   if (auth instanceof Response) return auth;
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Supabase config missing");
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -120,7 +120,7 @@ serve(async (req) => {
         try {
           console.log(`[enrich-destinations] Enriching: ${dest.city}, ${dest.country}`);
           
-          const enriched = await enrichWithLocalKnowledge(dest, LOVABLE_API_KEY);
+          const enriched = await enrichWithLocalKnowledge(dest, OPENROUTER_API_KEY);
           
           if (enriched) {
             const updates: Record<string, unknown> = {
@@ -287,7 +287,7 @@ Return ONLY valid JSON, no markdown or explanations.`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,

@@ -195,7 +195,7 @@ serve(async (req) => {
                     </div>
                     
                     <div style="text-align: center; margin-top: 30px;">
-                      <a href="https://voyance-travel-planner.lovable.app/trip/${tripId}" 
+                      <a href="https://travelwithvoyance.com/trip/${tripId}" 
                          style="display: inline-block; background: #1a1a1a; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
                         View Your Itinerary
                       </a>

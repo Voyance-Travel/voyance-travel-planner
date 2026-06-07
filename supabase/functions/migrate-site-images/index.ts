@@ -45,7 +45,7 @@ async function fetchImage(primary: string, fallback: string) {
   const primaryResp = await fetch(primary, {
     headers: {
       "Accept": "image/*",
-      "Referer": "https://voyance-travel-planner.lovable.app",
+      "Referer": "https://travelwithvoyance.com",
       "User-Agent": "Mozilla/5.0",
     },
   });
@@ -55,7 +55,7 @@ async function fetchImage(primary: string, fallback: string) {
   const fallbackResp = await fetch(fallback, {
     headers: {
       "Accept": "image/*",
-      "Referer": "https://voyance-travel-planner.lovable.app",
+      "Referer": "https://travelwithvoyance.com",
       "User-Agent": "Mozilla/5.0",
     },
   });

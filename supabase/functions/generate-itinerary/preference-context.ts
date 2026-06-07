@@ -874,7 +874,7 @@ export function buildPreferenceContext(insights: any, prefs: any): string {
 // AI Preference Enrichment
 // =============================================================================
 
-export async function enrichPreferencesWithAI(prefs: any, destination: string, LOVABLE_API_KEY: string): Promise<string> {
+export async function enrichPreferencesWithAI(prefs: any, destination: string, OPENROUTER_API_KEY: string): Promise<string> {
   if (!prefs || Object.keys(prefs).filter(k => prefs[k] !== null).length === 0) {
     return "";
   }
@@ -901,10 +901,10 @@ Create a detailed traveler profile with:
 Make it conversational and actionable, not a bullet list. The AI reading this should feel like they deeply understand this traveler.`;
 
   try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Lovable-API-Key": LOVABLE_API_KEY,
+        "Lovable-API-Key": OPENROUTER_API_KEY,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

@@ -81,11 +81,11 @@ Generate a daily briefing as JSON with:
 
 Return ONLY valid JSON, no markdown.`;
 
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('LOVABLE_API_KEY')}`,
+          'Authorization': `Bearer ${Deno.env.get('OPENROUTER_API_KEY')}`,
         },
         body: JSON.stringify({
           model: 'google/gemini-2.5-flash-lite',

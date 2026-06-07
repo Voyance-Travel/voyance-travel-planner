@@ -2097,20 +2097,20 @@ async function generatePerfectTrip(
   traits: TraitScores,
   confidence: number
 ): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
   
-  if (!LOVABLE_API_KEY) {
-    console.warn('LOVABLE_API_KEY not configured, using fallback');
+  if (!OPENROUTER_API_KEY) {
+    console.warn('OPENROUTER_API_KEY not configured, using fallback');
     return getFallbackPerfectTrip(archetype.id);
   }
   
   const prompt = buildPerfectTripPromptV2(archetype, secondaryArchetype, blendPct, answers, traits, confidence);
   
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

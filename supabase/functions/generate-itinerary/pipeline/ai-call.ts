@@ -53,14 +53,14 @@ function assertLovableApiKey(apiKey: string | undefined): string {
   const key = String(apiKey || '').trim();
   if (!key) {
     throw new AICallError(
-      'LOVABLE_API_KEY missing',
+      'OPENROUTER_API_KEY missing',
       500,
       'AI configuration is missing. Please try again in a moment.',
     );
   }
   if (key.startsWith('Bearer ') || key.startsWith('eyJ')) {
     throw new AICallError(
-      'LOVABLE_API_KEY malformed',
+      'OPENROUTER_API_KEY malformed',
       500,
       'AI configuration is invalid. Please try again in a moment.',
     );
@@ -163,7 +163,7 @@ export async function callAI(input: AICallInput): Promise<AICallResult> {
     const t0 = Date.now();
     let response: Response;
     try {
-      response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
           "Lovable-API-Key": lovableApiKey,

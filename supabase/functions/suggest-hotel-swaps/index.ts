@@ -100,10 +100,10 @@ Return a JSON array of swap suggestions. Each suggestion must have:
 If no swaps are beneficial, return an empty array [].
 Return ONLY the JSON array, no markdown or explanation.`;
 
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${Deno.env.get('LOVABLE_API_KEY')}`,
+        'Authorization': `Bearer ${Deno.env.get('OPENROUTER_API_KEY')}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

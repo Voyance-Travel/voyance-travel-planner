@@ -18,6 +18,10 @@ FROM (VALUES
   ('Mercat de la Boqueria'),
   ('Visit Sagrada Família')
 ) AS v(title)
+-- Guard: only seed when the target trip exists. On a fresh DB (e.g. a new
+-- Supabase project) the trip is absent, so this becomes a safe no-op instead of
+-- a foreign-key violation. On the live DB the trip exists and behavior is unchanged.
+WHERE EXISTS (SELECT 1 FROM public.trips WHERE id = '96d47894-d1f4-4cd7-865f-195912172cc1'::uuid)
 ON CONFLICT DO NOTHING;
 
 -- Unfreeze so a user-initiated regeneration writes a fresh itinerary.

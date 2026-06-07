@@ -97,8 +97,8 @@ export async function handleGenerateDay(
   userId: string,
   params: Record<string, any>
 ): Promise<Response> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
+  const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+  if (!OPENROUTER_API_KEY) {
     return new Response(
       JSON.stringify({ error: "Server configuration error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -212,7 +212,7 @@ export async function handleGenerateDay(
   // archetype guidance, Voyance Picks, attribution, system + user prompt.
   // Extracted to pipeline/compile-prompt.ts (Phase 4)
   // ═══════════════════════════════════════════════════════════════════════
-  const prompt = await compilePrompt(supabase, userId, LOVABLE_API_KEY, params, facts);
+  const prompt = await compilePrompt(supabase, userId, OPENROUTER_API_KEY, params, facts);
   const {
     systemPrompt, userPrompt,
     mustDoEventItems, dayMealPolicy,
@@ -242,7 +242,7 @@ export async function handleGenerateDay(
       aiResult = await callAI({
         systemPrompt,
         userPrompt,
-        apiKey: LOVABLE_API_KEY,
+        apiKey: OPENROUTER_API_KEY,
         dayNumber,
         trace: dayTrace.enabled ? dayTrace : null,
         tracePurpose: 'day-initial-generation',
@@ -629,7 +629,7 @@ export async function handleGenerateDay(
         departureTransportType: _departureTransportType,
         dayTitle: generatedDay?.theme || generatedDay?.title || `Day ${dayNumber}`,
         budgetTier: budgetTier || 'moderate',
-        apiKey: LOVABLE_API_KEY,
+        apiKey: OPENROUTER_API_KEY,
         lockedActivities: lockedActivities,
         usedRestaurants: paramUsedRestaurants || [],
         hotelName: (flightContext as any)?.hotelName || paramHotelName || params.hotelOverride?.name || undefined,
@@ -818,7 +818,7 @@ export async function handleGenerateDay(
       supabaseUrl,
       supabaseKey,
       googleMapsApiKey: GOOGLE_MAPS_API_KEY || '',
-      lovableApiKey: LOVABLE_API_KEY,
+      lovableApiKey: OPENROUTER_API_KEY,
       hotelCoordinates,
     });
     _diagTimers.enrichEnd = Date.now();
@@ -1363,7 +1363,7 @@ export async function handleGenerateDay(
           await fillMissingDescriptions(
             normalizedActivities as any[],
             validationInput.destination,
-            Deno.env.get('LOVABLE_API_KEY') || undefined,
+            Deno.env.get('OPENROUTER_API_KEY') || undefined,
             dayNumber,
           );
         } catch (err) {

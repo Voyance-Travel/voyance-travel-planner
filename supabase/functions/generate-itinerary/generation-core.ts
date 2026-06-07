@@ -618,7 +618,7 @@ export async function generateSingleDayWithRetry(
   dayNumber: number,
   previousDays: StrictDay[],
   flightHotelContext: string,
-  LOVABLE_API_KEY: string,
+  OPENROUTER_API_KEY: string,
   supabaseClient: any, // For DB-driven destination essentials
   perplexityApiKey?: string,
   maxRetries: number = 2
@@ -1265,10 +1265,10 @@ Generate activities for this day following ALL constraints above.`;
 
       let data: any = null;
       for (let attempt = 1; attempt <= 3; attempt++) {
-        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
           headers: {
-            "Lovable-API-Key": LOVABLE_API_KEY,
+            "Lovable-API-Key": OPENROUTER_API_KEY,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -2415,7 +2415,7 @@ Generate activities for this day following ALL constraints above.`;
 export async function generateItineraryAI(
   context: GenerationContext,
   preferenceContext: string,
-  LOVABLE_API_KEY: string,
+  OPENROUTER_API_KEY: string,
   flightHotelContext: string = '',
   supabaseClient?: any, // For DB-driven destination essentials
   perplexityApiKey?: string
@@ -2441,7 +2441,7 @@ export async function generateItineraryAI(
           dayNum,
           days, // Pass already completed days for context
           flightHotelContext,
-          LOVABLE_API_KEY,
+          OPENROUTER_API_KEY,
           supabaseClient,
           perplexityApiKey
         )
@@ -3077,7 +3077,7 @@ export async function finalSaveItinerary(
     // (Stage 2 happy-path) never persists a dining card without copy.
     try {
       const { fillMissingDescriptions } = await import('../_shared/description-fill.ts');
-      const apiKey = Deno.env.get('LOVABLE_API_KEY') || undefined;
+      const apiKey = Deno.env.get('OPENROUTER_API_KEY') || undefined;
       const daysForFill = (frontendReadyData?.days || frontendReadyData?.itinerary?.days || []) as any[];
       await Promise.all(daysForFill.map((d: any, idx: number) => {
         const cityForDay = d?.city || d?.cityName || context.destination;

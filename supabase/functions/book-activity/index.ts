@@ -115,7 +115,7 @@ serve(async (req) => {
       }
 
       // Create Stripe Checkout session for this item
-      const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
+      const origin = req.headers.get("origin") || "https://travelwithvoyance.com";
 
       // Deterministic idempotency key — collapses duplicate clicks for the same item+amount
       // within a 60-second window; later retries get a fresh key so users aren't locked out.

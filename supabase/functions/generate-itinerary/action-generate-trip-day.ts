@@ -1803,7 +1803,7 @@ async function _handleGenerateTripDayInner(
         await fillMissingDescriptions(
           dayResult.activities || [],
           cityInfo?.cityName || destination,
-          Deno.env.get("LOVABLE_API_KEY") || undefined,
+          Deno.env.get("OPENROUTER_API_KEY") || undefined,
           dayNumber,
         );
       } catch (err) {
@@ -2053,7 +2053,7 @@ async function _handleGenerateTripDayInner(
       departureTransportType: _isLastDay ? departureTransportType : undefined,
       dayTitle: dayResult?.theme || dayResult?.title,
       budgetTier: budgetTier || 'moderate',
-      apiKey: Deno.env.get("LOVABLE_API_KEY") || undefined,
+      apiKey: Deno.env.get("OPENROUTER_API_KEY") || undefined,
       lockedActivities: lockedActivitiesForDay,
       usedRestaurants: usedRestaurants,
       hotelName: cityInfo?.hotelName || tripHotelName || undefined,
@@ -4117,7 +4117,7 @@ async function _handleGenerateTripDayInner(
           const supaUrl = Deno.env.get('SUPABASE_URL') || '';
           const supaKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
           const gMapsKey = Deno.env.get('GOOGLE_MAPS_API_KEY') || '';
-          const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
+          const lovableKey = Deno.env.get('OPENROUTER_API_KEY') || '';
           const enrichSummary: Array<{ day: number; attempted: number; resolved: number; unresolved: string[] }> = [];
           try {
             const { enrichAnchorActivities } = await import('./pipeline/enrich-day.ts');

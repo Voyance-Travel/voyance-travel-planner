@@ -181,7 +181,7 @@ Return ONLY valid JSON, no markdown.`;
   const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
 
   try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -261,10 +261,10 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const lovableApiKey = Deno.env.get("OPENROUTER_API_KEY");
 
     if (!lovableApiKey && !dryRun) {
-      throw new Error("LOVABLE_API_KEY is required for live cleanup");
+      throw new Error("OPENROUTER_API_KEY is required for live cleanup");
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);

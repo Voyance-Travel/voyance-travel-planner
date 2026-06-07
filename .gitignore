@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Supabase edge-function secrets (filled-in, never commit)
+supabase/secrets.env
+secrets.env
+old-secrets.env
+supabase/.temp/
+supabase/.branches/
+.mcp.json

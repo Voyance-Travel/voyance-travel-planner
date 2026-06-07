@@ -286,7 +286,7 @@ Be SPECIFIC to ${destination}. Not generic advice.
 For a Culinary Cartographer in Rome, mustDo should include "Testaccio Market" not "visit a food market".`;
 
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Lovable-API-Key': aiGatewayKey,
