@@ -19,10 +19,13 @@ The app moved to a **new stack** (owned Supabase + OpenRouter + Vercel) and the 
 
 ### 📈 PROGRESS (new-stack re-QA)
 - **Code audit:** ~90% (carried from pre-migration; heavily re-read during cutover)
-- **Live re-test on new stack: ~3 of ~120 items (~3%)** — *just started*:
+- **Live re-test on new stack: ~5 of ~120 items (~4%)** — *underway, agent-driven via browser*:
   - ✅ Google login — OAuth end-to-end on the owned stack
-  - ✅ Image pipeline — `destination-images` caches to new storage; global image rewrite bug fixed
+  - ✅ Image pipeline — `destination-images` caches to new storage; global image rewrite bug FIXED (commit 1427c9776)
   - ✅ Public-share RPC routes — the original incident, confirmed fixed
+  - ✅ **A1 Home** — renders clean (nav, hero, Problem/comparison section), zero console errors
+  - ✅ **A2 Explore** — renders clean, **full Unsplash hero image loads** (image fix confirmed live)
+  - 🔁 next: A3 marketing (Pricing/How-It-Works/About), A4 Quiz, A5 Profile (logged-in), then trip build
 - **Left:** the full sheet below, re-tested on the new stack — trip generation, 4 creation modes, in-itinerary tools, credits/pricing, DNA→itinerary proof, security, admin.
 
 ### Working order (re-QA, 2026-06-07)
