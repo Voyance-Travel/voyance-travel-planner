@@ -540,6 +540,15 @@ export default function Quiz() {
     });
   };
 
+  const unansweredRequired = () => {
+    const requiredQuestions = stepQuestions.filter(q => !q.optional);
+    return requiredQuestions.filter(q => {
+      const answer = answers[q.id];
+      if (Array.isArray(answer)) return answer.length === 0;
+      return !answer;
+    }).length;
+  };
+
   const handleNext = async () => {
     if (currentStep < totalSteps - 1) {
       const nextStep = currentStep + 1;
@@ -763,6 +772,11 @@ export default function Quiz() {
               
               {/* Compact Navigation */}
               <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t border-border/50 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                {!canProceed() && !isSubmitting && (
+                  <p className="max-w-xl mx-auto text-center text-xs text-amber-600 dark:text-amber-400 mb-2">
+                    Answer {unansweredRequired()} more {unansweredRequired() === 1 ? 'question' : 'questions'} to continue
+                  </p>
+                )}
                 <div className="max-w-xl mx-auto flex justify-between items-center">
                   <Button
                     variant="ghost"
