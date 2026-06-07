@@ -48,25 +48,21 @@ export function normalizeUnsplashUrl(url?: string | null): string {
   const value = url.trim();
   if (!value) return PLACEHOLDER_TRAVEL_SRC;
 
-  // Already an internal, local, or data asset — pass through
-  if (
-    value.startsWith('/') ||
-    value.startsWith('data:') ||
-    value.includes('/storage/v1/object/public/site-images/')
-  ) {
+  // Local or data assets — pass through.
+  if (value.startsWith('/') || value.startsWith('data:')) {
     return value;
   }
 
-  // All Unsplash CDN URLs are now rewritten to internal site-images bucket
-  // to eliminate external CDN dependency and prevent slow loading on refresh.
-
-  // Only rewrite legacy source.unsplash.com or bare photo-id references
-  // to our internal bucket
-  if (isUnsplashUrl(value) || (!value.includes('/') && /^photo-[a-z0-9-]+$/i.test(value))) {
-    const photoId = extractPhotoId(value);
-    return toSiteImageUrlFromPhotoId(photoId);
+  // Any reference carrying an Unsplash photo id — an Unsplash CDN URL, a legacy
+  // `site-images` bucket URL, or a bare `photo-…` id — is served straight from
+  // the Unsplash CDN. The `site-images` bucket is NOT populated on this project,
+  // so the previous behavior (rewrite to that bucket) 404'd every image.
+  const photoId = extractPhotoId(value);
+  if (photoId) {
+    return `https://images.unsplash.com/${photoId}?auto=format&fit=crop&w=1600&q=80`;
   }
 
+  // Anything else (populated storage objects, other CDNs) — pass through.
   return value;
 }
 
