@@ -6,7 +6,7 @@
  * Returns { estimates: { walking, transit, taxi } }
  */
 
-import { googleRoutes } from "../_shared/google-api.ts";
+import { cachedGoogleRoutes as googleRoutes } from "../_shared/google-api.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
 import { parseAuth } from "../_shared/require-auth.ts";
 

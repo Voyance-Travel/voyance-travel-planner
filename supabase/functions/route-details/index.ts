@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { googleRoutes } from "../_shared/google-api.ts";
+import { cachedGoogleRoutes as googleRoutes } from "../_shared/google-api.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
 import { parseAuth } from "../_shared/require-auth.ts";
 

@@ -7,7 +7,7 @@
 
 import type { StrictActivity, StrictDay, VenueVerification, CachedVenue, EnrichmentStats } from './generation-types.ts';
 import { normalizeVenueName, haversineDistanceKm } from './generation-utils.ts';
-import { googleGeocode, cachedGooglePlacesTextSearch } from '../_shared/google-api.ts';
+import { cachedGoogleGeocode as googleGeocode, cachedGooglePlacesTextSearch } from '../_shared/google-api.ts';
 import { isWeakAddress } from '../_shared/address-quality.ts';
 
 // =============================================================================

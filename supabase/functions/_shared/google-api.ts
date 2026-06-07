@@ -709,3 +709,106 @@ export async function cachedGooglePlacesTextSearch(
 
   return result;
 }
+
+// ============================================================================
+// C-COST-5: Cached wrappers for geocode / routes / distance-matrix.
+// The response between fixed inputs (addresses/coords) is stable, so we cache the
+// raw Google response keyed by a deterministic hash of the request inputs in the
+// generic `google_api_response_cache` table (service-role only). This preserves
+// transit-buffer behaviour exactly (same inputs → same duration/distance) while
+// eliminating repeat Google calls for the same lookup across users/trips.
+// ============================================================================
+
+function _djb2Hex(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(16);
+}
+
+function _respCacheClient() {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  return _createSupabaseClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
+}
+
+async function _respCacheGet(cacheKey: string): Promise<unknown | null> {
+  try {
+    const supabase = _respCacheClient();
+    const { data } = await supabase
+      .from("google_api_response_cache")
+      .select("response_data")
+      .eq("cache_key", cacheKey)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
+    return (data as { response_data?: unknown } | null)?.response_data ?? null;
+  } catch (e) {
+    console.warn("[google-cache] lookup failed (continuing to Google):", e);
+    return null;
+  }
+}
+
+async function _respCacheSet(cacheKey: string, sku: string, responseData: unknown, ttlDays: number): Promise<void> {
+  try {
+    const supabase = _respCacheClient();
+    await supabase.from("google_api_response_cache").upsert(
+      {
+        cache_key: cacheKey,
+        sku,
+        response_data: responseData as Record<string, unknown>,
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      { onConflict: "cache_key" },
+    );
+  } catch (e) {
+    console.warn("[google-cache] store failed:", e);
+  }
+}
+
+/** Geocoding with a 60-day shared cache (coordinates of an address never change). */
+export async function cachedGoogleGeocode(params: GeocodeParams, ctx: GoogleCallContext): Promise<GeocodeResult> {
+  const key = `geocode:${_djb2Hex((params.address ?? "").toLowerCase().trim() + "|" + (params.language ?? ""))}`;
+  const cached = await _respCacheGet(key);
+  if (cached) {
+    console.log(`[google-cache] HIT geocode "${params.address}"`);
+    return { ok: true, status: 200, data: cached };
+  }
+  const result = await googleGeocode(params, ctx);
+  if (result.ok && (result.data as { status?: string })?.status === "OK") {
+    await _respCacheSet(key, "geocoding", result.data, 60);
+  }
+  return result;
+}
+
+/** Routes (computeRoutes) with a 30-day shared cache. Distance/duration between two
+ *  fixed coordinates is stable enough for itinerary buffer planning. */
+export async function cachedGoogleRoutes(params: RoutesParams, ctx: GoogleCallContext): Promise<RoutesResult> {
+  const key = `routes:${_djb2Hex(JSON.stringify(params.body) + "|" + params.fieldMask)}`;
+  const cached = await _respCacheGet(key);
+  if (cached) {
+    console.log(`[google-cache] HIT routes`);
+    return { ok: true, status: 200, data: cached };
+  }
+  const result = await googleRoutes(params, ctx);
+  if (result.ok && result.data && !(result.data as { error?: unknown })?.error) {
+    await _respCacheSet(key, "routes", result.data, 30);
+  }
+  return result;
+}
+
+/** Distance Matrix with a 30-day shared cache. departureTime is intentionally
+ *  excluded from the key — a single representative O/D/mode estimate is sufficient
+ *  for buffer planning and maximizes cross-trip reuse. */
+export async function cachedGoogleDistanceMatrix(params: DistanceMatrixParams, ctx: GoogleCallContext): Promise<DistanceMatrixResult> {
+  const key = `distmatrix:${_djb2Hex(`${params.origins}|${params.destinations}|${params.mode}`)}`;
+  const cached = await _respCacheGet(key);
+  if (cached) {
+    console.log(`[google-cache] HIT distmatrix ${params.mode}`);
+    return { ok: true, status: 200, data: cached };
+  }
+  const result = await googleDistanceMatrix(params, ctx);
+  if (result.ok && (result.data as { status?: string })?.status === "OK") {
+    await _respCacheSet(key, "distance_matrix", result.data, 30);
+  }
+  return result;
+}

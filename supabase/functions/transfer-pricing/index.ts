@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost } from "../_shared/cost-tracker.ts";
-import { googleDistanceMatrix } from "../_shared/google-api.ts";
+import { cachedGoogleDistanceMatrix as googleDistanceMatrix } from "../_shared/google-api.ts";
 import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
