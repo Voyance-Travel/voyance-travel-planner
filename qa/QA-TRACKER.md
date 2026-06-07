@@ -29,6 +29,9 @@ The app moved to a **new stack** (owned Supabase + OpenRouter + Vercel) and the 
   - ✅ **A4 "Complete" gating FIXED + VERIFIED LIVE** (commit b3a0f4e50) — quiz shows "Answer 2 more questions to continue" on the live new stack
   - ✅ **A9 session/auth VERIFIED LIVE** — signed in (avatar + logged-in nav); fresh account correctly routes to /quiz onboarding (test data not migrated, expected)
   - ✅ **A4 Quiz** renders + flows live (10 questions, progress bar, free-text "Just Tell Us Your Story" path present)
+  - ✅ **B4 CREDIT GRANTS verified live (DB-confirmed)**: welcome +150 → quiz_completion +100 → preferences_completion +50 = **300**; all grant rows + balance correct on new stack
+  - ✅ **A5 Overview stats** 0/0/0/0 — consistent w/ empty account (old fake-seed-stats bug does NOT reproduce)
+  - ✅ **A4 DNA assignment** — "The Cultural Anthropologist" assigned from quiz
   - ⏳ **Live-test-dependent red items remaining** (need a logged-in session on the new stack to reproduce + verify): A4 free-text DNA path · A5 Overview stats vs My Trips · A5 friends add/accept · A9 signup/password-reset/logout (OAuth login ✅ already) · A8 admin cost-RPC ($0) + user_tiers writes
 - **Left:** the full sheet below, re-tested on the new stack — trip generation, 4 creation modes, in-itinerary tools, credits/pricing, DNA→itinerary proof, security, admin.
 
