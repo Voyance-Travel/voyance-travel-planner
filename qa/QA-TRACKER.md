@@ -11,13 +11,28 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 - **Fix verified**: ✅ fix confirmed (re-audited or re-tested) · ⏳ fix shipped, awaiting verify · ⬜ no fix yet · ➖ nothing to fix
 - **DONE = Audit ✅ + Live ✅** (and Fix verified ✅ if there was a defect).
 
-### Working order (owner-set, 2026-06-05)
-1. ✅ Build this tracker
-2. ▶️ **Pricing / credits** — prove consistent + accurate (audit running)
-3. **Google overspend** — find the bleed + structural fix: ≤~200 Google calls/day regardless of traffic; shared place-level cache for popular destinations, 1–2 month+ TTL (audit running)
-4. **Fix standing concerns as we go** — preferences-injection, archetype/trait-leak/differentiation, low-sev — *don't let them pile up*
-5. **Then** live testing: DNA accuracy across ALL types, admin pages, page-by-page functionality, DNA→itinerary A/B
-6. Fix-and-verify each item before advancing; nothing closes on one checkmark.
+### 🔁 MIGRATION RE-QA PROTOCOL (2026-06-07) — read this first
+The app moved to a **new stack** (owned Supabase + OpenRouter + Vercel) and the **code changed a lot** (AI gateway, auth, image pipeline, env/URL config). So every item is re-checked on two axes:
+- **Audit** = re-read the (changed) code.
+- **Live (NEW STACK)** = re-tested on the **Vercel preview + owned Supabase**. ⚠️ **Every prior "Live ✅" below was on the OLD Lovable stack — treat them all as ⏳ PENDING re-test.** Nothing is DONE until it's green on the new stack.
+- When a re-test surfaces a bug (images, OAuth callback, etc.) → **investigate + fix + re-verify** before closing.
+
+### 📈 PROGRESS (new-stack re-QA)
+- **Code audit:** ~90% (carried from pre-migration; heavily re-read during cutover)
+- **Live re-test on new stack: ~3 of ~120 items (~3%)** — *just started*:
+  - ✅ Google login — OAuth end-to-end on the owned stack
+  - ✅ Image pipeline — `destination-images` caches to new storage; global image rewrite bug fixed
+  - ✅ Public-share RPC routes — the original incident, confirmed fixed
+- **Left:** the full sheet below, re-tested on the new stack — trip generation, 4 creation modes, in-itinerary tools, credits/pricing, DNA→itinerary proof, security, admin.
+
+### Working order (re-QA, 2026-06-07)
+1. ✅ Stack alive — login · image pipeline · share-RPC
+2. ▶️ **Trip generation** (OpenRouter AI → DB write) — the core path
+3. 4 creation modes + free version · in-itinerary tools (each: works + correct credit charge)
+4. Credits / pricing accuracy · Google budget enforcement
+5. DNA → itinerary differentiation (the proof) · Table E security
+6. Admin pages · navigation/dead-ends · marketing re-confirm
+7. Fix-and-verify each surfaced issue before advancing; nothing closes on one checkmark.
 
 ---
 
