@@ -4,7 +4,7 @@ import { trackCost } from "../_shared/cost-tracker.ts";
 import { parseAuth } from "../_shared/require-auth.ts";
 import {
   googleGeocode,
-  googlePlacesTextSearch,
+  cachedGooglePlacesTextSearch as googlePlacesTextSearch,
   googleRoutes,
   googleDirections,
   googleDistanceMatrix,

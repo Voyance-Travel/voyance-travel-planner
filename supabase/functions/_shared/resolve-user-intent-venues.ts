@@ -18,7 +18,7 @@
  * skipped — current path handles them.
  */
 
-import { googlePlacesTextSearch, type GoogleCallContext } from './google-api.ts';
+import { cachedGooglePlacesTextSearch as googlePlacesTextSearch, type GoogleCallContext } from './google-api.ts';
 import {
   INLINE_FALLBACK_RESTAURANTS,
   getRandomFallbackRestaurant,
