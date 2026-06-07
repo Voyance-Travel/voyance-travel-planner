@@ -1,531 +1,114 @@
-# Voyance Travel — QA Master Tracker
+# Voyance Travel — QA Tracker
 
-**The single source of truth for QA.** Every page, every feature, every concern gets **two independent checks** — a code **Audit** and a **Live** test. An item is only DONE when **both are ✅**. When something fails, we record **what went wrong → the resolution → and verify the fix** before closing.
+**State document. What's working, what's open, what needs the owner.** Not a changelog.
+An item is GREEN only when verified **live on the new stack** (code-read alone ≠ done).
 
-Env: **NEW STACK (2026-06-07)** — Vercel preview = staging · owned Supabase `qpwexpjqzsdkjkvgcntx` · OpenRouter AI. `travelwithvoyance.com` stays on the old Lovable site (rollback) until cutover is QA-verified. · Test credits authorized · Account: ashtonlaurenn@gmail.com
-Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). This file is the structured checklist.
+**Env:** owned Supabase `qpwexpjqzsdkjkvgcntx` · OpenRouter AI · Vercel (`voyance-travel-planner.vercel.app`) = staging. `travelwithvoyance.com` stays on the old Lovable site (rollback) until cutover is QA-verified. Test credits authorized · Account: ashtonlaurenn@gmail.com.
 
 ---
 
-## ✅ PROGRESS AT A GLANCE — 2026-06-07
+## CURRENT STATE — 2026-06-07
 
-### **Overall: ~30% complete** — *migration done is the big chunk; the product QA is barely started*
-
-| Track | Status |
+| Track | State |
 |---|---|
-| 🚚 **Migration & cutover** | ✅ **100% — DONE** (own Supabase + OpenRouter + Vercel · 48k content rows · original PostgREST incident fixed) |
-| 🟢 **Code audit** | **~90%** (carried + heavily re-read during cutover) |
-| 🔵 **Live re-QA on new stack** | **~12%** — a few foundational pages touched (mostly *partial*); **most sections still OPEN** |
+| 🚚 Migration & cutover | ✅ **DONE** — own Supabase + OpenRouter + Vercel; 48,831 content rows ported; schema/functions/secrets/realtime/Stripe/email all live |
+| 🤖 Core trip generation | ✅ **WORKING — verified live end-to-end** (free first trip: 4 days / 63 real DNA-differentiated activities) |
+| 🔓 Paid unlock (bulk + full-trip) | ✅ **WORKING — verified live** (−120 credits, days unlock, ledger correct) |
+| 💬 Freemium copy | ✅ accurate ("first trip starts free — 2 days included") |
+| 🔵 Product QA on new stack | **~15%** — foundational pages + the core money/build path verified; most in-itinerary tools & build modes still untested live |
 
-**Verified live (new stack) — the only closed-ish items:** images · OAuth login · share-RPC · A2 Explore (search→destination) · A4 quiz gating-fix + DNA-assign · A5 Overview-stats · A9 OAuth login · B4 credit *grants* (welcome/quiz/prefs = **300**, DB-confirmed). *(A1/A3 only render-verified; not click-through complete.)*
-**Fixed + shipped this cutover:** site-wide images · OAuth/SPA callback · quiz gating
+### Verified live on the new stack
+Images · Google OAuth login · public-share RPC · A1 Home · A2 Explore (search→destination) · A3 all marketing pages (pricing matches backend) · A4 quiz (gating + DNA assignment + match%) · A5 Profile (overview/credits/friends-sent/prefs) · A8 admin (gate + cost dashboard) · B4 credit grants (welcome 150 + quiz 100 + prefs 50 = 300, DB-confirmed) · **trip generation (free first trip)** · **paid day-unlock**.
 
-**✅ CRITICAL BUG FIXED + VERIFIED (2026-06-07) — trip generation free-first-trip 403:** root-caused to `generate-itinerary` ignoring `profiles.first_trip_used` (the client makes the 1st trip free → spends no credits → no proof-of-charge → server gate 403'd every fresh account's first generation). **Fix (commit `d0f5c795e`, deployed):** the gate now honors `first_trip_used === false` (same canonical flag as `get-entitlements`); flag is consumed by an existing trigger only after success, so paid 2nd+ trips still require a real proof. **Verified live:** with 0 proof rows + `first_trip_used=false`, the call now passes the gate (403 → 400 payload-validation). Confirmed `spend-credits` itself works (200). ✅ **final end-to-end gen verified — see next entry.**
-
-**✅✅ CRITICAL BUG #2 FIXED + VERIFIED END-TO-END (2026-06-07) — AI generation 401 (migration drift, commit `1333adb5f`):** after the gate fix let generation *start*, it failed at day 1 with `V2_FATAL` / `trip_plan_error: planner HTTP 401`. **Root cause:** all **14 AI call sites** were migrated to the OpenRouter URL (`https://openrouter.ai/api/v1/chat/completions`) but still sent the old Lovable-gateway header **`Lovable-API-Key`** instead of **`Authorization: Bearer ${key}`**. OpenRouter ignores that header → every LLM request was unauthenticated → 401 → generation produced 0 days. The OpenRouter key itself was valid (verified via `/api/v1/key` = 200) and the model slugs resolve (gemini-3-flash-preview / 2.5-flash = 200). **Fix:** swapped all 14 headers to `Authorization: Bearer` (generate-itinerary ai-call/generation-core/action-generate-trip/attraction-matching/preference-context/venue-enrichment/fix-placeholders, _shared trip-planner/refill-slots/slot-filler/fill-gap/description-fill, activity-concierge, itinerary-chat). Redeployed generate-itinerary + activity-concierge + itinerary-chat + refresh-day + backfill-must-do-anchor-enrichment. **VERIFIED LIVE END-TO-END via real UI (Madrid free-first-trip, trip `46e086c9`):** retry → status `failed→generating→partial`, **4 days / 63 real activities written**, `chain_error` cleared. UI renders fully: Chocolatería San Ginés (real address+photo+tip), El Rastro Market, Flamenco@Cardamomo, Madrid History E-Bike, **Bouldering@Sharma (DNA edge-activity)**, La Latina neighborhood — genuinely DNA-differentiated (cultural_anthropologist / adventure / authenticity). `partial` badge = **intended free-tier state** ("2 Unlocked · 2 Locked · Unlock All ~120 credits"), not a bug. **✅ RESOLVED — FREEMIUM WORDING FIX (owner confirmed freemium is correct; 2 free days + paid unlock):** the misleading "Your first trip is free!" copy (which implied a fully-free trip) was corrected across 7 strings to honest freemium framing — *"Your first trip starts free — 2 days included"*. Files: `TripCostEstimate.tsx`, `ItineraryGenerator.tsx` (×2: subhead + signup gate), `Pricing.tsx` (×4: FAQ "everything included" was outright wrong → fixed, meta description, hero subhead, pricing hero). Also clarified credits unlock **more days *and* future trips** (not just future trips). Build verified clean. The model is unchanged (generation free + days 1–2 unlocked, days 3+ cost credits); only the copy was made accurate.
-
-**🟠 CRITICAL BUG #3 FIXED — PAID UNLOCK BROKEN (2026-06-07, commit `56eb38f68`; ⬜ live re-verify after Vercel deploy):** clicking **"Unlock All Remaining ~120 credits"** on the Madrid trip showed *"Failed to unlock days. Please try again."* Console: `[BulkUnlock] Failed: Edge Function returned a non-2xx status code`. **Root cause (client/server contract drift):** `spend-credits` requires `metadata.idempotencyKey` for every spend (returns **400 MISSING_IDEMPOTENCY_KEY** without it, `index.ts:610-616`), but **`useBulkUnlock`** (bulk "Unlock All") and **`useUnlockTrip`** (full-trip unlock) never sent one. The deduct path itself is healthy — verified `deduct_credits_fifo(user,120)` returns `{success,deducted:120}` in a rolled-back txn, and the user has 240 credits across 3 `credit_purchases` rows. The sibling hooks (`useUnlockDay`, `useGenerationGate`, `useSpendCredits`) already sent the key; these two were missed. **Fix:** add a generated `idempotencyKey` (in body + metadata) to both, matching the `useUnlockDay` pattern. Build clean. **Note:** balance is 240 not 300 — 60 credits were deducted by a prior successful unlock (signup_bonus row shows remaining=90/150), so the spend path *did* work historically; this drift is purely the missing-key contract on these two hooks.
-
-~~**🔴 CRITICAL BUG (2026-06-07 live test) — TRIP GENERATION BLOCKED on new stack:** `generate-itinerary` → **403 `GENERATION_NOT_AUTHORIZED`** ("no charge record found", `index.ts:335`).~~ Acct has 5,300 credits (not the line-326 credits-exhausted path), so the **pre-generation proof-of-charge / credit-reservation step is not creating the ledger record** the server-side gate requires → generation refuses to run (status stays `not_started`, 0 days). **Blocks the core product.** **Diagnosis (deep):** charge step = `spend-credits` (`action:'trip_generation'`) fired from the credit *gate* in `ItineraryGenerator.tsx` (~L595) BEFORE generate. For the free-first-trip (Barcelona `cccfb390`, days 1–2 free / 3–5 paid) it produced **0 ledger spends + 0 pending_credit_charges** → generate-itinerary (`index.ts:314–336`) finds no proof → 403. **NOT a grant issue** (`deduct_credits_fifo`→service_role is granted). **DECISIVE NEXT TEST:** invoke `spend-credits` with the user JWT + trip_generation payload → see if it (a) wasn't called for free days, (b) ran $0 without writing a proof row, or (c) errored — each has a different targeted fix. **DO NOT ship blind changes to the credit path.** 3 files: `ItineraryGenerator.tsx` (gate), `spend-credits/index.ts`, `generate-itinerary/index.ts:314–336`.
-
-**🟥 STILL OPEN (NOT done) — the bulk of the product:** trip build (A6/A7 · D1–D6) · 4 build modes (B1) · in-itinerary tools (B2) · **DNA→itinerary proof (B3)** · credits/charging deep audit (B4 — only grants verified) · admin cost/economics (A8) · security (E) · A5 friends · A4 free-text DNA · A1 logged-out embeds · **all 5 deep-dive re-verifications.**
-**No major migration *drift* found** (the migration itself is clean) — but **product QA is early.** ▶️ **Next:** the [DNA & Preference-Adherence Test Plan](#-test-plan--dna--preference-adherence-the-big-proof) below.
+### Recently fixed (this cutover) — all verified live unless noted
+- **Trip-gen 403** (free-first-trip gate ignored `profiles.first_trip_used`) → gate honors the flag.
+- **AI 401** — all 14 AI call sites used the old `Lovable-API-Key` header instead of `Authorization: Bearer` for OpenRouter → every LLM call was unauthenticated. Fixed across `generate-itinerary` (+pipeline/_shared), `activity-concierge`, `itinerary-chat`.
+- **Paid unlock broken** — `useBulkUnlock` + `useUnlockTrip` didn't send the now-required `metadata.idempotencyKey` → 400. Fixed both.
+- Site-wide images · OAuth/SPA callback · quiz gating · freemium wording (7 strings).
 
 ---
 
-### How to read the checkboxes
-- **Audit** (code read): ✅ clean · ❌ issue found · ⏳ in progress · ⬜ not started · ➖ n/a
-- **Live** (exercised on prod): ✅ clean · ❌ broken · ⏳ in progress · ⬜ not started · ➖ n/a
-- **Fix verified**: ✅ fix confirmed (re-audited or re-tested) · ⏳ fix shipped, awaiting verify · ⬜ no fix yet · ➖ nothing to fix
-- **DONE = Audit ✅ + Live ✅** (and Fix verified ✅ if there was a defect).
+## NEEDS THE OWNER
 
-### 🔁 MIGRATION RE-QA PROTOCOL (2026-06-07) — read this first
-The app moved to a **new stack** (owned Supabase + OpenRouter + Vercel) and the **code changed a lot** (AI gateway, auth, image pipeline, env/URL config). So every item is re-checked on two axes:
-- **Audit** = re-read the (changed) code.
-- **Live (NEW STACK)** = re-tested on the **Vercel preview + owned Supabase**. ⚠️ **Every prior "Live ✅" below was on the OLD Lovable stack — treat them all as ⏳ PENDING re-test.** Nothing is DONE until it's green on the new stack.
-- When a re-test surfaces a bug (images, OAuth callback, etc.) → **investigate + fix + re-verify** before closing.
-
-### 📈 PROGRESS (new-stack re-QA)
-- **Code audit:** ~90% (carried from pre-migration; heavily re-read during cutover)
-- **Live re-test on new stack: ~5 of ~120 items (~4%)** — *underway, agent-driven via browser*:
-  - ✅ Google login — OAuth end-to-end on the owned stack
-  - ✅ Image pipeline — `destination-images` caches to new storage; global image rewrite bug FIXED (commit 1427c9776)
-  - ✅ Public-share RPC routes — the original incident, confirmed fixed
-  - ✅ **A1 Home** — renders clean; nav links verified (valid targets, no dead #); zero console errors *(footer + Explore-dropdown click-through still pending)*
-  - ✅ **A2 Explore** — **deep-tested**: search "Tokyo" → 1 result → `/destination/tokyo` loads with real content + images (validates content port). *Open: off-catalog search behavior, Filters*
-  - ✅ **A3 Pricing** — renders + image loads *(credit-value match vs backend not yet scrolled/verified)*
-  - ✅ **A4 "Complete" gating FIXED + VERIFIED LIVE** (commit b3a0f4e50) — quiz shows "Answer 2 more questions to continue" on the live new stack
-  - ✅ **A9 session/auth VERIFIED LIVE** — signed in (avatar + logged-in nav); fresh account correctly routes to /quiz onboarding (test data not migrated, expected)
-  - ✅ **A4 Quiz** renders + flows live (10 questions, progress bar, free-text "Just Tell Us Your Story" path present)
-  - ✅ **B4 CREDIT GRANTS verified live (DB-confirmed)**: welcome +150 → quiz_completion +100 → preferences_completion +50 = **300**; all grant rows + balance correct on new stack
-  - ✅ **A5 Overview stats** 0/0/0/0 — consistent w/ empty account (old fake-seed-stats bug does NOT reproduce)
-  - ✅ **A4 DNA assignment** — "The Cultural Anthropologist" assigned from quiz
-  - ⏳ **Live-test-dependent red items remaining** (need a logged-in session on the new stack to reproduce + verify): A4 free-text DNA path · A5 Overview stats vs My Trips · A5 friends add/accept · A9 signup/password-reset/logout (OAuth login ✅ already) · A8 admin cost-RPC ($0) + user_tiers writes
-- **Left:** the full sheet below, re-tested on the new stack — trip generation, 4 creation modes, in-itinerary tools, credits/pricing, DNA→itinerary proof, security, admin.
-
-### Working order (re-QA, 2026-06-07)
-1. ✅ Stack alive — login · image pipeline · share-RPC
-2. ▶️ **Trip generation** (OpenRouter AI → DB write) — the core path
-3. 4 creation modes + free version · in-itinerary tools (each: works + correct credit charge)
-4. Credits / pricing accuracy · Google budget enforcement
-5. DNA → itinerary differentiation (the proof) · Table E security
-6. Admin pages · navigation/dead-ends · marketing re-confirm
-7. Fix-and-verify each surfaced issue before advancing; nothing closes on one checkmark.
+- **pg_cron — 2 HTTP jobs** (`auto-summarize-completed-trips`, `send-trip-reminders-daily`) still point at the OLD project. Background-only (nightly), not user-blocking. Fix needs the service-role key set as a DB setting — blocked from automating (credential-leak guard). **Paste the 3-line SQL (provided in chat) into the Supabase SQL editor.**
+- **Optional secrets** (enrichment quality only): Viator · Foursquare · TripAdvisor · Unsplash · APNS/IAP iOS keys.
+- **Final cutover:** attach `travelwithvoyance.com` to Vercel once QA passes (old site = rollback until then).
 
 ---
 
-## 📊 OVERALL PROGRESS — updated 2026-06-07 (POST-MIGRATION — re-QA on new stack)
+## OPEN WORK — what's left to test/verify live
 
-**"Done" = Audit ✅ AND Live ✅** (and for a defect, fix merged + deployed + re-verified).
+### Core build & itinerary (highest value)
+- ⬜ **4 build modes** end-to-end: Single City · Multi-City · Just Tell Us (free-text) · Build Myself
+- ⬜ **Build wizard** steps validate/persist/resume (dest, dates, party, interests, dietary, pace, budget, accommodation, must-dos, accessibility)
+- ⬜ **In-itinerary tools** (each: works + persists on refresh + correct credit charge + refund-on-failure): regenerate day · swap activity · move/reorder · add activity · add flight/hotel · lock · Smart Finish · mystery · route optimize · restaurant recs · hotel optimize · AI chat · Export/PDF · Maps render · collaborator invite link
+- ⬜ **Persistence integrity** — `itinerary_activities` table ↔ `trips.itinerary_data` JSON stay in sync after regen/swap/move (known historical divergence point)
 
-| Lane | State | What's here |
-|---|--:|---|
-| ✅ **Verified LIVE** (Audit ✅ + Live ✅) | **A1, A2, A3 closed** + much of A4/A5/A8 | A1 (nav/bell/footer/CTA) · A2 Explore + **C-EXPLORE-1** · **A3 all 13 marketing pages** (pricing matches backend) · A4 DNA accuracy + match% · A5 Credits (accurate) + Friends-Sent · A8 admin gate + C-ADMIN-1/3 |
-| 🟢 **Code audit** | **~90% reviewed** | fleet swept every zone; per-row Audit boxes closed as each is live-verified |
-| 🚀 **Fixes shipped + deployed** (PRs #29–49, all merged 2026-06-05) | DNA #24/35, CRIT-1 #29, admin-gate #30, guide #32, IAP #34, C-PERSIST #38/40, C-FRIEND #39, Google #41/42, **C-DNA-4 #43**, **C-EXPLORE-1 #44**, **C-TOOL-1/2 #45**, **C-ADMIN-1 #46**, **C-ADMIN-2/3 #47**, **C-REFERRAL-1 #48**, **C-TOOL-3/4/5/7 #49** | 119 edge fns + 2 migrations deployed |
-| ✅ **Deep-dive bugs CLOSED (verified live, 2026-06-07)** | all 6 | C-COST-3a (admin Money-Out now **$205 live**, EXECUTE grant #59) · C-TRIPS-1 (My Trips **117 trips live**, #56) · C-CRED-9 #52 · C-DATA-1 #53 · C-POLL-1 #55 · C-COST-3b #57 · **share-recipient "worst" bug FIXED + verified** (#60/#61) |
-| ✅ **MIGRATION COMPLETE — blockers GONE** | own backend | 🔴→✅ **PUBLIC SHARE**: own Supabase PostgREST reloads normally (root cause gone) · 🔴→✅ **A9 Google OAuth**: native Supabase OAuth + Google enabled + URL config set (auth-lock path retired) · the gated 12% is now **testable** |
-| 🔄 **RE-QA on new stack — IN PROGRESS** | ⏳ start here | Re-validate infra-dependent flows on **Vercel preview (staging) + owned Supabase**: ① auth/login (Google) ② trip generation (OpenRouter AI) ③ payments (Stripe live) ④ email (Zoho/SendGrid) ⑤ images/content (48k rows ported) ⑥ public sharing — **then** the previously-gated **A6/A7 + Table D** (trip build), **B3** (DNA proof), **Table E** (security) |
-| ✅ **Carries over (logic unchanged — spot-check only)** | code identical | Deep-dive bugs (all 6 closed), meal coverage, cost math, itinerary rendering, A1–A5/A8 marketing+pricing — same code, just re-confirm it behaves on the new backend |
+### DNA & preferences (the big proof) — see test plan below
+- ⬜ Same city, different DNA → measurably different itinerary (≥40% venues differ, dining-ratio Δ≥15pts, no generic fallback)
+- ⬜ Preferences honored in output (dietary, budget tier, pace, accommodation, accessibility, must-dos/avoids)
 
-> **Honest state — MIGRATION COMPLETE (2026-06-07), now re-validating:** Fully **off Lovable Cloud**. Backend = owned Supabase **`qpwexpjqzsdkjkvgcntx`** (schema + **48,831 content rows** ported · 122 edge functions · pg_cron · realtime · 25 secrets). AI = **OpenRouter** (Lovable gateway dropped — 56 functions swapped to identical models). Auth = **native Supabase OAuth** (`@lovable.dev/cloud-auth-js` removed). Hosting = **Vercel** (Vite SPA builds clean). **The two original blockers are eliminated**: PostgREST reloads on the owned backend (fixes public share), and Google OAuth works (Google enabled + redirect allow-list set). The migration didn't reset QA — it **removed the wall** that gated the final ~12%. **Re-QA plan:** the Vercel preview is now a clean, controllable staging env; run the infra-dependent flows + the previously-gated items there, then attach `travelwithvoyance.com`. Regression gate: vitest **718/718**, tsc 0, build green.
+### Auth & security
+- ⬜ A9 finish: email signup · password reset · logout · email verification · return-path deep link
+- ⬜ Table E security: RLS spot-check (trips/credits/dna/user_roles) · edge-fn auth gating · no secret leak in bundle · non-admin admin-route denial (needs a 2nd account)
+- ⬜ User-type matrix: anon (gen blocked) · free (limits) · paid · club member
 
----
-
-## 🔁 MIGRATION VALIDATION — "any holes?" check (2026-06-07)
-
-Systematic check that nothing was missed moving to the owned stack. ✅ verified · ⚠️ hole/dependency · ⏳ owner live-test.
-
-| Area | Status | Notes |
-|---|---|---|
-| Schema (162 tbl · 85 fn · 493 RLS · 28 enum) | ✅ | replays clean; tsc 0 |
-| **Content data** | ✅ | **48,831 rows ported** from old project (destinations 2246, verified_venues 7476, airports 740, activities 15885, curated_images 15103, attractions 6999, guides, landmarks, archetype guides) |
-| Edge functions (122) | ✅ | deployed, pointing at OpenRouter |
-| AI → OpenRouter | ✅ | live chat verified; all model slugs present (image model remapped) |
-| Auth → native Supabase OAuth | ✅ | Google enabled · redirect allow-list set · `@lovable.dev/cloud-auth-js` removed |
-| Secrets | ✅ core / ⚠️ | 25 set; **missing (optional): Viator·Foursquare·TripAdvisor·Unsplash (enrichment), APNS/IAP iOS keys** |
-| **pg_cron (9 jobs)** | ⚠️ **HOLE — owner SQL** | 7 pure-SQL jobs ✅; **2 HTTP jobs (`auto-summarize`, `trip-reminders`) still point at the OLD project.** Background jobs only (nightly) — not user-blocking. Fix needs the service-role key set as a DB setting (I'm blocked from hardcoding it into a queryable cron command — credential-leak guard). **Owner: paste the 3-line SQL (provided in chat) into the Supabase SQL editor.** |
-| Realtime (8 tbl) | ✅ | publication migrated |
-| Storage buckets (8) | ✅ | **RESOLVED** — defs migrated; images are served by the live `destination-images` pipeline (Google/Pexels → new storage, verified) + the Unsplash-CDN fix for legacy `photo-` URLs. Stored files were never the real source, so nothing to copy. Images confirmed working site-wide. |
-| Stripe (live secret + webhook) | ✅ | live-validated, LIVE mode |
-| Email (Zoho SMTP) | ✅ | SMTP auth verified |
-| **Original incident (share RPC routing)** | ✅ **FIXED** | `toggle_consumer_trip_share` routes (HTTP 200) — PostgREST reloads on the owned backend |
-| Users/trips (test data) | ➖ | intentionally NOT migrated (test accounts only) |
-| Frontend (Vercel) | ✅ | deployed + serving; native auth + SPA callback + images all verified live on the preview |
-
-**Holes to close:** ① cron HTTP jobs (needs owner OK to set DB GUCs) · ② optional enrichment/iOS secrets · ③ storage files (deferred — old project alive).
+### Other live re-checks
+- ⬜ A4 "Just Tell Us Your Story" free-text DNA path · A5 friends add/accept flow · A1 logged-out marketing embeds
+- ⬜ Re-verify the original 5 generation fixes on a fresh build: launcher-timeout/heartbeat · crash-proof renderer · Partial-badge · meal coverage · departure transit
+- ⬜ Admin: Revenue/Forecast/Projections sub-tabs
 
 ---
 
-## 🆕 DEEP-DIVE FINDINGS — SQL-confirmed 2026-06-05 (5 items)
+## KNOWN OPEN DEFECTS (still-open only; condensed)
 
-> **⚠️ STATUS RECONCILIATION (2026-06-07) — read before trusting the rows below.** All 5 were FIXED in code + verified on the **OLD Lovable stack** (PRs #52/#53/#56/#57/#59). The rows below show the *original* finding for context — they are **NOT the current state.** Per the migration re-QA protocol, **each must be RE-VERIFIED on the new stack**, and C-COST-3a / C-COST-3b / C-TRIPS-1 are **data-dependent** (need real trips + API usage on the new account before they can even reproduce). **Honest current state: code fixed; new-stack re-verification = ⬜ PENDING (not done).**
->
-> **✅ CODE-READ CONFIRMATION (2026-06-07): the fixes ARE present in the migrated code — these are NOT broken on the new stack.** C-POLL-1 = `stalledFiredRef` log-once guard (`useGenerationPoller.ts:359`); C-COST-3a = RPC fix migrations `20260605190000` + `20260605210000` applied; C-TRIPS-1 / C-DATA-1 PRs migrated; C-EXPLORE-1 (#44) + C-DNA (#24/#35) migrated (A2 explore + A4 DNA already re-verified live). **They re-verify automatically once we build-test** (which generates the trips + usage data they need). No separate "fix" work required.
+Code carried over from pre-migration. These are genuinely **not yet fixed** (distinct from "fixed, awaiting live re-verify").
 
-| # | Finding | Sev | Status / Next step |
-|---|---|---|---|
-| **C-CRED-9** | `credit_balances.user_id` had **no FK** to auth.users → 20 orphan rows on account deletion (UNIQUE index holds, so balances NOT non-deterministic — low sev). | LOW | ✅ **FIXED — PR #52** (orphan cleanup + add `ON DELETE CASCADE`). Needs DB apply. |
-| **C-DATA-1** | Only 1/24 users has a `user_tiers` row. Stripe webhook writes it; the **IAP path** (`fulfill_credit_purchase` RPC) never did → IAP purchasers untracked. | MED | ✅ **FIXED — PR #53** (RPC upserts user_tiers, `ON CONFLICT DO NOTHING`, no downgrade). **PAYMENT-PATH — owner review** + DB apply. |
-| **C-COST-3a** | Admin Costs/Money-Out shows **$0** but `trip_cost_tracking` has **43,331 rows** (10K/mo). Writes fine → the **dashboard read RPC `get_unit_economics_summary` returns 0** (date/aggregation bug). | MED | 🔬 needs RPC fix (migration `20260215153101`). |
-| **C-COST-3b** | **`google_api_budget` table = 0 rows.** Nothing ever wrote to it → the **Google daily ceiling (#41) is NOT enforcing in prod** (`consume_google_budget` never increments — likely failing-open silently or hot path bypasses the gate). | **HIGH** | 🔬 **investigate FIRST** — deployed `_shared/google-api.ts` gate + RPC. The whole point of #41 (cost control) is inert. |
-| **C-TRIPS-1** | **My Trips shows "No trips yet" despite 108 trips** (all `status='draft'`, 77 `itinerary_status='ready'`). `loadTrips` has NO status filter + `transformTrip` date-buckets — so the simple "status filter" theory is WRONG. `getTripStats` reads the 108 fine (Overview 50/19/131/70 are REAL); `loadTrips` returns empty. | MED | 🔬 needs focused debug — add error logging to `loadTrips`, compare to `getTripStats` live. (Overview stats are NOT fake — correction to earlier note.) |
-| **C-POLL-1 🆕** | **Runaway `useGenerationPoller`**: console floods with `Silent timeout detected: heartbeat ~22min stale` **every ~8s**, re-parsing a 4-day itinerary each cycle (**10,000 log msgs**). A stuck-generation poller never terminates (acct has 4 `generating`+2 `not_started` trips). | MED | 🔬 terminate poller after N stale heartbeats. CPU/log churn. |
+| ID | Sev | Area | Issue | Direction |
+|---|---|---|---|---|
+| C-COST-3b | HIGH | cost | Google **daily ceiling not proven enforcing** — `google_api_budget` never incremented in prod; verify the breaker actually counts on a real build | behavioral counter test on next trip-build |
+| C-COST-4/5/6 | MED | cost | Uncached Google paths: frontend "Search with Google" (exposed key, untracked) · geocode/routes/distance-matrix · recommend-restaurants/hotels/reviews (engagement-scaled) | route via cached proxy wrappers |
+| C-COST-7 | LOW | cost | SKU billed even on network/abort; retries can double-bill a venue | don't bill on abort; cache-before-retry |
+| C-CRED-4/C-CRED-8 | HIGH | credits | Trip-gen cost is floor-only server-side (`days×60×0.9`) — client can skip multi-city fee + DNA complexity multiplier → undercharge | recompute canonical cost server-side from trip row |
+| C-CRED-6 | MED | credits | Monthly free-grant check-then-act race → possible concurrent 2× 150cr | atomic conditional UPDATE / unique(user,month) |
+| C-CRED-2b | LOW | credits | Guide-gen dup-click can double-charge (charge-after-success fixed the worst part) | client idempotencyKey on the guide charge |
+| C-TOOL-1/2/3/4 | HIGH/MED | tools | Refund-on-failure missing on several paid tools (day-unlock 60, AI-chat modifier, hotel-opt 100, add-activity 5) → credits lost if apply throws/cancels | add REFUND in catch / charge-after-confirm |
+| C-TOOL-5 | MED | tools | Charge/config drift: dead `RESTAURANT_REC` action consumes swap cap; chat pace/filter advertised-paid but free; chat prompt misquotes regen price | reconcile actions + prompt |
+| C-TOOL-6 | MED | tools | AI-feature edge fns (recommend-restaurants/hotels/optimize/chat/mystery) auth'd but **not** credit-gated server-side — trust client to charge | server-side proof-of-charge like generate-itinerary |
+| C-DNA-2/2b/3/5 | HIGH/MED | DNA | Trait-tuning gaps: client vs edge food-focus thresholds disagree · culinary answers leak to cultural traits · recalc path uses a divergent matcher · single-day regen with empty context drops dietary block | one source of truth for thresholds; rebalance answer→trait weights; route recalc through matchArchetypesV2 |
+| C-DNA-4 | HIGH | DNA A/B | Differentiation was flattened ("30-40% archetype seasoning"); de-flatten fix shipped but **needs the live A/B proof** (culinary vs cultural must diverge) | run the DNA test plan |
+| C-REFERRAL-1 | HIGH | growth | "Friends get 150 bonus credits" is non-functional — no referral bonus type, no `?ref=` consumption at signup | implement attribution + grant |
+| C-PERSIST-3 | MED | itinerary | Lock toggle: table updates but JSON lock frozen-blocked → reverts on refresh | pass `saveReason:'lock-toggle'` |
+| C-CREATE-1 | MED | create | "Just Tell Us" has no end≥start date guard → could create a zero/negative-day trip | add `isBefore(end,start)` check |
+| C-SEC-1 | MED | security | `verify_jwt=false` default on ~all edge fns (compensated by self-verify; a future un-gated fn would be exposed) | flip to true for non-public fns |
+| C-DATA-1 | MED | payments | IAP purchase path may not upsert `user_tiers` (Stripe webhook does) → IAP buyers untracked | verify on new stack; ensure upsert |
+| /press copy | LOW | content | "By the Numbers" says 29 archetypes; feature list says 27 — internal inconsistency | copy fix |
+
+> **Fixed-but-needs-live-reverify (not broken, just unproven on the new stack):** DNA accuracy (foodie→Culinary verified) · in-itinerary regenerate/edit persistence (C-PERSIST-1/2 saveReason fixes) · admin cost dashboard · credit-integrity hardening (Stripe priceId-derived grant, refund keying). These re-verify naturally as the build/tools tests above run.
 
 ---
 
 ## 🧬 TEST PLAN — DNA & Preference Adherence (the big proof)
-*Covers B3 (DNA→itinerary), D3 (preferences respected), D1/D2 (build), B1 (4 modes), D4 (generation correctness). The single highest-value test on the new stack — and it fills most remaining boxes.*
 
-**Method:** hold the destination constant (**Barcelona · 4 nights · 2 travelers**) and vary the DNA/preferences. Generate, then check the output against "Expect to see." Differentiation = the same city must produce **measurably different** itineraries per profile.
+Hold destination constant, vary DNA/preferences, confirm the output **measurably differs**. Closes the DNA/preferences/build-mode open items in one pass.
 
-### 1) DNA profiles — same city, different DNA → different itinerary
-| # | DNA / Profile | Set via | Expect the itinerary to lean toward… | Generated | Adheres ✅/❌ |
-|---|---|---|---|:--:|:--:|
-| 1 | **Culinary / foodie** | quiz: food-forward answers | La Boqueria, tapas crawl, cooking class, dinner reservations, food markets; **high dining ratio** | ⬜ | ⬜ |
-| 2 | **Cultural / history** | quiz: culture answers | Sagrada Família, Gothic Quarter, Picasso/MNAC, historic walking tours; **low nightlife** | ⬜ | ⬜ |
-| 3 | **Adventure / active** | quiz: adventure answers | Montjuïc, cable car, beach/water sports, Montserrat day-trip, **active pacing** | ⬜ | ⬜ |
-| 4 | **Relaxed / wellness** | quiz: slow/wellness answers | Spa, beach clubs, **fewer activities/day**, slow mornings, downtime | ⬜ | ⬜ |
+**DNA profiles (same city, different DNA → different itinerary):**
+| Profile | Expect | Generated | Adheres |
+|---|---|:--:|:--:|
+| Culinary / foodie | markets, tapas crawl, cooking class, high dining ratio | ⬜ | ⬜ |
+| Cultural / history | landmarks, museums, historic walks, low nightlife | ⬜ | ⬜ |
+| Adventure / active | hikes, water sports, day-trips, active pacing | ⬜ | ⬜ |
+| Relaxed / wellness | spa, beach, fewer activities/day, slow mornings | ⬜ | ⬜ |
 
-### 2) Preference adherence — set a pref, confirm the output honors it
-| Preference set | Expect | Adheres ✅/❌ |
-|---|---|:--:|
-| Dietary = **vegetarian** | restaurant picks veg-friendly; no steakhouse anchors | ⬜ |
-| Budget = **budget-friendly** | value venues, free attractions, lower total cost | ⬜ |
-| Budget = **luxury** | upscale dining/hotels, premium experiences | ⬜ |
-| Pace = **relaxed** | ≤3 activities/day, late starts, downtime blocks | ⬜ |
-| Accommodation = **unique stays** | boutique/Airbnb-style, not chain hotels | ⬜ |
-| Accessibility = **step-free** | avoids stair-heavy sites; notes accessibility | ⬜ |
+**Preference adherence:** dietary=vegetarian (veg-friendly picks) · budget=budget vs luxury (price tier) · pace=relaxed (≤3/day) · accommodation=unique (boutique not chain) · accessibility=step-free.
 
-### 3) Differentiation pass/fail (B3 proof)
-- [ ] ≥40% of venues **differ** between profiles 1 / 2 / 3 for the same city
-- [ ] Dining-ratio **Δ ≥15pts** between Culinary (1) and Cultural (2)
-- [ ] **No fallback/generic** itinerary — every day has real, named, geolocated venues (D4)
-- [ ] Each generation **charges the correct credits** and the AI path is OpenRouter (D4/B4)
+**Pass/fail:** ≥40% venues differ between profiles · dining-ratio Δ≥15pts (culinary vs cultural) · no generic fallback (every day real named geolocated venues) · each generation charges correct credits via OpenRouter.
 
-### 4) Build modes (B1 / D1) — each yields a complete itinerary
-| Mode | Built | Complete (no fallback) | DNA applied |
-|---|:--:|:--:|:--:|
-| Single City | ⬜ | ⬜ | ⬜ |
-| Multi-City | ⬜ | ⬜ | ⬜ |
-| Just Tell Us (free-text) | ⬜ | ⬜ | ⬜ |
-| Build Myself | ⬜ | ⬜ | ⬜ |
+**Build modes** (each → complete itinerary, no fallback, DNA applied): Single City ⬜ · Multi-City ⬜ · Just Tell Us ⬜ · Build Myself ⬜.
 
-> Running this plan top-to-bottom closes B3, D3, D1/D2/D4, B1, and most of A6/A7 in one coordinated pass.
+> Note: one data point already exists — the Madrid free-first-trip (cultural_anthropologist DNA) correctly produced edge activities (e-bike, bouldering), authentic-neighborhood encounters (La Latina), and nightlife (Flamenco, Salmon Guru). The plan needs a **contrasting** profile to prove divergence.
 
 ---
 
-# TABLE A — Pages × Features
-*(Itinerary, creation modes, and in-itinerary tools are detailed in **Table D**; auth/user-types in **Table E**.)*
-*Not just "does it render" — do the links work, do the in-page features actually function.*
-
-## A1. Home `/`
-| Feature | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Visual render | ➖ | ✅ | — | — | ➖ |
-| Hero CTA → trip builder | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: "Build My Itinerary" → /start (3-step builder) works. ⚠️ logged-out home *hero* button itself pending logged-out pass |
-| Nav links (all) | ✅ | ✅ | none — 22 links, zero dead `#` | — | ➖ |
-| Footer links | ✅ | ✅ | "Cookies"→/privacy (no dedicated cookies page) — minor | — | ✅ renders site-wide (About/HowItWorks/Pricing/Help/Contact/FAQ/Privacy/Terms) |
-| Any embedded CTAs / sample-itinerary / social proof widgets | ✅ | ⏳ | **logged-out marketing home only** — authed `/` redirects to /profile | code-reviewed (CTAs/social-proof present in Home component) | ⏳ **AUDIT closed**; LIVE pending logged-out pass (owner) |
-| Notification bell | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: opens Notifications panel with real entries ("Clinton Brooks joined your trip to Amsterdam/Lisbon"), "1 new" badge + "Read all" action |
-
-## A2. Explore `/explore`
-| Feature | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Visual render | ➖ | ✅ | — | — | ➖ |
-| Explore content cards / filters / links work | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: hero search bar, Filters, "Saved Destinations", category cards (Luxury/Adventure/Culture/Wellness/Culinary/Romantic), Voyance Guides + "All guides →" — all render & interactive |
-| **DNA-type explainer pages (one per archetype)** — enumerate ALL, each renders + describes the archetype correctly | ✅ | ✅ | **C-EXPLORE-1**: sheet showed a MISMATCHED body (Story Seeker→photography copy; history_hunter opened nothing) | **PR #44** — render sheet from the real narrative | ✅ **VERIFIED LIVE 2026-06-05**: history_hunter now OPENS (was dead) with correct content; story_seeker shows its real storytelling body, no photography. Title↔body match. |
-| DNA-type page ↔ archetype-matcher consistency (does the page's description match what the scorer actually assigns?) | ✅ | ✅ | was inconsistent (lossy narrative→detail map) | PR #44 renders from scorer-aligned `ARCHETYPE_NARRATIVES` | ✅ now consistent — the sheet is built from the same narratives the scorer assigns |
-
-## A3. Marketing / content pages
-| Page | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| /how-it-works | ✅ | ✅ | — | — | ✅ LIVE: renders ("The Voyance Method" hero + steps) |
-| /pricing (see also Table B credits) | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: renders + **credit values MATCH deployed backend** — Quick-Top-Up $9/100·$25/300·$39/500 = FLEX_PRICE_MAP; Adventurer 2500+700 = IAP fix #34. (Minor: "Founding Member 1000 of 1,000 remaining" — counter may be static.) |
-| /about | ✅ | ✅ | — | — | ✅ LIVE: full page (founder bios, problem/solution, feature-status transparency table, process steps, CTAs Take-Quiz/Founder's-Guides) |
-| /destinations | ✅ | ✅ | — | — | ✅ renders (hero + featured) |
-| /guides | ✅ | ✅ | — | — | ✅ renders (tabs/filters/cards) |
-| /careers | ✅ | ✅ | — | — | ✅ renders (4 positions) |
-| /faq | ✅ | ✅ | — | — | ✅ renders (accordions) |
-| /travel-tips | ✅ | ✅ | — | — | ✅ LIVE: guide cards (Smart Travel/Packing/Destinations/Airport Hacks) + newsletter subscribe |
-| /help | ✅ | ✅ | — | — | ✅ LIVE: full Help Center (4 categories, Quick Answers, Contact) |
-| /contact (form submit) | ✅ | ✅ | — | — | ✅ LIVE: full form (name/email/category/subject/message/Send) + direct email. ⚠️ submit NOT exercised (would send a message — needs owner permission) |
-| /press | ✅ | ✅ | **content bug**: "By the Numbers" says **29** archetypes but feature list says **27** (and "27 Curated City Guides") — internal inconsistency; 29 is correct elsewhere | needs copy fix on press page | ⏳ renders fully; minor count mismatch logged |
-| /privacy, /terms | ✅ | ✅ | — | — | ✅ LIVE: both complete real legal docs (privacy 9 sections, terms 12 sections; updated 2026-03-16) |
-
-## A4. Quiz `/quiz`
-| Feature | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Quiz completes + persists DNA | ✅ | ✅ | — | — | ➖ |
-| DNA assignment ACCURACY (right archetype for answers) | ✅ | ✅ | maximal foodie → "Urban Nomad" not Culinary (see Concern C-DNA-1) | fix #2 PR #24 (food weight 26→38 + urban anti-food guard) + PR #35 marker | ✅ **VERIFIED LIVE 2026-06-05**: post-CLI-deploy re-quiz (maximal foodie) → **"The Culinary Cartographer"** ("Your passport is basically a menu"), hints of Romantic Curator. Old Urban-Nomad fallback gone. |
-| "Complete" gating / unanswered-question guidance | ✅ | ✅ | (was: silently disabled <100% with no hint) | PR `b3a0f4e50` — inline "Answer N more questions to continue" hint | ✅ **FIXED + VERIFIED LIVE** (decrement 2→1 + singular grammar confirmed on new stack) |
-| Result card "match %" | ⬜ | ✅ | blank on new archetype | (resolved post-deploy?) | ✅ **LIVE 2026-06-05**: DNA card shows "52% match" for Culinary Cartographer — match% now renders (earlier "blank" not reproduced) |
-| "Just Tell Us Your Story" free-text DNA path | ⬜ | ⬜ | not exercised (2nd of 3 DNA input paths) | | ⬜ |
-
-## A5. Profile `/profile` (tabs)
-| Tab / feature | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Overview (stats render) | ✅ | ✅ | (old account showed real-but-misleading counts vs empty My Trips) | on the fresh new-stack account, stats show **0/0/0/0 — consistent** with empty My Trips | ✅ **VERIFIED LIVE — not a bug on the new stack** (no fake seed values; DNA card "The Cultural Anthropologist" renders) |
-| My Trips (list/open) | ✅ | ✅ | — | — | ✅ LIVE: "No trips yet" empty state (correct — acct has 0 real trips) |
-| Friends (list) | ⬜ | ✅ renders (2 friends) | | | ⬜ |
-| Friends — "Sent" count vs list | ✅ | ✅ | badge 3, only 1 invite renders; stuck Pending (Concern C-FRIEND-1) | RLS policy PR #39 (outgoing-pending profile visibility) + migration applied | ✅ **VERIFIED LIVE 2026-06-05**: Sent badge=3 and all 3 render real names (Clinique Brooks, Vonnetta Pryor, Shawl Pryor) — no "Unknown" rows |
-| Friends — add / accept / request flow | ⬜ | ⬜ | | | ⬜ |
-| Following | ✅ | ✅ | — | — | ✅ LIVE: "No creators followed yet" empty state + Browse-community CTA |
-| Credits tab (balance/ledger) | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: balance 1,933,385 (purchased, never-expire). "Earn Free Credits" = 900 = sum of 6 bonuses (Welcome 150 / Early-Adopter 500 / Quiz 100 / Prefs 50 / First-Share 50 / Second-Trip 50) — **every amount matches deployed grant-bonus-credits config**. Arithmetic correct. |
-| Preferences tab (edit + "Update Travel DNA" path) | ✅ | ✅ | 3rd DNA input path — untested | — | ✅ LIVE: full prefs center (Travel Style/Flights/Accommodation/Food/Accessibility/Planning/Budget/Packing) + "Update Travel DNA" button present. (DNA-update not exercised — would alter DNA.) |
-| Edit Profile | ✅ | ✅ | — | — | ✅ LIVE: /profile/edit form (name, email read-only w/ security note, username, home airport, avatar) |
-
-## A6. Trip / Itinerary `/trip/:id`
-| Feature | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Itinerary renders (Edit/Preview) | ➖ | ✅ | — | — | ➖ |
-| Share dialog — public link toggle | ✅ | ✅ | 404 (gen_random_bytes/search_path) | DB ALTER + durable migration PR #25 | ✅ |
-| Share — Copy / WhatsApp / X / public URL loads | ➖ | ✅ | — | — | ✅ |
-| Share — collaborator invite link (generate) | ⬜ | ⬜ | uses no-arg random()-based token (audited safe); not live-tested | | ⬜ |
-| In-itinerary tools (see Table B) | ⬜ | ⬜ | | | ⬜ |
-| Trip Health / Partial badge panel | ✅ | ✅ | (prior PRs #17–19) | meal/transit/partial fixes | ✅ |
-
-## A7. Trip creation `/start` `/build` (see Table B for the 4 modes)
-
-## A8. Admin pages
-| Page / feature | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| **Enumerate ALL admin routes** (not just cost dashboard) | ✅ | ✅ | owner: "look at all the admin pages" | — | ✅ routes: /admin/{bulk-import, data-cleanup, image-curation, dashboard, test-suites, user-tracking, session-explorer, logs}; bare /admin 404s ("Wrong turn") |
-| UnitEconomics / cost dashboard — accuracy | ✅ | ✅ | Google read ~2× low (price/place-details/retries) | fix PR #21 (useRealCostMetrics) | ✅ **LIVE 2026-06-05**: dashboard loads (Money In $47.99, 24 users, 151 trips, healthy). **C-ADMIN-2 VERIFIED** via SQL: policy "Admins can view all user tiers" (SELECT-only) IS on table; `total_tier_rows=1` is GROUND TRUTH → dashboard honest, fix correct. |
-| 🆕 **C-DATA-1: purchase doesn't write user_tiers** | ⬜ | ❌ | only **1 of 24** users has a `user_tiers` row (just owner=flex) but dashboard counts "2 paid" — a real purchase should upsert a tier row; paying users w/o one lose club-tier tracking (never-expire credits, badges) | audit stripe-webhook/IAP → ensure user_tiers upsert on purchase | ⬜ NEW FINDING (SQL 2026-06-05) |
-| 🆕 **C-CRED-9: credit_balances row count > users** | ⬜ | ❌ | `balance_rows=38` vs `auth_users=profiles=24` (14 extra). If MULTI-row per user → **non-deterministic balance reads** (credit-accuracy CRIT); grant/referral upserts use onConflict:user_id which REQUIRES a unique index — if missing, upserts dup instead of update. If orphaned → cleanup. | run multi-row + unique-index + orphan SQL (pending) | ⬜ NEW FINDING (SQL 2026-06-05) — **awaiting diagnostic** |
-| **C-ADMIN-1** ImageCuration write-error surfacing (#46) | ✅ | ✅ | blacklist/heal swallowed errors → faked success | PR #46 (check `{error}`, throw) | ✅ loads/functions (15k images, filters, Heal/Upload); error-surfacing code-verified (failure path not safely forceable — won't blacklist real prod image) |
-| **C-ADMIN-3** BulkImport dead "Delete All Users" (#47) | ✅ | ✅ | empty-body→400 dead button | PR #47 removed it | ✅ **VERIFIED LIVE**: button gone; only CSV import remains |
-| Admin — Costs / Credit-Econ tabs | ✅ | ❌ | **🆕 C-COST-3 (NEW FINDING)**: Costs tab = "0 tracked entries · $0.00" despite **151 trips created** + Money-Out(30d) $0.00. Real API-cost tracking not recording OR admin can't read the cost table (RLS). Credit-Econ "Our Cost" figures are therefore **config estimates, not actuals** → margins unverified against real spend. Also feeds Google-budget enforcement. | diagnostic SQL pending (cost-table row count + google_api_budget + RLS) | ⬜ **NEW — awaiting diagnostic** |
-| Admin — Credit Econ table (per-action costs/margins) | ✅ | ✅ | — | — | ✅ LIVE: renders; credit costs MATCH backend (Unlock 60/SmartFinish 50/Hotel 40/RouteOpt 20/Regen 30/Swap·Add 5). ⚠️ costs are estimates (see C-COST-3) |
-| Admin — traffic / performance / forecast / projections panels | ⬜ | ⏳ | Revenue/Forecast/Projections sub-tabs not yet opened | | ⬜ |
-| Admin — access control (only founders see it) | ✅ | ✅ | all 8 `/admin/*` routes were auth-only (no role check) | `AdminRoute`+`useIsAdmin` gate on all 8 (PR #30) | ✅ **LIVE**: admin (Ashton) reaches all admin pages; gate active. ⚠️ non-admin denial not testable (can't log out/in). |
-
-## A9. Auth / login
-| Feature | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| **Entire area** — login, signup, session, logout, password reset, OAuth | ✅ | 🟢 | (old stack: auth-lock aborted Google OAuth) | native Supabase OAuth (cloud-auth removed) + SPA `/auth/callback` fix | 🟢 **Google OAuth login VERIFIED LIVE end-to-end** (sign-in → callback → session ✅). Still ⬜ to close A9: email signup · password-reset · logout-click |
-| Security posture (RLS, exposed keys, auth gating on edge fns) | ✅ | 🟧 | — | fleet audit: auth **STRONG**; this session hardened CRIT-1 (Stripe), admin-gate, C-FRIEND/C-ADMIN-2 RLS, claim-referral anti-abuse | 🟧 code-audit strong + multiple RLS/auth fixes shipped+deployed; full pen-style live test = owner |
-
----
-
-# TABLE B — Cross-cutting features / flows
-
-## B1. Trip creation modes
-| Mode | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Single City | ⬜ | ⬜ | | | ⬜ |
-| Multi-City | ⬜ | ⬜ | | | ⬜ |
-| Just Tell Us (free-text) | ⬜ | ⬜ | | | ⬜ |
-| Build Myself | ⬜ | ⬜ | | | ⬜ |
-| Free version | ⬜ | ⬜ | | | ⬜ |
-
-## B2. In-itinerary tools
-| Tool | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Regenerate day | ⬜ | ⬜ | | | ⬜ |
-| Swap / replace activity | ⬜ | ⬜ | | | ⬜ |
-| Reorder / move activity | ⬜ | ⬜ | | | ⬜ |
-| Add booking / flight / hotel | ⬜ | ⬜ | | | ⬜ |
-| Lock activity | ⬜ | ⬜ | | | ⬜ |
-| Day-unlock | ⬜ | ⬜ | | | ⬜ |
-| **Each tool: correct credit charge** | ⬜ | ⬜ | (cross-ref C-CRED) | | ⬜ |
-
-## B3. DNA → itinerary differentiation (A/B) — the BIG proof
-| Run (Madrid, same dates/1 traveler) | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| A culinary vs B cultural vs C adventure — outputs measurably DIFFERENT (≥40% venues differ, dining-ratio Δ≥15pts, no fallback) | ⬜ | ⬜ | blocked until DNA accuracy + preferences fixes land | | ⬜ |
-| D culinary + dietary/prefs variation respected | ⬜ | ⬜ | | | ⬜ |
-
-## B4. Credits / charging — AUDIT COMPLETE
-| Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Stripe flex purchase integrity | ❌ | ✅ | **CRIT: client controls credits granted** — pay $9, request 100,000cr, webhook mints them (no price↔credits check) | derive credits server-side from priceId map; reject mismatch | ✅ **CODE-VERIFIED LIVE 2026-06-05** (deployed, NOT exploited): grant = `resolveFlexCredits(priceId, amountCents)`; client `metadata.credits` used only for `>0` null-check; mismatch uses authoritative priceId value; unknown priceId/charge → REJECT (refuse to mint). Both flex + group-pool paths. |
-| Cost display == backend charge | ❌ | ⬜ | guide gen charges **15** vs displayed **20**; admin table shows stale 10 for regen (real 30) | reconcile to one value | ⬜ |
-| Server-side enforcement (can't gen w/o credits) | ✅ | ⬜ | **PASS** — `deduct_credits_fifo` SECURITY DEFINER, row-locked, REVOKEd from anon/authenticated; client checks advisory only | — | ➖ |
-| Charge timing + refund-on-failure + double-charge | ⚠️ | ⬜ | core path robust (idempotency unique index); BUT guide-gen has no refund/idempotency; trip refund can double-refund (un-keyed `issueRefund`) | route guide via spend-credits; key all refunds | ⬜ |
-| Trip-gen server cost validation | ❌ | ⬜ | server only checks `days×60×0.9`; client can skip multi-city fee + complexity multiplier (3-city 10-day: pay 540 not 900) | recompute authoritative cost server-side | ⬜ |
-| Packages/bonuses math; bonus re-claim guard | ✅ | ⬜ | **PASS** — `UNIQUE(user_id,bonus_type)` blocks re-claim; bonuses server-verified; club/top-up math correct; IAP correct | (LOW: IAP adventurer split 2400/800 vs Stripe 2500/700) | ⬜ |
-| Monthly free-grant idempotency | ⚠️ | ⬜ | check-then-act race → concurrent 2× 150cr grant | atomic conditional UPDATE / unique (user,month) | ⬜ |
-| No cost/margin leak to non-admin | ❌ | ⬜ | `/admin/dashboard` auth-gated only (no role check); per-action cost/margin table hardcoded in client bundle | add admin-role gate + move cost table behind admin fetch | ⬜ |
-
-## B5. Cost / Google budget — AUDIT COMPLETE
-| Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Full call-site inventory + per-trip count | ✅ | ⬜ | ~$2.5–3.3/trip cold (→~$5 w/ retries+browsing). Dominant driver = **2 uncached text searches/activity** (verify + image) ≈ $1.60/trip = 50–65% | route both through shared cache | ⬜ |
-| Global daily ceiling (~200/day) / circuit breaker | ✅ | 🟧 | **CONFIRMED: NONE exists** anywhere (all 429 handlers are for the AI gateway, not Google) | `google_api_budget` table + atomic `consume_google_budget` RPC + breaker in google-api.ts wrappers | 🟧 **CODE-VERIFIED LIVE 2026-06-05** (deploy confirmed): all 6 live-fetch wrappers gate via `consumeGoogleBudget()` pre-fetch; `consume_google_budget` RPC (DEFAULT 200, service_role-only, REVOKEd anon/auth) in applied migration. ⏳ behavioral counter-increment test bundled into next trip-build |
-| Shared place-level cache, 1–2mo+ TTL, across users | ✅ | ⬜ | `cachedGooglePlacesTextSearch` (30-day shared cache) EXISTS but hot paths bypass it; venue-cache & image-cache miss INDEPENDENTLY → same venue hits Google twice | new `google_place_cache` (place_id-keyed, 60-day TTL; photos ~permanent); share resolved place_id between verify+image | ⬜ |
-| Frontend Google Places call (client key, untracked) | ✅ | ⬜ | **CORRECTION: NOT per-keystroke** (keystrokes use free Nominatim). Google fires only on explicit "Search with Google" button (`useAddressSearch.ts:87`) — but uncapped, untracked, exposed key | route via server `places-search-proxy` (cache+ceiling+tracked); drop browser key | ⬜ |
-
----
-
-# TABLE D — Itinerary (the deep core)
-*The itinerary is the product. Every build path, every wizard step, every preference, every in-itinerary tool — each gets Audit + Live.*
-
-## D1. Build paths (entry → fully generated trip)
-| Path | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Single City | ⬜ | ⬜ | | | ⬜ |
-| Multi-City | ⬜ | ⬜ | | | ⬜ |
-| Just Tell Us (free-text → parse) | ⬜ | ⬜ | | | ⬜ |
-| Build Myself (manual) | ⬜ | ⬜ | | | ⬜ |
-| Free version | ⬜ | ⬜ | | | ⬜ |
-| Each path → complete itinerary, no fallback, DNA applied | ⬜ | ⬜ | | | ⬜ |
-
-## D2. Build wizard — steps & inputs (each step: renders, validates, persists, back/forward, resume draft)
-| Step / input | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Destination select (search/autocomplete) | ⬜ | ⬜ | | | ⬜ |
-| Dates / duration | ⬜ | ⬜ | | | ⬜ |
-| Travelers / party size | ⬜ | ⬜ | | | ⬜ |
-| Interests | ⬜ | ⬜ | | | ⬜ |
-| Dietary | ⬜ | ⬜ | | | ⬜ |
-| Pace | ⬜ | ⬜ | | | ⬜ |
-| Budget level | ⬜ | ⬜ | | | ⬜ |
-| Accommodation | ⬜ | ⬜ | | | ⬜ |
-| Must-dos / avoids | ⬜ | ⬜ | | | ⬜ |
-| Accessibility | ⬜ | ⬜ | | | ⬜ |
-| DNA auto-applied from profile | ⬜ | ⬜ | | | ⬜ |
-| Cost preview + credit gate (correct cost shown) | ⬜ | ⬜ | (cross-ref C-CRED-4) | | ⬜ |
-| Step validation / resume incomplete draft | ⬜ | ⬜ | | | ⬜ |
-| Generation kickoff + progress/heartbeat | ⬜ | ⬜ | (cross-ref D4 #1) | | ⬜ |
-
-## D3. Preferences RESPECTED in output (the integrity test — cross-ref C-DNA-5)
-| Preference | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Interests → activities reflect them | ⬜ | ⬜ | | | ⬜ |
-| Dietary → restaurant picks respect it | ⬜ | ⬜ | | | ⬜ |
-| Pace → day density matches | ⬜ | ⬜ | | | ⬜ |
-| Budget → venue price tier matches | ⬜ | ⬜ | | | ⬜ |
-| DNA archetype → itinerary character matches | ⬜ | ⬜ | (= Table B3 A/B) | | ⬜ |
-| Must-dos included / avoids excluded | ⬜ | ⬜ | | | ⬜ |
-
-## D4. Generation correctness — RE-VERIFY the original 5 fixes still hold (fresh gen)
-| Original bug (already fixed) | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| #1 launcher timeout / "generation paused" / heartbeat | ✅ | ⬜ | (fixed PRs #16–19) | shipped | ⏳ **re-verify live** |
-| #2 Small Detour crash-proof renderer | ✅ | ⬜ | | shipped | ⏳ **re-verify live** |
-| #3 Partial badge false-positives + backfill | ✅ | ⬜ | | shipped | ⏳ **re-verify live** |
-| #4 meal coverage (no missing meals) | ✅ | ⬜ | | shipped | ⏳ **re-verify live** |
-| #5 departure airport transit / Day-N transit | ✅ | ⬜ | | shipped | ⏳ **re-verify live** |
-
-## D5. In-itinerary features (there are many — each: works, persists, reflects immediately, charges correct credits)
-| Feature | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Regenerate day | ⬜ | ⬜ | | | ⬜ |
-| Swap / replace activity | ⬜ | ⬜ | | | ⬜ |
-| Reorder / move (drag) | ⬜ | ⬜ | | | ⬜ |
-| Add activity (search → add) | ⬜ | ⬜ | | | ⬜ |
-| Add booking / flight / hotel | ⬜ | ⬜ | | | ⬜ |
-| Lock activity | ⬜ | ⬜ | | | ⬜ |
-| Day-unlock (locked days) | ⬜ | ⬜ | | | ⬜ |
-| Smart Finish | ⬜ | ⬜ | | | ⬜ |
-| Mystery activity | ⬜ | ⬜ | | | ⬜ |
-| Route optimization | ⬜ | ⬜ | (cross-ref C-COST-5) | | ⬜ |
-| Restaurant recommendations | ⬜ | ⬜ | (cross-ref C-COST-6) | | ⬜ |
-| Hotel optimization | ⬜ | ⬜ | | | ⬜ |
-| AI chat / trip-planner (itinerary-chat) | ⬜ | ⬜ | | | ⬜ |
-| Notes / personalization | ⬜ | ⬜ | | | ⬜ |
-| Edit ↔ Preview toggle | ⬜ | ⬜ | | | ⬜ |
-| Trip Health panel (Intelligence / Completion) | ⬜ | ✅ renders | | | ⬜ |
-| Day-by-day cost display | ⬜ | ⬜ | | | ⬜ |
-| Export / print / PDF | ⬜ | ⬜ | | | ⬜ |
-| Maps (Apple MapKit) render | ⬜ | ⬜ | | | ⬜ |
-| Share public link | ✅ | ✅ | (C-SHARE-1 closed) | PR #25 | ✅ |
-| Collaborator invite link | ⬜ | ⬜ | | | ⬜ |
-| Each tool charges correct credits + refunds on fail | ⬜ | ⬜ | (cross-ref C-CRED-2/5) | | ⬜ |
-
-## D6. Persistence / data integrity
-| Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| `itinerary_activities` table ↔ `trips.itinerary_data` JSON stay in sync | ⬜ | ⬜ | (known to diverge — persistDay vs persistTripItinerary) | | ⬜ |
-| Refresh / re-open reloads same itinerary | ⬜ | ⬜ | | | ⬜ |
-| Edits persist across sessions | ⬜ | ⬜ | | | ⬜ |
-| No divergence after regen / swap / move | ⬜ | ⬜ | | | ⬜ |
-
----
-
-# TABLE E — User types & Auth / end-to-end flow
-
-## E1. User-type matrix (what each can do / what's gated)
-| User type | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Anonymous / guest (browse, sample, gen blocked) | ⬜ | ⬜ | | | ⬜ |
-| Free user (free-version limits enforced) | ⬜ | ⬜ | | | ⬜ |
-| Paid user (purchased credits) | ⬜ | ⬜ | | | ⬜ |
-| Voyance Club member (perks / priority) | ⬜ | ⬜ | | | ⬜ |
-| Admin / founder (admin pages) | ❌→✅ | ⬜ | routes were auth-only | AdminRoute gate (PR #30) | ⏳ |
-
-## E2. Auth flows
-| Flow | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| Sign up (email) | ⬜ | ⬜ | | | ⬜ |
-| Sign in | ⬜ | ⬜ | | | ⬜ |
-| OAuth (Google / Apple) | ⬜ | ⬜ | | | ⬜ |
-| Email verification | ⬜ | ⬜ | | | ⬜ |
-| Password reset | ⬜ | ⬜ | | | ⬜ |
-| Session persistence / refresh | ⬜ | ⬜ | | | ⬜ |
-| Logout | ⬜ | ⬜ | | | ⬜ |
-| Return-path after login (deep link) | ⬜ | ⬜ | | | ⬜ |
-| Quiz-gating (`requireQuiz` routes) | ⬜ | ⬜ | | | ⬜ |
-
-## E3. End-to-end journeys (per user type)
-| Journey | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| New user: land → signup → quiz → DNA → build → itinerary → share | ⬜ | ⬜ | | | ⬜ |
-| Free user: login → build (free) → upgrade prompt | ⬜ | ⬜ | | | ⬜ |
-| Paying user: login → buy credits → build → tools | ⬜ | ⬜ | (buy = real Stripe; test carefully) | | ⬜ |
-| Admin: login → admin dashboards | ⬜ | ⬜ | | | ⬜ |
-
-## E4. Security posture
-| Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
-|---|:--:|:--:|---|---|---|
-| RLS on key tables (trips, credits, dna, user_roles) | ⬜ | ⬜ | | | ⬜ |
-| Edge functions auth-gated | ⬜ | ⬜ | | | ⬜ |
-| No exposed secrets in bundle (beyond known Maps key) | ⬜ | ⬜ | (cross-ref C-COST-4) | | ⬜ |
-| Admin route gating | ✅ | ⬜ | was auth-only | PR #30 | ⏳ |
-
----
-
-# TABLE C — Concerns / Findings (open defects)
-*Every defect carries its own two checkboxes + resolution + verify.*
-
-| ID | Sev | Area | What went wrong | Audit | Live | Resolution | Fix verified |
-|---|---|---|---|:--:|:--:|---|:--:|
-| C-DNA-1 | HIGH | DNA accuracy | Maximal foodie quiz → "Urban Nomad" ×2. **Root cause = DEPLOY GAP**: every marker lived in generate-itinerary; bundler only redeploys changed fns → calculate-travel-dna never redeployed after PR #24. Fix merged but never live. Offline recompute: food_focus=0.822 → culinary=54.6 wins (urban=15.6, penalized −16.5). | ✅ | ✅ | fix #2 PR #24 (validated correct) + PR #35 marker + **CLI deploy of 118 fns (incl. calculate-travel-dna)** | ✅ **RESOLVED — VERIFIED LIVE 2026-06-05**: re-quiz as maximal foodie → **"The Culinary Cartographer"** ("You eat your way through every destination. Food isn't fuel, it's the reason you travel."), hints of Romantic Curator. The deploy gap was the true root cause; scorer now live & correct. |
-| C-DNA-2b | HIGH | DNA matchers | 2nd divergent matcher: `recalculateArchetype.ts` uses V3-JSON `archetypeProfiles` (UNFIXED) AND feeds V2 −10..10 scores into a 0–1 matcher → wrong/unstable archetype on recalc path (gated by `dna_recalc_needed_at`, latent) | ✅ | ⬜ | port fix into quiz JSON + persist fine-grained vector / route recalc through matchArchetypesV2 — next | ⬜ |
-| C-DNA-2 | HIGH | DNA defs | Client gate `food_focus≥0.75` (hard) vs edge `0.4` (soft) — preview can disagree w/ result | ✅ | ⬜ | **pick ONE source of truth** — not done | ⬜ |
-| C-DNA-3 | HIGH | DNA traits | Culinary answers leak to cultural_depth/ethics not food_focus (36 vs 16) | ✅ | ⬜ | rebalance answer→trait weights — partial only | ⬜ |
-| C-DNA-4 | MED | DNA diff | Differentiation flatteners: "30–40% trait moderation" + generic fallback archetype | ✅ | ⬜ | ✅ **FIX SHIPPED** — de-flattened all 6 prompt sites (see HIGH row below) | ⏳ deploy + A/B behavioral |
-| C-DNA-5 | HIGH | preferences | `profile.interests`/`dietary` computed but **never injected into compile-prompt** | ✅ | ⬜ | inject prefs into generation — not done | ⬜ |
-| C-DNA-6 | LOW | latent | `signatureAnswers` no-op in V3 quiz path (legacy IDs); flat penalty ignores distance | ✅ | ➖ | follow-up | ⬜ |
-| C-COST-1 | HIGH | cost | Admin dashboard read ~2× low on Google | ✅ | ⬜ | PR #21 | ⏳ live verify |
-| C-COST-2 | CRIT | cost | **No global daily Google ceiling / circuit breaker** (confirmed: none anywhere) | ✅ | 🟧 | ✅ **PHASE 1 SHIPPED + CODE-VERIFIED LIVE (PR #41, deployed 2026-06-05)** — `google_api_budget` table + atomic `consume_google_budget` RPC + breaker gate in ALL 6 `google-api.ts` wrappers (≤200/day, fail-open, degrades to no-result). Edge deployed (118 fns) + migration applied. ⏳ behavioral counter test pending trip-build. Phase 2 = shared place-cache | 🟧 code-verified |
-| C-COST-3 | **CRIT** | cost | **SEV-1:** per-activity venue-verify uses UNCACHED `googlePlacesTextSearch` → ~20–30 searches/trip ($0.64–0.96) | ✅ **PHASE 2 SHIPPED (PR #42)** — routed through `cachedGooglePlacesTextSearch` (shared 60-day cache, reused across all users/trips) | ⏳ |
-| C-COST-3b | **CRIT** | cost | **SEV-1 (biggest):** image path runs a SECOND independent uncached search per activity ($0.78–1.17/trip) | ✅ **PHASE 2 SHIPPED (PR #42)** — image search now cached too (separate entry per fieldMask, still shared across users/trips). Verify+image place_id de-dup (Level B) deferred | ⏳ |
-| C-COST-4 | MED | cost | **CORRECTED:** frontend Google call is NOT per-keystroke (keystrokes = free Nominatim). Only on explicit "Search with Google" button — but untracked + exposed key + ceiling-bypass | server `places-search-proxy`; drop `VITE_GOOGLE_MAPS_API_KEY` path | ⬜ |
-| C-COST-5 | MED | cost | geocoding/routes/distance-matrix uncached (optimize/transit/transfers/airport) | ✅ | ⬜ | add `cachedGoogleGeocode/Routes/DistanceMatrix` wrappers | ⬜ |
-| C-COST-6 | MED | cost | `recommend-restaurants`/`hotels`(×3)/`fetch-reviews` uncached text search — scales with ENGAGEMENT not trip count (traffic-unbounded) | ✅ | ⬜ | cached search | ⬜ |
-| C-COST-7 | LOW | cost | SKU recorded even on network/abort error; retries (`enrichActivityWithRetry`) can double-bill a venue | ✅ | ⬜ | don't bill on abort; cache-before-retry | ⬜ |
-| C-CRED-1 | **CRIT** | credits/security | **Pay $9, mint up to 100k credits** — `create-embedded-checkout` + `stripe-webhook` grant client-supplied `credits` with no priceId↔credits check (flex + group-pool paths; club packs safe) | ✅ | ✅ | ✅ **RESOLVED — CODE-VERIFIED LIVE 2026-06-05** (PR #29 merged + deployed): webhook derives credits from priceId via FLEX_PRICE_MAP + asserts charge; client `metadata.credits` only gates a `>0` check; mismatch→authoritative value; unknown priceId/charge→REJECT. Verified by code read (not exploited). Both flex & group-pool paths. | ✅ |
-| C-CRED-2 | HIGH | credits | Guide gen charges hardcoded **15** vs displayed **20**, charges before deliver (lost on failure), no idempotency | ✅ | ⬜ | ✅ **FIX SHIPPED (PR #32)** — cost→20; charge moved to AFTER successful generate+persist (failure costs nothing) + affordability pre-check. ⚠️ dup-click idempotency deferred (needs client key) | ⏳ |
-| C-CRED-2b | LOW | credits | dup-click can still double-charge a guide (two successful gens) — charge-after fixed the worst part but not concurrent submits | ✅ | ⬜ | add client idempotencyKey → guard the charge | ⬜ |
-| C-CRED-3 | HIGH | security/leak | **ALL 8 admin routes** (`/admin/*`) were auth-gated only, not admin-gated → any logged-in user loads admin pages incl. UnitEconomics' hardcoded cost/margin table | ✅ | ⬜ | ✅ **FIX SHIPPED (PR #30)** — new `AdminRoute` + `useIsAdmin` (server `user_roles` check) on all 8 routes. Follow-up: move cost table out of client bundle | ⏳ |
-| C-CRED-4 | MED | credits | Trip-gen cost under-validated server-side — client can skip multi-city fee + complexity multiplier (undercharge) | ✅ | ⬜ | recompute authoritative cost server-side from days/cities/dna | ⬜ |
-| C-CRED-5 | MED | credits | Trip refund can **double-refund** — `issueRefund` sent no key, bypassed dedup | ✅ | ⬜ | ✅ **FIX SHIPPED (PR #34)** — gate exposes charge `idempotencyKey`; `issueRefund` forwards `originalIdempotencyKey` so all refund paths dedup | ⏳ |
-| C-CRED-6 | MED | credits | Monthly free-grant check-then-act race → concurrent 2× 150cr | ✅ | ⬜ | atomic conditional UPDATE / unique (user, month) — **next** | ⬜ |
-| C-CRED-7 | LOW | credits | IAP Adventurer split 2400/800 vs Stripe 2500/700; admin table stale regen value (10 vs 30) | ✅ | ⬜ | ✅ **FIX SHIPPED (PR #34)** — IAP → 2500/700; admin display → 30 | ⏳ |
-| ✅ PASS | — | credits | **Confirmed correct:** server-enforced FIFO debit (REVOKEd, row-locked), idempotency unique index, bonus re-claim hard-blocked, club/top-up math, IAP fulfillment, auditable ledger, 3-layer trip refund safety net | ✅ | ⬜ | — | ➖ |
-| C-UX-1 | MED | quiz UX | Next not gated on all answers; Complete silently disabled w/ no guidance | ⬜ | ✅ | re-verify in code + fix | ⬜ |
-| C-UX-2 | LOW | quiz UX | Result-card match% blank on new archetype | ⬜ | ✅ | re-verify in code + fix | ⬜ |
-| C-REL-1 | MED | reliability | Client self-heal retry storm on permanently-failed trip (100s of identical fetch errors) | ⬜ | ✅ | bound retries / backoff | ⬜ |
-| C-FRIEND-1 | HIGH | friends | "Sent" badge 3, only 1 invite renders; stuck Pending | ⬜ | ✅ | root-cause count/list mismatch in code | ⬜ |
-| C-SHARE-1 | CRIT | share | Public-link 404 (gen_random_bytes/search_path) | ✅ | ✅ | DB ALTER + durable migration PR #25 | ✅ **CLOSED** |
-
----
-
-# TABLE F — Audit Fleet Results (2026-06-05, 7/8 subagents)
-*Parallel read-only code audit of the untouched zones. Audit column now ✅ for these areas.*
-
-### ✅ CLEAN (audit passed — strong)
-- **Auth / security / RLS** — STRONG. Auth flows ✅, all 9 `/admin/*` routes use AdminRoute ✅, RLS enabled+correct on every key table (credit tables RESTRICTIVE-deny, `user_roles` can't self-grant admin) ✅, edge fns self-verify JWT ✅, no secrets in bundle ✅, free-version limits enforced SERVER-SIDE ✅.
-- **Admin pages backend authz** — all 8 pages: no non-admin can perform destructive/bulk writes; PII/revenue reads are admin-gated via RLS. (UI issues below.)
-- **Creation modes** — Single City ✅, Multi-City ✅ (genuine per-city path), Build Myself ✅.
-- **Marketing pages** — /contact form sends real email ✅; /help, /faq, /destinations, /guides functional ✅.
-- **Collaboration** — collaborator invite flow (resolve_or_rotate_invite → accept_trip_invite) correct ✅; friendship/collaborator RLS correct ✅.
-- **Preferences→prompt** — REFUTED C-DNA-5's worst claim: interests + dietary + must-dos DO reach the live compile-prompt (`pipeline/compile-prompt.ts`). DNA reloads from DB across the HTTP hop ✅.
-
-### New concerns found by the fleet
-| ID | Sev | Area | What went wrong | Fix |
-|---|---|---|---|---|
-| C-PERSIST-1 | **CRIT** | itinerary | Single-day **regenerate** writes the TABLE only; JSON (what UI reads) is frozen-gate-blocked → **regenerate silently reverts on refresh**. Most common edit op. **EDGE root cause:** `generate-trip-day-v2.ts:915` persisted JSON with non-whitelisted `saveReason:'v2-day-write'` → server-side blocked. | ✅ **CODE-VERIFIED LIVE 2026-06-05** (deploy confirmed): frontend saveReasons (PR #38) + edge fix PR #40 (`v2-day-write`→`regenerate-day-v2`) shipped in CLI deploy of generate-itinerary. Confirmed `frozen-guard.USER_SAVE_REASON_PREFIXES` includes `'regenerate-'` → `isUserSaveReason('regenerate-day-v2')`=true → persist allowed on frozen trip. ⏳ **Behavioral test (regen→refresh→persists) bundled into next trip-build** (no trip exists on test acct yet). |
-| C-PERSIST-2 | **CRIT** | itinerary | Editor **autosave + manual Save button** omit the frozen bypass → on a ready/frozen trip, edits land in neither JSON nor table → **lost on refresh** | ✅ **FIX SHIPPED (PR #38)** — autosave/Save + chat-action executor + day-unlock all carry `saveReason` now |
-| C-PERSIST-3 | MED | itinerary | **Lock toggle**: table `is_locked` updates but JSON lock is frozen-blocked → lock reverts on refresh | pass `saveReason:'lock-toggle'` |
-| C-EXPLORE-1 | **CRIT** | content | Explore archetype detail sheet shows **mismatched body** — title says one archetype, body+profile% describe a different generic one (e.g. "Story Seeker"→photography copy). Owner's specific concern, confirmed | author detail content per real scorer archetype; render from archetypeNarratives |
-| C-DNA-4 | **HIGH** | DNA A/B | CONFIRMED: "30-40% archetype seasoning" rule + archetype demoted to "voice not selection" + zero-trait fallback → **differentiation ~4.5/10**. Dining differs (Michelin req vs optional) but ~60-70% of each day converges generic | ✅ **FIX SHIPPED 2026-06-05 (branch fix/c-dna-4-archetype-differentiation)** — de-flattened ALL 6 prompt sites: (1) raised influence ceiling 30-40%→**50-60% for a distinct archetype** (kept lighter 30-40% only for mild/balanced DNA); (2) promoted archetype from "voice not selection" → **drives activity SELECTION + tone**; (3) explicit "different archetypes must produce genuinely different trips, never converge to a generic template" + concrete culinary food-forward guidance (market/cooking class/standout tables beyond meals). Sites: archetype-data.ts (TRAIT MODERATION + priority block), compile-prompt.ts (ARCHETYPE BALANCE, live v2 path), generation-core.ts (×3). User-primacy + all hard limits (budget/variety/pacing/meals) preserved. ✅ deno-check: 0 new errors. ⏳ **A/B behavioral test pending deploy + trip-build** (culinary vs cultural must diverge) |
-| C-DNA-5 | MED | DNA | (downgraded) dietary strong-block only written at trip kickoff — a single-day regen with empty `generation_context` drops it to a weak one-liner | recompute dietary block in compile-prompt when absent |
-| C-CRED-4 | HIGH | credits | CONFIRMED + worse: `spend-credits` trip_generation is **floor-only** (`days*60*0.9`), trusts client `creditsAmount` → undercharge | recompute canonical cost server-side from trip row |
-| C-CRED-8 | MED | credits | DNA complexity multiplier (1.15×/1.30×) + must-include add-ons **never charged** — `authorize()` called without `dna`/`mustIncludes` | thread DNA+mustIncludes into estimate & authorize |
-| C-REFERRAL-1 | HIGH | growth | "Friends get 150 bonus credits" is **non-functional** — no referral bonus type, no `?ref=` consumption at signup; pays nobody | implement referral attribution + grant |
-| C-ADMIN-1 | HIGH | admin | **ImageCuration page is dead** — all `curated_images` writes RLS-blocked to service_role, fail silently | route writes through admin edge fn |
-| C-ADMIN-2 | MED | admin | UnitEconomics "User Tiers"/"Group Pools" show only the admin's OWN row (missing admin SELECT on user_tiers/group_budgets) | add admin RLS SELECT |
-| C-ADMIN-3 | MED | admin | BulkImport "Delete All Users" button dead (empty body → 400) | remove or implement explicitly |
-| C-CREATE-1 | MED | create | "Just Tell Us" mode has no end≥start date guard → could create a zero/negative-day trip | add isBefore(end,start) check |
-| C-SEC-1 | MED | security | `verify_jwt = false` default on ~all edge fns (compensated by self-verify, but a future un-gated fn would be exposed) | flip to true for non-public fns |
-| C-FRIEND-1 | HIGH | friends | ROOT CAUSE: RLS gap — `profiles` SELECT has no outgoing-pending branch (regression from a dropped policy) → Sent invites render as blank "Unknown" rows, look stuck Pending | ✅ **RESOLVED — VERIFIED LIVE 2026-06-05** (PR #39 migration applied): narrow additive `profiles` SELECT policy for outgoing-pending addressee. Sent tab now renders all 3 real names (Clinique Brooks / Vonnetta Pryor / Shawl Pryor), zero "Unknown". |
-| C-TOOL-1 | HIGH | itinerary tools | **Day-unlock**: charges 60, but if generate-day throws there's NO refund → 60 credits lost (`useUnlockDay.ts` catch only toasts) | add REFUND in catch (unlock_day is refundable) |
-| C-TOOL-2 | HIGH | itinerary tools | **AI-chat InlineModifier** applies (swap/rewrite/regen) charge before execute with NO refund-on-failure | mirror ItineraryAssistant.refundOnFailure |
-| C-TOOL-3 | MED | itinerary tools | **Hotel optimization** charges 100 before apply; no refund if apply throws → 100 lost | refund on apply failure |
-| C-TOOL-4 | MED | itinerary tools | **Add-activity** charges 5 before cascade-overflow dialog; if user cancels, 5 not refunded | charge after cascade confirm |
-| C-TOOL-5 | MED | itinerary tools | Charge/config drift: `RESTAURANT_REC` action never dispatched (dead, consumes swap cap); chat pace/filter advertised-paid but FREE; chat prompt misquotes regen price (says 10, charges 30) | reconcile actions + prompt |
-| C-TOOL-6 | MED | itinerary tools | AI-feature edge fns (recommend-restaurants, hotels, optimize, itinerary-chat, mystery) are auth'd but NOT credit-gated server-side — trust client to charge; mystery delivers result then fire-and-forget charges → free if spend fails | server-side proof-of-charge like generate-itinerary |
-| C-TOOL-7 | MED | itinerary tools | **Route optimization** writes `trips.itinerary_data` via raw `.update()` bypassing persistTripItinerary (no contract/frozen guard, table left stale) + non-idempotent refund | route through persist + key the refund (ties to C-PERSIST) |
-
----
-
-# Rollup
-- **Closed (both ✅):** original 5 generation bugs, CI green, Share public-link, core-page render + navigation.
-- **Audit ✅ this sweep:** auth/security (STRONG), admin authz, creation modes, marketing functionality, collaboration, preferences→prompt.
-- **Awaiting verify (fix shipped):** DNA accuracy (PR #24/#35 — needs calculate-travel-dna deploy + re-quiz), admin cost dashboard (PR #21), credit batch (#34).
-- **Biggest NEW risks surfaced:** C-PERSIST-1/2 (in-itinerary edits silently don't persist — CRIT), C-EXPLORE-1 (archetype pages mislabeled — CRIT), C-DNA-4 (A/B differentiation flattened — HIGH), C-CRED-4 (server undercharge), C-REFERRAL-1 (referral pays nobody).
-- **Still owed:** in-itinerary-tools audit (1 agent running); Live testing of all the above (auth first per owner); Google bleed + DNA-A/B fixes before the A/B test.
+## Reference — already closed (one line)
+Original 5 generation bugs · CI green · public-share link · core-page render + navigation · auth/security audit (strong) · admin authz · creation-mode code audit · marketing functionality · collaboration · preferences→prompt injection · the 6 SQL deep-dive bugs (cost dashboard, My Trips, credit FK, user_tiers IAP, poller runaway) — all fixed; spot-check as the live tests above exercise them.
