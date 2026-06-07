@@ -112,6 +112,8 @@ Systematic check that nothing was missed moving to the owned stack. ✅ verified
 ## 🆕 DEEP-DIVE FINDINGS — SQL-confirmed 2026-06-05 (5 items)
 
 > **⚠️ STATUS RECONCILIATION (2026-06-07) — read before trusting the rows below.** All 5 were FIXED in code + verified on the **OLD Lovable stack** (PRs #52/#53/#56/#57/#59). The rows below show the *original* finding for context — they are **NOT the current state.** Per the migration re-QA protocol, **each must be RE-VERIFIED on the new stack**, and C-COST-3a / C-COST-3b / C-TRIPS-1 are **data-dependent** (need real trips + API usage on the new account before they can even reproduce). **Honest current state: code fixed; new-stack re-verification = ⬜ PENDING (not done).**
+>
+> **✅ CODE-READ CONFIRMATION (2026-06-07): the fixes ARE present in the migrated code — these are NOT broken on the new stack.** C-POLL-1 = `stalledFiredRef` log-once guard (`useGenerationPoller.ts:359`); C-COST-3a = RPC fix migrations `20260605190000` + `20260605210000` applied; C-TRIPS-1 / C-DATA-1 PRs migrated; C-EXPLORE-1 (#44) + C-DNA (#24/#35) migrated (A2 explore + A4 DNA already re-verified live). **They re-verify automatically once we build-test** (which generates the trips + usage data they need). No separate "fix" work required.
 
 | # | Finding | Sev | Status / Next step |
 |---|---|---|---|
