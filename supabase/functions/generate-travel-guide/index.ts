@@ -275,42 +275,69 @@ Keep it personal and authentic. Use the activity descriptions and my notes to ad
       guideId = newGuide.id;
     }
 
-    // ── Charge AFTER success (C-CRED-2) ───────────────────────────────────────
+    // ── Charge AFTER success, idempotently (C-CRED-2 + C-CRED-2b) ──────────────
     // Guide is generated and persisted above; only now do we debit credits, so
-    // any earlier failure (trip missing, AI 429/402/500, DB error) costs nothing.
-    const { error: chargeError } = await adminClient.rpc('deduct_credits_fifo', {
-      p_user_id: userId,
-      p_cost: GUIDE_COST,
+    // any earlier failure costs nothing. A claim-first ledger row keyed by
+    // (user, trip, selection) makes the charge idempotent — a dup-click or a
+    // second tab cannot double-charge (the unique index uq_credit_ledger_user_idempotency
+    // rejects the second claim).
+    const idemSrc = `guide:${userId}:${tripId}:${[...(selectedActivityIds || [])].sort().join(',')}:${includeNotes ? 1 : 0}${includeHotel ? 1 : 0}${includeFlights ? 1 : 0}`;
+    let _h = 5381;
+    for (let i = 0; i < idemSrc.length; i++) _h = ((_h << 5) + _h + idemSrc.charCodeAt(i)) | 0;
+    const idempotencyKey = `guide_${Math.abs(_h).toString(16)}`;
+
+    const { error: claimErr } = await adminClient.from('credit_ledger').insert({
+      user_id: userId,
+      transaction_type: 'spend',
+      action_type: 'generate_travel_guide',
+      credits_delta: 0, // placeholder; finalized after a successful deduct
+      is_free_credit: false,
+      idempotency_key: idempotencyKey,
+      notes: `Travel guide generation for trip ${tripId} (pending)`,
     });
-    if (chargeError) {
-      // The user already has their guide; do not fail the request. Log loudly —
-      // this should be rare (we pre-checked affordability before generating).
-      console.error('[generate-travel-guide] CRITICAL: post-generation charge failed (guide delivered free):',
-        chargeError.message, { userId, tripId, guideId });
+
+    if (claimErr) {
+      const pgCode = (claimErr as { code?: string }).code;
+      if (pgCode === '23505') {
+        // This exact guide request was already charged by a concurrent call —
+        // deliver the guide without charging again.
+        console.log('[generate-travel-guide] idempotent charge skip (duplicate request):', idempotencyKey);
+      } else {
+        console.error('[generate-travel-guide] claim insert failed (charging anyway):', claimErr.message);
+      }
     } else {
-      await adminClient.from('credit_ledger').insert({
-        user_id: userId,
-        transaction_type: 'spend',
-        action_type: 'generate_travel_guide',
-        credits_delta: -GUIDE_COST,
-        is_free_credit: false,
-        notes: `Travel guide generation for trip ${tripId}`,
+      // We own the claim — deduct, then finalize (or roll back on failure).
+      const { error: chargeError } = await adminClient.rpc('deduct_credits_fifo', {
+        p_user_id: userId,
+        p_cost: GUIDE_COST,
       });
-      // Resync balance cache from source of truth (credit_purchases).
-      const nowIso = new Date().toISOString();
-      const [{ data: purchasedRows }, { data: freeRows }] = await Promise.all([
-        adminClient.from('credit_purchases').select('remaining')
-          .eq('user_id', userId).gt('remaining', 0).neq('credit_type', 'free')
-          .or(`expires_at.is.null,expires_at.gt.${nowIso}`),
-        adminClient.from('credit_purchases').select('remaining')
-          .eq('user_id', userId).gt('remaining', 0).eq('credit_type', 'free')
-          .or(`expires_at.is.null,expires_at.gt.${nowIso}`),
-      ]);
-      await adminClient.from('credit_balances').update({
-        purchased_credits: (purchasedRows || []).reduce((s: number, r: any) => s + r.remaining, 0),
-        free_credits: (freeRows || []).reduce((s: number, r: any) => s + r.remaining, 0),
-        updated_at: nowIso,
-      }).eq('user_id', userId);
+      if (chargeError) {
+        console.error('[generate-travel-guide] CRITICAL: post-generation charge failed (guide delivered free):',
+          chargeError.message, { userId, tripId, guideId });
+        // Roll back the claim so a later retry can charge.
+        await adminClient.from('credit_ledger').delete()
+          .eq('user_id', userId).eq('idempotency_key', idempotencyKey);
+      } else {
+        await adminClient.from('credit_ledger').update({
+          credits_delta: -GUIDE_COST,
+          notes: `Travel guide generation for trip ${tripId}`,
+        }).eq('user_id', userId).eq('idempotency_key', idempotencyKey);
+        // Resync balance cache from source of truth (credit_purchases).
+        const nowIso = new Date().toISOString();
+        const [{ data: purchasedRows }, { data: freeRows }] = await Promise.all([
+          adminClient.from('credit_purchases').select('remaining')
+            .eq('user_id', userId).gt('remaining', 0).neq('credit_type', 'free')
+            .or(`expires_at.is.null,expires_at.gt.${nowIso}`),
+          adminClient.from('credit_purchases').select('remaining')
+            .eq('user_id', userId).gt('remaining', 0).eq('credit_type', 'free')
+            .or(`expires_at.is.null,expires_at.gt.${nowIso}`),
+        ]);
+        await adminClient.from('credit_balances').update({
+          purchased_credits: (purchasedRows || []).reduce((s: number, r: any) => s + r.remaining, 0),
+          free_credits: (freeRows || []).reduce((s: number, r: any) => s + r.remaining, 0),
+          updated_at: nowIso,
+        }).eq('user_id', userId);
+      }
     }
 
     return jsonResponse({ success: true, guideId, slug, content, title });

@@ -65,14 +65,40 @@ serve(async (req) => {
       );
     }
 
-    // Check if user already received credits this month
+    // C-CRED-6: atomically CLAIM this month's grant instead of check-then-act.
+    // Two concurrent invocations used to both read a stale last_free_credit_at,
+    // both pass the check, and both insert a 150-credit row (double grant).
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastGrantAt = balance?.last_free_credit_at ? new Date(balance.last_free_credit_at) : null;
-    
-    if (lastGrantAt && lastGrantAt >= startOfMonth) {
+
+    // Ensure a balance row exists so the conditional UPDATE below can match it
+    // (UPDATE no-ops on a missing row). ON CONFLICT DO NOTHING preserves any
+    // existing last_free_credit_at.
+    await supabaseAdmin
+      .from('credit_balances')
+      .upsert({ user_id: user.id }, { onConflict: 'user_id', ignoreDuplicates: true });
+
+    // Flip last_free_credit_at to now ONLY if it is still null or < start-of-month.
+    // Exactly one concurrent request matches a row; the loser matches zero rows.
+    const { data: claimed, error: claimErr } = await supabaseAdmin
+      .from('credit_balances')
+      .update({ last_free_credit_at: now.toISOString(), updated_at: now.toISOString() })
+      .eq('user_id', user.id)
+      .or(`last_free_credit_at.is.null,last_free_credit_at.lt.${startOfMonth.toISOString()}`)
+      .select('user_id');
+
+    if (claimErr) {
+      console.error('[grant-monthly-credits] atomic claim failed:', claimErr);
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({ error: 'Failed to claim monthly grant' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!claimed || claimed.length === 0) {
+      // Lost the race (or already granted this month).
+      return new Response(
+        JSON.stringify({
           granted: false,
           reason: 'Already received monthly credits',
           nextEligible: new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString(),
