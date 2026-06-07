@@ -9,17 +9,19 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 ## ✅ PROGRESS AT A GLANCE — 2026-06-07
 
-### **Overall: ~40% complete**
+### **Overall: ~30% complete** — *migration done is the big chunk; the product QA is barely started*
 
 | Track | Status |
 |---|---|
 | 🚚 **Migration & cutover** | ✅ **100% — DONE** (own Supabase + OpenRouter + Vercel · 48k content rows · original PostgREST incident fixed) |
 | 🟢 **Code audit** | **~90%** (carried + heavily re-read during cutover) |
-| 🔵 **Live re-QA on new stack** | **~20%** — foundational flows green; **trip-build + DNA proof + admin + security remain** |
+| 🔵 **Live re-QA on new stack** | **~12%** — a few foundational pages touched (mostly *partial*); **most sections still OPEN** |
 
-**Verified live (new stack):** images · OAuth login · share-RPC · A1 Home · A2 Explore (search→destination) · A3 Pricing · A4 Quiz (+gating fix +DNA) · A5 Overview · A9 session · B4 credit grants (welcome/quiz/prefs = **300**, DB-confirmed)
+**Verified live (new stack) — the only closed-ish items:** images · OAuth login · share-RPC · A2 Explore (search→destination) · A4 quiz gating-fix + DNA-assign · A5 Overview-stats · A9 OAuth login · B4 credit *grants* (welcome/quiz/prefs = **300**, DB-confirmed). *(A1/A3 only render-verified; not click-through complete.)*
 **Fixed + shipped this cutover:** site-wide images · OAuth/SPA callback · quiz gating
-**No major migration drift found.** ▶️ **Next:** the [DNA & Preference-Adherence Test Plan](#-test-plan--dna--preference-adherence-the-big-proof) below — the big proof.
+
+**🟥 STILL OPEN (NOT done) — the bulk of the product:** trip build (A6/A7 · D1–D6) · 4 build modes (B1) · in-itinerary tools (B2) · **DNA→itinerary proof (B3)** · credits/charging deep audit (B4 — only grants verified) · admin cost/economics (A8) · security (E) · A5 friends · A4 free-text DNA · A1 logged-out embeds · **all 5 deep-dive re-verifications.**
+**No major migration *drift* found** (the migration itself is clean) — but **product QA is early.** ▶️ **Next:** the [DNA & Preference-Adherence Test Plan](#-test-plan--dna--preference-adherence-the-big-proof) below.
 
 ---
 
@@ -94,20 +96,22 @@ Systematic check that nothing was missed moving to the owned stack. ✅ verified
 | AI → OpenRouter | ✅ | live chat verified; all model slugs present (image model remapped) |
 | Auth → native Supabase OAuth | ✅ | Google enabled · redirect allow-list set · `@lovable.dev/cloud-auth-js` removed |
 | Secrets | ✅ core / ⚠️ | 25 set; **missing (optional): Viator·Foursquare·TripAdvisor·Unsplash (enrichment), APNS/IAP iOS keys** |
-| **pg_cron (9 jobs)** | ⚠️ **HOLE** | 7 pure-SQL jobs ✅; **2 HTTP jobs misdirected**: `auto-summarize-completed-trips` hardcodes the **OLD** project URL+token; `send-trip-reminders-daily` reads the empty `supabase.functions_url` GUC. Fix = set `supabase.functions_url` + service-key GUC on the new DB, or reschedule jobs w/ new URL. **Background jobs only — not user-blocking. Owner OK needed (prod DB config).** |
+| **pg_cron (9 jobs)** | ⚠️ **HOLE — owner SQL** | 7 pure-SQL jobs ✅; **2 HTTP jobs (`auto-summarize`, `trip-reminders`) still point at the OLD project.** Background jobs only (nightly) — not user-blocking. Fix needs the service-role key set as a DB setting (I'm blocked from hardcoding it into a queryable cron command — credential-leak guard). **Owner: paste the 3-line SQL (provided in chat) into the Supabase SQL editor.** |
 | Realtime (8 tbl) | ✅ | publication migrated |
-| Storage buckets (8) | ✅ defs / ⚠️ files | bucket defs migrated; **files NOT copied — images resolve from OLD project's storage URLs** (fine while old project stays alive; copy files if ever sunset) |
+| Storage buckets (8) | ✅ | **RESOLVED** — defs migrated; images are served by the live `destination-images` pipeline (Google/Pexels → new storage, verified) + the Unsplash-CDN fix for legacy `photo-` URLs. Stored files were never the real source, so nothing to copy. Images confirmed working site-wide. |
 | Stripe (live secret + webhook) | ✅ | live-validated, LIVE mode |
 | Email (Zoho SMTP) | ✅ | SMTP auth verified |
 | **Original incident (share RPC routing)** | ✅ **FIXED** | `toggle_consumer_trip_share` routes (HTTP 200) — PostgREST reloads on the owned backend |
 | Users/trips (test data) | ➖ | intentionally NOT migrated (test accounts only) |
-| Frontend (Vercel) | ⏳ | deployed; **rebuild from latest `main`** to ensure native-auth code is live, then owner login/generate test |
+| Frontend (Vercel) | ✅ | deployed + serving; native auth + SPA callback + images all verified live on the preview |
 
 **Holes to close:** ① cron HTTP jobs (needs owner OK to set DB GUCs) · ② optional enrichment/iOS secrets · ③ storage files (deferred — old project alive).
 
 ---
 
 ## 🆕 DEEP-DIVE FINDINGS — SQL-confirmed 2026-06-05 (5 items)
+
+> **⚠️ STATUS RECONCILIATION (2026-06-07) — read before trusting the rows below.** All 5 were FIXED in code + verified on the **OLD Lovable stack** (PRs #52/#53/#56/#57/#59). The rows below show the *original* finding for context — they are **NOT the current state.** Per the migration re-QA protocol, **each must be RE-VERIFIED on the new stack**, and C-COST-3a / C-COST-3b / C-TRIPS-1 are **data-dependent** (need real trips + API usage on the new account before they can even reproduce). **Honest current state: code fixed; new-stack re-verification = ⬜ PENDING (not done).**
 
 | # | Finding | Sev | Status / Next step |
 |---|---|---|---|
