@@ -5135,14 +5135,12 @@ export function EditorialItinerary({
       }
     }
 
-    setDays(prev => {
-      const newDays = prev.map((day, idx) => {
-        if (idx !== dayIndex) return day;
-        return { ...day, activities: updated };
-      });
-      syncBudgetFromDays(newDays);
-      return newDays;
+    const newDays = days.map((day, idx) => {
+      if (idx !== dayIndex) return day;
+      return { ...day, activities: updated };
     });
+    setDays(newDays);
+    syncBudgetFromDays(newDays);
     // Clear stale refresh result for this day
     const dayNum = days[dayIndex]?.dayNumber;
     if (dayNum) {
@@ -5150,7 +5148,13 @@ export function EditorialItinerary({
     }
     setHasChanges(true);
     setNeedsOptimization(true);
-  }, [syncBudgetFromDays, isSyntheticActivity, isHiddenOptionAlternative, isTransportActivity, getVisibleReorderableActivities, days]);
+    // C-PERSIST: persist the reorder immediately rather than relying on the 3s
+    // autosave debounce — otherwise a quick navigation/refresh loses the new order
+    // (the DB kept the original sort_order/times). Mirrors the AI-note path.
+    persistDaysImmediately(newDays).catch((e) => {
+      console.warn('[reorder] immediate persist failed; autosave will retry', e);
+    });
+  }, [syncBudgetFromDays, isSyntheticActivity, isHiddenOptionAlternative, isTransportActivity, getVisibleReorderableActivities, days, persistDaysImmediately]);
 
   // Move activity up/down — operates on visible card order, not raw array
   const handleActivityMove = useCallback((dayIndex: number, activityId: string, direction: 'up' | 'down') => {
