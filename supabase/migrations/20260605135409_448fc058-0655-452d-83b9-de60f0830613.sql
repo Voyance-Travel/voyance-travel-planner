@@ -3,6 +3,9 @@
 -- C-FRIEND-1: restore outgoing-pending profile visibility
 -- ============================================================================
 
+-- Idempotency guard: this consolidated migration re-runs the policy from
+-- 20260605130000, which fails on a fresh replay ("already exists"). Drop first.
+DROP POLICY IF EXISTS "Users can view profiles of outgoing pending requests" ON public.profiles;
 CREATE POLICY "Users can view profiles of outgoing pending requests"
 ON public.profiles
 FOR SELECT
