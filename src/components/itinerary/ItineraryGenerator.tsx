@@ -1164,7 +1164,7 @@ export function ItineraryGenerator({
 
           <p className="text-xs text-muted-foreground mt-6">
             {isFirstTrip
-              ? 'Your first trip is free! Includes activities, restaurants, transit & tips'
+              ? 'Your first trip starts free — 2 days unlocked with activities, restaurants, transit & tips. Unlock more days with credits.'
               : costEstimate.totalCredits > 0 
                 ? `${formatCredits(costEstimate.totalCredits)} credits for ${totalDaysEstimate} days · Day unlocks charged separately`
                 : 'Includes activities, restaurants, transportation, and local tips'
@@ -1202,7 +1202,7 @@ export function ItineraryGenerator({
             </p>
             
             <p className="text-sm text-muted-foreground mb-6">
-              Your first itinerary build is <span className="font-medium text-foreground">completely free</span> - no credit card required.
+              Your first trip <span className="font-medium text-foreground">starts free</span> — 2 full days included, no credit card required.
             </p>
 
             <div className="flex flex-col gap-3">

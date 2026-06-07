@@ -40,7 +40,7 @@ export function TripCostEstimate({ tripDays, cities = ['single'], className }: T
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary shrink-0" />
           <p className="text-sm font-medium text-foreground">
-            Your first trip is free!
+            Your first trip starts free — 2 days included
           </p>
         </div>
         <p className="text-xs text-muted-foreground pl-6">
