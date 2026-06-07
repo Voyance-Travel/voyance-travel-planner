@@ -90,7 +90,7 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: LucideIcon }> = {
 function shareAchievement(achievement: UserAchievement) {
   const tierLabel = TIER_STYLES[achievement.tier]?.label || 'Bronze';
   const text = `I just earned the "${achievement.name}" ${tierLabel} badge on Voyance! ${achievement.description}`;
-  const url = 'https://voyance-travel-planner.lovable.app';
+  const url = 'https://travelwithvoyance.com';
   
   if (navigator.share) {
     navigator.share({

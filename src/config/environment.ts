@@ -17,8 +17,8 @@
 
 export const FRONTEND_CONFIG = {
   // App URLs
-  FRONTEND_URL: import.meta.env.VITE_SUPABASE_URL ? 'https://voyance-travel-planner.lovable.app' : 'http://localhost:3000',
-  APP_URL: import.meta.env.VITE_SUPABASE_URL ? 'https://voyance-travel-planner.lovable.app' : 'http://localhost:3002',
+  FRONTEND_URL: import.meta.env.VITE_SUPABASE_URL ? 'https://travelwithvoyance.com' : 'http://localhost:3000',
+  APP_URL: import.meta.env.VITE_SUPABASE_URL ? 'https://travelwithvoyance.com' : 'http://localhost:3002',
   
   // Google OAuth (client IDs are public)
   GOOGLE_CLIENT_ID: '914204616314-dejos0u65hqqg7tmr81pamlg7dcdq3bm.apps.googleusercontent.com',

@@ -6,11 +6,6 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import { lovable } from '@/integrations/lovable/index';
-
-const isCustomDomain = () =>
-  !window.location.hostname.includes('lovable.app') &&
-  !window.location.hostname.includes('lovableproject.com');
 
 // ============================================================================
 // Types
@@ -264,36 +259,23 @@ export async function updatePassword(newPassword: string): Promise<{ success: bo
 
 export async function signInWithGoogle(): Promise<{ success: boolean; error?: string }> {
   try {
-    if (isCustomDomain()) {
-      // On custom domains, bypass the auth-bridge entirely
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-          skipBrowserRedirect: true,
-        },
-      });
+    // Native Supabase OAuth (works on any domain off Lovable Cloud)
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+        skipBrowserRedirect: true,
+      },
+    });
 
-      if (error) throw error;
+    if (error) throw error;
 
-      if (data?.url) {
-        window.location.href = data.url;
-        return { success: true };
-      }
-
-      return { success: false, error: 'No OAuth URL returned' };
-    } else {
-      // On lovable.app domains, use the managed flow
-      const { error } = await lovable.auth.signInWithOAuth('google', {
-        redirect_uri: window.location.origin,
-      });
-
-      if (error) {
-        return { success: false, error: error instanceof Error ? error.message : 'Google sign in failed' };
-      }
-
+    if (data?.url) {
+      window.location.href = data.url;
       return { success: true };
     }
+
+    return { success: false, error: 'No OAuth URL returned' };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Google sign in failed' };
   }

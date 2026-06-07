@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { lovable } from '@/integrations/lovable/index';
 import { supabase } from '@/integrations/supabase/client';
 import { saveReturnPath } from '@/utils/authReturnPath';
 import { savePendingInviteToken, extractInviteTokenFromPath } from '@/utils/inviteTokenPersistence';
@@ -18,10 +17,6 @@ function getAuthRedirectUrl(): string {
   // Web: use the current origin.
   return `${window.location.origin}/auth/callback`;
 }
-
-const isCustomDomain = () =>
-  !window.location.hostname.includes('lovable.app') &&
-  !window.location.hostname.includes('lovableproject.com');
 
 interface SocialLoginButtonsProps {
   mode?: 'signin' | 'signup';
@@ -52,25 +47,17 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
     setIsLoadingApple(true);
     persistAuthReturnPath();
     try {
-      if (isCustomDomain()) {
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider: 'apple',
-          options: {
-            redirectTo: getAuthRedirectUrl(),
-            skipBrowserRedirect: true,
-          },
-        });
-        if (error) throw error;
-        if (data?.url) {
-          window.location.href = data.url;
-          return;
-        }
-      } else {
-        const result = await lovable.auth.signInWithOAuth('apple', {
-          redirect_uri: getAuthRedirectUrl(),
-        });
-        if (result.redirected) return;
-        if (result.error) throw result.error;
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo: getAuthRedirectUrl(),
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
       }
     } catch (error) {
       toast.error('Failed to sign in with Apple');
@@ -84,25 +71,17 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
     setIsLoadingGoogle(true);
     persistAuthReturnPath();
     try {
-      if (isCustomDomain()) {
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: getAuthRedirectUrl(),
-            skipBrowserRedirect: true,
-          },
-        });
-        if (error) throw error;
-        if (data?.url) {
-          window.location.href = data.url;
-          return;
-        }
-      } else {
-        const result = await lovable.auth.signInWithOAuth('google', {
-          redirect_uri: getAuthRedirectUrl(),
-        });
-        if (result.redirected) return;
-        if (result.error) throw result.error;
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: getAuthRedirectUrl(),
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
       }
     } catch (error) {
       toast.error('Failed to sign in with Google');
