@@ -96,9 +96,9 @@ serve(async (req) => {
 
     let alternatives: AlternativeActivity[];
     
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     
-    if (LOVABLE_API_KEY) {
+    if (OPENROUTER_API_KEY) {
       try {
         // Use AbortController so we can truly cancel the AI fetch on timeout
         const aiAbort = new AbortController();
@@ -108,7 +108,7 @@ serve(async (req) => {
           currentActivity, 
           destination, 
           searchQuery, 
-          LOVABLE_API_KEY, 
+          OPENROUTER_API_KEY, 
           excludeActivities,
           suggestionMode,
           travelerDNA,
@@ -283,7 +283,7 @@ Be specific with real place names when possible.`;
   }
 
   // Pass signal to fetch so the request is truly aborted on timeout
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,

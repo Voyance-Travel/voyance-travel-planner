@@ -919,8 +919,8 @@ async function handleGenerateTripBackground(
       // Without this, the meal guard falls through to generic "Meal at a bistro" fallbacks.
       try {
         timer.startPhase('restaurant_pool_generation');
-        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-        if (LOVABLE_API_KEY) {
+        const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+        if (OPENROUTER_API_KEY) {
           // Determine cities to generate pools for
           const citiesToPool: Array<{ city: string; country: string }> = [];
           if (isMultiCity) {
@@ -988,10 +988,10 @@ Return ONLY valid JSON array, no markdown:
 [{"name":"Restaurant Name","neighborhood":"Area Name","mealType":"breakfast|lunch|dinner","cuisine":"cuisine type","priceRange":"$|$$|$$$"}]`;
 
             try {
-              const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+              const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
                 headers: {
-                  'Lovable-API-Key': LOVABLE_API_KEY,
+                  'Lovable-API-Key': OPENROUTER_API_KEY,
                   'Content-Type': 'application/json',
                 },
                 signal: AbortSignal.timeout(30_000),
@@ -1044,7 +1044,7 @@ Return ONLY valid JSON array, no markdown:
             console.warn(`[generate-trip] ⚠️ Restaurant pool generation produced 0 venues — meal guard will use verified_venues fallback`);
           }
         } else {
-          console.warn('[generate-trip] LOVABLE_API_KEY not available — skipping restaurant pool generation');
+          console.warn('[generate-trip] OPENROUTER_API_KEY not available — skipping restaurant pool generation');
         }
         timer.endPhase('restaurant_pool_generation');
       } catch (rpErr) {

@@ -78,7 +78,7 @@ serve(async (req) => {
       })) || []
     };
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
     const prompt = `Analyze this trip feedback and generate a concise, actionable summary (2-3 sentences max) that can be used to improve future itinerary generation for this traveler.
 
@@ -96,12 +96,12 @@ Output a single paragraph that could be injected into an AI prompt for their nex
     let summarySource: 'ai' | 'fallback' = 'ai';
 
     try {
-      if (!LOVABLE_API_KEY) throw new Error('No LOVABLE_API_KEY configured');
+      if (!OPENROUTER_API_KEY) throw new Error('No OPENROUTER_API_KEY configured');
 
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

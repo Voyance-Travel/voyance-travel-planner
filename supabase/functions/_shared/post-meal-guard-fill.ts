@@ -21,7 +21,7 @@ export async function fillAfterMealGuard(
     const counters = await fillMissingDescriptions(
       activities || [],
       destination,
-      Deno.env.get('LOVABLE_API_KEY') || undefined,
+      Deno.env.get('OPENROUTER_API_KEY') || undefined,
       dayNumber,
     );
     if (counters.flagged > 0) {

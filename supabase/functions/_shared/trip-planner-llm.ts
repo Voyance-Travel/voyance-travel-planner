@@ -180,7 +180,7 @@ export interface PlannerCallResult {
   rawText?: string;
 }
 
-const GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const GATEWAY_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const PLANNER_MODEL = 'google/gemini-2.5-flash';
 const PLANNER_TIMEOUT_MS = 25_000;
 
@@ -193,9 +193,9 @@ export async function callTripPlannerLLM(
     return { ok: true, plan: { dayAssignments: [], omitted: [] } };
   }
 
-  const apiKey = opts.apiKey ?? Deno.env.get('LOVABLE_API_KEY') ?? '';
+  const apiKey = opts.apiKey ?? Deno.env.get('OPENROUTER_API_KEY') ?? '';
   if (!apiKey) {
-    return { ok: false, error: 'LOVABLE_API_KEY missing' };
+    return { ok: false, error: 'OPENROUTER_API_KEY missing' };
   }
 
   const prompt = buildPrompt(input);

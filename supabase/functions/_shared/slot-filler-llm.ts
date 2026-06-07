@@ -157,7 +157,7 @@ export interface FillerCallResult {
   attempts: number;
 }
 
-const GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const GATEWAY_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const FILLER_MODEL = 'google/gemini-3-flash-preview';
 const FILLER_TIMEOUT_MS = 12_000;
 
@@ -192,12 +192,12 @@ export async function fillDaySkeleton(
     };
   }
 
-  const apiKey = opts.apiKey ?? Deno.env.get('LOVABLE_API_KEY') ?? '';
+  const apiKey = opts.apiKey ?? Deno.env.get('OPENROUTER_API_KEY') ?? '';
   if (!apiKey) {
     return {
       ok: false,
       unfilledSlotIds: packets.map((p) => p.slotId),
-      error: 'LOVABLE_API_KEY missing',
+      error: 'OPENROUTER_API_KEY missing',
       durationMs: Date.now() - t0,
       attempts: 0,
     };

@@ -13,7 +13,7 @@
  *   - No duplication against existing day or avoid list.
  */
 
-const LOVABLE_GATEWAY = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const LOVABLE_GATEWAY = 'https://openrouter.ai/api/v1/chat/completions';
 
 function parseTime(t: string | undefined): number | null {
   if (!t) return null;
@@ -76,7 +76,7 @@ export async function proposeGapFiller(
     preferCategory,
   } = input;
 
-  const apiKey = Deno.env.get('LOVABLE_API_KEY');
+  const apiKey = Deno.env.get('OPENROUTER_API_KEY');
 
   const startMin = (parseTime(gapStartTime) ?? 0) + 15;
   const endMin = (parseTime(gapEndTime) ?? 0) - 15;

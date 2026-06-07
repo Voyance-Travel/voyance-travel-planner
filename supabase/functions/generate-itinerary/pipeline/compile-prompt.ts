@@ -345,7 +345,7 @@ function _timeDiffMinutes(a: string, b: string): number {
 export async function compilePrompt(
   supabase: any,
   userId: string,
-  LOVABLE_API_KEY: string,
+  OPENROUTER_API_KEY: string,
   params: Record<string, any>,
   facts: CompiledFacts,
 ): Promise<CompiledPrompt> {
@@ -1175,7 +1175,7 @@ The Activities target is REAL spend on bookable experiences — free venues do N
   const destinationId = await getDestinationId(supabase, resolvedDestination);
   const generationHierarchy = await buildFullPromptGuidanceAsync(
     supabase, primaryArchetype, resolvedDestination, destinationId,
-    effectiveBudgetTier, effectiveTraitScores, LOVABLE_API_KEY
+    effectiveBudgetTier, effectiveTraitScores, OPENROUTER_API_KEY
   );
   console.log(`[compile-prompt] Full guidance: ${generationHierarchy.length} chars`);
 

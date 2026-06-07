@@ -122,7 +122,7 @@ export async function fillMissingDescriptions(
   if (!Array.isArray(activities) || activities.length === 0) return counters;
   if (!apiKey) {
     counters.errored = true;
-    console.warn(`[DESC_FILL] day=${dayNumber} no LOVABLE_API_KEY — skipping`);
+    console.warn(`[DESC_FILL] day=${dayNumber} no OPENROUTER_API_KEY — skipping`);
     return counters;
   }
 
@@ -172,7 +172,7 @@ export async function fillMissingDescriptions(
   const timer = setTimeout(() => controller.abort(), FILL_TIMEOUT_MS);
 
   try {
-    const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Lovable-API-Key': apiKey,

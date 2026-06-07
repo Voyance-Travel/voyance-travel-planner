@@ -96,8 +96,8 @@ Deno.test('callTripPlannerLLM short-circuits on no must-dos', async () => {
 });
 
 Deno.test('callTripPlannerLLM returns ok:false when API key missing and work to do', async () => {
-  const old = Deno.env.get('LOVABLE_API_KEY');
-  Deno.env.delete('LOVABLE_API_KEY');
+  const old = Deno.env.get('OPENROUTER_API_KEY');
+  Deno.env.delete('OPENROUTER_API_KEY');
   try {
     const result = await callTripPlannerLLM({
       destination: 'Rome',
@@ -106,8 +106,8 @@ Deno.test('callTripPlannerLLM returns ok:false when API key missing and work to 
       mustDos: [{ id: 'md-1', title: 'Colosseum' }],
     });
     assertEquals(result.ok, false);
-    assert(result.error?.includes('LOVABLE_API_KEY'));
+    assert(result.error?.includes('OPENROUTER_API_KEY'));
   } finally {
-    if (old) Deno.env.set('LOVABLE_API_KEY', old);
+    if (old) Deno.env.set('OPENROUTER_API_KEY', old);
   }
 });

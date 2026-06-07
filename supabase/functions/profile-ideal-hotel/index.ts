@@ -151,9 +151,9 @@ serve(async (req) => {
     const archetypeContext = primaryArchetype ? `Their travel archetype is "${primaryArchetype}".` : '';
     const tripContext = tripType ? `This is a ${tripType} trip.` : '';
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    if (!OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY is not configured");
     }
 
     const systemPrompt = `You are a luxury travel concierge AI that recommends ideal hotel types for travelers based on their personality profile. You have deep knowledge of neighborhoods, hotel styles, and local character for destinations worldwide. Always return practical, real-world recommendations.`;
@@ -174,10 +174,10 @@ Recommend their ideal hotel profile. Think about:
 4. What types to AVOID
 5. Search keywords that would find their ideal property`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

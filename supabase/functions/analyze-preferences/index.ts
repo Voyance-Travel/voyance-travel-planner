@@ -80,7 +80,7 @@ serve(async (req) => {
       .slice(0, 2);
 
     // Generate AI summary using Lovable AI
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const lovableApiKey = Deno.env.get("OPENROUTER_API_KEY");
     
     if (!lovableApiKey) {
       // Fallback to simple summary
@@ -100,7 +100,7 @@ Favorite categories: ${topLovedCategories.map(([cat, score]) => `${cat} (score: 
 
 Write a brief, warm 2-3 sentence summary of their travel preferences. Be specific about what they enjoy and gently note what they tend to skip. Make it feel personal and insightful.`;
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

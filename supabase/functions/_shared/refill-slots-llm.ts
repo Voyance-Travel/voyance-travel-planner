@@ -60,7 +60,7 @@ export interface RefillResult {
   rawText?: string;
 }
 
-const GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const GATEWAY_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'google/gemini-3-flash-preview';
 
 export function buildRefillPrompt(input: RefillInput): string {
@@ -94,12 +94,12 @@ export async function refillDroppedSlots(
     return { ok: true, response: { fills: [] }, unfilledSlotIds: [], durationMs: 0, attempts: 0 };
   }
 
-  const apiKey = opts.lovableApiKey ?? Deno.env.get('LOVABLE_API_KEY') ?? '';
+  const apiKey = opts.lovableApiKey ?? Deno.env.get('OPENROUTER_API_KEY') ?? '';
   if (!apiKey) {
     return {
       ok: false,
       unfilledSlotIds: input.needsRefill.map((r) => r.slotId),
-      error: 'missing LOVABLE_API_KEY',
+      error: 'missing OPENROUTER_API_KEY',
       durationMs: Date.now() - t0,
       attempts: 0,
     };

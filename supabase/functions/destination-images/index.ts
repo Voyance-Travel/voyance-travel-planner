@@ -867,7 +867,7 @@ async function generateAIImage(
 
     const prompt = `A beautiful, high-quality travel photograph of ${subject} in ${context}. Scenic landmark view, golden hour lighting, professional travel photography, no people, ultra high resolution. 16:9 aspect ratio.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${lovableApiKey}`,
@@ -938,7 +938,7 @@ RANKING CRITERIA (in order of importance):
 
 Return ONLY the number (1, 2, 3, etc.) of the best image. Just the number, nothing else.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${lovableApiKey}`,
@@ -1528,7 +1528,7 @@ Respond ONLY with JSON: {"score": <0-100>, "issues": ["issue1"], "confidence": <
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${lovableApiKey}`,
@@ -2067,7 +2067,7 @@ serve(async (req) => {
       const supabase = createClient(supabaseUrl, supabaseKey);
       const googleApiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
       const tripAdvisorApiKey = Deno.env.get("TRIPADVISOR_API_KEY");
-      const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+      const lovableApiKey = Deno.env.get("OPENROUTER_API_KEY");
 
       const results: Record<string, DestinationImage> = {};
       let placesCallCount = 0;
@@ -2127,7 +2127,7 @@ serve(async (req) => {
 
     const googleApiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
     const tripAdvisorApiKey = Deno.env.get("TRIPADVISOR_API_KEY");
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const lovableApiKey = Deno.env.get("OPENROUTER_API_KEY");
 
     let resolvedDestination = destination;
     if (!resolvedDestination && destinationId) {
