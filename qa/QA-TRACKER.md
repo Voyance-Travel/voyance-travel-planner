@@ -198,7 +198,7 @@
 |---|:--:|:--:|---|---|---|
 | Single City | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — paid Barcelona (−210, charge==display) |
 | Multi-City | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — Lisbon→Porto (2 cities, 5 days, 52 acts, Day-3 transition); wizard (cities/nights/dates/transport/fine-tune) all work; real inter-city transport compare (CP train/FlixBus/TAP/car); **cost 360 display == −360 charged** (5×60 + 60 multi-city fee); **fresh-trip costs CLEAN** ($35–155/pp/day, no doubling) |
-| Just Tell Us (free-text) | ⬜ | ⬜ | | | ⬜ |
+| Just Tell Us (free-text) | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — conversational NLU parsed "relaxed 3-day food trip to Rome Jun 21" → structured (Rome/3d/1trav/food/relaxed/leisure) → generated 3 days/42 acts (food-themed); cost **180 == −180 charged**; **all 3 days auto-unlocked** (C-PRICE-1 fix proven on a fresh gen) |
 | Build Myself (= the FREE version, per owner — paste-research organizer, no AI generation) | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — pasted a 2-day Lisbon plan → parsed to 2 days/8 activities; **balance UNCHANGED (5600), 0 charges**, `unlocked_day_count=2` (fully unlocked). "Free – all content stays unlocked" accurate |
 | Free version | ✅ | ✅ | **= Build Myself** (owner-clarified) | — | ✅ **genuinely free** (0 credit charge, fully unlocked) |
 <!-- QA test-state 2026-06-07: owner-authorized test top-up → balance 5600 (qa_test_topup manual_grant, NOT real revenue). first_trip_used=true. -->
@@ -250,10 +250,10 @@
 |---|:--:|:--:|---|---|---|
 | Single City | ✅ | ✅ | | | ✅ paid Barcelona verified |
 | Multi-City | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — Lisbon→Porto, 5 days/52 acts/2 cities, transition day, fresh costs clean |
-| Just Tell Us (free-text → parse) | ⬜ | ⬜ | | | ⬜ |
+| Just Tell Us (free-text → parse) | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — chat NLU → Rome 3d/42 acts food-themed, 180 charged, all days unlocked |
 | Build Myself (manual, = Free version) | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — paste-organize → 2 days/8 acts, free (0 charge), fully unlocked |
 | Free version | ✅ | ✅ | = Build Myself | | ✅ free + unlocked verified |
-| Each path → complete itinerary, no fallback, DNA applied | 🟡 | 🟡 | | | 🟡 Single+Multi ✅; DNA-character A/B still unproven (Table B3) |
+| Each path → complete itinerary, no fallback, DNA applied | ✅ | 🟡 | | | ✅ **all 4 build modes produce a complete itinerary** (Single City, Multi-City, Just Tell Us, Build Myself/Free — all verified live 2026-06-07). 🟡 DNA-character A/B differentiation still unproven separately (Table B3) |
 
 ## D2. Build wizard — steps & inputs (each step: renders, validates, persists, back/forward, resume draft)
 | Step / input | Audit | Live | What went wrong | Resolution | Fix verified |
@@ -438,7 +438,7 @@
 | C-ADMIN-2 | MED | admin | UnitEconomics "User Tiers"/"Group Pools" show only the admin's OWN row (missing admin SELECT on user_tiers/group_budgets) | add admin RLS SELECT |
 | C-ADMIN-3 | MED | admin | BulkImport "Delete All Users" button dead (empty body → 400) | remove or implement explicitly |
 | C-CREATE-1 | MED | create | "Just Tell Us" mode has no end≥start date guard → could create a zero/negative-day trip | add isBefore(end,start) check |
-| C-PRICE-1 | **HIGH** | pricing / credits | **CONFIRMED BUG (owner): pay-to-generate + pay-to-unlock double-charge.** A non-first Multi-City trip charged **360 cr to GENERATE**, then showed "5 Days · 0 Unlocked · 5 Locked · Unlock All Remaining 300 cr" → ~660 cr to view a 5-day trip. Generation should be the whole price (360) and unlock all its days. Root: `spend-credits` charged the full trip_generation cost but never set `unlocked_day_count` → stayed 0. | ✅✅ **FIXED + VERIFIED LIVE 2026-06-07** (commit `0a84a5890`): a successful full paid trip_generation now sets `unlocked_day_count` = date-derived total days (added `days` to ServerTripCost). First (free) trips keep their 2-day freemium preview (don't hit the paid branch). Verified: Lisbon→Porto now renders all 5 days unlocked, no "Unlock 300" banner, real activities + clean $155/pp. Already-charged Lisbon trip repaired. |
+| C-PRICE-1 | **HIGH** | pricing / credits | **CONFIRMED BUG (owner): pay-to-generate + pay-to-unlock double-charge.** A non-first Multi-City trip charged **360 cr to GENERATE**, then showed "5 Days · 0 Unlocked · 5 Locked · Unlock All Remaining 300 cr" → ~660 cr to view a 5-day trip. Generation should be the whole price (360) and unlock all its days. Root: `spend-credits` charged the full trip_generation cost but never set `unlocked_day_count` → stayed 0. | ✅✅ **FIXED + VERIFIED LIVE 2026-06-07** (commit `0a84a5890`): a successful full paid trip_generation now sets `unlocked_day_count` = date-derived total days (added `days` to ServerTripCost). First (free) trips keep their 2-day freemium preview (don't hit the paid branch). Verified: Lisbon→Porto now renders all 5 days unlocked, no "Unlock 300" banner, real activities + clean $155/pp. Already-charged Lisbon trip repaired. **✅ FRESH-GEN PROOF:** a new Just-Tell-Us Rome trip (3 days, charged 180) came out with `unlocked_day_count=3` automatically — the fix fires on real generations. *(Minor copy follow-up: cost-confirm still says "Day unlocks charged separately" — now stale for paid gens.)* |
 | C-SEC-1 | MED | security | `verify_jwt = false` default on ~all edge fns (compensated by self-verify, but a future un-gated fn would be exposed) | flip to true for non-public fns |
 | C-FRIEND-1 | HIGH | friends | ROOT CAUSE: RLS gap — `profiles` SELECT has no outgoing-pending branch (regression from a dropped policy) → Sent invites render as blank "Unknown" rows, look stuck Pending | ✅ **RESOLVED — VERIFIED LIVE 2026-06-05** (PR #39 migration applied): narrow additive `profiles` SELECT policy for outgoing-pending addressee. Sent tab now renders all 3 real names (Clinique Brooks / Vonnetta Pryor / Shawl Pryor), zero "Unknown". |
 | C-TOOL-1 | HIGH | itinerary tools | **Day-unlock**: charges 60, but if generate-day throws there's NO refund → 60 credits lost (`useUnlockDay.ts` catch only toasts) | add REFUND in catch (unlock_day is refundable) |
