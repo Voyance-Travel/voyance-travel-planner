@@ -14,7 +14,9 @@
 | 🤖 Core trip generation | ✅ **WORKING — verified live e2e** (free first trip: 4 days / 63 real DNA-differentiated activities) |
 | 🔓 Paid unlock (bulk + full-trip) | ✅ **WORKING — verified live** (−120 cr, days unlock, ledger correct) |
 | 💬 Freemium copy | ✅ accurate ("first trip starts free — 2 days included") |
-| 🔵 Product QA on new stack | **~15%** — foundational pages + core money/build path green; most in-itinerary tools & build modes still untested live |
+| ✏️ In-itinerary edit persistence | ✅✅ **FIXED + VERIFIED 2026-06-07** — save-itinerary was crashing on EVERY real trip (`ReferenceError: day`) so reorder/autosave/AI-notes/lock-toggle silently never persisted. Root crash fixed; edits now save + read back from DB. Resolves the whole C-PERSIST cluster. |
+| 💵 In-itinerary cost display | ✅✅ **FIXED + VERIFIED 2026-06-07** — cost-doubling (×travelers every sync) traced to a DB trigger writing the GROUP total into the per-person `amount`; trigger now writes per-person. Madrid day-1 $8,395→$185/pp, stable. Test-trip data repaired. |
+| 🔵 Product QA on new stack | **~20%** — foundational pages + core money/build path green; **in-itinerary persistence + cost lanes now green**; build modes + DNA A/B + per-tool credit charges still untested live |
 
 **Now working through:** driving the whole sheet green (owner directive). (1) re-verify "fixed-but-unproven" defects, (2) fix genuinely-open defects, (3) DNA proof + build modes + auth flows.
 
@@ -22,13 +24,13 @@
 **Closed this sweep:**
 - ✅ **C-TOOL-1/2/3/4** (refund-on-failure for day-unlock / AI-chat modifier / route-opt / add-activity) — **already correctly wired** in current tree (inline `C-TOOL-N` remediation comments + verified refund paths). No change needed.
 - ✅ **C-TOOL-5** (price copy drift) — fixed: pace/filter chat actions advertised 5cr but are free (→0); rewrite badge 10→30; chat prompt "10 credits"→"30". Display/copy only. Deployed.
-- ✅ **C-PERSIST-3** (lock toggle reverts on frozen trips) — root-caused: JSON sync was frozen-blocked (no saveReason); added `saveReason:'lock-toggle'` ×3 in action-toggle-lock.ts. Deployed. *(Live re-verify needs a frozen/ready trip.)*
+- ✅ **C-PERSIST-3** (lock toggle reverts on frozen trips) — root-caused: JSON sync was frozen-blocked (no saveReason); added `saveReason:'lock-toggle'` ×3 in action-toggle-lock.ts. Deployed. **⚠️ Update 2026-06-07: the bigger blocker was a save-itinerary crash (see below) — that's now fixed, so all editorial saves (incl. lock) actually persist.** *(Lock re-toggle live-test still pending.)*
 - ✅ **C-CREATE-1** ("Just Tell Us" zero-day trip) — added `isBefore(end,start)` guard in Start.tsx. Deployed.
 - ✅ **C-DATA-1** (IAP user_tiers) — **confirmed applied in prod**: `fulfill_credit_purchase` upserts user_tiers (covers both Stripe + IAP paths). Closed.
 - ✅ **C-SEC-1** (verify_jwt=false default) — assessed: posture acceptable (truly-public fns verify signatures; data fns self-verify via require-auth). Do NOT flip globally. No change.
 
-**🔬 DUG IN — reorder/cost-recompute (Madrid live test, owner-requested):** drove a real reorder (⋯ → Move down on Breakfast; menu opens reliably only when the card is mid-viewport with room below). Two REAL bugs surfaced — correcting an earlier wrong "not a bug" call:
-- **✅ FIXED — cost DOUBLES on every reorder (`resolvePerPersonForDb`, commit `fb35090b0`).** A real reorder inflated Madrid day-1 **590→1150** (= ×num_travelers=2). Root cause = `[CPP_DOUBLE_COUNT]` feedback loop: the `activity_costs` sync writes `act.cost` back as `{basis:'ledger', amount:GROUP_TOTAL(160), perPerson:80}`; on the next sync `resolvePerPersonForDb` read **`amount`** (the group total) and, because `'ledger'` ≠ flat/per_room, returned it **without ÷travelers** → cpp re-multiplied by travelers every sync (breakfast 10→20→40→80…). **Fix:** prefer `cost.perPerson` when present + treat `'ledger'` like flat. Frontend-only, self-heals on next sync. (⚠️ pre-corrupted trip costs won't auto-un-inflate — a data-repair re-sync would be needed for already-touched trips.)
+**🔬 DUG IN → ✅✅ ALL RESOLVED — reorder/persistence/cost-recompute (Madrid live test, owner-requested):** drove real reorders (⋯ → Move down). **Three REAL bugs surfaced and all are now fixed + verified live** — correcting an earlier wrong "not a bug" call:
+- **✅ FIXED — cost DOUBLES on every reorder (`resolvePerPersonForDb`, commit `fb35090b0`).** A real reorder inflated Madrid day-1 **590→1150** (= ×num_travelers=2). Root cause = `[CPP_DOUBLE_COUNT]` feedback loop: the `activity_costs` sync writes `act.cost` back as `{basis:'ledger', amount:GROUP_TOTAL(160), perPerson:80}`; on the next sync `resolvePerPersonForDb` read **`amount`** (the group total) and, because `'ledger'` ≠ flat/per_room, returned it **without ÷travelers** → cpp re-multiplied by travelers every sync (breakfast 10→20→40→80…). **Fix:** prefer `cost.perPerson` when present + treat `'ledger'` like flat. **⚠️ SUPERSEDED — this was only a partial (defense-in-depth) fix; the TRUE root cause was a DB trigger writing the group total into `act.cost.amount` → see the ✅✅ trigger fix below (migration `20260607230000`).**
 - **✅✅ FIXED + VERIFIED — CRITICAL: save-itinerary crashed on EVERY real trip → no in-itinerary edits persisted (commits `6a481b4c0`, `135208067`).** Root cause: a stray `}` in `action-save-itinerary.ts` closed the per-day meal-guard loop one block early, so the per-day dedup (`collapseRedundantInjectedMeals(day.activities)` + `dayNumber` log) ran OUTSIDE the loop → **`ReferenceError: day is not defined` at runtime** → the handler crashed (HTTP 500, no CORS) → the browser surfaced **`FunctionsFetchError: Failed to send a request to the Edge Function`**. **Impact:** every `save-itinerary` call on a real multi-day trip crashed, silently breaking ALL in-itinerary edit persistence — **reorder, editor autosave, AI-notes, lock-toggle**. (Tiny payloads survived because the day-count guard short-circuited first; cost still changed because `syncBudgetFromDays` writes `activity_costs` via a direct REST call.) **Found via:** instrumented the invoke → reproduced `Failed to fetch` at 854ms → edge logs showed `ReferenceError: day is not defined at action-save-itinerary.ts:1060`. **Fix:** moved the dedup back inside the loop. Also fixed 2 sibling latent ReferenceErrors found by deno-check in non-default save branches: `callerMetaSuccess` (persist-itinerary.ts:453, timing-audit branch) and `parsedFineTune` (action-save-itinerary.ts:1331, fine-tune merge branch). **VERIFIED LIVE:** Madrid full save → **200** (was "Failed to fetch"); a title edit saved + **read back from the DB (`persisted:true`)**. In-itinerary edit persistence now works. *(Cleanup TODO: remove the `[SAVE_PROBE]` debug instrumentation added to EditorialItinerary.tsx — harmless, only logs on save error.)*
   - **✅✅ FIXED + VERIFIED — cost-doubling ROOT CAUSE was a DB trigger (migration `20260607230000`, + frontend `fb35090b0`).** The real culprit: the `activity_costs → itinerary_data` reverse-sync **DB trigger** `sync_activity_cost_to_itinerary_jsonb` stamped `act.cost.amount = cost_per_person_usd × num_travelers` (the **GROUP total**). But the whole app treats `act.cost.amount` as **per-person** (`resolvePerPersonForDb` returns it as-is for default/per_person/ledger basis). So the round-trip was non-idempotent: cpp=P → trigger writes amount=P×travelers → next client sync reads amount=2P → writes cpp=2P → trigger writes 4P… **×num_travelers every reorder/edit/load** (Madrid day-1 climbed 590→1150→2270→4510→8358). **Fix:** trigger now writes the **per-person** value into `amount` (amount == perPerson) — round-trip is a fixed point. Frontend `resolvePerPersonForDb` perPerson-preference is defense-in-depth. **VERIFIED:** (a) DB unit test — setting cpp=20 with 2 travelers now stamps `amount=20` (was 40); (b) live end-to-end — a reorder fired a fresh sync and Madrid day-1 stayed **$8,370 → $8,395** (transport delta only, NOT the ×2 to ~$16,740), breakfast held at $20. **✅ Data repaired (owner-authorized):** reset 16 pre-fix inflated rows across the 3 QA test trips (Madrid 46e086c9, Barcelona a6c101bb/22dbe829) to category-typical per-person values (dining 30 / transport 8 / activity·cultural 18 / nightlife 25); the fixed trigger restamped the JSON. **Verified:** Madrid day-1 badge now **$185/pp** (was $8,395); all days $110–185/pp, max per-activity $30–60. Only rows with cpp>60 were touched; no hotel/flight rows affected ($0 placeholder flights untouched). FRESH trips compute correctly from generation.
 
@@ -162,7 +164,7 @@
 | Share dialog — public link toggle | ✅ | ✅ | 404 (gen_random_bytes/search_path) | DB ALTER + durable migration PR #25 | ✅ |
 | Share — Copy / WhatsApp / X / public URL loads | ➖ | ✅ | — | — | ✅ |
 | Share — collaborator invite link (generate) | ⬜ | ⬜ | uses no-arg random()-based token (audited safe); not live-tested | | ⬜ |
-| In-itinerary tools (see Table B) | ⬜ | ⬜ | | | ⬜ |
+| In-itinerary tools (see Table B) | 🟡 | 🟡 | reorder/edit persistence + cost display were broken (save-itinerary crash + cost-doubling) — now ✅ fixed/verified; other tools (swap/regen/add/AI-chat) still untested live | crash fix `6a481b4c0` + trigger fix `20260607230000` | 🟡 persistence + cost ✅; remaining tools pending |
 | Trip Health / Partial badge panel | ✅ | ✅ | (prior PRs #17–19) | meal/transit/partial fixes | ✅ |
 
 ## A7. Trip creation `/start` `/build` (see Table B for the 4 modes)
@@ -205,9 +207,9 @@
 |---|:--:|:--:|---|---|---|
 | Regenerate day | ⬜ | ⬜ | | | ⬜ |
 | Swap / replace activity | ⬜ | ⬜ | | | ⬜ |
-| Reorder / move activity | ⬜ | ⬜ | | | ⬜ |
+| Reorder / move activity | ✅ | ✅ | save-itinerary crashed (`ReferenceError: day`) → reorder reverted on refresh | crash fix `6a481b4c0` | ✅ **VERIFIED LIVE 2026-06-07** — Move-down persists across reload; cost no longer doubles |
 | Add booking / flight / hotel | ⬜ | ⬜ | | | ⬜ |
-| Lock activity | ⬜ | ⬜ | | | ⬜ |
+| Lock activity | ✅ | 🟡 | JSON lock was frozen-blocked (C-PERSIST-3) **and** save-itinerary crashed | `saveReason:'lock-toggle'` + crash fix `6a481b4c0` | 🟡 mechanism fixed + save path verified; individual lock re-toggle live-test pending |
 | Day-unlock | ✅ | ✅ | missing `idempotencyKey` → 400 (now fixed) | idempotencyKey added | ✅ **VERIFIED LIVE 2026-06-07** (−120 cr, ledger row, days unlock) |
 | **Each tool: correct credit charge** | ⬜ | ⬜ | (cross-ref C-CRED) | | ⬜ |
 
@@ -294,10 +296,10 @@
 |---|:--:|:--:|---|---|---|
 | Regenerate day | ⬜ | ⬜ | | | ⬜ |
 | Swap / replace activity | ⬜ | ⬜ | | | ⬜ |
-| Reorder / move (drag) | ⬜ | ⬜ | | | ⬜ |
+| Reorder / move (drag) | ✅ | ✅ | save-itinerary crash → didn't persist | crash fix `6a481b4c0` | ✅ **VERIFIED LIVE 2026-06-07** (Move-down persists) |
 | Add activity (search → add) | ⬜ | ⬜ | | | ⬜ |
 | Add booking / flight / hotel | ⬜ | ⬜ | | | ⬜ |
-| Lock activity | ⬜ | ⬜ | | | ⬜ |
+| Lock activity | ✅ | 🟡 | C-PERSIST-3 + save crash | saveReason + crash fix | 🟡 fixed; lock re-toggle live-test pending |
 | Day-unlock (locked days) | ⬜ | ⬜ | | | ⬜ |
 | Smart Finish | ⬜ | ⬜ | | | ⬜ |
 | Mystery activity | ⬜ | ⬜ | | | ⬜ |
@@ -308,7 +310,7 @@
 | Notes / personalization | ⬜ | ⬜ | | | ⬜ |
 | Edit ↔ Preview toggle | ⬜ | ⬜ | | | ⬜ |
 | Trip Health panel (Intelligence / Completion) | ⬜ | ✅ renders | | | ⬜ |
-| Day-by-day cost display | ⬜ | ⬜ | | | ⬜ |
+| Day-by-day cost display | ✅ | ✅ | **cost-doubling**: DB trigger wrote group total into `act.cost.amount` → ×travelers every sync (badge climbed to $8,395/pp) | trigger writes per-person (`20260607230000`) + `fb35090b0` | ✅ **VERIFIED LIVE 2026-06-07** — Madrid day-1 $185/pp, stable across reorder (no ×2); test-trip data repaired |
 | Export / print / PDF | ⬜ | ⬜ | | | ⬜ |
 | Maps (Apple MapKit) render | ⬜ | ⬜ | | | ⬜ |
 | Share public link | ✅ | ✅ | (C-SHARE-1 closed) | PR #25 | ✅ |
@@ -318,10 +320,10 @@
 ## D6. Persistence / data integrity
 | Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| `itinerary_activities` table ↔ `trips.itinerary_data` JSON stay in sync | ⬜ | ⬜ | (known to diverge — persistDay vs persistTripItinerary) | | ⬜ |
-| Refresh / re-open reloads same itinerary | ⬜ | ⬜ | | | ⬜ |
-| Edits persist across sessions | ⬜ | ⬜ | | | ⬜ |
-| No divergence after regen / swap / move | ⬜ | ⬜ | | | ⬜ |
+| `itinerary_activities` table ↔ `trips.itinerary_data` JSON stay in sync | ✅ | ✅ | save-itinerary **crashed on every real trip** (`ReferenceError: day` — see C-PERSIST root-fix) so JSON writes never landed | crash fix `6a481b4c0` + trigger keeps cost in sync (`20260607230000`) | ✅ **VERIFIED LIVE 2026-06-07** — full save returns 200; JSON + activity_costs converge |
+| Refresh / re-open reloads same itinerary | ✅ | ✅ | | — | ✅ verified (Madrid/Barcelona reload intact) |
+| Edits persist across sessions | ✅ | ✅ | **ALL editorial saves silently failed** — save-itinerary crashed (HTTP 500, no CORS → client "FunctionsFetchError") | root crash fix `6a481b4c0` (+ `135208067`) | ✅✅ **VERIFIED LIVE 2026-06-07** — title edit saved + **read back from DB** (`persisted:true`); reorder persists across reload |
+| No divergence after regen / swap / move | ✅ | ✅ | (was blocked by the same crash) | crash fix | ✅ reorder verified persists; cost no longer doubles ($185/pp) |
 
 ---
 
@@ -422,9 +424,9 @@
 ### New concerns found by the fleet
 | ID | Sev | Area | What went wrong | Fix |
 |---|---|---|---|---|
-| C-PERSIST-1 | **CRIT** | itinerary | Single-day **regenerate** writes the TABLE only; JSON (what UI reads) is frozen-gate-blocked → **regenerate silently reverts on refresh**. Most common edit op. **EDGE root cause:** `generate-trip-day-v2.ts:915` persisted JSON with non-whitelisted `saveReason:'v2-day-write'` → server-side blocked. | ✅ **CODE-VERIFIED LIVE 2026-06-05** (deploy confirmed): frontend saveReasons (PR #38) + edge fix PR #40 (`v2-day-write`→`regenerate-day-v2`) shipped in CLI deploy of generate-itinerary. Confirmed `frozen-guard.USER_SAVE_REASON_PREFIXES` includes `'regenerate-'` → `isUserSaveReason('regenerate-day-v2')`=true → persist allowed on frozen trip. ⏳ **Behavioral test (regen→refresh→persists) bundled into next trip-build** (no trip exists on test acct yet). |
-| C-PERSIST-2 | **CRIT** | itinerary | Editor **autosave + manual Save button** omit the frozen bypass → on a ready/frozen trip, edits land in neither JSON nor table → **lost on refresh** | ✅ **FIX SHIPPED (PR #38)** — autosave/Save + chat-action executor + day-unlock all carry `saveReason` now |
-| C-PERSIST-3 | MED | itinerary | **Lock toggle**: table `is_locked` updates but JSON lock is frozen-blocked → lock reverts on refresh | pass `saveReason:'lock-toggle'` |
+| C-PERSIST-1 | **CRIT** | itinerary | Single-day **regenerate** writes the TABLE only; JSON (what UI reads) is frozen-gate-blocked → **regenerate silently reverts on refresh**. Most common edit op. **EDGE root cause:** `generate-trip-day-v2.ts:915` persisted JSON with non-whitelisted `saveReason:'v2-day-write'` → server-side blocked. | ✅ saveReasons (PR #38) + edge fix PR #40 (`v2-day-write`→`regenerate-day-v2`). **⚠️ 2026-06-07: also unblocked by the save-itinerary root crash fix `6a481b4c0`** — save-itinerary crashed on every real trip so NO editorial save persisted regardless of saveReason. Now save returns 200 + persists (verified). 🟡 regen→refresh behavioral test still pending. |
+| C-PERSIST-2 | **CRIT** | itinerary | Editor **autosave + manual Save button** omit the frozen bypass → on a ready/frozen trip, edits land in neither JSON nor table → **lost on refresh** | ✅✅ **RESOLVED — VERIFIED LIVE 2026-06-07.** saveReason fix (PR #38) was necessary but **MOOT until now**: save-itinerary itself **crashed on every real trip** (`ReferenceError: day is not defined`, action-save-itinerary.ts:1060 — stray `}` closed the meal-guard loop early → 500/no-CORS → client "FunctionsFetchError"). Root crash fix (`6a481b4c0`, +2 sibling ReferenceErrors `135208067`). Verified: title edit **read back from DB** (`persisted:true`). |
+| C-PERSIST-3 | MED | itinerary | **Lock toggle**: table `is_locked` updates but JSON lock is frozen-blocked → lock reverts on refresh | ✅ `saveReason:'lock-toggle'` shipped (action-toggle-lock.ts) **+ root crash fix `6a481b4c0`** (lock save also hit the same crash). 🟡 individual lock re-toggle live-test pending. |
 | C-EXPLORE-1 | **CRIT** | content | Explore archetype detail sheet shows **mismatched body** — title says one archetype, body+profile% describe a different generic one (e.g. "Story Seeker"→photography copy). Owner's specific concern, confirmed | author detail content per real scorer archetype; render from archetypeNarratives |
 | C-DNA-4 | **HIGH** | DNA A/B | CONFIRMED: "30-40% archetype seasoning" rule + archetype demoted to "voice not selection" + zero-trait fallback → **differentiation ~4.5/10**. Dining differs (Michelin req vs optional) but ~60-70% of each day converges generic | ✅ **FIX SHIPPED 2026-06-05 (branch fix/c-dna-4-archetype-differentiation)** — de-flattened ALL 6 prompt sites: (1) raised influence ceiling 30-40%→**50-60% for a distinct archetype** (kept lighter 30-40% only for mild/balanced DNA); (2) promoted archetype from "voice not selection" → **drives activity SELECTION + tone**; (3) explicit "different archetypes must produce genuinely different trips, never converge to a generic template" + concrete culinary food-forward guidance (market/cooking class/standout tables beyond meals). Sites: archetype-data.ts (TRAIT MODERATION + priority block), compile-prompt.ts (ARCHETYPE BALANCE, live v2 path), generation-core.ts (×3). User-primacy + all hard limits (budget/variety/pacing/meals) preserved. ✅ deno-check: 0 new errors. ⏳ **A/B behavioral test pending deploy + trip-build** (culinary vs cultural must diverge) |
 | C-DNA-5 | MED | DNA | (downgraded) dietary strong-block only written at trip kickoff — a single-day regen with empty `generation_context` drops it to a weak one-liner | recompute dietary block in compile-prompt when absent |
@@ -451,5 +453,5 @@
 - **Closed (both ✅):** original 5 generation bugs, CI green, Share public-link, core-page render + navigation.
 - **Audit ✅ this sweep:** auth/security (STRONG), admin authz, creation modes, marketing functionality, collaboration, preferences→prompt.
 - **Awaiting verify (fix shipped):** DNA accuracy (PR #24/#35 — needs calculate-travel-dna deploy + re-quiz), admin cost dashboard (PR #21), credit batch (#34).
-- **Biggest NEW risks surfaced:** C-PERSIST-1/2 (in-itinerary edits silently don't persist — CRIT), C-EXPLORE-1 (archetype pages mislabeled — CRIT), C-DNA-4 (A/B differentiation flattened — HIGH), C-CRED-4 (server undercharge), C-REFERRAL-1 (referral pays nobody).
+- **Biggest NEW risks surfaced:** ~~C-PERSIST-1/2 (in-itinerary edits silently don't persist — CRIT)~~ ✅✅ **RESOLVED 2026-06-07** — root cause was a save-itinerary crash (`ReferenceError: day`) breaking EVERY editorial save; fixed + verified (edits persist, read back from DB). ~~cost-doubling~~ ✅ **RESOLVED** (DB trigger wrote group-total into per-person amount; fixed + data repaired). Still open: C-EXPLORE-1 (archetype pages mislabeled — CRIT), C-DNA-4 (A/B differentiation flattened — HIGH), C-CRED-4 ✅ DONE (server undercharge — verified −210 paid charge), C-REFERRAL-1 (referral pays nobody).
 - **Still owed:** in-itinerary-tools audit (1 agent running); Live testing of all the above (auth first per owner); Google bleed + DNA-A/B fixes before the A/B test.
