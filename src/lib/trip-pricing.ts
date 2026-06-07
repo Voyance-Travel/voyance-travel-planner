@@ -94,11 +94,18 @@ export function resolvePerPersonForDb(
 
   if (cost.total != null && cost.total > 0) {
     perPersonInSourceCurrency = cost.total / Math.max(travelers, 1);
+  } else if (cost.perPerson != null && cost.perPerson > 0) {
+    // Prefer an explicit per-person value when present. 'ledger'-basis costs
+    // (written back by the activity_costs sync) carry amount = GROUP TOTAL and
+    // perPerson = the canonical per-person. Reading `amount` for those would
+    // re-multiply by travelers on every sync — the [CPP_DOUBLE_COUNT] feedback
+    // loop that inflated reordered-day costs by ×num_travelers each time.
+    perPersonInSourceCurrency = cost.perPerson;
   } else {
-    const amount = cost.amount ?? cost.perPerson ?? 0;
+    const amount = cost.amount ?? 0;
     if (amount <= 0) return 0;
     const basis = (cost.basis || 'per_person') as CostBasis;
-    perPersonInSourceCurrency = (basis === 'flat' || basis === 'per_room')
+    perPersonInSourceCurrency = (basis === 'flat' || basis === 'per_room' || (basis as string) === 'ledger')
       ? amount / Math.max(travelers, 1)
       : amount;
   }
