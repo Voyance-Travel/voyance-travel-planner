@@ -223,7 +223,7 @@ export async function fillDaySkeleton(
       const resp = await fetchImpl(GATEWAY_URL, {
         method: 'POST',
         headers: {
-          'Lovable-API-Key': apiKey,
+          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         signal,

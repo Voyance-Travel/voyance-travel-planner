@@ -166,7 +166,7 @@ export async function callAI(input: AICallInput): Promise<AICallResult> {
       response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
-          "Lovable-API-Key": lovableApiKey,
+          'Authorization': `Bearer ${lovableApiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

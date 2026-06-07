@@ -1268,7 +1268,7 @@ Generate activities for this day following ALL constraints above.`;
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
           headers: {
-            "Lovable-API-Key": OPENROUTER_API_KEY,
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({

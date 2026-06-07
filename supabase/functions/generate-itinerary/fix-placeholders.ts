@@ -1139,7 +1139,7 @@ export async function generateFallbackRestaurant(
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Lovable-API-Key": apiKey,
+        'Authorization': `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

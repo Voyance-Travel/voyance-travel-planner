@@ -991,7 +991,7 @@ Return ONLY valid JSON array, no markdown:
               const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
                 headers: {
-                  'Lovable-API-Key': OPENROUTER_API_KEY,
+                  'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
                   'Content-Type': 'application/json',
                 },
                 signal: AbortSignal.timeout(30_000),

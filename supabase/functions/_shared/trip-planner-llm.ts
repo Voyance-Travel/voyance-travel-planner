@@ -210,7 +210,7 @@ export async function callTripPlannerLLM(
     const resp = await fetch(GATEWAY_URL, {
       method: 'POST',
       headers: {
-        'Lovable-API-Key': apiKey,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       signal,

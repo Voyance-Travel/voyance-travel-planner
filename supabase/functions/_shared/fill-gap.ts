@@ -141,7 +141,7 @@ OUTPUT (JSON only, no markdown):
     try {
       aiResponse = await fetch(LOVABLE_GATEWAY, {
         method: 'POST',
-        headers: { 'Lovable-API-Key': apiKey, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'google/gemini-2.5-flash',
           messages: [

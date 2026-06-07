@@ -190,7 +190,7 @@ serve(async (req) => {
         method: "POST",
         headers: {
           Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          "Lovable-API-Key": OPENROUTER_API_KEY,
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
           "X-Lovable-AIG-SDK": "vercel-ai-sdk",
           "Content-Type": "application/json",
         },
