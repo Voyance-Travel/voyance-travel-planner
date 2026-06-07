@@ -2971,46 +2971,23 @@ export function EditorialItinerary({
       const { data: existingTrip } = await supabase
         .from('trips').select('id').eq('id', tripId).maybeSingle();
       if (existingTrip) {
-        const __pdKb = Math.round(JSON.stringify(itineraryData ?? {}).length / 1024);
-        const __pdT0 = Date.now();
-        let __pdError: any = null;
-        try {
-          const { error } = await supabase.functions.invoke('generate-itinerary', {
-            body: {
-              action: 'save-itinerary',
-              tripId,
-              itinerary: itineraryData,
-              // AI notes are pure metadata writes on user-touched activities — they
-              // must never trigger contract row drops or be blocked by the frozen gate.
-              // 'user-' prefix is whitelisted in USER_SAVE_REASON_PREFIXES.
-              saveReason: 'user-ai-note-save',
-              skipContract: true,
-            },
-          });
-          __pdError = error;
-        } catch (invokeThrow) {
-          __pdError = invokeThrow;
-          console.error('[SAVE_PROBE persistDays] invoke THREW', {
-            name: (invokeThrow as any)?.name, message: (invokeThrow as any)?.message,
-            cause: String((invokeThrow as any)?.cause || ''),
-          });
-        }
-        if (!__pdError) {
+        const { error } = await supabase.functions.invoke('generate-itinerary', {
+          body: {
+            action: 'save-itinerary',
+            tripId,
+            itinerary: itineraryData,
+            // AI notes are pure metadata writes on user-touched activities — they
+            // must never trigger contract row drops or be blocked by the frozen gate.
+            // 'user-' prefix is whitelisted in USER_SAVE_REASON_PREFIXES.
+            saveReason: 'user-ai-note-save',
+            skipContract: true,
+          },
+        });
+        if (!error) {
           setHasChanges(false);
           setLastSaved(new Date());
         } else {
-          const e: any = __pdError;
-          console.error('[SAVE_PROBE persistDays] failed', {
-            name: e?.name, message: e?.message,
-            hasContext: !!e?.context, ctxStatus: e?.context?.status,
-            payloadKb: __pdKb, ms: Date.now() - __pdT0, tripId,
-          });
-          try {
-            if (e?.context && typeof e.context.text === 'function') {
-              const body = await e.context.text();
-              console.error('[SAVE_PROBE persistDays] response body:', String(body).slice(0, 600));
-            }
-          } catch (_re) { /* ignore */ }
+          console.error('[EditorialItinerary] persistDaysImmediately save failed:', error);
         }
       } else {
         // localStorage demo trips
@@ -4397,8 +4374,6 @@ export function EditorialItinerary({
 
         if (existingTrip && !checkError) {
           // Trip exists in database - save through backend for normalization + meal guard
-          const __savePayloadKb = Math.round(JSON.stringify(itineraryData ?? {}).length / 1024);
-          const __saveT0 = Date.now();
           try {
             const { error } = await supabase.functions.invoke('generate-itinerary', {
               body: {
@@ -4417,28 +4392,9 @@ export function EditorialItinerary({
               setHasChanges(false);
               setLastSaved(new Date());
             } else {
-              // [SAVE_PROBE] instrument the FunctionsFetchError root cause
-              const e: any = error;
-              console.error('[SAVE_PROBE autosave] failed', {
-                name: e?.name, message: e?.message,
-                hasContext: !!e?.context, ctxStatus: e?.context?.status,
-                payloadKb: __savePayloadKb, ms: Date.now() - __saveT0, tripId,
-              });
-              try {
-                if (e?.context && typeof e.context.text === 'function') {
-                  const body = await e.context.text();
-                  console.error('[SAVE_PROBE autosave] response body:', String(body).slice(0, 600));
-                }
-              } catch (_re) { /* ignore */ }
               console.error('[EditorialItinerary] Backend save failed:', error);
             }
           } catch (saveErr) {
-            const e: any = saveErr;
-            console.error('[SAVE_PROBE autosave] THREW', {
-              name: e?.name, message: e?.message, cause: String(e?.cause || ''),
-              payloadKb: __savePayloadKb, ms: Date.now() - __saveT0,
-              stack: String(e?.stack || '').slice(0, 500),
-            });
             console.error('[EditorialItinerary] Backend save error:', saveErr);
           }
         } else {
