@@ -311,6 +311,34 @@ serve(async (req) => {
         }
       }
 
+      // ── Free-first-trip authorization (post-migration drift fix) ──────────
+      // The client (useGenerationGate / get-entitlements) makes a user's FIRST
+      // trip free based on profiles.first_trip_used === false, and intentionally
+      // does NOT spend credits for it — so no proof-of-charge row exists. The
+      // server gate below ignored that and 403'd, so every fresh account's first
+      // generation failed. Honor the SAME canonical flag here. The flag is
+      // consumed (set true) by an existing trigger only AFTER a generation
+      // completes, so a blocked/crashed trip can't abuse this; paid (2nd+) trips
+      // still require a real proof-of-charge.
+      if (!charge && action === 'generate-trip') {
+        const { data: profileRow } = await supabase
+          .from('profiles')
+          .select('first_trip_used')
+          .eq('id', authResult.userId)
+          .maybeSingle();
+        if (profileRow?.first_trip_used === false) {
+          charge = {
+            id: 'free_first_trip',
+            status: 'free_first_trip',
+            action: 'trip_generation',
+            created_at: new Date().toISOString(),
+          } as any;
+          console.log(
+            `[generate-itinerary] Free-first-trip authorization for user=${authResult.userId} (profiles.first_trip_used=false)`
+          );
+        }
+      }
+
       if (!charge) {
         console.warn(
           `[generate-itinerary] No proof-of-charge for user=${authResult.userId} trip=${tripId} action=${action} ` +
