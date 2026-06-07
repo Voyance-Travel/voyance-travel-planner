@@ -24,6 +24,7 @@ export interface CostDNA {
 }
 
 export interface ServerTripCost {
+  days: number;
   baseCredits: number;
   multiCityFee: number;
   subtotal: number;
@@ -89,6 +90,7 @@ export function computeServerTripCost(input: ServerTripCostInput): ServerTripCos
   const hotelCredits = input.includeHotels ? cityCount * HOTEL_PER_CITY : 0;
 
   return {
+    days,
     baseCredits,
     multiCityFee,
     subtotal,

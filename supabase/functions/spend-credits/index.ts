@@ -191,6 +191,10 @@ serve(async (req) => {
     // C-CRED-4: creditsAmount is reassignable so the trip_generation branch can
     // override it with the server-authoritative recompute.
     let creditsAmount = body.creditsAmount;
+    // C-PRICE-1: when a FULL paid trip_generation succeeds, unlock all the days it
+    // paid for (the generation charge IS the whole-trip price). 0 = don't touch
+    // unlock state (partial/journey/non-gen actions keep their own logic).
+    let tripGenUnlockDays = 0;
     console.log('[SPEND-CREDITS] Request:', { action, tripId, dayIndex, creditsAmount });
 
     const supabaseAdmin = createClient(
@@ -579,6 +583,9 @@ serve(async (req) => {
               );
             }
             creditsAmount = serverCost.totalCredits;
+            // C-PRICE-1: paying the full generation cost unlocks every day of the
+            // trip — no separate per-day unlock charge on top of generation.
+            tripGenUnlockDays = serverCost.days;
           } catch (costErr) {
             console.error('[spend-credits] trip_generation server cost recompute failed:', costErr);
             return errorResponse('Could not verify trip cost', 'COST_VERIFY_FAILED', 500);
@@ -826,6 +833,29 @@ serve(async (req) => {
         // credit_purchases. Stale-pending sweep / admin reconciliation will
         // surface this. Do not fail the response — credits are gone either way.
         console.error('[spend-credits] CRITICAL: claim row finalize failed', finalizeErr);
+      }
+    }
+
+    // ── C-PRICE-1: a paid full-trip generation unlocks ALL its days ──
+    // The generation charge (days×60 + multiCityFee + complexity + hotels) IS the
+    // whole-trip price, so the user must NOT be asked to pay again to unlock the
+    // days they just paid to generate. Set unlocked_day_count to the full day
+    // count (date-derived, so it's correct even though generation runs after this
+    // charge). First (free) trips never hit the paid branch, so their freemium
+    // 2-day preview is unaffected. Synchronous so a reload shows days unlocked.
+    if (action === 'trip_generation' && tripId && tripGenUnlockDays > 0) {
+      try {
+        const { error: unlockErr } = await supabaseAdmin
+          .from('trips')
+          .update({ unlocked_day_count: tripGenUnlockDays })
+          .eq('id', tripId);
+        if (unlockErr) {
+          console.error('[spend-credits] trip_generation day-unlock update failed (non-fatal):', unlockErr);
+        } else {
+          console.log(`[spend-credits] trip_generation unlocked all ${tripGenUnlockDays} days for trip ${tripId}`);
+        }
+      } catch (unlockEx) {
+        console.error('[spend-credits] trip_generation day-unlock threw (non-fatal):', unlockEx);
       }
     }
 
