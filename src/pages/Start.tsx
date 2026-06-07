@@ -2834,6 +2834,13 @@ export default function Start() {
                         return;
                       }
 
+                      // C-CREATE-1: guard against end < start (chat extraction can produce
+                      // a degenerate/zero-day trip; normalizeChatTripDates only clamps, never rejects).
+                      if (isBefore(chatEndDate, chatStartDate)) {
+                        toast.error('End date must be on or after the start date. Please tell me the correct dates.');
+                        return;
+                      }
+
                       setIsSubmitting(true);
                       try {
                         const chatBudget = details.budgetAmount || budgetAmount;

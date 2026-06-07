@@ -76,7 +76,7 @@ export async function handleToggleActivityLock(ctx: ActionContext): Promise<Resp
     const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
     const { error: saveErr } = await persistTripItinerary(
       supabase, tripId, { ...itineraryData, days: updatedDays },
-      { skipContract: true, label: 'toggle-lock' },
+      { skipContract: true, label: 'toggle-lock', saveReason: 'lock-toggle' },
     );
 
     return !saveErr;
@@ -126,7 +126,7 @@ export async function handleToggleActivityLock(ctx: ActionContext): Promise<Resp
             const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
             const { error: saveErr } = await persistTripItinerary(
               supabase, tripId, { ...itineraryData, days: updatedDays },
-              { skipContract: true, label: 'toggle-lock' },
+              { skipContract: true, label: 'toggle-lock', saveReason: 'lock-toggle' },
             );
             
             if (!saveErr) {
@@ -177,7 +177,7 @@ export async function handleToggleActivityLock(ctx: ActionContext): Promise<Resp
             const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
             const { error: saveErr } = await persistTripItinerary(
               supabase, tripId, { ...itineraryData, days: updatedDays },
-              { skipContract: true, label: 'toggle-lock' },
+              { skipContract: true, label: 'toggle-lock', saveReason: 'lock-toggle' },
             );
             
             if (!saveErr) {

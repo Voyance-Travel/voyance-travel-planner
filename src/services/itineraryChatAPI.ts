@@ -118,7 +118,7 @@ export function getActionDisplayInfo(action: { type: string; params: Record<stri
         title: `Rewrite Day ${action.params.target_day}`,
         description: action.params.reason as string || 'Rewrite this day based on your instructions',
         icon: 'rewrite',
-        creditCost: 10,
+        creditCost: 30,
       };
     case 'suggest_activity_swap':
       return {
@@ -135,14 +135,14 @@ export function getActionDisplayInfo(action: { type: string; params: Record<stri
           ? 'Make the day more relaxed with fewer activities'
           : 'Pack in more activities for an action-filled day',
         icon: 'pace',
-        creditCost: 5,
+        creditCost: 0,
       };
     case 'apply_filter':
       return {
         title: `Apply ${action.params.filter_type} filter`,
         description: `Filter for: ${action.params.filter_value}`,
         icon: 'filter',
-        creditCost: 5,
+        creditCost: 0,
       };
     case 'regenerate_day':
       return {
