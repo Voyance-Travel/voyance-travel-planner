@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = (() => {
       // Sane defaults so prod doesn't break if env not set
       'https://travelwithvoyance.com',
       'https://www.travelwithvoyance.com',
-      'https://voyance-travel-planner.lovable.app',
+      'https://travelwithvoyance.com',
     ];
   }
   return raw.split(',').map((s) => s.trim()).filter(Boolean);

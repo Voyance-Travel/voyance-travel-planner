@@ -160,7 +160,7 @@ function generatePriceAlertEmailHtml(alert: PriceAlert): string {
                   <table width="100%" cellpadding="0" cellspacing="0">
                     <tr>
                       <td align="center" style="padding-top: 10px;">
-                        <a href="https://voyance-travel-planner.lovable.app/trip/planner/${alert.tripId}/summary" 
+                        <a href="https://travelwithvoyance.com/trip/planner/${alert.tripId}/summary" 
                            style="display: inline-block; background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: white; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
                           Book Now & Save ${savingsFormatted}
                         </a>
@@ -174,11 +174,11 @@ function generatePriceAlertEmailHtml(alert: PriceAlert): string {
               <tr>
                 <td style="background-color: #f9fafb; padding: 24px 40px; text-align: center; border-top: 1px solid #e5e7eb;">
                   <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px;">
-                    Sent with ❤️ by <a href="https://voyance-travel-planner.lovable.app" style="color: #6366f1; text-decoration: none;">Voyance</a>
+                    Sent with ❤️ by <a href="https://travelwithvoyance.com" style="color: #6366f1; text-decoration: none;">Voyance</a>
                   </p>
                   <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                    <a href="https://voyance-travel-planner.lovable.app/settings" style="color: #9ca3af;">Manage price alerts</a> · 
-                    <a href="https://voyance-travel-planner.lovable.app/trip/dashboard" style="color: #9ca3af;">View all trips</a>
+                    <a href="https://travelwithvoyance.com/settings" style="color: #9ca3af;">Manage price alerts</a> · 
+                    <a href="https://travelwithvoyance.com/trip/dashboard" style="color: #9ca3af;">View all trips</a>
                   </p>
                 </td>
               </tr>
@@ -216,10 +216,10 @@ ${alert.hotelDetails ? `Hotel: ${alert.hotelDetails.name} · ${alert.hotelDetail
 
 ⏰ Act fast! Travel prices change frequently. Lock in this rate before it goes back up.
 
-Book now: https://voyance-travel-planner.lovable.app/trip/planner/${alert.tripId}/summary
+Book now: https://travelwithvoyance.com/trip/planner/${alert.tripId}/summary
 
 ---
-Manage price alerts: https://voyance-travel-planner.lovable.app/settings
+Manage price alerts: https://travelwithvoyance.com/settings
   `;
 }
 

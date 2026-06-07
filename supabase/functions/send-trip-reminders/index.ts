@@ -259,7 +259,7 @@ function generateEmailHtml(reminder: TripReminder, message: ReturnType<typeof ge
                   <table width="100%" cellpadding="0" cellspacing="0">
                     <tr>
                       <td align="center" style="padding-top: 10px;">
-                        <a href="https://voyance-travel-planner.lovable.app/trip/dashboard" 
+                        <a href="https://travelwithvoyance.com/trip/dashboard" 
                            style="display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
                           View My Trip
                         </a>
@@ -281,7 +281,7 @@ function generateEmailHtml(reminder: TripReminder, message: ReturnType<typeof ge
                         </p>
                       </td>
                       <td width="120" style="text-align: right;">
-                        <a href="https://voyance-travel-planner.lovable.app" 
+                        <a href="https://travelwithvoyance.com" 
                            style="display: inline-block; background: #4f46e5; color: white; padding: 10px 16px; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 13px;">
                           Invite Friends
                         </a>
@@ -295,11 +295,11 @@ function generateEmailHtml(reminder: TripReminder, message: ReturnType<typeof ge
               <tr>
                 <td style="background-color: #f9fafb; padding: 24px 40px; text-align: center; border-top: 1px solid #e5e7eb;">
                   <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px;">
-                    Sent with ❤️ by <a href="https://voyance-travel-planner.lovable.app" style="color: #6366f1; text-decoration: none;">Voyance</a>
+                    Sent with ❤️ by <a href="https://travelwithvoyance.com" style="color: #6366f1; text-decoration: none;">Voyance</a>
                   </p>
                   <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                    <a href="https://voyance-travel-planner.lovable.app/settings" style="color: #9ca3af;">Manage notifications</a> · 
-                    <a href="https://voyance-travel-planner.lovable.app/trip/dashboard" style="color: #9ca3af;">View all trips</a>
+                    <a href="https://travelwithvoyance.com/settings" style="color: #9ca3af;">Manage notifications</a> · 
+                    <a href="https://travelwithvoyance.com/trip/dashboard" style="color: #9ca3af;">View all trips</a>
                   </p>
                 </td>
               </tr>
@@ -338,13 +338,13 @@ Trip Details:
 
 ${message.cta}
 
-View your trip: https://voyance-travel-planner.lovable.app/trip/dashboard
+View your trip: https://travelwithvoyance.com/trip/dashboard
 
 ---
 Love Voyance? Share it with friends and plan adventures together!
-https://voyance-travel-planner.lovable.app
+https://travelwithvoyance.com
 
-Manage notifications: https://voyance-travel-planner.lovable.app/settings
+Manage notifications: https://travelwithvoyance.com/settings
   `;
 
   try {

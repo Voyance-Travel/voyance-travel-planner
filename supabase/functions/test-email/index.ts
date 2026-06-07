@@ -65,7 +65,7 @@ const templates = {
               <li>Start planning your first adventure</li>
             </ul>
             <div style="text-align: center; margin-top: 30px;">
-              <a href="https://voyance-travel-planner.lovable.app/quiz" style="display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;">Take the Quiz</a>
+              <a href="https://travelwithvoyance.com/quiz" style="display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;">Take the Quiz</a>
             </div>
           </div>
           <div style="background: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
@@ -75,7 +75,7 @@ const templates = {
       </body>
       </html>
     `,
-    text: `Welcome to Voyance!\n\nWe're thrilled to have you join us. Get ready for personalized travel experiences.\n\nNext steps:\n- Complete your Travel DNA quiz\n- Explore destinations\n- Start planning!\n\nVisit: https://voyance-travel-planner.lovable.app/quiz`,
+    text: `Welcome to Voyance!\n\nWe're thrilled to have you join us. Get ready for personalized travel experiences.\n\nNext steps:\n- Complete your Travel DNA quiz\n- Explore destinations\n- Start planning!\n\nVisit: https://travelwithvoyance.com/quiz`,
   },
   "booking-confirmation": {
     subject: "🎉 Booking Confirmed - Your Trip is Set!",
