@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
-import { GOOGLE_MAPS_API_KEY } from '@/config/api.config';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface AddressResult {
   name: string;
@@ -71,47 +71,37 @@ export function useAddressSearch(): UseAddressSearchReturn {
     }
   }, []);
 
+  // C-COST-4: route the Google fallback through the server proxy
+  // (places-search-proxy) — cached, ceiling-gated, cost-tracked, and the Google
+  // key never reaches the browser. The client no longer calls Google directly.
   const searchGoogle = useCallback(async (query: string, near?: string) => {
-    if (!query || !GOOGLE_MAPS_API_KEY) {
+    if (!query) {
       setResults([]);
       return;
     }
 
     abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
 
     setIsSearching(true);
     try {
-      const textQuery = near ? `${query} in ${near}` : query;
-      const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-          'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location',
-        },
-        body: JSON.stringify({ textQuery, maxResultCount: 5 }),
+      const { data, error } = await supabase.functions.invoke('places-search-proxy', {
+        body: { query, near, maxResultCount: 5 },
       });
 
-      if (!response.ok) throw new Error('Google Places search failed');
+      if (error) throw error;
 
-      const data = await response.json();
-      const places = data.places || [];
-
-      const mapped: AddressResult[] = places.map((p: any) => ({
-        name: p.displayName?.text || query,
-        address: p.formattedAddress || '',
-        lat: p.location?.latitude,
-        lng: p.location?.longitude,
+      const mapped: AddressResult[] = (data?.results ?? []).map((r: any) => ({
+        name: r.name || query,
+        address: r.address || '',
+        lat: r.lat,
+        lng: r.lng,
         source: 'google' as const,
       }));
 
       setResults(mapped);
     } catch (e: any) {
       if (e.name !== 'AbortError') {
-        console.warn('[AddressSearch] Google error:', e);
+        console.warn('[AddressSearch] Google proxy error:', e);
         setResults([]);
       }
     } finally {
@@ -130,6 +120,7 @@ export function useAddressSearch(): UseAddressSearchReturn {
     searchNominatim,
     searchGoogle,
     clearResults,
-    hasGoogleFallback: !!GOOGLE_MAPS_API_KEY,
+    // Google fallback is always available now — it runs server-side via the proxy.
+    hasGoogleFallback: true,
   };
 }

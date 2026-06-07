@@ -145,6 +145,8 @@ project_id = "jsxplunjjvxuejeouwob"
     verify_jwt = false
   [functions.purchase-group-unlock]
     verify_jwt = false
+  [functions.places-search-proxy]
+    verify_jwt = false
   [functions.purchase-trip-pass]
     verify_jwt = false
   [functions.recommend-restaurants]
