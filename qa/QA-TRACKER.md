@@ -5,6 +5,24 @@
 Env: **NEW STACK (2026-06-07)** — Vercel preview = staging · owned Supabase `qpwexpjqzsdkjkvgcntx` · OpenRouter AI. `travelwithvoyance.com` stays on the old Lovable site (rollback) until cutover is QA-verified. · Test credits authorized · Account: ashtonlaurenn@gmail.com
 Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). This file is the structured checklist.
 
+---
+
+## ✅ PROGRESS AT A GLANCE — 2026-06-07
+
+### **Overall: ~40% complete**
+
+| Track | Status |
+|---|---|
+| 🚚 **Migration & cutover** | ✅ **100% — DONE** (own Supabase + OpenRouter + Vercel · 48k content rows · original PostgREST incident fixed) |
+| 🟢 **Code audit** | **~90%** (carried + heavily re-read during cutover) |
+| 🔵 **Live re-QA on new stack** | **~20%** — foundational flows green; **trip-build + DNA proof + admin + security remain** |
+
+**Verified live (new stack):** images · OAuth login · share-RPC · A1 Home · A2 Explore (search→destination) · A3 Pricing · A4 Quiz (+gating fix +DNA) · A5 Overview · A9 session · B4 credit grants (welcome/quiz/prefs = **300**, DB-confirmed)
+**Fixed + shipped this cutover:** site-wide images · OAuth/SPA callback · quiz gating
+**No major migration drift found.** ▶️ **Next:** the [DNA & Preference-Adherence Test Plan](#-test-plan--dna--preference-adherence-the-big-proof) below — the big proof.
+
+---
+
 ### How to read the checkboxes
 - **Audit** (code read): ✅ clean · ❌ issue found · ⏳ in progress · ⬜ not started · ➖ n/a
 - **Live** (exercised on prod): ✅ clean · ❌ broken · ⏳ in progress · ⬜ not started · ➖ n/a
@@ -102,6 +120,47 @@ Systematic check that nothing was missed moving to the owned stack. ✅ verified
 
 ---
 
+## 🧬 TEST PLAN — DNA & Preference Adherence (the big proof)
+*Covers B3 (DNA→itinerary), D3 (preferences respected), D1/D2 (build), B1 (4 modes), D4 (generation correctness). The single highest-value test on the new stack — and it fills most remaining boxes.*
+
+**Method:** hold the destination constant (**Barcelona · 4 nights · 2 travelers**) and vary the DNA/preferences. Generate, then check the output against "Expect to see." Differentiation = the same city must produce **measurably different** itineraries per profile.
+
+### 1) DNA profiles — same city, different DNA → different itinerary
+| # | DNA / Profile | Set via | Expect the itinerary to lean toward… | Generated | Adheres ✅/❌ |
+|---|---|---|---|:--:|:--:|
+| 1 | **Culinary / foodie** | quiz: food-forward answers | La Boqueria, tapas crawl, cooking class, dinner reservations, food markets; **high dining ratio** | ⬜ | ⬜ |
+| 2 | **Cultural / history** | quiz: culture answers | Sagrada Família, Gothic Quarter, Picasso/MNAC, historic walking tours; **low nightlife** | ⬜ | ⬜ |
+| 3 | **Adventure / active** | quiz: adventure answers | Montjuïc, cable car, beach/water sports, Montserrat day-trip, **active pacing** | ⬜ | ⬜ |
+| 4 | **Relaxed / wellness** | quiz: slow/wellness answers | Spa, beach clubs, **fewer activities/day**, slow mornings, downtime | ⬜ | ⬜ |
+
+### 2) Preference adherence — set a pref, confirm the output honors it
+| Preference set | Expect | Adheres ✅/❌ |
+|---|---|:--:|
+| Dietary = **vegetarian** | restaurant picks veg-friendly; no steakhouse anchors | ⬜ |
+| Budget = **budget-friendly** | value venues, free attractions, lower total cost | ⬜ |
+| Budget = **luxury** | upscale dining/hotels, premium experiences | ⬜ |
+| Pace = **relaxed** | ≤3 activities/day, late starts, downtime blocks | ⬜ |
+| Accommodation = **unique stays** | boutique/Airbnb-style, not chain hotels | ⬜ |
+| Accessibility = **step-free** | avoids stair-heavy sites; notes accessibility | ⬜ |
+
+### 3) Differentiation pass/fail (B3 proof)
+- [ ] ≥40% of venues **differ** between profiles 1 / 2 / 3 for the same city
+- [ ] Dining-ratio **Δ ≥15pts** between Culinary (1) and Cultural (2)
+- [ ] **No fallback/generic** itinerary — every day has real, named, geolocated venues (D4)
+- [ ] Each generation **charges the correct credits** and the AI path is OpenRouter (D4/B4)
+
+### 4) Build modes (B1 / D1) — each yields a complete itinerary
+| Mode | Built | Complete (no fallback) | DNA applied |
+|---|:--:|:--:|:--:|
+| Single City | ⬜ | ⬜ | ⬜ |
+| Multi-City | ⬜ | ⬜ | ⬜ |
+| Just Tell Us (free-text) | ⬜ | ⬜ | ⬜ |
+| Build Myself | ⬜ | ⬜ | ⬜ |
+
+> Running this plan top-to-bottom closes B3, D3, D1/D2/D4, B1, and most of A6/A7 in one coordinated pass.
+
+---
+
 # TABLE A — Pages × Features
 *(Itinerary, creation modes, and in-itinerary tools are detailed in **Table D**; auth/user-types in **Table E**.)*
 *Not just "does it render" — do the links work, do the in-page features actually function.*
@@ -145,14 +204,14 @@ Systematic check that nothing was missed moving to the owned stack. ✅ verified
 |---|:--:|:--:|---|---|---|
 | Quiz completes + persists DNA | ✅ | ✅ | — | — | ➖ |
 | DNA assignment ACCURACY (right archetype for answers) | ✅ | ✅ | maximal foodie → "Urban Nomad" not Culinary (see Concern C-DNA-1) | fix #2 PR #24 (food weight 26→38 + urban anti-food guard) + PR #35 marker | ✅ **VERIFIED LIVE 2026-06-05**: post-CLI-deploy re-quiz (maximal foodie) → **"The Culinary Cartographer"** ("Your passport is basically a menu"), hints of Romantic Curator. Old Urban-Nomad fallback gone. |
-| "Complete" gating / unanswered-question guidance | ⬜ | ❌ | Complete silently disables <100% w/ no "which question" hint | | ⬜ |
+| "Complete" gating / unanswered-question guidance | ✅ | ✅ | (was: silently disabled <100% with no hint) | PR `b3a0f4e50` — inline "Answer N more questions to continue" hint | ✅ **FIXED + VERIFIED LIVE** (decrement 2→1 + singular grammar confirmed on new stack) |
 | Result card "match %" | ⬜ | ✅ | blank on new archetype | (resolved post-deploy?) | ✅ **LIVE 2026-06-05**: DNA card shows "52% match" for Culinary Cartographer — match% now renders (earlier "blank" not reproduced) |
 | "Just Tell Us Your Story" free-text DNA path | ⬜ | ⬜ | not exercised (2nd of 3 DNA input paths) | | ⬜ |
 
 ## A5. Profile `/profile` (tabs)
 | Tab / feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| Overview (stats render) | ✅ | ❌ | **DATA BUG**: stats show **50 Trips Completed / 19 Countries / 131 Days / 70 Upcoming** but My Trips is EMPTY (0 real trips) — cosmetic/seed values, misleading. DNA card OK ("Culinary Cartographer", 52% match). | replace seed stats with real counts | ⬜ **finding logged** |
+| Overview (stats render) | ✅ | ✅ | (old account showed real-but-misleading counts vs empty My Trips) | on the fresh new-stack account, stats show **0/0/0/0 — consistent** with empty My Trips | ✅ **VERIFIED LIVE — not a bug on the new stack** (no fake seed values; DNA card "The Cultural Anthropologist" renders) |
 | My Trips (list/open) | ✅ | ✅ | — | — | ✅ LIVE: "No trips yet" empty state (correct — acct has 0 real trips) |
 | Friends (list) | ⬜ | ✅ renders (2 friends) | | | ⬜ |
 | Friends — "Sent" count vs list | ✅ | ✅ | badge 3, only 1 invite renders; stuck Pending (Concern C-FRIEND-1) | RLS policy PR #39 (outgoing-pending profile visibility) + migration applied | ✅ **VERIFIED LIVE 2026-06-05**: Sent badge=3 and all 3 render real names (Clinique Brooks, Vonnetta Pryor, Shawl Pryor) — no "Unknown" rows |
@@ -191,7 +250,7 @@ Systematic check that nothing was missed moving to the owned stack. ✅ verified
 ## A9. Auth / login
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| **Entire area** — login, signup, session, logout, password reset, OAuth | ✅ | 🟧 | — | — | 🟧 **PARTIAL**: logged-in **session works**; account menu + **Sign Out control present** (not clicked — I can't re-login, password entry blocked). **signup / login / password-reset / OAuth = OWNER logged-out pass** |
+| **Entire area** — login, signup, session, logout, password reset, OAuth | ✅ | 🟢 | (old stack: auth-lock aborted Google OAuth) | native Supabase OAuth (cloud-auth removed) + SPA `/auth/callback` fix | 🟢 **Google OAuth login VERIFIED LIVE end-to-end** (sign-in → callback → session ✅). Still ⬜ to close A9: email signup · password-reset · logout-click |
 | Security posture (RLS, exposed keys, auth gating on edge fns) | ✅ | 🟧 | — | fleet audit: auth **STRONG**; this session hardened CRIT-1 (Stripe), admin-gate, C-FRIEND/C-ADMIN-2 RLS, claim-referral anti-abuse | 🟧 code-audit strong + multiple RLS/auth fixes shipped+deployed; full pen-style live test = owner |
 
 ---
