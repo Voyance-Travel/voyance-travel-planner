@@ -199,8 +199,9 @@
 | Single City | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — paid Barcelona (−210, charge==display) |
 | Multi-City | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — Lisbon→Porto (2 cities, 5 days, 52 acts, Day-3 transition); wizard (cities/nights/dates/transport/fine-tune) all work; real inter-city transport compare (CP train/FlixBus/TAP/car); **cost 360 display == −360 charged** (5×60 + 60 multi-city fee); **fresh-trip costs CLEAN** ($35–155/pp/day, no doubling) |
 | Just Tell Us (free-text) | ⬜ | ⬜ | | | ⬜ |
-| Build Myself | ⬜ | ⬜ | | | ⬜ |
-| Free version | ⬜ | ⬜ | | | ⬜ |
+| Build Myself (= the FREE version, per owner — manual build, no generation charge) | ⬜ | ⬜ | | | ⬜ |
+| Free version | ⬜ | ⬜ | **= Build Myself** (owner-clarified) — verify it's genuinely free (no credit charge) | | ⬜ |
+<!-- QA test-state 2026-06-07: owner-authorized test top-up → balance 5600 (qa_test_topup manual_grant, NOT real revenue). first_trip_used=true. -->
 
 ## B2. In-itinerary tools
 | Tool | Audit | Live | What went wrong | Resolution | Fix verified |
