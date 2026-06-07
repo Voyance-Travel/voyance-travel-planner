@@ -2,7 +2,7 @@
 
 **The single source of truth for QA.** Every page, every feature, every concern gets **two independent checks** — a code **Audit** and a **Live** test. An item is only DONE when **both are ✅**. When something fails, we record **what went wrong → the resolution → and verify the fix** before closing.
 
-Env: **prod** (travelwithvoyance.com) · Test credits authorized · Account: ashtonlaurenn@gmail.com
+Env: **NEW STACK (2026-06-07)** — Vercel preview = staging · owned Supabase `qpwexpjqzsdkjkvgcntx` · OpenRouter AI. `travelwithvoyance.com` stays on the old Lovable site (rollback) until cutover is QA-verified. · Test credits authorized · Account: ashtonlaurenn@gmail.com
 Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). This file is the structured checklist.
 
 ### How to read the checkboxes
@@ -21,7 +21,7 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 ---
 
-## 📊 OVERALL PROGRESS — updated live 2026-06-05 (post-deploy)
+## 📊 OVERALL PROGRESS — updated 2026-06-07 (POST-MIGRATION — re-QA on new stack)
 
 **"Done" = Audit ✅ AND Live ✅** (and for a defect, fix merged + deployed + re-verified).
 
@@ -31,10 +31,11 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 | 🟢 **Code audit** | **~90% reviewed** | fleet swept every zone; per-row Audit boxes closed as each is live-verified |
 | 🚀 **Fixes shipped + deployed** (PRs #29–49, all merged 2026-06-05) | DNA #24/35, CRIT-1 #29, admin-gate #30, guide #32, IAP #34, C-PERSIST #38/40, C-FRIEND #39, Google #41/42, **C-DNA-4 #43**, **C-EXPLORE-1 #44**, **C-TOOL-1/2 #45**, **C-ADMIN-1 #46**, **C-ADMIN-2/3 #47**, **C-REFERRAL-1 #48**, **C-TOOL-3/4/5/7 #49** | 119 edge fns + 2 migrations deployed |
 | ✅ **Deep-dive bugs CLOSED (verified live, 2026-06-07)** | all 6 | C-COST-3a (admin Money-Out now **$205 live**, EXECUTE grant #59) · C-TRIPS-1 (My Trips **117 trips live**, #56) · C-CRED-9 #52 · C-DATA-1 #53 · C-POLL-1 #55 · C-COST-3b #57 · **share-recipient "worst" bug FIXED + verified** (#60/#61) |
-| ⚠️ **Open / needs attention** | 🔴 **PUBLIC SHARE BROKEN** — Lovable Cloud PostgREST cache won't reload; reverted to 2-arg (#64), needs **Lovable backend restart OR migration** · 🔴 **A9 Google OAuth FAILS** — supabase `navigator.locks` auth-lock aborts (fix = resilient lock, do at/after migration) · A4 "Complete" gating-hint · A5 profile seed-stats (cosmetic) · B4 cost-display (guide-gen 15 vs 20) |
-| 🔴 **Not yet live-tested — the core ~12%** | **A6/A7 + Table D: trip BUILD path / 4 creation modes** (biggest) · **B3 DNA→itinerary differentiation** (the proof) · **Table E security** · in-itinerary tools deep live | ⛔ **GATED BY THE MIGRATION** |
+| ✅ **MIGRATION COMPLETE — blockers GONE** | own backend | 🔴→✅ **PUBLIC SHARE**: own Supabase PostgREST reloads normally (root cause gone) · 🔴→✅ **A9 Google OAuth**: native Supabase OAuth + Google enabled + URL config set (auth-lock path retired) · the gated 12% is now **testable** |
+| 🔄 **RE-QA on new stack — IN PROGRESS** | ⏳ start here | Re-validate infra-dependent flows on **Vercel preview (staging) + owned Supabase**: ① auth/login (Google) ② trip generation (OpenRouter AI) ③ payments (Stripe live) ④ email (Zoho/SendGrid) ⑤ images/content (48k rows ported) ⑥ public sharing — **then** the previously-gated **A6/A7 + Table D** (trip build), **B3** (DNA proof), **Table E** (security) |
+| ✅ **Carries over (logic unchanged — spot-check only)** | code identical | Deep-dive bugs (all 6 closed), meal coverage, cost math, itinerary rendering, A1–A5/A8 marketing+pricing — same code, just re-confirm it behaves on the new backend |
 
-> **Honest state (~85–88%):** The 6 deep-dive bugs are **CLOSED + verified live**, and the share-recipient bug is fixed. BUT the backend is **Lovable Cloud, whose PostgREST won't reload** → public-link sharing is currently broken and **Google login fails** (auth-lock). **Decision: migrate to an owned Supabase** — see `MIGRATION-RUNBOOK.md` (tasks #27–#29). The remaining ~12% (trip build, DNA proof, security, A9 auth-lock fix) is **blocked until the migration** stabilizes the backend. Regression gate: vitest **718/718**, tsc 0, build green.
+> **Honest state — MIGRATION COMPLETE (2026-06-07), now re-validating:** Fully **off Lovable Cloud**. Backend = owned Supabase **`qpwexpjqzsdkjkvgcntx`** (schema + **48,831 content rows** ported · 122 edge functions · pg_cron · realtime · 25 secrets). AI = **OpenRouter** (Lovable gateway dropped — 56 functions swapped to identical models). Auth = **native Supabase OAuth** (`@lovable.dev/cloud-auth-js` removed). Hosting = **Vercel** (Vite SPA builds clean). **The two original blockers are eliminated**: PostgREST reloads on the owned backend (fixes public share), and Google OAuth works (Google enabled + redirect allow-list set). The migration didn't reset QA — it **removed the wall** that gated the final ~12%. **Re-QA plan:** the Vercel preview is now a clean, controllable staging env; run the infra-dependent flows + the previously-gated items there, then attach `travelwithvoyance.com`. Regression gate: vitest **718/718**, tsc 0, build green.
 
 ---
 
