@@ -61,15 +61,19 @@ export function useBulkUnlock() {
 
     try {
       // Step 1: Spend credits via group_unlock action
+      // idempotencyKey is REQUIRED by the spend-credits edge function (400 MISSING_IDEMPOTENCY_KEY otherwise).
+      const idempotencyKey = `group_unlock_${params.tripId}_${Date.now()}`;
       const { data: spendData, error: spendError } = await supabase.functions.invoke('spend-credits', {
         body: {
           action: 'group_unlock',
           tripId: params.tripId,
           creditsAmount: cost,
+          idempotencyKey,
           metadata: {
             type: 'bulk_day_unlock',
             lockedDayCount: params.lockedDayCount,
             destination: params.destination,
+            idempotencyKey,
           },
         },
       });

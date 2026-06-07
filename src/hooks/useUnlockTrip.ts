@@ -97,15 +97,19 @@ export function useUnlockTrip() {
     });
 
     try {
+      // idempotencyKey is REQUIRED by the spend-credits edge function (400 MISSING_IDEMPOTENCY_KEY otherwise).
+      const idempotencyKey = `full_trip_unlock_${params.tripId}_${Date.now()}`;
       const { data: spendData, error: spendError } = await supabase.functions.invoke('spend-credits', {
         body: {
           action: 'unlock_day',
           tripId: params.tripId,
           creditsAmount: unlockCost,
+          idempotencyKey,
           metadata: {
             type: 'full_trip_unlock',
             days: params.totalDays,
             destination: params.destination,
+            idempotencyKey,
           },
         },
       });
