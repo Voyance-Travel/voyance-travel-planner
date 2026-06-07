@@ -39,6 +39,31 @@ Companion narrative log: `qa/QA-TEST-LOG.md` (detailed findings & root-causes). 
 
 ---
 
+## 🔁 MIGRATION VALIDATION — "any holes?" check (2026-06-07)
+
+Systematic check that nothing was missed moving to the owned stack. ✅ verified · ⚠️ hole/dependency · ⏳ owner live-test.
+
+| Area | Status | Notes |
+|---|---|---|
+| Schema (162 tbl · 85 fn · 493 RLS · 28 enum) | ✅ | replays clean; tsc 0 |
+| **Content data** | ✅ | **48,831 rows ported** from old project (destinations 2246, verified_venues 7476, airports 740, activities 15885, curated_images 15103, attractions 6999, guides, landmarks, archetype guides) |
+| Edge functions (122) | ✅ | deployed, pointing at OpenRouter |
+| AI → OpenRouter | ✅ | live chat verified; all model slugs present (image model remapped) |
+| Auth → native Supabase OAuth | ✅ | Google enabled · redirect allow-list set · `@lovable.dev/cloud-auth-js` removed |
+| Secrets | ✅ core / ⚠️ | 25 set; **missing (optional): Viator·Foursquare·TripAdvisor·Unsplash (enrichment), APNS/IAP iOS keys** |
+| **pg_cron (9 jobs)** | ⚠️ **HOLE** | 7 pure-SQL jobs ✅; **2 HTTP jobs misdirected**: `auto-summarize-completed-trips` hardcodes the **OLD** project URL+token; `send-trip-reminders-daily` reads the empty `supabase.functions_url` GUC. Fix = set `supabase.functions_url` + service-key GUC on the new DB, or reschedule jobs w/ new URL. **Background jobs only — not user-blocking. Owner OK needed (prod DB config).** |
+| Realtime (8 tbl) | ✅ | publication migrated |
+| Storage buckets (8) | ✅ defs / ⚠️ files | bucket defs migrated; **files NOT copied — images resolve from OLD project's storage URLs** (fine while old project stays alive; copy files if ever sunset) |
+| Stripe (live secret + webhook) | ✅ | live-validated, LIVE mode |
+| Email (Zoho SMTP) | ✅ | SMTP auth verified |
+| **Original incident (share RPC routing)** | ✅ **FIXED** | `toggle_consumer_trip_share` routes (HTTP 200) — PostgREST reloads on the owned backend |
+| Users/trips (test data) | ➖ | intentionally NOT migrated (test accounts only) |
+| Frontend (Vercel) | ⏳ | deployed; **rebuild from latest `main`** to ensure native-auth code is live, then owner login/generate test |
+
+**Holes to close:** ① cron HTTP jobs (needs owner OK to set DB GUCs) · ② optional enrichment/iOS secrets · ③ storage files (deferred — old project alive).
+
+---
+
 ## 🆕 DEEP-DIVE FINDINGS — SQL-confirmed 2026-06-05 (5 items)
 
 | # | Finding | Sev | Status / Next step |
