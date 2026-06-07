@@ -9,6 +9,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { corsResponse, errorResponse, unauthorizedResponse, forbiddenResponse, exceptionResponse } from "../_shared/edge-response.ts";
+import { loadServerTripCost } from "../_shared/trip-cost.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -186,7 +187,10 @@ serve(async (req) => {
     console.log('[SPEND-CREDITS] User authenticated:', { userId: user.id });
 
     const body: SpendRequest = await req.json();
-    const { action, tripId, activityId, dayIndex, creditsAmount, metadata } = body;
+    const { action, tripId, activityId, dayIndex, metadata } = body;
+    // C-CRED-4: creditsAmount is reassignable so the trip_generation branch can
+    // override it with the server-authoritative recompute.
+    let creditsAmount = body.creditsAmount;
     console.log('[SPEND-CREDITS] Request:', { action, tripId, dayIndex, creditsAmount });
 
     const supabaseAdmin = createClient(
@@ -548,10 +552,39 @@ serve(async (req) => {
         }
       }
       if (action === 'trip_generation') {
-        const days = (metadata?.days as number) || 1;
-        const minCost = days * BASE_RATE_PER_DAY;
-        if (creditsAmount < minCost * 0.9) {
-          return errorResponse('Trip cost too low for given parameters', 'COST_TOO_LOW');
+        const mode = metadata?.mode as string | undefined;
+        const journeyId = metadata?.journeyId as string | undefined;
+        const isPartial = mode === 'partial';
+        const isJourney = !!journeyId;
+
+        if (isPartial || isJourney) {
+          // Proration paths keep the legacy floor — do NOT recompute/override.
+          // (Partial charges a fraction of days; journey charges a canonical
+          //  multi-leg total computed client-side. Recomputing would break both.)
+          const days = (metadata?.days as number) || 1;
+          const minCost = days * BASE_RATE_PER_DAY;
+          if (creditsAmount < minCost * 0.9) {
+            return errorResponse('Trip cost too low for given parameters', 'COST_TOO_LOW');
+          }
+        } else if (tripId) {
+          // SERVER-AUTHORITATIVE (C-CRED-4): recompute the full-trip cost from the
+          // cost_dna snapshot + trip_cities + must-dos + hotels + dates, and charge
+          // THAT — the client `creditsAmount` is no longer trusted for the charge.
+          try {
+            const serverCost = await loadServerTripCost(supabaseAdmin, tripId);
+            if (serverCost.totalCredits !== creditsAmount) {
+              console.warn(
+                `[spend-credits] trip_generation cost override: client=${creditsAmount} server=${serverCost.totalCredits} ` +
+                `(subtotal=${serverCost.subtotal} x${serverCost.multiplier} +hotels=${serverCost.hotelCredits}; factors=${serverCost.factors.join(',')})`,
+              );
+            }
+            creditsAmount = serverCost.totalCredits;
+          } catch (costErr) {
+            console.error('[spend-credits] trip_generation server cost recompute failed:', costErr);
+            return errorResponse('Could not verify trip cost', 'COST_VERIFY_FAILED', 500);
+          }
+        } else {
+          return errorResponse('tripId required for trip_generation', 'MISSING_TRIP_ID', 400);
         }
       }
       cost = creditsAmount;

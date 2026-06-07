@@ -35,6 +35,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { buildCostDna } from '@/lib/costDna';
 import { toast } from 'sonner';
 import { splitJourneyIfNeeded } from '@/utils/splitJourneyIfNeeded';
 
@@ -2496,6 +2497,14 @@ export default function Start() {
           creation_source: isMultiCity ? 'multi_city' : 'single_city',
           status: 'draft',
           owner_plan_tier: ownerPlanTier,
+          // C-CRED-4: snapshot the cost-relevant DNA so the server charge equals
+          // the displayed estimate. specialOccasion (celebrationDay) is the one
+          // factor cleanly in scope here; dietary requires a user_preferences fetch
+          // (follow-up). budget never maps to 'strict' so it contributes nothing today.
+          cost_dna: buildCostDna({
+            budgetTier: budgetAmount ? (budgetAmount < 750 ? 'budget' : budgetAmount < 2000 ? 'moderate' : budgetAmount < 4000 ? 'premium' : 'luxury') : null,
+            celebrationDay: celebrationDay ?? null,
+          }) as any,
           metadata: (() => {
             // mustDoActivities = venue chips ONLY (landmarks + custom). The freeform
             // "Anything else?" textarea flows separately into metadata.additionalNotes,

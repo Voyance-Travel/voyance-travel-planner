@@ -28,7 +28,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useGenerationGate, type GateResult } from '@/hooks/useGenerationGate';
 import { generateFullPreview, type FullPreview, type PreviewDay } from '@/services/fullPreviewService';
 import { convertPreviewToGeneratedDays, createLockedPlaceholderDays } from '@/utils/previewConverter';
-import { calculateTripCredits, calculateMultiCityFee, roundUpTo10, BASE_RATE_PER_DAY } from '@/lib/tripCostCalculator';
+import { calculateTripCredits, calculateMultiCityFee, roundUpTo10, BASE_RATE_PER_DAY, type TravelDNA } from '@/lib/tripCostCalculator';
+import { extractMustDoVenues } from '@/lib/extractMustDoVenues';
 import { useTripCities } from '@/hooks/useTripCities';
 import { useCredits } from '@/hooks/useCredits';
 import { formatCredits } from '@/config/pricing';
@@ -365,9 +366,36 @@ export function ItineraryGenerator({
     return [destination]; // fallback
   }, [isMultiCity, tripCitiesData, destination]);
 
+  // C-CRED-4: load the cost-relevant inputs from the trip row so the DISPLAYED
+  // estimate matches the server charge exactly (both read the same cost_dna
+  // snapshot + must-dos + hotel flag).
+  const [costDna, setCostDna] = useState<TravelDNA | null>(null);
+  const [costMustIncludes, setCostMustIncludes] = useState<string[]>([]);
+  const [costIncludeHotels, setCostIncludeHotels] = useState(false);
+  useEffect(() => {
+    if (!tripId) return;
+    let cancelled = false;
+    supabase
+      .from('trips')
+      .select('cost_dna, metadata, budget_include_hotel')
+      .eq('id', tripId)
+      .single()
+      .then((res) => {
+        const row = res.data as any;
+        if (cancelled || !row) return;
+        setCostDna((row.cost_dna as TravelDNA) ?? null);
+        setCostMustIncludes(extractMustDoVenues(row.metadata));
+        setCostIncludeHotels(row.budget_include_hotel === true);
+      });
+    return () => { cancelled = true; };
+  }, [tripId]);
+
   const costEstimate = useMemo(() => {
-    return calculateTripCredits({ days: totalDaysEstimate, cities: tripCityNames });
-  }, [totalDaysEstimate, tripCityNames]);
+    return calculateTripCredits(
+      { days: totalDaysEstimate, cities: tripCityNames, mustIncludes: costMustIncludes, includeHotels: costIncludeHotels },
+      costDna ?? undefined,
+    );
+  }, [totalDaysEstimate, tripCityNames, costMustIncludes, costIncludeHotels, costDna]);
 
 
   // Keep the pre-generation experience on screen until the first day is ready,
@@ -565,6 +593,10 @@ export function ItineraryGenerator({
         tripId,
         days: totalDays,
         cities,
+        // C-CRED-4: same inputs the display used, so the charge matches the estimate.
+        dna: costDna ?? undefined,
+        mustIncludes: costMustIncludes,
+        includeHotels: costIncludeHotels,
         journeyId,
         journeyTotalLegs,
       });
