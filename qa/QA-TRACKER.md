@@ -16,7 +16,23 @@
 | 💬 Freemium copy | ✅ accurate ("first trip starts free — 2 days included") |
 | 🔵 Product QA on new stack | **~15%** — foundational pages + core money/build path green; most in-itinerary tools & build modes still untested live |
 
-**Now working through:** (1) re-verify the "fixed-but-unproven-on-new-stack" defects, (2) fix the genuinely-open defects in Table C/F, (3) the DNA differentiation proof.
+**Now working through:** driving the whole sheet green (owner directive). (1) re-verify "fixed-but-unproven" defects, (2) fix genuinely-open defects, (3) DNA proof + build modes + auth flows.
+
+### Defect sweep — 2026-06-07 PM (parallel-agent scoped + verified)
+**Closed this sweep:**
+- ✅ **C-TOOL-1/2/3/4** (refund-on-failure for day-unlock / AI-chat modifier / route-opt / add-activity) — **already correctly wired** in current tree (inline `C-TOOL-N` remediation comments + verified refund paths). No change needed.
+- ✅ **C-TOOL-5** (price copy drift) — fixed: pace/filter chat actions advertised 5cr but are free (→0); rewrite badge 10→30; chat prompt "10 credits"→"30". Display/copy only. Deployed.
+- ✅ **C-PERSIST-3** (lock toggle reverts on frozen trips) — root-caused: JSON sync was frozen-blocked (no saveReason); added `saveReason:'lock-toggle'` ×3 in action-toggle-lock.ts. Deployed. *(Live re-verify needs a frozen/ready trip.)*
+- ✅ **C-CREATE-1** ("Just Tell Us" zero-day trip) — added `isBefore(end,start)` guard in Start.tsx. Deployed.
+- ✅ **C-DATA-1** (IAP user_tiers) — **confirmed applied in prod**: `fulfill_credit_purchase` upserts user_tiers (covers both Stripe + IAP paths). Closed.
+- ✅ **C-SEC-1** (verify_jwt=false default) — assessed: posture acceptable (truly-public fns verify signatures; data fns self-verify via require-auth). Do NOT flip globally. No change.
+
+**🆕 Found (new) — reorder doesn't persist:** Move up/down (`handleActivityReorder`, EditorialItinerary.tsx:5020) updates client state + sets `hasChanges`/`needsOptimization` but **never persists immediately** — relies on debounced autosave; navigating away before it fires loses the reorder (DB keeps original `sort_order`/times; cost recalc persisted but order didn't). Fix = immediate persist on reorder. ⬜ OPEN (deferred — needs care re: status/contract side-effects of persistDaysImmediately).
+
+**🔶 HELD for owner — credit-path / pricing decision (not blocking other work):**
+- **C-CRED-4/8** (trip-gen server undercharge): server floor is `days×60×0.9` and trusts client `creditsAmount` — skips multi-city fee + DNA complexity multiplier. A conservative server-side floor (base + multi-city fee, recomputed from the trip row) is ready, BUT: (a) the production client already omits dna/mustIncludes so a fuller recompute is a **real pricing change**; (b) the `trips.destinations` JSON shape for multi-city is unverified (single-city trips store `destination` only, `destinations=null`). **Owner call needed before shipping a charge change.**
+- **C-CRED-6** (monthly free-grant race → double 150cr): atomic conditional-UPDATE claim ready; prereq verified (all users have a credit_balances row). Low blast radius — can ship on owner OK.
+- **C-CRED-2b** (guide dup-click double-charge): real fix is a server-side idempotency claim row in generate-travel-guide (client key alone insufficient). Ready to implement.
 
 ### Needs the owner
 - **pg_cron — 2 HTTP jobs** (`auto-summarize-completed-trips`, `send-trip-reminders-daily`) still point at the OLD project. Background-only, not user-blocking. Fix needs the service-role key set as a DB setting (blocked from automating — credential guard). **Paste the 3-line SQL (in chat) into the Supabase SQL editor.**
