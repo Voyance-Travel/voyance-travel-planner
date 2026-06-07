@@ -11990,17 +11990,10 @@ export type Database = {
       }
       sweep_stale_pending_charges: { Args: never; Returns: Json }
       sync_expired_credit_balances: { Args: never; Returns: number }
-      toggle_consumer_trip_share:
-        | { Args: { p_enabled: boolean; p_trip_id: string }; Returns: Json }
-        | {
-            Args: {
-              p_credit_policy?: string
-              p_enabled: boolean
-              p_permission?: string
-              p_trip_id: string
-            }
-            Returns: Json
-          }
+      toggle_consumer_trip_share: {
+        Args: { p_enabled: boolean; p_trip_id: string }
+        Returns: Json
+      }
       transition_booking_state: {
         Args: {
           p_activity_id: string
