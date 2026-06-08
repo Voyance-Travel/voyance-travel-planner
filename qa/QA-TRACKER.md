@@ -76,11 +76,11 @@
 | Preference set | Expect | Adheres ✅/❌ |
 |---|---|:--:|
 | Dietary = **vegan** (tested) | restaurant picks veg-friendly; no meat anchors | 🟧 **PARTIAL 2026-06-07** (Florence ccfc4491): 6 vegan venues incl. fully-vegan + Il Vegetariano, BUT "butter chicken" + "cured meats" slipped in → influences, not hard veto (**C-PREF-1**) |
-| Budget = **budget-friendly** | value venues, free attractions, lower total cost | ⬜ not yet tested |
-| Budget = **luxury** | upscale dining/hotels, premium experiences | ⬜ not yet tested |
-| Pace = **relaxed** | ≤3 activities/day, late starts, downtime blocks | ⬜ not yet tested |
+| Budget = **budget-friendly** | value venues, free attractions, lower total cost | ✅ **VERIFIED 2026-06-08** (C-BUDGET-1) — "budget-friendly/cheap" → `budget_tier=budget` captured + flows to generation. |
+| Budget = **luxury** | upscale dining/hotels, premium experiences | ✅ **VERIFIED LIVE 2026-06-08** — "luxury, no budget limit, Michelin" Vienna (e441fdc7) → `budget_tier=luxury` + genuinely upscale venues (**Pramerl & the Wolf** = Michelin-starred, Joseph Brot, Café Diglas). |
+| Pace = **relaxed** vs **packed** | relaxed ≤3 doing/day; packed = full days | ✅/🟧 **VERIFIED LIVE 2026-06-08** (C-PACE-1) — relaxed Seville = **3 doing/day** (↓ from default 4); packed Vienna = `pacing=packed`, **16 non-transit items/day** (full), though "doing" count (4) = default not higher (pace's downward push is stronger than upward). |
 | Accommodation = **unique stays** | boutique/Airbnb-style, not chain hotels | ⬜ not yet tested |
-| Accessibility = **step-free** | avoids stair-heavy sites; notes accessibility | ⬜ not yet tested |
+| Accessibility = **step-free** | avoids stair-heavy sites; notes accessibility | 🟧 **TESTED 2026-06-08 — NOT supported via trip NLU.** Just-Tell-Us "I use a wheelchair, step-free, wheelchair-accessible venues/routes" → NLU mis-parsed the accessibility phrases as a 3-city route (C-NLU-1 variant) + dropped Amsterdam. **Fix shipped (`906b84313`):** backstop now strips wheelchair/accessible/step-free/mobility phrases. **Deeper gap:** accessibility is NOT a structured trip field — the proper path is **Profile → Preferences → Accessibility** section (persists to user_prefs → generation). |
 
 ### 3) Differentiation pass/fail (B3 proof) — ✅ **PASS 2026-06-07**
 - [x] ✅ ≥40% of venues **differ** — **~92% differ** (culinary vs adventure, only 2 shared = generic breakfast spots)
@@ -269,11 +269,11 @@
 | Travelers / party size | ✅ | ✅ | | | ✅ **LIVE** — 1–5 selector works; doesn't inflate credit cost |
 | Interests | ✅ | ✅ | | | ✅ **LIVE** — trip-type chips + Just-Tell-Us parsed "food/local_culture" → reflected in output |
 | Dietary | ✅ | 🟧 | dietary soft, not hard veto (C-PREF-1) | capture structured dietaryRestrictions + hard filter | 🟧 **PARTIAL** (see D3) |
-| Pace | ⬜ | ⬜ | (relaxed captured in Just-Tell-Us but output-density not verified) | | ⬜ |
-| Budget level | ⬜ | ⬜ | ("Set budget" optional control not yet exercised) | | ⬜ |
+| Pace | ✅ | ✅ | | C-PACE-1 | ✅ **VERIFIED 2026-06-08** — relaxed→3 doing/day (↓ from 4); packed→16 items/day (full). Captured via Just-Tell-Us pacing + honored at generation. |
+| Budget level | ✅ | ✅ | | C-BUDGET-1 | ✅ **VERIFIED 2026-06-08** — qualitative budget-friendly→`budget_tier=budget`, luxury→`budget_tier=luxury` (+ Michelin venues). |
 | Accommodation | ✅ | ✅ | | | ✅ **LIVE** — "I have my own stay" / Skip; multi-city per-city hotel picker renders |
 | Must-dos / avoids | ✅ | ✅ | | | ✅ **LIVE** — fine-tune per-city suggestions + "add your own"; selected must-dos accepted |
-| Accessibility | ⬜ | ⬜ | (no accessibility input in current wizard) | | ⬜ |
+| Accessibility | 🟧 | 🟧 | trip NLU doesn't support it (mis-parses accessibility phrases as cities, C-NLU-1 variant — backstop fix `906b84313`) | accessibility lives in Profile→Preferences→Accessibility, not the trip wizard | 🟧 **TESTED 2026-06-08** — not a structured trip field; proper path = Profile Preferences. NLU mis-parse fixed. |
 | DNA auto-applied from profile | ✅ | ✅ | | | ✅ **LIVE 2026-06-07** — proven by B3 A/B (profile `travel_dna` drives output; reloaded server-side at gen time) |
 | Cost preview + credit gate (correct cost shown) | ✅ | ✅ | (C-CRED-4) | | ✅ **LIVE** — Cost Breakdown shows days×60 (+multi-city fee), display == charged every mode |
 | Step validation / resume incomplete draft | ⬜ | ⬜ | (resume-draft path not yet tested) | | ⬜ |
