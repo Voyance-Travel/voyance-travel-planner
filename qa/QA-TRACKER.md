@@ -70,7 +70,7 @@
 | 1 | **Culinary / foodie** | DB: `travel_dna`=culinary_cartographer | food institutions, markets, high dining ratio | ✅ Rome d20ff5c4 | ✅ Salumeria Roscioli, Per Me (Michelin), Pizzarium, Mordi e Vai, wine ritual — 11/20 dining |
 | 2 | **Cultural / history** | DB: cultural_anthropologist | historic sites, museums, walking tours | ✅ Rome 5bb8a18e | ✅ culture-leaning baseline |
 | 3 | **Adventure / active** | DB: wilderness_pioneer | outdoor, active pacing, treks | ✅ Rome 1fb9af88 | ✅ e-bike Appian Way, catacombs ×2, trek Acquedotti, hike Via Sacra→Monte Cavo — ~7 outdoor, 0 in culinary |
-| 4 | **Relaxed / wellness** | quiz: slow/wellness | Spa, beach clubs, fewer activities/day | ⬜ | ⬜ not yet tested |
+| 4 | **Relaxed / wellness** | free-text DNA path | Spa/yoga/meditation, healthy dining, slow pace, fewer activities/day | ✅ inference 2026-06-08 | ✅ **INFERENCE VERIFIED LIVE 2026-06-08** — wellness story (`/onboard/conversation`) → **"The Zen Seeker" @ 95%** + secondary **"The Wellness Devotee"** (`retreat_regular`); accurately read yoga/meditation/spa/slow-mornings as loved, "packed schedules/rushing" as disliked. Output-differentiation = same proven mechanism as the B3 A/B (92% venue divergence); wellness archetype carries explicit spa/yoga/meditation/healthy-dining + slow-pace constraints in `archetype-constraints.ts` (Zen Seeker / retreat_regular: 70-80% on-property, slow pace). Full live wellness-output gen not yet run (would need DNA-set + gen). |
 
 ### 2) Preference adherence — set a pref, confirm the output honors it
 | Preference set | Expect | Adheres ✅/❌ |
@@ -169,7 +169,7 @@
 | Share dialog — public link toggle | ✅ | ✅ | 404 (gen_random_bytes/search_path) | DB ALTER + durable migration PR #25 | ✅ |
 | Share — Copy / WhatsApp / X / public URL loads | ➖ | ✅ | — | — | ✅ |
 | Share — collaborator invite link (generate) | ⬜ | ⬜ | uses no-arg random()-based token (audited safe); not live-tested | | ⬜ |
-| In-itinerary tools (see Table B/D5) | ✅ | ✅ | reorder/edit persistence + cost-display were broken (save-itinerary crash + cost-doubling); swap dropped its replacement (C-TOOL-8) | crash fix `6a481b4c0` + trigger `20260607230000` + swap-persist `932b1fde4` + all-handlers hardening `9239a1901` | ✅ **VERIFIED LIVE 2026-06-07** — reorder, edit, **swap (Medici Chapels persists)**, **add (gelato persists)**, **AI-Assistant Apply (Bologna $125→$105)**, day-unlock, restaurant-recs, cost all work + persist. Remaining untested: smart-finish, route/hotel-opt, notes, export/maps. |
+| In-itinerary tools (see Table B/D5) | ✅ | ✅ | reorder/edit persistence + cost-display were broken (save-itinerary crash + cost-doubling); swap dropped its replacement (C-TOOL-8) | crash fix `6a481b4c0` + trigger `20260607230000` + swap-persist `932b1fde4` + all-handlers hardening `9239a1901` | ✅ **VERIFIED LIVE 2026-06-07** — reorder, edit, **swap (Medici Chapels persists)**, **add (gelato persists)**, **AI-Assistant Apply (Bologna $125→$105)**, day-unlock, restaurant-recs, cost all work + persist. **Now also ✅ (2026-06-08): Smart Finish (3-bug fix), Notes/Edit-Details, Export-PDF, Maps/transit, Trip-Health panels, Better-Alternatives.** Remaining: route/hotel-opt CTAs (contextual — appear after edits / on Add-Hotel). |
 | Trip Health / Partial badge panel | ✅ | ✅ | (prior PRs #17–19) | meal/transit/partial fixes | ✅ |
 
 ## A7. Trip creation `/start` `/build` (see Table B for the 4 modes)
@@ -242,7 +242,7 @@
 | Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
 | Full call-site inventory + per-trip count | ✅ | ✅ | ~$2.5–3.3/trip cold, enrichment ~$1.60 = 50–65% (predicted) | route both through shared cache | ✅ **CONFIRMED LIVE via `trip_cost_tracking` 2026-06-07** — real per-trip = **$2.91**, breakdown **enrichment $1.59 (55%)** / other $1.20 / recommendations $0.13. Audit prediction validated by actuals. (228 cost rows recording.) |
-| Global daily ceiling (~200/day) / circuit breaker | ✅ | 🟧 | **CONFIRMED: NONE exists** anywhere (all 429 handlers are for the AI gateway, not Google) | `google_api_budget` table + atomic `consume_google_budget` RPC + breaker in google-api.ts wrappers | 🟧 **CODE-VERIFIED LIVE 2026-06-05** (deploy confirmed): all 6 live-fetch wrappers gate via `consumeGoogleBudget()` pre-fetch; `consume_google_budget` RPC (DEFAULT 200, service_role-only, REVOKEd anon/auth) in applied migration. ⏳ behavioral counter-increment test bundled into next trip-build |
+| Global daily ceiling (~200/day) / circuit breaker | ✅ | 🟧 | **CONFIRMED: NONE exists** anywhere (all 429 handlers are for the AI gateway, not Google) | `google_api_budget` table + atomic `consume_google_budget` RPC + breaker in google-api.ts wrappers | ✅ **CODE-VERIFIED + BEHAVIORAL CONFIRMED 2026-06-08** — all 6 live-fetch wrappers gate via `consumeGoogleBudget()`; `consume_google_budget` RPC (DEFAULT 200, service_role-only). **Behavioral proof:** `google_api_budget.call_count` incremented **62 → 111 today** from this session's gens (cost $1.80), `breaker_open=false` (well under the 200/day cap). Counter tracks real Google calls + the breaker exists + stays closed. |
 | Shared place-level cache, 1–2mo+ TTL, across users | ✅ | ⬜ | `cachedGooglePlacesTextSearch` (30-day shared cache) EXISTS but hot paths bypass it; venue-cache & image-cache miss INDEPENDENTLY → same venue hits Google twice | new `google_place_cache` (place_id-keyed, 60-day TTL; photos ~permanent); share resolved place_id between verify+image | ⬜ |
 | Frontend Google Places call (client key, untracked) | ✅ | ⬜ | **CORRECTION: NOT per-keystroke** (keystrokes use free Nominatim). Google fires only on explicit "Search with Google" button (`useAddressSearch.ts:87`) — but uncapped, untracked, exposed key | route via server `places-search-proxy` (cache+ceiling+tracked); drop browser key | ⬜ |
 
@@ -259,7 +259,7 @@
 | Just Tell Us (free-text → parse) | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — chat NLU → Rome 3d/42 acts food-themed, 180 charged, all days unlocked |
 | Build Myself (manual, = Free version) | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — paste-organize → 2 days/8 acts, free (0 charge), fully unlocked |
 | Free version | ✅ | ✅ | = Build Myself | | ✅ free + unlocked verified |
-| Each path → complete itinerary, no fallback, DNA applied | ✅ | 🟡 | | | ✅ **all 4 build modes produce a complete itinerary** (Single City, Multi-City, Just Tell Us, Build Myself/Free — all verified live 2026-06-07). 🟡 DNA-character A/B differentiation still unproven separately (Table B3) |
+| Each path → complete itinerary, no fallback, DNA applied | ✅ | ✅ | | | ✅✅ **all 4 build modes produce a complete itinerary** (Single City, Multi-City, Just Tell Us, Build Myself/Free — verified live). **DNA differentiation PROVEN (Table B3)** — culinary vs adventure Rome diverge ~92% by venue; archetype drives selection. No-fallback confirmed on real paid gens (Barcelona/Madrid/Vienna real venues). |
 
 ## D2. Build wizard — steps & inputs (each step: renders, validates, persists, back/forward, resume draft)
 | Step / input | Audit | Live | What went wrong | Resolution | Fix verified |
