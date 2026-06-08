@@ -15,12 +15,13 @@ export default function SignUp() {
       <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2">
         {/* Right side - Travel inspiration (reversed from signin) */}
         <div className="relative hidden lg:block order-2">
+          {/* Unsplash source to match SignIn (was Pexels — inconsistent). All ids verified live. */}
           <HeroImageWithFallback
-            src="https://images.pexels.com/photos/2387418/pexels-photo-2387418.jpeg"
-            alt="Mountain peaks with winding roads at sunset"
+            src="https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1920&q=80"
+            alt="Aerial coastline at golden hour"
             fallbackSources={[
-              'https://images.pexels.com/photos/2265876/pexels-photo-2265876.jpeg',
-              'https://images.pexels.com/photos/1287145/pexels-photo-1287145.jpeg',
+              'https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=1920&q=80',
+              'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1920&q=80',
             ]}
             overlayGradient="from-rose-900/50 via-transparent to-amber-900/50"
             className="absolute inset-0 w-full h-full object-cover"
