@@ -297,6 +297,22 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
             prevExtractedRef.current = null;
           }
 
+          // C-NLU-1 backstop: the NLU sometimes mis-tags preference phrases ("cheap eats",
+          // "free attractions", "slow pace", "keep costs low") as cities. Strip them so they
+          // can't become a bogus multi-city route. If exactly one REAL city survives, also use
+          // it as the destination (the NLU may have set destination to the phrase list).
+          const PREF_CITY_RE = /\b(cheap|budget|free|cost|pace|relax|slow|packed|fast|eats|attraction|nightlife|street food|fine dining|museum|luxury|splurge|shoestring|good food|hidden gem)\b/i;
+          if (Array.isArray(details.cities) && details.cities.length > 0) {
+            const realCities = details.cities.filter((c) => c?.name && !PREF_CITY_RE.test(String(c.name)));
+            if (realCities.length !== details.cities.length) {
+              console.warn('[C-NLU-1] stripped preference-phrase cities:', details.cities.map((c) => c?.name));
+              details.cities = realCities;
+              if (realCities.length === 1 && PREF_CITY_RE.test(String(details.destination || ''))) {
+                details.destination = String(realCities[0].name);
+              }
+            }
+          }
+
           // Hard date guard: force dates to 2026+ and never in the past
           if (details.startDate && details.endDate) {
             const normalized = normalizeChatTripDates(details.startDate, details.endDate);

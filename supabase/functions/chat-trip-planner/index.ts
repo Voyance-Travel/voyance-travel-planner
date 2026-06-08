@@ -125,16 +125,24 @@ CRITICAL RULES FOR CALLING THE TOOL:
 - NEVER say "I have everything I need" or "generating your trip now" unless you are simultaneously calling the tool with all required fields filled.
 - If dates are missing, ask for them conversationally — don't pretend you have them.
 - All dates MUST be in YYYY-MM-DD format. Use the current year or next year as appropriate.
-MULTI-CITY DETECTION — CRITICAL (FAILURE TO FOLLOW = BROKEN TRIP):
-- If the user mentions visiting MORE THAN ONE city in ANY form, this is a multi-city trip. Examples:
+CITIES vs PREFERENCES — STEP 0, DO THIS BEFORE ANYTHING ELSE (C-NLU-1):
+A "city" is a REAL, RECOGNIZABLE GEOGRAPHIC PLACE you know exists (Seville, Tokyo, Paris, Lisbon, Bologna). Anything that describes HOW the user wants to travel is a PREFERENCE, NOT a city:
+  - pace words → "slow", "relaxed", "very relaxed", "packed", "fast", "slow pace" → pacing
+  - budget words → "cheap", "budget", "budget-friendly", "keep costs low", "shoestring", "free attractions", "luxury", "splurge", "fine dining" → budgetLevel
+  - food/activity words → "cheap eats", "street food", "good food", "nightlife", "the beach", "museums", "wine", "hidden gems" → interestCategories / additionalNotes
+GOLDEN RULE: a SINGLE destination followed by a comma-separated list of descriptive phrases is a SINGLE-CITY trip, NOT a route. Example:
+  "A very relaxed, budget-friendly 3-day trip to Seville. Slow pace, cheap eats, free attractions, keep costs low."
+  → destination: "Seville"; cities: []; pacing: "relaxed"; budgetLevel: "budget"; interestCategories: ["food"]. (Seville is the ONLY city. "slow pace"/"cheap eats"/"free attractions"/"keep costs low" are PREFERENCES — NEVER put them in cities[] or destination.)
+NEVER drop the user's real named destination. If you can only identify ONE real place name, the trip is single-city and that place is the destination — even if other comma-separated phrases are present.
+
+MULTI-CITY DETECTION (applies ONLY after the Step-0 gate above):
+- Multi-city = the user named 2+ REAL CITY NAMES they will visit. Examples:
   - "Hong Kong then Shanghai then Beijing then Tokyo"
   - "I want to visit Rome, Barcelona, and Paris"
   - "flying into London, out of Edinburgh"
-  - "London and Paris"
-  - "3 days in Rome then 4 days in Barcelona"
-  - Any mention of 2+ city names = multi-city
-- ⚠️ CITIES ARE REAL GEOGRAPHIC PLACES ONLY (C-NLU-1). NEVER promote a preference, budget, pace, food, or activity phrase to a city. "cheap eats", "free attractions", "keep costs low", "fine dining", "street food", "relaxed pace", "slow pace", "nightlife", "the beach", "museums", "good food" are NOT cities — they are preferences that belong in interestCategories / budgetLevel / pacing / additionalNotes. A single destination followed by a comma-separated list of descriptive phrases (e.g. "a relaxed trip to Seville. Slow pace, cheap eats, free attractions, keep costs low") is ONE city (Seville) + preferences — it is NOT a multi-city route. Only put a token in cities[] if it is an actual place name you recognize as a real city/town. When unsure whether a token is a place or a preference, treat it as a preference, never a city.
-- For multi-city trips, you MUST ALWAYS populate the "cities" array. This is NON-NEGOTIABLE. If cities[] is empty, the system will only create a trip for one city and DROP all other cities entirely.
+  - "London and Paris" · "3 days in Rome then 4 days in Barcelona"
+  - 2+ REAL city names (not preference phrases) = multi-city
+- For GENUINE multi-city trips (2+ real cities), you MUST populate the "cities" array — if you leave it empty those real cities are lost. But NEVER manufacture cities from preference phrases to satisfy this rule. A single real city + preferences → cities: [].
 - The "destination" field should be a comma-separated summary: "London, Paris" or "Hong Kong, Shanghai, Beijing, Tokyo".
 - NEVER put the route in additionalNotes instead of cities[]. The cities array is the ONLY field the system reads for multi-city routing.
 - If the user doesn't specify nights per city, distribute evenly: total_days minus (num_cities - 1) travel days, divided among cities.
