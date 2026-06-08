@@ -312,6 +312,18 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
               }
             }
           }
+          // Full-drop recovery: the NLU sometimes drops the real city ENTIRELY (destination +
+          // every cities[] entry are preference phrases). Recover the destination from the user's
+          // raw message — "trip to Seville" → "Seville".
+          const noRealCity = !Array.isArray(details.cities) || details.cities.length === 0;
+          if (noRealCity && PREF_CITY_RE.test(String(details.destination || ''))) {
+            const m = String(text || '').match(/\b(?:trip to|travel to|going to|fly(?:ing)? to|visit(?:ing)?|to|in)\s+([A-Z][a-zA-Z'’.-]+(?:\s+[A-Z][a-zA-Z'’.-]+){0,2})/);
+            if (m?.[1] && !PREF_CITY_RE.test(m[1])) {
+              console.warn('[C-NLU-1] recovered dropped destination from raw message:', m[1]);
+              details.destination = m[1].trim();
+              details.cities = [];
+            }
+          }
 
           // Hard date guard: force dates to 2026+ and never in the past
           if (details.startDate && details.endDate) {
