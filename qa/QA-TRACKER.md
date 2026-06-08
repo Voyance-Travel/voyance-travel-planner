@@ -34,7 +34,9 @@
 - [x] ~~**C-COST / place-cache** (6/7, B5)~~ — ✅ 2026-06-08: C-COST-7 not-a-bug (intentional); 6 + place-cache + places-proxy = **deferred-perf with rationale** (1 user, budget healthy — premature to build cache infra; revisit at scale)
 
 ### ✅ Closed THIS session (2026-06-08, detail below)
-Smart Finish 3-bug fix · hero photos (C-IMG-1) · NLU/pace/budget prefs (C-NLU-1/PACE-1/BUDGET-1) · all 5 preference rows · structured-quiz DNA path · lock-activity · **A8 admin dashboard (role grant → Forecast/Projections + correct counts)** · Wellness DNA inference (Zen Seeker @95%) · B5 google-budget behavioral · flight/transfer plane photos · dining-density rule shipped (C-DINING-1).
+Smart Finish 3-bug fix · hero photos (C-IMG-1) · NLU/pace/budget prefs (C-NLU-1/PACE-1/BUDGET-1) · all 5 preference rows · structured-quiz DNA path · lock-activity · **A8 admin dashboard (role grant → Forecast/Projections + correct counts)** · Wellness DNA inference (Zen Seeker @95%) · B5 google-budget behavioral · flight/transfer plane photos · dining-density rule shipped (C-DINING-1) · D3 must-dos inclusion · D5 route/hotel-opt · C-DNA cluster · C-COST cluster · **auth fixes (C-AUTH-1 deep-link `?next=` [confirmed live] / C-AUTH-2 logout dest / C-AUTH-3 stale subtitle)** · C-AUTH-5 quiz-gate decision · **C-IMG-2 broken Seville card** · **C-IMG-4 image consolidation — trip cards now use the live `destination-images` edge fn (real photos == hero) + auth heroes standardized**.
+
+**Owner action items still open:** C-AUTH-4 Apple OAuth (recipe given) · **C-IMG-3 re-host old-project storage before decommission** (75% of cached images + most trip heroes are on old Lovable — break at cutover) · the incognito live pass (`qa/INCOGNITO-CHECKLIST.md`).
 
 ---
 
