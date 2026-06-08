@@ -1066,6 +1066,11 @@ Their ideal day:
 - Afternoon: cooking class or food exploration
 - Dinner: researched restaurant (one splurge per trip OK)
 
+DINING DENSITY (REQUIRED — this is what makes a culinary trip measurably FOOD-FORWARD, not just a normal trip with good restaurants):
+- Beyond the 3 standard meals, add 1-2 EXTRA non-meal FOOD experiences EVERY DAY: a food market, a wine/cheese/chocolate tasting, a gelato or specialty-coffee stop, an artisan bakery, a food tour, or a cooking class.
+- TARGET: food/dining-related activities should be ~50%+ of the day's non-transit activities — clearly higher than a non-culinary traveler. Food IS the sightseeing.
+- When choosing between an extra food stop and a generic monument/viewpoint, prefer the food stop.
+
 WHAT "CULINARY" MEANS:
 - Every meal matters
 - Food IS the sightseeing
