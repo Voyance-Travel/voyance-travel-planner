@@ -77,6 +77,7 @@ interface DisplayTrip {
 
 // Use centralized curated image utility
 import { getDestinationImage as getCuratedDestinationImage } from '@/utils/destinationImages';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 import { parseLocalDate } from '@/utils/dateUtils';
 
 function getDestinationImage(destination: string): string {
@@ -163,10 +164,13 @@ function transformTrip(trip: any, ratingMap?: Map<string, number>): DisplayTrip 
     dates,
     status,
     image:
+      // normalizeUnsplashUrl rescues legacy hero URLs that point at the OLD project's
+      // `site-images` bucket (404s here): it extracts the `photo-…` id and serves it
+      // straight from the Unsplash CDN. URLs without a photo-id pass through unchanged.
       (typeof trip?.metadata?.hero_image === 'string' && trip.metadata.hero_image.length > 0)
-        ? trip.metadata.hero_image
+        ? normalizeUnsplashUrl(trip.metadata.hero_image)
         : (typeof trip?.metadata?.imageUrl === 'string' && trip.metadata.imageUrl.length > 0)
-          ? trip.metadata.imageUrl
+          ? normalizeUnsplashUrl(trip.metadata.imageUrl)
           : getDestinationImage(trip.destination || ''),
     progress,
     progressLabel,

@@ -511,6 +511,11 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1559630929-ebf1d1ff5b1f?w=1200', // Seville cathedral
     'https://images.unsplash.com/photo-1559683586-91e7e87e93c0?w=1200', // Plaza de España arches
   ],
+  'seville': [ // English spelling — trips store "Seville", map previously only had "sevilla"
+    'https://images.unsplash.com/photo-1559535332-db9b07f0d0d7?w=1200', // Plaza de España
+    'https://images.unsplash.com/photo-1559630929-ebf1d1ff5b1f?w=1200', // Seville cathedral
+    'https://images.unsplash.com/photo-1559683586-91e7e87e93c0?w=1200', // Plaza de España arches
+  ],
   'cinque-terre': [
     'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=1200', // Manarola cliff village
     'https://images.unsplash.com/photo-1534445967719-8ae7b972b1a5?w=1200', // Vernazza harbor
