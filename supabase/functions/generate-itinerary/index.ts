@@ -194,8 +194,13 @@ serve(async (req) => {
       // every day call returns GENERATION_NOT_AUTHORIZED and silently burns the charge.
       // trip_generation similarly authorizes day-chain calls during primary generation.
       const SPEND_ACTIONS_BY_EDGE: Record<string, string[]> = {
-        'generate-trip':  ['trip_generation', 'regenerate_trip'],
-        'generate-full':  ['trip_generation', 'regenerate_trip'],
+        // C-SMART-2: 'SMART_FINISH' authorizes the generate-trip call fired by enrich-manual-trip
+        // (Build-Myself Smart Finish). enrich-manual-trip records a pending_credit_charges row with
+        // action='SMART_FINISH' then invokes generate-itinerary with action='generate-trip'. Without
+        // SMART_FINISH in this allow-list the proof-of-charge lookup misses → GENERATION_NOT_AUTHORIZED
+        // → "no charge record found" → Smart Finish silently fails + refunds (the "spotty" bug).
+        'generate-trip':  ['trip_generation', 'regenerate_trip', 'SMART_FINISH'],
+        'generate-full':  ['trip_generation', 'regenerate_trip', 'SMART_FINISH'],
         'regenerate-day': ['regenerate_day', 'unlock_day', 'regenerate_trip', 'trip_generation'],
         'generate-day':   ['regenerate_day', 'unlock_day', 'regenerate_trip', 'trip_generation'],
       };
