@@ -75,7 +75,7 @@
 ### 2) Preference adherence — set a pref, confirm the output honors it
 | Preference set | Expect | Adheres ✅/❌ |
 |---|---|:--:|
-| Dietary = **vegan** (tested) | restaurant picks veg-friendly; no meat anchors | 🟧 **PARTIAL 2026-06-07** (Florence ccfc4491): 6 vegan venues incl. fully-vegan + Il Vegetariano, BUT "butter chicken" + "cured meats" slipped in → influences, not hard veto (**C-PREF-1**) |
+| Dietary = **vegan** (tested) | restaurant picks veg-friendly; no meat anchors | ✅✅ **FIXED + VERIFIED LIVE 2026-06-07 (C-PREF-1, `f6678c3ef`, deployed).** Was partial (Florence "butter chicken"/"cured meats" slipped in) → re-tested strictly-vegan in **meat-heavy Bologna** (82223283): **ALL dining venues explicitly vegan** (Pappare', Botanica Lab plant-based Bolognese, Caminetto d'Oro vegan tasting, Forno Brisa); one slot left a graceful "no vetted vegan venue" gap rather than serving meat = **hard-veto confirmed**. |
 | Budget = **budget-friendly** | value venues, free attractions, lower total cost | ✅ **VERIFIED 2026-06-08** (C-BUDGET-1) — "budget-friendly/cheap" → `budget_tier=budget` captured + flows to generation. |
 | Budget = **luxury** | upscale dining/hotels, premium experiences | ✅ **VERIFIED LIVE 2026-06-08** — "luxury, no budget limit, Michelin" Vienna (e441fdc7) → `budget_tier=luxury` + genuinely upscale venues (**Pramerl & the Wolf** = Michelin-starred, Joseph Brot, Café Diglas). |
 | Pace = **relaxed** vs **packed** | relaxed ≤3 doing/day; packed = full days | ✅/🟧 **VERIFIED LIVE 2026-06-08** (C-PACE-1) — relaxed Seville = **3 doing/day** (↓ from default 4); packed Vienna = `pacing=packed`, **16 non-transit items/day** (full), though "doing" count (4) = default not higher (pace's downward push is stronger than upward). |
@@ -213,12 +213,12 @@
 | Tool | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
 | Regenerate day | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — AI-Assistant "rewrite day" (= regenerate_day) on clean Bologna trip Applied successfully ($125→$105); free within the regenerate cap. Day-header "Refresh Day" = separate free timeline-fix tool. |
-| Swap / replace activity (Find Alternative) | ✅ | ✅ | **BUG (FIXED): replacement NOT persisted.** Live (Florence ccfc4491): ⋯→Find Alternative found 25 alts, picked "La tenda rossa", UI showed "Activity swapped!" — but after reload the old venue (L'OV) is gone AND La tenda rossa is absent (day cost $185→$140). Swap removes the old activity but the new one is lost on refresh. Free-swap accounting OK (1st swap free, 0 charge, swap_usage=1). Also: swap alternatives aren't dietary-filtered (C-PREF-1). | trace swap persist path (likely doesn't call save-itinerary with the new venue, or table/JSON divergence) → C-TOOL-8 | ✅ **FIXED + VERIFIED — Medici Chapels swap persists (C-TOOL-8, `932b1fde4`)** |
+| Swap / replace activity (Find Alternative) | ✅ | ✅ | was: replacement not persisted on reload (C-TOOL-8) | swap-persist path fixed (`932b1fde4`) + Better-Alternatives panel | ✅✅ **FIXED + VERIFIED LIVE** — Medici Chapels swap persists across reload; Find-Alternative returns 25 ranked alts; Better-Alternatives shows 4 contextual picks. Free-swap accounting OK (1st free, swap_usage tracked). |
 | Reorder / move activity | ✅ | ✅ | save-itinerary crashed (`ReferenceError: day`) → reorder reverted on refresh | crash fix `6a481b4c0` | ✅ **VERIFIED LIVE 2026-06-07** — Move-down persists across reload; cost no longer doubles |
 | Add booking / flight / hotel | ⬜ | ⬜ | | | ⬜ |
-| Lock activity | ✅ | 🟡 | JSON lock was frozen-blocked (C-PERSIST-3) **and** save-itinerary crashed | `saveReason:'lock-toggle'` + crash fix `6a481b4c0` | 🟡 mechanism fixed + save path verified; individual lock re-toggle live-test pending |
+| Lock activity | ✅ | ✅ | was: JSON lock frozen-blocked (C-PERSIST-3) + save crash | `saveReason:'lock-toggle'` + crash fix `6a481b4c0` | ✅ **VERIFIED LIVE 2026-06-08** — toggled lock on "Pastéis de Nata" (Lisbon) → toast "Activity locked" → `isLocked=true` confirmed in DB; unlock toggles back. |
 | Day-unlock | ✅ | ✅ | missing `idempotencyKey` → 400 (now fixed) | idempotencyKey added | ✅ **VERIFIED LIVE 2026-06-07** (−120 cr, ledger row, days unlock) |
-| **Each tool: correct credit charge** | ✅ | 🟡 | (cross-ref C-CRED) | | 🟡 **LIVE-SPOT-VERIFIED 2026-06-07** — swap (free within cap, 0 charge, usage tracked), AI-rewrite/regenerate_day (free within cap), add-activity (free), gen charge==display every mode (Barcelona 210, Lisbon 360, Rome 180). Refund-on-failure wired (C-TOOL-1/2/3/4) + verified no-charge-on-fail (degraded-trip AI Apply). Full PAID-tier charge (beyond free caps) not yet exhausted. |
+| **Each tool: correct credit charge** | ✅ | ✅ | (cross-ref C-CRED) | refund-on-failure wired (C-TOOL-1/2/3/4) | ✅ **VERIFIED — incl. a PAID tool 2026-06-08:** Smart Finish charged **50cr (4,400→4,350) and STUCK** (not refunded) on success; on its earlier failure credits were **correctly refunded**. Plus: swap (free within cap, usage tracked), regenerate_day (free within cap), add (free), gen charge==display every mode (Barcelona 210, Lisbon 360, Rome 180, Vienna luxury 180). |
 
 ## B3. DNA → itinerary differentiation (A/B) — the BIG proof
 | Run (Madrid, same dates/1 traveler) | Audit | Live | What went wrong | Resolution | Fix verified |
@@ -268,7 +268,7 @@
 | Dates / duration | ✅ | ✅ | | | ✅ **LIVE** — arrival/range picker, nights→days, future-only |
 | Travelers / party size | ✅ | ✅ | | | ✅ **LIVE** — 1–5 selector works; doesn't inflate credit cost |
 | Interests | ✅ | ✅ | | | ✅ **LIVE** — trip-type chips + Just-Tell-Us parsed "food/local_culture" → reflected in output |
-| Dietary | ✅ | 🟧 | dietary soft, not hard veto (C-PREF-1) | capture structured dietaryRestrictions + hard filter | 🟧 **PARTIAL** (see D3) |
+| Dietary | ✅ | ✅ | was soft → now **hard veto** (C-PREF-1) | structured dietaryRestrictions + hard filter, deployed | ✅✅ **FIXED + VERIFIED** — vegan Bologna = 100% vegan dining (see D3) |
 | Pace | ✅ | ✅ | | C-PACE-1 | ✅ **VERIFIED 2026-06-08** — relaxed→3 doing/day (↓ from 4); packed→16 items/day (full). Captured via Just-Tell-Us pacing + honored at generation. |
 | Budget level | ✅ | ✅ | | C-BUDGET-1 | ✅ **VERIFIED 2026-06-08** — qualitative budget-friendly→`budget_tier=budget`, luxury→`budget_tier=luxury` (+ Michelin venues). |
 | Accommodation | ✅ | ✅ | | | ✅ **LIVE** — "I have my own stay" / Skip; multi-city per-city hotel picker renders |
@@ -284,8 +284,8 @@
 |---|:--:|:--:|---|---|---|
 | Interests → activities reflect them | ✅ | ✅ | | | ✅ **LIVE 2026-06-07** — Just-Tell-Us "food" interest → food-forward Rome (5bb8a18e); culinary DNA → food institutions |
 | Dietary → restaurant picks respect it | ✅ | ✅ | **✅✅ FIXED + VERIFIED LIVE 2026-06-07.** Was 🟧 partial (Florence "vegan" → "butter chicken"/"cured meats" slipped in; dietary only reached free-text). Fixed (C-PREF-1, `f6678c3ef`, deployed) → re-tested strictly-vegan in **meat-heavy Bologna** (82223283): ALL dining venues explicitly vegan (Pappare', Botanica Lab plant-based Bolognese, Caminetto d'Oro vegan tasting menu, Forno Brisa); one slot left a graceful "no vetted vegan venue" gap rather than serving meat = hard-veto confirmed. | done (C-PREF-1) | ✅ **FIXED + VERIFIED** |
-| Pace → day density matches | ✅ | 🔴 | **CAPTURED but NOT ADHERED — TESTED LIVE 2026-06-07.** "very relaxed, slow pace" Just-Tell-Us Seville (24293141) → metadata.pacing=`relaxed` ✓ captured, BUT output = **4 doing-activities/day** (Day1 4, Day2 4) — **IDENTICAL to a default-pace Florence trip (4, 3)**. Relaxed produced zero density reduction. | make pacing a real generation constraint (relaxed → fewer slots/day) → C-PACE-1 | ✅ **FIXED — C-PACE-1 (4→3 doing/day)** |
-| Budget → venue price tier matches | ✅ | 🔴 | **NOT CAPTURED — TESTED LIVE 2026-06-07.** Prompt "budget-friendly, cheap eats, free attractions, keep costs low" → trip `metadata.budget=(none)`, `budget_tier=(none)`. Qualitative budget intent is dropped entirely (the phrases were mis-parsed as cities — C-NLU-1 — then lost on correction). Can't adhere to an uncaptured pref. | capture qualitative budget ("budget/cheap/luxury") → budget_tier in chat-trip-planner NLU → C-BUDGET-1 | ✅ **FIXED — C-BUDGET-1 (budget_tier=budget)** |
+| Pace → day density matches | ✅ | ✅ | was captured-but-not-adhered (relaxed = default density) | make pacing a real generation constraint → **C-PACE-1** (profile-loader overrides traitScores.pace), deployed | ✅✅ **FIXED + VERIFIED LIVE 2026-06-08** — relaxed Seville = **3 doing/day** (↓ from default 4); packed Vienna = `pacing=packed`, 16 non-transit items/day (full). Pace now drives density. |
+| Budget → venue price tier matches | ✅ | ✅ | was not captured (qualitative budget dropped) | capture qualitative budget → budget_tier → **C-BUDGET-1**, deployed | ✅✅ **FIXED + VERIFIED LIVE 2026-06-08** — budget-friendly→`budget_tier=budget`; luxury→`budget_tier=luxury` + Michelin venues (Pramerl & the Wolf). |
 | DNA archetype → itinerary character matches | ✅ | ✅ | (= Table B3 A/B) | | ✅ **PASS LIVE 2026-06-07** — culinary vs adventure Rome diverge ~92% by venue, archetype drives selection |
 | Must-dos included / avoids excluded | 🟡 | 🟡 | (selected must-dos accepted in wizard; inclusion-in-output not yet rigorously diffed) | | 🟡 partial |
 
@@ -303,7 +303,7 @@
 |---|:--:|:--:|---|---|---|
 | Regenerate day | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — AI day-regenerate (via AI-Assistant "rewrite day") Applied on clean Bologna ($125→$105, free within cap); day-header "Refresh Day" = separate free timeline-fix tool. |
 | Weather forecast (Flights & Hotels tab) | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-08** — per-day forecast (highs/lows, humidity, wind) w/ "Seasonal Estimates" badge + contextual packing tip. |
-| Swap / replace activity | ✅ | 🔴 | **C-TOOL-8 — replacement NOT persisted** (Florence: swapped to "La tenda rossa", lost on reload; old venue also gone, cost $185→$140) | trace swap persist path | ✅ **FIXED + VERIFIED (C-TOOL-8, `932b1fde4`)** |
+| Swap / replace activity | ✅ | ✅ | was C-TOOL-8 — replacement not persisted | swap persist path fixed | ✅✅ **FIXED + VERIFIED (C-TOOL-8, `932b1fde4`)** — Medici Chapels swap persists across reload. |
 | Reorder / move (drag) | ✅ | ✅ | save-itinerary crash → didn't persist | crash fix `6a481b4c0` | ✅ **VERIFIED LIVE 2026-06-07** (Move-down persists) |
 | Add activity (search → add) | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — manual add ("QA Test Gelato") on Florence ccfc4491 → toast "Activity added!" → **persisted across reload** (DB confirms). Also validates the C-TOOL-8 handler-hardening for add. |
 | Add booking / flight / hotel | ✅ | 🟢 | | | 🟢 **SURFACE VERIFIED LIVE 2026-06-08** — "Flights & Hotels" tab: weather forecast (58°F, per-day Sep 5-7 highs/lows + packing tip) + Flights "No flights added yet" → **Add Flight** button (FlightImportModal w/ paste-parsing). Day-1 Arrival Game Plan also offers Add Flight / Add Hotel. Modal submit not exercised (would add data). |
@@ -325,7 +325,7 @@
 | Flight card image | ✅ | ✅ | flight cards showed only a lucide plane icon (owner: "put a real plane picture") | default flight cards to `fallback-plane.jpg` + skip photo-fetch (`isFlightCard`, e5596579c) | ✅ **FIXED + VERIFIED LIVE 2026-06-08** — "Departure Flight" card now renders a real plane photo (airplane over clouds). Hotels/activities keep their fetched photos. **Airport/inter-city transfer cards (InterCityTransportCard, `756c73451`) ALSO show the plane photo now — verified live on Seville "Transfer to the Airport".** |
 | Share public link | ✅ | ✅ | (C-SHARE-1 closed) | PR #25 | ✅ |
 | Collaborator invite link | ⬜ | ⬜ | | | ⬜ |
-| Each tool charges correct credits + refunds on fail | 🟡 | 🟡 | (cross-ref C-CRED-2/5) | | 🟡 **LIVE 2026-06-07** — swap free-accounting OK (1st free, 0 charge, swap_usage=1); gen charge==display every mode; refund-on-fail code-wired (C-TOOL-1/2/3/4). Full paid-tool charge (4th swap / AI rewrite) not yet exercised |
+| Each tool charges correct credits + refunds on fail | ✅ | ✅ | (cross-ref C-CRED-2/5) | refund-on-fail wired (C-TOOL-1/2/3/4) | ✅ **VERIFIED incl. PAID tool 2026-06-08** — Smart Finish charged 50cr & STUCK on success / refunded on failure; swap free-accounting OK; gen charge==display every mode. |
 
 ## D6. Persistence / data integrity
 | Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
