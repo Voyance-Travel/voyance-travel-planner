@@ -4271,58 +4271,67 @@ export function EditorialItinerary({
 
     // Replacing activity with new selection
 
-    setDays(prev => {
-      const updatedDays = prev.map((day, dIdx) => {
-        if (dIdx !== target.dayIndex) return day;
-        
-        const updatedActivities = day.activities.map(a => {
-          if (a.id !== target.activityId) return a;
+    // Replace the target activity with the new selection. Compute `updatedDays`
+    // from the current `days` (not inside a setDays updater) so we can persist
+    // the exact same value immediately below — see C-TOOL-8.
+    const updatedDays = days.map((day, dIdx) => {
+      if (dIdx !== target.dayIndex) return day;
 
-          const preservedTime = a.time || a.startTime || newActivity.time;
-          const preservedStartTime = a.startTime || preservedTime;
+      const updatedActivities = day.activities.map(a => {
+        if (a.id !== target.activityId) return a;
 
-          return {
-            ...a,
-            id: newActivity.id, // Use new activity ID
-            title: enforceMealTimeCoherence(newActivity.title || '', preservedStartTime),
-            description: newActivity.description,
-            category: newActivity.type,
-            type: newActivity.type,
-            time: preservedTime,
-            startTime: preservedStartTime,
-            duration: coerceDurationString(newActivity.duration, (newActivity as any).durationMinutes),
-            cost: { amount: newActivity.cost, currency: tripCurrency },
-            location: {
-              name: newActivity.location?.name,
-              address: newActivity.location?.address,
-            },
-            rating: newActivity.rating ?? a.rating,
-            tags: newActivity.tags,
-            isLocked: false,
-            // Clear stale Voyance intelligence from old activity
-            tips: undefined,
-            voyanceInsight: undefined,
-            isVoyancePick: false,
-            // Clear old enrichment data so it can be re-fetched
-            photos: undefined,
-            website: undefined,
-            viatorProductCode: undefined,
-          } satisfies EditorialActivity;
-        });
-        
-        return { ...day, activities: updatedActivities };
+        const preservedTime = a.time || a.startTime || newActivity.time;
+        const preservedStartTime = a.startTime || preservedTime;
+
+        return {
+          ...a,
+          id: newActivity.id, // Use new activity ID
+          title: enforceMealTimeCoherence(newActivity.title || '', preservedStartTime),
+          description: newActivity.description,
+          category: newActivity.type,
+          type: newActivity.type,
+          time: preservedTime,
+          startTime: preservedStartTime,
+          duration: coerceDurationString(newActivity.duration, (newActivity as any).durationMinutes),
+          cost: { amount: newActivity.cost, currency: tripCurrency },
+          location: {
+            name: newActivity.location?.name,
+            address: newActivity.location?.address,
+          },
+          rating: newActivity.rating ?? a.rating,
+          tags: newActivity.tags,
+          isLocked: false,
+          // Clear stale Voyance intelligence from old activity
+          tips: undefined,
+          voyanceInsight: undefined,
+          isVoyancePick: false,
+          // Clear old enrichment data so it can be re-fetched
+          photos: undefined,
+          website: undefined,
+          viatorProductCode: undefined,
+        } satisfies EditorialActivity;
       });
-      
-      // Sync budget with updated days
-      syncBudgetFromDays(updatedDays);
-      return updatedDays;
+
+      return { ...day, activities: updatedActivities };
     });
+
+    setDays(updatedDays);
+    // Sync budget with updated days
+    syncBudgetFromDays(updatedDays);
 
     setHasChanges(true);
     setSwapDrawerOpen(false);
     setSwapTarget(null);
     setSwapDrawerActivity(null);
     toast.success('Activity swapped!');
+
+    // C-TOOL-8: persist the swap IMMEDIATELY. Previously this handler only set
+    // hasChanges and relied on the 3s autosave debounce, which silently dropped
+    // the replacement on a fast reload (old venue removed, new venue lost).
+    // Mirror the reorder fix — write the new days straight to save-itinerary.
+    persistDaysImmediately(updatedDays).catch((e) => {
+      console.warn('[Swap] immediate persist failed; autosave will retry', e);
+    });
 
     // Background-enrich the swapped activity to get website/maps link
     const swappedTitle = newActivity.title;
@@ -4343,7 +4352,7 @@ export function EditorialItinerary({
         }
       }).catch(() => { /* enrichment is best-effort */ });
     }
-  }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId, days, syncBudgetFromDays, destination]);
+  }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId, days, syncBudgetFromDays, destination, persistDaysImmediately]);
 
   // Supports both database trips and localStorage demo trips
   useEffect(() => {
