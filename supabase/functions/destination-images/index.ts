@@ -131,6 +131,11 @@ async function checkCuratedCache(
     // "Restore Google→cache→serve" — destinations must keep trying real photos.
     const negativeHit = data.find((row: any) => {
       if (row.source !== 'no_result') return false;
+      // C-IMG-1: ONLY honor a negative cache on an EXACT entity-key match. A fuzzy
+      // alt_text match must never trigger it — otherwise a "Bologna" hero query gets
+      // poisoned by a no_result row cached for "Archiginnasio of Bologna" and is stuck
+      // on the gradient even when Unsplash would return a real photo.
+      if (row.entity_key !== normalizedKey) return false;
       if (entityType !== 'destination') return true;
       const updatedAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
       const ageMs = Date.now() - updatedAt;
