@@ -97,20 +97,26 @@ serve(async (req) => {
       return `Day ${day.dayNumber || day.day}: ${activities.join(", ") || "No activities"}`;
     }).join("\n");
 
-    // Extract DNA traits for context
-    const traits = dna.traits || dna.traitScores || {};
-    const archetype = dna.primaryArchetype || dna.archetype || "";
+    // Extract DNA traits for context.
+    // NOTE: profiles.travel_dna stores snake_case keys (trait_scores, primary_archetype_name).
+    // The old camelCase reads (traits/primaryArchetype) silently resolved to empty, so Smart
+    // Finish's gap analysis ran with NO DNA — the "spotty DNA" bug. Read all key variants.
+    const traits = dna.traits || dna.traitScores || dna.trait_scores || {};
+    const archetype = dna.primaryArchetype || dna.archetype || dna.primary_archetype_name
+      || dna.archetypeName || "";
     const overrides = profile?.travel_dna_overrides || {};
 
     // Build DNA context string
     const dnaContext = [
       archetype ? `Travel archetype: ${archetype}` : "",
-      traits.pace ? `Pace preference: ${traits.pace}/10` : "",
-      traits.comfort ? `Comfort level: ${traits.comfort}/10` : "",
-      traits.spontaneity ? `Spontaneity: ${traits.spontaneity}/10` : "",
-      traits.social ? `Social preference: ${traits.social}/10` : "",
-      traits.culture ? `Cultural interest: ${traits.culture}/10` : "",
-      traits.adventure ? `Adventure level: ${traits.adventure}/10` : "",
+      traits.pace != null ? `Pace preference: ${traits.pace}` : "",
+      traits.comfort != null ? `Comfort level: ${traits.comfort}` : "",
+      traits.social != null ? `Social preference: ${traits.social}` : "",
+      traits.adventure != null ? `Adventure level: ${traits.adventure}` : "",
+      traits.budget != null ? `Budget orientation: ${traits.budget}` : "",
+      traits.planning != null ? `Planning style (vs spontaneity): ${traits.planning}` : "",
+      traits.authenticity != null ? `Authenticity / cultural depth: ${traits.authenticity}` : "",
+      traits.transformation != null ? `Transformation seeking: ${traits.transformation}` : "",
       (overrides as any)?.dietaryPreferences ? `Dietary: ${(overrides as any).dietaryPreferences}` : "",
       (overrides as any)?.budgetPreference ? `Budget: ${(overrides as any).budgetPreference}` : "",
     ].filter(Boolean).join("\n");
