@@ -52,6 +52,10 @@ export function InterCityTransportCard({ title, travelMeta, className, variant =
   const hasRoute = travelMeta.from && travelMeta.to;
   const carrierLine = [travelMeta.carrier, travelMeta.flightNum].filter(Boolean).join(' ');
   const isFinal = variant === 'final';
+  // Show a real plane photo (instead of a bare icon) for flight / airport transfers.
+  const _tn = (travelMeta.transportName || '').toLowerCase();
+  const _ttl = (title || '').toLowerCase();
+  const useFlightPhoto = /(flight|fly|plane|airport)/.test(_tn) || /(flight|airport)/.test(_ttl) || isFinal;
   const depTimeFormatted = travelMeta.depTime ? formatTime12h(travelMeta.depTime) : null;
   const arrTimeFormatted = travelMeta.arrTime ? formatTime12h(travelMeta.arrTime) : null;
   const transportLabel = (travelMeta.transportName || 'Transfer').toUpperCase();
@@ -149,8 +153,18 @@ export function InterCityTransportCard({ title, travelMeta, className, variant =
       </div>
 
       {/* ── Desktop: Icon / Thumbnail Column ── */}
-      <div className="hidden sm:flex w-24 h-24 shrink-0 border-r border-border bg-muted/30 items-center justify-center">
-        <Icon className="h-8 w-8 text-muted-foreground/60" />
+      <div className="hidden sm:flex w-24 h-24 shrink-0 border-r border-border bg-muted/30 items-center justify-center overflow-hidden">
+        {useFlightPhoto ? (
+          <img
+            src="/images/fallbacks/fallback-plane.jpg"
+            alt="Flight"
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+          />
+        ) : (
+          <Icon className="h-8 w-8 text-muted-foreground/60" />
+        )}
       </div>
 
       {/* ── Desktop: Content Column ── */}
