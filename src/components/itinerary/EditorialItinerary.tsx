@@ -11805,6 +11805,11 @@ function ActivityRow({
   const isCheckIn = titleLower.includes('check-in') || titleLower.includes('check in');
   const isAirport = titleLower.includes('airport') || titleLower.includes('transfer');
   const isAccommodation = activityType === 'accommodation';
+  // Flight cards default to a real plane photo (not just an icon). Hotels/activities
+  // get fetched photos; flights are generic, so a clean plane image reads better.
+  const isFlightCard = activityType === 'flight' || activityType === 'inter_city_flight'
+    || activityType === 'arrival' || activityType === 'departure'
+    || titleLower.includes('flight');
   const showThumbnail = !isTransport && !isDowntime;
   
   // Only show ratings for venues that make sense: restaurants, activities, sightseeing, cultural
@@ -11915,7 +11920,7 @@ function ActivityRow({
   
   // Fetch real photos for most activities, including hotels (but not generic check-ins without hotel name)
   const hasHotelName = hotelName && hotelName.length > 3 && !hotelName.toLowerCase().includes('hotel check');
-  const shouldFetchRealPhoto = canViewPremium && !isManualMode && showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
+  const shouldFetchRealPhoto = canViewPremium && !isManualMode && showThumbnail && !isAirport && !isFlightCard && (hasHotelName || (!isCheckIn && !isAccommodation));
   
   const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
     isHotelActivity && hasHotelName ? `${hotelName} hotel` : effectiveSearchTerm,
@@ -11926,7 +11931,9 @@ function ActivityRow({
     activity.id  // activityId - for DB write-back of fetched photo URLs
   );
 
-  const thumbnailUrl = isManualMode ? null : fetchedImageUrl;
+  const thumbnailUrl = isManualMode
+    ? null
+    : (fetchedImageUrl || (isFlightCard ? getActivityFallbackImage('flight', activityTitle) : null));
   const [thumbnailError, setThumbnailError] = useState(false);
 
   // Report resolved photo for batch write-back to itinerary_data
