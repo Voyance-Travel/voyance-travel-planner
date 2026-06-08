@@ -301,7 +301,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
           // "free attractions", "slow pace", "keep costs low") as cities. Strip them so they
           // can't become a bogus multi-city route. If exactly one REAL city survives, also use
           // it as the destination (the NLU may have set destination to the phrase list).
-          const PREF_CITY_RE = /\b(cheap|budget|free|cost|pace|relax|slow|packed|fast|eats|attraction|nightlife|street food|fine dining|museum|luxury|splurge|shoestring|good food|hidden gem)\b/i;
+          const PREF_CITY_RE = /\b(cheap|budget|free|cost|pace|relax|slow|packed|fast|eats|attraction|nightlife|street food|fine dining|museum|luxury|splurge|shoestring|good food|hidden gem|wheelchair|accessib|step-free|stair|mobility|disabled|traveler|venues?|routes?)\b/i;
           if (Array.isArray(details.cities) && details.cities.length > 0) {
             const realCities = details.cities.filter((c) => c?.name && !PREF_CITY_RE.test(String(c.name)));
             if (realCities.length !== details.cities.length) {
