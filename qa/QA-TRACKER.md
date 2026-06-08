@@ -13,7 +13,7 @@
 - [~] **Auth flows (Table E)** — ✅ **CODE-AUDIT DONE 2026-06-08** (all flows wired correctly; session-persistence also LIVE-confirmed). Remaining = **owner LIVE pass in incognito** (the credential actions I'm barred from): sign up · sign in · OAuth consent (+ set Google/Apple keys in Supabase) · click email-verify · click reset-email + set pw · logout · fresh-account quiz-gate redirect. *Return-path & callback are robust in code.*
 - [ ] **User-type matrix (Table E)** — anonymous/guest · free · paid · Voyance Club · admin journeys *(needs the accounts)*
 - [ ] **A5 Friends add/accept · A6 collaborator-invite link** — needs a **2nd account** signup
-- [ ] **A1 embedded CTAs** (logged-out marketing home) — authed `/` redirects to /profile → needs **incognito**
+- [~] **A1 embedded CTAs** (logged-out marketing home) — ✅ **CODE-AUDIT DONE 2026-06-08** (all CTAs enumerated + targets verified — hero/FreeTier/FinalCTA/ItineraryShowcase-sample/StickyMobile/SocialProof). Only the **live render + click-through needs owner incognito** (authed `/`→`/profile`).
 - [ ] **Paying-user journey** — real Stripe purchase (test carefully, real money)
 - [ ] **Security full live pen-test** — code-audit already STRONG; live test = owner
 - [ ] **Infra:** pg_cron 2 HTTP jobs (service-role SQL) + final `travelwithvoyance.com` → Vercel cutover
@@ -135,7 +135,7 @@ Smart Finish 3-bug fix · hero photos (C-IMG-1) · NLU/pace/budget prefs (C-NLU-
 | Hero CTA → trip builder | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: "Build My Itinerary" → /start (3-step builder) works. ⚠️ logged-out home *hero* button itself pending logged-out pass |
 | Nav links (all) | ✅ | ✅ | none — 22 links, zero dead `#` | — | ➖ |
 | Footer links | ✅ | ✅ | "Cookies"→/privacy (no dedicated cookies page) — minor | — | ✅ renders site-wide (About/HowItWorks/Pricing/Help/Contact/FAQ/Privacy/Terms) |
-| Any embedded CTAs / sample-itinerary / social proof widgets | ✅ | ⏳ | **logged-out marketing home only** — authed `/` redirects to /profile | code-reviewed (CTAs/social-proof present in Home component) | ⏳ **AUDIT closed**; LIVE pending logged-out pass (owner) |
+| Any embedded CTAs / sample-itinerary / social proof widgets | ✅ | ⬜owner | **logged-out marketing home only** — re-confirmed 2026-06-08 that authed `/` redirects to `/profile`, so it can't be seen while logged in | full Home-component CTA audit | ✅✅ **AUDIT COMPLETE 2026-06-08** — every CTA enumerated + targets verified: **Hero** (ValueFirstHero) · **FreeTierSection** "Get Started Free" → `ROUTES.START` (×2) · **FinalCTA** "Start Planning" → START + "Take the Quiz" → `ROUTES.QUIZ` · **ItineraryShowcase** (the sample-itinerary widget) → sample viewer `ITINERARY.SAMPLE?id=` + "/demo" + `EXPLORE` + START-with-prefilled-destination · **StickyMobileCTA** "Start Planning" · **SocialProofSection** = BETA_TESTIMONIALS cards (quote/name/trip/archetype). All targets resolve to real routes. ⬜ LIVE render/click-through = owner incognito (5 min). |
 | Notification bell | ✅ | ✅ | — | — | ✅ **LIVE 2026-06-05**: opens Notifications panel with real entries ("Clinton Brooks joined your trip to Amsterdam/Lisbon"), "1 new" badge + "Read all" action |
 
 ## A2. Explore `/explore`
