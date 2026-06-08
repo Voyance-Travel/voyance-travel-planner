@@ -566,3 +566,11 @@ Owner asked to retest everything we were only code-confident on. Results:
 ### 🔍 Low-pri, NOT fixed (non-user-facing / by-design):
 - `itinerary_versions.dna_snapshot` is sparse (only `{snapshotAt}`) via the version-level persist path — the trip-level snapshot code (generation-core:3009) uses the correct field names. Audit/repro field only; DNA applies correctly. Deferred (would risk a generation-pipeline change for no user benefit).
 - Activity-name placeholder suffixes — spawned as a separate task.
+
+<!-- OWNER-TAIL UPDATE 2026-06-08 -->
+## Owner-side tail — status 2026-06-08
+- ✅ **(1) Password-reset click-through** — owner tested, works.
+- ✅ **(2) Apple OAuth consent / account-link round-trip** — owner tested, works.
+- 🟡 **(3) pg_cron HTTP jobs** — ALREADY repointed to the new project (stale "what's left" entry). BUT live check found: `auto-summarize-completed-trips` (job 9) last run **succeeded**; `send-trip-reminders-daily` (job 2) last run **FAILED** — `null value in column "url"` because `current_setting('supabase.service_role_key')` is **UNSET** → Authorization = `Bearer null`. Both jobs read that GUC; it was never configured. **FIX (owner, credential-guarded): `ALTER DATABASE postgres SET supabase.service_role_key = '<service_role_key>';`** Job 2 already evaluates the GUC correctly (works once set). Job 9 has a latent bug — its auth header is a NON-evaluated string literal (the `||` is inside the JSON string), so it sends garbage but "succeeds" only because the function doesn't enforce auth; should be rewritten to `jsonb_build_object` after the GUC is set. Both are background-only (reminders/summaries), not user-blocking.
+- 🟢 **(4) C-IMG-3 storage re-host** — LARGELY SELF-HEALING (see C-IMG-3 OUTCOME): ~70% of old files already 404; recoverable ones preserved; the rest is a re-fetchable cache (app re-fetches from Google/Unsplash/edge-fn on view) + trip cards/heroes now route through the live `destination-images` edge fn (C-IMG-1/2/4). Recommendation: **don't re-host — accept self-heal**; spot-check heroes/cards after cutover. Zero permanent user-facing loss.
+- ⬜ **(5) Domain cutover** — final flip: attach `travelwithvoyance.com` to Vercel + point DNS. Last step, after QA sign-off.
