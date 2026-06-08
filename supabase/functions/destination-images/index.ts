@@ -441,9 +441,18 @@ async function tryUnsplashFallback(destination: string): Promise<DestinationImag
     const data = await response.json();
     const results = Array.isArray(data?.results) ? data.results : [];
 
-    const qualityResults = results.filter(
+    let qualityResults = results.filter(
       (r: any) => (r?.width ?? 0) >= 1920 && (r?.likes ?? 0) >= 50
     );
+    if (qualityResults.length === 0) {
+      // C-IMG-1: under-photographed cities (e.g. Bologna) have no high-like landscape
+      // shots, so the strict gate left them with a gradient. Relax to width>=1200 with
+      // no like floor so they still get a real photo (content-guard below still applies).
+      qualityResults = results.filter((r: any) => (r?.width ?? 0) >= 1200);
+      if (qualityResults.length > 0) {
+        console.log(`[unsplash] relaxed quality gate for "${destination}" → ${qualityResults.length} results`);
+      }
+    }
     if (qualityResults.length === 0) {
       console.log(`[unsplash] no quality results for "${destination}" (${results.length} raw)`);
       return null;
