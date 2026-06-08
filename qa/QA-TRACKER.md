@@ -6,6 +6,9 @@
 
 ---
 
+
+- ✅ **EMAIL/SMTP FIXED 2026-06-08** — root cause was SendGrid **trial expired (0 emails/mo)**, not DNS (DNS+domain-auth were fine). Owner upgraded to Essentials 50K → `/auth/v1/recover` flipped **500→200**, no more `451 Maximum credits exceeded`. Branded SendGrid send confirmed at send-layer (owner verifies inbox render/from-address). <!-- EMAIL-SMTP-STATUS -->
+
 ## ⬜ WHAT'S LEFT — ~10% open, **ALL owner-side** (everything else below is ✅ verified)
 *Updated 2026-06-08. **Top = not-yet-truly-checked.** Product QA = **~90% done**. Every item I can do without you is now closed (see the ✅ list below); the only open work needs your accounts/incognito/Stripe/infra.*
 
