@@ -233,8 +233,6 @@ export function useTripHeroImage({
       dbCuratedFetched && !dbCuratedUrl &&
       !apiFetched;
 
-    console.log('[heroDbg] API-effect gate', destination, { seededDone, canonicalDone, hasCurated, storageDone, dbCuratedFetched, dbCuratedUrl: !!dbCuratedUrl, apiFetched, canonicalFetched, canonicalUrl: !!canonicalUrl, shouldFetch });
-
     if (!shouldFetch || !destination) return;
 
     let cancelled = false;
@@ -247,7 +245,6 @@ export function useTripHeroImage({
         const xcity = result?.alt
           ? detectCrossCityMention(result.alt, destination)
           : null;
-        console.log('[heroDbg] API result', destination, { hasUrl: !!result?.url, source: result?.source, alt: result?.alt, xcity, untrusted: result?.url ? isUntrustedHeroUrl(result.url) : null });
         if (result?.url && !isUntrustedHeroUrl(result.url) && !xcity) {
           setApiImageUrl(result.url);
           if (result.source === 'unsplash' && result.photographer) {
