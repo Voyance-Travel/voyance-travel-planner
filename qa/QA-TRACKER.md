@@ -540,3 +540,11 @@ Owner created the account; agent drove the rest. Every link verified live + in D
 ### Minor findings (cosmetic / data-quality — NOT blockers):
 - Activity names have placeholder-ish suffixes on a couple: "São Bento Railway Station **Title**", "Wine Cellars Of Vila Nova De Gaia **Activity**" — naming polish.
 - trips.dna_snapshot column was NOT populated for this trip (DNA still applied via profile — content proves it). Worth confirming snapshot write.
+
+<!-- APPLE ACCOUNT-LINKING 2026-06-08 -->
+## ✅ Apple/Google account-linking feature — BUILT + DEPLOYED + LIVE
+The full fix for Apple Hide-My-Email duplicate accounts (lets users consolidate into one login).
+- ✅ Enabled `security_manual_linking_enabled=true` in Supabase Auth (via Management API).
+- ✅ Settings → Linked accounts: per-provider Connect (linkIdentity) / Disconnect (unlinkIdentity); guards against unlinking the only sign-in method.
+- ✅ Typechecks clean (0 errors), deployed (commit f932e96d4), verified LIVE on test account: Google=Connected (disabled, only method), Apple=Connect (functional).
+- ⏸️ OWNER to test the actual OAuth link round-trip (Connect Apple → Apple sign-in → linked) — needs real Apple auth.
