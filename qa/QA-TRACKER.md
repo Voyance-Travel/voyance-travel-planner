@@ -524,3 +524,19 @@ Smart Finish 3-bug fix · hero photos (C-IMG-1) · NLU/pace/budget prefs (C-NLU-
 - 🔍 **Linked-Accounts label** — Settings.tsx hardcodes 'Google' (Apple removed from UI before re-enable). Needs provider-detection. PROPOSED.
 - 🔍 **Apple Hide-My-Email dup accounts** — needs design decision (auto-link vs detect-warn). PROPOSED.
 - ⏸️ Queued (owner): Club monthly purchase · new test-acct full-chain journey (agent barred from creating/deleting accounts) · $9 refund→clawback live verify.
+
+<!-- FULL-CHAIN FREE JOURNEY 2026-06-08 (new account, agent-driven) -->
+## ✅ Full-chain free journey — VERIFIED (travelwithvoyance@gmail.com, fresh account)
+Owner created the account; agent drove the rest. Every link verified live + in DB:
+1. ✅ Signup → email confirmed
+2. ✅ Onboarding tour fired
+3. ✅ +150 welcome credits (modal → DB free=150 → cache synced by new trigger). NOTE: welcome grant is sequenced AFTER the tour closes (by design) — not a bug.
+4. ✅ Quiz (10 steps, ~20 Qs) → DNA = **Cultural Anthropologist + Social Butterfly** — archetype MATCHES the answers (locals/authenticity/wandering/social)
+5. ✅ +100 quiz credits (free 150→250, ledger: +150 welcome, +100 quiz)
+6. ✅ Build (Porto, 3 days) → **46 activities**, generated clean, **FREE (no credit debit — first-trip-free honored; still 250)**
+7. ✅ DNA differentiation REAL: cultural landmarks (São Bento, Porto Cathedral, Dom Luís Bridge, Wine Cellars) + local/authentic food (Confeitaria do Bolhão, Taberna do Largo, O Paparico) + spontaneous **"Free roam — follow your nose in Ribeira"** (maps to the 'Wandering' answer)
+8. ✅ Cosmetic fix CONFIRMED LIVE: free-trip banner shows "Day 3 can be unlocked" (the 'Days 3-3'→'Day 3' fix)
+
+### Minor findings (cosmetic / data-quality — NOT blockers):
+- Activity names have placeholder-ish suffixes on a couple: "São Bento Railway Station **Title**", "Wine Cellars Of Vila Nova De Gaia **Activity**" — naming polish.
+- trips.dna_snapshot column was NOT populated for this trip (DNA still applied via profile — content proves it). Worth confirming snapshot write.
