@@ -379,7 +379,7 @@ Smart Finish 3-bug fix · hero photos (C-IMG-1) · NLU/pace/budget prefs (C-NLU-
 |---|:--:|:--:|---|---|---|
 | Anonymous / guest (browse, sample, gen blocked) | ✅ | ✅ | — | ProtectedRoute | ✅ **VERIFIED LIVE 2026-06-08 (agent, logged out)** — CAN browse: home + Explore (search/hero render). CANNOT build: `/start` → `/signin?next=%2Fstart`. CANNOT admin: `/admin/dashboard` → `/signin?next=%2Fadmin%2Fdashboard`. Correct freemium gating. |
 | Free user (free-version limits enforced) | ⬜ | ⬜ | | | ⬜ |
-| Paid user (purchased credits) | ⬜ | ⬜ | | | ⬜ |
+| Paid user (purchased credits) | ✅ | ⚠️ | **LIVE TEST 2026-06-08 — CRITICAL BUG FOUND.** Real $9 Top-Up 100 (cs_live_a10QsWO2…) charged OK, but **0 credits landed** — `stripe-webhook` had **0 invocations**. STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET are set, so root cause = **live webhook endpoint in Stripe still points at the OLD project (or unregistered for new)**. Profile purchases rely solely on the webhook (no verify-payment fallback for /profile returnPath). FIX (owner): repoint Stripe LIVE webhook → `https://qpwexpjqzsdkjkvgcntx.supabase.co/functions/v1/stripe-webhook` → resend event → verify +100. Also minor: success_url double-`?` bug. | | ❌→fix in progress |
 | Voyance Club member (perks / priority) | ⬜ | ⬜ | | | ⬜ |
 | Admin / founder (admin pages) | ✅ | ✅ | routes were auth-only; owner also lacked the `admin` role row on the new stack | AdminRoute gate (PR #30) + owner granted `admin` role 2026-06-08 | ✅ **VERIFIED LIVE 2026-06-08** — admin (Ashton) reaches all `/admin/*`; dashboard + Forecast + Projections load with new-project data. |
 
