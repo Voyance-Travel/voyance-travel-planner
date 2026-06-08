@@ -15,7 +15,7 @@
 - ⚠️→✅ **C-AUTH-2 logout dest** FIXED — landed on /signin (protected-route race); now navigate('/' replace) before logout
 - ⚠️→✅ **C-AUTH-3 stale subtitle** FIXED — "access your profile" showed on every visit; now only on a real `?next=`
 - 🔴 **C-AUTH-4 Apple OAuth NOT enabled** — owner: add Apple Services ID + private key in Supabase → Auth → Providers → Apple
-- 🟡 **C-AUTH-5 requireQuiz unused** — the guard works but **no route passes `requireQuiz={true}`** → never fires. **Product decision (owner): which routes should gate on quiz completion?** (gating /start would force everyone to quiz before building — a funnel/conversion call, so not changed unilaterally)
+- ✅ **C-AUTH-5 requireQuiz** — RESOLVED (owner decided 2026-06-08: **don't hard-gate — soft-prompt model**, best for free-trial conversion). No route changes; `requireQuiz` stays a **latent capability, not a bug**. Soft-nudge already exists (`hasCompletedQuiz` gates in CompanionContext / ItineraryPreview). Building stays open (DNA via free-text / defaults if the quiz is skipped).
 
 ### 🔴 Needs the owner (blocked without your action)
 - [~] **Auth flows (Table E)** — ✅ **CODE-AUDIT DONE 2026-06-08** (all flows wired correctly; session-persistence also LIVE-confirmed). Remaining = **owner LIVE pass in incognito** (the credential actions I'm barred from): sign up · sign in · OAuth consent (+ set Google/Apple keys in Supabase) · click email-verify · click reset-email + set pw · logout · fresh-account quiz-gate redirect. *Return-path & callback are robust in code.*
