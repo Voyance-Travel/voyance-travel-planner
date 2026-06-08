@@ -506,16 +506,9 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1549144511-f099e773c147?w=1200', // Alhambra at sunset
     'https://images.unsplash.com/photo-1559511260-66a654ae982a?w=1200', // Granada with Sierra Nevada
   ],
-  'sevilla': [
-    'https://images.unsplash.com/photo-1559535332-db9b07f0d0d7?w=1200', // Plaza de España
-    'https://images.unsplash.com/photo-1559630929-ebf1d1ff5b1f?w=1200', // Seville cathedral
-    'https://images.unsplash.com/photo-1559683586-91e7e87e93c0?w=1200', // Plaza de España arches
-  ],
-  'seville': [ // English spelling — trips store "Seville", map previously only had "sevilla"
-    'https://images.unsplash.com/photo-1559535332-db9b07f0d0d7?w=1200', // Plaza de España
-    'https://images.unsplash.com/photo-1559630929-ebf1d1ff5b1f?w=1200', // Seville cathedral
-    'https://images.unsplash.com/photo-1559683586-91e7e87e93c0?w=1200', // Plaza de España arches
-  ],
+  // NOTE: the previous 'sevilla' Unsplash photo-ids (1559535332 / 1559630929 / 1559683586)
+  // are all DEAD (404 on the Unsplash CDN). Removed so Seville falls through to the
+  // alive generic-travel images instead of returning dead URLs.
   'cinque-terre': [
     'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=1200', // Manarola cliff village
     'https://images.unsplash.com/photo-1534445967719-8ae7b972b1a5?w=1200', // Vernazza harbor
