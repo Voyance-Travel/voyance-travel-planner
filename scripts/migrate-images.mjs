@@ -73,8 +73,14 @@ async function migrateOne(table, col, id, oldUrl) {
   try { exists = (await fetch(newUrl, { method: 'HEAD' })).ok; } catch {}
   if (DRY_RUN) return { id, status: exists ? 'dry-repoint' : 'dry-copy', bucket: p.bucket };
   if (!exists) {
-    let r;
-    try { r = await fetch(oldUrl); } catch (e) { return { id, status: `fetch-err:${e.message}`, oldUrl }; }
+    // Retry transient failures (429/5xx/network) but NOT 400/404 (file genuinely gone).
+    let r, lastErr;
+    for (let t = 0; t < 3; t++) {
+      if (t) await new Promise(res => setTimeout(res, 500 * t));
+      try { r = await fetch(oldUrl); } catch (e) { lastErr = e; r = null; continue; }
+      if (r.ok || r.status === 404 || r.status === 400) break; // success or genuinely-gone → stop
+    }
+    if (!r) return { id, status: `fetch-err:${lastErr?.message || 'network'}`, oldUrl };
     if (!r.ok) return { id, status: `fetch-${r.status}`, oldUrl };
     const buf = Buffer.from(await r.arrayBuffer());
     const ct = r.headers.get('content-type') || 'image/jpeg';
