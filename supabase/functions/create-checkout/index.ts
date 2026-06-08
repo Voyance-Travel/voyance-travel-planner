@@ -131,8 +131,11 @@ serve(async (req) => {
       if (productName) sessionMetadata.product_name = productName;
     }
 
-    // Deterministic idempotency key — same logical purchase intent reuses the same Stripe session
-    const idempotencyKey = `checkout:${userId}:${priceId}:${mode}:${days ?? ''}:${returnPath ?? ''}`.slice(0, 255);
+    // Idempotency key with a 10s time-bucket: collapses double-clicks / retries within the bucket,
+    // but allows an intentional repeat purchase (the old key reused the original session for
+    // Stripe's full 24h window → blocked re-buying the same pack for a day).
+    const idemBucket = Math.floor(Date.now() / 10000);
+    const idempotencyKey = `checkout:${userId}:${priceId}:${mode}:${days ?? ''}:${returnPath ?? ''}:${idemBucket}`.slice(0, 255);
 
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
