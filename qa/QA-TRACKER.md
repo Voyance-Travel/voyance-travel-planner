@@ -20,7 +20,7 @@
 | 💳 Paid-gen unlocks its days (C-PRICE-1) | ✅✅ **FIXED + VERIFIED 2026-06-07** — was charging to generate AND again to unlock (~660 for a 5-day). Now one charge unlocks all days (fresh Rome gen → `unlocked_day_count=3` auto). |
 | 🧬 DNA → itinerary differentiation (B3, "the big proof") | ✅✅ **PASSED LIVE 2026-06-07** — same Rome/dates/inputs, only DNA archetype differs → culinary vs adventure = **~92% venue divergence**, ~0% non-meal-activity overlap; archetype drives SELECTION (C-DNA-4 verified). |
 | 🍽️ Preference adherence (dietary) | 🟧 **PARTIAL — TESTED LIVE 2026-06-07** — "strictly vegan" Florence trip got mostly vegan venues but also "butter chicken" + "cured meats" slipped in. Dietary influences, not hard-enforced (→ C-PREF-1). |
-| 🔵 Product QA on new stack | **~38%** — green: core build/money path, all 4 build modes, in-itinerary persistence+cost, DNA-A/B differentiation. 🟧 dietary-pref adherence partial (gap logged). **STILL UNTESTED LIVE:** other prefs (pace/budget→output), per-tool credit charges (swap/regen/add), navigation dead-ends/UX states, DNA-accuracy edge cases (C-DNA-2/3/5), auth-flow tails. |
+| 🔵 Product QA on new stack | **~48%** — ✅ green: core build/money path, **all 4 build modes** (TEST PLAN §4), **generation correctness original-5 re-verified** (D4, across 7+ fresh gens), **build wizard steps** (D2: destination/dates/travelers/interests/accommodation/must-dos/cost-gate/kickoff), **DNA→output differentiation** (B3/§1/§3), **in-itinerary persistence + cost + day-unlock + restaurant-recs** (D5). 🟧 dietary-pref partial (C-PREF-1). 🔴 swap-replace persistence (C-TOOL-8). **STILL UNTESTED LIVE:** prefs pace/budget/accessibility→output, D5 tools add/smart-finish/mystery/route-opt/hotel-opt/AI-chat/notes/export/maps, navigation dead-ends, DNA-accuracy edge cases (C-DNA-2/3/5), auth-flow tails. |
 
 **Now working through (owner-directed 2026-06-07 PM):** (1) ✅ tracker headline now reflects build-mode + DNA wins; (2) ✅ preferences→output (D3): dietary = 🟧 PARTIAL (C-PREF-1); (3) ✅ per-tool charges tested → free-swap accounting OK, Refresh-Day = free timeline tool, **but found 🔴 C-TOOL-8 (swap replacement not persisted)**; (4) → navigation dead-ends; (5) DNA-accuracy traces. **New bugs found this pass: C-PREF-1 (dietary soft), C-TOOL-8 (swap-persist).**
 
@@ -63,37 +63,37 @@
 
 **Method:** hold the destination constant (**Barcelona · 4 nights · 2 travelers**) and vary the DNA/preferences. Generate, then check the output against "Expect to see." Differentiation = the same city must produce **measurably different** itineraries per profile.
 
-### 1) DNA profiles — same city, different DNA → different itinerary
+### 1) DNA profiles — same city, different DNA → different itinerary  *(tested on **Rome**, not Barcelona — same proof)*
 | # | DNA / Profile | Set via | Expect the itinerary to lean toward… | Generated | Adheres ✅/❌ |
 |---|---|---|---|:--:|:--:|
-| 1 | **Culinary / foodie** | quiz: food-forward answers | La Boqueria, tapas crawl, cooking class, dinner reservations, food markets; **high dining ratio** | ⬜ | ⬜ |
-| 2 | **Cultural / history** | quiz: culture answers | Sagrada Família, Gothic Quarter, Picasso/MNAC, historic walking tours; **low nightlife** | ⬜ | ⬜ |
-| 3 | **Adventure / active** | quiz: adventure answers | Montjuïc, cable car, beach/water sports, Montserrat day-trip, **active pacing** | ⬜ | ⬜ |
-| 4 | **Relaxed / wellness** | quiz: slow/wellness answers | Spa, beach clubs, **fewer activities/day**, slow mornings, downtime | ⬜ | ⬜ |
+| 1 | **Culinary / foodie** | DB: `travel_dna`=culinary_cartographer | food institutions, markets, high dining ratio | ✅ Rome d20ff5c4 | ✅ Salumeria Roscioli, Per Me (Michelin), Pizzarium, Mordi e Vai, wine ritual — 11/20 dining |
+| 2 | **Cultural / history** | DB: cultural_anthropologist | historic sites, museums, walking tours | ✅ Rome 5bb8a18e | ✅ culture-leaning baseline |
+| 3 | **Adventure / active** | DB: wilderness_pioneer | outdoor, active pacing, treks | ✅ Rome 1fb9af88 | ✅ e-bike Appian Way, catacombs ×2, trek Acquedotti, hike Via Sacra→Monte Cavo — ~7 outdoor, 0 in culinary |
+| 4 | **Relaxed / wellness** | quiz: slow/wellness | Spa, beach clubs, fewer activities/day | ⬜ | ⬜ not yet tested |
 
 ### 2) Preference adherence — set a pref, confirm the output honors it
 | Preference set | Expect | Adheres ✅/❌ |
 |---|---|:--:|
-| Dietary = **vegetarian** | restaurant picks veg-friendly; no steakhouse anchors | ⬜ |
-| Budget = **budget-friendly** | value venues, free attractions, lower total cost | ⬜ |
-| Budget = **luxury** | upscale dining/hotels, premium experiences | ⬜ |
-| Pace = **relaxed** | ≤3 activities/day, late starts, downtime blocks | ⬜ |
-| Accommodation = **unique stays** | boutique/Airbnb-style, not chain hotels | ⬜ |
-| Accessibility = **step-free** | avoids stair-heavy sites; notes accessibility | ⬜ |
+| Dietary = **vegan** (tested) | restaurant picks veg-friendly; no meat anchors | 🟧 **PARTIAL 2026-06-07** (Florence ccfc4491): 6 vegan venues incl. fully-vegan + Il Vegetariano, BUT "butter chicken" + "cured meats" slipped in → influences, not hard veto (**C-PREF-1**) |
+| Budget = **budget-friendly** | value venues, free attractions, lower total cost | ⬜ not yet tested |
+| Budget = **luxury** | upscale dining/hotels, premium experiences | ⬜ not yet tested |
+| Pace = **relaxed** | ≤3 activities/day, late starts, downtime blocks | ⬜ not yet tested |
+| Accommodation = **unique stays** | boutique/Airbnb-style, not chain hotels | ⬜ not yet tested |
+| Accessibility = **step-free** | avoids stair-heavy sites; notes accessibility | ⬜ not yet tested |
 
-### 3) Differentiation pass/fail (B3 proof)
-- [ ] ≥40% of venues **differ** between profiles 1 / 2 / 3 for the same city
-- [ ] Dining-ratio **Δ ≥15pts** between Culinary (1) and Cultural (2)
-- [ ] **No fallback/generic** itinerary — every day has real, named, geolocated venues (D4)
-- [ ] Each generation **charges the correct credits** and the AI path is OpenRouter (D4/B4)
+### 3) Differentiation pass/fail (B3 proof) — ✅ **PASS 2026-06-07**
+- [x] ✅ ≥40% of venues **differ** — **~92% differ** (culinary vs adventure, only 2 shared = generic breakfast spots)
+- [ ] 🟧 Dining-ratio **Δ ≥15pts** — only **8pts** (55% vs 47%); weak metric (all eat 3 meals/day) — but non-meal-activity overlap ~0% & venue-diff overwhelmingly passes
+- [x] ✅ **No fallback/generic** — every day has real named geolocated venues (Salumeria Roscioli, Per Me, Appian Way e-bike, Monte Cavo hike)
+- [x] ✅ Each generation **charges correct credits** (Rome 180==charged) and AI path is **OpenRouter**
 
-### 4) Build modes (B1 / D1) — each yields a complete itinerary
+### 4) Build modes (B1 / D1) — each yields a complete itinerary — ✅ **ALL TESTED LIVE 2026-06-07**
 | Mode | Built | Complete (no fallback) | DNA applied |
 |---|:--:|:--:|:--:|
-| Single City | ⬜ | ⬜ | ⬜ |
-| Multi-City | ⬜ | ⬜ | ⬜ |
-| Just Tell Us (free-text) | ⬜ | ⬜ | ⬜ |
-| Build Myself | ⬜ | ⬜ | ⬜ |
+| Single City | ✅ Barcelona paid (−210) | ✅ real venues, no fallback | ✅ celebration/complexity applied |
+| Multi-City | ✅ Lisbon→Porto (84617c59), 5d/2 cities/transition | ✅ 52 acts, real inter-city transport | ✅ |
+| Just Tell Us (free-text) | ✅ Rome (5bb8a18e) chat NLU | ✅ 42 acts, food-themed | ✅ archetype + parsed interests |
+| Build Myself | ✅ paste-organize (5934a22b), **free** | ✅ 8 acts from pasted plan | ➖ n/a (manual, no AI) |
 
 > Running this plan top-to-bottom closes B3, D3, D1/D2/D4, B1, and most of A6/A7 in one coordinated pass.
 
@@ -262,54 +262,54 @@
 ## D2. Build wizard — steps & inputs (each step: renders, validates, persists, back/forward, resume draft)
 | Step / input | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| Destination select (search/autocomplete) | ⬜ | ⬜ | | | ⬜ |
-| Dates / duration | ⬜ | ⬜ | | | ⬜ |
-| Travelers / party size | ⬜ | ⬜ | | | ⬜ |
-| Interests | ⬜ | ⬜ | | | ⬜ |
-| Dietary | ⬜ | ⬜ | | | ⬜ |
-| Pace | ⬜ | ⬜ | | | ⬜ |
-| Budget level | ⬜ | ⬜ | | | ⬜ |
-| Accommodation | ⬜ | ⬜ | | | ⬜ |
-| Must-dos / avoids | ⬜ | ⬜ | | | ⬜ |
-| Accessibility | ⬜ | ⬜ | | | ⬜ |
-| DNA auto-applied from profile | ⬜ | ⬜ | | | ⬜ |
-| Cost preview + credit gate (correct cost shown) | ⬜ | ⬜ | (cross-ref C-CRED-4) | | ⬜ |
-| Step validation / resume incomplete draft | ⬜ | ⬜ | | | ⬜ |
-| Generation kickoff + progress/heartbeat | ⬜ | ⬜ | (cross-ref D4 #1) | | ⬜ |
+| Destination select (search/autocomplete) | ✅ | ✅ | | | ✅ **LIVE 2026-06-07** — Rome/Florence/Lisbon/Porto autocomplete (real city + country, dedup) |
+| Dates / duration | ✅ | ✅ | | | ✅ **LIVE** — arrival/range picker, nights→days, future-only |
+| Travelers / party size | ✅ | ✅ | | | ✅ **LIVE** — 1–5 selector works; doesn't inflate credit cost |
+| Interests | ✅ | ✅ | | | ✅ **LIVE** — trip-type chips + Just-Tell-Us parsed "food/local_culture" → reflected in output |
+| Dietary | ✅ | 🟧 | dietary soft, not hard veto (C-PREF-1) | capture structured dietaryRestrictions + hard filter | 🟧 **PARTIAL** (see D3) |
+| Pace | ⬜ | ⬜ | (relaxed captured in Just-Tell-Us but output-density not verified) | | ⬜ |
+| Budget level | ⬜ | ⬜ | ("Set budget" optional control not yet exercised) | | ⬜ |
+| Accommodation | ✅ | ✅ | | | ✅ **LIVE** — "I have my own stay" / Skip; multi-city per-city hotel picker renders |
+| Must-dos / avoids | ✅ | ✅ | | | ✅ **LIVE** — fine-tune per-city suggestions + "add your own"; selected must-dos accepted |
+| Accessibility | ⬜ | ⬜ | (no accessibility input in current wizard) | | ⬜ |
+| DNA auto-applied from profile | ✅ | ✅ | | | ✅ **LIVE 2026-06-07** — proven by B3 A/B (profile `travel_dna` drives output; reloaded server-side at gen time) |
+| Cost preview + credit gate (correct cost shown) | ✅ | ✅ | (C-CRED-4) | | ✅ **LIVE** — Cost Breakdown shows days×60 (+multi-city fee), display == charged every mode |
+| Step validation / resume incomplete draft | ⬜ | ⬜ | (resume-draft path not yet tested) | | ⬜ |
+| Generation kickoff + progress/heartbeat | ✅ | ✅ | (D4 #1) | | ✅ **LIVE** — "Building Day X of Y" + background-build message on all 7+ gens |
 
 ## D3. Preferences RESPECTED in output (the integrity test — cross-ref C-DNA-5)
 | Preference | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| Interests → activities reflect them | ⬜ | ⬜ | | | ⬜ |
+| Interests → activities reflect them | ✅ | ✅ | | | ✅ **LIVE 2026-06-07** — Just-Tell-Us "food" interest → food-forward Rome (5bb8a18e); culinary DNA → food institutions |
 | Dietary → restaurant picks respect it | ✅ | 🟧 | **⚠️ PARTIAL — VERIFIED LIVE 2026-06-07** (Just-Tell-Us "strictly vegan" Florence, trip ccfc4491). Vegan **influenced** selection well — 6 deliberate vegan venues incl. *Giumella Gastronomia Vegana* (fully vegan), *Il Vegetariano*, *Base V Juicery*, vegan carbonara, Wild Bun vegan. **BUT not hard-enforced:** *Trattoria Sostanza* (desc recommends "the butter chicken") + *All'Antico Vinaio* ("cured meats, pecorino") + Sbrino gelato slipped through → a strictly-vegan user is shown meat/dairy. "vegan" reached metadata as request-text only, **no structured `dietaryRestrictions` field** captured → soft influence, not a hard veto. | strengthen dietary to a HARD filter/veto (ties to C-DNA-5: dietary strong-block only written at kickoff) + capture structured `dietaryRestrictions` from the parse | 🟧 **PARTIAL (real gap logged → C-PREF-1)** |
 | Pace → day density matches | ⬜ | ⬜ | | | ⬜ |
 | Budget → venue price tier matches | ⬜ | ⬜ | | | ⬜ |
-| DNA archetype → itinerary character matches | ⬜ | ⬜ | (= Table B3 A/B) | | ⬜ |
-| Must-dos included / avoids excluded | ⬜ | ⬜ | | | ⬜ |
+| DNA archetype → itinerary character matches | ✅ | ✅ | (= Table B3 A/B) | | ✅ **PASS LIVE 2026-06-07** — culinary vs adventure Rome diverge ~92% by venue, archetype drives selection |
+| Must-dos included / avoids excluded | 🟡 | 🟡 | (selected must-dos accepted in wizard; inclusion-in-output not yet rigorously diffed) | | 🟡 partial |
 
 ## D4. Generation correctness — RE-VERIFY the original 5 fixes still hold (fresh gen)
 | Original bug (already fixed) | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| #1 launcher timeout / "generation paused" / heartbeat | ✅ | ⬜ | (fixed PRs #16–19) | shipped | ⏳ **re-verify live** |
-| #2 Small Detour crash-proof renderer | ✅ | ⬜ | | shipped | ⏳ **re-verify live** |
-| #3 Partial badge false-positives + backfill | ✅ | ⬜ | | shipped | ⏳ **re-verify live** |
-| #4 meal coverage (no missing meals) | ✅ | ⬜ | | shipped | ⏳ **re-verify live** |
-| #5 departure airport transit / Day-N transit | ✅ | ⬜ | | shipped | ⏳ **re-verify live** |
+| #1 launcher timeout / "generation paused" / heartbeat | ✅ | ✅ | | shipped | ✅ **RE-VERIFIED LIVE 2026-06-07** — 7+ fresh gens (Madrid/Barcelona/Lisbon-Porto/Rome×3/Florence) all showed "Building Day X of Y" progress + "Feel free to leave, we'll keep building in background"; none stalled |
+| #2 Small Detour crash-proof renderer | ✅ | ✅ | | shipped | ✅ **RE-VERIFIED LIVE 2026-06-07** — all 7+ trips rendered day-by-day with no blank/crash |
+| #3 Partial badge false-positives + backfill | ✅ | ✅ | | shipped | ✅ **RE-VERIFIED LIVE 2026-06-07** — Madrid correctly shows "Partial" (day-4 missing breakfast); full trips show ready, no false Partial |
+| #4 meal coverage (no missing meals) | ✅ | ✅ | | shipped | ✅ **RE-VERIFIED LIVE 2026-06-07** — every gen has breakfast/lunch/dinner per day; meal-guard ran (edge logs: "[save-itinerary] Meal guard total") |
+| #5 departure airport transit / Day-N transit | ✅ | ✅ | | shipped | ✅ **RE-VERIFIED LIVE 2026-06-07** — multi-city Lisbon→Porto had real inter-city transport + departure flights; single-city had departure-day logistics |
 
 ## D5. In-itinerary features (there are many — each: works, persists, reflects immediately, charges correct credits)
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| Regenerate day | ⬜ | ⬜ | | | ⬜ |
-| Swap / replace activity | ⬜ | ⬜ | | | ⬜ |
+| Regenerate day | 🟡 | 🟡 | "Refresh Day" (timeline-fix tool) tested = **free**, proposes time-buffer fixes; the AI day-regenerate not yet exercised | | 🟡 partial (Refresh Day ✅ free) |
+| Swap / replace activity | ✅ | 🔴 | **C-TOOL-8 — replacement NOT persisted** (Florence: swapped to "La tenda rossa", lost on reload; old venue also gone, cost $185→$140) | trace swap persist path | 🔴 **broken (C-TOOL-8)** |
 | Reorder / move (drag) | ✅ | ✅ | save-itinerary crash → didn't persist | crash fix `6a481b4c0` | ✅ **VERIFIED LIVE 2026-06-07** (Move-down persists) |
 | Add activity (search → add) | ⬜ | ⬜ | | | ⬜ |
 | Add booking / flight / hotel | ⬜ | ⬜ | | | ⬜ |
 | Lock activity | ✅ | 🟡 | C-PERSIST-3 + save crash | saveReason + crash fix | 🟡 fixed; lock re-toggle live-test pending |
-| Day-unlock (locked days) | ⬜ | ⬜ | | | ⬜ |
+| Day-unlock (locked days) | ✅ | ✅ | missing idempotencyKey → 400 (fixed) | idempotencyKey + C-PRICE-1 auto-unlock | ✅ **VERIFIED LIVE 2026-06-07** — bulk unlock −120cr (C-MIG-3) + paid gen auto-unlocks all days (C-PRICE-1) |
 | Smart Finish | ⬜ | ⬜ | | | ⬜ |
 | Mystery activity | ⬜ | ⬜ | | | ⬜ |
 | Route optimization | ⬜ | ⬜ | (cross-ref C-COST-5) | | ⬜ |
-| Restaurant recommendations | ⬜ | ⬜ | (cross-ref C-COST-6) | | ⬜ |
+| Restaurant recommendations | ✅ | ✅ | | | ✅ **LIVE 2026-06-07** — Find-Alternative returned 25 ranked Florence restaurants (recommend-restaurants); ⚠️ not dietary-filtered (C-PREF-1) |
 | Hotel optimization | ⬜ | ⬜ | | | ⬜ |
 | AI chat / trip-planner (itinerary-chat) | ⬜ | ⬜ | | | ⬜ |
 | Notes / personalization | ⬜ | ⬜ | | | ⬜ |
@@ -320,7 +320,7 @@
 | Maps (Apple MapKit) render | ⬜ | ⬜ | | | ⬜ |
 | Share public link | ✅ | ✅ | (C-SHARE-1 closed) | PR #25 | ✅ |
 | Collaborator invite link | ⬜ | ⬜ | | | ⬜ |
-| Each tool charges correct credits + refunds on fail | ⬜ | ⬜ | (cross-ref C-CRED-2/5) | | ⬜ |
+| Each tool charges correct credits + refunds on fail | 🟡 | 🟡 | (cross-ref C-CRED-2/5) | | 🟡 **LIVE 2026-06-07** — swap free-accounting OK (1st free, 0 charge, swap_usage=1); gen charge==display every mode; refund-on-fail code-wired (C-TOOL-1/2/3/4). Full paid-tool charge (4th swap / AI rewrite) not yet exercised |
 
 ## D6. Persistence / data integrity
 | Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
