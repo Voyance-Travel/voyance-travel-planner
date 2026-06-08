@@ -94,9 +94,12 @@ export default function TopNav() {
   const isTransparent = location.pathname === '/' && !hasScrolled && !isMenuOpen;
 
   const handleLogout = () => {
-    logout();
     setIsUserMenuOpen(false);
-    navigate(ROUTES.HOME);
+    // Navigate to the public home FIRST (replace), so we're off any protected route
+    // before the auth-state change fires — otherwise ProtectedRoute on the current
+    // page redirects to /signin and wins the race (user lands on /signin, not /).
+    navigate(ROUTES.HOME, { replace: true });
+    logout();
   };
 
   // Get user initials for avatar

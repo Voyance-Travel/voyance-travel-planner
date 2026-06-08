@@ -13,8 +13,12 @@ export default function SignIn() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { isAuthenticated, isLoading } = useAuth();
-  const nextPath = searchParams.get('next') || '/profile';
-  const isRedirectedFromProtected = nextPath && nextPath.startsWith('/');
+  const rawNext = searchParams.get('next');
+  const nextPath = rawNext || '/profile';
+  // Only treat as a protected-route redirect when an actual ?next= is present —
+  // the default '/profile' made this always true, so the "you need to sign in to
+  // access your profile" subtitle showed on every direct /signin visit.
+  const isRedirectedFromProtected = !!rawNext;
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {

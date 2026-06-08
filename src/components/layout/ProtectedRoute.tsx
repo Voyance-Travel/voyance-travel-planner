@@ -33,7 +33,10 @@ export default function ProtectedRoute({
   if (!isAuthenticated) {
     const fullPath = location.pathname + location.search + location.hash;
     saveReturnPath(fullPath);
-    return <Navigate to={ROUTES.SIGNIN} state={{ from: fullPath }} replace />;
+    // SignIn reads the return destination from `?next=` (not router state), so pass it
+    // there too — otherwise the email/password path always falls back to /profile.
+    // `state` + saveReturnPath are kept for the OAuth/AuthCallback consumers.
+    return <Navigate to={`${ROUTES.SIGNIN}?next=${encodeURIComponent(fullPath)}`} state={{ from: fullPath }} replace />;
   }
 
   // Redirect to quiz if required and not completed
