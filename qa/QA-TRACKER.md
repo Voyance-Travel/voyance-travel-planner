@@ -9,6 +9,14 @@
 ## ⬜ WHAT'S LEFT — ~10% open, **ALL owner-side** (everything else below is ✅ verified)
 *Updated 2026-06-08. **Top = not-yet-truly-checked.** Product QA = **~90% done**. Every item I can do without you is now closed (see the ✅ list below); the only open work needs your accounts/incognito/Stripe/infra.*
 
+### ✅ Auth LIVE pass — owner ran it 2026-06-08 (incognito)
+- ✅ Signup + verify-email screen · ✅ Google OAuth (key set) · ✅ Forgot-password send · ✅ session persistence
+- ❌→✅ **C-AUTH-1 deep-link return** FIXED (`114d46265`) — ProtectedRoute sent `state.from` but SignIn read `?next=`; now appends `?next=`
+- ⚠️→✅ **C-AUTH-2 logout dest** FIXED — landed on /signin (protected-route race); now navigate('/' replace) before logout
+- ⚠️→✅ **C-AUTH-3 stale subtitle** FIXED — "access your profile" showed on every visit; now only on a real `?next=`
+- 🔴 **C-AUTH-4 Apple OAuth NOT enabled** — owner: add Apple Services ID + private key in Supabase → Auth → Providers → Apple
+- 🟡 **C-AUTH-5 requireQuiz unused** — the guard works but **no route passes `requireQuiz={true}`** → never fires. **Product decision (owner): which routes should gate on quiz completion?** (gating /start would force everyone to quiz before building — a funnel/conversion call, so not changed unilaterally)
+
 ### 🔴 Needs the owner (blocked without your action)
 - [~] **Auth flows (Table E)** — ✅ **CODE-AUDIT DONE 2026-06-08** (all flows wired correctly; session-persistence also LIVE-confirmed). Remaining = **owner LIVE pass in incognito** (the credential actions I'm barred from): sign up · sign in · OAuth consent (+ set Google/Apple keys in Supabase) · click email-verify · click reset-email + set pw · logout · fresh-account quiz-gate redirect. *Return-path & callback are robust in code.*
 - [ ] **User-type matrix (Table E)** — anonymous/guest · free · paid · Voyance Club · admin journeys *(needs the accounts)*
