@@ -25,7 +25,7 @@ export const keyStats = [
 ];
 
 export const platformCapabilities = [
-  'Unique itineraries shaped by 27 distinct Travel DNA archetypes',
+  'Unique itineraries shaped by 29 distinct Travel DNA archetypes',
   'Multi-factor personalization using 50+ preference signals',
   'Day-by-day activity scheduling with time-optimized routing',
   'Real-time flight search and manual hotel integration',

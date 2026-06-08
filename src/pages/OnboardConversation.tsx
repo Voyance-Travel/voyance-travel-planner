@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
 // recalculateArchetype removed — see note in handleSave (was clobbering authoritative secondary)
 
@@ -216,6 +217,40 @@ export default function OnboardConversation() {
           console.error('[OnboardConversation] save_onboarding_dna returned failure', data);
           toast.error(`Save failed: ${result?.error || 'unknown error'}. Please try again.`);
           return;
+        }
+
+        // Refresh the denormalized `profiles.travel_dna` blob so AuthContext + profile
+        // views reflect the NEW archetype immediately. The RPC writes the canonical
+        // `travel_dna_profiles` table (+ quiz_completed) but NOT this cached blob — without
+        // this, a free-text DNA switch left the profile header / AuthContext showing the OLD
+        // archetype until re-login. Mirrors the structured-quiz path (quizMapping.ts:1069).
+        // Non-fatal: the canonical write already succeeded.
+        try {
+          const secondaryName =
+            analysis.secondaryArchetype?.name &&
+            analysis.secondaryArchetype.name !== analysis.primaryArchetype.name
+              ? analysis.secondaryArchetype.name
+              : null;
+          const travelDnaJson = {
+            primary_archetype_name: analysis.primaryArchetype.name,
+            secondary_archetype_name: secondaryName,
+            dna_confidence_score: Math.round(analysis.confidence),
+            dna_rarity: null,
+            trait_scores: traitScores,
+            tone_tags: [],
+            emotional_drivers: [],
+            perfect_trip_preview: null,
+            summary: analysis.reasoning || null,
+          };
+          const { error: blobError } = await supabase
+            .from('profiles')
+            .update({ travel_dna: travelDnaJson as unknown as Json })
+            .eq('id', user.id);
+          if (blobError) {
+            console.warn('[OnboardConversation] travel_dna blob refresh failed (non-fatal):', blobError.message);
+          }
+        } catch (blobErr) {
+          console.warn('[OnboardConversation] travel_dna blob refresh threw (non-fatal):', blobErr);
         }
 
         // NOTE: Auto-recalc via TS matchArchetypes removed — the save_onboarding_dna
