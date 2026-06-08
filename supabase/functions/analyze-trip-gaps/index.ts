@@ -62,14 +62,19 @@ serve(async (req) => {
       }
     }
 
-    // 2. Load user's Travel DNA
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("travel_dna, travel_dna_overrides")
-      .eq("id", user.id)
-      .single();
+    // 2. Load user's Travel DNA — prefer the canonical travel_dna_profiles table (always
+    // current) over the denormalized profiles.travel_dna blob. The free-text "This is Me!"
+    // DNA switch updates the TABLE but not the BLOB, so the blob can go STALE — reading it
+    // made Smart Finish enrich against the user's OLD archetype after a DNA switch.
+    const [{ data: profile }, { data: dnaRow }] = await Promise.all([
+      supabase.from("profiles").select("travel_dna, travel_dna_overrides").eq("id", user.id).single(),
+      supabase.from("travel_dna_profiles")
+        .select("primary_archetype_name, secondary_archetype_name, trait_scores")
+        .eq("user_id", user.id).maybeSingle(),
+    ]);
 
-    const dna = profile?.travel_dna as any;
+    // Canonical table first; fall back to the blob only if the table row is missing.
+    const dna = (dnaRow ?? profile?.travel_dna) as any;
     const itinerary = trip.itinerary_data as any;
 
     if (!itinerary?.days || !dna) {
