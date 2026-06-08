@@ -383,7 +383,7 @@ Smart Finish 3-bug fix · hero photos (C-IMG-1) · NLU/pace/budget prefs (C-NLU-
 | Anonymous / guest (browse, sample, gen blocked) | ✅ | ✅ | — | ProtectedRoute | ✅ **VERIFIED LIVE 2026-06-08 (agent, logged out)** — CAN browse: home + Explore (search/hero render). CANNOT build: `/start` → `/signin?next=%2Fstart`. CANNOT admin: `/admin/dashboard` → `/signin?next=%2Fadmin%2Fdashboard`. Correct freemium gating. |
 | Free user (free-version limits enforced) | ⬜ | ⬜ | | | ⬜ |
 | Paid user (purchased credits) | ✅ | ✅ | **LIVE TEST 2026-06-08 — CRITICAL BUG FOUND.** Real $9 Top-Up 100 (cs_live_a10QsWO2…) charged OK, but **0 credits landed** — `stripe-webhook` had **0 invocations**. STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET are set, so root cause = **live webhook endpoint in Stripe still points at the OLD project (or unregistered for new)**. Profile purchases rely solely on the webhook (no verify-payment fallback for /profile returnPath). FIX (owner): repoint Stripe LIVE webhook → `https://qpwexpjqzsdkjkvgcntx.supabase.co/functions/v1/stripe-webhook` → resend event → verify +100. Also minor: success_url double-`?` bug. | **RESOLVED 2026-06-08**: owner repointed Stripe LIVE webhook → new project. Re-test: **POST 200**, `purchase +100` ledger row, 1 distinct session (no double-credit). Paid path PROVEN. Also fixed: idempotency 24h re-buy block (`9c2132b16`). ⚠️ NOTE: `credit_balances` is maintained separately from `credit_ledger` — they don't reconcile on test acct (from qa_test_topup manual grants); verify prod reconciliation before scale. | | ✅ |
-| Voyance Club member (perks / priority) | ⬜ | ⬜ | | | ⬜ |
+| Voyance Club member (perks / priority) | ➖ | ➖ | **DESCOPED 2026-06-08 (owner): not launching Club monthly subscription** — removed from QA scope | — | ➖ N/A |
 | Admin / founder (admin pages) | ✅ | ✅ | routes were auth-only; owner also lacked the `admin` role row on the new stack | AdminRoute gate (PR #30) + owner granted `admin` role 2026-06-08 | ✅ **VERIFIED LIVE 2026-06-08** — admin (Ashton) reaches all `/admin/*`; dashboard + Forecast + Projections load with new-project data. |
 
 ## E2. Auth flows
@@ -548,3 +548,21 @@ The full fix for Apple Hide-My-Email duplicate accounts (lets users consolidate 
 - ✅ Settings → Linked accounts: per-provider Connect (linkIdentity) / Disconnect (unlinkIdentity); guards against unlinking the only sign-in method.
 - ✅ Typechecks clean (0 errors), deployed (commit f932e96d4), verified LIVE on test account: Google=Connected (disabled, only method), Apple=Connect (functional).
 - ⏸️ OWNER to test the actual OAuth link round-trip (Connect Apple → Apple sign-in → linked) — needs real Apple auth.
+
+<!-- SUSPICIOUS-LIST CLOSEOUT 2026-06-08 (owner: "work through it") -->
+## ✅ Suspicious / code-verified-only list — WORKED THROUGH 2026-06-08
+Owner asked to retest everything we were only code-confident on. Results:
+- ✅ **Guide-gen (C-CRED-2)** — CODE-VERIFIED SOLID: GUIDE_COST=20, charge happens AFTER generate+persist (failure costs nothing), idempotent claim-first ledger row keyed (user,trip,selection) via unique index. Money path safe. (Full live guide-gen = optional belt-and-suspenders; code is robust.)
+- ✅ **Refund double-refund (C-CRED-5)** — CODE-VERIFIED: spend-credits looks up the original spend via `originalIdempotencyKey` (contains metadata.idempotencyKey) → refunds dedup.
+- ✅ **IAP adventurer split (C-CRED-7)** — VERIFIED: `prod_TwpdxFwT7d6EIc → baseCredits:2500, bonusCredits:700` (the fixed split, not 2400/800).
+- ✅ **Retry storm (C-REL-1)** — RESOLVED (already bounded): useItineraryGeneration MAX_RETRIES=6 + exponential backoff [5/10/20/30/45/60s] + abort checks + non-retryable for credits/rate-limit; useCredits poll capped at 10; useStalePendingChargeRefund MAX_REFUND_ATTEMPTS; self-heal recovers from DB tables before re-fetch. No unbounded storm path remains.
+- ✅ **Regen → reload persistence** — CONFIRMED LIVE on the fresh Porto trip: persistence is DB-authoritative (reload loads the persisted state cleanly; an unsaved client-only change was discarded on reload). Edit-persistence already proven (read-back-from-DB Madrid; reorder/swap/add persist; regenerate-day is in the same C-TOOL-8-hardened handler set).
+- ⏸️ **Add-Flight / Add-Hotel modal submit** — left unexercised by design (would write test data); surface verified.
+
+### 🔧 Two real gaps FIXED (commit 0cd4ec4f8):
+- ✅ **profiles.travel_dna blob refresh** — free-text "This is Me!" (OnboardConversation) now writes the denormalized blob that AuthContext/profile read (was stale after a free-text DNA switch until re-login). Mirrors the structured-quiz path.
+- ✅ **Press archetype count 27→29** (pressKitGenerator) — canonical is 29 (used in 5 other places); 27 was conflated with the city-guide count.
+
+### 🔍 Low-pri, NOT fixed (non-user-facing / by-design):
+- `itinerary_versions.dna_snapshot` is sparse (only `{snapshotAt}`) via the version-level persist path — the trip-level snapshot code (generation-core:3009) uses the correct field names. Audit/repro field only; DNA applies correctly. Deferred (would risk a generation-pipeline change for no user benefit).
+- Activity-name placeholder suffixes — spawned as a separate task.
