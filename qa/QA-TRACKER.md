@@ -515,3 +515,12 @@ Smart Finish 3-bug fix · hero photos (C-IMG-1) · NLU/pace/budget prefs (C-NLU-
 - **Awaiting verify (fix shipped):** DNA accuracy (PR #24/#35 — needs calculate-travel-dna deploy + re-quiz), admin cost dashboard (PR #21), credit batch (#34).
 - **Biggest NEW risks surfaced:** ~~C-PERSIST-1/2 (in-itinerary edits silently don't persist — CRIT)~~ ✅✅ **RESOLVED 2026-06-07** — root cause was a save-itinerary crash (`ReferenceError: day`) breaking EVERY editorial save; fixed + verified (edits persist, read back from DB). ~~cost-doubling~~ ✅ **RESOLVED** (DB trigger wrote group-total into per-person amount; fixed + data repaired). Still open: C-EXPLORE-1 (archetype pages mislabeled — CRIT), C-DNA-4 (A/B differentiation flattened — HIGH), C-CRED-4 ✅ DONE (server undercharge — verified −210 paid charge), C-REFERRAL-1 (referral pays nobody).
 - **Still owed:** in-itinerary-tools audit (1 agent running); Live testing of all the above (auth first per owner); Google bleed + DNA-A/B fixes before the A/B test.
+
+<!-- AUTONOMOUS-FIXES 2026-06-08 (owner stepped away) -->
+## 🔨 Autonomous fixes 2026-06-08 (while owner away)
+- ✅ **Credit balance reconciliation FIXED (the big one)** — `credit_balances` is a cache of `credit_purchases` (source of truth); it could drift (right total, wrong purchased/free split — found live, 1/3 users). Added DB trigger `trg_sync_credit_balance` → recomputes cache from credit_purchases on every change (can't drift). Ran `reconcile_credit_balances()` → corrected 1 drifted user. Migration `20260608210000`. Applied to prod.
+- ✅ **Refund clawback AUDITED — well-built, not a bug** — `charge.refunded` zeros unspent credit_purchases for the session, idempotent, forgives already-spent. Fires now that webhook is repointed. Live confirm = owner refunds $9.
+- ✅ **Cosmetic:** 'Days 3-3'→'Day 3' (TripCostEstimate); embedded-checkout return_url double-? fixed + deployed (`972046162`).
+- 🔍 **Linked-Accounts label** — Settings.tsx hardcodes 'Google' (Apple removed from UI before re-enable). Needs provider-detection. PROPOSED.
+- 🔍 **Apple Hide-My-Email dup accounts** — needs design decision (auto-link vs detect-warn). PROPOSED.
+- ⏸️ Queued (owner): Club monthly purchase · new test-acct full-chain journey (agent barred from creating/deleting accounts) · $9 refund→clawback live verify.
