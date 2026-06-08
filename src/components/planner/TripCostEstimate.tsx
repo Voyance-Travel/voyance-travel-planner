@@ -46,7 +46,7 @@ export function TripCostEstimate({ tripDays, cities = ['single'], className }: T
         <p className="text-xs text-muted-foreground pl-6">
           No credits charged for generation. Days 1–2 are fully unlocked.{' '}
           {tripDays > 2
-            ? `Days 3-${tripDays} can be unlocked later with credits (${BASE_RATE_PER_DAY} credits/day).`
+            ? `${tripDays === 3 ? 'Day 3' : `Days 3-${tripDays}`} can be unlocked later with credits (${BASE_RATE_PER_DAY} credits/day).`
             : ''}
         </p>
       </div>

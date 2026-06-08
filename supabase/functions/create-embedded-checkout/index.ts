@@ -153,7 +153,9 @@ serve(async (req) => {
       line_items: [{ price: priceId, quantity: 1 }],
       mode: mode as "subscription" | "payment",
       ui_mode: "embedded",
-      return_url: `${origin}${returnPath}?session_id={CHECKOUT_SESSION_ID}&payment=success`,
+      // Use & if returnPath already has a query string (e.g. "/profile?payment=success"),
+      // otherwise ? — avoids the malformed "...?payment=success?session_id=..." double-?.
+      return_url: `${origin}${returnPath}${returnPath.includes('?') ? '&' : '?'}session_id={CHECKOUT_SESSION_ID}&payment=success`,
       metadata: sessionMetadata,
     }, { idempotencyKey });
 
