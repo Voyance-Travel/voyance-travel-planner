@@ -2820,6 +2820,7 @@ export function EditorialItinerary({
       return { ...day, activities: cascade.activities as any };
     }));
     setHasChanges(true);
+    schedulePersist();
     // Clear refresh results for this day
     const dayNum = days[dayIndex]?.dayNumber;
     if (dayNum) {
@@ -3010,6 +3011,21 @@ export function EditorialItinerary({
       console.warn('[AI note] immediate persist failed; autosave will retry', e);
     }
   }, [tripId, optionSelections, parsedMetadata]);
+
+  // C-TOOL-8 HARDENING: editor mutations historically only called
+  // setHasChanges(true) and relied on the 3s autosave debounce, which is flaky
+  // (guarded by editability; the timer is reset by background-enrichment setDays).
+  // That silently dropped swaps/edits on a fast reload. Reorder + swap were fixed
+  // to call persistDaysImmediately directly; the remaining day-mutating handlers
+  // call schedulePersist() instead — this effect writes the freshly-committed
+  // `days` straight to save-itinerary as soon as a mutation requests it.
+  const persistRequestRef = useRef(false);
+  const schedulePersist = useCallback(() => { persistRequestRef.current = true; }, []);
+  useEffect(() => {
+    if (!persistRequestRef.current) return;
+    persistRequestRef.current = false;
+    void persistDaysImmediately(days);
+  }, [days, persistDaysImmediately]);
 
   const handleSaveAINote = useCallback(async (activityId: string, note: AISavedNote) => {
     let nextDays: EditorialDay[] = [];
@@ -3290,6 +3306,7 @@ export function EditorialItinerary({
         return d;
       }));
       setHasChanges(true);
+      schedulePersist();
     });
   }, [unlockDay, tripId, days.length, destination, destinationCountry, travelers, startDate, budgetTier, tripType]);
 
@@ -4898,6 +4915,7 @@ export function EditorialItinerary({
             };
           }));
           setHasChanges(true);
+          schedulePersist();
           setNeedsOptimization(false);
 
           const parts: string[] = [];
@@ -4956,8 +4974,9 @@ export function EditorialItinerary({
       };
     }));
     setHasChanges(true);
+    schedulePersist();
     toast.success(newLockedState ? 'Activity locked' : 'Activity unlocked');
-    
+
     // Persist lock state directly to itinerary_activities table
     if (tripId) {
       try {
@@ -5263,9 +5282,10 @@ export function EditorialItinerary({
       return updated;
     });
     setHasChanges(true);
+    schedulePersist();
     setNeedsOptimization(true);
     toast.success(`Moved to Day ${toDayIndex + 1}`);
-  }, [syncBudgetFromDays]);
+  }, [syncBudgetFromDays, schedulePersist]);
 
   // Copy/duplicate activity to a different day
   const handleCopyToDay = useCallback((fromDayIndex: number, activityId: string, toDayIndex: number) => {
@@ -5316,8 +5336,9 @@ export function EditorialItinerary({
       return updated;
     });
     setHasChanges(true);
+    schedulePersist();
     toast.success(`Copied to Day ${toDayIndex + 1}`);
-  }, [syncBudgetFromDays]);
+  }, [syncBudgetFromDays, schedulePersist]);
 
   const handleActivityRemove = useCallback((dayIndex: number, activityId: string) => {
     const activity = days[dayIndex]?.activities.find(a => a.id === activityId);
@@ -5356,9 +5377,10 @@ export function EditorialItinerary({
       setRefreshResults(prev => { const next = { ...prev }; delete next[dayNum]; return next; });
     }
     setHasChanges(true);
+    schedulePersist();
     setNeedsOptimization(true);
     toast.success('Activity removed');
-  }, [pendingRemove, syncBudgetFromDays, days, tripId]);
+  }, [pendingRemove, syncBudgetFromDays, days, tripId, schedulePersist]);
 
   // Check if user can regenerate (has enough credits)
   const canRegenerate = useCallback(() => {
@@ -5525,6 +5547,7 @@ export function EditorialItinerary({
           newDay.theme = day.theme;
           setDays(prev => prev.map((d, idx) => idx === dayIndex ? newDay : d));
           setHasChanges(true);
+          schedulePersist();
           toast.success(`Day ${day.dayNumber} regenerated!`);
         }
       } else {
@@ -5605,6 +5628,7 @@ export function EditorialItinerary({
 
           setDays(prev => prev.map((d, idx) => idx === dayIndex ? data.day : d));
           setHasChanges(true);
+          schedulePersist();
           if (guidedPreferences) {
             toast.success(`Day ${day.dayNumber} regenerated with your preferences!`);
           } else {
@@ -5703,7 +5727,8 @@ export function EditorialItinerary({
       };
     }));
     setHasChanges(true);
-  }, []);
+    schedulePersist();
+  }, [schedulePersist]);
 
   const handleAddActivity = useCallback(async (dayIndex: number, activity: Partial<EditorialActivity>) => {
     // C-TOOL-4: captured so an overflow-cascade CANCEL can refund this charge.
@@ -5792,10 +5817,11 @@ export function EditorialItinerary({
       setRefreshResults(prev => { const next = { ...prev }; delete next[dayNum]; return next; });
     }
     setHasChanges(true);
+    schedulePersist();
     setNeedsOptimization(true);
     setAddActivityModal(null);
     toast.success('Activity added!');
-  }, [tripCurrency, spendCredits, tripId, days, syncBudgetFromDays]);
+  }, [tripCurrency, spendCredits, tripId, days, syncBudgetFromDays, schedulePersist]);
 
   // Listen for accepted dead-gap suggestions and commit them via handleAddActivity
   useEffect(() => {
@@ -5862,6 +5888,7 @@ export function EditorialItinerary({
       return updated;
     });
     setHasChanges(true);
+    schedulePersist();
     setImportModal(null);
     refreshUndoState();
     const totalImported = imports.reduce((sum, i) => sum + i.activities.length, 0);
@@ -6046,9 +6073,11 @@ export function EditorialItinerary({
     // Sync activity_costs + dispatch booking-changed so header total, Budget tab,
     // and Payments tab refresh immediately (mirrors swap / generated-days paths).
     syncBudgetFromDays(nextDays);
+    // C-TOOL-8: persist the edit immediately (don't rely on the flaky autosave).
+    void persistDaysImmediately(nextDays);
     setEditActivityModal(null);
     toast.success('Activity updated');
-  }, [syncBudgetFromDays]);
+  }, [syncBudgetFromDays, persistDaysImmediately]);
 
    // Reset share state when tripId changes — prevents stale links
    useEffect(() => {
