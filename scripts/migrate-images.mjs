@@ -28,6 +28,7 @@ const OLD_HOST = 'jsxplunjjvxuejeouwob.supabase.co';
 const NEW_HOST = 'qpwexpjqzsdkjkvgcntx.supabase.co';
 const NEW_URL  = `https://${NEW_HOST}`;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const DRY_RUN = process.argv.includes('--dry-run');
 if (!KEY) {
   console.error('❌ Set SUPABASE_SERVICE_ROLE_KEY (new project service_role secret).');
   process.exit(1);
@@ -70,6 +71,7 @@ async function migrateOne(table, col, id, oldUrl) {
   // already there?
   let exists = false;
   try { exists = (await fetch(newUrl, { method: 'HEAD' })).ok; } catch {}
+  if (DRY_RUN) return { id, status: exists ? 'dry-repoint' : 'dry-copy', bucket: p.bucket };
   if (!exists) {
     let r;
     try { r = await fetch(oldUrl); } catch (e) { return { id, status: `fetch-err:${e.message}`, oldUrl }; }
@@ -100,8 +102,8 @@ async function migrateTarget({ table, col }) {
       const res = await Promise.all(batch.map(r => migrateOne(table, col, r.id, r[col])));
       for (const x of res) {
         done++;
-        if (x.status === 'copied') copied++;
-        else if (x.status === 'repointed') repoint++;
+        if (x.status === 'copied' || x.status === 'dry-copy') copied++;
+        else if (x.status === 'repointed' || x.status === 'dry-repoint') repoint++;
         else failures.push({ table, col, ...x });
       }
       if (done % 200 === 0) console.log(`  ${done} processed (copied ${copied}, repointed ${repoint}, failed ${failures.length})`);
@@ -111,7 +113,7 @@ async function migrateTarget({ table, col }) {
 }
 
 (async () => {
-  console.log(`Porting images  ${OLD_HOST}  →  ${NEW_HOST}\n`);
+  console.log(`Porting images  ${OLD_HOST}  →  ${NEW_HOST}  ${DRY_RUN ? '[🔍 DRY RUN — no changes]' : '[🚀 LIVE]'}\n`);
   for (const t of TARGETS) await migrateTarget(t);
   if (failures.length) {
     fs.writeFileSync('migrate-images-failures.json', JSON.stringify(failures, null, 2));
