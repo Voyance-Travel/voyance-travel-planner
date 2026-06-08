@@ -93,13 +93,17 @@ export default function TopNav() {
   // Determine if nav should be transparent (only on home page, not scrolled)
   const isTransparent = location.pathname === '/' && !hasScrolled && !isMenuOpen;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsUserMenuOpen(false);
-    // Navigate to the public home FIRST (replace), so we're off any protected route
-    // before the auth-state change fires — otherwise ProtectedRoute on the current
-    // page redirects to /signin and wins the race (user lands on /signin, not /).
-    navigate(ROUTES.HOME, { replace: true });
-    logout();
+    // Clear the session, then HARD-navigate to the public home. A full page load
+    // sidesteps every SPA redirect race during the auth-state change — both
+    // ProtectedRoute (→ /signin) and the journey/onboarding nudge for a no-DNA user
+    // (→ /quiz). The user reliably lands on the public home page.
+    try {
+      await logout();
+    } finally {
+      window.location.assign(ROUTES.HOME);
+    }
   };
 
   // Get user initials for avatar
