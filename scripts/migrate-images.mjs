@@ -36,7 +36,8 @@ if (!KEY) {
 
 const sb = createClient(NEW_URL, KEY, { auth: { persistSession: false } });
 
-const CONCURRENCY = 6;          // parallel transfers per page
+const CONCURRENCY = 2;          // gentle — old Lovable rate-limits under heavier load
+const BATCH_PAUSE_MS = 150;     // small breather between batches to avoid throttling
 const PAGE = 500;               // rows per DB page (cursor-paginated by id)
 const ensured = new Set();      // buckets we've confirmed/created
 const failures = [];
@@ -113,6 +114,7 @@ async function migrateTarget({ table, col }) {
         else failures.push({ table, col, ...x });
       }
       if (done % 200 === 0) console.log(`  ${done} processed (copied ${copied}, repointed ${repoint}, failed ${failures.length})`);
+      await new Promise(r => setTimeout(r, BATCH_PAUSE_MS));
     }
   }
   console.log(`  ✓ ${table}.${col}: copied ${copied}, repointed ${repoint}, failed-so-far ${failures.length}`);
