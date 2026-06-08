@@ -19,7 +19,7 @@
 - [ ] **Infra:** pg_cron 2 HTTP jobs (service-role SQL) + final `travelwithvoyance.com` → Vercel cutover
 
 ### 🟡 I can still do (no owner needed)
-- [ ] **Dining-ratio output** — re-test culinary food-density after the C-DINING-1 deploy (just shipped)
+- [x] ~~**Dining-ratio output**~~ — **TESTED + RESOLVED 2026-06-08 (C-DINING-1).** Shipped a culinary "DINING DENSITY" prompt rule + deployed → live re-test (culinary DNA via "This is Me!" → fresh Rome gen c8d940ee): **new culinary 36% food vs old culinary 38% — prompt rule did NOT move the ratio.** Root: archetype drives *venue selection within slots*, not *slot allocation*, so the day-template caps food density; a prompt can't force 50%. **Differentiation still holds** (culinary 36% > adventure 24% = +12pt) and the real signal (92% venue divergence) passes. **Decision: won't chase a risky day-template rewrite for a weak sub-metric.** *(Owner test DNA now = Culinary Cartographer.)*
 - [ ] **D2 resume-incomplete-draft** · **D3 must-dos inclusion diff** (rigorous)
 - [ ] **D5 Route-optimization live-click** · **Hotel-optimization** surface
 - [ ] **C-DNA latent refinements** (C-DNA-2b/2/3/5 — matcher single-source-of-truth + prefs injection into compile-prompt)
