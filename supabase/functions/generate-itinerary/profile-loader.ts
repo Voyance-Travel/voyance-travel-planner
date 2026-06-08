@@ -357,10 +357,24 @@ export async function loadTravelerProfile(
     }
   }
   
+  // C-PACE-1: a PER-TRIP pacing preference ("relaxed"/"packed") overrides the DNA
+  // pace trait so it actually drives day density. Previously buildPacingRules() only
+  // saw the archetype's trait_scores.pace, so a user asking for a "relaxed/slow pace"
+  // got the same density as default. Map the trip's metadata.pacing → an extreme pace
+  // value that flows into all pacing logic (buildPacingRules / buildUnscheduledTimeRules).
+  const tripPacing = String((tripData?.metadata as any)?.pacing || '').toLowerCase().trim();
+  if (tripPacing === 'relaxed' || tripPacing === 'slow') {
+    traitScores.pace = -6;
+    console.log('[profile-loader] C-PACE-1: per-trip relaxed pacing → pace=-6 (fewer activities/day)');
+  } else if (tripPacing === 'packed' || tripPacing === 'fast') {
+    traitScores.pace = 6;
+    console.log('[profile-loader] C-PACE-1: per-trip packed pacing → pace=6 (more activities/day)');
+  }
+
   // =========================================================================
   // STEP 6: Extract Preferences
   // =========================================================================
-  
+
   const interests = extractInterests(travelDNA, tripData, userPrefs, archetypeContext);
   const dietaryRestrictions = extractDietaryRestrictions(travelDNA, tripData, userPrefs);
   const avoidList = extractAvoidList(travelDNA, archetypeContext);

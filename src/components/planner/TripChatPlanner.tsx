@@ -63,6 +63,8 @@ export interface TripDetails {
   interestCategories?: string[];
   /** Dietary restrictions / allergies captured from conversation (C-PREF-1) */
   dietaryRestrictions?: string[];
+  /** Qualitative budget tier captured from conversation (C-BUDGET-1) */
+  budgetLevel?: 'budget' | 'mid-range' | 'luxury';
   /** Day number of a special celebration (birthday, anniversary, etc.) */
   celebrationDay?: number;
   /** Per-day activity structure for preserving user's day-by-day plans */

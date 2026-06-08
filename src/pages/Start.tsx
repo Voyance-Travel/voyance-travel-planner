@@ -2853,6 +2853,14 @@ export default function Start() {
                       setIsSubmitting(true);
                       try {
                         const chatBudget = details.budgetAmount || budgetAmount;
+                        // C-BUDGET-1: prefer numeric budget → tier; else fall back to the
+                        // qualitative budgetLevel the NLU captured ("budget-friendly"/"luxury").
+                        const chatBudgetTier =
+                          (chatBudget ? (chatBudget < 750 ? 'budget' : chatBudget < 2000 ? 'moderate' : chatBudget < 4000 ? 'premium' : 'luxury') : null)
+                          || (details.budgetLevel === 'budget' ? 'budget'
+                            : details.budgetLevel === 'luxury' ? 'luxury'
+                            : details.budgetLevel === 'mid-range' ? 'moderate'
+                            : null);
                         const chatTripType = details.tripType || tripType;
                         const chatTravelers = details.travelers || travelers;
                         // Use shared city normalization (single source of truth)
@@ -2933,7 +2941,7 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                             end_date: format(chatEndDate, 'yyyy-MM-dd'),
                             travelers: chatTravelers,
                             trip_type: chatTripType,
-                            budget_tier: chatBudget ? (chatBudget < 750 ? 'budget' : chatBudget < 2000 ? 'moderate' : chatBudget < 4000 ? 'premium' : 'luxury') : null,
+                            budget_tier: chatBudgetTier,
                             budget_total_cents: chatBudget ? chatBudget * 100 : null,
                             hotel_selection: hotelSelection,
                             flight_selection: flightSelection,

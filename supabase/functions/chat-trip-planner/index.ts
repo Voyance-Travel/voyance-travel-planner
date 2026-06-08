@@ -133,6 +133,7 @@ MULTI-CITY DETECTION — CRITICAL (FAILURE TO FOLLOW = BROKEN TRIP):
   - "London and Paris"
   - "3 days in Rome then 4 days in Barcelona"
   - Any mention of 2+ city names = multi-city
+- ⚠️ CITIES ARE REAL GEOGRAPHIC PLACES ONLY (C-NLU-1). NEVER promote a preference, budget, pace, food, or activity phrase to a city. "cheap eats", "free attractions", "keep costs low", "fine dining", "street food", "relaxed pace", "slow pace", "nightlife", "the beach", "museums", "good food" are NOT cities — they are preferences that belong in interestCategories / budgetLevel / pacing / additionalNotes. A single destination followed by a comma-separated list of descriptive phrases (e.g. "a relaxed trip to Seville. Slow pace, cheap eats, free attractions, keep costs low") is ONE city (Seville) + preferences — it is NOT a multi-city route. Only put a token in cities[] if it is an actual place name you recognize as a real city/town. When unsure whether a token is a place or a preference, treat it as a preference, never a city.
 - For multi-city trips, you MUST ALWAYS populate the "cities" array. This is NON-NEGOTIABLE. If cities[] is empty, the system will only create a trip for one city and DROP all other cities entirely.
 - The "destination" field should be a comma-separated summary: "London, Paris" or "Hong Kong, Shanghai, Beijing, Tokyo".
 - NEVER put the route in additionalNotes instead of cities[]. The cities array is the ONLY field the system reads for multi-city routing.
@@ -414,6 +415,12 @@ serve(async (req) => {
                       type: "number",
                       description:
                         "Total budget in USD if mentioned",
+                    },
+                    budgetLevel: {
+                      type: "string",
+                      enum: ["budget", "mid-range", "luxury"],
+                      description:
+                        "Qualitative budget tier (C-BUDGET-1). Map the user's spending intent: 'budget-friendly'/'cheap'/'keep costs low'/'backpacking'/'free attractions'/'shoestring' → 'budget'; 'luxury'/'splurge'/'high-end'/'five-star'/'no expense spared'/'fine dining' → 'luxury'; otherwise 'mid-range'. Only set if the user expressed a clear spending intent.",
                     },
                     hotelName: {
                       type: "string",
