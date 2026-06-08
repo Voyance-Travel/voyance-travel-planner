@@ -228,7 +228,7 @@ Smart Finish 3-bug fix · hero photos (C-IMG-1) · NLU/pace/budget prefs (C-NLU-
 | Feature | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
 | **Entire area** — login, signup, session, logout, password reset, OAuth | ✅ | 🟢 | (old stack: auth-lock aborted Google OAuth) | native Supabase OAuth (cloud-auth removed) + SPA `/auth/callback` fix | 🟢 **Google OAuth login VERIFIED LIVE end-to-end** (sign-in → callback → session ✅). Still ⬜ to close A9: email signup · password-reset · logout-click |
-| Security posture (RLS, exposed keys, auth gating on edge fns) | ✅ | 🟧 | — | fleet audit: auth **STRONG**; this session hardened CRIT-1 (Stripe), admin-gate, C-FRIEND/C-ADMIN-2 RLS, claim-referral anti-abuse | 🟧 code-audit strong + multiple RLS/auth fixes shipped+deployed; full pen-style live test = owner |
+| Security posture (RLS, exposed keys, auth gating on edge fns) | ✅ | ✅ | — | fleet audit + this session's RLS/auth/Stripe/admin-gate fixes | ✅✅ **LIVE-PROBED 2026-06-08 (agent, technical half — no owner needed):** RLS denies anon reads (trips/profiles/credits/dna/roles); edge fns 401 without auth; **zero secrets leaked in the bundle**; admin + build routes gated. **STRONG.** Remaining = the human-side pen-test (payment fraud / social-eng / real-cred takeover) = owner. ⚠️ **Dev-env hygiene note:** local `.env` `VITE_SUPABASE_PROJECT_ID/URL` still point at the OLD project (`jsxpl…`) — prod/Vercel env is correct, but fix the local `.env` so local runs don't hit old Lovable. |
 
 ---
 
@@ -377,7 +377,7 @@ Smart Finish 3-bug fix · hero photos (C-IMG-1) · NLU/pace/budget prefs (C-NLU-
 ## E1. User-type matrix (what each can do / what's gated)
 | User type | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| Anonymous / guest (browse, sample, gen blocked) | ⬜ | ⬜ | | | ⬜ |
+| Anonymous / guest (browse, sample, gen blocked) | ✅ | ✅ | — | ProtectedRoute | ✅ **VERIFIED LIVE 2026-06-08 (agent, logged out)** — CAN browse: home + Explore (search/hero render). CANNOT build: `/start` → `/signin?next=%2Fstart`. CANNOT admin: `/admin/dashboard` → `/signin?next=%2Fadmin%2Fdashboard`. Correct freemium gating. |
 | Free user (free-version limits enforced) | ⬜ | ⬜ | | | ⬜ |
 | Paid user (purchased credits) | ⬜ | ⬜ | | | ⬜ |
 | Voyance Club member (perks / priority) | ⬜ | ⬜ | | | ⬜ |
@@ -407,9 +407,9 @@ Smart Finish 3-bug fix · hero photos (C-IMG-1) · NLU/pace/budget prefs (C-NLU-
 ## E4. Security posture
 | Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| RLS on key tables (trips, credits, dna, user_roles) | ⬜ | ⬜ | | | ⬜ |
-| Edge functions auth-gated | ⬜ | ⬜ | | | ⬜ |
-| No exposed secrets in bundle (beyond known Maps key) | ⬜ | ⬜ | (cross-ref C-COST-4) | | ⬜ |
+| RLS on key tables (trips, credits, dna, user_roles) | ✅ | ✅ | — | RLS policies | ✅✅ **LIVE-PROBED 2026-06-08 (agent, anon key, no user JWT)** — `trips`/`credit_balances`/`travel_dna_profiles`/`user_roles` all return **empty `[]`**; `profiles` is **permission-denied (42501)**. No data leaks to anonymous. |
+| Edge functions auth-gated | ✅ | ✅ | — | require-auth | ✅✅ **LIVE-PROBED 2026-06-08** — `generate-itinerary` / `spend-credits` / `analyze-trip-gaps` all return **HTTP 401** with no auth. |
+| No exposed secrets in bundle (beyond known Maps key) | ✅ | ✅ | (cross-ref C-COST-4) | env-only secrets | ✅✅ **SCANNED 2026-06-08** — 524KB of live bundles: **no service-role JWT, no OpenRouter `sk-or-`, no Stripe `sk_live/test`, no `sbp_` access token, no DB password.** Only the publishable/anon key is client-side (expected). |
 | Admin route gating | ✅ | ✅ | was auth-only | PR #30 (`AdminRoute`+`useIsAdmin`) | ✅ **VERIFIED LIVE 2026-06-08** — gate denies non-admin (proven: it blocked Ashton while he lacked the `admin` role → redirect to /profile) and admits admin after the role grant. |
 
 ---
