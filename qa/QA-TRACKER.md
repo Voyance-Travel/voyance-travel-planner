@@ -10,7 +10,7 @@
 *Updated 2026-06-08. **Top = not-yet-truly-checked.** Product QA = **~90% done**. Every item I can do without you is now closed (see the ✅ list below); the only open work needs your accounts/incognito/Stripe/infra.*
 
 ### 🔴 Needs the owner (blocked without your action)
-- [ ] **Auth flows (Table E)** — sign up · sign in · OAuth (Google/Apple) · email verify · password reset · logout · session persistence · return-path · quiz-gating *(needs real signup + incognito)*
+- [~] **Auth flows (Table E)** — ✅ **CODE-AUDIT DONE 2026-06-08** (all flows wired correctly; session-persistence also LIVE-confirmed). Remaining = **owner LIVE pass in incognito** (the credential actions I'm barred from): sign up · sign in · OAuth consent (+ set Google/Apple keys in Supabase) · click email-verify · click reset-email + set pw · logout · fresh-account quiz-gate redirect. *Return-path & callback are robust in code.*
 - [ ] **User-type matrix (Table E)** — anonymous/guest · free · paid · Voyance Club · admin journeys *(needs the accounts)*
 - [ ] **A5 Friends add/accept · A6 collaborator-invite link** — needs a **2nd account** signup
 - [ ] **A1 embedded CTAs** (logged-out marketing home) — authed `/` redirects to /profile → needs **incognito**
@@ -375,15 +375,15 @@ Smart Finish 3-bug fix · hero photos (C-IMG-1) · NLU/pace/budget prefs (C-NLU-
 ## E2. Auth flows
 | Flow | Audit | Live | What went wrong | Resolution | Fix verified |
 |---|:--:|:--:|---|---|---|
-| Sign up (email) | ⬜ | ⬜ | | | ⬜ |
-| Sign in | ⬜ | ⬜ | | | ⬜ |
-| OAuth (Google / Apple) | ⬜ | ⬜ | | | ⬜ |
-| Email verification | ⬜ | ⬜ | | | ⬜ |
-| Password reset | ⬜ | ⬜ | | | ⬜ |
-| Session persistence / refresh | ⬜ | ⬜ | | | ⬜ |
-| Logout | ⬜ | ⬜ | | | ⬜ |
-| Return-path after login (deep link) | ⬜ | ⬜ | | | ⬜ |
-| Quiz-gating (`requireQuiz` routes) | ⬜ | ⬜ | | | ⬜ |
+| Sign up (email) | ✅ | ⬜owner | route `/signup` (SignUpForm) | `supabase.auth.signUp` w/ `emailRedirectTo` (+ invite-token thread) | ✅ **AUDIT 2026-06-08** — wired correctly. ⬜ LIVE = owner (creating an account is a credential action I can't do). |
+| Sign in | ✅ | ⬜owner | route `/signin` (SignIn) | `signInWithPassword` | ✅ **AUDIT** — wired. ⬜ LIVE = owner (entering a password is barred for me). |
+| OAuth (Google / Apple) | ✅ | ⬜owner | `SocialLoginButtons` | `signInWithOAuth` for **both** `'google'` + `'apple'`, `redirectTo`→`/auth/callback`; `AuthCallback` waits for session → returns to dest, 8s fail-safe → `/signin?error=oauth_failed` | ✅ **AUDIT** — both providers + callback wired. ⬜ LIVE = owner (OAuth consent) + needs Google/Apple provider keys set in Supabase. |
+| Email verification | ✅ | ⬜owner | signUp `emailRedirectTo` → `/auth/callback` | — | ✅ **AUDIT** — confirm-link path wired. ⬜ LIVE = owner (click the verify email). Confirm Supabase "Confirm email" setting matches intent. |
+| Password reset | ✅ | ⬜owner | `/forgot-password` + `/reset-password` | `resetPasswordForEmail(redirectTo:/reset-password)` → `updateUser({password})` → signOut | ✅ **AUDIT** — full reset loop wired. ⬜ LIVE = owner (click reset email + set new pw). |
+| Session persistence / refresh | ✅ | ✅ | — | `persistSession:true` + `autoRefreshToken:true` | ✅✅ **AUDIT + LIVE-OBSERVED 2026-06-08** — config correct AND **stayed authenticated as Ashton across dozens of reloads/navigations this session** (no re-login). Token auto-refresh active. |
+| Logout | ✅ | ⬜owner | Settings + ResetPassword | `signOut()` (multi-tab `scope:'local'` so tabs don't ping-pong) | ✅ **AUDIT** — wired w/ multi-tab care. ⬜ LIVE = owner (I won't log out the active session — can't re-auth to restore it). |
+| Return-path after login (deep link) | ✅ | ⬜owner | `redirect`/`next` query params | params read in SocialLoginButtons/SignUpForm; `AuthCallback` → `consumeReturnPath('/profile')` + invite-token → `dest` | ✅ **AUDIT** — robust (return-path + invite-token preserved through OAuth/signup; default `/profile`). ⬜ LIVE = owner. |
+| Quiz-gating (`requireQuiz` routes) | ✅ | 🟡 | `hasCompletedQuiz` (CompanionContext / ItineraryPreview) | gates companion stage + preview features when quiz incomplete | ✅ **AUDIT** — present + unit-tested (`authNavigation.test.ts`: `requireQuiz && !quizCompleted → redirect-quiz`). 🟡 LIVE: I'm past the gate (quiz done); a fresh-account pass (owner) confirms the redirect. |
 
 ## E3. End-to-end journeys (per user type)
 | Journey | Audit | Live | What went wrong | Resolution | Fix verified |
