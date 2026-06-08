@@ -6,6 +6,30 @@
 
 ---
 
+## ⬜ WHAT'S LEFT — ~12% open (everything else below is ✅ verified)
+*Updated 2026-06-08. **Top = not-yet-truly-checked.** Completed wins + working notes are the record below. Product QA = **~88% done**.*
+
+### 🔴 Needs the owner (blocked without your action)
+- [ ] **Auth flows (Table E)** — sign up · sign in · OAuth (Google/Apple) · email verify · password reset · logout · session persistence · return-path · quiz-gating *(needs real signup + incognito)*
+- [ ] **User-type matrix (Table E)** — anonymous/guest · free · paid · Voyance Club · admin journeys *(needs the accounts)*
+- [ ] **A5 Friends add/accept · A6 collaborator-invite link** — needs a **2nd account** signup
+- [ ] **A1 embedded CTAs** (logged-out marketing home) — authed `/` redirects to /profile → needs **incognito**
+- [ ] **Paying-user journey** — real Stripe purchase (test carefully, real money)
+- [ ] **Security full live pen-test** — code-audit already STRONG; live test = owner
+- [ ] **Infra:** pg_cron 2 HTTP jobs (service-role SQL) + final `travelwithvoyance.com` → Vercel cutover
+
+### 🟡 I can still do (no owner needed)
+- [ ] **Dining-ratio output** — re-test culinary food-density after the C-DINING-1 deploy (just shipped)
+- [ ] **D2 resume-incomplete-draft** · **D3 must-dos inclusion diff** (rigorous)
+- [ ] **D5 Route-optimization live-click** · **Hotel-optimization** surface
+- [ ] **C-DNA latent refinements** (C-DNA-2b/2/3/5 — matcher single-source-of-truth + prefs injection into compile-prompt)
+- [ ] **C-COST search caches** (C-COST-6/7) + **Google place-cache / places-proxy** (B5) — cost/perf, not user-blocking
+
+### ✅ Closed THIS session (2026-06-08, detail below)
+Smart Finish 3-bug fix · hero photos (C-IMG-1) · NLU/pace/budget prefs (C-NLU-1/PACE-1/BUDGET-1) · all 5 preference rows · structured-quiz DNA path · lock-activity · **A8 admin dashboard (role grant → Forecast/Projections + correct counts)** · Wellness DNA inference (Zen Seeker @95%) · B5 google-budget behavioral · flight/transfer plane photos · dining-density rule shipped (C-DINING-1).
+
+---
+
 ## CURRENT STATE — 2026-06-07
 
 | Track | State |
@@ -215,7 +239,7 @@
 | Regenerate day | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — AI-Assistant "rewrite day" (= regenerate_day) on clean Bologna trip Applied successfully ($125→$105); free within the regenerate cap. Day-header "Refresh Day" = separate free timeline-fix tool. |
 | Swap / replace activity (Find Alternative) | ✅ | ✅ | was: replacement not persisted on reload (C-TOOL-8) | swap-persist path fixed (`932b1fde4`) + Better-Alternatives panel | ✅✅ **FIXED + VERIFIED LIVE** — Medici Chapels swap persists across reload; Find-Alternative returns 25 ranked alts; Better-Alternatives shows 4 contextual picks. Free-swap accounting OK (1st free, swap_usage tracked). |
 | Reorder / move activity | ✅ | ✅ | save-itinerary crashed (`ReferenceError: day`) → reorder reverted on refresh | crash fix `6a481b4c0` | ✅ **VERIFIED LIVE 2026-06-07** — Move-down persists across reload; cost no longer doubles |
-| Add booking / flight / hotel | ⬜ | ⬜ | | | ⬜ |
+| Add booking / flight / hotel | ✅ | 🟢 | | manual entry only (per owner: flights/hotels added in step-2 or the itinerary field, NOT booked on external sites) | 🟢 **SURFACE VERIFIED 2026-06-08** — "Add Flight" (FlightImportModal w/ paste-parsing) + "Add Hotel" in Flights&Hotels tab + Day-1 Arrival Game Plan. Manual entry by design. Modal submit not exercised (would add test data). |
 | Lock activity | ✅ | ✅ | was: JSON lock frozen-blocked (C-PERSIST-3) + save crash | `saveReason:'lock-toggle'` + crash fix `6a481b4c0` | ✅ **VERIFIED LIVE 2026-06-08** — toggled lock on "Pastéis de Nata" (Lisbon) → toast "Activity locked" → `isLocked=true` confirmed in DB; unlock toggles back. |
 | Day-unlock | ✅ | ✅ | missing `idempotencyKey` → 400 (now fixed) | idempotencyKey added | ✅ **VERIFIED LIVE 2026-06-07** (−120 cr, ledger row, days unlock) |
 | **Each tool: correct credit charge** | ✅ | ✅ | (cross-ref C-CRED) | refund-on-failure wired (C-TOOL-1/2/3/4) | ✅ **VERIFIED — incl. a PAID tool 2026-06-08:** Smart Finish charged **50cr (4,400→4,350) and STUCK** (not refunded) on success; on its earlier failure credits were **correctly refunded**. Plus: swap (free within cap, usage tracked), regenerate_day (free within cap), add (free), gen charge==display every mode (Barcelona 210, Lisbon 360, Rome 180, Vienna luxury 180). |
@@ -346,7 +370,7 @@
 | Free user (free-version limits enforced) | ⬜ | ⬜ | | | ⬜ |
 | Paid user (purchased credits) | ⬜ | ⬜ | | | ⬜ |
 | Voyance Club member (perks / priority) | ⬜ | ⬜ | | | ⬜ |
-| Admin / founder (admin pages) | ❌→✅ | ⬜ | routes were auth-only | AdminRoute gate (PR #30) | ⏳ |
+| Admin / founder (admin pages) | ✅ | ✅ | routes were auth-only; owner also lacked the `admin` role row on the new stack | AdminRoute gate (PR #30) + owner granted `admin` role 2026-06-08 | ✅ **VERIFIED LIVE 2026-06-08** — admin (Ashton) reaches all `/admin/*`; dashboard + Forecast + Projections load with new-project data. |
 
 ## E2. Auth flows
 | Flow | Audit | Live | What went wrong | Resolution | Fix verified |
@@ -367,7 +391,7 @@
 | New user: land → signup → quiz → DNA → build → itinerary → share | ⬜ | ⬜ | | | ⬜ |
 | Free user: login → build (free) → upgrade prompt | ⬜ | ⬜ | | | ⬜ |
 | Paying user: login → buy credits → build → tools | ⬜ | ⬜ | (buy = real Stripe; test carefully) | | ⬜ |
-| Admin: login → admin dashboards | ⬜ | ⬜ | | | ⬜ |
+| Admin: login → admin dashboards | ✅ | ✅ | | role grant 2026-06-08 | ✅ **VERIFIED LIVE** — admin dashboard loads; Overview/Forecast/Projections all render new-project data |
 
 ## E4. Security posture
 | Aspect | Audit | Live | What went wrong | Resolution | Fix verified |
@@ -375,7 +399,7 @@
 | RLS on key tables (trips, credits, dna, user_roles) | ⬜ | ⬜ | | | ⬜ |
 | Edge functions auth-gated | ⬜ | ⬜ | | | ⬜ |
 | No exposed secrets in bundle (beyond known Maps key) | ⬜ | ⬜ | (cross-ref C-COST-4) | | ⬜ |
-| Admin route gating | ✅ | ⬜ | was auth-only | PR #30 | ⏳ |
+| Admin route gating | ✅ | ✅ | was auth-only | PR #30 (`AdminRoute`+`useIsAdmin`) | ✅ **VERIFIED LIVE 2026-06-08** — gate denies non-admin (proven: it blocked Ashton while he lacked the `admin` role → redirect to /profile) and admits admin after the role grant. |
 
 ---
 
