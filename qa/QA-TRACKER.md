@@ -316,10 +316,11 @@
 | AI chat / trip-planner (itinerary-chat) | ✅ | ✅ | **VERIFIED LIVE 2026-06-07** — context-aware, free chat + review-first proposal + **Apply works** (clean Bologna trip: "make Day 1 relaxed" → Applied, $125→$105, regenerate_day free within cap). Apply only failed on a heavily-degraded test trip (C-CHAT-1, downgraded to LOW edge case; no wrongful charge). | optional: graceful error on degraded itinerary | ✅ **works (C-CHAT-1 = edge case)** |
 | Notes / personalization | ⬜ | ⬜ | | | ⬜ |
 | Edit ↔ Preview toggle | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — Preview switches to a polished read-only magazine view (no edit affordances, hero photos); Edit returns to the interactive editor. Bologna trip. |
-| Trip Health panel (Intelligence / Completion) | ⬜ | ✅ renders | | | ⬜ |
+| Trip Health panel (Intelligence / Completion) | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-08** (Bologna) — all 3 panels render real data: **Voyance Intelligence** (3 Finds / 4 Local Picks / 10 Insider Tips, "1+ hr + ~$30 saved", Europe/Rome·EUR); **Trip Completion** (67%, "2 of 2 days planned", Plan quality 80, 2 issues flagged incl. Day-2 missing breakfast — meal-detector working); **Better Alternatives** = 4 genuinely knowledgeable Bologna picks w/ savings + reasoning (Mercato delle Erbe vs Quadrilatero, Torre dell'Orologio vs Asinelli, Trattoria Anna Maria, Via del Pratello). |
+| Better Alternatives (swap suggestions) | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-08** — 4 real, contextual local-pick alternatives with $/time savings + "instead of X" reasoning (see Trip Health row). |
 | Day-by-day cost display | ✅ | ✅ | **cost-doubling**: DB trigger wrote group total into `act.cost.amount` → ×travelers every sync (badge climbed to $8,395/pp) | trigger writes per-person (`20260607230000`) + `fb35090b0` | ✅ **VERIFIED LIVE 2026-06-07** — Madrid day-1 $185/pp, stable across reorder (no ×2); test-trip data repaired |
-| Export / print / PDF | ⬜ | ⬜ | | | ⬜ |
-| Maps (Apple MapKit) render | ⬜ | ⬜ | | | ⬜ |
+| Export / print / PDF | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-08** — Export PDF (Bologna) → "PDF downloaded!" toast, file generated successfully. |
+| Maps / routing render | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-08** — inter-activity transit legs show mode + travel time ("Travel to Piazza del Nettuno · 15m"); expanding gives an **AI transport recommendation** ("Train/Metro is a solid option between Pappare' and Piazza del Nettuno — affordable and avoids traffic"). Activity cards also now render **real photos** (Unsplash key fix). |
 | Share public link | ✅ | ✅ | (C-SHARE-1 closed) | PR #25 | ✅ |
 | Collaborator invite link | ⬜ | ⬜ | | | ⬜ |
 | Each tool charges correct credits + refunds on fail | 🟡 | 🟡 | (cross-ref C-CRED-2/5) | | 🟡 **LIVE 2026-06-07** — swap free-accounting OK (1st free, 0 charge, swap_usage=1); gen charge==display every mode; refund-on-fail code-wired (C-TOOL-1/2/3/4). Full paid-tool charge (4th swap / AI rewrite) not yet exercised |
