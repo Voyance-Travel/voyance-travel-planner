@@ -87,26 +87,23 @@ Deno.serve(async (req: Request) => {
     return json(200, ACK);
   }
 
-  // Look up target user_id.
-  // Use existing `get_user_id_by_email` if the service role can call it;
-  // otherwise fall back to a direct auth.users query via admin API.
+  // Look up target user_id via a service-role-only resolver.
+  // NOTE: the old `get_user_id_by_email` RPC is admin-gated (requires auth.uid()),
+  // so the service-role client always threw "Not authenticated" and fell through to
+  // `admin.auth.admin.listUsers({ filter: 'email.eq.…' })` — but GoTrue ignores that
+  // `filter`, so it returned the FIRST user regardless of email (requests routed to the
+  // wrong person). `get_user_id_by_email_service` does an exact lower(email) match and is
+  // EXECUTE-granted to service_role only (clients can't call it → enumeration still safe).
   let targetId: string | null = null;
   try {
-    const { data, error } = await admin.rpc("get_user_id_by_email", { lookup_email: rawEmail }) as
+    const { data, error } = await admin.rpc("get_user_id_by_email_service", { lookup_email: rawEmail }) as
       { data: string | null; error: { message?: string } | null };
     if (error) throw error;
     targetId = data ?? null;
   } catch (e) {
-    // Fallback: list users and filter by email (kept narrow with a generous page size).
-    try {
-      const { data: page, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 1, filter: `email.eq.${rawEmail}` } as any);
-      if (listErr) throw listErr;
-      targetId = (page?.users?.[0]?.id as string | undefined) ?? null;
-    } catch (e2) {
-      console.error("[friend-request-by-email] lookup failed:", e, e2);
-      // Privacy preserved — caller still gets ACK, not an error.
-      return json(200, ACK);
-    }
+    console.error("[friend-request-by-email] lookup failed:", e);
+    // Privacy preserved — caller still gets ACK, not an error.
+    return json(200, ACK);
   }
 
   // Self-target / not-found / hits-existing edge cases all return identical ACK.
