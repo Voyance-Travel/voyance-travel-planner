@@ -161,6 +161,12 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
           </span>
         )}
       </Button>
+      {/* Apple Hide-My-Email creates a relay address → a separate account from Google/email.
+          It can't be auto-detected (the emails differ), so we proactively nudge users to be
+          consistent. Full consolidation = account-linking in Settings (follow-up). */}
+      <p className="text-[11px] leading-snug text-muted-foreground/70 text-center pt-1">
+        Tip: sign in the same way each time — with Apple, choosing “Hide My Email” creates a separate account.
+      </p>
     </motion.div>
   );
 }
