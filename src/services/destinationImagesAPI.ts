@@ -225,15 +225,18 @@ export async function getDestinationImages(
 
     // TIER 2b: For curated-only destinations with no hardcoded images, don't call API
     if (isCuratedOnlyDestination(normalizedDestination)) {
+      console.log('[heroDbg] curated-only skip (no API) for:', normalizedDestination);
       return [];
     }
   }
 
   // Guard: don't call backend without a destination or ID
   if (!normalizedDestination && !params.destinationId) {
+    console.log('[heroDbg] guard: no destination/id, skip API. raw=', params.destination, 'norm=', normalizedDestination);
     return [];
   }
 
+  console.log('[heroDbg] invoking destination-images edge fn for:', normalizedDestination, 'type=', params.imageType);
   // Call backend function via POST body for reliability (no querystring invoke)
   const { data, error } = await supabase.functions.invoke('destination-images', {
     body: {

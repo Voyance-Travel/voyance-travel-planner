@@ -233,6 +233,8 @@ export function useTripHeroImage({
       dbCuratedFetched && !dbCuratedUrl &&
       !apiFetched;
 
+    console.log('[heroDbg] API-effect gate', destination, { seededDone, canonicalDone, hasCurated, storageDone, dbCuratedFetched, dbCuratedUrl: !!dbCuratedUrl, apiFetched, canonicalFetched, canonicalUrl: !!canonicalUrl, shouldFetch });
+
     if (!shouldFetch || !destination) return;
 
     let cancelled = false;
