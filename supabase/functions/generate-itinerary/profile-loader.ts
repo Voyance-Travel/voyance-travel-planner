@@ -164,7 +164,7 @@ export async function loadTravelerProfile(
   if (tripId) {
     const { data, error } = await supabase
       .from('trips')
-      .select('budget_tier, trip_type, metadata')
+      .select('budget_tier, trip_type, metadata, cost_dna')
       .eq('id', tripId)
       .maybeSingle();
     
@@ -200,7 +200,7 @@ export async function loadTravelerProfile(
   if (userId) {
     const { data, error } = await supabase
       .from('user_preferences')
-      .select('interests, travel_vibes, emotional_drivers, traveler_type')
+      .select('interests, travel_vibes, emotional_drivers, traveler_type, dietary_restrictions')
       .eq('user_id', userId)
       .maybeSingle();
     
@@ -362,7 +362,7 @@ export async function loadTravelerProfile(
   // =========================================================================
   
   const interests = extractInterests(travelDNA, tripData, userPrefs, archetypeContext);
-  const dietaryRestrictions = extractDietaryRestrictions(travelDNA);
+  const dietaryRestrictions = extractDietaryRestrictions(travelDNA, tripData, userPrefs);
   const avoidList = extractAvoidList(travelDNA, archetypeContext);
   const mobilityNeeds = extractMobilityNeeds(travelDNA);
   
@@ -478,24 +478,32 @@ function extractInterests(travelDNA: any, tripData: any, userPrefs: any, archety
   return Array.from(interests);
 }
 
-function extractDietaryRestrictions(travelDNA: any): string[] {
+function extractDietaryRestrictions(travelDNA: any, tripData?: any, userPrefs?: any): string[] {
   const restrictions = new Set<string>();
-  
-  if (travelDNA?.dietary_restrictions) {
-    const items = Array.isArray(travelDNA.dietary_restrictions)
-      ? travelDNA.dietary_restrictions
-      : [travelDNA.dietary_restrictions];
-    items.forEach((r: string) => restrictions.add(r));
-  }
-  
+  const addItems = (items: unknown) => {
+    if (!items) return;
+    const arr = Array.isArray(items) ? items : [items];
+    arr.forEach((r) => { if (typeof r === 'string' && r.trim()) restrictions.add(r.trim()); });
+  };
+
+  // 1. Saved Travel DNA profile
+  addItems(travelDNA?.dietary_restrictions);
   // From travel_dna_v2 blob (fixed: was incorrectly referencing travel_dna)
-  if ((travelDNA?.travel_dna_v2 as any)?.dietary_restrictions) {
-    const items = (travelDNA.travel_dna_v2 as any).dietary_restrictions;
-    if (Array.isArray(items)) {
-      items.forEach((r: string) => restrictions.add(r));
-    }
-  }
-  
+  addItems((travelDNA?.travel_dna_v2 as any)?.dietary_restrictions);
+
+  // 2. C-PREF-1: PER-TRIP dietary from the trip request (conversational/wizard).
+  //    The dietary enforcement prompt (buildDietaryEnforcementPrompt) previously
+  //    only saw the saved DNA profile, so a trip-specific "I'm vegan" never became
+  //    a hard constraint. Merge the trip metadata + cost_dna here.
+  const meta = tripData?.metadata as any;
+  addItems(meta?.dietaryRestrictions);
+  addItems(meta?.dietary_restrictions);
+  const costDnaDietary = (tripData?.cost_dna as any)?.dietary;
+  addItems(costDnaDietary);
+
+  // 3. user_preferences.dietary_restrictions (profile-level standing prefs)
+  addItems(userPrefs?.dietary_restrictions);
+
   return Array.from(restrictions);
 }
 

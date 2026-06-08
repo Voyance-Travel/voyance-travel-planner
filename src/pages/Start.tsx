@@ -3096,6 +3096,12 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                                 pacing: details.pacing || 'balanced',
                                 isFirstTimeVisitor: details.isFirstTimeVisitor ?? true,
                                 interestCategories: details.interestCategories?.length ? details.interestCategories : null,
+                                // C-PREF-1: persist captured dietary as a structured field so the
+                                // generator's dietary enforcement (a HARD restaurant filter) sees it.
+                                // Write both casings — profile-loader reads camelCase, the per-day
+                                // generator reads snake_case (tripMeta.dietary_restrictions).
+                                dietaryRestrictions: details.dietaryRestrictions?.length ? details.dietaryRestrictions : null,
+                                dietary_restrictions: details.dietaryRestrictions?.length ? details.dietaryRestrictions : null,
                                 celebrationDay: details.celebrationDay || null,
                                 generationRules,
                                 perDayActivities: details.perDayActivities || null,

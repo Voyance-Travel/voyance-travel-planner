@@ -197,6 +197,15 @@ When calling extract_trip_details, you MUST extract EVERY specific detail the us
    - "we love wine" or "vineyard tours" → interestCategories: ["wine"] (do NOT fold into "food")
    - Valid values: history, food, nightlife, art, nature, shopping, adventure, culture, relaxation, architecture, music, sports, photography, family, romance, wine
 
+6b. DIETARY RESTRICTIONS & ALLERGIES (HARD CONSTRAINT — never drop these): if the user states any dietary need or food allergy, set dietaryRestrictions. This is NOT a free-text note — it MUST go in the structured field so every restaurant complies.
+   - "I'm vegan" / "plant-based" → dietaryRestrictions: ["vegan"]
+   - "strictly vegetarian" / "no meat" → ["vegetarian"]
+   - "gluten intolerant" / "celiac" → ["gluten-free"]
+   - "lactose intolerant" / "no dairy" → ["dairy-free"]
+   - "peanut allergy" / "allergic to nuts" → ["peanut-free"] (or "nut-free")
+   - "allergic to shellfish" → ["shellfish-free"]
+   - Capture EVERY restriction the user mentions; allergies are safety-critical.
+
 7. LOGISTICS & CONSTRAINTS: Put transport needs and constraints in additionalNotes:
    - "need to get from US Open to JFK" → additionalNotes
    - "traveling with elderly parent" → additionalNotes
@@ -501,6 +510,14 @@ serve(async (req) => {
                         enum: ["history", "food", "nightlife", "art", "nature", "shopping", "adventure", "culture", "relaxation", "architecture", "music", "sports", "photography", "family", "romance"],
                       },
                       description: "Interest categories inferred from conversation. E.g. 'we love food and nightlife' → ['food', 'nightlife']. Only include categories the user actually expressed interest in.",
+                    },
+                    dietaryRestrictions: {
+                      type: "array",
+                      items: {
+                        type: "string",
+                        enum: ["vegetarian", "vegan", "pescatarian", "halal", "kosher", "gluten-free", "dairy-free", "nut-free", "peanut-free", "shellfish-free", "fish-free", "egg-free"],
+                      },
+                      description: "Dietary restrictions or food allergies the user states (e.g. 'I'm vegan', 'strictly vegetarian', 'gluten intolerant', 'no pork', 'peanut allergy'). CRITICAL for restaurant selection — every dining recommendation MUST comply. Map free phrasing to the closest enum value (e.g. 'plant-based'→'vegan', 'no meat'→'vegetarian', 'celiac'/'gluten intolerant'→'gluten-free', 'lactose intolerant'→'dairy-free', 'allergic to peanuts'→'peanut-free', 'allergic to shellfish'→'shellfish-free'). Only set values the user actually expressed.",
                     },
                     celebrationDay: {
                       type: "number",
