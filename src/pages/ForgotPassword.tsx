@@ -26,10 +26,11 @@ export default function ForgotPassword() {
             transition={{ duration: 0.8 }}
           >
             <HeroImageWithFallback
-              src={normalizeUnsplashUrl("https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=800&q=80")}
-              alt="A path through mountains at golden hour"
+              src={normalizeUnsplashUrl("https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80")}
+              alt="An open road winding through the wilderness"
               fallbackSources={[
-                normalizeUnsplashUrl("https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80")
+                normalizeUnsplashUrl("https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800&q=80"),
+                normalizeUnsplashUrl("https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80")
               ]}
               overlayGradient="from-black/30 via-black/20 to-black/60"
               className="h-full"
