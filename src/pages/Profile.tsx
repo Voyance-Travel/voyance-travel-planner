@@ -78,7 +78,44 @@ interface DisplayTrip {
 // Use centralized curated image utility
 import { getDestinationImage as getCuratedDestinationImage } from '@/utils/destinationImages';
 import { normalizeUnsplashUrl } from '@/utils/unsplash';
+import { getHeroImageByName } from '@/services/destinationImagesAPI';
 import { parseLocalDate } from '@/utils/dateUtils';
+
+// Session cache: destination(lowercase) → resolved real photo URL. Dedups across cards.
+const cardImageCache = new Map<string, string>();
+
+/**
+ * Trip-card thumbnail. Shows an instant placeholder (stored hero / curated), then
+ * upgrades to the REAL city photo from the same `destination-images` edge fn that
+ * powers the trip hero (`getHeroImageByName`), so cards == hero. 3-tier <img onError>
+ * (curated → local asset) guarantees no broken image. Deduped + cached per session.
+ */
+function TripCardImage({ destination, seed, className }: { destination: string; seed?: string; className?: string }) {
+  const key = (destination || '').toLowerCase().trim();
+  const [src, setSrc] = useState<string>(() => cardImageCache.get(key) || seed || getCuratedDestinationImage(destination));
+  useEffect(() => {
+    if (!key || cardImageCache.has(key)) return;
+    let alive = true;
+    getHeroImageByName(destination)
+      .then((img) => { if (alive && img?.url) { cardImageCache.set(key, img.url); setSrc(img.url); } })
+      .catch(() => { /* keep the placeholder; onError covers the rest */ });
+    return () => { alive = false; };
+  }, [key, destination]);
+  return (
+    <img
+      src={src}
+      alt={destination}
+      className={className}
+      loading="lazy"
+      onError={(e) => {
+        const img = e.currentTarget;
+        const s = img.dataset.fbStage || '0';
+        if (s === '0') { img.dataset.fbStage = '1'; img.src = getCuratedDestinationImage(destination); }
+        else if (s === '1') { img.dataset.fbStage = '2'; img.src = '/images/fallbacks/fallback-destination.jpg'; }
+      }}
+    />
+  );
+}
 
 function getDestinationImage(destination: string): string {
   return getCuratedDestinationImage(destination);
@@ -679,7 +716,7 @@ export default function Profile() {
                             className="group flex items-center gap-4 p-3 bg-card border border-border rounded-xl hover:border-primary/50 hover:shadow-md transition-all"
                           >
                             <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
-                              <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover" onError={(e) => { const img = e.currentTarget; const s = img.dataset.fbStage || '0'; if (s === '0') { img.dataset.fbStage = '1'; img.src = getCuratedDestinationImage(trip.destination); } else if (s === '1') { img.dataset.fbStage = '2'; img.src = '/images/fallbacks/fallback-destination.jpg'; } }} />
+                              <TripCardImage destination={trip.destination} seed={trip.image} className="w-full h-full object-cover" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
@@ -733,7 +770,7 @@ export default function Profile() {
                             className="group flex items-center gap-4 p-3 bg-card border border-border rounded-xl hover:border-emerald-500/50 hover:shadow-md transition-all"
                           >
                             <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
-                              <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover" onError={(e) => { const img = e.currentTarget; const s = img.dataset.fbStage || '0'; if (s === '0') { img.dataset.fbStage = '1'; img.src = getCuratedDestinationImage(trip.destination); } else if (s === '1') { img.dataset.fbStage = '2'; img.src = '/images/fallbacks/fallback-destination.jpg'; } }} />
+                              <TripCardImage destination={trip.destination} seed={trip.image} className="w-full h-full object-cover" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <h3 className="font-semibold text-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate">
@@ -829,7 +866,7 @@ export default function Profile() {
                           className="group flex items-center gap-4 p-4 bg-card border border-border rounded-xl hover:border-primary/50 hover:shadow-lg transition-all"
                         >
                           <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
-                            <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={(e) => { const img = e.currentTarget; const s = img.dataset.fbStage || '0'; if (s === '0') { img.dataset.fbStage = '1'; img.src = getCuratedDestinationImage(trip.destination); } else if (s === '1') { img.dataset.fbStage = '2'; img.src = '/images/fallbacks/fallback-destination.jpg'; } }} />
+                            <TripCardImage destination={trip.destination} seed={trip.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-lg text-foreground group-hover:text-primary transition-colors truncate">
@@ -877,7 +914,7 @@ export default function Profile() {
                           className="group flex items-center gap-4 p-4 bg-card border border-border rounded-xl hover:border-emerald-500/50 hover:shadow-lg transition-all"
                         >
                           <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
-                            <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={(e) => { const img = e.currentTarget; const s = img.dataset.fbStage || '0'; if (s === '0') { img.dataset.fbStage = '1'; img.src = getCuratedDestinationImage(trip.destination); } else if (s === '1') { img.dataset.fbStage = '2'; img.src = '/images/fallbacks/fallback-destination.jpg'; } }} />
+                            <TripCardImage destination={trip.destination} seed={trip.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-lg text-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate">
@@ -922,7 +959,7 @@ export default function Profile() {
                           className="group flex items-center gap-4 p-4 bg-card border border-dashed border-border rounded-xl hover:border-foreground/30 hover:shadow-md transition-all"
                         >
                           <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 opacity-80">
-                            <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={(e) => { const img = e.currentTarget; const s = img.dataset.fbStage || '0'; if (s === '0') { img.dataset.fbStage = '1'; img.src = getCuratedDestinationImage(trip.destination); } else if (s === '1') { img.dataset.fbStage = '2'; img.src = '/images/fallbacks/fallback-destination.jpg'; } }} />
+                            <TripCardImage destination={trip.destination} seed={trip.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-lg text-foreground/80 group-hover:text-foreground transition-colors truncate">
@@ -1040,7 +1077,7 @@ function TripCard({ trip }: { trip: { id: string; destination: string; dates: st
       className="group flex gap-4 p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
     >
       <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
-        <img src={trip.image} alt={trip.destination} className="w-full h-full object-cover" onError={(e) => { const img = e.currentTarget; const s = img.dataset.fbStage || '0'; if (s === '0') { img.dataset.fbStage = '1'; img.src = getCuratedDestinationImage(trip.destination); } else if (s === '1') { img.dataset.fbStage = '2'; img.src = '/images/fallbacks/fallback-destination.jpg'; } }} />
+        <TripCardImage destination={trip.destination} seed={trip.image} className="w-full h-full object-cover" />
       </div>
       <div className="flex-1 min-w-0">
         <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
