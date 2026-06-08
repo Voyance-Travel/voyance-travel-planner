@@ -16,9 +16,12 @@
 | 💬 Freemium copy | ✅ accurate ("first trip starts free — 2 days included") |
 | ✏️ In-itinerary edit persistence | ✅✅ **FIXED + VERIFIED 2026-06-07** — save-itinerary was crashing on EVERY real trip (`ReferenceError: day`) so reorder/autosave/AI-notes/lock-toggle silently never persisted. Root crash fixed; edits now save + read back from DB. Resolves the whole C-PERSIST cluster. |
 | 💵 In-itinerary cost display | ✅✅ **FIXED + VERIFIED 2026-06-07** — cost-doubling (×travelers every sync) traced to a DB trigger writing the GROUP total into the per-person `amount`; trigger now writes per-person. Madrid day-1 $8,395→$185/pp, stable. Test-trip data repaired. |
-| 🔵 Product QA on new stack | **~20%** — foundational pages + core money/build path green; **in-itinerary persistence + cost lanes now green**; build modes + DNA A/B + per-tool credit charges still untested live |
+| 🧭 Build modes (all 4 + free) | ✅✅ **ALL VERIFIED LIVE 2026-06-07** — Single City (paid Barcelona −210), Multi-City (Lisbon→Porto, 5d/2 cities/transition), Just Tell Us (chat→Rome 3d), Build Myself = Free version (paste-organize, 0 charge). Cost display == charge in every mode. |
+| 💳 Paid-gen unlocks its days (C-PRICE-1) | ✅✅ **FIXED + VERIFIED 2026-06-07** — was charging to generate AND again to unlock (~660 for a 5-day). Now one charge unlocks all days (fresh Rome gen → `unlocked_day_count=3` auto). |
+| 🧬 DNA → itinerary differentiation (B3, "the big proof") | ✅✅ **PASSED LIVE 2026-06-07** — same Rome/dates/inputs, only DNA archetype differs → culinary vs adventure = **~92% venue divergence**, ~0% non-meal-activity overlap; archetype drives SELECTION (C-DNA-4 verified). |
+| 🔵 Product QA on new stack | **~35%** — green: core build/money path, all 4 build modes, in-itinerary persistence+cost, DNA-A/B differentiation. **STILL UNTESTED LIVE:** preferences→output adherence (D3, dietary/pace/budget), per-tool credit charges (swap/regen/add), navigation dead-ends/UX states, DNA-accuracy edge cases (C-DNA-2/3/5), auth-flow tails. |
 
-**Now working through:** driving the whole sheet green (owner directive). (1) re-verify "fixed-but-unproven" defects, (2) fix genuinely-open defects, (3) DNA proof + build modes + auth flows.
+**Now working through (owner-directed 2026-06-07 PM):** (1) ✅ tracker headline now reflects build-mode + DNA wins; (2) → **preferences→output adherence (D3)**; (3) per-tool/partial credit charges; (4) navigation dead-ends; (5) DNA-accuracy traces.
 
 ### Defect sweep — 2026-06-07 PM (parallel-agent scoped + verified)
 **Closed this sweep:**
