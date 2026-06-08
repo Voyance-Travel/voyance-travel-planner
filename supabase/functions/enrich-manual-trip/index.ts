@@ -288,7 +288,14 @@ async function runGenerationInBackground(
     const HH_MM = /^\d{1,2}:\d{2}/;
 
     let qualityPass = true;
+    let timesCoerced = false;
     const qualityIssues: string[] = [];
+    // C-SMART-3: map slot labels → real clock times so manual-paste anchors
+    // ("Morning visit Belem Tower") don't fail the HH:MM quality gate.
+    const SLOT_TIME: Record<string, string> = {
+      morning: "09:00", breakfast: "08:30", brunch: "10:30", midday: "12:30",
+      lunch: "12:30", afternoon: "14:00", evening: "19:00", dinner: "19:30", night: "21:00",
+    };
 
     // Check 1: Days exist
     if (!Array.isArray(savedDays) || savedDays.length === 0) {
@@ -306,15 +313,33 @@ async function runGenerationInBackground(
           qualityIssues.push(`Day ${dayNum}: only ${acts.length} activities (need ${minActs}+)`);
         }
 
-        // Check 3: No unresolved slot labels in times
+        // Check 3: coerce slot-label / non-HH:MM times to real HH:MM instead of
+        // hard-failing the whole enrichment (C-SMART-3 — the "spotty Smart Finish" bug).
+        let actIdx = 0;
         for (const act of acts) {
-          const time = act.startTime || act.start_time || act.time || "";
-          if (SLOT_LABELS.test(time.trim()) || (time && !HH_MM.test(time.trim()))) {
-            qualityPass = false;
-            qualityIssues.push(`Day ${dayNum}: "${act.title || act.name}" has non-HH:MM time "${time}"`);
-          }
+          const raw = String(act.startTime || act.start_time || act.time || "").trim();
+          if (raw && HH_MM.test(raw)) { actIdx++; continue; }
+          const hr = Math.min(9 + Math.floor(actIdx * 1.5), 22);
+          const fallback = `${String(hr).padStart(2, "0")}:${actIdx % 2 === 0 ? "00" : "30"}`;
+          const coerced = SLOT_TIME[raw.toLowerCase()] || (SLOT_LABELS.test(raw) ? SLOT_TIME[raw.toLowerCase()] : null) || fallback;
+          act.startTime = coerced;
+          if ("start_time" in act) act.start_time = coerced;
+          if ("time" in act) act.time = coerced;
+          timesCoerced = true;
+          qualityIssues.push(`Day ${dayNum}: coerced "${act.title || act.name}" time "${raw || "(empty)"}" → ${coerced}`);
+          actIdx++;
         }
       }
+    }
+
+    // Persist coerced clock times so the UI shows real HH:MM (and the gate passes).
+    if (timesCoerced && savedItinerary) {
+      const { error: coerceErr } = await supabase
+        .from("trips")
+        .update({ itinerary_data: savedItinerary })
+        .eq("id", tripId);
+      if (coerceErr) console.error(`[enrich-manual-trip:bg] Failed to persist coerced times:`, coerceErr);
+      else console.log(`[enrich-manual-trip:bg] Coerced ${qualityIssues.length} non-HH:MM anchor time(s) to clock times`);
     }
 
     // Check 4: accommodationNotes / practicalTips present
