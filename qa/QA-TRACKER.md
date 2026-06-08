@@ -315,7 +315,7 @@
 | Hotel optimization | ⬜ | ⬜ | | | ⬜ |
 | AI chat / trip-planner (itinerary-chat) | ✅ | ✅ | **VERIFIED LIVE 2026-06-07** — context-aware, free chat + review-first proposal + **Apply works** (clean Bologna trip: "make Day 1 relaxed" → Applied, $125→$105, regenerate_day free within cap). Apply only failed on a heavily-degraded test trip (C-CHAT-1, downgraded to LOW edge case; no wrongful charge). | optional: graceful error on degraded itinerary | ✅ **works (C-CHAT-1 = edge case)** |
 | Notes / personalization | ⬜ | ⬜ | | | ⬜ |
-| Edit ↔ Preview toggle | ⬜ | ⬜ | | | ⬜ |
+| Edit ↔ Preview toggle | ✅ | ✅ | | | ✅ **VERIFIED LIVE 2026-06-07** — Preview switches to a polished read-only magazine view (no edit affordances, hero photos); Edit returns to the interactive editor. Bologna trip. |
 | Trip Health panel (Intelligence / Completion) | ⬜ | ✅ renders | | | ⬜ |
 | Day-by-day cost display | ✅ | ✅ | **cost-doubling**: DB trigger wrote group total into `act.cost.amount` → ×travelers every sync (badge climbed to $8,395/pp) | trigger writes per-person (`20260607230000`) + `fb35090b0` | ✅ **VERIFIED LIVE 2026-06-07** — Madrid day-1 $185/pp, stable across reorder (no ×2); test-trip data repaired |
 | Export / print / PDF | ⬜ | ⬜ | | | ⬜ |
