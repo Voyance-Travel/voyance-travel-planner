@@ -1120,6 +1120,44 @@ export async function handleGenerateTripDayV2(
       } catch (_e) { /* non-blocking */ }
     }
 
+    // ── 8h. FINAL departure-day cleanup (runs AFTER 8g re-injection) ──
+    // 8g (meal-coverage) + the departure-transport injection run AFTER the 6c
+    // terminalCleanup + 6b2 vague-title pass, so an awkward departure day can
+    // still ship a vague "Breakfast — find a local spot" injected at 08:30 AFTER
+    // the airport transfer, plus duplicate "Departure" rows. Re-run vague-title
+    // sanitize + terminalCleanup on the LAST day here, as the absolute final
+    // step before the write, so nothing re-introduced after cleanup survives.
+    if (isLastDay) {
+      try {
+        const ld: any = mergedDays.find((d: any) => (d?.dayNumber ?? d?.day_number) === totalDays) || mergedDays[mergedDays.length - 1];
+        if (ld && Array.isArray(ld.activities)) {
+          const STRIP = [
+            /\s*[—–-]\s*find (?:a |your )?(?:local|the perfect|a good|a great)?\s*(?:spot|place|restaurant|caf[eé]|eatery|gem|favou?rite|meal)\b[^,.;]*/ig,
+            /\s*\(?\bor (?:similar|high[- ]?end|comparable)[^)]*\)?/ig,
+          ];
+          for (const a of ld.activities) {
+            if (!a) continue;
+            let tt = String(a.title || a.name || '');
+            const before = tt;
+            for (const re of STRIP) tt = tt.replace(re, '');
+            tt = tt.replace(/\s{2,}/g, ' ').replace(/\s+([,.])/g, '$1').replace(/\s*[—–-]\s*(?:in|at)?\s*the destination\s*$/i, '').replace(/[—–-]\s*$/, '').trim();
+            if (tt && tt !== before) { a.title = tt; a.name = tt; }
+          }
+          const { terminalCleanup: finalTC } = await import('../universal-quality-pass.ts');
+          finalTC(ld.activities, {
+            departureTime24: repairDepartureTime24 || undefined,
+            city: facts.destination.city,
+            dayNumber: totalDays,
+            isFirstDay: false,
+            isLastDay: true,
+            hotelName: facts.hotel.name || undefined,
+          });
+        }
+      } catch (e) {
+        console.warn('[v2] final departure-day cleanup failed (non-blocking):', e);
+      }
+    }
+
     // ── 9. Single write of merged JSON ─────────────────────────────────
     // C-PERSIST-1: saveReason MUST be a whitelisted prefix or the frozen gate
     // silently drops this write on an already-ready trip (regenerate-a-day and

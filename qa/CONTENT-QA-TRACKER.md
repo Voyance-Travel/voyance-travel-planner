@@ -94,3 +94,10 @@ User read: venue SELECTION is genuinely good (Flavio al Velavevodetto, Da Enzo, 
 - C3 non-meal dedup VERIFIED LIVE: Fado + Heim repeats gone, market collapsed. C7 holds; C1 Day-4 perfectly clean (the "Travel to Your Hotel" mislabel auto-resolved to "Transfer to Airport").
 - Only remaining flag: Taberna Sal Grosso lunch on Days 2+3 (restaurant repeat).
 - **C3 restaurant-swap ADDED:** when a meal venue repeats, swap the later one to a different city-matched venue from the curated INLINE_FALLBACK_RESTAURANTS catalog (covers Paris/Rome/Barcelona/London/Berlin/Lisbon/Venice) instead of dropping it. Verified locally on Lisbon: D3 "Taberna Sal Grosso" → "Cervejaria Ramiro". Graceful no-op if the city isn't in the catalog. **C3 now complete (non-meal drop + meal swap), pending deploy + verify.**
+
+<!-- ROUND 5 — Lisbon regen #3 REGRESSED to 34/100 (variance) -->
+## Round 5 — Lisbon regen #3 = 34/100 (REGRESSION; departure-day variance)
+Same trip/code, different roll of the dice: this generation produced an inconsistent departure day — a hallucinated 15:25 departure flight with a 07:35 airport transfer (mis-timed), the 8g meal-coverage gate then injected a VAGUE "Breakfast — find a local spot" at 08:30 AFTER the transfer, plus 3 duplicate "Departure" rows. C3 swap also didn't fire live (Sal Grosso still 2×).
+ROOT CAUSE: my 6c terminalCleanup + 6b2 vague-title run MID-pipeline; 8g (meal-coverage) + departure-transport injection run AFTER and re-introduce post-departure / vague cards that cleanup never sees.
+FIX (8h): final departure-day cleanup AFTER 8g, just before the write — re-run vague-title sanitize + terminalCleanup on the last day. Verified locally on the broken Day 4: vague breakfast → real venue (nuclear sweep), 3 departures → 1, post-barrier strip applied.
+STILL OPEN: (a) departure-logistics MIS-TIMING (07:35 transfer for a 15:25 flight) — a generation-time bug, not cleanup; (b) C3 swap firing inconsistently live (worked locally, not on this regen) — needs edge-log debugging; (c) overall HIGH VARIANCE — good ~92 most rolls, can drop to ~34 on a bad departure-day roll.
