@@ -61,53 +61,73 @@ function auditDay(day, idx, total) {
   const issues = [];
   const acts = (day.activities || []).filter(Boolean);
   const isLast = idx === total - 1;
-  const add = (sev, msg) => issues.push({ sev, msg, day: idx + 1 });
+  const add = (sev, type, msg) => issues.push({ sev, type, msg, day: idx + 1 });
 
   // 1) DEPARTURE-DAY logic
   if (isLast) {
     const isDep = (a) => /\b(airport|station|terminal|transfer to|head to|taxi to|depart|fly home|flight home|heading home|boarding|security)\b/.test(titleOf(a)) || catOf(a) === 'flight';
     const depRows = acts.filter(isDep);
     const barrier = depRows.map((a) => parseMins(a.startTime || a.time)).filter((m) => m != null).sort((x, y) => x - y)[0] ?? null;
-    if (depRows.length > 1) add('high', `duplicate departure rows (${depRows.length}: ${depRows.map((a) => `"${a.title || a.name}"`).join(', ')})`);
-    if (barrier != null) {
-      for (const a of acts) {
-        const s = parseMins(a.startTime || a.time);
-        if (s != null && s >= barrier && !isLogistics(a)) add('high', `"${a.title || a.name}" at ${a.startTime || a.time} is scheduled AFTER departure (barrier ${Math.floor(barrier/60)}:${String(barrier%60).padStart(2,'0')})`);
-      }
-    }
+    if (depRows.length > 1) add('high', 'DEPARTURE_DAY', `duplicate departure rows (${depRows.length}: ${depRows.map((a) => `"${a.title || a.name}"`).join(', ')})`);
+    if (barrier != null) for (const a of acts) { const s = parseMins(a.startTime || a.time); if (s != null && s >= barrier && !isLogistics(a)) add('high', 'DEPARTURE_DAY', `"${a.title || a.name}" at ${a.startTime || a.time} scheduled AFTER departure (barrier ${Math.floor(barrier/60)}:${String(barrier%60).padStart(2,'0')})`); }
   }
 
-  // 2) GEOGRAPHIC zig-zag (non-meal located stops, in order)
+  // 2) GEOGRAPHIC zig-zag
   const stops = acts.filter((a) => !isMeal(a) && !isLogistics(a) && coordsOf(a)).map((a) => ({ t: a.title || a.name, c: coordsOf(a) }));
   if (stops.length >= 3) {
     let actual = 0; for (let i = 1; i < stops.length; i++) actual += haversineKm(stops[i-1].c, stops[i].c) || 0;
-    // nearest-neighbour optimal from the first stop
     const rest = stops.slice(1).map((s) => s.c); let cur = stops[0].c, opt = 0;
     while (rest.length) { let bi = 0, bd = Infinity; rest.forEach((c, i) => { const d = haversineKm(cur, c); if (d < bd) { bd = d; bi = i; } }); opt += bd; cur = rest.splice(bi, 1)[0]; }
-    if (opt > 0.1 && actual > opt * 1.4 && (actual - opt) > 3) add('med', `geographic zig-zag: ${actual.toFixed(1)}km path vs ~${opt.toFixed(1)}km clustered (${(actual/opt).toFixed(1)}x)`);
-    for (let i = 1; i < stops.length; i++) { const d = haversineKm(stops[i-1].c, stops[i].c); if (d && d > 8) add('med', `long intra-city hop: "${stops[i-1].t}" → "${stops[i].t}" is ${d.toFixed(1)}km`); }
+    if (opt > 0.1 && actual > opt * 1.4 && (actual - opt) > 3) add('med', 'GEOGRAPHIC', `zig-zag: ${actual.toFixed(1)}km path vs ~${opt.toFixed(1)}km clustered (${(actual/opt).toFixed(1)}x)`);
+    for (let i = 1; i < stops.length; i++) { const d = haversineKm(stops[i-1].c, stops[i].c); if (d && d > 8) add('med', 'GEOGRAPHIC', `long intra-city hop: "${stops[i-1].t}" → "${stops[i].t}" is ${d.toFixed(1)}km`); }
   }
 
   // 3) TRAVEL-TIME consistency
   const legs = acts.filter((a) => catOf(a).includes('trans')).map(durStr);
   const present = legs.filter((d) => d && String(d).trim());
-  if (legs.length >= 3 && present.length >= 3 && new Set(present.map((d) => String(d).replace(/\s/g, '').toLowerCase())).size === 1)
-    add('med', `placeholder travel times: all ${legs.length} legs are "${present[0]}" (doesn't reflect distance)`);
-  if (legs.length >= 2 && present.length < legs.length) add('low', `${legs.length - present.length}/${legs.length} travel legs have no duration`);
+  if (legs.length >= 3 && present.length >= 3 && new Set(present.map((d) => String(d).replace(/\s/g, '').toLowerCase())).size === 1) add('med', 'TRAVEL_TIME', `placeholder travel times: all ${legs.length} legs are "${present[0]}"`);
+  if (legs.length >= 2 && present.length < legs.length) add('low', 'TRAVEL_TIME', `${legs.length - present.length}/${legs.length} travel legs have no duration`);
 
   // 4) SEQUENCE sanity
   let prev = -1, sawTerminal = false;
   for (const a of acts) {
     const s = parseMins(a.startTime || a.time);
-    if (s != null) { if (s < prev - 30) add('low', `out-of-order: "${a.title || a.name}" at ${a.startTime || a.time} starts before the previous card`); prev = Math.max(prev, s); }
-    if (sawTerminal && !isLogistics(a) && !isMeal(a)) add('med', `"${a.title || a.name}" is scheduled after hotel-return/checkout`);
+    if (s != null) { if (s < prev - 30) add('low', 'SEQUENCE', `out-of-order: "${a.title || a.name}" at ${a.startTime || a.time} starts before the previous card`); prev = Math.max(prev, s); }
+    if (sawTerminal && !isLogistics(a) && !isMeal(a)) add('med', 'SEQUENCE', `"${a.title || a.name}" scheduled after hotel-return/checkout`);
     if (/return to (your )?hotel|check[- ]?out/.test(titleOf(a))) sawTerminal = true;
   }
 
-  // 5) MEAL sanity (conservative — only obvious cases)
-  const meals = acts.map(mealType).filter(Boolean);
-  for (const m of ['breakfast','lunch','dinner']) if (meals.filter((x) => x === m).length > 1) add('med', `duplicate ${m} on the day`);
-  if (!isLast && idx !== 0 && acts.filter((a) => !isLogistics(a)).length >= 4 && meals.length === 0) add('med', 'full mid-trip day with zero meals');
+  // 5) MEALS — duplicates, missing, wrong time-of-day
+  const mealActs = acts.filter((a) => mealType(a));
+  const meals = mealActs.map(mealType);
+  for (const m of ['breakfast','lunch','dinner']) if (meals.filter((x) => x === m).length > 1) add('med', 'MEALS', `duplicate ${m} on the day`);
+  if (!isLast && idx !== 0 && acts.filter((a) => !isLogistics(a)).length >= 4 && meals.length === 0) add('med', 'MEALS', 'full mid-trip day with zero meals');
+  const WIN = { breakfast: [300, 690], lunch: [660, 960], dinner: [1020, 1380] }; // 5:00–11:30 / 11:00–16:00 / 17:00–23:00
+  for (const a of mealActs) { const mt = mealType(a); const s = parseMins(a.startTime || a.time); if (mt && WIN[mt] && s != null && (s < WIN[mt][0] || s > WIN[mt][1])) add('med', 'MEALS', `${mt} at ${a.startTime || a.time} is outside a sensible ${mt} window`); }
+
+  // 6) VAGUE / PLACEHOLDER titles
+  const VAGUE = /\b(or similar|or high[- ]?end|boutique wellness|local spa|nearby caf[eé]|find a local|a local (restaurant|spot|caf[eé]|bar|venue|eatery)|local restaurant|local spot|^tbd$|placeholder|insert |your choice|optional activity)\b/i;
+  for (const a of acts) { if (!isLogistics(a) && VAGUE.test(titleOf(a))) add('med', 'VAGUE_TITLE', `vague/placeholder title: "${a.title || a.name}"`); }
+
+  // 7) PROMPT-INSTRUCTION LEAK (scaffolding rendered as an activity)
+  const LEAK = /\b(user-provided anchors|dna-matched|incorporate all|expand with|researched places|exact hh:?mm|keep all user|then expand|additional dna|user'?s researched)\b/i;
+  for (const a of acts) { if (LEAK.test(titleOf(a)) || LEAK.test(String(a.description || ''))) add('high', 'PROMPT_LEAK', `prompt scaffolding leaked as activity: "${(a.title || a.name || '').slice(0, 55)}…"`); }
+
+  // 8) MISSING LOCATION (a real venue with no coords AND no address)
+  for (const a of acts) {
+    if (isLogistics(a) || isMeal(a)) continue;
+    const hasLoc = coordsOf(a) || a.venue_name || a.venueName || a?.location?.address || a?.location?.name || a.address;
+    if (!hasLoc && /sight|attraction|museum|landmark|tour|experience|activity|culture/.test(catOf(a))) add('low', 'MISSING_LOCATION', `no address/coordinates: "${a.title || a.name}"`);
+  }
+
+  // 9) ARRIVAL-DAY: a real activity scheduled BEFORE the landing/arrival time
+  if (idx === 0) {
+    const arr = acts.map((a) => /landing|arrival|arrive/.test(titleOf(a)) ? parseMins(a.startTime || a.time) : null).filter((m) => m != null).sort((x, y) => x - y)[0] ?? null;
+    if (arr != null) for (const a of acts) { const s = parseMins(a.startTime || a.time); if (s != null && s < arr - 5 && !isLogistics(a) && !/landing|arrival|arrive/.test(titleOf(a))) add('high', 'ARRIVAL_DAY', `"${a.title || a.name}" at ${a.startTime || a.time} is BEFORE arrival (${Math.floor(arr/60)}:${String(arr%60).padStart(2,'0')})`); }
+  }
+
+  // 10) THIN DAY (full mid-trip day with very few real activities)
+  if (!isLast && idx !== 0) { const real = acts.filter((a) => !isLogistics(a) && !isMeal(a)).length; if (real > 0 && real < 2) add('med', 'THIN_DAY', `only ${real} non-meal activit${real===1?'y':'ies'} on a full day`); }
 
   return issues;
 }
@@ -121,8 +141,18 @@ function auditTrip(trip) {
 
   // hero image: old host or wrong city
   const hero = trip.metadata?.hero_image || trip.metadata?.heroImage || '';
-  if (hero.includes(OLD_HOST)) issues.push({ sev: 'high', msg: `hero image still on the OLD host (breaks on decommission): ${hero.split('/').pop()}`, day: 0 });
-  if (hero) { const fn = hero.split('/').pop().toLowerCase(); const wrong = KNOWN_CITIES.find((c) => c !== dest && fn.includes(c)); if (wrong && dest) issues.push({ sev: 'high', msg: `hero image looks like ${wrong}, not ${dest}: ${hero.split('/').pop()}`, day: 0 }); }
+  if (hero.includes(OLD_HOST)) issues.push({ sev: 'high', type: 'HERO_IMAGE', msg: `hero image still on the OLD host (breaks on decommission): ${hero.split('/').pop()}`, day: 0 });
+  if (hero) { const fn = hero.split('/').pop().toLowerCase(); const wrong = KNOWN_CITIES.find((c) => c !== dest && fn.includes(c)); if (wrong && dest) issues.push({ sev: 'high', type: 'HERO_IMAGE', msg: `hero image looks like ${wrong}, not ${dest}: ${hero.split('/').pop()}`, day: 0 }); }
+
+  // cross-day DUPLICATE VENUE (same attraction/restaurant scheduled on 2+ days)
+  const seen = {};
+  days.forEach((d, di) => (d.activities || []).forEach((a) => {
+    if (isLogistics(a)) return;
+    const key = String(a.venue_name || a.venueName || a.title || a.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (key.length < 6) return;
+    (seen[key] = seen[key] || new Set()).add(di + 1);
+  }));
+  for (const [k, dset] of Object.entries(seen)) if (dset.size >= 2) issues.push({ sev: 'med', type: 'DUPLICATE_VENUE', msg: `"${k}" repeats on days ${[...dset].join(', ')}`, day: 0 });
 
   const penalty = issues.reduce((s, i) => s + (i.sev === 'high' ? 25 : i.sev === 'med' ? 8 : 2), 0);
   return { id: trip.id, destination: trip.destination, dayCount: days.length, score: Math.max(0, 100 - penalty), issues };
