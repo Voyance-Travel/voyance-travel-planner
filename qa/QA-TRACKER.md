@@ -626,3 +626,12 @@ Confirmed via hard reload + React-fiber inspection on trip 6e087c7f:
 2. **Note attaches to the wrong (transit) activity on re-parse** — after hard reload the aiNotes shows on **"Travel to Barri Gòtic"** (a transit row) instead of **"Wander the Barri Gòtic"** (the activity the concierge was open on). ID/index drift between save-time activity.id and the re-parsed activities (parser inserts/derives transit rows). FIX: stabilize activity ids across parse, or key aiNotes save by a stable id.
 3. **Display gate hides transit notes** — AISavedNotes render condition is `... && !isDowntime && !isTransport` (EditorialItinerary.tsx:12228), so even when the note lands on a transit row it's suppressed. 
 Owner UX expectation (2026-06-09): notes should also be surfaced on the **⋯ menu** ("Notes" entry) + shown as a **log** on the activity (the AISavedNotes inline log is the intended log — currently broken by the above). Build all of this together + deploy + re-test.
+
+<!-- LIVE PROD in-itinerary tools 2026-06-09 -->
+### ✅ In-itinerary tools — VERIFIED LIVE ON PRODUCTION (Barcelona 6e087c7f, travelwithvoyance.com)
+- ✅ **Move** (⋯→Move down) — reordered + persisted to DB; cost recomputed correctly (no doubling)
+- ✅ **Lock** — toggled on Quimet dinner → toast "Activity locked" → `isLocked=true` in DB (+ padlock shows)
+- ✅ **Swap** (⋯→Find Alternative) — "3/3 free swaps", real ranked alternatives, picked "Gourmet Tapas Tour in Poble Sec" → toast "Activity swapped!" → persisted (old Pintxos Crawl gone, new one in)
+- ✅ **Add** (day footer "+ Add") — **place search works** (typed "Casa Batllo" → "Batlló House" w/ real address; Nominatim-first + "Search Google Places instead" fallback) → auto-filled venue/address/title → Add → smart **Schedule-overflow dialog** (warned it'd shorten Sagrada Família 120→69min / drop hotel return) → "Shift anyway" → **Batlló House persisted**; cascade applied as warned
+- ✅ **AI Concierge** — excellent, accurate, venue-specific guidance on every activity
+- 🐞 only issue: AI-concierge "Save note to card" display bug (saves to DB, doesn't re-display — see 3-part diagnosis; data safe; fix queued task_0383682c)
