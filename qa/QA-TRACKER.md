@@ -657,3 +657,14 @@ Live test (Barcelona 6e087c7f): the Arrival Game Plan "Add Hotel" button opened 
 - ✅ **Budget** — set $1,000 → instant Over-Budget detection ($180/18% over), Budget Coach with category breakdown (Dining +$250 / Activities +$120 / Transit +$60) + "Raise budget to $1,300" action; persisted (trips.budget_total_cents=100000, include_hotel=true).
 - ✅ **Payments** — already verified this session (Stripe paid build 240 credits + $9 purchase + FIFO + refund clawback).
 - Minor open: flight modal pre-fills To=LHR on a Barcelona trip (should be BCN).
+
+<!-- IMAGE STORAGE NOT MIGRATED 2026-06-08 -->
+## 🚨 HIGH — Image storage buckets never migrated (all heroes served from OLD Lovable host)
+While chasing "Madrid photo on a Barcelona trip", found a systemic migration gap:
+- `src/data/destinationStorageImages.ts` STORAGE_BASE = `https://jsxplunjjvxuejeouwob.supabase.co/...` (OLD host).
+- `destinations.hero_image_url`/`stock_image_url` (NEW DB rows) point to OLD host (`site-images/photo-*`).
+- 18 trips' `metadata.hero_image` point to OLD host.
+- NEW host (`qpwexpjqzsdkjkvgcntx`) returns HTTP 400 for these paths → the `destination-images` + `site-images` storage buckets were NOT ported in the migration.
+- IMPACT: every destination/hero image in the app currently loads from the OLD project. The moment old-Lovable is decommissioned, ALL hero/destination imagery breaks. Latent outage — blocks the old-project decommission.
+- SECOND bug (content): `destination-images/destination/barcelona-1.jpg` is actually a **Madrid** photo (Gran Vía / Metropolis bldg) — mislabeled seed → "Madrid on a Barcelona trip".
+- FIX: (1) copy `destination-images` + `site-images` buckets old→new host (needs old project's storage/service key — owner); (2) rewrite STORAGE_BASE + destinations.hero/stock_image_url + trips.metadata.hero_image to the new host; (3) replace the mislabeled barcelona-1.jpg with a real Barcelona photo; (4) extend heroCrossCityGuard to also catch storage-map filenames (currently only matches unsplash `photo-XXXX` slugs, so barcelona-1.jpg slips the guard). Then add old host to isUntrustedHeroUrl so any stragglers self-heal.
