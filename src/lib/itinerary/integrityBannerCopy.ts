@@ -40,12 +40,12 @@ export function integrityCodeMessage(code: string): IntegrityCodeMessage | null 
         body:
           "A taxi or transfer doesn't line up with the next stop. You can edit or remove it from the day.",
       };
+    // Meal coverage is intentionally NOT surfaced to users — the detector
+    // false-fires (departure days that don't need breakfast, food-hall /
+    // arrival-lunch edge cases) and "some meals couldn't be scheduled" makes a
+    // perfectly good itinerary look broken. Tracked internally for QA only.
     case 'MEAL_COVERAGE_MISSING':
-      return {
-        code,
-        title: "Some meals couldn't be scheduled",
-        body: 'One or more days are missing a breakfast, lunch, or dinner slot.',
-      };
+      return null;
     default:
       return null;
   }

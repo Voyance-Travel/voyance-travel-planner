@@ -47,12 +47,21 @@ const CODE_COPY: Record<string, string> = {
 
 export function IntegrityContractBanner({ contract }: Props) {
   if (!contract || contract.ok !== false) return null;
-  const codes = Array.isArray(contract.codes) ? contract.codes : [];
-  const violations = Array.isArray(contract.violations) ? contract.violations.slice(0, 5) : [];
+  // Meal-coverage is intentionally NOT surfaced to users. The detector
+  // false-fires (e.g. departure days that don't need breakfast, food-hall /
+  // arrival-lunch edge cases), and a "missing meals / trip is incomplete" alarm
+  // makes a perfectly good itinerary look broken. Meal coverage is still tracked
+  // internally for QA — it's just never shown in this user-facing banner.
+  const codes = (Array.isArray(contract.codes) ? contract.codes : []).filter(
+    (c) => c !== 'MEAL_COVERAGE_MISSING',
+  );
+  const violations = (Array.isArray(contract.violations) ? contract.violations : [])
+    .filter((v) => v.code !== 'MEAL_COVERAGE_MISSING')
+    .slice(0, 5);
   const omitted = Array.isArray(contract.omittedRequests) ? contract.omittedRequests : [];
-  const mealRows = Array.isArray(contract.mealCoverage)
-    ? contract.mealCoverage.filter((r) => Array.isArray(r.missing) && r.missing.length > 0)
-    : [];
+
+  // If meal coverage was the only thing that "failed", show nothing at all.
+  if (codes.length === 0 && omitted.length === 0 && violations.length === 0) return null;
 
   return (
     <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 my-3">
@@ -67,19 +76,6 @@ export function IntegrityContractBanner({ contract }: Props) {
               <li key={c}>{CODE_COPY[c] || c}</li>
             ))}
           </ul>
-
-          {mealRows.length > 0 && (
-            <div className="text-xs text-amber-800 dark:text-amber-200">
-              <div className="font-medium">Missing meals:</div>
-              <ul className="mt-1 pl-4 list-disc">
-                {mealRows.map((r) => (
-                  <li key={r.dayNumber}>
-                    Day {r.dayNumber}: {r.missing.join(', ')}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
 
           {omitted.length > 0 && (
             <div className="text-xs text-amber-800 dark:text-amber-200">
