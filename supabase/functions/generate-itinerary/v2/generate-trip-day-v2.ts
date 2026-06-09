@@ -587,6 +587,26 @@ export async function handleGenerateTripDayV2(
       console.warn(`[v2] Step 8 (hotel-return) retry failed (non-blocking) day=${dayNumber}:`, e);
     }
 
+    // ── 6c. Terminal cleanup — V2 departure-day parity ──
+    // The V1 / single-day paths run terminalCleanup; the V2 chain (the LIVE
+    // production path) did NOT — so no-return-flight trips kept sightseeing +
+    // lunch scheduled AFTER the airport transfer and duplicate "Departure" rows.
+    // Strip post-barrier non-logistics + collapse duplicate departures on the
+    // last day, on the final activities just before persist. Non-blocking.
+    try {
+      const { terminalCleanup } = await import('../universal-quality-pass.ts');
+      terminalCleanup(finalDay.activities, {
+        departureTime24: isLastDay ? (repairDepartureTime24 || undefined) : undefined,
+        city: facts.destination.city,
+        dayNumber,
+        isFirstDay,
+        isLastDay,
+        hotelName: facts.hotel.name || undefined,
+      });
+    } catch (e) {
+      console.warn(`[v2] terminalCleanup failed (non-blocking) day=${dayNumber}:`, e);
+    }
+
     // ── 7. Persist tables (itinerary_days + itinerary_activities) ──────
     const persisted = await withStage(trace, 'persist_gate', { dayNumber }, () =>
       persistDay({
