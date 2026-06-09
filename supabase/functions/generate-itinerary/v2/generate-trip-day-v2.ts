@@ -1024,12 +1024,23 @@ export async function handleGenerateTripDayV2(
         for (const d of mergedDays) {
           if (!Array.isArray((d as any)?.activities)) continue;
           const kept: any[] = [];
+          const seenTypeToday = new Set<string>();
           for (const a of (d as any).activities) {
             if (a?.locked || a?.isLocked || a?.lock_state === 'locked' || isLog3(a)) { kept.push(a); continue; }
             const key = lc(a?.location?.name || a?.venue_name || a?.venueName || a?.title || a?.name);
             if (!key || key.length < 6) { kept.push(a); continue; }
             const mt = mealTypeOf(a);
             if (mt) {
+              // same-day duplicate meal TYPE (e.g. two dinners) → drop the later
+              // one. Only act on EXPLICIT meal titles, not category-inferred ones
+              // — otherwise "Izakaya at X" / "Cocktails at Y" (dining category,
+              // no meal word) get wrongly dropped as duplicate "lunches".
+              const ttX = String(a?.title || a?.name || '').toLowerCase();
+              const mtExplicit = /\bbreakfast\b/.test(ttX) ? 'breakfast' : /\blunch\b/.test(ttX) ? 'lunch' : /\bdinner\b/.test(ttX) ? 'dinner' : null;
+              if (mtExplicit) {
+                if (seenTypeToday.has(mtExplicit)) { console.log(`[v2] [MEAL_DEDUP] day ${(d as any).dayNumber}: dropped extra ${mtExplicit} "${a.title || a.name}"`); continue; }
+                seenTypeToday.add(mtExplicit);
+              }
               // MEAL repeat → swap to a different city-matched restaurant (never drop a meal).
               if (usedMealNames.has(key)) {
                 const fb = getRandomFallbackRestaurant(c3City, mt, usedMealNames);
