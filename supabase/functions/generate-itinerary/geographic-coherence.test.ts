@@ -269,3 +269,38 @@ Deno.test("reorderDayByProximity: no-op on a transition/arrival day (<2 flexible
   assertEquals(flexibleCount, 0);
   assertEquals(reordered, false);
 });
+
+// ---------- V2-chain wiring regression ----------
+// generate-trip-day-v2.ts (the LIVE production path) composes
+// reorderDayByProximity → retimeAndComputeLegTimes after the Schedule
+// Executioner, exactly as the V1 paths do. The reported prod symptom was
+// "Day 1 all legs 15m" — a uniform placeholder that survives because the
+// executioner only retimes explicit transit CARDS, never the per-leg
+// transportation.duration field. This locks in that the wired pair writes
+// real, distance-proportional leg times (a long city-crossing hop must read
+// longer than a short neighbourhood hop), not a single placeholder value.
+Deno.test("V2 wiring: legs reflect real distance, not a uniform 15m placeholder", () => {
+  // Three stops on an east–west line: a long hop then a short hop, all delivered
+  // with the same "15m" placeholder the AI tends to emit.
+  const day = [
+    { id: "m1", title: "Breakfast", category: "dining", startTime: "09:00", endTime: "10:00", durationMinutes: 60, location: { name: "Cafe", coordinates: { lat: 41.39, lng: 2.10 } }, transportation: { method: "walking", duration: "15m" } },
+    { id: "f1", title: "Museum Far East", category: "sightseeing", startTime: "11:00", endTime: "12:00", durationMinutes: 60, location: { name: "FarEast", coordinates: { lat: 41.39, lng: 2.25 } }, transportation: { method: "transit", duration: "15m" } },
+    { id: "f2", title: "Gallery Just East", category: "sightseeing", startTime: "12:30", endTime: "13:30", durationMinutes: 60, location: { name: "JustEast", coordinates: { lat: 41.39, lng: 2.26 } }, transportation: { method: "walking", duration: "15m" } },
+  ];
+  const reorder = reorderDayByProximity(day, { hotelCoords: { lat: 41.39, lng: 2.10 } });
+  const timed = retimeAndComputeLegTimes(reorder.activities, { destination: "Barcelona" });
+
+  const parseMin = (t: unknown) => {
+    const m = typeof t === "string" ? t.match(/^(\d+) min$/) : null;
+    return m ? Number(m[1]) : NaN;
+  };
+  // First stop's inbound leg is cleared; the long hop (m1→f1, ~12km) must read
+  // materially longer than the short hop (f1→f2, ~800m).
+  assertEquals(timed[0].transportation?.duration, "");
+  const longHop = parseMin(timed[1].transportation?.duration);
+  const shortHop = parseMin(timed[2].transportation?.duration);
+  assert(Number.isFinite(longHop) && Number.isFinite(shortHop), `legs must be "{n} min": got ${JSON.stringify([timed[1].transportation?.duration, timed[2].transportation?.duration])}`);
+  assert(longHop > shortHop, `long hop (${longHop}m) must exceed short hop (${shortHop}m) — placeholder not replaced with real distance`);
+  // And the values are not all the stale 15-minute placeholder.
+  assert(longHop !== 15 || shortHop !== 15, "legs still read as the 15m placeholder");
+});
