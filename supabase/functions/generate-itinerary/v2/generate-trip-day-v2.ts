@@ -657,6 +657,39 @@ export async function handleGenerateTripDayV2(
       }
     }
 
+    // ── 6b1. Meal-sanity + late-overflow guard (C7) ──
+    // Real clean-trip failures this targets: TWO dinners on one day (19:30 +
+    // 23:29) and a nightcap that cascaded to 01:55. Keep ONE of each meal type
+    // (the earliest, which is the sensible one) and drop non-logistics cards
+    // that overflow past midnight (00:00–04:59). Locked/user items are kept.
+    try {
+      const seenMeal = new Set();
+      finalDay.activities = (finalDay.activities || []).filter((a) => {
+        const isLk = a?.locked || a?.isLocked || a?.lock_state === 'locked';
+        const t = String(a?.title || a?.name || '').toLowerCase();
+        let mt = null;
+        if (/\bbreakfast\b/.test(t)) mt = 'breakfast';
+        else if (/\blunch\b/.test(t)) mt = 'lunch';
+        else if (/\bdinner\b/.test(t)) mt = 'dinner';
+        if (mt) {
+          // Count the meal even when locked, so a later UNLOCKED duplicate is
+          // still detected (the first dinner is often lock_state='locked').
+          if (seenMeal.has(mt)) {
+            if (!isLk) { console.log(`[v2] meal-dedup day=${dayNumber}: dropped extra ${mt} "${a.title || a.name}"`); return false; }
+          } else {
+            seenMeal.add(mt);
+          }
+        }
+        const tm = (() => { const x = String(a?.startTime || a?.time || '').match(/(\d{1,2}):(\d{2})/); return x ? (+x[1]) * 60 + (+x[2]) : null; })();
+        const cat = String(a?.category || '').toLowerCase();
+        const isLog = ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(cat);
+        if (!isLk && tm != null && tm < 300 && !isLog) { console.log(`[v2] late-overflow day=${dayNumber}: dropped "${a.title || a.name}" at ${a.startTime || a.time}`); return false; }
+        return true;
+      });
+    } catch (e) {
+      console.warn(`[v2] meal-sanity guard failed day=${dayNumber}:`, e);
+    }
+
     // ── 6b2. C5 vague-title sanitize ──
     // Strip placeholder/instruction phrasing the model leaves in titles
     // ("Breakfast — find a local spot in Vienna", "… or similar"). These read

@@ -71,3 +71,13 @@ e.g. *"QA Test Gelato Stop at Vivoli"* with no coords (can't map or compute trav
 - **Everything routes through the V2 chain** (`v2/generate-trip-day-v2.ts`, default-on; V1 deletion is imminent). Every fix above must land in **V2**, not V1.
 - Sample is small (18 trips with ≥2 days). Re-run `--limit 50+` as the trip corpus grows.
 - A `--llm` "skeptical traveller" pass exists for subjective issues a rule can't catch; needs `OPENROUTER_API_KEY`.
+
+<!-- ROUND 2 — first CLEAN fresh trip (Rome, 4d, no locks/must-dos) -->
+## Round 2 — clean Rome generation (trip 9e87e73e)
+User read: venue SELECTION is genuinely good (Flavio al Velavevodetto, Da Enzo, Roscioli, SantoPalato — real local spots). SCHEDULING is the slop. Auditor 66/100.
+- **C1 DEPARTURE: ✅ VERIFIED FIXED** on clean data — Day 4 = Checkout → Transfer to Airport, nothing after. (Barcelona only "failed" because its must-dos were locked.)
+- **C5 VAGUE_TITLE: ✅ VERIFIED** — no placeholder titles. Hero correct (Rome).
+- **C7 MEALS: FIX WRITTEN (pending deploy)** — clean trip had TWO dinners on Day 1 (19:30 + 23:29) and a nightcap cascaded to 01:55. Added v2 6b1 guard: keep one of each meal type (locked meals still counted so later unlocked dupes drop), drop non-logistics cards overflowing past midnight. Verified locally on Rome Day 1 (12→10, drops 23:29 dinner + 01:55 nightcap).
+- **C3 DUPLICATE_VENUE: prompt-feed INSUFFICIENT.** Da Enzo (Day 2+3 dinner) + Pasticceria Regoli (Day 1 lunch + Day 3 breakfast) still repeated — the model ignores the "don't repeat" instruction. Needs TEETH: a post-generation cross-day dedup that SWAPS a repeated dining venue (needs a real alternative pool, not just a prompt nudge).
+- **C10 OVERLAP (new):** two activities at the same start time (Day 2: Colosseum + breakfast both 08:30). Executioner not spacing them.
+- **C11 THIN/GAPPY DAY (new, ⊃ C8):** Day 3 had one attraction + 4-hour holes between meals. Completeness/pacing gap.
