@@ -70,9 +70,10 @@ function auditDay(day, idx, total) {
     const isBareDep = (a) => { const t = titleOf(a); return /\bdepart(?:ure|ing|s)?\b/.test(t) && !/\b(flight|transfer|airport|station|terminal|check)\b/.test(t); };
     const isStrong = (a) => catOf(a) === 'flight' || ((catOf(a).includes('trans') || catOf(a) === 'logistics') && /\b(airport|station|terminal|transfer|head to|taxi to|boarding|security)\b/.test(titleOf(a)));
     const bareDeps = acts.filter(isBareDep);
-    const barrier = acts.map((a) => isStrong(a) ? parseMins(a.startTime || a.time) : null).filter((m) => m != null).sort((x, y) => x - y)[0] ?? null;
+    const sb = acts.map((a) => isStrong(a) ? parseMins(a.startTime || a.time) : null).filter((m) => m != null).sort((x, y) => x - y);
+    const early = sb[0] ?? null, late = sb[sb.length - 1] ?? null;
     if (bareDeps.length > 1) add('high', 'DEPARTURE_DAY', `${bareDeps.length} bare departure rows`);
-    if (barrier != null) for (const a of acts) { const s = parseMins(a.startTime || a.time); if (s != null && s >= barrier && !isLogistics(a) && !isMeal(a)) add('high', 'DEPARTURE_DAY', `"${a.title || a.name}" at ${a.startTime || a.time} scheduled AFTER departure (barrier ${Math.floor(barrier/60)}:${String(barrier%60).padStart(2,'0')})`); }
+    for (const a of acts) { if (isLogistics(a)) continue; const s = parseMins(a.startTime || a.time); if (s == null) continue; if ((late != null && s >= late) || (early != null && s >= early && !isMeal(a))) add('high', 'DEPARTURE_DAY', `"${a.title || a.name}" at ${a.startTime || a.time} scheduled AFTER departure`); }
   }
 
   // 2) GEOGRAPHIC zig-zag

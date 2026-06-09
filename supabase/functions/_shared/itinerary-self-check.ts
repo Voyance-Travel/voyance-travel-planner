@@ -57,8 +57,11 @@ export function checkItineraryQuality(days: any[]): { score: number; issues: Qua
     if (isLast) {
       const bareDeps = acts.filter(isBareDeparture);
       if (bareDeps.length > 1) add('high', 'DEPARTURE_DAY', idx + 1, `${bareDeps.length} bare Departure rows`);
-      const barrier = acts.map((a: any) => isStrongBarrier(a) ? parseMins(a.startTime || a.time) : null).filter((m: any) => m != null).sort((x: number, y: number) => x - y)[0] ?? null;
-      if (barrier != null) for (const a of acts) { const s = parseMins(a.startTime || a.time); if (s != null && s >= barrier && !isLogistics(a) && !isMeal(a)) add('high', 'DEPARTURE_DAY', idx + 1, `"${a.title || a.name}" after departure`); }
+      // Leisure can't follow the EARLIEST barrier (you've left for the airport);
+      // NOTHING (meals included) can follow the LATEST barrier (the flight).
+      const sb = acts.map((a: any) => isStrongBarrier(a) ? parseMins(a.startTime || a.time) : null).filter((m: any) => m != null).sort((x: number, y: number) => x - y);
+      const early = sb[0] ?? null, late = sb[sb.length - 1] ?? null;
+      for (const a of acts) { if (isLogistics(a)) continue; const s = parseMins(a.startTime || a.time); if (s == null) continue; if ((late != null && s >= late) || (early != null && s >= early && !isMeal(a))) add('high', 'DEPARTURE_DAY', idx + 1, `"${a.title || a.name}" after departure`); }
     }
     // prompt-leak + vague titles
     for (const a of acts) {
@@ -104,13 +107,18 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
     // non-logistics, non-meal activities scheduled at/after the strong barrier.
     const bareMins = d.activities.filter(isBareDeparture).map((a: any) => parseMins(a.startTime || a.time)).filter((m: any) => m != null).sort((x: number, y: number) => x - y);
     const keepBare = bareMins.length ? bareMins[bareMins.length - 1] : null;
-    const barrier = d.activities.map((a: any) => isStrongBarrier(a) ? parseMins(a.startTime || a.time) : null).filter((m: any) => m != null).sort((x: number, y: number) => x - y)[0] ?? null;
+    const sb = d.activities.map((a: any) => isStrongBarrier(a) ? parseMins(a.startTime || a.time) : null).filter((m: any) => m != null).sort((x: number, y: number) => x - y);
+    const early = sb[0] ?? null, late = sb[sb.length - 1] ?? null;
     d.activities = d.activities.filter((a: any) => {
+      const s = parseMins(a.startTime || a.time);
+      // NOTHING (not even a locked/auto-locked meal) can occur after the flight
+      // has departed — strip it regardless of lock.
+      if (s != null && late != null && s >= late && !isLogistics(a)) { repaired++; return false; }
       if (isLocked(a)) return true;
       if (isBareDeparture(a)) { const m = parseMins(a.startTime || a.time); if (keepBare != null && m != null && m !== keepBare) { repaired++; return false; } return true; }
       if (isLogistics(a)) return true;
-      const s = parseMins(a.startTime || a.time);
-      if (barrier != null && s != null && s >= barrier && !isMeal(a)) { repaired++; return false; }
+      // leisure (non-meal) can't follow the earliest barrier (left for the airport).
+      if (s != null && early != null && s >= early && !isMeal(a)) { repaired++; return false; }
       return true;
     });
   });
