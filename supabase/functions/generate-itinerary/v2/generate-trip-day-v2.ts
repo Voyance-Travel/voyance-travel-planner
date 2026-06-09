@@ -1143,6 +1143,30 @@ export async function handleGenerateTripDayV2(
             tt = tt.replace(/\s{2,}/g, ' ').replace(/\s+([,.])/g, '$1').replace(/\s*[—–-]\s*(?:in|at)?\s*the destination\s*$/i, '').replace(/[—–-]\s*$/, '').trim();
             if (tt && tt !== before) { a.title = tt; a.name = tt; }
           }
+          // Re-time a mis-placed airport transfer to the ACTUAL departure flight.
+          // The model sometimes puts the transfer hours too early (e.g. 07:35
+          // for a 15:25 flight), which made terminalCleanup's barrier far too
+          // early and wrongly stripped the whole morning. Anchor the transfer at
+          // flight − 180min, then re-sort, so cleanup sees a coherent barrier.
+          const pM = (s: any) => { const m = String(s || '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+          const fM = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+          let depMin: number | null = repairDepartureTime24 ? pM(repairDepartureTime24) : null;
+          for (const a of ld.activities) {
+            const tt = String(a?.title || '').toLowerCase(); const c = String(a?.category || '').toLowerCase();
+            if (c === 'flight' || /\bdeparture flight\b|\bflight\b/.test(tt)) { const m = pM(a.startTime || a.time); if (m != null) depMin = Math.max(depMin ?? 0, m); }
+          }
+          if (depMin != null && depMin > 180) {
+            const tgt = depMin - 180;
+            let retimed = false;
+            for (const a of ld.activities) {
+              const tt = String(a?.title || '').toLowerCase();
+              if (/transfer to (the )?airport|head to (the )?airport|taxi to (the )?airport|to the airport/.test(tt)) {
+                const m = pM(a.startTime || a.time);
+                if (m != null && m < tgt - 60) { a.startTime = fM(tgt); a.time = a.startTime; retimed = true; console.log(`[v2] [DEP_RETIME] transfer ${fM(m)} → ${fM(tgt)} (flight ${fM(depMin)})`); }
+              }
+            }
+            if (retimed) ld.activities.sort((x: any, y: any) => (pM(x.startTime || x.time) ?? 9999) - (pM(y.startTime || y.time) ?? 9999));
+          }
           const { terminalCleanup: finalTC } = await import('../universal-quality-pass.ts');
           finalTC(ld.activities, {
             departureTime24: repairDepartureTime24 || undefined,
