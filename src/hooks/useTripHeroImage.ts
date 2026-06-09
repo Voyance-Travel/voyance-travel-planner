@@ -13,7 +13,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   getDestinationImage, 
   getDestinationImages as getCuratedImages,
-  hasCuratedImages,
   generateDestinationGradient
 } from '@/utils/destinationImages';
 import { getHeroImageByName, getDestinationCanonicalImage } from '@/services/destinationImagesAPI';
@@ -163,8 +162,14 @@ export function useTripHeroImage({
     return () => { cancelled = true; };
   }, [canonicalUrl, destination]);
 
-  const curatedImages = getCuratedImages(destination);
-  const hasCurated = hasCuratedImages(destination);
+  // Only trust curated images the policy allows. The legacy curated lists are
+  // entirely images.unsplash.com URLs (untrusted: expired/403 + unverified
+  // labels — e.g. barcelona[0] is a Madrid photo). Filtering here means
+  // `hasCurated` is false when nothing trustworthy remains, so the resolver's
+  // `!hasCurated` gate opens and the destination-images API tier can fetch a
+  // correct, city-matched image instead of pinning the chain at a dead tier.
+  const curatedImages = getCuratedImages(destination).filter((u) => !isUntrustedHeroUrl(u));
+  const hasCurated = curatedImages.length > 0;
 
   const [storageFailed, setStorageFailed] = useState(false);
   const storageUrl = useMemo(() => lookupStorageHero(destination), [destination]);
