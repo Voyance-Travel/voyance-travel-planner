@@ -520,6 +520,14 @@ function parseSingleActivity(
           .map((t) => sanitizeDisplayString(t))
           .filter((t): t is string => Boolean(t))
       : [],
+    // Preserve AI-concierge "saved notes" through the parse so they re-hydrate on
+    // reload. They're stored in itinerary_data and saved correctly, but were not
+    // re-displayed on the card after reload — making notes look like they never
+    // persisted. Explicit (not just via the ...activityData spread) so a typed
+    // rebuild downstream can't silently drop them.
+    aiNotes: Array.isArray((activityData as { aiNotes?: unknown }).aiNotes)
+      ? (activityData as { aiNotes?: unknown }).aiNotes
+      : undefined,
   };
 }
 
