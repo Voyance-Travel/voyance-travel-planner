@@ -583,3 +583,18 @@ Owner asked to retest everything we were only code-confident on. Results:
 - **DECISION (owner, 2026-06-08): DEFER (option 3).** Background-only (reminder emails / trip summaries), NOT user-blocking. No rush.
 - **Future clean fix (option 2, when wanted):** refactor send-trip-reminders + auto-summarize-completed-trips to gate on a **dedicated low-privilege `CRON_SECRET`** (not the master service-role key), so the cron never holds admin. Owner sets one secret via `supabase secrets set`; agent does the function + cron-command changes. (Supabase Vault is the interim alternative — encrypted vs. a plain GUC.)
 - **DO NOT** use the plain-GUC `ALTER DATABASE` approach.
+
+<!-- 🚀 MIGRATION CUTOVER COMPLETE 2026-06-08 -->
+## 🚀 DOMAIN CUTOVER COMPLETE + VERIFIED — 2026-06-08
+Owner flipped DNS at Squarespace (domain had migrated from Google Domains 2024). Agent **independently verified live** (not just trusting the report):
+- ✅ DNS: apex `travelwithvoyance.com` → A `216.198.79.1` (Vercel); `www` → CNAME `…vercel-dns-017.com` → Vercel IPs. Old Lovable A `185.158.133.1` gone.
+- ✅ apex → **HTTP/2 308** → `https://www.travelwithvoyance.com/` (server: Vercel, HSTS).
+- ✅ www → **HTTP/2 200**, server Vercel, valid SSL, x-vercel-cache HIT.
+- ✅ **Served bundle references the NEW Supabase `qpwexpjqzsdkjkvgcntx` (×2), ZERO refs to old `jsxpl…`** — live domain is on the owner-owned backend.
+- ✅ App **renders live** on `www.travelwithvoyance.com` (marketing home, logged-out).
+**MIGRATION COMPLETE** — travelwithvoyance.com now fully on the owned stack (Supabase + OpenRouter + Vercel). Old Lovable out of the traffic path.
+
+### Post-cutover notes:
+- ⚠️ Keep old Lovable project ALIVE a few more days = rollback safety + lets the image cache self-heal (some old-storage image URLs re-fetch on first view — transient, expected; C-IMG-3).
+- ⏸️ Cron trip-reminders auth still deferred (non-blocking background; clean fix = dedicated CRON_SECRET when wanted).
+- ℹ️ Corrections to the cutover-report checklist that was pasted: **Apple OAuth JWT is DONE** (not "pending" — client-secret generated + live-probed 302 this session) and **SendGrid is DONE** (trial/credit issue resolved → /auth/v1/recover 200).
