@@ -44,6 +44,7 @@ import { persistDay } from '../pipeline/persist-day.ts';
 import { persistTripItinerary } from '../../_shared/persist-itinerary.ts';
 import { writeActivityCostsFromItinerary } from '../../_shared/write-activity-costs.ts';
 import { scrubActivity } from '../../_shared/scrub-activity.ts';
+import { getRandomFallbackRestaurant } from '../fix-placeholders.ts';
 import { buildDayScheduleSummary, scrubPhantomEventRefs } from '../../_shared/prompt-leak-scrub.ts';
 import { runScheduleExecutioner, toExecutionerAuditCodes } from '../../_shared/schedule-executioner.ts';
 import { applyAnchorsWin } from '../anchor-guard.ts';
@@ -994,7 +995,10 @@ export async function handleGenerateTripDayV2(
     // (separate follow-up). Logistics + locked items always kept. Last day only.
     if (isLastDay) {
       try {
-        const { getRandomFallbackRestaurant } = await import('../fix-placeholders.ts');
+        // getRandomFallbackRestaurant is now a STATIC import (top of file) —
+        // a dynamic await import() of a local module was silently failing in the
+        // bundled edge runtime, so this whole C3 dedup/swap block no-op'd live
+        // (duplicate Kagari/Kappabashi survived on the Tokyo regen).
         const lc = (s: any) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
         const isLog3 = (a: any) => ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(String(a?.category || '').toLowerCase());
         const mealTypeOf = (a: any): 'breakfast' | 'lunch' | 'dinner' | null => {
