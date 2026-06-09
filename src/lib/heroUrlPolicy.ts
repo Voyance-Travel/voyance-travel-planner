@@ -30,6 +30,16 @@ export function isUntrustedHeroUrl(url: string | null | undefined): boolean {
   if (!trimmed) return true;
   if (/images\.unsplash\.com/i.test(trimmed)) return true;
   if (/source\.unsplash\.com/i.test(trimmed)) return true;
+  // Old Lovable Supabase host. Its hero/destination storage buckets were never
+  // migrated to the owner-owned project, so every image still pointing here
+  // (94 destination rows + ~18 trips + the legacy storage-map constant) loads
+  // from a host slated for decommission — and some seeds are mislabeled
+  // (destination-images/destination/barcelona-1.jpg is actually a Madrid photo).
+  // Treat the whole host as untrusted so the resolver advances to the
+  // destination-images API tier, which fetches a correct, city-matched image and
+  // stores it on the NEW host; the existing write-back path then self-heals the
+  // stored URL. Removes the app's runtime dependency on the old project.
+  if (/jsxplunjjvxuejeouwob\.supabase\.co/i.test(trimmed)) return true;
   if (PEOPLE_CONTENT_SLUG_RE.test(trimmed)) return true;
   return false;
 }

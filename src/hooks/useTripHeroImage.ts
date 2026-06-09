@@ -42,7 +42,9 @@ function lookupStorageHero(destination: string): string | null {
   const candidates = [cityOnly, slug, cityOnly.replace(/-/g, ' ')];
   for (const k of candidates) {
     const hit = DESTINATION_STORAGE_IMAGES[k];
-    if (hit?.imageUrl) return hit.imageUrl;
+    // Skip untrusted URLs (e.g. the legacy old-host storage map) so this tier
+    // can't pin a stale/dead-host image; the resolver advances to the API tier.
+    if (hit?.imageUrl && !isUntrustedHeroUrl(hit.imageUrl)) return hit.imageUrl;
   }
   return null;
 }
