@@ -1018,6 +1018,11 @@ export async function handleGenerateTripDayV2(
           return (c === 'dining' || c === 'restaurant') ? 'lunch' : null;
         };
         const prefixSame = (a: string, b: string) => { if (a === b) return true; const [s, l] = a.length < b.length ? [a, b] : [b, a]; return l.startsWith(s + ' '); };
+        const pMin = (s: any) => { const m = String(s || '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+        // Map a clock time to its meal window (overlapping edges; gaps → null so
+        // an ambiguous 16:30 meal is left alone). breakfast 05:00–11:30, lunch
+        // 11:00–16:00, dinner 17:00–23:00.
+        const windowType = (m: number | null) => m == null ? null : (m >= 300 && m <= 690 ? 'breakfast' : m >= 660 && m <= 960 ? 'lunch' : m >= 1020 && m <= 1380 ? 'dinner' : null);
         const c3City = (facts.destination.city as string) || '';
         const seenNonMeal: string[] = [];
         const usedMealNames = new Set<string>();
@@ -1036,7 +1041,22 @@ export async function handleGenerateTripDayV2(
               // — otherwise "Izakaya at X" / "Cocktails at Y" (dining category,
               // no meal word) get wrongly dropped as duplicate "lunches".
               const ttX = String(a?.title || a?.name || '').toLowerCase();
-              const mtExplicit = /\bbreakfast\b/.test(ttX) ? 'breakfast' : /\blunch\b/.test(ttX) ? 'lunch' : /\bdinner\b/.test(ttX) ? 'dinner' : null;
+              let mtExplicit = /\bbreakfast\b/.test(ttX) ? 'breakfast' : /\blunch\b/.test(ttX) ? 'lunch' : /\bdinner\b/.test(ttX) ? 'dinner' : null;
+              // MEAL-TIME RELABEL: a meal whose TIME contradicts its label (e.g.
+              // a "Lunch" at 09:55) is relabeled to the correct meal for that
+              // time. Runs before the same-day dedup so a relabel that collides
+              // with an existing meal of that type is then dropped.
+              if (mtExplicit) {
+                const wt = windowType(pMin(a.startTime || a.time));
+                if (wt && wt !== mtExplicit) {
+                  const lbl = wt[0].toUpperCase() + wt.slice(1);
+                  const wasT = a.title || a.name;
+                  a.title = String(a.title || a.name || '').replace(/\b(breakfast|brunch|lunch|dinner)\b/i, lbl);
+                  a.name = a.title;
+                  mtExplicit = wt;
+                  console.log(`[v2] [MEAL_RELABEL] day ${(d as any).dayNumber}: "${wasT}" → "${a.title}" (time ${a.startTime || a.time})`);
+                }
+              }
               if (mtExplicit) {
                 if (seenTypeToday.has(mtExplicit)) { console.log(`[v2] [MEAL_DEDUP] day ${(d as any).dayNumber}: dropped extra ${mtExplicit} "${a.title || a.name}"`); continue; }
                 seenTypeToday.add(mtExplicit);
