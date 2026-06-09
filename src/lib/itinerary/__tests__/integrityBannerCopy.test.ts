@@ -12,9 +12,10 @@ describe('integrityCodeMessage', () => {
     expect(integrityCodeMessage('FINAL_ORPHAN_TRANSIT')?.title).toMatch(
       /transit connection/i,
     );
-    expect(integrityCodeMessage('MEAL_COVERAGE_MISSING')?.title).toMatch(
-      /meals/i,
-    );
+  });
+
+  it('suppresses MEAL_COVERAGE_MISSING (false-fires — never surfaced)', () => {
+    expect(integrityCodeMessage('MEAL_COVERAGE_MISSING')).toBeNull();
   });
 
   it('returns null for unknown codes', () => {
@@ -63,7 +64,7 @@ describe('pickBannerVariant', () => {
       generationFailureReason: null,
       integrityCodes: [
         'FINAL_ORPHAN_TRANSIT',
-        'MEAL_COVERAGE_MISSING',
+        'FLIGHT_ANCHOR_COMMIT_MISMATCH',
         'FINAL_ORPHAN_TRANSIT',
       ],
       meaningfulActivityCount: 8,
@@ -72,8 +73,31 @@ describe('pickBannerVariant', () => {
     if (v?.kind === 'integrity') {
       expect(v.items.map((i) => i.code)).toEqual([
         'FINAL_ORPHAN_TRANSIT',
-        'MEAL_COVERAGE_MISSING',
+        'FLIGHT_ANCHOR_COMMIT_MISMATCH',
       ]);
+    }
+  });
+
+  it('does not surface a banner when MEAL_COVERAGE_MISSING is the only code', () => {
+    const v = pickBannerVariant({
+      itineraryStatus: 'partial',
+      generationFailureReason: null,
+      integrityCodes: ['MEAL_COVERAGE_MISSING'],
+      meaningfulActivityCount: 8,
+    });
+    expect(v).toBeNull();
+  });
+
+  it('drops MEAL_COVERAGE_MISSING but keeps other surfaced codes', () => {
+    const v = pickBannerVariant({
+      itineraryStatus: 'partial',
+      generationFailureReason: null,
+      integrityCodes: ['MEAL_COVERAGE_MISSING', 'FINAL_ORPHAN_TRANSIT'],
+      meaningfulActivityCount: 8,
+    });
+    expect(v?.kind).toBe('integrity');
+    if (v?.kind === 'integrity') {
+      expect(v.items.map((i) => i.code)).toEqual(['FINAL_ORPHAN_TRANSIT']);
     }
   });
 
