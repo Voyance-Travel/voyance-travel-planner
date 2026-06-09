@@ -171,7 +171,7 @@ export function useTripHeroImage({
 
   // Fetch canonical destination hero image (shared across all views)
   useEffect(() => {
-    const seededDone = !seededHeroUrl || seededFailed || seededCrossCity;
+    const seededDone = !seededHeroUrl || seededFailed || seededCrossCity || isBrokenSeededUrl(seededHeroUrl);
     const shouldFetch = seededDone && !canonicalFetched;
 
     if (!shouldFetch || !destination) return;
@@ -193,7 +193,7 @@ export function useTripHeroImage({
 
   // Fetch DB curated image when canonical+curated+storage are exhausted
   useEffect(() => {
-    const seededDone = !seededHeroUrl || seededFailed || seededCrossCity;
+    const seededDone = !seededHeroUrl || seededFailed || seededCrossCity || isBrokenSeededUrl(seededHeroUrl);
     const canonicalDone = canonicalFetched && (!canonicalUrl || canonicalFailed || canonicalCrossCity);
     const storageDone = !storageUrl || storageFailed;
     const shouldFetch =
@@ -224,7 +224,7 @@ export function useTripHeroImage({
 
   // Fetch from API once all earlier tiers are exhausted
   useEffect(() => {
-    const seededDone = !seededHeroUrl || seededFailed || seededCrossCity;
+    const seededDone = !seededHeroUrl || seededFailed || seededCrossCity || isBrokenSeededUrl(seededHeroUrl);
     const canonicalDone = canonicalFetched && (!canonicalUrl || canonicalFailed || canonicalCrossCity);
     const storageDone = !storageUrl || storageFailed;
     const shouldFetch =
