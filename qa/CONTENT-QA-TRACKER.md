@@ -88,3 +88,9 @@ User read: venue SELECTION is genuinely good (Flavio al Velavevodetto, Da Enzo, 
 - **C3 is now the ceiling.** Lisbon repeated: Mercado de Campo de Ourique 3× (Days 1-3), Tasca do Chico Fado 2×, Taberna Sal Grosso lunch 2×, Heim Café breakfast 2×. Prompt-feed confirmed ignored by the model.
   - **FIX (non-meal): deterministic cross-day venue dedup** added to V2 last-day finalization (8f3) — keeps first occurrence of each non-meal venue, drops repeats (keyed on location.name, prefix-match for suffixed names). Verified locally on Lisbon: Mercado 3×→1×, Fado 2×→1×, days stay full. Meals left (restaurant-swap needs a venue pool — open follow-up).
 - **New small bug:** Day 4 transit said "Travel to Your Hotel" *after* checkout (should be "to Airport").
+
+<!-- ROUND 4 — Lisbon regen #2 (92/100) + restaurant-swap -->
+## Round 4 — Lisbon regen #2 = 92/100 (53→66→84→92)
+- C3 non-meal dedup VERIFIED LIVE: Fado + Heim repeats gone, market collapsed. C7 holds; C1 Day-4 perfectly clean (the "Travel to Your Hotel" mislabel auto-resolved to "Transfer to Airport").
+- Only remaining flag: Taberna Sal Grosso lunch on Days 2+3 (restaurant repeat).
+- **C3 restaurant-swap ADDED:** when a meal venue repeats, swap the later one to a different city-matched venue from the curated INLINE_FALLBACK_RESTAURANTS catalog (covers Paris/Rome/Barcelona/London/Berlin/Lisbon/Venice) instead of dropping it. Verified locally on Lisbon: D3 "Taberna Sal Grosso" → "Cervejaria Ramiro". Graceful no-op if the city isn't in the catalog. **C3 now complete (non-meal drop + meal swap), pending deploy + verify.**

@@ -994,25 +994,63 @@ export async function handleGenerateTripDayV2(
     // (separate follow-up). Logistics + locked items always kept. Last day only.
     if (isLastDay) {
       try {
-        const c3norm = (s: any) => String(s || '').normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, ' ').replace(/\s+/g, ' ').trim();
-        const c3IsMeal = (a: any) => { const tt = String(a?.title || a?.name || '').toLowerCase(); const c = String(a?.category || '').toLowerCase(); return c === 'dining' || c === 'restaurant' || /\b(breakfast|brunch|lunch|dinner)\b/.test(tt); };
-        const c3IsLog = (a: any) => ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(String(a?.category || '').toLowerCase());
-        const c3Same = (a: string, b: string) => { if (a === b) return true; const [s, l] = a.length < b.length ? [a, b] : [b, a]; return l.startsWith(s + ' '); };
-        const c3Seen: string[] = [];
+        const { getRandomFallbackRestaurant } = await import('../fix-placeholders.ts');
+        const lc = (s: any) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const isLog3 = (a: any) => ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(String(a?.category || '').toLowerCase());
+        const mealTypeOf = (a: any): 'breakfast' | 'lunch' | 'dinner' | null => {
+          const tt = String(a?.title || a?.name || '').toLowerCase();
+          if (/\bbreakfast\b/.test(tt)) return 'breakfast';
+          if (/\blunch\b/.test(tt)) return 'lunch';
+          if (/\bdinner\b/.test(tt)) return 'dinner';
+          const c = String(a?.category || '').toLowerCase();
+          return (c === 'dining' || c === 'restaurant') ? 'lunch' : null;
+        };
+        const prefixSame = (a: string, b: string) => { if (a === b) return true; const [s, l] = a.length < b.length ? [a, b] : [b, a]; return l.startsWith(s + ' '); };
+        const c3City = (facts.destination.city as string) || '';
+        const seenNonMeal: string[] = [];
+        const usedMealNames = new Set<string>();
         for (const d of mergedDays) {
           if (!Array.isArray((d as any)?.activities)) continue;
-          (d as any).activities = (d as any).activities.filter((a: any) => {
-            if (a?.locked || a?.isLocked || a?.lock_state === 'locked') return true;
-            if (c3IsMeal(a) || c3IsLog(a)) return true;
-            const key = c3norm(a?.location?.name || a?.venue_name || a?.venueName || a?.title || a?.name);
-            if (key.length < 6) return true;
-            if (c3Seen.some((k) => c3Same(k, key))) { console.log(`[v2] [C3_DEDUP] dropped repeat venue "${a.title || a.name}" (day ${(d as any).dayNumber})`); return false; }
-            c3Seen.push(key);
-            return true;
-          });
+          const kept: any[] = [];
+          for (const a of (d as any).activities) {
+            if (a?.locked || a?.isLocked || a?.lock_state === 'locked' || isLog3(a)) { kept.push(a); continue; }
+            const key = lc(a?.location?.name || a?.venue_name || a?.venueName || a?.title || a?.name);
+            if (!key || key.length < 6) { kept.push(a); continue; }
+            const mt = mealTypeOf(a);
+            if (mt) {
+              // MEAL repeat → swap to a different city-matched restaurant (never drop a meal).
+              if (usedMealNames.has(key)) {
+                const fb = getRandomFallbackRestaurant(c3City, mt, usedMealNames);
+                if (fb?.name && !usedMealNames.has(lc(fb.name))) {
+                  const label = mt[0].toUpperCase() + mt.slice(1);
+                  const was = a.title || a.name;
+                  a.title = `${label} at ${fb.name}`;
+                  a.name = a.title;
+                  a.location = a.location || {};
+                  a.location.name = fb.name;
+                  if (fb.address) a.location.address = fb.address;
+                  if (fb.description) a.description = fb.description;
+                  a.source = 'c3-restaurant-swap';
+                  usedMealNames.add(lc(fb.name));
+                  console.log(`[v2] [C3_SWAP] day ${(d as any).dayNumber}: "${was}" → "${a.title}"`);
+                } else {
+                  usedMealNames.add(key);
+                }
+              } else {
+                usedMealNames.add(key);
+              }
+              kept.push(a);
+            } else {
+              // NON-MEAL repeat → drop (keep first occurrence).
+              if (seenNonMeal.some((k) => prefixSame(k, key))) { console.log(`[v2] [C3_DEDUP] dropped repeat venue "${a.title || a.name}" (day ${(d as any).dayNumber})`); continue; }
+              seenNonMeal.push(key);
+              kept.push(a);
+            }
+          }
+          (d as any).activities = kept;
         }
       } catch (e) {
-        console.warn('[v2] C3 cross-day dedup failed (non-blocking):', e);
+        console.warn('[v2] C3 dedup/swap failed (non-blocking):', e);
       }
     }
 
