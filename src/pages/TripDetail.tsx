@@ -3620,7 +3620,12 @@ export default function TripDetail() {
                 ) : null}
                 {!isPreviewMode && (() => {
                   const gs = trip.itinerary_status as string | undefined;
-                  if (!gs || gs === 'ready' || gs === 'generated' || gs === 'complete') return null;
+                  // 'partial' is intentionally hidden: the integrity/meal contract
+                  // marks fully-generated trips 'partial' off false-positive flags
+                  // (e.g. a departure day that doesn't need breakfast), and the
+                  // badge just reads as "your trip is broken". Real generation
+                  // states (generating/queued/failed) still show.
+                  if (!gs || gs === 'ready' || gs === 'generated' || gs === 'complete' || gs === 'partial') return null;
                   const map: Record<string, { label: string; cls: string; pulse?: boolean }> = {
                     generating: { label: 'Generating', cls: 'bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400', pulse: true },
                     queued:     { label: 'Queued',     cls: 'bg-muted text-muted-foreground border-border' },
