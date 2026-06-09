@@ -996,7 +996,7 @@ export async function handleGenerateTripDayV2(
     // non-meal venue and drop later repeats. Meals are LEFT alone — dropping a
     // meal is worse than a repeat restaurant; restaurant-swap needs a venue pool
     // (separate follow-up). Logistics + locked items always kept. Last day only.
-    if (isLastDay) {
+    const runCrossDayDedup = () => {
       try {
         // getRandomFallbackRestaurant is now a STATIC import (top of file) —
         // a dynamic await import() of a local module was silently failing in the
@@ -1064,7 +1064,11 @@ export async function handleGenerateTripDayV2(
       } catch (e) {
         console.warn('[v2] C3 dedup/swap failed (non-blocking):', e);
       }
-    }
+    };
+    // Run once BEFORE 8g (catches model-made dups), then AGAIN after 8g/8h
+    // (see 8h2 below) — the meal-coverage gate re-injects meals with the title
+    // in location.name, which is how a duplicate breakfast survived on Barcelona.
+    if (isLastDay) runCrossDayDedup();
 
     // ── 8g. FINAL meal-coverage gate — the LAST thing before the write ──
     // ROOT-CAUSE FIX (Day-N-missing-dinner): the 6c meal guard runs
@@ -1213,6 +1217,13 @@ export async function handleGenerateTripDayV2(
         console.warn('[v2] final departure-day cleanup failed (non-blocking):', e);
       }
     }
+
+    // ── 8h2. Re-run cross-day de-dup AFTER 8g/8h. The meal-coverage gate (8g)
+    // re-injects required meals from the catalog WITHOUT cross-day awareness, so
+    // it can re-create a duplicate the first 8f3 pass already cleaned (e.g.
+    // Barcelona shipped Syra Coffee on days 2 AND 3 — day 3 was an 8g injection).
+    // Running de-dup again here, after all injections, is the final word.
+    if (isLastDay) runCrossDayDedup();
 
     // ── 8i. SELF-CHECK GATE — verify + repair + score before the write ──
     // The auditor's checks, run inside generation as the final quality gate so
