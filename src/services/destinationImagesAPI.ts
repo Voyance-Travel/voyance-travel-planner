@@ -12,6 +12,7 @@ import {
   hasCuratedImages,
 } from '@/utils/destinationImages';
 import { normalizeUnsplashUrl } from '@/utils/unsplash';
+import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
 
 // ============================================================================
 // DB CACHE HELPERS
@@ -202,29 +203,45 @@ export async function getDestinationImages(
     const type = (params.imageType === 'gallery' ? 'gallery' : 'hero') as DestinationImage['type'];
     const limit = params.limit ?? (params.imageType === 'gallery' ? 6 : 1);
 
-    // TIER 1: Check curated_images DB table (fast, indexed query)
+    // TIER 1: Check curated_images DB table (fast, indexed query). Drop any
+    // untrusted rows (legacy unsplash/old-host seeds) so a stale cache can't
+    // pin a bad image ahead of the API tier.
     const dbImages = await getDbCachedImages(normalizedDestination, limit);
-    if (dbImages && dbImages.length > 0) {
-      console.log('[Images] DB cache hit for:', normalizedDestination, dbImages.length, 'images');
-      return dbImages;
+    const trustedDbImages = (dbImages || []).filter((im) => im?.url && !isUntrustedHeroUrl(im.url));
+    if (trustedDbImages.length > 0) {
+      console.log('[Images] DB cache hit for:', normalizedDestination, trustedDbImages.length, 'images');
+      return trustedDbImages;
     }
 
-    // TIER 2: Fall back to hardcoded curated images + seed DB for next time
+    // TIER 2: Fall back to hardcoded curated images + seed DB for next time.
+    // TRUSTED ones only — the legacy curated lists are entirely
+    // images.unsplash.com (untrusted: expired/403 + unverified labels, e.g.
+    // barcelona[0] is a Madrid photo). If trusted images remain, use them;
+    // otherwise fall through to the API tier, which now returns a correct,
+    // city-matched image stored on the new host.
     if (hasCuratedImages(normalizedDestination)) {
-      const urls = getCuratedDestinationImages(normalizedDestination, limit);
-      // Fire-and-forget: seed the DB so next request hits TIER 1
-      seedDbFromCurated(normalizedDestination, urls);
-      return urls.map((url, i) => ({
-        id: `curated-local-${type}-${i}`,
-        url: normalizeImageUrl(url),
-        alt: `${normalizedDestination} photo ${i + 1}`,
-        type,
-        source: 'database' as const,
-      }));
+      const urls = getCuratedDestinationImages(normalizedDestination, limit)
+        .map((u) => normalizeImageUrl(u))
+        .filter((u) => !isUntrustedHeroUrl(u));
+      if (urls.length > 0) {
+        // Fire-and-forget: seed the DB so next request hits TIER 1
+        seedDbFromCurated(normalizedDestination, urls);
+        return urls.map((url, i) => ({
+          id: `curated-local-${type}-${i}`,
+          url,
+          alt: `${normalizedDestination} photo ${i + 1}`,
+          type,
+          source: 'database' as const,
+        }));
+      }
+      // No trusted curated → continue to the API below.
     }
 
-    // TIER 2b: For curated-only destinations with no hardcoded images, don't call API
-    if (isCuratedOnlyDestination(normalizedDestination)) {
+    // TIER 2b: Curated-only destinations historically skipped the API to avoid
+    // wrong results. Only skip it when there are NO curated images to fall back
+    // on; when a curated destination's images were all dropped as untrusted, the
+    // API is the only path to a correct image, so let it through.
+    if (isCuratedOnlyDestination(normalizedDestination) && !hasCuratedImages(normalizedDestination)) {
       return [];
     }
   }
