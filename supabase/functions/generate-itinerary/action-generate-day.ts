@@ -828,10 +828,22 @@ export async function handleGenerateDay(
     // No API calls, no credit charge — uses coordinates from enrichment
     // =======================================================================
     try {
-      const { autoOptimizeDayRoute } = await import('./auto-route-optimizer.ts');
-      normalizedActivities = autoOptimizeDayRoute(normalizedActivities);
+      const { reorderDayByProximity, retimeAndComputeLegTimes } = await import('./geographic-coherence.ts');
+      const geoLockedIds = new Set<string>(
+        ((lockedActivities as any[] | undefined) ?? []).map((l: any) => l?.id).filter(Boolean)
+      );
+      const geoDestination = resolvedDestination || destination || '';
+      const reorder = reorderDayByProximity(normalizedActivities, {
+        hotelCoords: hotelCoordinates || null,
+        lockedIds: geoLockedIds,
+        destination: geoDestination,
+      });
+      normalizedActivities = retimeAndComputeLegTimes(reorder.activities, { destination: geoDestination });
+      if (reorder.reordered || reorder.strippedConnectors > 0) {
+        console.log(`[geo-order] Day ${dayNumber}: clustered ${reorder.flexibleCount} flexible stop(s) by proximity, stripped ${reorder.strippedConnectors} stale connector(s)`);
+      }
     } catch (routeErr) {
-      console.warn(`[generate-day] Auto route optimization failed (non-blocking):`, routeErr);
+      console.warn(`[generate-day] Geo-ordering failed (non-blocking):`, routeErr);
     }
 
     generatedDay.activities = normalizedActivities;

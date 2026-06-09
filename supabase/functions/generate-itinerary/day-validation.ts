@@ -132,7 +132,8 @@ export interface DayValidationResult {
   warnings: string[];
 }
 
-const MEAL_KEYWORDS: Record<RequiredMeal, string[]> = {
+export const DINING_CATEGORIES = ['dining', 'restaurant', 'food', 'cafe', 'meal'];
+export const MEAL_KEYWORDS: Record<RequiredMeal, string[]> = {
   breakfast: ['breakfast', 'brunch'],
   lunch: ['lunch'],
   dinner: ['dinner', 'supper', 'evening meal'],

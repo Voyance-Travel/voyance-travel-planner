@@ -9,6 +9,9 @@
  * - Optimal activity reordering
  */
 
+import { MEAL_KEYWORDS, DINING_CATEGORIES } from './day-validation.ts';
+import { estimateTransit as estimateLegTransit, parseTime, minutesToTime } from '../_shared/timing-cascade.ts';
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -792,6 +795,261 @@ export function logGeographicQAMetrics(
 // EXPORTS
 // =============================================================================
 
+
+// ─── Proximity reorder + leg-time computation (2-opt; meals/locks pinned) ───
+const STRUCTURAL_CATEGORIES = new Set([
+  'transport', 'transit', 'transportation', 'transfer', 'flight',
+  'accommodation', 'lodging', 'hotel', 'logistics',
+]);
+
+const BOOKEND_TITLE_RE = /\b(airport|arrival|departure|check[\s-]?in|check[\s-]?out|terminal|station|flight|luggage|baggage|return to|back to)\b|\bhotel\b/i;
+
+/** A mid-day "Walk/Travel/Transit to X" connector card (stripped; repair regenerates). */
+const CONNECTOR_TITLE_RE = /^\s*(walk|travel|transit|taxi|drive|ride|bus|metro|train|head|transfer|commute)\b.*\bto\b/i;
+
+/** Extract {lat,lng} from an activity, tolerating nested or flat coordinate shapes. */
+function getActivityCoordinates(act: any): Coordinates | null {
+  const nested = act?.location?.coordinates;
+  if (nested && typeof nested.lat === 'number' && typeof nested.lng === 'number') {
+    return { lat: nested.lat, lng: nested.lng };
+  }
+  const loc = act?.location;
+  if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+    return { lat: loc.lat, lng: loc.lng };
+  }
+  return null;
+}
+
+function categoryOf(act: any): string {
+  return String(act?.category || act?.type || '').toLowerCase();
+}
+
+function isStructuralActivity(act: any): boolean {
+  return STRUCTURAL_CATEGORIES.has(categoryOf(act));
+}
+
+/** A meal card (dining category, or a meal keyword in the title) — pinned to its slot. */
+function isMealActivity(act: any): boolean {
+  const category = categoryOf(act);
+  if (DINING_CATEGORIES.some(c => category.includes(c))) return true;
+  // Structural cards (e.g. "Walk to Dinner") never count as meals.
+  if (STRUCTURAL_CATEGORIES.has(category)) return false;
+  const title = String(act?.title || act?.name || '').toLowerCase();
+  for (const kws of Object.values(MEAL_KEYWORDS)) {
+    if (kws.some(k => title.includes(k))) return true;
+  }
+  return false;
+}
+
+/** A strippable mid-day transit connector (not a bookend transfer). */
+function isStripableConnector(act: any): boolean {
+  if (!isStructuralActivity(act)) return false;
+  const category = categoryOf(act);
+  // Flights and accommodation (check-in/out) are bookends repair manages.
+  if (category === 'flight' || category === 'accommodation' || category === 'lodging' || category === 'hotel') return false;
+  const title = String(act?.title || act?.name || '').toLowerCase();
+  if (BOOKEND_TITLE_RE.test(title)) return false;
+  return CONNECTOR_TITLE_RE.test(title) ||
+    category === 'transport' || category === 'transit' || category === 'transportation' || category === 'transfer';
+}
+
+export interface ReorderDayResult {
+  activities: any[];
+  reordered: boolean;
+  strippedConnectors: number;
+  flexibleCount: number;
+}
+
+/**
+ * Reorder a day's flexible (non-meal, non-locked) activities by geographic
+ * proximity using a meal-anchored greedy nearest-neighbor walk.
+ *
+ * - Meals, locked activities, and bookend transfers stay pinned at their slots
+ *   and act as fixed waypoints (the running "current" position jumps to them).
+ * - Mid-day transit connector cards are stripped; the downstream repair pass
+ *   (repair-day §9/§15) + timing-cascade regenerate and realign them.
+ * - Returns the activities array reordered in place of the flexible slots; no
+ *   times are changed here (see retimeAndComputeLegTimes).
+ *
+ * No-op (returns input minus stripped connectors) when fewer than 2 flexible
+ * activities carry coordinates — e.g. arrival/departure/transition days.
+ */
+export function reorderDayByProximity(
+  activities: any[],
+  opts: { hotelCoords?: Coordinates | null; lockedIds?: Set<string>; destination?: string } = {}
+): ReorderDayResult {
+  const lockedIds = opts.lockedIds ?? new Set<string>();
+
+  // 1. Strip mid-day transit connectors (repair regenerates them post-reorder).
+  let strippedConnectors = 0;
+  const kept: any[] = [];
+  for (const act of activities) {
+    if (!lockedIds.has(act?.id) && isStripableConnector(act)) {
+      strippedConnectors++;
+      continue;
+    }
+    kept.push(act);
+  }
+
+  const isPinned = (act: any): boolean =>
+    lockedIds.has(act?.id) || act?.locked === true || act?.isLocked === true ||
+    isMealActivity(act) || isStructuralActivity(act) || getActivityCoordinates(act) === null;
+
+  const flexibleCount = kept.filter(a => !isPinned(a)).length;
+  if (flexibleCount < 2) {
+    return { activities: kept, reordered: false, strippedConnectors, flexibleCount };
+  }
+
+  // 2. Day anchor: hotel › first locked activity › centroid. The open path is
+  //    measured from this anchor so the optimizer prefers starting (and not
+  //    ending) far from where the traveler is based.
+  const anchor = determineDayAnchor(
+    kept.map(a => ({
+      id: String(a?.id ?? ''),
+      title: String(a?.title || a?.name || ''),
+      coordinates: getActivityCoordinates(a) || undefined,
+      isLocked: lockedIds.has(a?.id) || a?.isLocked === true || a?.locked === true,
+    })),
+    opts.hotelCoords || undefined
+  );
+  const anchorCoords: Coordinates | null = anchor?.coordinates || opts.hotelCoords || null;
+
+  // Open-path length (anchor → stop₁ → … → stopₙ) over whatever coordinates the
+  // ordering exposes. Meals/locked/bookends are fixed waypoints in the sequence,
+  // so reordering flexible stops between them is penalised by the real geography.
+  const pathLength = (order: any[]): number => {
+    let cost = 0;
+    let prev: Coordinates | null = anchorCoords;
+    for (const act of order) {
+      const c = getActivityCoordinates(act);
+      if (c) {
+        if (prev) cost += haversineDistance(prev.lat, prev.lng, c.lat, c.lng);
+        prev = c;
+      }
+    }
+    return cost;
+  };
+
+  // 3. 2-opt exchange over the flexible slots, starting from the AI's order.
+  //    Only pairwise swaps that *shorten* the path are accepted, so the result
+  //    is never worse than the input (a pure nearest-neighbor walk regresses on
+  //    outlier-heavy days by stranding the far stop at the end). Swaps may cross
+  //    meal boundaries — meals stay pinned in place, but a flexible stop can move
+  //    between morning/afternoon/evening when that removes a city-crossing hop.
+  const order = [...kept];
+  const flexiblePositions: number[] = [];
+  for (let i = 0; i < order.length; i++) {
+    if (!isPinned(order[i])) flexiblePositions.push(i);
+  }
+  const EPS = 1; // metres — ignore floating-point-noise "improvements"
+  let bestCost = pathLength(order);
+  let improved = true;
+  let guard = 0;
+  while (improved && guard++ < 64) {
+    improved = false;
+    for (let a = 0; a < flexiblePositions.length; a++) {
+      for (let b = a + 1; b < flexiblePositions.length; b++) {
+        const pi = flexiblePositions[a];
+        const pj = flexiblePositions[b];
+        const tmp = order[pi];
+        order[pi] = order[pj];
+        order[pj] = tmp;
+        const cost = pathLength(order);
+        if (cost + EPS < bestCost) {
+          bestCost = cost;
+          improved = true;
+        } else {
+          // revert — swap was not an improvement
+          order[pj] = order[pi];
+          order[pi] = tmp;
+        }
+      }
+    }
+  }
+
+  return { activities: order, reordered: true, strippedConnectors, flexibleCount };
+}
+
+/** Best-effort duration in minutes for an activity. */
+function activityDurationMinutes(act: any): number {
+  const s = parseTime(act?.startTime);
+  const e = parseTime(act?.endTime);
+  if (s !== null && e !== null && e > s) return e - s;
+  if (typeof act?.durationMinutes === 'number' && act.durationMinutes > 0) return act.durationMinutes;
+  return isMealActivity(act) ? 60 : 90;
+}
+
+/**
+ * Reassign times to a reordered day and write consistent per-leg travel times.
+ *
+ * Times: the ascending set of original start times is re-applied positionally,
+ * preserving each activity's own duration. Because pinned items (meals, locked,
+ * bookends) stay at their original indices and the input was already
+ * chronological, they keep their own original start times — meals stay in slot —
+ * while the new order remains strictly ascending, so the downstream chronology
+ * sort can't revert the proximity reorder.
+ *
+ * Travel: every non-first stop gets `transportation.duration = "{n} min"` for its
+ * inbound leg (previous stop → this stop), computed with the shared deterministic
+ * haversine estimator. This overwrites the mixed AI placeholders ('', '15m', '25m')
+ * so the field the UI renders is uniform; the first stop's stale value is cleared.
+ */
+export function retimeAndComputeLegTimes(
+  activities: any[],
+  _opts: { destination?: string } = {}
+): any[] {
+  // 1. Positional re-time from the ascending list of original starts.
+  const slots = activities
+    .map(a => parseTime(a?.startTime))
+    .filter((m): m is number => m !== null)
+    .sort((x, y) => x - y);
+  let si = 0;
+  for (const act of activities) {
+    if (parseTime(act?.startTime) === null) continue; // no original time → leave as-is
+    const start = slots[si++];
+    if (start === undefined) continue;
+    const dur = activityDurationMinutes(act);
+    act.startTime = minutesToTime(start);
+    act.endTime = minutesToTime(start + dur);
+  }
+
+  // 2. Per-leg inbound travel time on every non-first stop.
+  let prev: any = null;
+  for (const act of activities) {
+    if (prev) {
+      const pc = getActivityCoordinates(prev);
+      const cc = getActivityCoordinates(act);
+      if (pc && cc) {
+        const est = estimateLegTransit(
+          { id: String(prev?.id ?? 'a'), category: categoryOf(prev), location: { lat: pc.lat, lng: pc.lng } },
+          { id: String(act?.id ?? 'b'), category: categoryOf(act), location: { lat: cc.lat, lng: cc.lng } }
+        );
+        if (est) {
+          act.transportation = {
+            ...(act.transportation || {}),
+            method: est.method,
+            duration: `${est.durationMinutes} min`,
+          };
+        }
+      }
+    } else if (act?.transportation && 'duration' in act.transportation) {
+      // First stop has no inbound travel — clear any stale placeholder ('15m', etc.).
+      act.transportation = { ...act.transportation, duration: '' };
+    }
+    prev = act;
+  }
+
+  return activities;
+}
+
+// =============================================================================
+// PROMPT BUILDERS
+// =============================================================================
+
+/**
+ * Build geographic coherence prompt for LLM
+ */
+
 export default {
   getCuratedZones,
   assignToZone,
@@ -805,5 +1063,6 @@ export default {
   buildDayZonePrompt,
   logGeographicQAMetrics,
   haversineDistance,
-  estimateTravelMinutes
-};
+  reorderDayByProximity,
+  retimeAndComputeLegTimes,
+  estimateTravelMinutes};
