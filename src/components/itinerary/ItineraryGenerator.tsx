@@ -1234,7 +1234,7 @@ export function ItineraryGenerator({
             </p>
             
             <p className="text-sm text-muted-foreground mb-6">
-              Your first trip <span className="font-medium text-foreground">starts free</span> — 2 full days included, no credit card required.
+              Your first trip <span className="font-medium text-foreground">starts free</span>: 2 full days included, no credit card required.
             </p>
 
             <div className="flex flex-col gap-3">

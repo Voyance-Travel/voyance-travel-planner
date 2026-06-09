@@ -183,7 +183,7 @@ export default function Pricing() {
 
   return (
     <MainLayout>
-      <Head title="Pricing | Voyance" description="Your first trip starts free — 2 full days with every detail. Unlock more days, and future trips, with credits." canonical="https://travelwithvoyance.com/pricing" />
+      <Head title="Pricing | Voyance" description="Your first trip starts free: 2 full days with every detail. Unlock more days, and future trips, with credits." canonical="https://travelwithvoyance.com/pricing" />
       
       {/* HERO */}
       <section className="relative pt-20 pb-12 sm:pt-24 sm:pb-16 overflow-hidden">
@@ -194,7 +194,7 @@ export default function Pricing() {
         <div className="relative max-w-3xl mx-auto px-4 text-center">
           <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-xs font-medium tracking-widest text-primary uppercase mb-4">Pricing</motion.p>
           <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="text-3xl sm:text-4xl md:text-5xl font-serif font-medium text-foreground mb-5 text-balance">Your first trip is on us. Full power, every detail.</motion.h1>
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto leading-relaxed">2 full days with addresses, photos, costs, tips, and booking links — completely free. Use credits to unlock more days and future trips.</motion.p>
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto leading-relaxed">2 full days with addresses, photos, costs, tips, and booking links, completely free. Use credits to unlock more days and future trips.</motion.p>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mt-8">
             <Button asChild size="lg"><Link to={ROUTES.QUIZ}>Start Free<ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
             <p className="text-xs text-muted-foreground mt-3">No credit card required</p>
@@ -457,7 +457,7 @@ export default function Pricing() {
       <section className="py-16 sm:py-20 bg-primary/5 border-t border-primary/10">
         <div className="max-w-xl mx-auto px-4 text-center">
           <motion.h2 initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-3">See what we'd plan for you.</motion.h2>
-          <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.05 }} className="text-sm text-muted-foreground mb-6">Your first trip starts free — 2 full days, every detail included. Takes 5 minutes.</motion.p>
+          <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.05 }} className="text-sm text-muted-foreground mb-6">Your first trip starts free: 2 full days, every detail included. Takes 5 minutes.</motion.p>
           <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.1 }}>
             <Button asChild size="lg"><Link to={ROUTES.QUIZ}>Start Free<ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
           </motion.div>
