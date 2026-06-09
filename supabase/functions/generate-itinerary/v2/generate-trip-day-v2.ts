@@ -197,6 +197,33 @@ export async function handleGenerateTripDayV2(
       })
     );
 
+    // ── C3 cross-day variety: feed already-used venues to the prompt so the
+    // LLM doesn't reuse the same restaurant/attraction on multiple days. Each
+    // day generates independently (chain self-invoke), so without this the
+    // model has no memory of prior days and repeats "Granja Viader" all trip.
+    // compilePrompt already has a "DO NOT USE THESE" variety rule — it was just
+    // never given the list. Non-blocking; empty list on day 1 / read failure.
+    let usedRestaurantsForPrompt = [];
+    let usedVenuesForPrompt = [];
+    try {
+      const { data: priorRow } = await supabase.from('trips').select('itinerary_data').eq('id', tripId).maybeSingle();
+      const priorDays = Array.isArray(priorRow?.itinerary_data?.days) ? priorRow.itinerary_data.days : [];
+      const restSet = new Set(); const venSet = new Set();
+      for (const pd of priorDays) {
+        if ((pd?.dayNumber ?? 0) === dayNumber) continue;
+        for (const a of (pd?.activities || [])) {
+          const nm = a?.location?.name || a?.venue_name || a?.venueName || a?.title || a?.name;
+          if (!nm) continue;
+          const t = String(a?.title || a?.name || '');
+          const cat = String(a?.category || '').toLowerCase();
+          if (cat === 'dining' || cat === 'restaurant' || /\b(breakfast|brunch|lunch|dinner)\b/i.test(t)) restSet.add(String(nm));
+          else if (!/^\s*(walk|travel|transfer|taxi|train|bus|metro|depart|arriv|check[- ]?(in|out)|return to)/i.test(t)) venSet.add(String(nm));
+        }
+      }
+      usedRestaurantsForPrompt = [...restSet];
+      usedVenuesForPrompt = [...venSet];
+    } catch (_e) { /* non-blocking */ }
+
     // ── 3. Compile prompt + schema ─────────────────────────────────────
     const compiled = await withStage(trace, 'compile_prompt', { dayNumber }, async () =>
       compilePrompt(supabase, userId, OPENROUTER_API_KEY, {
@@ -210,6 +237,8 @@ export async function handleGenerateTripDayV2(
         tripType: facts.preferences.tripType,
         budgetTier: facts.preferences.budgetTier,
         preferences: facts.preferences.interests,
+        usedRestaurants: usedRestaurantsForPrompt,
+        usedVenues: usedVenuesForPrompt,
       }, dayFacts)
     );
 
@@ -334,7 +363,7 @@ export async function handleGenerateTripDayV2(
         hasHotel: repairHasHotel,
         lockedActivities: dayFacts.lockedActivities ?? [],
         restaurantPool: [],
-        usedRestaurants: [],
+        usedRestaurants: usedRestaurantsForPrompt,
         isTransitionDay: dayFacts.resolvedIsTransitionDay,
         isMultiCity: dayFacts.resolvedIsMultiCity,
         isLastDayInCity: dayFacts.resolvedIsLastDayInCity,
@@ -585,6 +614,69 @@ export async function handleGenerateTripDayV2(
       }
     } catch (e) {
       console.warn(`[v2] Step 8 (hotel-return) retry failed (non-blocking) day=${dayNumber}:`, e);
+    }
+
+    // ── 6d-bis. Geographic clustering + consistent travel times — V2 parity ──
+    // The V1 single-day path (action-generate-day.ts) and the V1 full-trip path
+    // (action-generate-trip-day.ts) both cluster the day by proximity and rewrite
+    // per-leg travel times; the V2 chain (the LIVE production path) did NOT — so
+    // real multi-neighbourhood trips shipped city-crossing zig-zags and the
+    // "all legs 15m" placeholder symptom. reorderDayByProximity pins meals/locked/
+    // bookends, so the meal-guard + step-8 work above survives; the Schedule
+    // Executioner above does NOT touch the per-leg transportation.duration field,
+    // so there is no conflict. Runs AFTER the executioner and BEFORE terminalCleanup
+    // (mirrors the V1 full-trip ordering: cluster + retime, then clean). Non-blocking.
+    if (Array.isArray(finalDay.activities) && finalDay.activities.length > 0) {
+      try {
+        const { reorderDayByProximity, retimeAndComputeLegTimes } = await import('../geographic-coherence.ts');
+        const geoDest = facts.destination.city || '';
+        const geoLockedIds = new Set<string>(
+          ((finalDay.activities as any[]) || [])
+            .filter((a: any) => a?.locked || a?.isLocked || a?.lock_state === 'locked')
+            .map((a: any) => a?.id).filter(Boolean)
+        );
+        const reorder = reorderDayByProximity(finalDay.activities, {
+          hotelCoords: null,
+          lockedIds: geoLockedIds,
+          destination: geoDest,
+        });
+        finalDay.activities = retimeAndComputeLegTimes(reorder.activities, { destination: geoDest });
+        if (reorder.reordered || reorder.strippedConnectors > 0) {
+          finalDay.metadata = finalDay.metadata || {};
+          finalDay.metadata.quality = finalDay.metadata.quality || {};
+          finalDay.metadata.quality.geo_order = {
+            reordered: reorder.reordered,
+            flexible: reorder.flexibleCount,
+            stripped_connectors: reorder.strippedConnectors,
+            source: 'v2:final-per-day',
+          };
+          console.log(`[v2] [geo-order] day=${dayNumber}: clustered ${reorder.flexibleCount} flexible stop(s), stripped ${reorder.strippedConnectors} stale connector(s)`);
+        }
+      } catch (routeErr) {
+        console.warn(`[v2] geo-ordering failed (non-blocking) day=${dayNumber}:`, routeErr);
+      }
+    }
+
+    // ── 6b2. C5 vague-title sanitize ──
+    // Strip placeholder/instruction phrasing the model leaves in titles
+    // ("Breakfast — find a local spot in Vienna", "… or similar"). These read
+    // as an unfinished to-do note. Clean the text only; the rest is untouched.
+    try {
+      const VAGUE_STRIP = [
+        /\s*[—–-]\s*find (?:a |your )?(?:local|the perfect|a good|a great)?\s*(?:spot|place|restaurant|caf[eé]|eatery|gem|favou?rite|meal)\b/ig,
+        /\s*\(?\bor (?:similar|high[- ]?end|comparable)[^)]*\)?/ig,
+        /\s*[—–-]\s*(?:a )?(?:nearby|local) (?:caf[eé]|spot|restaurant|eatery)\b/ig,
+      ];
+      for (const a of (finalDay.activities || [])) {
+        if (!a) continue;
+        let t = String(a.title || a.name || '');
+        const before = t;
+        for (const re of VAGUE_STRIP) t = t.replace(re, '');
+        t = t.replace(/\s{2,}/g, ' ').replace(/\s+([,.])/g, '$1').replace(/[—–-]\s*$/, '').trim();
+        if (t && t !== before) { a.title = t; a.name = t; }
+      }
+    } catch (e) {
+      console.warn(`[v2] vague-title sanitize failed (non-blocking) day=${dayNumber}:`, e);
     }
 
     // ── 6c. Terminal cleanup — V2 departure-day parity ──
