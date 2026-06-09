@@ -44,7 +44,6 @@ import { persistDay } from '../pipeline/persist-day.ts';
 import { persistTripItinerary } from '../../_shared/persist-itinerary.ts';
 import { writeActivityCostsFromItinerary } from '../../_shared/write-activity-costs.ts';
 import { scrubActivity } from '../../_shared/scrub-activity.ts';
-import { getRandomFallbackRestaurant } from '../fix-placeholders.ts';
 import { buildDayScheduleSummary, scrubPhantomEventRefs } from '../../_shared/prompt-leak-scrub.ts';
 import { runScheduleExecutioner, toExecutionerAuditCodes } from '../../_shared/schedule-executioner.ts';
 import { applyAnchorsWin } from '../anchor-guard.ts';
@@ -60,6 +59,8 @@ import { collapseRedundantInjectedMeals } from '../../_shared/meal-protection.ts
 import { runStep8, terminalCleanup } from '../universal-quality-pass.ts';
 import { reorderDayByProximity, retimeAndComputeLegTimes } from '../geographic-coherence.ts';
 import { selfCheckAndRepair } from '../../_shared/itinerary-self-check.ts';
+import { crossDayDedup } from '../_shared/cross-day-dedup.ts';
+import { makePlacesAlternatives } from '../_shared/places-alternatives.ts';
 import { ledgerCheck } from '../ledger-check.ts';
 import { nuclearCrossCitySweep, nuclearDiningStrip, nuclearWellnessSweep } from '../fix-placeholders.ts';
 import { noopTrace, attachTrace, withStage, type Trace } from '../../_shared/trace-recorder.ts';
@@ -996,106 +997,14 @@ export async function handleGenerateTripDayV2(
     // non-meal venue and drop later repeats. Meals are LEFT alone — dropping a
     // meal is worse than a repeat restaurant; restaurant-swap needs a venue pool
     // (separate follow-up). Logistics + locked items always kept. Last day only.
-    const runCrossDayDedup = () => {
+    const runCrossDayDedup = async () => {
       try {
-        // getRandomFallbackRestaurant is now a STATIC import (top of file) —
-        // a dynamic await import() of a local module was silently failing in the
-        // bundled edge runtime, so this whole C3 dedup/swap block no-op'd live
-        // (duplicate Kagari/Kappabashi survived on the Tokyo regen).
-        // Normalize a venue name to its bare form so "Breakfast at Centre The
-        // Bakery", "Centre The Bakery", and the catalog's "Centre The Bakery"
-        // all key the same — otherwise the swap re-picks an already-used venue.
-        const lc = (s: any) => String(s || '').toLowerCase()
-          .replace(/^\s*[a-z' ]*\b(breakfast|brunch|lunch|dinner|nightcap|drinks?|coffee|cocktails?|tea|supper|aperitivo|aperitif)\b\s+(at|in|with|@|by)\s+/i, '')
-          .replace(/\s+/g, ' ').trim();
-        const isLog3 = (a: any) => ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(String(a?.category || '').toLowerCase());
-        const mealTypeOf = (a: any): 'breakfast' | 'lunch' | 'dinner' | null => {
-          const tt = String(a?.title || a?.name || '').toLowerCase();
-          if (/\bbreakfast\b/.test(tt)) return 'breakfast';
-          if (/\blunch\b/.test(tt)) return 'lunch';
-          if (/\bdinner\b/.test(tt)) return 'dinner';
-          const c = String(a?.category || '').toLowerCase();
-          return (c === 'dining' || c === 'restaurant') ? 'lunch' : null;
-        };
-        const prefixSame = (a: string, b: string) => { if (a === b) return true; const [s, l] = a.length < b.length ? [a, b] : [b, a]; return l.startsWith(s + ' '); };
-        const pMin = (s: any) => { const m = String(s || '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; };
-        // Map a clock time to its meal window (overlapping edges; gaps → null so
-        // an ambiguous 16:30 meal is left alone). breakfast 05:00–11:30, lunch
-        // 11:00–16:00, dinner 17:00–23:00.
-        const windowType = (m: number | null) => m == null ? null : (m >= 300 && m <= 690 ? 'breakfast' : m >= 660 && m <= 990 ? 'lunch' : m >= 990 && m <= 1410 ? 'dinner' : null);
-        const c3City = (facts.destination.city as string) || '';
-        const seenNonMeal: string[] = [];
-        const usedMealNames = new Set<string>();
-        for (const d of mergedDays) {
-          if (!Array.isArray((d as any)?.activities)) continue;
-          const kept: any[] = [];
-          const seenTypeToday = new Set<string>();
-          for (const a of (d as any).activities) {
-            // Skip logistics + GENUINE user must-dos. Auto-locks from the meal
-            // guard (no lockedSource) must NOT be skipped — otherwise an
-            // auto-locked 2nd dinner / duplicate breakfast survives.
-            const isUMD3 = a?.lockedSource === 'must_do' || a?.lockedSource === 'user' || /must[_-]?do|user[_-]?anchor/i.test(String(a?.source || ''));
-            if (isLog3(a) || isUMD3) { kept.push(a); continue; }
-            const key = lc(a?.location?.name || a?.venue_name || a?.venueName || a?.title || a?.name);
-            if (!key || key.length < 6) { kept.push(a); continue; }
-            const mt = mealTypeOf(a);
-            if (mt) {
-              // same-day duplicate meal TYPE (e.g. two dinners) → drop the later
-              // one. Only act on EXPLICIT meal titles, not category-inferred ones
-              // — otherwise "Izakaya at X" / "Cocktails at Y" (dining category,
-              // no meal word) get wrongly dropped as duplicate "lunches".
-              const ttX = String(a?.title || a?.name || '').toLowerCase();
-              let mtExplicit = /\bbreakfast\b/.test(ttX) ? 'breakfast' : /\blunch\b/.test(ttX) ? 'lunch' : /\bdinner\b/.test(ttX) ? 'dinner' : null;
-              // MEAL-TIME RELABEL: a meal whose TIME contradicts its label (e.g.
-              // a "Lunch" at 09:55) is relabeled to the correct meal for that
-              // time. Runs before the same-day dedup so a relabel that collides
-              // with an existing meal of that type is then dropped.
-              if (mtExplicit) {
-                const wt = windowType(pMin(a.startTime || a.time));
-                if (wt && wt !== mtExplicit) {
-                  const lbl = wt[0].toUpperCase() + wt.slice(1);
-                  const wasT = a.title || a.name;
-                  a.title = String(a.title || a.name || '').replace(/\b(breakfast|brunch|lunch|dinner)\b/i, lbl);
-                  a.name = a.title;
-                  mtExplicit = wt;
-                  console.log(`[v2] [MEAL_RELABEL] day ${(d as any).dayNumber}: "${wasT}" → "${a.title}" (time ${a.startTime || a.time})`);
-                }
-              }
-              if (mtExplicit) {
-                if (seenTypeToday.has(mtExplicit)) { console.log(`[v2] [MEAL_DEDUP] day ${(d as any).dayNumber}: dropped extra ${mtExplicit} "${a.title || a.name}"`); continue; }
-                seenTypeToday.add(mtExplicit);
-              }
-              // MEAL repeat → swap to a different city-matched restaurant (never drop a meal).
-              if (usedMealNames.has(key)) {
-                const fb = getRandomFallbackRestaurant(c3City, mt, usedMealNames);
-                if (fb?.name && !usedMealNames.has(lc(fb.name))) {
-                  const label = mt[0].toUpperCase() + mt.slice(1);
-                  const was = a.title || a.name;
-                  a.title = `${label} at ${fb.name}`;
-                  a.name = a.title;
-                  a.location = a.location || {};
-                  a.location.name = fb.name;
-                  if (fb.address) a.location.address = fb.address;
-                  if (fb.description) a.description = fb.description;
-                  a.source = 'c3-restaurant-swap';
-                  usedMealNames.add(lc(fb.name));
-                  console.log(`[v2] [C3_SWAP] day ${(d as any).dayNumber}: "${was}" → "${a.title}"`);
-                } else {
-                  usedMealNames.add(key);
-                }
-              } else {
-                usedMealNames.add(key);
-              }
-              kept.push(a);
-            } else {
-              // NON-MEAL repeat → drop (keep first occurrence).
-              if (seenNonMeal.some((k) => prefixSame(k, key))) { console.log(`[v2] [C3_DEDUP] dropped repeat venue "${a.title || a.name}" (day ${(d as any).dayNumber})`); continue; }
-              seenNonMeal.push(key);
-              kept.push(a);
-            }
-          }
-          (d as any).activities = kept;
-        }
+        // The full cross-day cleanup — meal-time relabel, same-day duplicate-meal
+        // drop (auto-lock-aware), cross-day restaurant swap (inline catalog + a
+        // Google-Places fallback for non-catalog cities via recommend-restaurants),
+        // and non-meal duplicate drop — now lives in the shared module so the
+        // regenerate-day path runs the identical logic. See _shared/cross-day-dedup.ts.
+        await crossDayDedup(mergedDays as any[], (facts.destination.city as string) || '', makePlacesAlternatives(supabase));
       } catch (e) {
         console.warn('[v2] C3 dedup/swap failed (non-blocking):', e);
       }
@@ -1103,7 +1012,7 @@ export async function handleGenerateTripDayV2(
     // Run once BEFORE 8g (catches model-made dups), then AGAIN after 8g/8h
     // (see 8h2 below) — the meal-coverage gate re-injects meals with the title
     // in location.name, which is how a duplicate breakfast survived on Barcelona.
-    if (isLastDay) runCrossDayDedup();
+    if (isLastDay) await runCrossDayDedup();
 
     // ── 8g. FINAL meal-coverage gate — the LAST thing before the write ──
     // ROOT-CAUSE FIX (Day-N-missing-dinner): the 6c meal guard runs
@@ -1258,7 +1167,7 @@ export async function handleGenerateTripDayV2(
     // it can re-create a duplicate the first 8f3 pass already cleaned (e.g.
     // Barcelona shipped Syra Coffee on days 2 AND 3 — day 3 was an 8g injection).
     // Running de-dup again here, after all injections, is the final word.
-    if (isLastDay) runCrossDayDedup();
+    if (isLastDay) await runCrossDayDedup();
 
     // ── 8i. SELF-CHECK GATE — verify + repair + score before the write ──
     // The auditor's checks, run inside generation as the final quality gate so
