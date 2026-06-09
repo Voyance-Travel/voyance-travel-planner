@@ -81,3 +81,10 @@ User read: venue SELECTION is genuinely good (Flavio al Velavevodetto, Da Enzo, 
 - **C3 DUPLICATE_VENUE: prompt-feed INSUFFICIENT.** Da Enzo (Day 2+3 dinner) + Pasticceria Regoli (Day 1 lunch + Day 3 breakfast) still repeated — the model ignores the "don't repeat" instruction. Needs TEETH: a post-generation cross-day dedup that SWAPS a repeated dining venue (needs a real alternative pool, not just a prompt nudge).
 - **C10 OVERLAP (new):** two activities at the same start time (Day 2: Colosseum + breakfast both 08:30). Executioner not spacing them.
 - **C11 THIN/GAPPY DAY (new, ⊃ C8):** Day 3 had one attraction + 4-hour holes between meals. Completeness/pacing gap.
+
+<!-- ROUND 3 — clean Lisbon (trip 9888bdaf), score 84/100 -->
+## Round 3 — clean Lisbon generation (84/100, up from Rome 66 / baseline 53)
+- **C7 ✅ VERIFIED FIXED on a 2nd clean trip** — exactly one dinner/day, nothing past midnight. The double-dinner/cascade bug is gone.
+- **C3 is now the ceiling.** Lisbon repeated: Mercado de Campo de Ourique 3× (Days 1-3), Tasca do Chico Fado 2×, Taberna Sal Grosso lunch 2×, Heim Café breakfast 2×. Prompt-feed confirmed ignored by the model.
+  - **FIX (non-meal): deterministic cross-day venue dedup** added to V2 last-day finalization (8f3) — keeps first occurrence of each non-meal venue, drops repeats (keyed on location.name, prefix-match for suffixed names). Verified locally on Lisbon: Mercado 3×→1×, Fado 2×→1×, days stay full. Meals left (restaurant-swap needs a venue pool — open follow-up).
+- **New small bug:** Day 4 transit said "Travel to Your Hotel" *after* checkout (should be "to Airport").
