@@ -57,7 +57,9 @@ import { extractMustDoVenues } from '../../_shared/extract-must-dos.ts';
 import { fillAfterMealGuard } from '../../_shared/post-meal-guard-fill.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from '../day-validation.ts';
 import { collapseRedundantInjectedMeals } from '../../_shared/meal-protection.ts';
-import { runStep8 } from '../universal-quality-pass.ts';
+import { runStep8, terminalCleanup } from '../universal-quality-pass.ts';
+import { reorderDayByProximity, retimeAndComputeLegTimes } from '../geographic-coherence.ts';
+import { selfCheckAndRepair } from '../../_shared/itinerary-self-check.ts';
 import { ledgerCheck } from '../ledger-check.ts';
 import { nuclearCrossCitySweep, nuclearDiningStrip, nuclearWellnessSweep } from '../fix-placeholders.ts';
 import { noopTrace, attachTrace, withStage, type Trace } from '../../_shared/trace-recorder.ts';
@@ -629,7 +631,7 @@ export async function handleGenerateTripDayV2(
     // (mirrors the V1 full-trip ordering: cluster + retime, then clean). Non-blocking.
     if (Array.isArray(finalDay.activities) && finalDay.activities.length > 0) {
       try {
-        const { reorderDayByProximity, retimeAndComputeLegTimes } = await import('../geographic-coherence.ts');
+        // reorderDayByProximity + retimeAndComputeLegTimes: static imports (top of file).
         const geoDest = facts.destination.city || '';
         const geoLockedIds = new Set<string>(
           ((finalDay.activities as any[]) || [])
@@ -720,7 +722,8 @@ export async function handleGenerateTripDayV2(
     // Strip post-barrier non-logistics + collapse duplicate departures on the
     // last day, on the final activities just before persist. Non-blocking.
     try {
-      const { terminalCleanup } = await import('../universal-quality-pass.ts');
+      // terminalCleanup is a static import (top of file) — a dynamic import here
+      // silently failed in the bundled edge runtime, so per-day departure cleanup never ran.
       terminalCleanup(finalDay.activities, {
         departureTime24: isLastDay ? (repairDepartureTime24 || undefined) : undefined,
         city: facts.destination.city,
@@ -1191,7 +1194,7 @@ export async function handleGenerateTripDayV2(
             }
             if (retimed) ld.activities.sort((x: any, y: any) => (pM(x.startTime || x.time) ?? 9999) - (pM(y.startTime || y.time) ?? 9999));
           }
-          const { terminalCleanup: finalTC } = await import('../universal-quality-pass.ts');
+          const finalTC = terminalCleanup; // static import (top of file)
           finalTC(ld.activities, {
             departureTime24: repairDepartureTime24 || undefined,
             city: facts.destination.city,
@@ -1215,7 +1218,7 @@ export async function handleGenerateTripDayV2(
     // trips, and flag low-scoring trips for review.
     if (isLastDay) {
       try {
-        const { selfCheckAndRepair } = await import('../../_shared/itinerary-self-check.ts');
+        // selfCheckAndRepair is a static import (top of file).
         const sc = selfCheckAndRepair(mergedDays);
         const highCount = sc.issues.filter((i) => i.severity === 'high').length;
         console.log(`[v2] [SELF_CHECK] score=${sc.score} repaired=${sc.repaired} remaining=${sc.issues.length} high=${highCount}`);
