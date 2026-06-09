@@ -1022,7 +1022,7 @@ export async function handleGenerateTripDayV2(
         // Map a clock time to its meal window (overlapping edges; gaps → null so
         // an ambiguous 16:30 meal is left alone). breakfast 05:00–11:30, lunch
         // 11:00–16:00, dinner 17:00–23:00.
-        const windowType = (m: number | null) => m == null ? null : (m >= 300 && m <= 690 ? 'breakfast' : m >= 660 && m <= 960 ? 'lunch' : m >= 1020 && m <= 1380 ? 'dinner' : null);
+        const windowType = (m: number | null) => m == null ? null : (m >= 300 && m <= 690 ? 'breakfast' : m >= 660 && m <= 990 ? 'lunch' : m >= 990 && m <= 1410 ? 'dinner' : null);
         const c3City = (facts.destination.city as string) || '';
         const seenNonMeal: string[] = [];
         const usedMealNames = new Set<string>();

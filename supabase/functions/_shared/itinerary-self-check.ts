@@ -73,7 +73,7 @@ export function checkItineraryQuality(days: any[]): { score: number; issues: Qua
     // meals — duplicate same-type, wrong time
     const meals = acts.filter((a: any) => mealType(a));
     for (const m of ['breakfast', 'lunch', 'dinner']) if (meals.filter((a: any) => mealType(a) === m).length > 1) add('med', 'MEALS', idx + 1, `duplicate ${m}`);
-    const WIN: Record<string, [number, number]> = { breakfast: [300, 690], lunch: [660, 960], dinner: [1020, 1380] };
+    const WIN: Record<string, [number, number]> = { breakfast: [300, 690], lunch: [660, 990], dinner: [990, 1410] };
     for (const a of meals) { const mt = mealType(a); const s = parseMins(a.startTime || a.time); if (mt && WIN[mt] && s != null && (s < WIN[mt][0] || s > WIN[mt][1])) add('med', 'MEALS', idx + 1, `${mt} at bad time`); }
     // after hotel-return / checkout
     let term = false;

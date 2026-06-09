@@ -38,7 +38,9 @@ export function crossDayDedup(days: any[], city: string): { swaps: number; drops
   };
   const prefixSame = (a: string, b: string) => { if (a === b) return true; const [s, l] = a.length < b.length ? [a, b] : [b, a]; return l.startsWith(s + ' '); };
   const pMin = (s: any) => { const m = String(s || '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; };
-  const windowType = (m: number | null) => m == null ? null : (m >= 300 && m <= 690 ? 'breakfast' : m >= 660 && m <= 960 ? 'lunch' : m >= 1020 && m <= 1380 ? 'dinner' : null);
+  // Contiguous windows (no gap) so an in-between meal (e.g. 16:30) is relabeled
+  // to the nearest meal: breakfast 05:00–11:30, lunch 11:00–16:30, dinner 16:30–23:30.
+  const windowType = (m: number | null) => m == null ? null : (m >= 300 && m <= 690 ? 'breakfast' : m >= 660 && m <= 990 ? 'lunch' : m >= 990 && m <= 1410 ? 'dinner' : null);
 
   const c3City = city || '';
   const seenNonMeal: string[] = [];
