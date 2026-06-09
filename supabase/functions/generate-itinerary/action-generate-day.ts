@@ -27,7 +27,6 @@ import {
 } from './generation-utils.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
 import { crossDayDedup } from './_shared/cross-day-dedup.ts';
-import { makePlacesAlternatives } from './_shared/places-alternatives.ts';
 import { selfCheckAndRepair } from '../_shared/itinerary-self-check.ts';
 import { persistTripItinerary } from '../_shared/persist-itinerary.ts';
 import { stripBookendsForPrompt } from '../_shared/strip-bookends-for-prompt.ts';
@@ -2010,7 +2009,7 @@ export async function handleGenerateDay(
         const { data: _ccRow } = await supabase.from('trips').select('itinerary_data, metadata').eq('id', tripId).maybeSingle();
         const _ccDays = (_ccRow?.itinerary_data as any)?.days;
         if (Array.isArray(_ccDays) && _ccDays.length > 1) {
-          const _ccRes = await crossDayDedup(_ccDays, destination || '', makePlacesAlternatives(supabase));
+          const _ccRes = crossDayDedup(_ccDays, destination || '');
           const _sc = selfCheckAndRepair(_ccDays);
           await persistTripItinerary(supabase, tripId, { ...((_ccRow!.itinerary_data as any) || {}), days: _ccDays }, { label: 'regen-cross-day', saveReason: 'regenerate-day-cleanup' });
           const _meta: any = (_ccRow?.metadata as any) || {};
