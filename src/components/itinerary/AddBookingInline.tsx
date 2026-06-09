@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { getAirportCodeForCity } from '@/utils/destinationSearch';
 import { BoardingPassUpload } from './BoardingPassUpload';
 import { useNavigate } from 'react-router-dom';
 import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon, ChevronDown, ChevronUp, Upload, Sparkles, MapPin } from 'lucide-react';
@@ -160,8 +161,8 @@ export function AddFlightInline({
       return multiCityRoute.map((r, i) => ({
         airline: '',
         flightNumber: '',
-        departureAirport: '',
-        arrivalAirport: '',
+        departureAirport: getAirportCodeForCity(r.from) || '',
+        arrivalAirport: getAirportCodeForCity(r.to) || '',
         departureTime: '',
         arrivalTime: '',
         departureDate: r.date || (i === 0 ? startDate : ''),
@@ -174,12 +175,14 @@ export function AddFlightInline({
       }));
     }
 
-    // Default: single outbound leg
+    // Default: single outbound leg. Prefill airports from the trip's own
+    // origin/destination (the user's input) so the arrival airport matches the
+    // actual trip (e.g. Barcelona → BCN) instead of a hardcoded placeholder.
     return [{
       airline: '',
       flightNumber: '',
-      departureAirport: origin || '',
-      arrivalAirport: '',
+      departureAirport: getAirportCodeForCity(origin) || origin || '',
+      arrivalAirport: getAirportCodeForCity(destination) || '',
       departureTime: '',
       arrivalTime: '',
       departureDate: startDate,
@@ -513,7 +516,7 @@ export function AddFlightInline({
                         <AirportAutocomplete
                           value={leg.departureAirport}
                           onChange={(code) => updateLeg(idx, { departureAirport: code })}
-                          placeholder="ATL"
+                          placeholder={getAirportCodeForCity(origin) || origin?.split(',')[0]?.trim() || 'Departure'}
                         />
                       </div>
                       <div>
@@ -521,7 +524,7 @@ export function AddFlightInline({
                         <AirportAutocomplete
                           value={leg.arrivalAirport}
                           onChange={(code) => updateLeg(idx, { arrivalAirport: code })}
-                          placeholder="LHR"
+                          placeholder={getAirportCodeForCity(destination) || destination?.split(',')[0]?.trim() || 'Arrival'}
                         />
                       </div>
                     </div>

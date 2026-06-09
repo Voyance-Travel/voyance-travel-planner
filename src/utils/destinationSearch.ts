@@ -96,6 +96,28 @@ const popularDestinations: SearchableDestination[] = [
 /**
  * Search destinations with simulated API delay
  */
+/**
+ * Best-effort IATA airport code for a destination/origin city name.
+ * Matches the trip's city (the user's own input) against the popular-destinations
+ * list, case-insensitively, using the first comma-separated token
+ * (e.g. "Barcelona, Spain" → "barcelona" → "BCN"). Returns undefined when unknown,
+ * so callers can fall back to an empty field for manual user input rather than a
+ * misleading hardcoded default.
+ */
+export const getAirportCodeForCity = (cityName?: string | null): string | undefined => {
+  if (!cityName) return undefined;
+  const primary = cityName.trim().toLowerCase().split(',')[0].trim();
+  if (!primary) return undefined;
+  const exact = popularDestinations.find(
+    (d) => d.city.toLowerCase() === primary || d.name.toLowerCase() === primary,
+  );
+  if (exact) return exact.code;
+  const partial = popularDestinations.find(
+    (d) => primary.includes(d.city.toLowerCase()) || primary.includes(d.name.toLowerCase()),
+  );
+  return partial?.code;
+};
+
 export const searchDestinations = async (query: string): Promise<DestinationSearchResult[]> => {
   await new Promise((resolve) => setTimeout(resolve, 200));
 
