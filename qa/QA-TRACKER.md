@@ -643,3 +643,9 @@ Owner flagged; confirmed on live Barcelona trip 6e087c7f Day 2:
 - **Travel times are inconsistent placeholders:** distinct values across the trip = `''`, `10 min`, `15 min`, `15m`, `25m` — a mix of generator defaults (`15m`/`25m`) and real route data (`10/15 min`); several legs blank. The flat `15m` doesn't reflect real distances (e.g., Gràcia→Poble Sec ~30+ min). Format inconsistent too.
 - IMPACT: undermines credibility of EVERY itinerary. Higher priority than the note-display bug.
 - FIX directions: (1) order each day's activities by geographic proximity (cluster by neighborhood / nearest-neighbor or 2-opt on lat/lng) at GENERATION, before transit legs are computed; (2) compute real travel durations per leg (the route-details/transit path exists — D5) instead of the `15m` placeholder, and render consistently; (3) reconcile the placeholder→real handoff so users don't see `15m` that never updates.
+
+<!-- ARRIVAL GAME PLAN add-hotel bug 2026-06-08 -->
+### ✅ FIXED — "Add Hotel" opened the Flight modal
+Live test (Barcelona 6e087c7f): the Arrival Game Plan "Add Hotel" button opened the **Add Flight Details** modal (reproduced twice). Root cause EditorialItinerary.tsx:10564 — `onClick={onAddFlightInline || onNavigateToBookings}` (ArrivalGamePlan had no hotel handler). Fix: added `onAddHotelInline` prop, wired the button to it, and passed `onAddHotelInline={() => setEditHotelOpen(true)}` at the 3 call sites. Deploying — re-test that Add Hotel now opens the hotel entry dialog.
+- ✅ Add Flight verified: Vueling arr 14:30 persisted to flight_selection; Arrival Game Plan shows "Landing at 14:30".
+- Side findings on this trip: (a) flight modal pre-fills To=LHR for a Barcelona trip (should be BCN); (b) "Day 2 needs regeneration — 3+ hr unscheduled gap" toast; (c) draft warning "Day 4: breakfast" missing; (d) "2 activities have no travel buffer" on Day 1 — all relate to the routing/meal-coverage quality work.
