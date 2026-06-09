@@ -84,6 +84,7 @@ import { resolveActivityDisplayDescription } from '@/lib/itinerary/diningDescrip
 import { getDisplayDayTitle } from '@/utils/dayTitleCoherence';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { parseEditorialDays } from '@/utils/itineraryParser';
+import { dispatchTripPersisted } from '@/lib/itinerary/resyncItineraryFromDb';
 import { getAppUrl } from '@/utils/getAppUrl';
 import { resolveInviteLink, getInviteErrorMessage, type InviteHealth } from '@/services/inviteResolver';
 
@@ -1199,6 +1200,15 @@ function getActivityCost(
 function getActivityType(activity: EditorialActivity): string {
   const raw = activity.category || activity.type || 'activity';
   return typeof raw === 'string' ? raw : String(raw);
+}
+
+// AI-concierge notes must never attach to a transit/logistics row. Mirrors the
+// CONCIERGE_HIDDEN_TYPES set used to hide the concierge entry point on those
+// cards — the save path guards the data too, so an id mix-up can't land a note
+// on the preceding transit card (the original "note shows on Travel to X" bug).
+const NOTE_BLOCKED_TYPES = ['transportation', 'transport', 'transit', 'travel', 'logistics'];
+function isNoteBlockedActivity(activity: EditorialActivity): boolean {
+  return NOTE_BLOCKED_TYPES.includes(getActivityType(activity));
 }
 
 function getActivityRating(activity: EditorialActivity): number | null {
@@ -2987,6 +2997,14 @@ export function EditorialItinerary({
         if (!error) {
           setHasChanges(false);
           setLastSaved(new Date());
+          // Signal TripDetail (and other listeners) to re-read canonical
+          // itinerary_data from the DB. Without this, TripDetail's
+          // trip.itinerary_data — the source of `initialDays` — stays at its
+          // pre-save value, so a soft (same-URL) remount rebuilds the day from
+          // stale data and silently reverts the edit (the AI-note disappear-on-
+          // reload bug; it also affected swap/reorder/edit). See the
+          // TRIP_PERSISTED_EVENT handler in TripDetail.
+          dispatchTripPersisted({ tripId, source: 'EditorialItinerary.persistImmediate' });
         } else {
           console.error('[EditorialItinerary] persistDaysImmediately save failed:', error);
         }
@@ -3005,6 +3023,7 @@ export function EditorialItinerary({
         localStorage.setItem(localStorageKey, JSON.stringify(demoTrips));
         setHasChanges(false);
         setLastSaved(new Date());
+        dispatchTripPersisted({ tripId, source: 'EditorialItinerary.persistImmediate' });
       }
     } catch (e) {
       // Leave hasChanges=true so the autosave timer retries as a safety net.
@@ -3034,6 +3053,8 @@ export function EditorialItinerary({
         ...day,
         activities: day.activities.map(act => {
           if (act.id !== activityId) return act;
+          // Defensive: never attach a note to a transit/logistics row.
+          if (isNoteBlockedActivity(act)) return act;
           const existing = act.aiNotes || [];
           // Dedup by content
           if (existing.some(n => n.content === note.content)) return act;
@@ -3043,6 +3064,8 @@ export function EditorialItinerary({
       return nextDays;
     });
     setHasChanges(true);
+    // persistDaysImmediately fires TRIP_PERSISTED_EVENT on success so the saved
+    // note survives a soft (same-URL) reload — see that function.
     await persistDaysImmediately(nextDays);
   }, [persistDaysImmediately]);
 
@@ -11785,6 +11808,22 @@ function ActivityRow({
   if (!activity) return null;
   const activityType = getActivityType(activity);
   const style = activityStyles[activityType] || activityStyles.activity;
+  // Scroll the saved-notes log into view from the ⋯ menu. The mobile log lives
+  // in the collapsed detail panel, so expand it first; two log instances share
+  // this activity's id (mobile + desktop), so scroll whichever is visible.
+  const scrollToNotes = () => {
+    setMobileExpanded(true);
+    window.setTimeout(() => {
+      const nodes = document.querySelectorAll(`[data-ai-notes="${activity.id}"]`);
+      for (let i = 0; i < nodes.length; i++) {
+        const el = nodes[i] as HTMLElement;
+        if (el.offsetParent !== null) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          break;
+        }
+      }
+    }, 80);
+  };
   const rawRating = getActivityRating(activity);
   const reviewCount = getActivityReviewCount(activity);
   const costInfo = getActivityCostInfo(activity, travelers, budgetTier, destination, destinationCountry, isManualMode);
@@ -12230,10 +12269,12 @@ function ActivityRow({
           )}
           {/* AI Saved Notes */}
           {activity.aiNotes && activity.aiNotes.length > 0 && !isDowntime && !isTransport && (
-            <AISavedNotes
-              notes={activity.aiNotes}
-              onDeleteNote={isEditable && onDeleteAINote ? (noteId) => onDeleteAINote(activity.id, noteId) : undefined}
-            />
+            <div data-ai-notes={activity.id} className="scroll-mt-24">
+              <AISavedNotes
+                notes={activity.aiNotes}
+                onDeleteNote={isEditable && onDeleteAINote ? (noteId) => onDeleteAINote(activity.id, noteId) : undefined}
+              />
+            </div>
           )}
           {/* Mobile action buttons */}
           {!isPreview && (
@@ -12269,6 +12310,11 @@ function ActivityRow({
                         {onSwap && canViewPremium && (
                           <DropdownMenuItem onClick={() => onSwap(dayIndex, activity)} className="cursor-pointer gap-2">
                             <ArrowRightLeft className="h-4 w-4" /> Find Alternative
+                          </DropdownMenuItem>
+                        )}
+                        {activity.aiNotes && activity.aiNotes.length > 0 && (
+                          <DropdownMenuItem onClick={scrollToNotes} className="cursor-pointer gap-2">
+                            <FileText className="h-4 w-4" /> Notes ({activity.aiNotes.length})
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem onClick={() => onEdit(dayIndex, activityIndex, activity)} className="cursor-pointer gap-2">
@@ -12684,6 +12730,17 @@ function ActivityRow({
                 />
               </div>
             )}
+            {/* AI Saved Notes (desktop): the inline log of concierge "save to
+                card" notes. Mirrors the mobile render above so desktop owners
+                can actually see/manage saved notes. */}
+            {activity.aiNotes && activity.aiNotes.length > 0 && !isDowntime && !isTransport && (
+              <div data-ai-notes={activity.id} className="scroll-mt-24">
+                <AISavedNotes
+                  notes={activity.aiNotes}
+                  onDeleteNote={isEditable && onDeleteAINote ? (noteId) => onDeleteAINote(activity.id, noteId) : undefined}
+                />
+              </div>
+            )}
           </div>
 
           {/* Actions & Cost */}
@@ -12917,6 +12974,15 @@ function ActivityRow({
                         Propose Replacement
                       </DropdownMenuItem>
                       </>
+                      )}
+                      {activity.aiNotes && activity.aiNotes.length > 0 && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={scrollToNotes} className="cursor-pointer gap-2">
+                            <FileText className="h-4 w-4" />
+                            Notes ({activity.aiNotes.length})
+                          </DropdownMenuItem>
+                        </>
                       )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
