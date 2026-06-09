@@ -203,27 +203,12 @@ export function analyzeHealth(days: any[], opts?: { tripFlightSelection?: any })
       }
       const missingMeals = requiredMeals.filter((m) => !detectedMeals.has(m));
       if (missingMeals.length > 0) {
-        // Sparse-JSON heuristic: if the day has ZERO detected meals AND
-        // requires multiple, the rendered itinerary almost certainly lost
-        // meal cards to JSON-vs-table drift (Casablanca pattern). The
-        // sparse-JSON probe in TripDetail rebuilds from the per-row table
-        // on next mount; surface this as a soft "recovering" warning so
-        // the score doesn't crater while the heal completes.
-        const sparseJsonLikely = detectedMeals.size === 0 && missingMeals.length >= 2;
-        issues.push({
-          id: `missing-meals-${dayNum}`,
-          severity: sparseJsonLikely ? 'warning' : 'error',
-          message: sparseJsonLikely
-            ? `Day ${dayNum} meals not yet loaded - recovering from saved data`
-            : `Day ${dayNum} missing ${missingMeals.join(', ')}`,
-          // A missing MEAL cannot be added by `refresh_day` (that only
-          // re-validates timing/buffers and reports "looks clean" while the
-          // meal is still gone). Route to a real AI day-regeneration that
-          // re-runs the meal guard and injects the missing course.
-          fixLabel: sparseJsonLikely ? undefined : 'Regenerate Day',
-          fixAction: sparseJsonLikely ? undefined : 'regenerate_day',
-          dayNumber: dayNum,
-        });
+        // Meal-coverage warnings are intentionally NOT surfaced to users here.
+        // The detector false-fires (departure days that don't need breakfast,
+        // food-hall / arrival-lunch edge cases), and a "Day N missing breakfast"
+        // alarm makes a perfectly good itinerary look broken. Meal coverage is
+        // still tracked server-side for QA — we just don't alarm users with it.
+        void missingMeals;
       }
     }
 
