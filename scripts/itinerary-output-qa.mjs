@@ -63,13 +63,16 @@ function auditDay(day, idx, total) {
   const isLast = idx === total - 1;
   const add = (sev, type, msg) => issues.push({ sev, type, msg, day: idx + 1 });
 
-  // 1) DEPARTURE-DAY logic
+  // 1) DEPARTURE-DAY logic — a real departure day legitimately has a Transfer
+  //    AND a Flight, so only flag MULTIPLE BARE "Departure" rows; and a meal
+  //    before a midday flight is fine, so exclude meals from the after-barrier check.
   if (isLast) {
-    const isDep = (a) => /\b(airport|station|terminal|transfer to|head to|taxi to|depart|fly home|flight home|heading home|boarding|security)\b/.test(titleOf(a)) || catOf(a) === 'flight';
-    const depRows = acts.filter(isDep);
-    const barrier = depRows.map((a) => parseMins(a.startTime || a.time)).filter((m) => m != null).sort((x, y) => x - y)[0] ?? null;
-    if (depRows.length > 1) add('high', 'DEPARTURE_DAY', `duplicate departure rows (${depRows.length}: ${depRows.map((a) => `"${a.title || a.name}"`).join(', ')})`);
-    if (barrier != null) for (const a of acts) { const s = parseMins(a.startTime || a.time); if (s != null && s >= barrier && !isLogistics(a)) add('high', 'DEPARTURE_DAY', `"${a.title || a.name}" at ${a.startTime || a.time} scheduled AFTER departure (barrier ${Math.floor(barrier/60)}:${String(barrier%60).padStart(2,'0')})`); }
+    const isBareDep = (a) => { const t = titleOf(a); return /\bdepart(?:ure|ing|s)?\b/.test(t) && !/\b(flight|transfer|airport|station|terminal|check)\b/.test(t); };
+    const isStrong = (a) => catOf(a) === 'flight' || ((catOf(a).includes('trans') || catOf(a) === 'logistics') && /\b(airport|station|terminal|transfer|head to|taxi to|boarding|security)\b/.test(titleOf(a)));
+    const bareDeps = acts.filter(isBareDep);
+    const barrier = acts.map((a) => isStrong(a) ? parseMins(a.startTime || a.time) : null).filter((m) => m != null).sort((x, y) => x - y)[0] ?? null;
+    if (bareDeps.length > 1) add('high', 'DEPARTURE_DAY', `${bareDeps.length} bare departure rows`);
+    if (barrier != null) for (const a of acts) { const s = parseMins(a.startTime || a.time); if (s != null && s >= barrier && !isLogistics(a) && !isMeal(a)) add('high', 'DEPARTURE_DAY', `"${a.title || a.name}" at ${a.startTime || a.time} scheduled AFTER departure (barrier ${Math.floor(barrier/60)}:${String(barrier%60).padStart(2,'0')})`); }
   }
 
   // 2) GEOGRAPHIC zig-zag
