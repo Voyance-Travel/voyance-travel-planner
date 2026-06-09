@@ -598,3 +598,15 @@ Owner flipped DNS at Squarespace (domain had migrated from Google Domains 2024).
 - ⚠️ Keep old Lovable project ALIVE a few more days = rollback safety + lets the image cache self-heal (some old-storage image URLs re-fetch on first view — transient, expected; C-IMG-3).
 - ⏸️ Cron trip-reminders auth still deferred (non-blocking background; clean fix = dedicated CRON_SECRET when wanted).
 - ℹ️ Corrections to the cutover-report checklist that was pasted: **Apple OAuth JWT is DONE** (not "pending" — client-secret generated + live-probed 302 this session) and **SendGrid is DONE** (trial/credit issue resolved → /auth/v1/recover 200).
+
+<!-- LIVE PRODUCTION SMOKE TEST 2026-06-08 (travelwithvoyance.com, post-cutover) -->
+## ✅ Live PRODUCTION feature test — Build #1 Barcelona (travelwithvoyance.com)
+First full build + tool exercise on the REAL domain post-cutover (account ashtonlaurenn, Culinary Cartographer). All ✅:
+- ✅ Build wizard: destination autocomplete (Barcelona,Spain), dates (Jun16→19 / 4d), travelers, trip-type
+- ✅ Must-see picker: selected Sagrada Família + Park Güell + Barri Gòtic → **ALL 3 landed in output** (must-dos honored on prod)
+- ✅ PAID charge: cost display 240 == charged 240; balance 3810→3570; FIFO (100 free + 140 purchased); trigger-synced. Money path works on prod.
+- ✅ Generation: 4 days, Barcelona-specific day titles (Gothic Roots & Gaudí Heights / Authentic Tapas / Gràcia & Gastronomy), real geolocated DNA-culinary venues (Quimet & Quimet, Granja Viader), no fallback
+- ✅ Editor loads with full tool surface: ⋯ menu = Find Alternative (swap, 3/3 free) / Move up·down / Move-to-day / Copy-to-day / Edit Details / Remove; plus Show Routes, lock, regenerate, Add Flight/Hotel
+- ✅ MOVE: "Move down" reordered (Luggage Drop → Granja Viader first) + **persisted to DB** (verified) + cost recomputed 185→175/pp correctly (NO doubling on prod)
+- ⚠️ MINOR: trip hero photo showed Madrid's Metropolis building for a Barcelona trip (hero-image city mismatch — cosmetic; build content all correct).
+Trip id 6e087c7f. Remaining tools (swap/add/lock/regenerate/edit) use the same now-verified persist path.
