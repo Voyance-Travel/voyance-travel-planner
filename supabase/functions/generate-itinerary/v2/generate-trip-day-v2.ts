@@ -1031,7 +1031,11 @@ export async function handleGenerateTripDayV2(
           const kept: any[] = [];
           const seenTypeToday = new Set<string>();
           for (const a of (d as any).activities) {
-            if (a?.locked || a?.isLocked || a?.lock_state === 'locked' || isLog3(a)) { kept.push(a); continue; }
+            // Skip logistics + GENUINE user must-dos. Auto-locks from the meal
+            // guard (no lockedSource) must NOT be skipped — otherwise an
+            // auto-locked 2nd dinner / duplicate breakfast survives.
+            const isUMD3 = a?.lockedSource === 'must_do' || a?.lockedSource === 'user' || /must[_-]?do|user[_-]?anchor/i.test(String(a?.source || ''));
+            if (isLog3(a) || isUMD3) { kept.push(a); continue; }
             const key = lc(a?.location?.name || a?.venue_name || a?.venueName || a?.title || a?.name);
             if (!key || key.length < 6) { kept.push(a); continue; }
             const mt = mealTypeOf(a);
