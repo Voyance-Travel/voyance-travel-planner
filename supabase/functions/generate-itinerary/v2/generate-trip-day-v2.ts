@@ -1158,11 +1158,31 @@ export async function handleGenerateTripDayV2(
           if (depMin != null && depMin > 180) {
             const tgt = depMin - 180;
             let retimed = false;
+            let transferMin: number | null = null;
             for (const a of ld.activities) {
               const tt = String(a?.title || '').toLowerCase();
-              if (/transfer to (the )?airport|head to (the )?airport|taxi to (the )?airport|to the airport/.test(tt)) {
+              const cc = String(a?.category || '').toLowerCase();
+              // Match the airport transfer even when the airport NAME is in the
+              // title ("Taxi to London Heathrow Airport"): any transport card
+              // mentioning an airport/terminal, or a movement verb toward one.
+              if (/\bairport\b|\bterminal\b/.test(tt) && (/transport|transit|transfer|logistics/.test(cc) || /\b(transfer|taxi|head|drive|ride|car|shuttle|travel|head to)\b/.test(tt))) {
                 const m = pM(a.startTime || a.time);
-                if (m != null && m < tgt - 60) { a.startTime = fM(tgt); a.time = a.startTime; retimed = true; console.log(`[v2] [DEP_RETIME] transfer ${fM(m)} → ${fM(tgt)} (flight ${fM(depMin)})`); }
+                // Anchor the airport transfer at flight − 3h whether the model placed
+                // it too EARLY (e.g. 07:35 for a 15:25 flight) OR too LATE (e.g. a
+                // 07:35 taxi for an 08:00 transatlantic flight — you'd miss it).
+                if (m != null && Math.abs(m - tgt) > 45) { a.startTime = fM(tgt); a.time = a.startTime; retimed = true; console.log(`[v2] [DEP_RETIME] transfer ${fM(m)} → ${fM(tgt)} (flight ${fM(depMin)})`); }
+                transferMin = pM(a.startTime || a.time);
+              }
+            }
+            // Checkout can't happen after you've left for the airport — pull it to
+            // just before the transfer if the model scheduled it later.
+            if (transferMin != null) {
+              for (const a of ld.activities) {
+                const tt = String(a?.title || '').toLowerCase();
+                if (/check[- ]?out/.test(tt)) {
+                  const m = pM(a.startTime || a.time);
+                  if (m != null && m > transferMin - 15) { a.startTime = fM(Math.max(0, transferMin - 30)); a.time = a.startTime; retimed = true; console.log(`[v2] [DEP_RETIME] checkout ${fM(m)} → ${a.startTime} (before transfer ${fM(transferMin)})`); }
+                }
               }
             }
             if (retimed) ld.activities.sort((x: any, y: any) => (pM(x.startTime || x.time) ?? 9999) - (pM(y.startTime || y.time) ?? 9999));
