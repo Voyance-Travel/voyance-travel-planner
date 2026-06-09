@@ -111,6 +111,25 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
         .replace(/\s{2,}/g, ' ').replace(/\s+([,.])/g, '$1').replace(/\s*[—–-]\s*$/,'').trim();
       if (tt && tt !== before) { a.title = tt; a.name = tt; repaired++; }
     }
+    // past-midnight wrap fix: a late-night activity that cascaded past midnight
+    // (00:00–04:59) on a day that ALSO has normal daytime activities is a
+    // trailing wrap (e.g. "Late Night Jazz" at 00:39 after a 21:00 tasting) —
+    // a naive time-sort puts it BEFORE the morning arrival. Clamp such rows to
+    // late evening so they sort after the evening, not before the day.
+    const hasDaytime = d.activities.some((a: any) => { const m = parseMins(a?.startTime || a?.time); return m != null && m >= 720; });
+    if (hasDaytime) {
+      let wrapN = 0;
+      for (const a of d.activities) {
+        if (!a || isLocked(a) || isLogistics(a)) continue;
+        const m = parseMins(a.startTime || a.time);
+        if (m != null && m < 300) {
+          const nm = Math.min(1380 + wrapN * 12, 1439); // 23:00, 23:12, … capped 23:59
+          a.startTime = `${String(Math.floor(nm / 60)).padStart(2, '0')}:${String(nm % 60).padStart(2, '0')}`;
+          a.time = a.startTime;
+          wrapN++; repaired++;
+        }
+      }
+    }
     // prompt-leak strip (any day)
     d.activities = d.activities.filter((a: any) => {
       if (isLocked(a)) return true;
