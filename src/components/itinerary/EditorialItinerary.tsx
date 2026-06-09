@@ -7423,6 +7423,7 @@ export function EditorialItinerary({
                         destination={destination}
                          onNavigateToBookings={() => setActiveTab('details')}
                          onAddFlightInline={() => setAddFlightDialogOpen(true)}
+                         onAddHotelInline={() => setEditHotelOpen(true)}
                       />
                     );
                   }
@@ -7437,6 +7438,7 @@ export function EditorialItinerary({
                         destination={destination}
                          onNavigateToBookings={() => setActiveTab('details')}
                          onAddFlightInline={() => setAddFlightDialogOpen(true)}
+                         onAddHotelInline={() => setEditHotelOpen(true)}
                       />
                     );
                   }
@@ -7468,6 +7470,7 @@ export function EditorialItinerary({
                           destination={arrivingCity.cityName}
                            onNavigateToBookings={() => setActiveTab('details')}
                            onAddFlightInline={() => setAddFlightDialogOpen(true)}
+                         onAddHotelInline={() => setEditHotelOpen(true)}
                           arrivalCityInfo={arrivingCity}
                           dayNumber={selectedDayIndex + 1}
                         />
@@ -10175,13 +10178,14 @@ interface ArrivalGamePlanProps {
   destination: string;
   onNavigateToBookings?: () => void;
   onAddFlightInline?: () => void;
+  onAddHotelInline?: () => void;
   /** For multi-city arrivals: the city being arrived at */
   arrivalCityInfo?: CityHotelInfo;
   /** Day number (1-indexed), defaults to 1 */
   dayNumber?: number;
 }
 
-function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destination, onNavigateToBookings, onAddFlightInline, arrivalCityInfo, dayNumber = 1 }: ArrivalGamePlanProps) {
+function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destination, onNavigateToBookings, onAddFlightInline, onAddHotelInline, arrivalCityInfo, dayNumber = 1 }: ArrivalGamePlanProps) {
   const outbound = flightSelection?.outbound;
   const fallbackCityHotel = allHotels?.find(h => !!h.hotel?.name)?.hotel || null;
   const effectiveHotelSelection = hotelSelection?.name ? hotelSelection : fallbackCityHotel;
@@ -10557,11 +10561,11 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
                 <p className="text-xs text-muted-foreground">Get transfer times and check-in recommendations</p>
               </div>
             </div>
-            {(onAddFlightInline || onNavigateToBookings) && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={onAddFlightInline || onNavigateToBookings}
+            {(onAddHotelInline || onNavigateToBookings) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onAddHotelInline || onNavigateToBookings}
                 className="shrink-0"
               >
                 Add Hotel
