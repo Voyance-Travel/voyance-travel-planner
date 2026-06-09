@@ -1182,6 +1182,33 @@ export async function handleGenerateTripDayV2(
       }
     }
 
+    // ── 8i. SELF-CHECK GATE — verify + repair + score before the write ──
+    // The auditor's checks, run inside generation as the final quality gate so
+    // nothing broken ships: repairs any HIGH-severity issue that slipped through
+    // (post-departure activities, prompt-scaffolding cards, duplicate
+    // departures) and stamps a 0–100 quality score into trips.metadata for live
+    // observability — we can monitor the real distribution instead of only test
+    // trips, and flag low-scoring trips for review.
+    if (isLastDay) {
+      try {
+        const { selfCheckAndRepair } = await import('../../_shared/itinerary-self-check.ts');
+        const sc = selfCheckAndRepair(mergedDays);
+        const highCount = sc.issues.filter((i) => i.severity === 'high').length;
+        console.log(`[v2] [SELF_CHECK] score=${sc.score} repaired=${sc.repaired} remaining=${sc.issues.length} high=${highCount}`);
+        if (sc.score < 75 || highCount > 0) console.warn(`[v2] [SELF_CHECK] LOW score=${sc.score} issues=${JSON.stringify(sc.issues.slice(0, 8))}`);
+        try {
+          const { data: mRow } = await supabase.from('trips').select('metadata').eq('id', tripId).maybeSingle();
+          const meta: any = (mRow?.metadata as any) || {};
+          meta.quality = meta.quality || {};
+          meta.quality.self_check = { score: sc.score, repaired: sc.repaired, issues: sc.issues.length, high: highCount, top: sc.issues.slice(0, 6), at: dayDate };
+          if (sc.score < 75 || highCount > 0) meta.quality.needs_review = true; else delete meta.quality.needs_review;
+          await supabase.from('trips').update({ metadata: meta }).eq('id', tripId);
+        } catch (_e) { /* metadata stamp non-blocking */ }
+      } catch (e) {
+        console.warn('[v2] self-check gate failed (non-blocking):', e);
+      }
+    }
+
     // ── 9. Single write of merged JSON ─────────────────────────────────
     // C-PERSIST-1: saveReason MUST be a whitelisted prefix or the frozen gate
     // silently drops this write on an already-ready trip (regenerate-a-day and
