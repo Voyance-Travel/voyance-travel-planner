@@ -111,6 +111,22 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
         .replace(/\s{2,}/g, ' ').replace(/\s+([,.])/g, '$1').replace(/\s*[—–-]\s*$/,'').trim();
       if (tt && tt !== before) { a.title = tt; a.name = tt; repaired++; }
     }
+    // travel-leg duration backstop: the routing pass can leave a leg with no
+    // duration (e.g. a transfer to an un-geocoded "Your Hotel"). Fill any travel
+    // card that still has none with a mode-based estimate so every leg shows a time.
+    for (const a of d.activities) {
+      if (!a) continue;
+      const c = catOf(a); const t = titleOf(a);
+      const isTravel = c.includes('trans') || /^\s*(travel|taxi|walk|drive|metro|train|bus|head|ride|car|shuttle|ferry|transfer)\b/i.test(t);
+      if (!isTravel) continue;
+      if (a?.transportation?.duration || a?.travelTime || a?.duration) continue;
+      a.duration = /\bwalk\b/.test(t) ? '10 min'
+        : /\b(airport|terminal)\b/.test(t) ? '45 min'
+        : /\b(metro|subway|train|tram|bus|ferry|boat)\b/.test(t) ? '20 min'
+        : /\b(taxi|drive|car|cab|ride|shuttle)\b/.test(t) ? '15 min'
+        : '15 min';
+      repaired++;
+    }
     // past-midnight wrap fix: a late-night activity that cascaded past midnight
     // (00:00–04:59) on a day that ALSO has normal daytime activities is a
     // trailing wrap (e.g. "Late Night Jazz" at 00:39 after a 21:00 tasting) —
