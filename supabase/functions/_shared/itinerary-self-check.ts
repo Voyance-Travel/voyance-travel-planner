@@ -41,7 +41,9 @@ export function checkItineraryQuality(days: any[]): { score: number; issues: Qua
   const seen: Record<string, Set<number>> = {};
   days.forEach((d, di) => (d?.activities || []).forEach((a: any) => {
     if (isLogistics(a)) return;
-    const key = String(a?.location?.name || a?.venue_name || a?.title || a?.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const key = String(a?.location?.name || a?.venue_name || a?.title || a?.name || '').toLowerCase()
+      .replace(/^\s*[a-z' ]*\b(breakfast|brunch|lunch|dinner|nightcap|drinks?|coffee|cocktails?|tea|supper|aperitivo|aperitif)\b\s+(at|in|with|@|by)\s+/i, '')
+      .replace(/\s+/g, ' ').trim();
     if (key.length < 6) return;
     (seen[key] = seen[key] || new Set()).add(di + 1);
   }));
