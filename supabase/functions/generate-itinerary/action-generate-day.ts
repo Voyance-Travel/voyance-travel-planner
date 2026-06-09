@@ -26,6 +26,9 @@ import {
   getAirportTransferFare,
 } from './generation-utils.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
+import { crossDayDedup } from './_shared/cross-day-dedup.ts';
+import { selfCheckAndRepair } from '../_shared/itinerary-self-check.ts';
+import { persistTripItinerary } from '../_shared/persist-itinerary.ts';
 import { stripBookendsForPrompt } from '../_shared/strip-bookends-for-prompt.ts';
 import {
   sanitizeDateString,
@@ -1994,6 +1997,30 @@ export async function handleGenerateDay(
         completionTokens: aiResult?.usage?.completion_tokens || 0,
       },
     };
+
+    // ── Cross-day cleanup for the REGENERATE path ──────────────────────
+    // The whole-trip "Regenerate" fires a per-day regenerate-day loop that
+    // bypasses the generate-trip chain's cross-day passes, so regenerated trips
+    // shipped duplicate venues / 2nd dinners and no final self-check. On the
+    // LAST day (all prior days already regenerated + persisted), run the SAME
+    // shared de-dup + self-check gate on the full trip and stamp the score.
+    if (isLastDay) {
+      try {
+        const { data: _ccRow } = await supabase.from('trips').select('itinerary_data, metadata').eq('id', tripId).maybeSingle();
+        const _ccDays = (_ccRow?.itinerary_data as any)?.days;
+        if (Array.isArray(_ccDays) && _ccDays.length > 1) {
+          const _ccRes = crossDayDedup(_ccDays, destination || '');
+          const _sc = selfCheckAndRepair(_ccDays);
+          await persistTripItinerary(supabase, tripId, { ...((_ccRow!.itinerary_data as any) || {}), days: _ccDays }, { label: 'regen-cross-day', saveReason: 'regenerate-day-cleanup' });
+          const _meta: any = (_ccRow?.metadata as any) || {};
+          _meta.quality = _meta.quality || {};
+          _meta.quality.self_check = { score: _sc.score, repaired: _sc.repaired, issues: _sc.issues.length, high: _sc.issues.filter((i: any) => i.severity === 'high').length, top: _sc.issues.slice(0, 6), at: date, via: 'regen' };
+          if (_sc.score < 75 || _meta.quality.self_check.high > 0) _meta.quality.needs_review = true; else delete _meta.quality.needs_review;
+          await supabase.from('trips').update({ metadata: _meta }).eq('id', tripId);
+          console.log(`[generate-day] [REGEN_CROSS_DAY] swaps=${_ccRes.swaps} drops=${_ccRes.drops} relabels=${_ccRes.relabels} score=${_sc.score}`);
+        }
+      } catch (e) { console.warn('[generate-day] regen cross-day cleanup failed (non-blocking):', e); }
+    }
 
     return new Response(
       JSON.stringify({

@@ -155,3 +155,8 @@ OPEN (minor, MED): wrong-TIME meals still slip (Day 2 lunch at 09:55) — a sepa
 
 ## Round 13 — meal-TIME relabel (open item 1)
 A meal whose clock time contradicts its label (e.g. a "Lunch" at 09:55) is now relabeled to the correct meal for that time, inside runCrossDayDedup BEFORE the same-day dedup (so a relabel that collides with an existing meal of that type is dropped). Windows: breakfast 05:00-11:30, lunch 11:00-16:00, dinner 17:00-23:00; ambiguous gaps (e.g. 16:30) are left alone. Verified on Tokyo Day 2: "Lunch at Ramen Yoroiya" 09:55 → "Breakfast at Ramen Yoroiya" (Day 2 had no breakfast, so it fills the gap). No false relabels on correctly-timed meals.
+
+## Round 14 — regen cross-day refactor (open item 2) + auto-lock handling
+TWO things:
+1) AUTO-LOCK handling: the de-dup skipped ALL locked items, so an AUTO-locked 2nd dinner / duplicate breakfast (the meal guard auto-locks injected meals with no lockedSource) survived. Fixed: skip only logistics + GENUINE user must-dos (lockedSource must_do/user). Auto-locks are now deduped/swapped. Verified: Tokyo drops the auto-locked 2nd dinner (0 dup venues); Barcelona swaps the auto-locked Day-3 Syra → Flax & Kale.
+2) REGEN gap: extracted the full cross-day cleanup into _shared/cross-day-dedup.ts (relabel + same-day meal dedup + cross-day swap/drop, auto-lock-aware). The regenerate-day handler (action-generate-day.ts) now, on the LAST day, reads the full trip and runs crossDayDedup + selfCheckAndRepair + persists + stamps self_check{via:'regen'}. So regenerated trips get the SAME cleanup as fresh ones. Static imports (no dynamic-import bug). v2's inline kept (line-1034 lock fix) — equivalent logic; note for future consolidation that v2 inline + shared module duplicate the dedup.
