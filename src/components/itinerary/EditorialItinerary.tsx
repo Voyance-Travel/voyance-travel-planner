@@ -12730,7 +12730,7 @@ function ActivityRow({
                 />
               </div>
             )}
-            {/* AI Saved Notes (desktop) — the inline log of concierge "save to
+            {/* AI Saved Notes (desktop): the inline log of concierge "save to
                 card" notes. Mirrors the mobile render above so desktop owners
                 can actually see/manage saved notes. */}
             {activity.aiNotes && activity.aiNotes.length > 0 && !isDowntime && !isTransport && (
