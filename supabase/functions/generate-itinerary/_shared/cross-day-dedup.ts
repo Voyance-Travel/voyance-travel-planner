@@ -17,9 +17,20 @@
  */
 import { getRandomFallbackRestaurant } from '../fix-placeholders.ts';
 
-export function crossDayDedup(days: any[], city: string): { swaps: number; drops: number; relabels: number } {
+/**
+ * fetchAlternatives — optional async venue source for cities NOT in the inline
+ * catalog (e.g. Seoul, Cairo). Called lazily, at most once, only when a
+ * cross-day duplicate restaurant needs swapping and the inline catalog has no
+ * match. Returns a pool of real venues (e.g. from Google Places via the
+ * recommend-restaurants function). The caller wires it; this module stays
+ * decoupled from Supabase/HTTP.
+ */
+export type FetchAlternatives = (city: string, count: number) => Promise<Array<{ name: string; address?: string; description?: string }>>;
+
+export async function crossDayDedup(days: any[], city: string, fetchAlternatives?: FetchAlternatives): Promise<{ swaps: number; drops: number; relabels: number }> {
   if (!Array.isArray(days)) return { swaps: 0, drops: 0, relabels: 0 };
   let swaps = 0, drops = 0, relabels = 0;
+  let pool: Array<{ name: string; address?: string; description?: string }> | null = null; // lazy non-catalog venue pool
   const lc = (s: any) => String(s || '').toLowerCase()
     .replace(/^\s*[a-z' ]*\b(breakfast|brunch|lunch|dinner|nightcap|drinks?|coffee|cocktails?|tea|supper|aperitivo|aperitif)\b\s+(at|in|with|@|by)\s+/i, '')
     .replace(/\s+/g, ' ').trim();
@@ -82,9 +93,9 @@ export function crossDayDedup(days: any[], city: string): { swaps: number; drops
         if (usedMealNames.has(key)) {
           // duplicate restaurant across days → swap (auto-locks ok; not user must-dos)
           if (!isUserMustDo(a)) {
+            const label = mt[0].toUpperCase() + mt.slice(1);
             const fb = getRandomFallbackRestaurant(c3City, mt, usedMealNames);
             if (fb?.name && !usedMealNames.has(lc(fb.name))) {
-              const label = mt[0].toUpperCase() + mt.slice(1);
               a.title = `${label} at ${fb.name}`;
               a.name = a.title;
               a.location = a.location || {};
@@ -94,6 +105,21 @@ export function crossDayDedup(days: any[], city: string): { swaps: number; drops
               a.source = 'c3-restaurant-swap';
               usedMealNames.add(lc(fb.name));
               swaps++;
+            } else if (fetchAlternatives) {
+              // no inline catalog match (non-catalog city) → live venue source
+              if (pool === null) { try { pool = (await fetchAlternatives(c3City, 15)) || []; } catch { pool = []; } }
+              const alt = pool.find((p) => p?.name && !usedMealNames.has(lc(p.name)));
+              if (alt) {
+                a.title = `${label} at ${alt.name}`;
+                a.name = a.title;
+                a.location = a.location || {};
+                a.location.name = alt.name;
+                if (alt.address) a.location.address = alt.address;
+                a.description = alt.description || `A well-regarded spot in ${c3City}.`;
+                a.source = 'c3-places-swap';
+                usedMealNames.add(lc(alt.name));
+                swaps++;
+              }
             }
           }
         } else {
