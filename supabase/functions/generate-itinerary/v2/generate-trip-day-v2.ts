@@ -1002,7 +1002,12 @@ export async function handleGenerateTripDayV2(
         // a dynamic await import() of a local module was silently failing in the
         // bundled edge runtime, so this whole C3 dedup/swap block no-op'd live
         // (duplicate Kagari/Kappabashi survived on the Tokyo regen).
-        const lc = (s: any) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        // Normalize a venue name to its bare form so "Breakfast at Centre The
+        // Bakery", "Centre The Bakery", and the catalog's "Centre The Bakery"
+        // all key the same — otherwise the swap re-picks an already-used venue.
+        const lc = (s: any) => String(s || '').toLowerCase()
+          .replace(/^\s*[a-z' ]*\b(breakfast|brunch|lunch|dinner|nightcap|drinks?|coffee|cocktails?|tea|supper|aperitivo|aperitif)\b\s+(at|in|with|@|by)\s+/i, '')
+          .replace(/\s+/g, ' ').trim();
         const isLog3 = (a: any) => ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(String(a?.category || '').toLowerCase());
         const mealTypeOf = (a: any): 'breakfast' | 'lunch' | 'dinner' | null => {
           const tt = String(a?.title || a?.name || '').toLowerCase();
