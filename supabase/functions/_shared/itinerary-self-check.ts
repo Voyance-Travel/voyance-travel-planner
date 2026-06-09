@@ -96,6 +96,19 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
   days.forEach((d, idx) => {
     if (!Array.isArray(d?.activities)) return;
     const isLast = idx === total - 1;
+    // vague-title clean (all days): the meal guard can inject "Lunch — find a
+    // local spot in <city>" placeholders AFTER the per-day sanitize, especially
+    // for cities not in the swap catalog. Strip the placeholder phrasing here as
+    // the final pass. Non-destructive text edit, applied even to locked cards.
+    for (const a of d.activities) {
+      if (!a) continue;
+      let tt = String(a.title || a.name || '');
+      const before = tt;
+      tt = tt.replace(/\s*[—–-]\s*find (?:a |your )?(?:local|the perfect|a good|a great)?\s*(?:spot|place|restaurant|caf[eé]|eatery|gem|favou?rite|meal)\b/ig, '')
+        .replace(/\s*\(?\bor (?:similar|high[- ]?end|comparable)[^)]*\)?/ig, '')
+        .replace(/\s{2,}/g, ' ').replace(/\s+([,.])/g, '$1').replace(/\s*[—–-]\s*$/,'').trim();
+      if (tt && tt !== before) { a.title = tt; a.name = tt; repaired++; }
+    }
     // prompt-leak strip (any day)
     d.activities = d.activities.filter((a: any) => {
       if (isLocked(a)) return true;

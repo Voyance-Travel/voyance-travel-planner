@@ -112,3 +112,9 @@ This is the architecture answer to variance: nothing broken ships, and every tri
 ## Round 7 — with-flight + with-hotel (Paris) — gate confirmed + 1 fix
 First variance test with a real return flight (CDG→ATL Jun 25 6pm) + hotel. WINS: the self-check GATE fired live (stamped self_check {score:92,high:0} into metadata ✅); the departure RE-TIMING worked (Taxi to Airport 15:25 = flight 18:25 − 3h ✅); auditor 98. "Take a beat" caught ONE real issue the scorers missed: Dinner at Septime at 19:00 scheduled AFTER the 18:25 flight (also a Day3/Day4 duplicate). Cause: my departure strip excluded meals (to protect a pre-flight breakfast), which wrongly kept a meal AFTER the flight; and the dinner was auto-locked by the meal guard so the repair skipped it.
 FIX: strip non-logistics after the EARLIEST barrier (leisure) and ANYTHING — incl meals, even locked — after the LATEST barrier (the flight). A meal before the barrier is still safe. Verified on Paris: dinner-after-flight stripped → Day 4 coherent, score 100. Applied to the gate (check + repair) and the external auditor.
+
+<!-- ROUND 8 — staged campaign tests 1-2 -->
+## Round 8 — staged campaign (toward 5-test baseline)
+- TEST 1 Paris (with-flight+hotel): gate fired ✅, re-timing ✅; found+fixed dinner-after-flight → 100.
+- TEST 2 Vienna (no-flight, NON-catalog): gate fired ✅, departure clean ✅, real venues; found "Lunch — find a local spot in Vienna" (meal-guard placeholder, no catalog to swap). FIX: vague-title clean added to the gate's repair (runs all days, after the meal guard) → "Lunch in Vienna", score 100.
+Both fixes live in the self-check gate; pending one deploy, then tests 3-5 on the clean build.
