@@ -91,6 +91,14 @@ export function pruneOrphanTransits(activities: any[]): number {
 
     const target = extractTransitTarget(act);
 
+    // Transfers to a transport HUB (airport/station/port/ferry/…) are departure/
+    // arrival logistics, never orphans — the real "destination" is the flight or
+    // train (which lives in trip metadata, not a venue card). pruneOrphanTransits
+    // runs BEFORE the departure barrier, so when leisure still sits after the
+    // transfer it isn't yet last-in-day; dropping it here loses the airport
+    // transfer and defeats terminalCleanup. Skip hub transfers at ANY position.
+    if (LOGISTICS_TARGET_RE.test(`${target || ''} ${String(act?.title || '')}`)) continue;
+
     // Case 1: transit at end of day with no following card → orphaned.
     // Exempt logistics targets (airport/station/port/etc.) — flight/train
     // cards live in trip metadata, so the transfer legitimately ends the day.

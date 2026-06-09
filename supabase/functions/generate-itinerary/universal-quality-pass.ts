@@ -739,75 +739,99 @@ export function terminalCleanup(
   }
 
   // ── 3. Post-departure filter (last day) ──
-  if (isLastDay && departureTime24) {
-    const depMins = parseTimeMins(departureTime24);
-    if (depMins !== null) {
-      const isTrain = departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(departureTransportType);
-      const bufferMins = isTrain ? 120 : 180;
-      const latestEnd = depMins - bufferMins;
+  // Runs even when no return flight (departureTime24) is set: a real departure can
+  // be inferred from the cards themselves. Prevents the broken last day where
+  // sightseeing/lunch is scheduled AFTER the traveler has left for the airport, and
+  // collapses duplicate "Departure" rows (generator + repair can each emit one).
+  if (isLastDay) {
+    const LOGISTICS_CATS = ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'stay', 'logistics'];
+    const depMins = departureTime24 ? parseTimeMins(departureTime24) : null;
+    const isTrain = departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(departureTransportType);
+    const bufferMins = isTrain ? 120 : 180;
+    // Clock-derived "must have left the hotel" time; -1 when no clock.
+    const latestEnd = depMins !== null ? depMins - bufferMins : -1;
 
-      // Any departure-bound logistics card (airport transfer, "depart for flight",
-      // "head to airport", security/boarding, the flight itself) is a HARD BARRIER.
-      // Once the traveler is heading to the airport/station, the only valid
-      // follow-ups are more logistics — never a stroll, lunch, museum, etc.
-      const DEPARTURE_TITLE_RE = /\b(airport|head\s+to\s+airport|taxi\s+to\s+airport|transfer\s+to\b|depart(?:ure|ing|s|\b)|heading?\s+home|to\s+the\s+(?:airport|station|terminal)|security|boarding|check.?in\s+(?:at\s+)?(?:the\s+)?(?:airport|terminal))\b/i;
-      const isDepartureBarrier = (act: any): boolean => {
+    // STRONG barrier — physically heading to the airport/station or boarding
+    // (transfer/airport/station/flight/security/boarding). Nothing leisure may
+    // follow; the EARLIEST strong barrier wins. WEAK "Departure" placeholder — a
+    // bare "Departure"/"Depart" row with no airport/transfer context; keep only the
+    // LAST, earlier ones are spurious duplicates. With no strong barrier, the kept
+    // weak departure acts as the barrier.
+    const STRONG_RE = /\b(airport|station|terminal|transfer|head\s+to|taxi\s+to|fly\s+home|flight\s+home|heading?\s+home|security|boarding|to\s+the\s+(?:airport|station|terminal))\b/i;
+    const WEAK_RE = /\bdepart(?:ure|ing|s|\b)/i;
+    const isTransportCat = (act: any): boolean =>
+      ['transport', 'transportation', 'transit', 'logistics'].includes((act.category || '').toLowerCase());
+    const isStrongBarrier = (act: any): boolean => {
+      const cat = (act.category || '').toLowerCase();
+      if (cat === 'flight') return true;
+      return isTransportCat(act) && STRONG_RE.test((act.title || '').toLowerCase());
+    };
+    const isWeakDeparture = (act: any): boolean =>
+      isTransportCat(act) && !isStrongBarrier(act) && WEAK_RE.test((act.title || '').toLowerCase());
+
+    // Chronologically-ordered view (does not reorder the source array).
+    const sorted = activities
+      .map((act, idx) => ({ act, idx, mins: parseTimeMins(act.startTime || act.start_time || '') }))
+      .filter((e) => e.mins !== null)
+      .sort((a, b) => (a.mins as number) - (b.mins as number));
+
+    // Earliest strong barrier.
+    let strongBarrierMins: number | null = null;
+    for (const e of sorted) {
+      if (isStrongBarrier(e.act)) { strongBarrierMins = e.mins as number; break; }
+    }
+
+    // Weak departures: keep the last, mark earlier ones spurious.
+    const spurious = new Set<number>();
+    const weak = sorted.filter((e) => isWeakDeparture(e.act));
+    let lastWeakMins: number | null = null;
+    if (weak.length > 0) {
+      lastWeakMins = weak[weak.length - 1].mins as number;
+      for (let i = 0; i < weak.length - 1; i++) {
+        if (!(weak[i].act.locked || weak[i].act.isLocked)) spurious.add(weak[i].idx);
+      }
+    }
+
+    // A strong barrier always wins; otherwise the kept weak departure.
+    const barrierMins: number | null =
+      strongBarrierMins !== null ? strongBarrierMins : lastWeakMins;
+
+    if (spurious.size > 0 || latestEnd > 0 || barrierMins !== null) {
+      const result: any[] = [];
+      activities.forEach((act, idx) => {
+        // Preserve locked items + guard-guaranteed meals — never silently delete.
+        if (act.locked || act.isLocked || act.lock_state === 'locked' || isProtectedMeal(act)) { result.push(act); return; }
+        // Drop spurious/duplicate departure rows (real departure occurs later).
+        if (spurious.has(idx)) {
+          console.warn(`[${label}] Removing duplicate/spurious departure row "${act.title}" — real departure occurs later`);
+          removed++;
+          return;
+        }
         const cat = (act.category || '').toLowerCase();
-        const t = (act.title || '').toLowerCase();
-        if (cat === 'flight') return true;
-        if ((cat === 'transport' || cat === 'transit' || cat === 'logistics') &&
-            DEPARTURE_TITLE_RE.test(t)) return true;
-        return false;
-      };
-      let departureBarrierStart: number | null = null;
-      for (const act of activities) {
-        if (isDepartureBarrier(act)) {
-          const m = parseTimeMins(act.startTime || act.start_time || '');
-          if (m !== null && (departureBarrierStart === null || m < departureBarrierStart)) {
-            departureBarrierStart = m;
+        // Keep all true logistics categories.
+        if (LOGISTICS_CATS.includes(cat)) { result.push(act); return; }
+        const startStr = act.startTime || act.start_time || '';
+        const startMins = parseTimeMins(startStr);
+        const title = (act.title || '').toLowerCase();
+        const isDepartureRelated = /depart|airport|flight|check.?out|heading?\s+home|fly\s+home|security|boarding/i.test(title);
+
+        if (startMins !== null) {
+          const tooLateForBuffer = latestEnd > 0 && startMins > latestEnd;
+          const afterBarrier = barrierMins !== null && startMins >= barrierMins;
+          if (tooLateForBuffer || afterBarrier) {
+            if (isDepartureRelated) { result.push(act); return; }
+            const reason = afterBarrier
+              ? 'after departure barrier (heading to airport/station)'
+              : `past departure buffer (departure: ${departureTime24})`;
+            console.warn(`[${label}] Removing post-departure activity "${act.title}" at ${startStr} — ${reason}`);
+            removed++;
+            return;
           }
         }
-      }
-
-      if (latestEnd > 0 || departureBarrierStart !== null) {
-        const result: any[] = [];
-        for (const act of activities) {
-          // Always preserve user-locked items — never silently delete them.
-          // KEYSTONE: also preserve guard-guaranteed meals (departure-aware
-          // injector ⇒ feasible) and any lock_state-locked card.
-          if (act.locked || act.isLocked || act.lock_state === 'locked' || isProtectedMeal(act)) { result.push(act); continue; }
-          const cat = (act.category || '').toLowerCase();
-          // Keep all true logistics categories
-          if (['transport', 'transit', 'flight', 'accommodation', 'logistics'].includes(cat)) {
-            result.push(act);
-            continue;
-          }
-          const startStr = act.startTime || act.start_time || '';
-          const startMins = parseTimeMins(startStr);
-          const title = (act.title || '').toLowerCase();
-          const isDepartureRelated = /depart|airport|flight|check.?out|heading?\s+home|security|boarding/i.test(title);
-
-          if (startMins !== null) {
-            const tooLateForBuffer = latestEnd > 0 && startMins > latestEnd;
-            const afterBarrier = departureBarrierStart !== null && startMins >= departureBarrierStart;
-            if (tooLateForBuffer || afterBarrier) {
-              if (isDepartureRelated) {
-                result.push(act);
-                continue;
-              }
-              const reason = afterBarrier
-                ? 'after departure barrier (heading to airport/station)'
-                : `past departure buffer (departure: ${departureTime24})`;
-              console.warn(`[${label}] Removing post-departure activity "${act.title}" at ${startStr} — ${reason}`);
-              removed++;
-              continue;
-            }
-          }
-          result.push(act);
-        }
-        activities.length = 0;
-        activities.push(...result);
-      }
+        result.push(act);
+      });
+      activities.length = 0;
+      activities.push(...result);
     }
   }
 

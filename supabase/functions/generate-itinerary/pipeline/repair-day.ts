@@ -2466,9 +2466,14 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     const isDepartureTransportRow = (a: any): boolean => {
       const t = (a?.title || '').toLowerCase();
       const cat = (a?.category || '').toLowerCase();
-      return (cat === 'transport' || cat === 'transit' || cat === 'logistics') && (
+      return (cat === 'transport' || cat === 'transportation' || cat === 'transit' || cat === 'logistics') && (
         t.includes('airport') || t.includes('transfer to') || t.includes('head to') ||
-        t.includes('taxi to') || t.includes('station') || t.includes('departure transfer')
+        t.includes('taxi to') || t.includes('station') || t.includes('departure transfer') ||
+        // Bare "Departure"/"Depart"/"fly home" placeholder rows count too. Without
+        // this, hasDepartureTransport reads false and the guarantee path injects a
+        // SECOND departure transport — producing the duplicate "Departure" rows.
+        /\bdepart(?:ure|ing|s|\b)/.test(t) || t.includes('fly home') ||
+        t.includes('flight home') || t.includes('heading home')
       );
     };
     const isValidHHMM = (s: any) => typeof s === 'string' && /^\d{1,2}:\d{2}$/.test(s);

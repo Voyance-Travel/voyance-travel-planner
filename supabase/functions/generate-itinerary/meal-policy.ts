@@ -226,9 +226,13 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
         'Late departure — nearly a full day. Include breakfast, lunch, and dinner before airport.');
     }
 
-    // No departure time — plan morning + lunch before checkout
-    return meal('midday_departure', ['breakfast', 'lunch'], usableHours,
-      'Departure time unknown — planning breakfast + lunch. Add flight details for better planning.');
+    // No departure time (no return flight set) — we cannot anchor the last day,
+    // so do NOT hard-require any meal. Forcing breakfast/lunch here produced
+    // false "missing breakfast Day N" warnings and stranded meals after a guessed
+    // departure. Keep the day light/optional; the traveler can add their return
+    // flight for a precise plan.
+    return meal('early_departure', [], usableHours,
+      'Departure time unknown (no return flight set) — keeping the last day light with no mandatory meals. Add your return flight for a precise breakfast/lunch plan.');
   }
 
   // ── Standard mid-trip day ──
