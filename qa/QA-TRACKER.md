@@ -635,3 +635,11 @@ Owner UX expectation (2026-06-09): notes should also be surfaced on the **⋯ me
 - ✅ **Add** (day footer "+ Add") — **place search works** (typed "Casa Batllo" → "Batlló House" w/ real address; Nominatim-first + "Search Google Places instead" fallback) → auto-filled venue/address/title → Add → smart **Schedule-overflow dialog** (warned it'd shorten Sagrada Família 120→69min / drop hotel return) → "Shift anyway" → **Batlló House persisted**; cascade applied as warned
 - ✅ **AI Concierge** — excellent, accurate, venue-specific guidance on every activity
 - 🐞 only issue: AI-concierge "Save note to card" display bug (saves to DB, doesn't re-display — see 3-part diagnosis; data safe; fix queued task_0383682c)
+
+<!-- ROUTING/TRAVEL-TIME LOGIC 2026-06-09 (owner: "everything looks illogical") -->
+## 🐞 HIGH — Itinerary routing logic looks illogical (geographic zigzag + placeholder travel times)
+Owner flagged; confirmed on live Barcelona trip 6e087c7f Day 2:
+- **No geographic clustering at generation:** sequence = Granja Viader (Raval) → Bodega 1900 (Sant Antoni) → **Gràcia (far N)** → Slow Spa (Eixample) → **Quimet & Quimet (Poble Sec, far S)** → La Confiteria (Sant Antoni) → hotel. Crosses the city 3-4×; the Gràcia detour sits between southern/central stops. Activities aren't ordered by proximity.
+- **Travel times are inconsistent placeholders:** distinct values across the trip = `''`, `10 min`, `15 min`, `15m`, `25m` — a mix of generator defaults (`15m`/`25m`) and real route data (`10/15 min`); several legs blank. The flat `15m` doesn't reflect real distances (e.g., Gràcia→Poble Sec ~30+ min). Format inconsistent too.
+- IMPACT: undermines credibility of EVERY itinerary. Higher priority than the note-display bug.
+- FIX directions: (1) order each day's activities by geographic proximity (cluster by neighborhood / nearest-neighbor or 2-opt on lat/lng) at GENERATION, before transit legs are computed; (2) compute real travel durations per leg (the route-details/transit path exists — D5) instead of the `15m` placeholder, and render consistently; (3) reconcile the placeholder→real handoff so users don't see `15m` that never updates.
