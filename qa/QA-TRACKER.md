@@ -649,3 +649,11 @@ Owner flagged; confirmed on live Barcelona trip 6e087c7f Day 2:
 Live test (Barcelona 6e087c7f): the Arrival Game Plan "Add Hotel" button opened the **Add Flight Details** modal (reproduced twice). Root cause EditorialItinerary.tsx:10564 — `onClick={onAddFlightInline || onNavigateToBookings}` (ArrivalGamePlan had no hotel handler). Fix: added `onAddHotelInline` prop, wired the button to it, and passed `onAddHotelInline={() => setEditHotelOpen(true)}` at the 3 call sites. Deploying — re-test that Add Hotel now opens the hotel entry dialog.
 - ✅ Add Flight verified: Vueling arr 14:30 persisted to flight_selection; Arrival Game Plan shows "Landing at 14:30".
 - Side findings on this trip: (a) flight modal pre-fills To=LHR for a Barcelona trip (should be BCN); (b) "Day 2 needs regeneration — 3+ hr unscheduled gap" toast; (c) draft warning "Day 4: breakfast" missing; (d) "2 activities have no travel buffer" on Day 1 — all relate to the routing/meal-coverage quality work.
+
+<!-- BUDGET/PAYMENTS/HOTEL/FLIGHT verified 2026-06-08 -->
+### ✅ Budget / Payments / Add Hotel / Add Flight — VERIFIED LIVE (Barcelona 6e087c7f)
+- ✅ **Add Flight** — Vueling, arrival 14:30 → flight_selection persisted; Arrival Game Plan uses landing time.
+- ✅ **Add Hotel** — was a BUG (button opened the Flight modal); FIXED (commit 1a07814d0) + **verified live**: now opens "Edit Hotel Details", autocompleted real "Casa Bonay" (Gran Via, Eixample, 4.4★), persisted to hotel_selection, and computed **live airport→hotel transfer options** (Taxi 25-45min/€40-50, Train 25-35min/€5.15) + arrival recommendation.
+- ✅ **Budget** — set $1,000 → instant Over-Budget detection ($180/18% over), Budget Coach with category breakdown (Dining +$250 / Activities +$120 / Transit +$60) + "Raise budget to $1,300" action; persisted (trips.budget_total_cents=100000, include_hotel=true).
+- ✅ **Payments** — already verified this session (Stripe paid build 240 credits + $9 purchase + FIFO + refund clawback).
+- Minor open: flight modal pre-fills To=LHR on a Barcelona trip (should be BCN).
