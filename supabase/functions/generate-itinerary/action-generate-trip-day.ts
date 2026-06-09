@@ -3201,6 +3201,33 @@ async function _handleGenerateTripDayInner(
     // dining venues so subsequent days don't pick the same restaurant.
     _harvestDining(updatedDays[i].activities);
 
+    // ── Geographic clustering + consistent travel times ──
+    // The single-day path (action-generate-day.ts) does this after enrichment,
+    // but the FULL-TRIP path (this file) previously skipped it entirely — so
+    // real trips kept city-crossing zig-zags and placeholder "15m" legs. Runs
+    // BEFORE terminalCleanup so the day is clustered + retimed, then cleaned.
+    // reorderDayByProximity pins meals/locked/bookends, so meal slots survive.
+    try {
+      const { reorderDayByProximity, retimeAndComputeLegTimes } = await import('./geographic-coherence.ts');
+      const geoDest = d.city || cityInfo?.cityName || destination || '';
+      const geoLockedIds = new Set<string>(
+        ((updatedDays[i].activities as any[]) || [])
+          .filter((a: any) => a?.locked || a?.isLocked || a?.lock_state === 'locked')
+          .map((a: any) => a?.id).filter(Boolean)
+      );
+      const reorder = reorderDayByProximity(updatedDays[i].activities, {
+        hotelCoords: null,
+        lockedIds: geoLockedIds,
+        destination: geoDest,
+      });
+      updatedDays[i].activities = retimeAndComputeLegTimes(reorder.activities, { destination: geoDest });
+      if (reorder.reordered || reorder.strippedConnectors > 0) {
+        console.log(`[geo-order] trip-day Day ${dn}: clustered ${reorder.flexibleCount} flexible stop(s), stripped ${reorder.strippedConnectors} stale connector(s)`);
+      }
+    } catch (routeErr) {
+      console.warn(`[generate-trip-day] Geo-ordering failed (non-blocking) day=${dn}:`, routeErr);
+    }
+
     // Terminal cleanup for each day
     try {
       const { terminalCleanup } = await import('./universal-quality-pass.ts');
