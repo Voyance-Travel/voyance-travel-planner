@@ -2997,6 +2997,14 @@ export function EditorialItinerary({
         if (!error) {
           setHasChanges(false);
           setLastSaved(new Date());
+          // Signal TripDetail (and other listeners) to re-read canonical
+          // itinerary_data from the DB. Without this, TripDetail's
+          // trip.itinerary_data — the source of `initialDays` — stays at its
+          // pre-save value, so a soft (same-URL) remount rebuilds the day from
+          // stale data and silently reverts the edit (the AI-note disappear-on-
+          // reload bug; it also affected swap/reorder/edit). See the
+          // TRIP_PERSISTED_EVENT handler in TripDetail.
+          dispatchTripPersisted({ tripId, source: 'EditorialItinerary.persistImmediate' });
         } else {
           console.error('[EditorialItinerary] persistDaysImmediately save failed:', error);
         }
@@ -3015,6 +3023,7 @@ export function EditorialItinerary({
         localStorage.setItem(localStorageKey, JSON.stringify(demoTrips));
         setHasChanges(false);
         setLastSaved(new Date());
+        dispatchTripPersisted({ tripId, source: 'EditorialItinerary.persistImmediate' });
       }
     } catch (e) {
       // Leave hasChanges=true so the autosave timer retries as a safety net.
@@ -3055,14 +3064,10 @@ export function EditorialItinerary({
       return nextDays;
     });
     setHasChanges(true);
+    // persistDaysImmediately fires TRIP_PERSISTED_EVENT on success so the saved
+    // note survives a soft (same-URL) reload — see that function.
     await persistDaysImmediately(nextDays);
-    // Tell TripDetail to re-read canonical itinerary_data from DB so the saved
-    // note survives a soft (same-URL) reload. Without this signal, TripDetail's
-    // trip.itinerary_data — the source of `initialDays` — stays at its pre-save
-    // value and a remount rebuilds the day without the note. See
-    // TripDetail TRIP_PERSISTED_EVENT handler.
-    dispatchTripPersisted({ tripId, source: 'EditorialItinerary.aiNote' });
-  }, [persistDaysImmediately, tripId]);
+  }, [persistDaysImmediately]);
 
   const handleDeleteAINote = useCallback(async (activityId: string, noteId: string) => {
     let nextDays: EditorialDay[] = [];
@@ -3078,10 +3083,7 @@ export function EditorialItinerary({
     });
     setHasChanges(true);
     await persistDaysImmediately(nextDays);
-    // Re-read canonical itinerary_data so the deletion survives a soft reload
-    // (see handleSaveAINote for the full rationale).
-    dispatchTripPersisted({ tripId, source: 'EditorialItinerary.aiNote' });
-  }, [persistDaysImmediately, tripId]);
+  }, [persistDaysImmediately]);
 
   // Build saved note content set for current concierge activity
   // Derive from `days` state (not the stale `conciergeActivity` snapshot) so the
