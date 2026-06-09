@@ -610,3 +610,11 @@ First full build + tool exercise on the REAL domain post-cutover (account ashton
 - ✅ MOVE: "Move down" reordered (Luggage Drop → Granja Viader first) + **persisted to DB** (verified) + cost recomputed 185→175/pp correctly (NO doubling on prod)
 - ⚠️ MINOR: trip hero photo showed Madrid's Metropolis building for a Barcelona trip (hero-image city mismatch — cosmetic; build content all correct).
 Trip id 6e087c7f. Remaining tools (swap/add/lock/regenerate/edit) use the same now-verified persist path.
+
+<!-- AI CONCIERGE + NOTE-PERSIST 2026-06-09 (owner-reported, live prod test) -->
+## 🔍 AI Concierge ✅ + "Save note to card" persistence bug (owner-reported)
+Tested live on prod (Barcelona trip 6e087c7f):
+- ✅ **AI Concierge WORKS** — opened on Granja Viader + Barri Gòtic → generated rich, accurate, venue-specific guidance (history, what-to-order, insider tips, skip-the-line, etiquette). Follow-up chips work.
+- 🐞 **"Save note to card" — DISPLAY bug (data SAFE, not lost):** clicked the bookmark → toast "Note saved to card" → **note IS written to itinerary_data.aiNotes (DB confirmed, 2 activities, survives background saves)**. BUT after reload the card does NOT show the note ("AI Notes" label absent from DOM; React-fiber confirms the rendered activity object has `aiNotes:false`).
+- Diagnosis: NOT data loss — purely re-display/re-hydration. All parse transforms (parseSingleActivity / parseSingleDay / parseItineraryDays / parseEditorialDays / sanitizeActivity) **spread `...activity`** so they *should* preserve it; no offline/IndexedDB cache shadowing. So the strip is either a **derived-days transform inside EditorialItinerary** that rebuilds the card's activity, or a **stale React-Query trip fetch** (page rendered a pre-save copy).
+- FIX so far: explicit `aiNotes` in `parseSingleActivity` (`5...`, committed) — defensive; **needs deploy + re-test** (save note → reload → confirm "AI Notes" shows). If still missing post-deploy, instrument the EditorialItinerary derived-days/`editorDays` path + verify the trip query refetches after a note save.
