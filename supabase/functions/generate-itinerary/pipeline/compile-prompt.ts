@@ -742,6 +742,18 @@ RULES FOR USER-SPECIFIED ACTIVITIES:
   // the Day Brief, not here.
   let additionalNotesPrompt = '';
   const additionalNotes = (metadata?.additionalNotes as string) || '';
+  // ── EXPLICIT LIMITS → HARD RULES (detected ONCE at function scope so both the
+  // HARD RULES block below AND the structural activity-cap further down can read
+  // them; must live outside the `if` so `_activityCap` is in scope at the cap). ─
+  const _notesLc = additionalNotes.toLowerCase();
+  const _capM = _notesLc.match(/(\d+)\s*(?:-|–|to)\s*(\d+)\s*(?:things|activit\w*|stops|spots|places|sights)\b/)
+    || _notesLc.match(/(?:no more than|at most|max(?:imum)?|keep (?:it )?to|only)\s*(\d+)\s*(?:things|activit\w*|stops|spots|places|sights)?\b\s*(?:a|per)\s*day/)
+    || _notesLc.match(/(\d+)\s*(?:things|activit\w*|stops|spots|places|sights)\s*(?:a|per)\s*day/);
+  const _activityCap = _capM ? parseInt(_capM[_capM.length - 1], 10) : NaN;
+  const _onlyOneSplurge = /\b(?:one|single|just one|a single|one\s+(?:nice|fancy|special|memorable|expensive))\b[^.]*\bsplurge\b/.test(_notesLc)
+    || /\bsplurge\b[^.]*\b(?:once|one (?:meal|dinner|night))\b/.test(_notesLc);
+  const _budgetDiscipline = /\b(cheap|budget|affordable|modest|local)\b[^.]*\b(otherwise|the rest|elsewhere)\b/.test(_notesLc);
+  const _avoidCrowds = /\bavoid\b[^.]*\b(crowd|tourist|clich)/.test(_notesLc) || /\bskip\b[^.]*\btourist/.test(_notesLc) || /\b(lesser.?known|off the beaten|where locals)\b/.test(_notesLc);
   if (additionalNotes.trim()) {
     // ── INTENT RESOLUTION FROM NOTES ─────────────────────────────────────
     // Parse free-text sentences into concrete venue picks for any that
@@ -775,22 +787,8 @@ RULES FOR USER-SPECIFIED ACTIVITIES:
       }
     }
 
-    // ── EXPLICIT LIMITS → HARD RULES ─────────────────────────────────────
-    // Without this the note is "high-level context" the model treats as vibe,
-    // so quantified limits ("3-4 things a day", "one splurge, cheap otherwise")
-    // get nailed in flavor but never enforced — Barcelona came back with ~6
-    // stops/day and TWO Michelin dinners on a "moderate, one splurge" brief.
-    // Detect the common quantified/budget limits and surface them as MANDATORY
-    // rules that OVERRIDE the DNA-derived pacing/dining defaults.
-    const _notesLc = additionalNotes.toLowerCase();
-    const _capM = _notesLc.match(/(\d+)\s*(?:-|–|to)\s*(\d+)\s*(?:things|activit\w*|stops|spots|places|sights)\b/)
-      || _notesLc.match(/(?:no more than|at most|max(?:imum)?|keep (?:it )?to|only)\s*(\d+)\s*(?:things|activit\w*|stops|spots|places|sights)?\b\s*(?:a|per)\s*day/)
-      || _notesLc.match(/(\d+)\s*(?:things|activit\w*|stops|spots|places|sights)\s*(?:a|per)\s*day/);
-    const _activityCap = _capM ? parseInt(_capM[_capM.length - 1], 10) : NaN;
-    const _onlyOneSplurge = /\b(?:one|single|just one|a single|one\s+(?:nice|fancy|special|memorable|expensive))\b[^.]*\bsplurge\b/.test(_notesLc)
-      || /\bsplurge\b[^.]*\b(?:once|one (?:meal|dinner|night))\b/.test(_notesLc);
-    const _budgetDiscipline = /\b(cheap|budget|affordable|modest|local)\b[^.]*\b(otherwise|the rest|elsewhere)\b/.test(_notesLc);
-    const _avoidCrowds = /\bavoid\b[^.]*\b(crowd|tourist|clich)/.test(_notesLc) || /\bskip\b[^.]*\btourist/.test(_notesLc) || /\b(lesser.?known|off the beaten|where locals)\b/.test(_notesLc);
+    // EXPLICIT LIMITS were detected above at function scope (so _activityCap is
+    // also in scope at the structural cap). Build the HARD RULES block from them.
     const _hardLines: string[] = [];
     if (Number.isFinite(_activityCap) && _activityCap >= 1 && _activityCap <= 8) {
       _hardLines.push(`- MAXIMUM ${_activityCap} activities per day (NOT counting meals or transit). Never exceed this — fewer is good, leave room to linger.`);
