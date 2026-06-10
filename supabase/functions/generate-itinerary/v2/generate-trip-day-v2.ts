@@ -1241,8 +1241,22 @@ export async function handleGenerateTripDayV2(
               unmet: unmetMustDos,
               message: `This trip was ambitious for its length — we couldn't fit ${unmetMustDos.length} of your must-do${unmetMustDos.length > 1 ? 's' : ''} (${unmetMustDos.join('; ')}). Add a day or two, or trim a priority, and we'll get them all in.`,
             };
+            // "Saved for later" holding bay — the dropped must-dos as placeable items.
+            // Text-only here (resolved: null); the place-held-item edge action resolves
+            // a concrete venue lazily, only when the user actually places one. Stable,
+            // deterministic ids so a regenerate doesn't duplicate the same item.
+            const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+            meta.holding_bay = unmetMustDos.map((m: string) => ({
+              id: `held-${slug(m)}`,
+              source: 'capacity_overflow',
+              label: m,
+              resolved: null,
+              originalMustDo: m,
+              createdAt: dayDate,
+            }));
           } else {
             delete meta.quality.capacity_warning;
+            delete meta.holding_bay;
           }
           await supabase.from('trips').update({ metadata: meta }).eq('id', tripId);
         } catch (_e) { /* metadata stamp non-blocking */ }
