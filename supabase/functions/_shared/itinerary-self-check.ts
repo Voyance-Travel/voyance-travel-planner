@@ -239,6 +239,30 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
       return true;
     });
     if (!isLast) return;
+    // departure-day post-checkout strip: NOTHING substantial belongs after hotel
+    // checkout. When must-dos can't fit earlier days (6 must-dos in 3 days) the
+    // injector crams them onto the departure day past checkout — and with no
+    // flight clock the strong-barrier strip below never fires (Rome 3d/6must:
+    // trattoria 13:20 + "Lunch" 14:50 + "Travel to Hotel" 16:30, all after an
+    // 11:10 checkout). Drop post-checkout non-logistics cards + any hotel-return
+    // leg (you've left the hotel); keep the checkout itself + onward airport/flight
+    // logistics. Dropped must-dos surface as a capacity warning upstream.
+    const coMins = d.activities
+      .filter((a: any) => /check[-\s]?out/i.test(titleOf(a)))
+      .map((a: any) => parseMins(a.startTime || a.time))
+      .filter((m: any) => m != null)
+      .sort((x: number, y: number) => x - y)[0];
+    if (coMins != null) {
+      d.activities = d.activities.filter((a: any) => {
+        const s = parseMins(a.startTime || a.time);
+        if (s == null || s <= coMins) return true;                         // before/at checkout — keep
+        if (/check[-\s]?out/i.test(titleOf(a))) return true;               // the checkout card itself
+        if (/\b(airport|flight|depart)\b/i.test(titleOf(a))) return true;  // onward departure logistics stay
+        if (/\b(return|travel|back|head)\s+to\b[^,]*\bhotel\b/i.test(titleOf(a))) { repaired++; return false; } // hotel-return after checkout = illogical
+        if (!isLogistics(a)) { repaired++; return false; }                 // any activity crammed past checkout → drop
+        return true;
+      });
+    }
     // collapse duplicate bare "Departure" placeholders (keep the last); strip
     // non-logistics, non-meal activities scheduled at/after the strong barrier.
     const bareMins = d.activities.filter(isBareDeparture).map((a: any) => parseMins(a.startTime || a.time)).filter((m: any) => m != null).sort((x: number, y: number) => x - y);
