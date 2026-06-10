@@ -1442,6 +1442,37 @@ export async function handleGenerateTripDayV2(
       }
     }
 
+    // ── 11a. THIN-DAY heal: queue underfilled days for the same background
+    // regen as empty days. A non-departure day with < 2 real (non-meal, non-
+    // logistics) activities reads as underfilled — Athens D3 had only one
+    // sightseeing card all day (Philopappos) and the Acropolis was never placed.
+    // Computed on the FINAL merged trip (post-dedup/self-check) so a day thinned
+    // BY the dedup is caught too. Departure day exempt (legitimately light:
+    // checkout + transfer). Reuses the tested heal path (step 11b) + the heal's
+    // own dedup/self-check + the race-safe pass clean the regenerated day.
+    if (isLastDay && !heal) {
+      try {
+        const realCount = (d: any) => (Array.isArray(d?.activities) ? d.activities : []).filter((a: any) => {
+          const t = String(a?.title || a?.name || '').toLowerCase();
+          const c = String(a?.category || '').toLowerCase();
+          const log = ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(c) || /check.?in|check.?out|transfer|airport|\bflight\b|return to|travel to|\bdepart/.test(t);
+          const meal = ['breakfast', 'lunch', 'dinner', 'dining', 'restaurant'].includes(c) || /\b(breakfast|brunch|lunch|dinner)\b/.test(t);
+          return !log && !meal;
+        }).length;
+        const thin: number[] = [];
+        for (let n = 1; n < totalDays; n++) { // exclude the departure (last) day
+          const d = mergedDays.find((x: any) => (x?.dayNumber ?? x?.day_number) === n);
+          if (d && Array.isArray(d.activities) && d.activities.length > 0 && realCount(d) < 2 && !pendingHeals.includes(n)) thin.push(n);
+        }
+        if (thin.length > 0) {
+          console.error(`[v2] [THIN_DAY_HEAL] underfilled days=[${thin.join(',')}] (<2 real activities) — queued for background regen`);
+          pendingHeals.push(...thin);
+        }
+      } catch (e) {
+        console.warn('[v2] thin-day detection failed (non-blocking):', (e as Error)?.message);
+      }
+    }
+
     // ── 11b. Background completeness heal (fire-and-forget) ────────────
     // Re-generate any day the table backfill could not recover, as its OWN
     // request (own wall-clock budget + heartbeat). Fired AFTER step 9's JSON
