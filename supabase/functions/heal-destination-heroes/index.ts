@@ -69,8 +69,10 @@ Deno.serve(async (req) => {
       const city = String((row as any).city || '').trim();
       if (!city) { skipped++; continue; }
       try {
+        // skipCache: bypass any stale curated/negative-cache row (e.g. Seoul's
+        // `curated → null`) so the loosened live tiers fetch a fresh image.
         const { data, error } = await supabase.functions.invoke('destination-images', {
-          body: { destination: city, imageType: 'hero', limit: 1 },
+          body: { destination: city, imageType: 'hero', limit: 1, skipCache: true },
         });
         if (error) { failed++; results.push({ city, status: 'invoke_error', error: error.message }); continue; }
 
