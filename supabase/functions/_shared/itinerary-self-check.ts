@@ -195,7 +195,14 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
     {
       const hhmm2 = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
       const acts = d.activities;
-      const firstIdx = acts.findIndex((a: any) => a && !isLogistics(a) && !isLocked(a));
+      // Skip logistics and USER-locked cards when finding the day's opener — but
+      // DO consider an AUTO-locked meal. The meal guard auto-locks breakfasts, so
+      // a 06:20 auto-locked breakfast was never the "first" unlocked card and
+      // slipped the lift (Lisbon 5d/0must). Only a genuine user/must-do lock is skipped.
+      const isUserLocked = (a: any) => isLocked(a) && (
+        a?.lockedSource === 'user' || a?.lockedSource === 'must_do' ||
+        /\b(user|must[_-]?do|anchor|pinned)\b/i.test(String(a?.lockedSource || a?.lockReason || a?.source || '')));
+      const firstIdx = acts.findIndex((a: any) => a && !isLogistics(a) && !isUserLocked(a));
       const first = firstIdx >= 0 ? acts[firstIdx] : null;
       const isMealCard = (a: any) => /dining|food|breakfast|brunch/i.test(catOf(a)) || /\b(breakfast|brunch)\b/i.test(titleOf(a));
       if (first && isMealCard(first)) {
@@ -203,17 +210,34 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
         const hasAmDeparture = acts.some((a: any) =>
           isLogistics(a) && /\b(airport|flight|departure)\b/i.test(titleOf(a)) && (parseMins(a.startTime || a.time) ?? 1440) < 720);
         if (s != null && s >= 300 && s < 450 && !hasAmDeparture) {
-          let nextStart = 1440;
-          for (let i = firstIdx + 1; i < acts.length; i++) {
-            const m = parseMins(acts[i]?.startTime || acts[i]?.time);
-            if (m != null && m > s) { nextStart = m; break; }
-          }
-          const ns = 8 * 60; // 08:00 — a sane breakfast open
-          if (ns > s && ns < nextStart - 20) {
-            const dur = Math.max(30, (parseMins(first.endTime) ?? (s + 75)) - s);
-            const ne = Math.min(ns + dur, nextStart - 10, 1439);
-            first.startTime = hhmm2(ns); first.time = first.startTime; first.endTime = hhmm2(ne);
+          // Lift the opener to 08:00 and forward-cascade any same-day card it now
+          // overlaps — instead of BAILING when 08:00 would crowd the next card.
+          // Lisbon 5d/0must: a 06:20 90-min breakfast with an 08:10 next card left
+          // the 06:20 in place under the old "skip if it crowds" rule (H4 breach).
+          // Now we slide the breakfast and push only the cards that actually
+          // conflict (prevEnd + 15-min gap), bounded so nothing spills past ~23:00.
+          const dur = Math.max(30, (parseMins(first.endTime) ?? (s + 75)) - s);
+          const target = 8 * 60; // 08:00 — a sane breakfast open
+          if (target > s) {
+            first.startTime = hhmm2(target); first.time = first.startTime;
+            first.endTime = hhmm2(Math.min(target + dur, 1439));
             repaired++;
+            let prevEnd = target + dur;
+            for (let i = firstIdx + 1; i < acts.length; i++) {
+              const a = acts[i];
+              const cs = parseMins(a?.startTime || a?.time);
+              if (cs == null) continue;
+              if (isLogistics(a)) { prevEnd = Math.max(prevEnd, cs); continue; }
+              if (cs < prevEnd + 15) {
+                const cdur = Math.max(30, (parseMins(a.endTime) ?? (cs + 60)) - cs);
+                const nstart = Math.min(prevEnd + 15, 1380);
+                a.startTime = hhmm2(nstart); a.time = a.startTime;
+                a.endTime = hhmm2(Math.min(nstart + cdur, 1439));
+                prevEnd = nstart + cdur;
+              } else {
+                prevEnd = Math.max(prevEnd, cs);
+              }
+            }
           }
         }
       }
