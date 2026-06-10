@@ -413,8 +413,14 @@ function withUtm(url: string): string {
  * Catches the recurring "two businessmen shaking hands" Unsplash leak
  * for cities that don't have a dominant landmark match.
  */
+// Only flag content that is UNAMBIGUOUSLY a people/business stock shot. The
+// previous list included generic urban words (office, crowd, man, woman, person,
+// people, suit, meeting) that appear in the tags/alt-text of almost every real
+// cityscape — so it dropped all 5 Unsplash results for most destinations and
+// every city fell to the gradient. Keep only portrait/wedding/business-person
+// terms; a city photo that merely contains people is fine for a hero.
 const HERO_PEOPLE_CONTENT_RE =
-  /\b(business(?:man|woman|men|women|people)?|suit|handshake|meeting|office|conference|boardroom|portrait|headshot|model|crowd|group of people|man|woman|person|people|wedding|bride|groom)\b/i;
+  /\b(business(?:man|woman|men|women)|handshake|boardroom|portrait|headshot|selfie|fashion model|wedding|bride|groom)\b/i;
 
 function isPeopleContentResult(r: any): boolean {
   const fields: string[] = [
@@ -1446,9 +1452,12 @@ function passesBasicQuality(
   const h = image.height ?? 0;
 
   if (entityType === "destination" && w > 0 && h > 0) {
+    // Relaxed from 1.4/1600: many real Google/Unsplash city photos are 4:3
+    // (1.33) or 1200-1500px wide and were being rejected wholesale, leaving the
+    // gradient. 1.2 still excludes portraits; 1200px is fine for a hero header.
     const ratio = w / h;
-    if (ratio < 1.4) return { passes: false, reason: "aspect_ratio_too_narrow" };
-    if (w < 1600) return { passes: false, reason: "resolution_too_low" };
+    if (ratio < 1.2) return { passes: false, reason: "aspect_ratio_too_narrow" };
+    if (w < 1200) return { passes: false, reason: "resolution_too_low" };
   }
 
   const url = image.url.toLowerCase();
