@@ -1019,6 +1019,40 @@ export async function handleGenerateTripDayV2(
         // and non-meal duplicate drop — now lives in the shared module so the
         // regenerate-day path runs the identical logic. See _shared/cross-day-dedup.ts.
         await crossDayDedup(mergedDays as any[], (facts.destination.city as string) || '', makePlacesAlternatives(supabase));
+        // ── must-do-aware cross-day collapse ──────────────────────────────
+        // The title-keyed dedup above treats the SAME user must-do venue as
+        // distinct when the model renders it with varying titles across days
+        // (Istanbul: "Spice Bazaar (Egyptian Bazaar) Exploration" on D1/D2 +
+        // "Explore the Spice Bazaar" on D4 all survived). Collapse to ONE card
+        // per user must-do, matched by the must-do's core tokens (parentheticals
+        // stripped), keeping the first occurrence. Only fires against EXPLICIT
+        // user must-do strings, so it can't over-merge unrelated venues.
+        try {
+          const STOP = new Set(['the', 'a', 'an', 'of', 'and', 'or', 'to', 'in', 'at', 'on', 'explore', 'exploration', 'visit', 'tour', 'see', 'experience', 'time', 'your', 'day', 'morning', 'afternoon', 'evening', 'one', 'memorable']);
+          const norm = (s: unknown) => String(s ?? '').toLowerCase().replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+          const coreTokens = (s: unknown) => norm(s).split(' ').filter((t) => t.length >= 3 && !STOP.has(t));
+          const isLog = (a: any) =>
+            ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics', 'travel'].includes(String(a?.category ?? '').toLowerCase()) ||
+            /check.?in|check.?out|transfer|airport|\bflight\b|return to|travel to|\bdepart/i.test(String(a?.title ?? a?.name ?? ''));
+          const mustDoStrings: string[] = (extractMustDoVenues(tripMeta) as string[]) || [];
+          for (const md of mustDoStrings) {
+            const mdTokens = coreTokens(md);
+            if (mdTokens.length === 0) continue;
+            let kept = false;
+            for (const d of mergedDays as any[]) {
+              if (!Array.isArray(d?.activities)) continue;
+              d.activities = d.activities.filter((a: any) => {
+                if (isLog(a)) return true;
+                const cardN = norm(a?.title ?? a?.name) + ' ' + norm(a?.location?.name);
+                if (!mdTokens.every((t) => cardN.includes(t))) return true; // not this must-do
+                if (!kept) { kept = true; return true; }                    // keep first occurrence
+                drops++; console.log(`[v2] [MUSTDO_DEDUP] dropped repeat of "${md}": "${a?.title || a?.name}"`); return false;
+              });
+            }
+          }
+        } catch (e) {
+          console.warn('[v2] must-do-aware dedup failed (non-blocking):', e);
+        }
       } catch (e) {
         console.warn('[v2] C3 dedup/swap failed (non-blocking):', e);
       }
