@@ -48,7 +48,12 @@ Deno.serve(async (req) => {
     );
 
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
-    const limit = Math.min(Math.max(Number(body.limit) || 30, 1), 100);
+    // skipCache forces a live Google+Unsplash fetch+upload per city (~3-8s), so
+    // keep batches small — a big batch overruns the edge wall-clock and the
+    // function gets killed mid-loop (opaque 500). Default 5; hard cap 25.
+    const limit = Math.min(Math.max(Number(body.limit) || 5, 1), 25);
+    const startedAt = Date.now();
+    const TIME_BUDGET_MS = 110_000;
     const cities = Array.isArray(body.cities) ? (body.cities as string[]) : null;
     const mode = (body.mode === 'null' ? 'null' : 'oldhost') as 'oldhost' | 'null';
     const dryRun = !!body.dryRun;
@@ -65,7 +70,9 @@ Deno.serve(async (req) => {
     let healed = 0, skipped = 0, failed = 0;
     const results: Array<Record<string, unknown>> = [];
 
+    let timedOut = false;
     for (const row of rows || []) {
+      if (Date.now() - startedAt > TIME_BUDGET_MS) { timedOut = true; break; }
       const city = String((row as any).city || '').trim();
       if (!city) { skipped++; continue; }
       try {
@@ -97,9 +104,11 @@ Deno.serve(async (req) => {
       }
     }
 
+    const moreRemain = timedOut || (rows?.length || 0) === limit;
     return new Response(JSON.stringify({
-      success: true, mode, dryRun, processed: rows?.length || 0, healed, skipped, failed,
-      hint: (rows?.length || 0) === limit ? 're-run: more rows may remain' : 'batch complete',
+      success: true, mode, dryRun, timedOut,
+      processed: (healed + skipped + failed), selected: rows?.length || 0, healed, skipped, failed,
+      hint: moreRemain ? 're-run: more rows remain' : 'batch complete',
       results,
     }, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e) {
