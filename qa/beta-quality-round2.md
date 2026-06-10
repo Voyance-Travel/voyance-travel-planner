@@ -87,3 +87,26 @@ departure-day, meal floor) holds across the board. Remaining gap = a short conte
 (a) a "nightcap"/late-night time-of-day guard, (b) the 06:30 breakfast floor catching the 06:20 edge
 + venue-appropriate breakfasts, (c) thin-day backfill on long / zero-catalog trips.
 **Read: structurally beta-ready & consistent; content polish is the next tier, not a blocker.**
+
+---
+
+## Fresh 15/15 run (owner: "solid fresh batch + proof") — 7 fresh trips on the deployed content-floor fix
+Vienna 4d · Tokyo 6d Honeymoon · Lisbon 6d · Barcelona 5d · Marrakech 4d · Mexico City 5d · Istanbul 5d
+(Europe×2, Asia, Africa, Americas, Eurasia; both previously-failing cities re-tested.)
+
+**All 7: ready + fully_persisted=true → all render.** (V2 render fix holding.)
+
+**Deep content audit: 6/7 PASS hard gates.**
+- ✅ **Lisbon + Barcelona come out CLEAN from fresh generation** → the nightcap + 06:30 meal-floor
+  fix is validated in production (the exact cities that failed before).
+- ✅ Vienna, Tokyo, Marrakech, Mexico City clean.
+- ❌ **Istanbul** — 1 real issue: a placeholder breakfast ("Breakfast — find a local spot in the
+  destination", 08:30) on the departure day, *after* the 07:35 airport transfer.
+  - The self-check's post-checkout strip **already removes it correctly** (tested on the real data:
+    BEFORE has the breakfast, AFTER selfCheckAndRepair it's gone). So the strip is right — it's a
+    **V2-chain ordering bug**: the meal-coverage gate (8g) re-injects a departure-day breakfast that
+    escapes the final strip. Narrow (early-flight last days) + uses a placeholder title.
+  - The audit's "Spice Bazaar dup" was a **false positive** (DB confirms it appears once, D1 only).
+
+**Net: 6/7 fresh clean; the fix this round targeted (nightcap/breakfast-floor) is confirmed working.
+Remaining: a narrow departure-day meal-reinjection edge on Istanbul.**

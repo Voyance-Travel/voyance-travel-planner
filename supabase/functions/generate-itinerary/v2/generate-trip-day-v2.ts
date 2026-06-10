@@ -1049,12 +1049,35 @@ export async function handleGenerateTripDayV2(
       try {
         const policy = facts.mealPolicy(dNum);
         if (!policy.requiredMeals.length) continue;
+        // ── departure-day meal filter ──────────────────────────────────────
+        // An early-departure last day must NOT have a meal re-injected whose slot
+        // opens after the airport transfer / checkout. When flight details are
+        // skipped, mealPolicy has no departure clock and still "requires" breakfast,
+        // but the chain generates an early airport transfer — so the post-checkout
+        // strip removes the breakfast, the day looks thin, and 8g re-injects it as a
+        // post-departure placeholder (Istanbul D5: 08:30 breakfast after a 07:35
+        // transfer). Drop any required meal whose normal slot opens at/after the
+        // earliest departure barrier present on the day.
+        let requiredMeals: string[] = policy.requiredMeals;
+        if (dNum === totalDays) {
+          const pMin = (s: unknown) => { const m = String(s ?? '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+          const depTimes = acts
+            .filter((a: any) => /airport|\bflight\b|\bdepart|transfer to|check.?out/i.test(String(a?.title || a?.name || '')))
+            .map((a: any) => pMin(a?.startTime || a?.time))
+            .filter((m: number | null): m is number => m != null);
+          if (depTimes.length) {
+            const depMin = Math.min(...depTimes);
+            const slotOpen: Record<string, number> = { breakfast: 8 * 60, lunch: 12 * 60, dinner: 18 * 60 };
+            requiredMeals = requiredMeals.filter((m) => (slotOpen[m] ?? 0) < depMin);
+          }
+        }
+        if (!requiredMeals.length) continue;
         const detected = detectMealSlots(acts);
-        const missing = policy.requiredMeals.filter((m) => !detected.includes(m));
+        const missing = requiredMeals.filter((m) => !detected.includes(m));
         if (missing.length === 0) continue;
         const res = enforceRequiredMealsFinalGuard(
           acts,
-          policy.requiredMeals,
+          requiredMeals,
           dNum,
           facts.destination.city || 'the destination',
           'USD',
