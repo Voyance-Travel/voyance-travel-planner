@@ -242,6 +242,47 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
         }
       }
     }
+    // ── order-independent content-sanity backstop (FINAL meal/nightcap floor) ──
+    // The order-dependent lifts above key off array position (acts[0]) or skip
+    // locked cards, so edges slip: a 06:20 breakfast that wasn't the array-first
+    // card (Lisbon fa6601e2), and "nightcap"-labelled cards landing in the
+    // afternoon (Lisbon 14:05) or at 00:00 (Barcelona). This sweep is position-
+    // independent — it scans EVERY card by time and fixes two "doesn't make
+    // sense" classes deterministically. Times only (renderer sorts), no re-order.
+    {
+      const HH = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+      const userLk = (a: any) => isLocked(a) && /\b(user|must[_-]?do|anchor|pinned)\b/i.test(String(a?.lockedSource || a?.lockReason || a?.source || ''));
+      // latest non-logistics end, to place evening cards after the day's activities
+      let lastEnd = 18 * 60;
+      for (const a of d.activities) {
+        if (!a || isLogistics(a)) continue;
+        const e = parseMins(a.endTime) ?? parseMins(a.startTime || a.time);
+        if (e != null && e < 1380) lastEnd = Math.max(lastEnd, e);
+      }
+      for (const a of d.activities) {
+        if (!a || userLk(a)) continue;
+        const t = titleOf(a);
+        const s = parseMins(a.startTime || a.time);
+        if (s == null) continue;
+        // (1) nightcap / late-night drinks belong in the evening — never afternoon,
+        // never pre-dawn/00:00. Move to a late-evening slot after the day's cards.
+        const isNightcap = /\bnight ?cap\b|late[- ]?night (?:drink|jazz|stroll|out|bar|bite)|evening (?:drink|nightcap)/i.test(t);
+        if (isNightcap && s < 19 * 60) {
+          const dur = Math.min(90, Math.max(45, (parseMins(a.endTime) ?? (s + 60)) - s));
+          const ns = Math.min(Math.max(lastEnd + 15, 20 * 60 + 30), 23 * 60);
+          a.startTime = HH(ns); a.time = a.startTime; a.endTime = HH(Math.min(ns + dur, 1439));
+          lastEnd = ns + dur; repaired++;
+          continue;
+        }
+        // (2) hard meal floor: no meal opens before 06:30; lift to an 08:00 open.
+        if (isMeal(a) && s < 390) {
+          const dur = Math.max(45, (parseMins(a.endTime) ?? (s + 75)) - s);
+          const target = 8 * 60;
+          a.startTime = HH(target); a.time = a.startTime; a.endTime = HH(Math.min(target + dur, 1439));
+          repaired++;
+        }
+      }
+    }
     // redundant hotel-leg drop: when an accommodation "Return to Hotel" bookend
     // already ends the day, a TRANSPORT "Travel/Return to Hotel" leg at the same
     // hour is the same thing said twice (Day-1 23:44 "Return to Hotel" +
