@@ -187,6 +187,37 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
         }
       }
     }
+    // too-early opening meal (FINAL-gate lift): a breakfast that opens the day
+    // before 07:30 must be lifted HERE, not in the predawn normalizer — the
+    // executioner re-times the meal AFTER the normalizer runs (Day-4 06:00
+    // breakfast survived the earlier lift for exactly this reason). Lift toward
+    // 08:00, never overlapping the next real card, and skip morning-departure days.
+    {
+      const hhmm2 = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+      const acts = d.activities;
+      const firstIdx = acts.findIndex((a: any) => a && !isLogistics(a) && !isLocked(a));
+      const first = firstIdx >= 0 ? acts[firstIdx] : null;
+      const isMealCard = (a: any) => /dining|food|breakfast|brunch/i.test(catOf(a)) || /\b(breakfast|brunch)\b/i.test(titleOf(a));
+      if (first && isMealCard(first)) {
+        const s = parseMins(first.startTime || first.time);
+        const hasAmDeparture = acts.some((a: any) =>
+          isLogistics(a) && /\b(airport|flight|departure)\b/i.test(titleOf(a)) && (parseMins(a.startTime || a.time) ?? 1440) < 720);
+        if (s != null && s >= 300 && s < 450 && !hasAmDeparture) {
+          let nextStart = 1440;
+          for (let i = firstIdx + 1; i < acts.length; i++) {
+            const m = parseMins(acts[i]?.startTime || acts[i]?.time);
+            if (m != null && m > s) { nextStart = m; break; }
+          }
+          const ns = 8 * 60; // 08:00 — a sane breakfast open
+          if (ns > s && ns < nextStart - 20) {
+            const dur = Math.max(30, (parseMins(first.endTime) ?? (s + 75)) - s);
+            const ne = Math.min(ns + dur, nextStart - 10, 1439);
+            first.startTime = hhmm2(ns); first.time = first.startTime; first.endTime = hhmm2(ne);
+            repaired++;
+          }
+        }
+      }
+    }
     // redundant hotel-leg drop: when an accommodation "Return to Hotel" bookend
     // already ends the day, a TRANSPORT "Travel/Return to Hotel" leg at the same
     // hour is the same thing said twice (Day-1 23:44 "Return to Hotel" +
