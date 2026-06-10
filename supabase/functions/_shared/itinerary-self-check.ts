@@ -108,7 +108,10 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
       const before = tt;
       tt = tt.replace(/\s*[—–-]\s*find (?:a |your )?(?:local|the perfect|a good|a great)?\s*(?:spot|place|restaurant|caf[eé]|eatery|gem|favou?rite|meal)\b/ig, '')
         .replace(/\s*\(?\bor (?:similar|high[- ]?end|comparable)[^)]*\)?/ig, '')
-        .replace(/\s{2,}/g, ' ').replace(/\s+([,.])/g, '$1').replace(/\s*[—–-]\s*$/,'').trim();
+        .replace(/\s*\((?:must|must-?do|user|anchor|pinned)[^)]*\)\s*/ig, ' ')   // strip internal "(must)" marker if it leaked into a title
+        .replace(/\s{2,}/g, ' ').replace(/\s+([,.])/g, '$1').replace(/\s*[—–-]\s*$/,'')
+        .replace(/\s+(?:and|or|at|the|in|with|to|for|a|an|&)\s*$/i, '')          // strip a dangling trailing conjunction/preposition ("Solo Reflection and")
+        .trim();
       if (tt && tt !== before) { a.title = tt; a.name = tt; repaired++; }
     }
     // travel-leg duration backstop: the routing pass can leave a leg with no
@@ -182,6 +185,20 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
           if (i >= 0 && i !== d.activities.length - 1) { d.activities.splice(i, 1); d.activities.push(ret); }
           repaired++;
         }
+      }
+    }
+    // redundant hotel-leg drop: when an accommodation "Return to Hotel" bookend
+    // already ends the day, a TRANSPORT "Travel/Return to Hotel" leg at the same
+    // hour is the same thing said twice (Day-1 23:44 "Return to Hotel" +
+    // "Travel to Hotel"). Keep the accommodation bookend, drop the transit leg.
+    {
+      const hasReturnBookend = d.activities.some((a: any) =>
+        /accommodation/i.test(catOf(a)) && /\b(return|back|head back) to\b[^,]*\bhotel\b/i.test(titleOf(a)));
+      if (hasReturnBookend) {
+        d.activities = d.activities.filter((a: any) => {
+          if (/trans/i.test(catOf(a)) && /\b(travel|return|back|head) to\b[^,]*\bhotel\b/i.test(titleOf(a))) { repaired++; return false; }
+          return true;
+        });
       }
     }
     // prompt-leak strip (any day)
