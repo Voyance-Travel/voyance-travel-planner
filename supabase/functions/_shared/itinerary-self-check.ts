@@ -146,6 +146,44 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
         }
       }
     }
+    // trailing hotel-return order fix: a late enrichment pass (e.g. a nightcap
+    // wine bar) can be appended AFTER the end-of-day "Return to Hotel" bookend
+    // was already placed by runStep8 — leaving the return ordered/timed BEFORE
+    // an activity that now follows it ("Return to Hotel 20:40" then "Nightcap
+    // 21:10", i.e. home-then-back-out). Re-time the return to just after the
+    // latest real activity and move it to the array tail so the day genuinely
+    // ends on the hotel return.
+    {
+      const hhmm = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+      const isReturnBookend = (a: any) => {
+        if (!a) return false;
+        const src = String(a?.source || '').toLowerCase();
+        if (/bookend-validator|bookend-synthesized|late_nightlife_bookend/.test(src)) return true;
+        return /\b(return to|back to|head back to)\b/i.test(titleOf(a));
+      };
+      const ret = [...d.activities].reverse().find(isReturnBookend);
+      if (ret) {
+        const rs = parseMins(ret.startTime || ret.time);
+        let latestStart: number | null = null;
+        let latestEnd: number | null = null;
+        for (const a of d.activities) {
+          if (a === ret || isReturnBookend(a) || isLogistics(a) || isBareDeparture(a)) continue;
+          if (/check[-\s]?out/i.test(titleOf(a))) continue;
+          const s = parseMins(a.startTime || a.time);
+          if (s == null) continue;
+          if (latestStart == null || s > latestStart) { latestStart = s; latestEnd = parseMins(a.endTime) ?? (s + 60); }
+        }
+        if (rs != null && latestStart != null && latestStart > rs) {
+          let ns = Math.max((latestEnd ?? latestStart) + 10, rs);
+          if (ns > 1439) ns = 1439;
+          ret.startTime = hhmm(ns); ret.time = ret.startTime;
+          ret.endTime = hhmm(Math.min(ns + 25, 1439));
+          const i = d.activities.indexOf(ret);
+          if (i >= 0 && i !== d.activities.length - 1) { d.activities.splice(i, 1); d.activities.push(ret); }
+          repaired++;
+        }
+      }
+    }
     // prompt-leak strip (any day)
     d.activities = d.activities.filter((a: any) => {
       if (isLocked(a)) return true;
