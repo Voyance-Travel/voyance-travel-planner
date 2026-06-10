@@ -37,6 +37,7 @@ import { ItineraryGenerator } from '@/components/itinerary/ItineraryGenerator';
 import { useGenerationPoller } from '@/hooks/useGenerationPoller';
 import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
+import { CapacityWarningBanner } from '@/components/trip/CapacityWarningBanner';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
 import TravelIntelCard from '@/components/itinerary/TravelIntelCard';
 import { TripHealthPanel } from '@/components/trip/TripHealthPanel';
@@ -4236,6 +4237,14 @@ export default function TripDetail() {
                           </div>
                         </div>
                       </div>
+                    )}
+
+                    {/* Honest over-capacity heads-up (e.g. 6 must-dos in 3 days) — backend stamps trip.metadata.quality.capacity_warning */}
+                    {!isPreviewMode && (
+                      <CapacityWarningBanner
+                        warning={(trip.metadata as any)?.quality?.capacity_warning}
+                        tripId={trip.id}
+                      />
                     )}
 
                     <ErrorBoundary compact resetKeys={[trip.itinerary_data, trip.itinerary_status]}>
