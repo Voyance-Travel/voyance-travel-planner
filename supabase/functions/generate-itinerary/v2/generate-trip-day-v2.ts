@@ -50,7 +50,7 @@ import { applyAnchorsWin } from '../anchor-guard.ts';
 import { runBookendVerification } from '../../_shared/bookend-verification.ts';
 import { assertNoCrossDayBleed } from '../../_shared/cross-day-bleed-guard.ts';
 import { normalizePredawnCascade } from '../../_shared/predawn-cascade-normalize.ts';
-import { assertMustDoCoverage } from '../../_shared/assert-must-do-coverage.ts';
+import { assertMustDoCoverage, dropRedundantInjectedMustDos } from '../../_shared/assert-must-do-coverage.ts';
 import { injectMissingMustDos } from '../../_shared/inject-missing-must-dos.ts';
 import { extractMustDoVenues } from '../../_shared/extract-must-dos.ts';
 import { fillAfterMealGuard } from '../../_shared/post-meal-guard-fill.ts';
@@ -999,6 +999,20 @@ export async function handleGenerateTripDayV2(
     // (separate follow-up). Logistics + locked items always kept. Last day only.
     const runCrossDayDedup = async () => {
       try {
+        // First: drop must-do cards the per-day injector added redundantly. Under
+        // the V2 self-invoke race the injector can fire against a partial view and
+        // re-inject a venue the AI already placed on another day, landing a locked
+        // duplicate on the departure day (which the cross-day de-dup then refuses
+        // to drop because it's a must_do anchor). Run on the complete mergedDays
+        // so coverage sees every real placement. See assert-must-do-coverage.ts.
+        try {
+          const r = dropRedundantInjectedMustDos(mergedDays as any[]);
+          if (r.dropped.length > 0) {
+            console.log(`[v2] [MUST_DO_INJECT_DEDUP] dropped=${r.dropped.length} redundant injected must-dos`);
+          }
+        } catch (e) {
+          console.warn('[v2] injected-must-do dedup failed (non-blocking):', e);
+        }
         // The full cross-day cleanup — meal-time relabel, same-day duplicate-meal
         // drop (auto-lock-aware), cross-day restaurant swap (inline catalog + a
         // Google-Places fallback for non-catalog cities via recommend-restaurants),
