@@ -32,6 +32,10 @@ export async function crossDayDedup(days: any[], city: string, fetchAlternatives
   let swaps = 0, drops = 0, relabels = 0;
   let pool: Array<{ name: string; address?: string; description?: string }> | null = null; // lazy non-catalog venue pool
   const lc = (s: any) => String(s || '').toLowerCase()
+    // strip the internal must-do marker the backlog appends to a satisfied
+    // venue ("La Lolita Barcelona (must)") — otherwise the SAME venue keyed with
+    // and without "(must)" reads as two venues and the cross-day swap misses it.
+    .replace(/\s*\((?:must|must-?do|user|anchor|pinned)[^)]*\)\s*$/i, '')
     .replace(/^\s*[a-z' ]*\b(breakfast|brunch|lunch|dinner|nightcap|drinks?|coffee|cocktails?|tea|supper|aperitivo|aperitif)\b\s+(at|in|with|@|by)\s+/i, '')
     .replace(/\s+/g, ' ').trim();
   const isLog = (a: any) => ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(String(a?.category || '').toLowerCase());
@@ -52,6 +56,33 @@ export async function crossDayDedup(days: any[], city: string, fetchAlternatives
   // Contiguous windows (no gap) so an in-between meal (e.g. 16:30) is relabeled
   // to the nearest meal: breakfast 05:00–11:30, lunch 11:00–16:30, dinner 16:30–23:30.
   const windowType = (m: number | null) => m == null ? null : (m >= 300 && m <= 690 ? 'breakfast' : m >= 660 && m <= 990 ? 'lunch' : m >= 990 && m <= 1410 ? 'dinner' : null);
+
+  // ── 0) splurge collapse (trip-wide) ───────────────────────────────────────
+  // A vague venue-less "one splurge dinner" intent can't be pinned to a single
+  // day, so it lands in the per-day "fit one today" backlog shown to EVERY day —
+  // and because each day is generated WITHOUT seeing its siblings, several days
+  // each add a "Splurge Dinner". The per-day prompt structurally can't enforce a
+  // trip-wide "one splurge" rule; this cross-day pass can. Keep the FIRST splurge
+  // dinner; relabel the rest to a normal dinner (the venue-swap below then clears
+  // any repeated venue, e.g. La Lolita on two days).
+  {
+    let splurgeKept = false;
+    for (const d of days) {
+      if (!Array.isArray(d?.activities)) continue;
+      for (const a of d.activities) {
+        const t = String(a?.title || a?.name || '');
+        if (!/\bsplurge\b/i.test(t)) continue;
+        if (!splurgeKept) { splurgeKept = true; continue; }
+        const nt = t
+          .replace(/\btraditional\s+splurge\b/i, 'Traditional')
+          .replace(/\bsplurge\s+/i, '')
+          .replace(/\bsplurge\b/i, '')
+          .replace(/\s{2,}/g, ' ').trim();
+        a.title = nt || t; a.name = a.title;
+        relabels++;
+      }
+    }
+  }
 
   const c3City = city || '';
   const seenNonMeal: string[] = [];
