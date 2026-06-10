@@ -1326,6 +1326,31 @@ export async function handleGenerateTripDayV2(
       }
     }
 
+    // ── 8z. RACE-SAFE FINAL CLEANUP ────────────────────────────────────
+    // The per-day requests run in parallel and EACH writes the whole trip
+    // (section 9 below). The last-day request runs crossDayDedup + selfCheck
+    // (gated isLastDay||heal), but a NON-last request that finishes LATER then
+    // re-persists its own, uncleaned view of the trip — silently clobbering that
+    // cleanup. This is how Athens D1's "Return→Nightcap→Return" clutter survived
+    // even though selfCheck removes it (proven on the dumped data). Fix: if the
+    // trip is already COMPLETE when a non-last request is about to write, re-run
+    // the (idempotent) cleanups first, so whichever request writes last always
+    // lands a cleaned itinerary. Gated on completeness so it never runs the
+    // last-day-only departure strip against a partial trip.
+    if (!isLastDay && !heal) {
+      try {
+        const complete = Array.isArray(mergedDays) && mergedDays.length >= totalDays &&
+          mergedDays.slice(0, totalDays).every((d: any) => Array.isArray(d?.activities) && d.activities.length > 0);
+        if (complete) {
+          await runCrossDayDedup();
+          selfCheckAndRepair(mergedDays);
+          console.log('[v2] [RACE_SAFE_CLEANUP] re-cleaned an already-complete trip on a non-last write');
+        }
+      } catch (e) {
+        console.warn('[v2] race-safe final cleanup failed (non-blocking):', e);
+      }
+    }
+
     // ── 9. Single write of merged JSON ─────────────────────────────────
     // C-PERSIST-1: saveReason MUST be a whitelisted prefix or the frozen gate
     // silently drops this write on an already-ready trip (regenerate-a-day and
@@ -1414,6 +1439,37 @@ export async function handleGenerateTripDayV2(
         console.log(`[v2] [STATUS_FINALIZE] status=${finalStatus} fully_persisted=${finalStatus === 'ready'} days=${mergedDays.length}/${totalDays}`);
       } catch (e) {
         console.warn('[v2] status finalize failed (non-blocking):', (e as Error)?.message);
+      }
+    }
+
+    // ── 11a. THIN-DAY heal: queue underfilled days for the same background
+    // regen as empty days. A non-departure day with < 2 real (non-meal, non-
+    // logistics) activities reads as underfilled — Athens D3 had only one
+    // sightseeing card all day (Philopappos) and the Acropolis was never placed.
+    // Computed on the FINAL merged trip (post-dedup/self-check) so a day thinned
+    // BY the dedup is caught too. Departure day exempt (legitimately light:
+    // checkout + transfer). Reuses the tested heal path (step 11b) + the heal's
+    // own dedup/self-check + the race-safe pass clean the regenerated day.
+    if (isLastDay && !heal) {
+      try {
+        const realCount = (d: any) => (Array.isArray(d?.activities) ? d.activities : []).filter((a: any) => {
+          const t = String(a?.title || a?.name || '').toLowerCase();
+          const c = String(a?.category || '').toLowerCase();
+          const log = ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(c) || /check.?in|check.?out|transfer|airport|\bflight\b|return to|travel to|\bdepart/.test(t);
+          const meal = ['breakfast', 'lunch', 'dinner', 'dining', 'restaurant'].includes(c) || /\b(breakfast|brunch|lunch|dinner)\b/.test(t);
+          return !log && !meal;
+        }).length;
+        const thin: number[] = [];
+        for (let n = 1; n < totalDays; n++) { // exclude the departure (last) day
+          const d = mergedDays.find((x: any) => (x?.dayNumber ?? x?.day_number) === n);
+          if (d && Array.isArray(d.activities) && d.activities.length > 0 && realCount(d) < 2 && !pendingHeals.includes(n)) thin.push(n);
+        }
+        if (thin.length > 0) {
+          console.error(`[v2] [THIN_DAY_HEAL] underfilled days=[${thin.join(',')}] (<2 real activities) — queued for background regen`);
+          pendingHeals.push(...thin);
+        }
+      } catch (e) {
+        console.warn('[v2] thin-day detection failed (non-blocking):', (e as Error)?.message);
       }
     }
 
