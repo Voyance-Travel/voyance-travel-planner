@@ -48,10 +48,15 @@ Deno.serve(async (req) => {
     );
 
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
-    // skipCache forces a live Google+Unsplash fetch+upload per city (~3-8s), so
-    // keep batches small — a big batch overruns the edge wall-clock and the
-    // function gets killed mid-loop (opaque 500). Default 5; hard cap 25.
-    const limit = Math.min(Math.max(Number(body.limit) || 5, 1), 25);
+    // Default to READING the cache (skipCache=false). The first dry run already
+    // downloaded + cached real heroes on the new host for most cities, so a cache
+    // read heals them instantly with no live re-fetch — which is the whole point,
+    // since re-fetching every pass just hammers the Unsplash rate limit and makes
+    // already-cached cities (like Seoul) skip forever. Pass skipCache:true only to
+    // force a fresh fetch for the few stragglers that never cached.
+    const skipCache = body.skipCache === true;
+    // Cache reads are fast (~0.5s); live fetches are slow (~3-8s) → smaller batch.
+    const limit = Math.min(Math.max(Number(body.limit) || (skipCache ? 5 : 25), 1), 50);
     const startedAt = Date.now();
     const TIME_BUDGET_MS = 110_000;
     const cities = Array.isArray(body.cities) ? (body.cities as string[]) : null;
@@ -76,10 +81,8 @@ Deno.serve(async (req) => {
       const city = String((row as any).city || '').trim();
       if (!city) { skipped++; continue; }
       try {
-        // skipCache: bypass any stale curated/negative-cache row (e.g. Seoul's
-        // `curated → null`) so the loosened live tiers fetch a fresh image.
         const { data, error } = await supabase.functions.invoke('destination-images', {
-          body: { destination: city, imageType: 'hero', limit: 1, skipCache: true },
+          body: { destination: city, imageType: 'hero', limit: 1, skipCache },
         });
         if (error) { failed++; results.push({ city, status: 'invoke_error', error: error.message }); continue; }
 
