@@ -76,13 +76,13 @@ Not every failure is a code bug. Classify each:
 ### Set 2 — breadth (6–12)
 | # | City | Days | Must-dos | Budget | Stress tested | Cr | Status | H-fails | S-fails | Disposition / notes |
 |---|------|------|----------|--------|---------------|----|--------|---------|---------|---------------------|
-| 6 | Marrakech | 4 | 3 | moderate | non-catalog mid | 240 | ⬜ | | | |
-| 7 | Paris | 5 | 3 | moderate | big catalog city | 300 | ⬜ | | | |
-| 8 | New York | 3 | 0 | budget | short + cheap | 180 | ⬜ | | | |
-| 9 | Bangkok | 7 | 6 | moderate | long + many, non-Euro | 420 | ⬜ | | | |
-| 10 | Amsterdam | 4 | 3 | luxury | luxury one-splurge test | 240 | ⬜ | | | |
-| 11 | Seoul | 6 | 3 | moderate | non-catalog | 360 | ⬜ | | | |
-| 12 | Mexico City | 5 | 6 | budget | many must-dos + budget | 300 | ⬜ | | | |
+| 6 | Marrakech | 4 | 3 | moderate | non-catalog mid | 240 | 🟩 | 0 | — | ready, score 84, no hard fails. Splurge present; "unmet splurge" was a false-positive (now fixed). |
+| 7 | Paris | 5 | 3 | moderate | big catalog city | 300 | 🟩 | 0 | 0 | ready, **score 100**, clean. (Autocomplete picked "Disneyland Paris" — same bug as Frome.) |
+| 8 | New York | 3 | 0 | budget | short + cheap | 180 | 🟩 | 0 | 0 | ready, **score 100**, clean, no warning. |
+| 9 | Bangkok | 7 | 6 | moderate | long + many, non-Euro | 420 | ⬜ | | | *(deferred to post-deploy batch 2)* |
+| 10 | Amsterdam | 4 | 3 | luxury | luxury one-splurge test | 240 | ⬜ | | | *(deferred to post-deploy batch 2)* |
+| 11 | Seoul | 6 | 3 | moderate | non-catalog | 360 | ⬜ | | | *(deferred to post-deploy batch 2)* |
+| 12 | Mexico City | 5 | 6 | budget | many must-dos + budget | 300 | 🟩 | 0 | 0 | ready, **score 100**, clean. **All 6 must-dos fit in 5 days → no overflow.** Confirms overflow is 3-day-specific. |
 
 ### Set 3 — stress / break (13–20) — *needs credit top-up*
 | # | City | Days | Must-dos | Budget | Stress tested | Cr | Status | H-fails | S-fails | Disposition / notes |
@@ -117,7 +117,7 @@ Legend: ⬜ not run · 🟩 pass · 🟥 hard fail · 🟨 soft fail only
 | Must-do overflow cramming cards AFTER checkout | Rome (3d/6must) | **FIX** | selfCheckAndRepair strips post-checkout non-logistics + hotel-return. **Re-verified live (015d4f19): postCheckout 2→0.** | ✅ DONE+VERIFIED c7b50b7 |
 | Over-capacity must-do request (too many for the days) | Rome | **SOFT-WARN** | Stamps `metadata.quality.capacity_warning`. **Re-verified live: warning fired with the 1 unmet must-do.** Frontend banner to render = follow-up. | ◑ backend done+verified |
 | Splurge-DINNER must-do relabeled to morning "Breakfast" under overflow | Rome re-run | FIX (minor) | cross-day meal-relabel turns a 09:15-slotted "dinner" must-do into breakfast. Should preserve intent or drop, not flip dinner→breakfast. | open |
-| Auto-locked 06:20 breakfast not lifted (H4) | Lisbon (5d/0must) | **FIX** | breakfast-lift gate skips locked cards (`!isLocked`), so an AUTO-locked early meal survives. Lift gate should treat the first meal even if auto-locked — only skip USER-locked. | open |
-| capacity_warning over-reports a vague dining must-do | Tokyo (8d) | FIX (minor) | "Izakaya" flagged unmet despite 8 days of room — coverage matcher likely missed an izakaya-style dinner. Loosen dining keyword match. | open |
+| Breakfast-lift bailed when 08:00 crowded next card (H4) | Lisbon (5d/0must) | **FIX** | Gate now lifts to 08:00 + forward-cascades conflicting cards instead of bailing. Verified 06:20→08:00, no regression. | ✅ DONE cb8ad3cb (deploy pending) |
+| capacity_warning false-flags intent must-dos as unmet | Tokyo/Marrakech/Paris/MexicoCity | **FIX** | Venue-name matcher can't match "a splurge dinner"/"a taqueria" → false "couldn't fit" even when present. Now drops unmet must-dos whose keyword is in a card title. Verified unmet→0 on 3 live trips. | ✅ DONE e651acce (deploy pending) |
 | Dangling title persisted ("...Market In") | Rome | RESOLVED | Gate title-strip cleans it on re-run; persisted copy was a pre-status-fix artifact (gate output now persists). | ✅ moot |
 | "Rome" autocomplete selects "Frome, UK" | wizard | **FIX** | Bias city search toward major destinations / show country prominently — wrong city silently chosen. | open (frontend) |
