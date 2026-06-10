@@ -1190,7 +1190,14 @@ export async function handleGenerateTripDayV2(
     // departures) and stamps a 0–100 quality score into trips.metadata for live
     // observability — we can monitor the real distribution instead of only test
     // trips, and flag low-scoring trips for review.
-    if (isLastDay) {
+    // Run on the real last day AND on every completeness-heal. A heal
+    // regenerates a single (non-last) day, so without `|| heal` that day's
+    // fresh output never gets the gate's time repairs (early-breakfast lift,
+    // predawn clamp, dangling-title, redundant-leg) and ships ungated — the one
+    // path that could still leak a 06:00 breakfast onto a finished trip.
+    // mergedDays is the full trip on a heal too, so per-day repairs land on the
+    // healed day while the last-day-only strips stay scoped to the actual last day.
+    if (isLastDay || heal) {
       try {
         // selfCheckAndRepair is a static import (top of file).
         const sc = selfCheckAndRepair(mergedDays);
