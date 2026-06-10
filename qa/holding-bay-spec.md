@@ -88,7 +88,14 @@ On place onto **Day D**:
 
 ---
 
-## Open questions to lock before build
-1. **Final name:** "Not yet placed" / "On your list" / "Saved for later"?
-2. **Place orchestration:** client-mutate-then-persist (simpler) vs. a dedicated `place-held-item` edge action (cleaner, server-authoritative)?
-3. **Resolve failures:** if we can't resolve a vague must-do to a real venue, show it as a text-only card the user places manually — OK, or drop from bay?
+## Locked decisions ✅
+1. **Name:** **"Saved for later."**
+2. **Place orchestration:** **server-side `place-held-item` edge action** (server-authoritative) — slots into the existing `generate-itinerary` action dispatcher next to `save-itinerary` / `toggle-activity-lock`.
+3. **Resolve failures:** **text-only card the user places manually** (don't drop from bay).
+
+## Build status & order
+- **① Data layer — ✅ DONE (main 6cd67ffa6, deno-clean).** `generate-trip-day-v2.ts` writes `trip.metadata.holding_bay` (stable ids, `resolved:null`) whenever there are unmet must-dos; clears it otherwise.
+- **② `place-held-item` edge action — NEXT.** New `handlePlaceHeldItem(tripId, heldItemId, dayNumber, action)` in `generate-itinerary/index.ts` dispatcher: fit-check → swap-candidate rule (§3) → apply (swap → displaced card back to bay; add → cascade re-time via the breakfast-lift cascade) → persist `itinerary_data` + `metadata.holding_bay` atomically. Resolve venue lazily here (text-only label as title if unresolved).
+- **③ UI — WITH ②.** "Saved for later" mobile drawer + sticky chip on `TripDetail` (reads `metadata.holding_bay`) → tap card → "which day?" → confirm sheet (Swap / Add both / Cancel) → calls ②. Desktop drag rail = Phase 2.
+
+> **Build approach (decided): ②+③ together as ONE verified slice.** First time we call it "done" it must be *watched working* end-to-end. **Verification recipe:** generate Rome 3d/6must (makes a real overflow + populates the bay on demand) → open the drawer → place a held item → confirm a swap actually moves a card and refills the bay.
