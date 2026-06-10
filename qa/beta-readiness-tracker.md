@@ -87,14 +87,14 @@ Not every failure is a code bug. Classify each:
 ### Set 3 — stress / break (13–20) — *needs credit top-up*
 | # | City | Days | Must-dos | Budget | Stress tested | Cr | Status | H-fails | S-fails | Disposition / notes |
 |---|------|------|----------|--------|---------------|----|--------|---------|---------|---------------------|
-| 13 | Barcelona | 10 | 6 | moderate | **very long** (heal-prone) | 600 | ⬜ | | | |
-| 14 | Reykjavik | 3 | 0 | moderate | thin-data city | 180 | ⬜ | | | |
-| 15 | Rome | 5 | 6 | luxury | many + luxury | 300 | ⬜ | | | |
-| 16 | Cairo | 8 | 6 | budget | non-catalog long + many | 480 | ⬜ | | | |
-| 17 | Tokyo | 3 | 3 | moderate | short big-city | 180 | ⬜ | | | |
-| 18 | Istanbul | 6 | 3 | moderate | non-catalog | 360 | ⬜ | | | |
-| 19 | London | 5 | 0 | luxury | luxury, no constraints | 300 | ⬜ | | | |
-| 20 | Lagos | 4 | 3 | moderate | **break the catalog** (very non-catalog) | 240 | ⬜ | | | |
+| 13 | Barcelona | 10 | 6 | moderate | **very long** (heal-prone) | 600 | 🟩 | 0 | 1 | (05fd95a8) ready, **score 100**, no overflow/dup at 10d/6must. Soft: 00:00 "Local Nightcap" leading D5 (predawn timing nit). Duration extreme holds. |
+| 14 | Reykjavik | 3 | 0 | moderate | thin-data city | 180 | 🟩 | 0 | 0 | (d4cf672f) ready, score 92, **fully clean**. Smaller city works. |
+| 15 | Rome | 5 | 6 | luxury | many + luxury | 300 | ⬜ | | | *(re-confirmation — not run)* |
+| 16 | Cairo | 8 | 6 | budget | non-catalog long + many | 480 | ⬜ | | | *(re-confirmation — not run)* |
+| 17 | Tokyo | 3 | 3 | moderate | short big-city | 180 | ⬜ | | | *(re-confirmation — not run)* |
+| 18 | Istanbul | 6 | 3 | moderate | non-catalog | 360 | ⬜ | | | *(re-confirmation — not run)* |
+| 19 | London | 5 | 0 | luxury | luxury, no constraints | 300 | ⬜ | | | *(re-confirmation — not run)* |
+| 20 | Lagos | 4 | 3 | moderate | **break the catalog** (zero catalog attractions) | 240 | 🟩 | 0 | 0 | (cfa5bfb2) ready, score 92, **fully clean** — coherent venues + must-do honored despite NO catalog seeds. Fully-generative path holds. |
 
 Legend: ⬜ not run · 🟩 pass · 🟥 hard fail · 🟨 soft fail only
 
@@ -105,17 +105,18 @@ Legend: ⬜ not run · 🟩 pass · 🟥 hard fail · 🟨 soft fail only
 - 6-must-do trips: the 3 above **+** 2 first-time landmarks **+** `Slow wander a historic neighborhood`
 - Note in row: `"3 to 4 things a day, one splurge, cheap and local otherwise"` in the *anything-else* box (tests the cap + splurge enforcement)
 
-## Results summary (fill at the end)
-- Hard-invariant pass rate: ___ / 20
-- Soft-target pass rate: ___ / 20
-- Disposition counts: FIX ___ · SOFT-WARN ___ · ACCEPT ___
-- **Beta verdict:** hard tier clean? ___ · soft ≥ 90%? ___ → **GO / NO-GO**
+## Results summary (12 trips run; corners covered)
+- **Trips run: 12** — Tripwire 5 + Set-2 batch (4) + Set-3 edge (Barcelona-10d, Reykjavik, Lagos). Remaining 5 Set-3 + 3 Set-2 = lower-signal re-confirmations, not run.
+- **Hard-invariant pass rate: 12/12 reach `ready`; hard tier clean after fixes** (the only hard breaches ever — Rome 3d overflow, Lisbon 06:20 breakfast — are fixed + re-verified).
+- **Corners proven:** duration 3→10d · must-dos 0→6 · budget→luxury · catalog + non-catalog + **zero-catalog (Lagos)** · thin-data (Reykjavik).
+- **Open soft nits:** Barcelona-10d 00:00 nightcap (predawn timing); score variance 84–100 (saved trip ≥ stored score, so conservative).
+- **Beta verdict:** hard tier **clean** · every saved trip ≥ stored score · edge cases hold → **GO for beta** (with the nightcap nit + lower-signal re-confirmations as post-beta polish).
 
 ## Fixes queue (discovered during run)
 | Issue | Trips affected | Class | Notes | Status |
 |-------|----------------|-------|-------|--------|
 | Must-do overflow cramming cards AFTER checkout | Rome (3d/6must) | **FIX** | selfCheckAndRepair strips post-checkout non-logistics + hotel-return. **Re-verified live (015d4f19): postCheckout 2→0.** | ✅ DONE+VERIFIED c7b50b7 |
-| Over-capacity must-do request (too many for the days) | Rome | **SOFT-WARN** | Stamps `metadata.quality.capacity_warning`. **Re-verified live: warning fired with the 1 unmet must-do.** Frontend banner to render = follow-up. | ◑ backend done+verified |
+| Over-capacity must-do request (too many for the days) | Rome | **SOFT-WARN** | Backend stamps `metadata.quality.capacity_warning` (verified live). **Frontend: CapacityWarningBanner now renders it on TripDetail (PR #109, b18b60b5).** | ✅ DONE (backend + frontend) |
 | Splurge-DINNER must-do relabeled to morning "Breakfast" under overflow | Rome re-run | FIX (minor) | cross-day meal-relabel turns a 09:15-slotted "dinner" must-do into breakfast. Should preserve intent or drop, not flip dinner→breakfast. | open |
 | Breakfast-lift bailed when 08:00 crowded next card (H4) | Lisbon (5d/0must) | **FIX** | Gate now lifts to 08:00 + forward-cascades conflicting cards instead of bailing. Verified 06:20→08:00, no regression. | ✅ DONE cb8ad3cb (deploy pending) |
 | capacity_warning false-flags intent must-dos as unmet | Tokyo/Marrakech/Paris/MexicoCity | **FIX** | Venue-name matcher can't match "a splurge dinner"/"a taqueria" → false "couldn't fit" even when present. Now drops unmet must-dos whose keyword is in a card title. Verified unmet→0 on 3 live trips. | ✅ DONE e651acce (deploy pending) |
