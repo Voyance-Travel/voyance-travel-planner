@@ -27,6 +27,7 @@ import {
 } from './generation-utils.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
 import { crossDayDedup } from './_shared/cross-day-dedup.ts';
+import { dropRedundantInjectedMustDos } from '../_shared/assert-must-do-coverage.ts';
 import { makePlacesAlternatives } from './_shared/places-alternatives.ts';
 import { selfCheckAndRepair } from '../_shared/itinerary-self-check.ts';
 import { persistTripItinerary } from '../_shared/persist-itinerary.ts';
@@ -2010,6 +2011,11 @@ export async function handleGenerateDay(
         const { data: _ccRow } = await supabase.from('trips').select('itinerary_data, metadata').eq('id', tripId).maybeSingle();
         const _ccDays = (_ccRow?.itinerary_data as any)?.days;
         if (Array.isArray(_ccDays) && _ccDays.length > 1) {
+          // Drop must-do cards a prior fresh-gen injected redundantly (a venue
+          // already placed on another day) before the cross-day de-dup, which
+          // would otherwise preserve them as locked must_do anchors. Parity with
+          // the V2 fresh path. See assert-must-do-coverage.ts.
+          try { dropRedundantInjectedMustDos(_ccDays); } catch (_e) { /* non-blocking */ }
           const _ccRes = await crossDayDedup(_ccDays, destination || '', makePlacesAlternatives(supabase));
           const _sc = selfCheckAndRepair(_ccDays);
           await persistTripItinerary(supabase, tripId, { ...((_ccRow!.itinerary_data as any) || {}), days: _ccDays }, { label: 'regen-cross-day', saveReason: 'regenerate-day-cleanup' });

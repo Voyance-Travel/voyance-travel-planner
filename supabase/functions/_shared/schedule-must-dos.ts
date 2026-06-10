@@ -271,9 +271,17 @@ export function scheduleMustDos(
         // Require the contiguous free window to be at least longHaul minutes.
         return (d.latestEnd - d.earliestStart) >= longHaul!;
       })
-      .sort((a, b) =>
-        a.existingLandmarkCount - b.existingLandmarkCount || a.dayNumber - b.dayNumber
-      );
+      .sort((a, b) => {
+        // The departure day is a LAST RESORT for a must-do. It usually has the
+        // FEWEST existing landmarks (just breakfast + checkout), which would
+        // otherwise make it the scheduler's first pick — cramming a sightseeing
+        // visit onto the fly-home day, after checkout, which reads as broken.
+        // Push it to the end so must-dos land on full sightseeing days first.
+        const aDep = (a.dayNumber === lastDayNumber && hasDepartureClock) ? 1 : 0;
+        const bDep = (b.dayNumber === lastDayNumber && hasDepartureClock) ? 1 : 0;
+        if (aDep !== bDep) return aDep - bDep;
+        return a.existingLandmarkCount - b.existingLandmarkCount || a.dayNumber - b.dayNumber;
+      });
 
     let picked: MustDoSlot | null = null;
     for (const d of candidates) {

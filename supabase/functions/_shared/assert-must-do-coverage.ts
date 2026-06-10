@@ -439,5 +439,54 @@ export function assertMustDoCoverage(
   return { missing, scheduled, total: mustDos.length, matchedActivityIds };
 }
 
+/**
+ * Remove redundant injected must-do cards.
+ *
+ * The deterministic must-do injector (inject-missing-must-dos.ts) runs inside
+ * the per-day chain against whatever days are visible at that moment. Under the
+ * V2 self-invoke race, an earlier-day invocation can fire the injector before
+ * later days' real placements are merged in — so it injects a card for a venue
+ * the AI *did* schedule on another day, producing a duplicate that lands on the
+ * last (departure) day. Because injected cards are locked `must_do` anchors, the
+ * cross-day de-dup correctly refuses to drop them, so the duplicate survives.
+ *
+ * This pass runs ONCE on the finalized, complete itinerary (where every day's
+ * real activities are present) and drops an injected card iff the SAME venue is
+ * already covered by a NON-injected (AI- or user-placed) activity. The genuinely
+ * missing must-do (no real placement anywhere) is kept. Mutates `allDays`.
+ */
+export function dropRedundantInjectedMustDos(
+  allDays: any[],
+): { dropped: Array<{ venue: string; dayNumber: number }> } {
+  const dropped: Array<{ venue: string; dayNumber: number }> = [];
+  const days = Array.isArray(allDays) ? allDays : [];
+  // The "real" itinerary the user/AI actually built — injected cards excluded.
+  const nonInjected = days.map((d) => ({
+    ...d,
+    activities: (Array.isArray(d?.activities) ? d.activities : []).filter(
+      (a: any) => String(a?.source || '') !== 'must-do-injection',
+    ),
+  }));
+  for (const day of days) {
+    const acts = Array.isArray(day?.activities) ? day.activities : [];
+    for (let i = acts.length - 1; i >= 0; i--) {
+      const a = acts[i];
+      if (String(a?.source || '') !== 'must-do-injection') continue;
+      const venue = String(a?.title || a?.name || '').trim();
+      if (!venue) continue;
+      // Is this venue already satisfied by a real (non-injected) card anywhere?
+      const cov = assertMustDoCoverage(nonInjected, [venue]);
+      if (cov.scheduled.length > 0) {
+        acts.splice(i, 1);
+        dropped.push({ venue, dayNumber: Number(day?.dayNumber) || 0 });
+        console.log(
+          `[MUST_DO_INJECT_DEDUP] dropped redundant injected "${venue}" from day=${day?.dayNumber} (already placed by a real card)`,
+        );
+      }
+    }
+  }
+  return { dropped };
+}
+
 // Re-export for tests
 export const __test__ = { canonicalize, activityMatches, activityMatchesFuzzy, fuzzyVenueMatch, coreTokens, normalize, matchesWord, isNonQualifyingActivity, isVenueViableOnDay };
