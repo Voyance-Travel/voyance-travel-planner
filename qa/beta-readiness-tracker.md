@@ -64,11 +64,14 @@ Not every failure is a code bug. Classify each:
 |---|------|------|----------|--------|---------------|----|--------|---------|---------|---------------------|
 | 1 | Barcelona | 5 | 3 | moderate | known-good baseline | 300 | 🟩 | 0 | 0 | PASS — build 32d0b59f: status=ready, score 100, 1 splurge, no dup, no early meal, no predawn |
 | 2 | Cairo | 5 | 3 | moderate | **non-catalog** swap path | 300 | 🟩 | 0 | 1 | PASS (dd0ac61a): status=ready, score 92, 0 dup, 0 early-meal, 0 predawn, 0 post-checkout. Non-catalog works. |
-| 3 | Rome | 3 | 6 | budget | **short + many must-dos** (overflow / departure cram) | 180 | 🟥 | 1 | 1 | HARD FAIL (da68c608): status=ready score 92, **2 cards AFTER checkout** (H2) + 1 dangling title. 6 must-dos can't fit 3 days → crammed past checkout. |
-| 4 | Tokyo | 8 | 6 | luxury | **long + many + luxury** (one-splurge stress, heals) | 480 | ⬜ | | | |
-| 5 | Lisbon | 5 | 0 | moderate | no-constraint baseline (should be cleanest) | 300 | ⬜ | | | |
+| 3 | Rome | 3 | 6 | budget | **short + many must-dos** (overflow / departure cram) | 180 | 🟩 | 0 | 1 | FIXED + re-verified (015d4f19): postCheckout **2→0**, capacity_warning stamped (1 unmet), status=ready, no dup/dangling. Score 84. Soft: splurge-dinner must-do relabeled to 09:15 "Breakfast" under overflow. *(orig da68c608 was 🟥 1-hard.)* |
+| 4 | Tokyo | 8 | 6 | luxury | **long + many + luxury** (one-splurge stress, heals) | 480 | 🟩 | 0 | 1 | PASS (db3a51e0): **score 100**, 1 splurge, 0 dup/early/predawn/postCheckout/dangling. **6 must-dos fit in 8 days → no overflow.** Soft: capacity_warning flagged "Izakaya" unmet (likely coverage-matcher miss on a vague dining must-do). |
+| 5 | Lisbon | 5 | 0 | moderate | no-constraint baseline (should be cleanest) | 300 | 🟨 | 1 | 0 | (fa6601e2): status=ready score 92, 0 dup/predawn/postCheckout/dangling. **D1 06:20 "Breakfast" (H4, marginal −10min)** — auto-locked meal slipped the breakfast-lift gate (gate skips locked cards). |
 
-**Checkpoint after #5:** _____ hard fails, _____ soft fails → **CONTINUE / PULL UP**
+**Checkpoint after #5:** **4 clean / 1 marginal.** Hard tier: Rome+Tokyo overflow handled; only Lisbon's 06:20 auto-locked breakfast breaches H4 (by 10 min). → **fix the lift-gate gap, then CONTINUE.**
+
+### Key learning from Tripwire 5
+**Tokyo (8d/6must) had NO overflow — 6 must-dos fit cleanly with room.** So the post-checkout cramming is *genuinely short-trip over-capacity* (Rome 3d/6must), not a general 6-must-do bug. The fix + soft-warn target exactly the right case; long trips with many must-dos are fine.
 
 ### Set 2 — breadth (6–12)
 | # | City | Days | Must-dos | Budget | Stress tested | Cr | Status | H-fails | S-fails | Disposition / notes |
@@ -111,7 +114,10 @@ Legend: ⬜ not run · 🟩 pass · 🟥 hard fail · 🟨 soft fail only
 ## Fixes queue (discovered during run)
 | Issue | Trips affected | Class | Notes | Status |
 |-------|----------------|-------|-------|--------|
-| Must-do overflow cramming cards AFTER checkout | Rome (3d/6must) | **FIX** | When must-dos can't fit, drop the un-fittable ones — NEVER schedule past checkout. Extend departure-strip + must-do placement. | open |
-| Over-capacity must-do request (too many for the days) | Rome | **SOFT-WARN** | Surface in wizard: "6 must-dos in 3 days is ambitious — we'll fit what we can." Honest expectation-set. | open |
-| "Rome" autocomplete selects "Frome, UK" | wizard | **FIX** | Bias city search toward major destinations / show country prominently — wrong city silently chosen. | open |
-| Dangling title persisted ("...and") | Rome | FIX/investigate | Gate dangling-strip exists; pattern slipped OR added by a post-gate heal. | open |
+| Must-do overflow cramming cards AFTER checkout | Rome (3d/6must) | **FIX** | selfCheckAndRepair strips post-checkout non-logistics + hotel-return. **Re-verified live (015d4f19): postCheckout 2→0.** | ✅ DONE+VERIFIED c7b50b7 |
+| Over-capacity must-do request (too many for the days) | Rome | **SOFT-WARN** | Stamps `metadata.quality.capacity_warning`. **Re-verified live: warning fired with the 1 unmet must-do.** Frontend banner to render = follow-up. | ◑ backend done+verified |
+| Splurge-DINNER must-do relabeled to morning "Breakfast" under overflow | Rome re-run | FIX (minor) | cross-day meal-relabel turns a 09:15-slotted "dinner" must-do into breakfast. Should preserve intent or drop, not flip dinner→breakfast. | open |
+| Auto-locked 06:20 breakfast not lifted (H4) | Lisbon (5d/0must) | **FIX** | breakfast-lift gate skips locked cards (`!isLocked`), so an AUTO-locked early meal survives. Lift gate should treat the first meal even if auto-locked — only skip USER-locked. | open |
+| capacity_warning over-reports a vague dining must-do | Tokyo (8d) | FIX (minor) | "Izakaya" flagged unmet despite 8 days of room — coverage matcher likely missed an izakaya-style dinner. Loosen dining keyword match. | open |
+| Dangling title persisted ("...Market In") | Rome | RESOLVED | Gate title-strip cleans it on re-run; persisted copy was a pre-status-fix artifact (gate output now persists). | ✅ moot |
+| "Rome" autocomplete selects "Frome, UK" | wizard | **FIX** | Bias city search toward major destinations / show country prominently — wrong city silently chosen. | open (frontend) |
