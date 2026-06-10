@@ -1326,6 +1326,31 @@ export async function handleGenerateTripDayV2(
       }
     }
 
+    // ── 8z. RACE-SAFE FINAL CLEANUP ────────────────────────────────────
+    // The per-day requests run in parallel and EACH writes the whole trip
+    // (section 9 below). The last-day request runs crossDayDedup + selfCheck
+    // (gated isLastDay||heal), but a NON-last request that finishes LATER then
+    // re-persists its own, uncleaned view of the trip — silently clobbering that
+    // cleanup. This is how Athens D1's "Return→Nightcap→Return" clutter survived
+    // even though selfCheck removes it (proven on the dumped data). Fix: if the
+    // trip is already COMPLETE when a non-last request is about to write, re-run
+    // the (idempotent) cleanups first, so whichever request writes last always
+    // lands a cleaned itinerary. Gated on completeness so it never runs the
+    // last-day-only departure strip against a partial trip.
+    if (!isLastDay && !heal) {
+      try {
+        const complete = Array.isArray(mergedDays) && mergedDays.length >= totalDays &&
+          mergedDays.slice(0, totalDays).every((d: any) => Array.isArray(d?.activities) && d.activities.length > 0);
+        if (complete) {
+          await runCrossDayDedup();
+          selfCheckAndRepair(mergedDays);
+          console.log('[v2] [RACE_SAFE_CLEANUP] re-cleaned an already-complete trip on a non-last write');
+        }
+      } catch (e) {
+        console.warn('[v2] race-safe final cleanup failed (non-blocking):', e);
+      }
+    }
+
     // ── 9. Single write of merged JSON ─────────────────────────────────
     // C-PERSIST-1: saveReason MUST be a whitelisted prefix or the frozen gate
     // silently drops this write on an already-ready trip (regenerate-a-day and
