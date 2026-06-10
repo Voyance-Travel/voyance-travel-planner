@@ -21,6 +21,8 @@ project_id = "jsxplunjjvxuejeouwob"
     verify_jwt = false
   [functions.backfill-destination-images]
     verify_jwt = false
+  [functions.heal-destination-heroes]
+    verify_jwt = false
   [functions.book-activity]
     verify_jwt = false
   [functions.budget-coach]
