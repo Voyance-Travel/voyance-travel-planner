@@ -1253,9 +1253,16 @@ The Activities target is REAL spend on bookable experiences — free venues do N
       console.log(`[compile-prompt] Day 1 Arrival Cultural Anchor directive injected`);
     }
   }
-  const maxActivitiesFromArchetype = archetypeContext.definition.dayStructure.maxScheduledActivities;
-  const minActivitiesFromArchetype = archetypeContext.definition.dayStructure.minScheduledActivities
-    || Math.max(3, Math.ceil(maxActivitiesFromArchetype * 0.6));
+  const _archMaxActs = archetypeContext.definition.dayStructure.maxScheduledActivities;
+  const _archMinActs = archetypeContext.definition.dayStructure.minScheduledActivities
+    || Math.max(3, Math.ceil(_archMaxActs * 0.6));
+  // An explicit per-day cap from the traveler's note ("3-4 things a day")
+  // OVERRIDES the archetype pacing — a stated requirement, not a default. Clamp
+  // both bounds so the count instruction matches the HARD RULE block and the
+  // floor never exceeds the cap.
+  const _userCap = (Number.isFinite(_activityCap) && _activityCap >= 1 && _activityCap <= 8) ? _activityCap : null;
+  const maxActivitiesFromArchetype = _userCap != null ? Math.min(_archMaxActs, _userCap) : _archMaxActs;
+  const minActivitiesFromArchetype = Math.min(_archMinActs, maxActivitiesFromArchetype);
 
   // ═══════════════════════════════════════════════════════════════════════
   // VOYANCE PICKS
@@ -1546,7 +1553,7 @@ HOTEL ADDRESS RULE — CRITICAL:
 - Include at least 1 EVENING/NIGHTLIFE activity after dinner (bar, show, night market, jazz, rooftop, dessert spot)
 - Include PRACTICAL TIPS inline: booking requirements, queue advice, dress codes, closure days, best times
 - The LAST activity's tips field must include a NEXT MORNING PREVIEW: "Tomorrow: Wake [time]. Breakfast at [place] ([distance], ~[price])."
-- For full exploration days: minimum 3 paid activities + 2 free activities + required meals (per meal policy) + evening option
+- For full exploration days: ${_userCap != null ? `AT MOST ${_userCap} activities (the traveler capped the day — quality over quantity, leave downtime)` : `minimum 3 paid activities + 2 free activities`} + required meals (per meal policy) + evening option
 ${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time slots listed above' : ''}
 ${collaboratorAttributionPrompt}
 ${voyancePicksPrompt}
@@ -1795,7 +1802,7 @@ Budget: ${effectiveBudgetTier}${actualDailyBudgetPerPerson != null ? ` (~$${actu
 ${actualDailyBudgetPerPerson < 10 ? `🚨 EXTREMELY TIGHT BUDGET: Do your best — prioritize FREE activities (parks, temples, markets, viewpoints, walking tours). For meals, suggest cheapest realistic options (street food, convenience stores). Do NOT invent fake low prices — use real local costs. Include a "budget_note" field with an honest 1-sentence note about budget feasibility.` : actualDailyBudgetPerPerson < 30 ? `⚡ TIGHT BUDGET: Lean heavily on free attractions, street food, self-guided exploration. Limit paid activities to 1-2/day. Use realistic local prices.` : `Stay within this cap. Balance expensive activities with free alternatives.`}` : ''}
 ${allocationPromptBlock}
 ARCHETYPE: ${primaryArchetype}
-${isFullDay ? `DAY TYPE: Full exploration day — generate a COMPLETE hour-by-hour plan with ${dayMealPolicy?.requiredMeals?.length ?? 3} meals (${dayMealPolicy?.requiredMeals?.join(', ') ?? 'breakfast, lunch, dinner'}), transit between every stop, evening activity, and next-morning preview.` : dayMealPolicy && !isFirstDay && !isLastDay ? `DAY TYPE: ${dayMealPolicy.dayMode.replace(/_/g, ' ')} — ${dayMealPolicy.mealInstructionText}` : `SIGHTSEEING ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} (adjust for arrival/departure constraints)`}
+${isFullDay ? `${_userCap != null ? `DAY TYPE: Relaxed day — schedule AT MOST ${_userCap} activities plus the required meals (${dayMealPolicy?.requiredMeals?.join(', ') ?? 'breakfast, lunch, dinner'}); leave real downtime to linger, do NOT fill every hour.` : `DAY TYPE: Full exploration day — generate a COMPLETE hour-by-hour plan with ${dayMealPolicy?.requiredMeals?.length ?? 3} meals (${dayMealPolicy?.requiredMeals?.join(', ') ?? 'breakfast, lunch, dinner'}), transit between every stop, evening activity, and next-morning preview.`}` : dayMealPolicy && !isFirstDay && !isLastDay ? `DAY TYPE: ${dayMealPolicy.dayMode.replace(/_/g, ' ')} — ${dayMealPolicy.mealInstructionText}` : `SIGHTSEEING ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} (adjust for arrival/departure constraints)`}
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
 ${preferences?.dayFocus ? `Day focus: ${preferences.dayFocus}` : ''}
 ${(() => {
@@ -2025,7 +2032,7 @@ WELLNESS/SPA: any spa, wellness, massage, hammam, or thermal activity MUST name 
 })()}
 
 CRITICAL REMINDERS:
-1. ${isFullDay ? `This is a FULL DAY: ${dayMealPolicy?.requiredMeals?.join(' + ') ?? 'breakfast + lunch + dinner'} + 3 paid activities + 2 free activities + transit between all stops + evening activity + next morning preview. Fill EVERY hour.` : dayMealPolicy && !isFirstDay && !isLastDay ? `This is a ${dayMealPolicy.dayMode.replace(/_/g, ' ')} day. Required meals: ${dayMealPolicy.requiredMeals.length > 0 ? dayMealPolicy.requiredMeals.join(', ') : 'none'}. Do NOT add extra meals beyond what the meal policy specifies.` : `${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled sightseeing activities for this ${isFirstDay ? 'arrival' : 'departure'} day.`}
+1. ${isFullDay ? `${_userCap != null ? `RELAXED day (the traveler capped it): ${dayMealPolicy?.requiredMeals?.join(' + ') ?? 'breakfast + lunch + dinner'} + AT MOST ${_userCap} activities total + transit between stops. Do NOT fill every hour — leave real downtime to linger.` : `This is a FULL DAY: ${dayMealPolicy?.requiredMeals?.join(' + ') ?? 'breakfast + lunch + dinner'} + 3 paid activities + 2 free activities + transit between all stops + evening activity + next morning preview. Fill EVERY hour.`}` : dayMealPolicy && !isFirstDay && !isLastDay ? `This is a ${dayMealPolicy.dayMode.replace(/_/g, ' ')} day. Required meals: ${dayMealPolicy.requiredMeals.length > 0 ? dayMealPolicy.requiredMeals.join(', ') : 'none'}. Do NOT add extra meals beyond what the meal policy specifies.` : `${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled sightseeing activities for this ${isFirstDay ? 'arrival' : 'departure'} day.`}
 2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
 3. Check the budget constraints. If value-focused, no €100+ experiences.
 4. ${primaryArchetype === 'flexible_wanderer' || primaryArchetype === 'slow_traveler' || (traitScores.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}
@@ -2033,7 +2040,7 @@ CRITICAL REMINDERS:
 6. ${isFullDay ? 'PRICES: Every meal, every ticket, every taxi must have a price. estimatedCost.amount = 0 for free activities. No blanks.' : ''}
 7. NEVER repeat a restaurant across different days. Each day MUST use completely different restaurants for every meal. Variety is essential — travelers do not want to eat at the same place twice.
 8. For BREAKFAST specifically: NEVER repeat the same breakfast venue on consecutive days. ${destination || 'This destination'} has hundreds of excellent breakfast spots — there is NO reason to repeat any restaurant. If you find yourself choosing a restaurant from the blocklist above, STOP and pick a completely different one.
-9. ACTIVITY COUNT CHECK: Every day must have minimum 3 paid activities + 2 free activities. If your output has fewer, you are under-generating. Add more.
+9. ACTIVITY COUNT CHECK: ${_userCap != null ? `The traveler CAPPED this trip at ${_userCap} activities/day — ${_userCap} or fewer is CORRECT, NOT under-generating. Do NOT add activities to fill time; leave deliberate downtime.` : `Every day must have minimum 3 paid activities + 2 free activities. If your output has fewer, you are under-generating. Add more.`}
 10. MORNING GAP CHECK: If there is nothing between breakfast (8-9am) and lunch (12-1pm), you left a 3-hour gap. Fill it with at least 1 paid activity + 1 free activity.
 11. TRANSIT REALITY CHECK: Do NOT use "5 min walk" as a default. Actually think about the distance between locations. Different arrondissements/neighborhoods = minimum 10-15 min. Same street/block = 3-5 min. Cross-city = 20-30 min.
 12. TRANSIT LABELS: The transit activity title MUST name the IMMEDIATE NEXT activity's venue in chronological order. "Travel to [next venue name]" or "Walk to [next venue name]". Never label transit with a venue that is two or more stops away. WRONG: lunch at 12:30 then "Travel to Hammam" inserted before lunch when the Hammam isn't until 15:15 — the card before lunch must say "Travel to [the lunch venue]". Insert one transit card per real venue change, immediately preceding that venue.
