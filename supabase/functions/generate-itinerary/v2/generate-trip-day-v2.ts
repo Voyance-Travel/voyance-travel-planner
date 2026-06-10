@@ -1211,7 +1211,24 @@ export async function handleGenerateTripDayV2(
         let unmetMustDos: string[] = [];
         try {
           const _md = extractMustDoVenues(tripMeta);
-          if (_md.length > 0) unmetMustDos = assertMustDoCoverage(mergedDays, _md).missing;
+          if (_md.length > 0) {
+            unmetMustDos = assertMustDoCoverage(mergedDays, _md).missing;
+            // assertMustDoCoverage is venue-NAME based, so an intent must-do with
+            // no fixed venue ("one memorable splurge dinner", "a taqueria",
+            // "X market") reads as unmet even when a card satisfies the intent
+            // (Marrakech/Paris/MexicoCity all HAD a splurge dinner yet it was
+            // flagged). Drop any must-do whose salient keyword appears in a card
+            // title so the warning lists only genuinely-absent priorities.
+            if (unmetMustDos.length > 0) {
+              const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+              const titles = norm(mergedDays.flatMap((d: any) => (d?.activities || []).map((a: any) => `${a?.title || a?.name || ''}`)).join(' | '));
+              const STOP = new Set(['one', 'memorable', 'traditional', 'where', 'locals', 'actually', 'eat', 'your', 'through', 'some', 'good', 'great', 'best', 'really', 'authentic', 'local', 'morning', 'evening', 'night', 'lunch', 'breakfast', 'spot', 'place', 'visit', 'with', 'from', 'that', 'this', 'must']);
+              unmetMustDos = unmetMustDos.filter((m: string) => {
+                const words = norm(m).replace(/[^a-z\s-]/g, ' ').split(/\s+/).filter((w: string) => w.length >= 4 && !STOP.has(w));
+                return !words.some((w: string) => titles.includes(w)); // any salient word present → intent satisfied
+              });
+            }
+          }
         } catch { /* non-blocking */ }
         try {
           const { data: mRow } = await supabase.from('trips').select('metadata').eq('id', tripId).maybeSingle();
