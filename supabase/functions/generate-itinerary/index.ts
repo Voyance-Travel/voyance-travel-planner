@@ -9,6 +9,7 @@ import { handleGetTrip } from './action-get-trip.ts';
 import { handleSaveItinerary } from './action-save-itinerary.ts';
 import { handleGetItinerary } from './action-get-itinerary.ts';
 import { handleToggleActivityLock } from './action-toggle-lock.ts';
+import { handlePlaceHeldItem } from './action-place-held-item.ts';
 import { handleSyncItineraryTables } from './action-sync-tables.ts';
 import { handleRepairTripCosts } from './action-repair-costs.ts';
 import { handleGenerateTrip } from './action-generate-trip.ts';
@@ -448,6 +449,7 @@ serve(async (req) => {
     if (action === 'save-itinerary') return handleSaveItinerary(actCtx);
     if (action === 'get-itinerary') return handleGetItinerary(actCtx);
     if (action === 'toggle-activity-lock') return handleToggleActivityLock(actCtx);
+    if (action === 'place-held-item') return handlePlaceHeldItem(actCtx);
     if (action === 'sync-itinerary-tables') return handleSyncItineraryTables(actCtx);
     if (action === 'repair-trip-costs') return handleRepairTripCosts(actCtx);
 

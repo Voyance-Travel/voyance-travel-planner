@@ -38,6 +38,7 @@ import { useGenerationPoller } from '@/hooks/useGenerationPoller';
 import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { CapacityWarningBanner } from '@/components/trip/CapacityWarningBanner';
+import { SavedForLaterDrawer } from '@/components/trip/SavedForLaterDrawer';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
 import TravelIntelCard from '@/components/itinerary/TravelIntelCard';
 import { TripHealthPanel } from '@/components/trip/TripHealthPanel';
@@ -4244,6 +4245,18 @@ export default function TripDetail() {
                       <CapacityWarningBanner
                         warning={(trip.metadata as any)?.quality?.capacity_warning}
                         tripId={trip.id}
+                      />
+                    )}
+
+                    {/* "Saved for later" holding bay — place dropped must-dos with the explicit trade-off */}
+                    {!isPreviewMode && (
+                      <SavedForLaterDrawer
+                        trip={trip}
+                        onPlaced={async () => {
+                          if (!tripId) return;
+                          const { data } = await supabase.from('trips').select('*').eq('id', tripId).single();
+                          if (data) setTrip(data);
+                        }}
                       />
                     )}
 
