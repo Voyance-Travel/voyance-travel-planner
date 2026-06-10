@@ -1334,8 +1334,23 @@ export async function handleGenerateTripDayV2(
         const allComplete = Array.isArray(mergedDays) && mergedDays.length >= totalDays &&
           mergedDays.slice(0, totalDays).every((d: any) => Array.isArray(d?.activities) && d.activities.length > 0);
         const finalStatus = allComplete ? 'ready' : 'partial';
-        await supabase.from('trips').update({ itinerary_status: finalStatus }).eq('id', tripId);
-        console.log(`[v2] [STATUS_FINALIZE] status=${finalStatus} days=${mergedDays.length}/${totalDays}`);
+        const statusUpdate: Record<string, any> = { itinerary_status: finalStatus };
+        // ── Stamp fully_persisted=true alongside the ready flip — the OTHER half of
+        // the V1 Phase-6 finalize (generation-core.ts:3305) that the v2 cutover also
+        // dropped. Without it the frontend `isFinalizing` gate (TripDetail.tsx) treats
+        // ready + !fully_persisted (post-2026-04-01 trips) as "still finalizing" and the
+        // trip is stuck on "Loading your itinerary…" forever — never rendering until a
+        // user edit happens to stamp it. v2 builds each day synchronously (no async
+        // post-ready enrichment phase), so "ready" == "fully persisted" here. Re-fetch
+        // metadata fresh so we merge on top of holding_bay / heartbeat writes above.
+        if (finalStatus === 'ready') {
+          const { data: fpRow } = await supabase
+            .from('trips').select('metadata').eq('id', tripId).maybeSingle();
+          const fpMeta = (fpRow?.metadata as any) || {};
+          statusUpdate.metadata = { ...fpMeta, fully_persisted: true, fully_persisted_at: new Date().toISOString() };
+        }
+        await supabase.from('trips').update(statusUpdate).eq('id', tripId);
+        console.log(`[v2] [STATUS_FINALIZE] status=${finalStatus} fully_persisted=${finalStatus === 'ready'} days=${mergedDays.length}/${totalDays}`);
       } catch (e) {
         console.warn('[v2] status finalize failed (non-blocking):', (e as Error)?.message);
       }
