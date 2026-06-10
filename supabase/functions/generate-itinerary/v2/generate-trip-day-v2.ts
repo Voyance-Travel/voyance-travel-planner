@@ -1204,12 +1204,29 @@ export async function handleGenerateTripDayV2(
         const highCount = sc.issues.filter((i) => i.severity === 'high').length;
         console.log(`[v2] [SELF_CHECK] score=${sc.score} repaired=${sc.repaired} remaining=${sc.issues.length} high=${highCount}`);
         if (sc.score < 75 || highCount > 0) console.warn(`[v2] [SELF_CHECK] LOW score=${sc.score} issues=${JSON.stringify(sc.issues.slice(0, 8))}`);
+        // SOFT-WARN — over-capacity: re-check must-do coverage AFTER the gate.
+        // The post-checkout strip may have dropped must-dos that genuinely could
+        // not fit (e.g. 6 must-dos in a 3-day trip). Surface the unmet ones so the
+        // UI can set honest expectations instead of silently cramming them.
+        let unmetMustDos: string[] = [];
+        try {
+          const _md = extractMustDoVenues(tripMeta);
+          if (_md.length > 0) unmetMustDos = assertMustDoCoverage(mergedDays, _md).missing;
+        } catch { /* non-blocking */ }
         try {
           const { data: mRow } = await supabase.from('trips').select('metadata').eq('id', tripId).maybeSingle();
           const meta: any = (mRow?.metadata as any) || {};
           meta.quality = meta.quality || {};
           meta.quality.self_check = { score: sc.score, repaired: sc.repaired, issues: sc.issues.length, high: highCount, top: sc.issues.slice(0, 6), at: dayDate };
           if (sc.score < 75 || highCount > 0) meta.quality.needs_review = true; else delete meta.quality.needs_review;
+          if (unmetMustDos.length > 0) {
+            meta.quality.capacity_warning = {
+              unmet: unmetMustDos,
+              message: `This trip was ambitious for its length — we couldn't fit ${unmetMustDos.length} of your must-do${unmetMustDos.length > 1 ? 's' : ''} (${unmetMustDos.join('; ')}). Add a day or two, or trim a priority, and we'll get them all in.`,
+            };
+          } else {
+            delete meta.quality.capacity_warning;
+          }
           await supabase.from('trips').update({ metadata: meta }).eq('id', tripId);
         } catch (_e) { /* metadata stamp non-blocking */ }
       } catch (e) {
