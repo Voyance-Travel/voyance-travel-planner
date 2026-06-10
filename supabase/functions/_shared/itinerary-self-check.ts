@@ -95,6 +95,19 @@ export function checkItineraryQuality(days: any[]): { score: number; issues: Qua
 export function selfCheckAndRepair(days: any[]): SelfCheckResult {
   let repaired = 0;
   const total = days.length;
+  // garble strip: a stray out-of-script char appended to a Latin-dominant venue
+  // name is generation corruption (Vienna "Esterházykeller抽", "…Wien抽" — the
+  // stray U+62BD 抽). Strip the minority out-of-script chars (CJK/kana/Hangul) but
+  // PRESERVE genuine CJK venue names (Tokyo/Seoul), where the string is CJK-dominant,
+  // and PRESERVE Latin accents (ü, á, é) + punctuation (em-dash).
+  const OUT_SCRIPT = /[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]/g;
+  const stripGarble = (s: any): string => {
+    const str = String(s ?? '');
+    if (!str) return str;
+    const cjk = (str.match(OUT_SCRIPT) || []).length;
+    const latin = (str.match(/[a-zA-Z]/g) || []).length;
+    return (latin >= 3 && cjk > 0 && cjk <= 3) ? str.replace(OUT_SCRIPT, '').replace(/\s+/g, ' ').trim() : str;
+  };
   days.forEach((d, idx) => {
     if (!Array.isArray(d?.activities)) return;
     const isLast = idx === total - 1;
@@ -106,6 +119,12 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
       if (!a) continue;
       let tt = String(a.title || a.name || '');
       const before = tt;
+      // strip stray out-of-script corruption first (preserves Latin accents)
+      tt = stripGarble(tt);
+      if (a.location && a.location.name) {
+        const ln = stripGarble(a.location.name);
+        if (ln !== a.location.name) { a.location.name = ln; repaired++; }
+      }
       tt = tt.replace(/\s*[—–-]\s*find (?:a |your )?(?:local|the perfect|a good|a great)?\s*(?:spot|place|restaurant|caf[eé]|eatery|gem|favou?rite|meal)\b/ig, '')
         .replace(/\s*\(?\bor (?:similar|high[- ]?end|comparable)[^)]*\)?/ig, '')
         .replace(/\s*\((?:must|must-?do|user|anchor|pinned)[^)]*\)\s*/ig, ' ')   // strip internal "(must)" marker if it leaked into a title
@@ -320,7 +339,8 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
     if (coMins != null) {
       d.activities = d.activities.filter((a: any) => {
         const s = parseMins(a.startTime || a.time);
-        if (s == null || s <= coMins) return true;                         // before/at checkout — keep
+        if (s == null || s < coMins) return true;                          // strictly before checkout — keep
+        if (s === coMins && isMeal(a)) return true;                        // a meal exactly at checkout — keep (you eat, then leave)
         if (/check[-\s]?out/i.test(titleOf(a))) return true;               // the checkout card itself
         if (/\b(airport|flight|depart)\b/i.test(titleOf(a))) return true;  // onward departure logistics stay
         if (/\b(return|travel|back|head)\s+to\b[^,]*\bhotel\b/i.test(titleOf(a))) { repaired++; return false; } // hotel-return after checkout = illogical

@@ -1363,7 +1363,7 @@ export async function handleGenerateTripDayV2(
         supabase,
         tripId,
         { ...(tripRow?.itinerary_data || {}), days: mergedDays },
-        { label: 'v2-generate-trip-day', saveReason: 'regenerate-day-v2' },
+        { label: 'v2-generate-trip-day', saveReason: 'regenerate-day-v2', finalGate: true },
       )
     );
 
