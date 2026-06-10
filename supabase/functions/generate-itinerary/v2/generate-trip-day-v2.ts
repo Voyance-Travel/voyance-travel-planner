@@ -1266,6 +1266,26 @@ export async function handleGenerateTripDayV2(
       console.warn(`[v2] heartbeat/progress refresh failed (non-blocking) day=${dayNumber}:`, (e as Error)?.message);
     }
 
+    // ── 10c. Finalize itinerary_status — THE V2 CUTOVER DROPPED THIS ───
+    // The V1 chain flipped status ready/partial on the last day
+    // (action-generate-trip-day.ts:4285). V2 never ported it, so EVERY v2 trip
+    // stayed at the launcher's kickoff 'generating' forever — even after the
+    // last day persisted. That is the root of "stuck generating + the gate's
+    // repaired itinerary never looks applied": the trip never reaches a terminal
+    // state, and the frontend/poller treats it as in-flight. Flip it here, on the
+    // real last day (never on a background heal), based on real completeness.
+    if (isLastDay && !heal) {
+      try {
+        const allComplete = Array.isArray(mergedDays) && mergedDays.length >= totalDays &&
+          mergedDays.slice(0, totalDays).every((d: any) => Array.isArray(d?.activities) && d.activities.length > 0);
+        const finalStatus = allComplete ? 'ready' : 'partial';
+        await supabase.from('trips').update({ itinerary_status: finalStatus }).eq('id', tripId);
+        console.log(`[v2] [STATUS_FINALIZE] status=${finalStatus} days=${mergedDays.length}/${totalDays}`);
+      } catch (e) {
+        console.warn('[v2] status finalize failed (non-blocking):', (e as Error)?.message);
+      }
+    }
+
     // ── 11b. Background completeness heal (fire-and-forget) ────────────
     // Re-generate any day the table backfill could not recover, as its OWN
     // request (own wall-clock budget + heartbeat). Fired AFTER step 9's JSON
