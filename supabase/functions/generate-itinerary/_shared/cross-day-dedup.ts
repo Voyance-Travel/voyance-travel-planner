@@ -87,6 +87,31 @@ export async function crossDayDedup(days: any[], city: string, fetchAlternatives
   const c3City = city || '';
   const seenNonMeal: string[] = [];
   const usedMealNames = new Set<string>();
+  // ── core-venue key ──────────────────────────────────────────────────────
+  // The model renders the SAME place with different names across days, which
+  // defeats the raw-string dedup above: Cape Town "Bo-Kaap Neighborhood" (D2) vs
+  // "Bo-Kaap Area" (D3); Singapore "28 HongKong Street (Note: …)" (D2, miscat as
+  // dining) vs "Bar Hopping at 28 HongKong Street" (D3, activity). Reduce a venue
+  // to its significant core tokens — drop parentheticals/(Note:…), action verbs
+  // (wander/explore/bar hopping), and generic area words (neighborhood/area/
+  // district) — and collapse cross-day repeats by that. seenCore spans BOTH the
+  // meal and non-meal branches so the dining/activity misclassification can't hide
+  // a repeat. Equality match (not substring) keeps it conservative — "National
+  // Gallery" and "National Museum" stay distinct.
+  const GEO_GENERIC = new Set(['neighborhood', 'neighbourhood', 'area', 'district', 'quarter', 'region', 'zone', 'precinct', 'vicinity', 'side']);
+  const STOP_CORE = new Set(['the', 'a', 'an', 'of', 'and', 'or', 'to', 'in', 'at', 'on', 'by', 'with', 'your', 'via', 'for',
+    'wander', 'wandering', 'explore', 'exploring', 'visit', 'visiting', 'tour', 'touring', 'discover', 'discovering',
+    'stroll', 'strolling', 'see', 'seeing', 'experience', 'experiencing', 'roam', 'free', 'follow', 'nose', 'hop', 'hopping',
+    'bar', 'drinks', 'nightcap', 'note', 'location', 'nearby', 'around', 'through', 'walk', 'walking', 'open', 'afternoon', 'morning', 'evening', 'reflection', 'solo']);
+  const coreKey = (raw: any): string => {
+    const toks = String(raw || '').toLowerCase()
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/[^a-z0-9 ]+/g, ' ')
+      .split(/\s+/).filter(Boolean)
+      .filter((t) => t.length >= 3 && !STOP_CORE.has(t) && !GEO_GENERIC.has(t));
+    return [...new Set(toks)].sort().join(' ');
+  };
+  const seenCore = new Set<string>();
   for (const d of days) {
     if (!Array.isArray(d?.activities)) continue;
     const kept: any[] = [];
@@ -156,11 +181,17 @@ export async function crossDayDedup(days: any[], city: string, fetchAlternatives
         } else {
           usedMealNames.add(key); // register (even locked) so later days avoid it
         }
+        { const ck = coreKey(a?.location?.name || a?.title || a?.name); if (ck.length >= 4) seenCore.add(ck); }
         kept.push(a);
       } else if (keyOk && !isUserMustDo(a)) {
-        // non-meal duplicate venue across days → drop (keep first)
-        if (seenNonMeal.some((k) => prefixSame(k, key))) { drops++; continue; }
+        // non-meal duplicate venue across days → drop (keep first). Match by
+        // raw-prefix (existing) OR core-venue key — the latter catches a venue
+        // renamed across days, including one the meal branch already placed under
+        // a different category (seenCore spans both branches).
+        const ck = coreKey(a?.location?.name || a?.title || a?.name);
+        if (seenNonMeal.some((k) => prefixSame(k, key)) || (ck.length >= 4 && seenCore.has(ck))) { drops++; continue; }
         seenNonMeal.push(key);
+        if (ck.length >= 4) seenCore.add(ck);
         kept.push(a);
       } else {
         kept.push(a); // locked non-meal or short key → keep
