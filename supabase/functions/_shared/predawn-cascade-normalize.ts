@@ -32,6 +32,21 @@ const BOOKEND_SOURCE_RE =
 const PREDAWN_BOUNDARY_MIN = 5 * 60; // [00:00, 05:00)
 const TARGET_FIRST_START_MIN = 9 * 60; // 09:00
 
+// A MEAL that opens the day before this is the "model packed the day from dawn"
+// symptom (e.g. a 06:35 breakfast on a leisure day). Lift the leading block so
+// the opening meal lands at 08:00. Meal-gated, so intentional early non-meal
+// excursions (sunrise tours, dawn hikes) are untouched.
+const TOO_EARLY_MEAL_MIN = 7 * 60 + 30; // 07:30
+const SANE_MORNING_START_MIN = 8 * 60; // 08:00
+
+function isMealCard(a: any): boolean {
+  if (!a) return false;
+  const cat = String(a?.category || '').toLowerCase();
+  if (/\b(dining|food|breakfast|brunch)\b/.test(cat)) return true;
+  const title = String(a?.title || a?.name || '').toLowerCase();
+  return /\b(breakfast|brunch)\b/.test(title);
+}
+
 const DEPARTURE_LOGISTICS_RE =
   /^(airport[-_ ]?transfer|transfer[-_ ]?to[-_ ]?airport|flight|checkout|check[-_ ]?out)$/i;
 
@@ -179,22 +194,63 @@ export function normalizePredawnCascade<TAct extends Record<string, any> = any>(
   // strand the rest of the morning at 03:26 / 06:31. Day 1 is now in
   // scope (no `dayIndex <= 0` early-return) since upstream gen cascades
   // can produce the same bleed on Day 1 too.
-  const shiftIdx: number[] = [];
+  // Walk the LEADING block of non-bookend cards whose start falls inside
+  // `inWindow`. Locked / booked / departure-logistics rows are SKIPPED (don't
+  // end the walk) so a single locked card can't strand the rest of the block.
+  const walkLeading = (inWindow: (m: number) => boolean): { idx: number[]; first: number | null } => {
+    const idx: number[] = [];
+    let first: number | null = null;
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      if (isBookendSourceLike(a)) break;
+      const m = pickStartMin(a);
+      if (m === null || !inWindow(m)) break;
+      if (isLockedLike(a) || isDepartureLogistics(a)) continue;
+      idx.push(i);
+      if (first === null) first = m;
+    }
+    return { idx, first };
+  };
+
+  // Pass 1: pre-dawn leading block [00:00,05:00) → lift the first card to 09:00.
+  let shiftIdx: number[] = [];
   let firstShiftStart: number | null = null;
-  for (let i = 0; i < list.length; i++) {
-    const a = list[i];
-    if (isBookendSourceLike(a)) break;
-    if (!isInPredawnWindow(a)) break;
-    if (isLockedLike(a) || isDepartureLogistics(a)) continue;
-    shiftIdx.push(i);
-    if (firstShiftStart === null) firstShiftStart = pickStartMin(a);
+  let target = TARGET_FIRST_START_MIN;
+  {
+    const w = walkLeading((m) => m >= 0 && m < PREDAWN_BOUNDARY_MIN);
+    shiftIdx = w.idx;
+    firstShiftStart = w.first;
+  }
+
+  // Pass 2 (only if no pre-dawn block): a MEAL opening the day before 07:30 is
+  // a mis-timed "packed from dawn" start (e.g. 06:35 breakfast). Lift the
+  // leading [05:00,07:30) block to 08:00. Meal-gated so early non-meal
+  // excursions are preserved, and skipped on days with a morning departure so
+  // an intentional pre-flight breakfast stays put. The downstream cascade
+  // (enforceTimingAndBuffers) re-settles the seam with the next card.
+  if (shiftIdx.length === 0) {
+    const firstReal = list.find(
+      (a) => !isBookendSourceLike(a) && !isLockedLike(a) && !isDepartureLogistics(a),
+    );
+    const hasMorningDeparture = list.some(
+      (a) => isDepartureLogistics(a) && (pickStartMin(a) ?? 24 * 60) < 12 * 60,
+    );
+    if (firstReal && isMealCard(firstReal) && !hasMorningDeparture) {
+      const w = walkLeading((m) => m >= PREDAWN_BOUNDARY_MIN && m < TOO_EARLY_MEAL_MIN);
+      // Fire only when the first shiftable card IS that opening meal.
+      if (w.idx.length > 0 && w.first !== null && list[w.idx[0]] === firstReal) {
+        shiftIdx = w.idx;
+        firstShiftStart = w.first;
+        target = SANE_MORNING_START_MIN;
+      }
+    }
   }
 
   if (shiftIdx.length === 0 || firstShiftStart === null) {
     return { activities: list, count: 0, shiftMin: 0, changed: false };
   }
 
-  const shiftMin = TARGET_FIRST_START_MIN - firstShiftStart;
+  const shiftMin = target - firstShiftStart;
   if (shiftMin === 0) {
     return { activities: list, count: 0, shiftMin: 0, changed: false };
   }
