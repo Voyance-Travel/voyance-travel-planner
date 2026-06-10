@@ -775,8 +775,40 @@ RULES FOR USER-SPECIFIED ACTIVITIES:
       }
     }
 
-    additionalNotesPrompt = `\n## 🎯 TRAVELER'S TRIP PURPOSE
-The traveler's overall trip context (specific venue intents have already been resolved above — use them; this paragraph is high-level context only):
+    // ── EXPLICIT LIMITS → HARD RULES ─────────────────────────────────────
+    // Without this the note is "high-level context" the model treats as vibe,
+    // so quantified limits ("3-4 things a day", "one splurge, cheap otherwise")
+    // get nailed in flavor but never enforced — Barcelona came back with ~6
+    // stops/day and TWO Michelin dinners on a "moderate, one splurge" brief.
+    // Detect the common quantified/budget limits and surface them as MANDATORY
+    // rules that OVERRIDE the DNA-derived pacing/dining defaults.
+    const _notesLc = additionalNotes.toLowerCase();
+    const _capM = _notesLc.match(/(\d+)\s*(?:-|–|to)\s*(\d+)\s*(?:things|activit\w*|stops|spots|places|sights)\b/)
+      || _notesLc.match(/(?:no more than|at most|max(?:imum)?|keep (?:it )?to|only)\s*(\d+)\s*(?:things|activit\w*|stops|spots|places|sights)?\b\s*(?:a|per)\s*day/)
+      || _notesLc.match(/(\d+)\s*(?:things|activit\w*|stops|spots|places|sights)\s*(?:a|per)\s*day/);
+    const _activityCap = _capM ? parseInt(_capM[_capM.length - 1], 10) : NaN;
+    const _onlyOneSplurge = /\b(?:one|single|just one|a single|one\s+(?:nice|fancy|special|memorable|expensive))\b[^.]*\bsplurge\b/.test(_notesLc)
+      || /\bsplurge\b[^.]*\b(?:once|one (?:meal|dinner|night))\b/.test(_notesLc);
+    const _budgetDiscipline = /\b(cheap|budget|affordable|modest|local)\b[^.]*\b(otherwise|the rest|elsewhere)\b/.test(_notesLc);
+    const _avoidCrowds = /\bavoid\b[^.]*\b(crowd|tourist|clich)/.test(_notesLc) || /\bskip\b[^.]*\btourist/.test(_notesLc) || /\b(lesser.?known|off the beaten|where locals)\b/.test(_notesLc);
+    const _hardLines: string[] = [];
+    if (Number.isFinite(_activityCap) && _activityCap >= 1 && _activityCap <= 8) {
+      _hardLines.push(`- MAXIMUM ${_activityCap} activities per day (NOT counting meals or transit). Never exceed this — fewer is good, leave room to linger.`);
+    }
+    if (_onlyOneSplurge) {
+      _hardLines.push(`- AT MOST ONE splurge / expensive / high-end (e.g. Michelin) venue for the ENTIRE trip. Every other meal must be local, modest and budget-friendly — do NOT add a second fine-dining pick.`);
+    } else if (_budgetDiscipline) {
+      _hardLines.push(`- Keep dining local and budget-friendly throughout; reserve any single upscale choice for one occasion only.`);
+    }
+    if (_avoidCrowds) {
+      _hardLines.push(`- Favor local, lesser-known spots; avoid tourist-trap and heavily-crowded venues.`);
+    }
+    const _hardBlock = _hardLines.length
+      ? `\n## 🚨 TRAVELER'S EXPLICIT LIMITS — HARD RULES (DO NOT VIOLATE)\nThese are REQUIREMENTS the traveler stated, not soft preferences. They OVERRIDE the default pacing and dining guidance elsewhere in this prompt:\n${_hardLines.join('\n')}\n`
+      : '';
+
+    additionalNotesPrompt = `${_hardBlock}\n## 🎯 TRAVELER'S TRIP PURPOSE
+The traveler's overall trip context${_hardLines.length ? ' (the HARD RULES above are mandatory and win any conflict)' : ' (specific venue intents have already been resolved above — use them)'}:
 
 "${additionalNotes.trim()}"
 
