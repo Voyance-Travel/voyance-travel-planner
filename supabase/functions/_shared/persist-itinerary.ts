@@ -116,6 +116,16 @@ export interface PersistItineraryOptions {
    *  (`frozen-guard.ts::isUserSaveReason`). */
   saveReason?: string;
   /**
+   * Opt IN to the final content gate. GENERATION write paths pass `true`; the
+   * single write choke-point then runs the idempotent selfCheckAndRepair on the
+   * COMPLETE trip right before persisting — so the parallel self-invoke race,
+   * the table-recovery heal, and any other late write can't ship a trip with
+   * garble / past-midnight cards / post-checkout activities / bad meal-timing
+   * that an earlier gate already cleaned. NOT set by user-edit writes (so a
+   * deliberate user edit is never force-"repaired"). Completeness-gated.
+   */
+  finalGate?: boolean;
+  /**
    * Opt out of the MEAL-ONLY guard. Default false. The guard rejects writes
    * whose `nonMealMeaningfulCount === 0` when either the previously-persisted
    * itinerary OR the latest `itinerary_versions` row for any day has ≥3
@@ -188,6 +198,28 @@ export async function persistTripItinerary(
         const k = `${d?.dayNumber ?? '?'}::${a.id ?? a.title ?? a.name ?? ''}`;
         mustDoAnchorEntrySet.add(k);
       }
+    }
+  }
+
+  // ── FINAL CONTENT GATE (opt-in; generation writes only) ─────────
+  // The single reliable choke-point. Every generation write (per-day, heal,
+  // table-recovery, race-safe re-clean) flows through here, so running the
+  // idempotent selfCheckAndRepair on the COMPLETE trip right before persisting
+  // means whichever parallel request writes LAST always lands a cleaned trip —
+  // the V2 self-invoke race / recovery can no longer ship a blemish an earlier
+  // in-request gate already fixed (Lisbon 00:40 ginjinha, Vienna garble +
+  // post-checkout sightseeing all reached disk exactly because the in-request
+  // gate's output got clobbered by a later write). User-edit writes don't set
+  // finalGate, so a deliberate edit is never force-repaired. Completeness-gated
+  // so the last-day-only departure strip never runs against a partial trip.
+  if (options.finalGate && days.length > 0 &&
+      days.every((d: any) => Array.isArray(d?.activities) && d.activities.length > 0)) {
+    try {
+      const { selfCheckAndRepair } = await import('./itinerary-self-check.ts');
+      const sc = selfCheckAndRepair(days);
+      if (sc.repaired > 0) console.log(`[${label}] [FINAL_GATE] repaired=${sc.repaired} score=${sc.score}`);
+    } catch (e) {
+      console.warn(`[${label}] final gate failed (non-blocking):`, e);
     }
   }
 
