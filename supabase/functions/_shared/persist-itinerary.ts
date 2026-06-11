@@ -1109,11 +1109,40 @@ export async function persistTripItinerary(
         updatePayload.metadata = newMeta;
       }
 
+      // ── EVALUATE THE GATE AGAINST THE POST-WRITE STATE, NOT THE PAYLOAD ──
+      // Under the parallel self-invoke chain a late write's in-memory `days` can
+      // be a stale view missing meal injections another request already landed
+      // (Marrakech: contract said "D4 missing lunch / D5 missing breakfast" while
+      // the PERSISTED days plainly had both → false demotion to partial, stuck).
+      // The write itself is an additive per-day merge, so the truth after this
+      // write = fresh DB days with this write's scope merged on top. Simulate
+      // that and judge THAT. Whole-array writes still judge the payload (which
+      // IS the post-write state for them). Falls back to the payload on error.
+      let gateDays: any[] = days;
+      try {
+        if (options.mergeDayNumber != null || options.mergeAllDays) {
+          const { data: freshRow } = await supabase
+            .from('trips').select('itinerary_data').eq('id', tripId).maybeSingle();
+          const dbDays: any[] = Array.isArray((freshRow?.itinerary_data as any)?.days)
+            ? (freshRow!.itinerary_data as any).days : [];
+          const writeScope: any[] = options.mergeDayNumber != null
+            ? days.filter((d: any) => Number(d?.dayNumber) === Number(options.mergeDayNumber))
+            : days;
+          const byNum = new Map<number, any>();
+          for (const d of dbDays) if (Number.isFinite(Number(d?.dayNumber))) byNum.set(Number(d.dayNumber), d);
+          for (const d of writeScope) if (Number.isFinite(Number(d?.dayNumber))) byNum.set(Number(d.dayNumber), d);
+          gateDays = [...byNum.values()].sort((a: any, b: any) => Number(a?.dayNumber ?? 0) - Number(b?.dayNumber ?? 0));
+        }
+      } catch (e) {
+        console.warn(`[${label}] post-write gate-days simulation failed (using payload):`, e);
+        gateDays = days;
+      }
+
       const { resolveCommitGate } = await import('./commit-itinerary.ts');
       const gateResult = await resolveCommitGate({
         supabase,
         tripId,
-        days,
+        days: gateDays,
         proposedStatus: (proposedStatus === 'generated' ? 'generated' : 'ready') as any,
         label: `persist-boundary:${label}`,
       });
