@@ -108,6 +108,17 @@ if (import.meta.main) {
     const tripId = trip.id as string;
     console.log(`  trip ${tripId}`);
 
+    // 1b) warm the landmarks cache — the wizard's step-3 always does this
+    // (MustSeeLandmarkPicker → suggest-landmarks), and the thin-day backfill
+    // reads the same cache. Without it, 13/20 matrix cities had no landmarks
+    // and the backfill silently no-opped. Cached per city, so cost is one-time.
+    try {
+      const bare = t.city.split(',')[0].trim();
+      const country = t.city.split(',').pop()?.trim() ?? '';
+      const { error: lmErr } = await sb.functions.invoke('suggest-landmarks', { body: { city: bare, country } });
+      console.log(`  landmarks cache: ${lmErr ? 'warm FAILED (' + lmErr.message + ')' : 'warm ✓'}`);
+    } catch (e) { console.warn('  landmarks warm failed (non-blocking):', (e as Error)?.message); }
+
     // 2) spend-credits — same gate the wizard runs (charges days*60)
     const credits = t.days * 60;
     const { data: sc, error: scerr } = await sb.functions.invoke('spend-credits', {
