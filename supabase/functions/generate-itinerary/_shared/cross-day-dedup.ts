@@ -158,7 +158,21 @@ export async function crossDayDedup(days: any[], city: string, fetchAlternatives
         (/^(breakfast|brunch|lunch|dinner)\b/.test(key) && cityLcG.length > 0 && key.endsWith(cityLcG))           // prefix-strip missed (em-dash etc.)
       );
       if (mt) {
-        if (usedMealNames.has(key) || isGenericMeal) {
+        // Cross-BRANCH dup detection: the same venue can appear once as
+        // category=activity (non-meal branch) and once as category=dining (here) —
+        // Budapest's "Late Night at Szimpla Kert" (activity, D2) + "Nightcap at
+        // Szimpla Kert" (dining, D3) survived because this branch only consulted
+        // usedMealNames. Consult seenCore (spans both branches) too.
+        const ckCur = coreKey(a?.location?.name || a?.title || a?.name);
+        const isDup = usedMealNames.has(key) || (ckCur.length >= 4 && seenCore.has(ckCur));
+        let swapResolved = false;
+        // A duplicate DRINK stop (second visit to the same bar) is simply dropped —
+        // renaming it to a restaurant would be weirder than removing it.
+        if (isDup && !isUserMustDo(a) && /nightcap|drinks?|cocktail|aperitif|wine bar/i.test(String(a?.title || a?.name || ''))) {
+          drops++;
+          continue;
+        }
+        if (isDup || isGenericMeal) {
           // duplicate OR placeholder restaurant → swap (auto-locks ok; not user must-dos)
           if (!isUserMustDo(a)) {
             const label = mt[0].toUpperCase() + mt.slice(1);
@@ -172,7 +186,7 @@ export async function crossDayDedup(days: any[], city: string, fetchAlternatives
               if (fb.description) a.description = fb.description;
               a.source = 'c3-restaurant-swap';
               usedMealNames.add(lc(fb.name));
-              swaps++;
+              swaps++; swapResolved = true;
             } else if (fetchAlternatives) {
               // no inline catalog match (non-catalog city) → live venue source
               if (pool === null) { try { pool = (await fetchAlternatives(c3City, 15)) || []; } catch { pool = []; } }
@@ -186,7 +200,7 @@ export async function crossDayDedup(days: any[], city: string, fetchAlternatives
                 a.description = alt.description || `A well-regarded spot in ${c3City}.`;
                 a.source = 'c3-places-swap';
                 usedMealNames.add(lc(alt.name));
-                swaps++;
+                swaps++; swapResolved = true;
               }
             }
           }
