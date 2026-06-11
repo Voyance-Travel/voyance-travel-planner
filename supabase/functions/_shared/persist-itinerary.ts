@@ -652,6 +652,41 @@ export async function persistTripItinerary(
     console.warn(`[${label}] per-day cascade failed (non-blocking):`, e);
   }
 
+  // 3a-quater. POST-CASCADE MIDNIGHT RE-CLAMP (generation writes only).
+  // The buffer cascade above pushes overlapping evening cards LATER — on a
+  // crowded evening the last card gets shoved past midnight to 00:00+ AFTER
+  // the content gate already clamped it (Osaka 'Nightcap at The Library Bar'
+  // 00:00, Naples 'Nightcap at Galleria Umberto I' 00:00 — the gate provably
+  // clamps both; the cascade re-broke them post-gate). Re-apply the same wrap
+  // rule the self-check uses, as the LAST re-timer before the write.
+  if (options.finalGate) {
+    try {
+      const pM = (s: unknown) => { const m = String(s ?? '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+      const hM = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+      let reclamped = 0;
+      for (const d of days) {
+        const acts: any[] = Array.isArray(d?.activities) ? d.activities : [];
+        if (!acts.some((a) => { const m = pM(a?.startTime ?? a?.time); return m != null && m >= 720; })) continue;
+        let wrapN = 0;
+        for (const a of acts) {
+          if (!a || a.locked || a.isLocked || a.lock_state === 'locked') continue;
+          const c = String(a?.category ?? '').toLowerCase();
+          if (['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(c)) continue;
+          const m = pM(a.startTime ?? a.time);
+          if (m != null && m < 300) {
+            const nm = Math.min(1380 + wrapN * 12, 1439); // 23:00, 23:12, …
+            a.startTime = hM(nm); a.time = a.startTime;
+            a.endTime = hM(Math.min(nm + 55, 1439));
+            wrapN++; reclamped++;
+          }
+        }
+      }
+      if (reclamped > 0) console.log(`[${label}] [POST_CASCADE_MIDNIGHT_RECLAMP] fixed=${reclamped}`);
+    } catch (e) {
+      console.warn(`[${label}] post-cascade re-clamp failed (non-blocking):`, e);
+    }
+  }
+
   // 3b. Dining description deterministic safety net — guarantees no dining
   // card persists with an empty `description`. Runs at the single boundary
   // so every write path (final-save, save-itinerary, repair-costs, lock
