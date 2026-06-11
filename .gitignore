@@ -30,3 +30,4 @@ old-secrets.env
 supabase/.temp/
 supabase/.branches/
 .mcp.json
+qa/harness/.env
