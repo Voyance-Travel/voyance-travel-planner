@@ -199,6 +199,37 @@ export interface PersistResult {
  *  `metadata.rejected_attempts` for post-mortem debugging. */
 const MAX_REJECTED_ATTEMPTS = 3;
 
+/**
+ * A blocked write's days were REJECTED (frozen / regression / shrink / meal-only
+ * guard) — so any status change or integrity verdict the CALLER computed from
+ * that rejected content must not land either. Without this, a stale frontend
+ * autosave whose snapshot predated the meal injections couldn't change the data
+ * (guard worked) but still demoted a complete ready trip to partial and stamped
+ * a false "missing meal" verdict over it (Vienna, Amsterdam D1-lunch pattern:
+ * verdict said missing, persisted day plainly had it). Neutral extras
+ * (timestamps, cost stamps, rejected_attempts) still apply.
+ */
+function stripContentVerdictFromBlockedWrite(
+  updatePayload: Record<string, any>,
+  label: string,
+  reason: string,
+): void {
+  const stripped: string[] = [];
+  if ('itinerary_status' in updatePayload) {
+    delete updatePayload.itinerary_status;
+    stripped.push('itinerary_status');
+  }
+  if (updatePayload.metadata && typeof updatePayload.metadata === 'object' && 'integrity_contract' in updatePayload.metadata) {
+    const m = { ...(updatePayload.metadata as Record<string, any>) };
+    delete m.integrity_contract;
+    updatePayload.metadata = m;
+    stripped.push('metadata.integrity_contract');
+  }
+  if (stripped.length > 0) {
+    console.log(`[${label}] [BLOCKED_WRITE_VERDICT_STRIPPED] reason=${reason} stripped=${stripped.join(',')}`);
+  }
+}
+
 export async function persistTripItinerary(
   supabase: any,
   tripId: string,
@@ -266,7 +297,8 @@ export async function persistTripItinerary(
       const extra = options.extraUpdate || {};
       const updatePayload: Record<string, any> = { ...extra };
       delete updatePayload.itinerary_data;
-      // Apply non-itinerary metadata/status writes only, if any remain.
+      stripContentVerdictFromBlockedWrite(updatePayload, label, 'frozen');
+      // Apply non-itinerary metadata writes only, if any remain.
       if (Object.keys(updatePayload).length > 0) {
         const { error } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
         if (error) {
@@ -362,6 +394,7 @@ export async function persistTripItinerary(
       ].slice(-MAX_REJECTED_ATTEMPTS);
       updatePayload.metadata = { ...priorMeta, ...callerMetadata, rejected_attempts: rejected };
     } catch (_e) { /* best effort */ }
+    stripContentVerdictFromBlockedWrite(updatePayload, label, 'day_count_shrink');
     if (Object.keys(updatePayload).length > 0) {
       const { error } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
       if (error) {
@@ -873,6 +906,7 @@ export async function persistTripItinerary(
     };
     console.log(`[persist-itinerary] meta-merge (blocked) tripId=${tripId} priorMustDo=${!!(priorMeta as any)?.mustDoActivities} newMustDo=${!!(callerMetadata as any)?.mustDoActivities} priorAnchors=${Array.isArray((priorMeta as any)?.userAnchors) ? (priorMeta as any).userAnchors.length : 0}`);
     delete updatePayload.itinerary_data; // belt-and-suspenders
+    stripContentVerdictFromBlockedWrite(updatePayload, label, blockReason);
   } else {
     updatePayload.itinerary_data = itinerary;
     // ── TIMING LIFECYCLE TRACE (Step 6) ─────────────────────────────
