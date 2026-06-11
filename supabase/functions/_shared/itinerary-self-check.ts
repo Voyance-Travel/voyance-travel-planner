@@ -92,7 +92,7 @@ export function checkItineraryQuality(days: any[]): { score: number; issues: Qua
  * - collapses duplicate bare "Departure" rows (keep the last).
  * Returns the post-repair score + remaining issues + repair count.
  */
-export function selfCheckAndRepair(days: any[]): SelfCheckResult {
+export function selfCheckAndRepair(days: any[], opts?: { skipLastDayStrips?: boolean }): SelfCheckResult {
   let repaired = 0;
   const total = days.length;
   // garble strip: a stray out-of-script char appended to a Latin-dominant venue
@@ -352,7 +352,13 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
       if (LEAK_RE.test(titleOf(a)) || LEAK_RE.test(String(a?.description || ''))) { repaired++; return false; }
       return true;
     });
-    if (!isLast) return;
+    // skipLastDayStrips: DAY-SCOPED mode — a per-day write with an incomplete
+    // trip view runs only the day-local repairs above (midnight clamp, late
+    // dinner, garble, meal lift, …). The strips below assume "this array's last
+    // day = the trip's departure day", which is wrong for a partial view and
+    // can strip legitimate cards after a "Taxi to…" barrier. The full strips
+    // still run on every complete-view pass (finalize / heal / race-safe gate).
+    if (!isLast || opts?.skipLastDayStrips) return;
     // departure-day post-checkout strip: NOTHING substantial belongs after hotel
     // checkout. When must-dos can't fit earlier days (6 must-dos in 3 days) the
     // injector crams them onto the departure day past checkout — and with no
