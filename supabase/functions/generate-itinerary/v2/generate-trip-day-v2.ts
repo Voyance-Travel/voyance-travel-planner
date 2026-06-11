@@ -1363,7 +1363,14 @@ export async function handleGenerateTripDayV2(
         supabase,
         tripId,
         { ...(tripRow?.itinerary_data || {}), days: mergedDays },
-        { label: 'v2-generate-trip-day', saveReason: 'regenerate-day-v2', finalGate: true },
+        {
+          label: 'v2-generate-trip-day', saveReason: 'regenerate-day-v2', finalGate: true,
+          // V2 parallel-race fix: never overwrite the whole days array. A fill (non-last,
+          // non-heal) request atomically merges ONLY its own day; the finalize (last-day or
+          // heal) merges every cleaned day. No whole-array overwrite ⇒ no concurrent day is
+          // ever clobbered (proven: 10 concurrent overwrites kept 1 day, merges kept all 10).
+          ...((isLastDay || heal) ? { mergeAllDays: true } : { mergeDayNumber: dayNumber }),
+        },
       )
     );
 

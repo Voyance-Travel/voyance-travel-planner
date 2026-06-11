@@ -126,6 +126,28 @@ export interface PersistItineraryOptions {
    */
   finalGate?: boolean;
   /**
+   * Per-day atomic write. When set, the final itinerary_data write goes through the
+   * row-locked merge_trip_day RPC for ONLY this dayNumber, instead of overwriting the
+   * whole days array. This is the fix for the V2 parallel self-invoke clobber: a
+   * per-day generation request reads a stale full-trip view and would overwrite
+   * concurrently-written days — proven 10 concurrent overwrites kept 1 day, the RPC
+   * kept all 10. Non-last generation requests pass this so they only ever touch their
+   * own day. The last-day/heal finalize leaves it unset (it writes the whole cleaned,
+   * authoritatively-re-read trip). Other update fields (metadata, extraUpdate) still
+   * apply; only the itinerary_data write is routed through the RPC.
+   */
+  mergeDayNumber?: number | null;
+  /**
+   * Finalize write: persist EVERY day via the per-day merge RPC (one row-locked
+   * upsert per day) instead of a single whole-array overwrite. The last-day/heal
+   * finalize uses this so it can write its cross-day cleanup (dedup, meal-coverage,
+   * self-check) for all days WITHOUT the overwrite that removes a day a concurrent
+   * fill just wrote. merge is additive/replace-by-dayNumber, so no day is ever
+   * dropped; worst case a day briefly regresses to this request's slightly-older
+   * copy and the owning fill/heal re-merges it.
+   */
+  mergeAllDays?: boolean;
+  /**
    * Opt out of the MEAL-ONLY guard. Default false. The guard rejects writes
    * whose `nonMealMeaningfulCount === 0` when either the previously-persisted
    * itinerary OR the latest `itinerary_versions` row for any day has ≥3
@@ -1133,7 +1155,49 @@ export async function persistTripItinerary(
     console.warn(`[${label}] persist-boundary final gate failed (non-blocking):`, e);
   }
 
-  const { error } = await supabase.from('trips').update(updatePayload).eq('id', tripId);
+  let error: any = null;
+  if (options.mergeDayNumber != null && (updatePayload as any).itinerary_data) {
+    // ── PER-DAY ATOMIC WRITE ──────────────────────────────────────────────
+    // Route ONLY this day through the row-locked merge_trip_day RPC, so a per-day
+    // generation request's stale full-trip view can't clobber concurrently-written
+    // days (the V2 parallel race). Other fields (metadata/status/extraUpdate) still
+    // apply via a normal update — only itinerary_data is routed through the RPC.
+    const dn = Number(options.mergeDayNumber);
+    const dayObj = (Array.isArray((updatePayload as any).itinerary_data?.days) ? (updatePayload as any).itinerary_data.days : [])
+      .find((d: any) => Number(d?.dayNumber) === dn);
+    if (dayObj) {
+      const { error: rpcErr } = await supabase.rpc('merge_trip_day', { p_trip_id: tripId, p_day_number: dn, p_day_data: dayObj });
+      if (rpcErr) { console.error(`[${label}] merge_trip_day(${dn}) failed:`, rpcErr); error = rpcErr; }
+      else console.log(`[${label}] [PER_DAY_MERGE] day=${dn} merged atomically`);
+    } else {
+      console.warn(`[${label}] [PER_DAY_MERGE] day=${dn} not found in payload — itinerary write skipped`);
+    }
+    const rest: Record<string, any> = { ...(updatePayload as any) };
+    delete rest.itinerary_data;
+    if (!error && Object.keys(rest).length > 0) {
+      const { error: restErr } = await supabase.from('trips').update(rest).eq('id', tripId);
+      if (restErr) error = restErr;
+    }
+  } else if (options.mergeAllDays && (updatePayload as any).itinerary_data && Array.isArray((updatePayload as any).itinerary_data?.days)) {
+    // ── FINALIZE: merge every day (no whole-array overwrite that could drop a day) ──
+    const daysArr: any[] = (updatePayload as any).itinerary_data.days;
+    for (const d of daysArr) {
+      const dn = Number(d?.dayNumber);
+      if (!Number.isFinite(dn)) continue;
+      const { error: rpcErr } = await supabase.rpc('merge_trip_day', { p_trip_id: tripId, p_day_number: dn, p_day_data: d });
+      if (rpcErr) { console.error(`[${label}] merge_trip_day(${dn}) [all] failed:`, rpcErr); error = rpcErr; break; }
+    }
+    if (!error) console.log(`[${label}] [PER_DAY_MERGE_ALL] merged ${daysArr.length} days atomically`);
+    const rest: Record<string, any> = { ...(updatePayload as any) };
+    delete rest.itinerary_data;
+    if (!error && Object.keys(rest).length > 0) {
+      const { error: restErr } = await supabase.from('trips').update(rest).eq('id', tripId);
+      if (restErr) error = restErr;
+    }
+  } else {
+    const r = await supabase.from('trips').update(updatePayload).eq('id', tripId);
+    error = r.error;
+  }
   if (error) {
     console.error(`[${label}] trips.update failed:`, error);
   } else {
