@@ -19,6 +19,24 @@
 import { auditTripRow, type AuditIssue } from './audit.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
+// ── env loading (no secrets in code or chat) ────────────────────────────────
+// 1) repo root .env → VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY (the
+//    PUBLIC anon key the frontend already ships) → SUPABASE_URL / SUPABASE_ANON_KEY
+// 2) qa/harness/.env (gitignored) → VOYANCE_EMAIL / VOYANCE_PASSWORD
+function loadEnvFile(path: string, map: Record<string, string> = {}) {
+  try {
+    for (const line of Deno.readTextFileSync(path).split('\n')) {
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*"?([^"\n#]*)"?\s*$/);
+      if (!m) continue;
+      const k = map[m[1]] ?? m[1];
+      if (!Deno.env.get(k) && m[2].trim()) Deno.env.set(k, m[2].trim());
+    }
+  } catch { /* file absent — fine */ }
+}
+const here = new URL('.', import.meta.url).pathname;
+loadEnvFile(`${here}.env`);
+loadEnvFile(`${here}../../.env`, { VITE_SUPABASE_URL: 'SUPABASE_URL', VITE_SUPABASE_PUBLISHABLE_KEY: 'SUPABASE_ANON_KEY' });
+
 // 20-city default matrix: catalog-rich, thin-catalog, CJK, accented-Latin; 3–7 days.
 const MATRIX: Array<{ city: string; days: number }> = [
   { city: 'Athens, Greece', days: 5 },        // thin-day repeat offender
@@ -55,7 +73,9 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 if (import.meta.main) {
   const URL_ = Deno.env.get('SUPABASE_URL'), ANON = Deno.env.get('SUPABASE_ANON_KEY');
   const EMAIL = Deno.env.get('VOYANCE_EMAIL'), PASS = Deno.env.get('VOYANCE_PASSWORD');
-  if (!URL_ || !ANON || !EMAIL || !PASS) { console.error('need SUPABASE_URL, SUPABASE_ANON_KEY, VOYANCE_EMAIL, VOYANCE_PASSWORD'); Deno.exit(2); }
+  const missing = [['SUPABASE_URL', URL_], ['SUPABASE_ANON_KEY', ANON], ['VOYANCE_EMAIL', EMAIL], ['VOYANCE_PASSWORD', PASS]]
+    .filter(([, v]) => !v).map(([k]) => k);
+  if (missing.length) { console.error(`missing env: ${missing.join(', ')} (see qa/harness/README.md)`); Deno.exit(2); }
   const sb = createClient(URL_, ANON);
   const { data: auth, error: aerr } = await sb.auth.signInWithPassword({ email: EMAIL, password: PASS });
   if (aerr || !auth.user) { console.error('sign-in failed:', aerr?.message); Deno.exit(2); }
