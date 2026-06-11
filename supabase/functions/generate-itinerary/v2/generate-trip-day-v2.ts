@@ -789,9 +789,14 @@ export async function handleGenerateTripDayV2(
         const lcb = (s: unknown) => String(s ?? '').toLowerCase();
         const isLogB = (a: any) => ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(lcb(a?.category)) || /check.?in|check.?out|transfer|airport|\bflight\b|return to|travel to|\bdepart/i.test(lcb(a?.title || a?.name));
         const isMealB = (a: any) => ['breakfast', 'lunch', 'dinner', 'dining', 'restaurant'].includes(lcb(a?.category)) || /\b(breakfast|brunch|lunch|dinner)\b/i.test(lcb(a?.title || a?.name));
-        const realCount = acts.filter((a) => !isLogB(a) && !isMealB(a)).length;
+        const isDrinkB = (a: any) => /\bnight ?cap\b|late[- ]?night (?:drink|jazz|stroll|out|bar|bite)|evening (?:drink|nightcap)/i.test(lcb(a?.title || a?.name));
+        const realCount = acts.filter((a) => !isLogB(a) && !isMealB(a) && !isDrinkB(a)).length;
         if (realCount < 2) {
-          const city = String(facts.destination.city || '').trim();
+          // BARE city — facts.destination.city carries the wizard's full
+          // "Athens, Greece" but city_landmarks_cache stores "Athens"; the
+          // ilike('%Athens, Greece%') lookup matched nothing and the backfill
+          // silently no-opped (streak run 2, Athens D3 shipped thin).
+          const city = String(facts.destination.city || '').split(',')[0].trim();
           const { data: lmRow } = await supabase
             .from('city_landmarks_cache').select('landmarks').ilike('city', `%${city}%`).limit(1).maybeSingle();
           const landmarks: any[] = Array.isArray(lmRow?.landmarks) ? lmRow!.landmarks : [];
@@ -1081,7 +1086,9 @@ export async function handleGenerateTripDayV2(
         // Google-Places fallback for non-catalog cities via recommend-restaurants),
         // and non-meal duplicate drop — now lives in the shared module so the
         // regenerate-day path runs the identical logic. See _shared/cross-day-dedup.ts.
-        await crossDayDedup(mergedDays as any[], (facts.destination.city as string) || '', makePlacesAlternatives(supabase));
+        // bare city: the dedup's inline restaurant catalog + generic-meal
+        // detection key on "Athens", not "Athens, Greece"
+        await crossDayDedup(mergedDays as any[], String(facts.destination.city || '').split(',')[0].trim(), makePlacesAlternatives(supabase));
         // ── must-do-aware cross-day collapse ──────────────────────────────
         // The title-keyed dedup above treats the SAME user must-do venue as
         // distinct when the model renders it with varying titles across days
@@ -1552,7 +1559,10 @@ export async function handleGenerateTripDayV2(
           const c = String(a?.category || '').toLowerCase();
           const log = ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(c) || /check.?in|check.?out|transfer|airport|\bflight\b|return to|travel to|\bdepart/.test(t);
           const meal = ['breakfast', 'lunch', 'dinner', 'dining', 'restaurant'].includes(c) || /\b(breakfast|brunch|lunch|dinner)\b/.test(t);
-          return !log && !meal;
+          // nightcaps/drinks are filler, not substance — parity with the QA audit's
+          // G9 so the heal fires on every day the audit would call thin
+          const drink = /\bnight ?cap\b|late[- ]?night (?:drink|jazz|stroll|out|bar|bite)|evening (?:drink|nightcap)/.test(t);
+          return !log && !meal && !drink;
         }).length;
         const thin: number[] = [];
         for (let n = 1; n < totalDays; n++) { // exclude the departure (last) day
