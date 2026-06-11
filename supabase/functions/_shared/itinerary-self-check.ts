@@ -168,6 +168,36 @@ export function selfCheckAndRepair(days: any[]): SelfCheckResult {
         }
       }
     }
+    // late-dinner normalizer: a dinner that starts after 21:45 reads as nonsense
+    // (Mexico City D1: nightcap 20:30 then "Dinner at Páramo" 23:25). The meal
+    // windows alone don't catch it (23:25 is technically inside the dinner
+    // window) — it's the SEQUENCE that's wrong. Re-time such a dinner into the
+    // natural 19:30–21:00 slot and push any displaced evening card (the nightcap)
+    // to after it. Locked cards untouched.
+    {
+      const hhmmD = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+      for (const a of d.activities) {
+        if (!a || isLocked(a) || isLogistics(a)) continue;
+        if (!/\bdinner\b/i.test(titleOf(a))) continue;
+        const s = parseMins(a.startTime || a.time);
+        if (s == null || s <= 1305) continue; // only dinners after 21:45
+        a.startTime = '19:30'; a.time = '19:30'; a.endTime = '21:00';
+        repaired++;
+        // push displaced non-logistics evening cards (19:00–21:15 window) after dinner
+        let nudge = 1275; // 21:15, then +60 per card, capped 23:30
+        for (const b of d.activities) {
+          if (!b || b === a || isLocked(b) || isLogistics(b)) continue;
+          if (/\bdinner\b/i.test(titleOf(b))) continue;
+          const bs = parseMins(b.startTime || b.time);
+          if (bs != null && bs >= 1140 && bs < 1275) {
+            const nb = Math.min(nudge, 1410);
+            b.startTime = hhmmD(nb); b.time = b.startTime;
+            b.endTime = hhmmD(Math.min(nb + 50, 1439));
+            nudge += 60; repaired++;
+          }
+        }
+      }
+    }
     // trailing hotel-return order fix: a late enrichment pass (e.g. a nightcap
     // wine bar) can be appended AFTER the end-of-day "Return to Hotel" bookend
     // was already placed by runStep8 — leaving the return ordered/timed BEFORE
