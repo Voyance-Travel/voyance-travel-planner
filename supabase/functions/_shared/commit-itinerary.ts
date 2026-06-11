@@ -212,7 +212,31 @@ async function deriveRequiredMealsByDay(
         arrivalTime24: isFirstDay && arrivalTime24 ? arrivalTime24 : undefined,
         departureTime24: isLastDay && departureTime24 ? departureTime24 : undefined,
       });
-      out[dayNumber] = policy.requiredMeals as Array<'breakfast' | 'lunch' | 'dinner'>;
+      let required = policy.requiredMeals as Array<'breakfast' | 'lunch' | 'dinner'>;
+      // ── DEPARTURE-BARRIER PARITY WITH THE GENERATOR'S 8g GATE ──────────
+      // For flight-skipped trips savedDepartureTime24 is null, so the policy
+      // can't see the early departure — but the generator's meal gate infers
+      // the barrier FROM THE DAY'S CARDS (checkout/transfer/airport times) and
+      // correctly requires no breakfast before a 07:00 checkout. Without the
+      // same inference here the contract demands a meal the generator was
+      // right to omit → false MEAL_COVERAGE_MISSING → false partial (Mexico
+      // City D5: 07:00 checkout + 07:50 transfer flagged "missing breakfast"
+      // while the identical Istanbul D6 passed). Mirror 8g: drop any required
+      // meal whose slot opens at/after the earliest departure barrier present.
+      if (isLastDay && required.length > 0) {
+        const acts: any[] = Array.isArray(days[i]?.activities) ? days[i].activities : [];
+        const pMin = (s: unknown) => { const m = String(s ?? '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+        const depTimes = acts
+          .filter((a) => /airport|\bflight\b|\bdepart|transfer to|check.?out/i.test(String(a?.title || a?.name || '')))
+          .map((a) => pMin(a?.startTime || a?.time))
+          .filter((m): m is number => m != null);
+        if (depTimes.length > 0) {
+          const depMin = Math.min(...depTimes);
+          const slotOpen: Record<string, number> = { breakfast: 480, lunch: 720, dinner: 1080 };
+          required = required.filter((m) => (slotOpen[m] ?? 0) < depMin);
+        }
+      }
+      out[dayNumber] = required;
     }
   } catch (e) {
     console.warn('[commit-itinerary] deriveRequiredMealsByDay failed:', e);
