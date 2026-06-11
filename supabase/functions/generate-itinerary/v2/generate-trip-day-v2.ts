@@ -815,7 +815,12 @@ export async function handleGenerateTripDayV2(
       }
 
       const mustDos = extractMustDoVenues(tripMeta);
-      if (mustDos.length > 0 && mergedDays.length > 0) {
+      // Inject ONLY on the full-picture requests (last day / heal). A per-day
+      // fill assesses coverage against its STALE view of the trip — under the
+      // parallel chain each fill saw "Templo Mayor missing" and injected its
+      // own copy, shipping the must-do on D1+D2+D3 with three title variants.
+      // Coverage is a cross-day property; only the finalize can judge it.
+      if ((isLastDay || heal) && mustDos.length > 0 && mergedDays.length > 0) {
         await withStage(trace, 'must_do_coverage', { dayNumber }, async (ctx) => {
           const coverage = assertMustDoCoverage(mergedDays, mustDos);
           if (coverage.missing.length > 0) {
