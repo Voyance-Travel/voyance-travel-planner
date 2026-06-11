@@ -632,8 +632,19 @@ export function checkItineraryIntegrity(
 
 
   const codes = Array.from(new Set(violations.map((v) => v.code)));
+  // ── READY-GATE SEVERITY ──────────────────────────────────────────────────
+  // Only genuinely-incomplete-DAY problems should block `ready` and demote a
+  // complete trip to `partial`. Everything else (neighborhood mismatch, a meal
+  // at an odd hour, a nightcap too early, a thin day, an orphan transit, a
+  // missing requested venue) is a CONTENT-QUALITY nit the traveler can fix in
+  // seconds with the in-app tools — surfacing it in the health panel is right,
+  // demoting the whole trip to "incomplete" is not. A 6-day Rome trip with all
+  // days, all meals, was being shown partial purely because a dinner was in
+  // Testaccio on a "Monti"-themed day. `ok` now reflects only blocking codes;
+  // advisory violations still ride along in `violations`/`codes` for the UI.
+  const blocking = violations.filter((v) => BLOCKING_INTEGRITY_CODES.has(v.code));
   return {
-    ok: violations.length === 0,
+    ok: blocking.length === 0,
     ranAt,
     violations,
     codes,
@@ -642,6 +653,16 @@ export function checkItineraryIntegrity(
     mealCoverage,
   };
 }
+
+/**
+ * Integrity codes that genuinely mean "this day is not complete" and so should
+ * block `ready`/demote to `partial`. Everything NOT in this set is advisory
+ * (recorded for the health panel, but never blocks a complete trip from ready).
+ */
+export const BLOCKING_INTEGRITY_CODES: Set<string> = new Set([
+  'LOGISTICS_ONLY_CURATED_DAY', // a curated day with nothing but transit = effectively empty
+  'MEAL_COVERAGE_MISSING',      // a day missing a required meal entirely
+]);
 
 /**
  * Convenience: returns the metadata patch + corrected `itinerary_status`
