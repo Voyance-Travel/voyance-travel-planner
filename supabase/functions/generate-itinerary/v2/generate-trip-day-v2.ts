@@ -1518,7 +1518,15 @@ export async function handleGenerateTripDayV2(
         // post-ready enrichment phase), so "ready" == "fully persisted" here. Re-fetch
         // metadata fresh so we merge on top of holding_bay / heartbeat writes above.
         if (finalStatus === 'ready') {
-          const fpMeta = (stRow?.metadata as any) || {};
+          const fpMeta = { ...((stRow?.metadata as any) || {}) };
+          // STALE-VERDICT RECONCILE: a parallel writer judging its incomplete view
+          // can stamp a blocking integrity verdict (e.g. MEAL_COVERAGE_MISSING)
+          // moments before this authoritative finalize confirms the trip is whole
+          // (Athens 638c9def: verdict said D1 missing breakfast+lunch; persisted D1
+          // plainly has both). Ready is judged from DB truth here — any stored
+          // verdict predates that truth, so drop it rather than ship a ready trip
+          // wearing a false "missing meals" badge in the health panel.
+          delete fpMeta.integrity_contract;
           statusUpdate.metadata = { ...fpMeta, fully_persisted: true, fully_persisted_at: new Date().toISOString() };
         }
         await supabase.from('trips').update(statusUpdate).eq('id', tripId);
