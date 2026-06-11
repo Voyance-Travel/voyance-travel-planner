@@ -1413,9 +1413,14 @@ export async function handleGenerateTripDayV2(
     // stayed at the launcher's kickoff 'generating' forever — even after the
     // last day persisted. That is the root of "stuck generating + the gate's
     // repaired itinerary never looks applied": the trip never reaches a terminal
-    // state, and the frontend/poller treats it as in-flight. Flip it here, on the
-    // real last day (never on a background heal), based on real completeness.
-    if (isLastDay && !heal) {
+    // state, and the frontend/poller treats it as in-flight. Flip it here based on
+    // real completeness — on the real last day AND on a background heal. The heal
+    // is exactly what fills a day the parallel race left empty at first finalize;
+    // without re-finalizing on the heal, that trip is set 'partial' and STAYS
+    // partial forever even after the heal completes it (Vienna + Seoul both stuck
+    // this way). The allComplete guard means a heal only flips 'ready' once the
+    // trip is genuinely whole; an incomplete heal just re-affirms 'partial'.
+    if (isLastDay || heal) {
       try {
         const allComplete = Array.isArray(mergedDays) && mergedDays.length >= totalDays &&
           mergedDays.slice(0, totalDays).every((d: any) => Array.isArray(d?.activities) && d.activities.length > 0);
