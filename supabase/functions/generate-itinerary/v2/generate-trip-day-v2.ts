@@ -1363,7 +1363,14 @@ export async function handleGenerateTripDayV2(
         supabase,
         tripId,
         { ...(tripRow?.itinerary_data || {}), days: mergedDays },
-        { label: 'v2-generate-trip-day', saveReason: 'regenerate-day-v2', finalGate: true },
+        {
+          label: 'v2-generate-trip-day', saveReason: 'regenerate-day-v2', finalGate: true,
+          // V2 parallel-race fix: never overwrite the whole days array. A fill (non-last,
+          // non-heal) request atomically merges ONLY its own day; the finalize (last-day or
+          // heal) merges every cleaned day. No whole-array overwrite ⇒ no concurrent day is
+          // ever clobbered (proven: 10 concurrent overwrites kept 1 day, merges kept all 10).
+          ...((isLastDay || heal) ? { mergeAllDays: true } : { mergeDayNumber: dayNumber }),
+        },
       )
     );
 
@@ -1422,9 +1429,22 @@ export async function handleGenerateTripDayV2(
     // trip is genuinely whole; an incomplete heal just re-affirms 'partial'.
     if (isLastDay || heal) {
       try {
-        const allComplete = Array.isArray(mergedDays) && mergedDays.length >= totalDays &&
-          mergedDays.slice(0, totalDays).every((d: any) => Array.isArray(d?.activities) && d.activities.length > 0);
-        const finalStatus = allComplete ? 'ready' : 'partial';
+        // AUTHORITATIVE completeness: read the CURRENT persisted trip, not this
+        // request's possibly-stale in-memory mergedDays — under the parallel race a
+        // heal can hold a view momentarily missing a day, and computing status from
+        // THAT flipped a healthy ready trip back to partial (Tokyo). UPGRADE-ONLY on
+        // a heal: flip partial→ready once whole; never downgrade ready→partial.
+        const { data: stRow } = await supabase
+          .from('trips').select('itinerary_data, itinerary_status, metadata').eq('id', tripId).maybeSingle();
+        const dbDays: any[] = Array.isArray((stRow?.itinerary_data as any)?.days) ? (stRow!.itinerary_data as any).days : mergedDays;
+        const allComplete = Array.isArray(dbDays) && dbDays.length >= totalDays &&
+          dbDays.slice(0, totalDays).every((d: any) => Array.isArray(d?.activities) && d.activities.length > 0);
+        const curStatus = String(stRow?.itinerary_status || '');
+        const finalStatus: 'ready' | 'partial' | null =
+          allComplete ? 'ready'
+          : (isLastDay && !heal && curStatus !== 'ready') ? 'partial'
+          : null;
+        if (finalStatus) {
         const statusUpdate: Record<string, any> = { itinerary_status: finalStatus };
         // ── Stamp fully_persisted=true alongside the ready flip — the OTHER half of
         // the V1 Phase-6 finalize (generation-core.ts:3305) that the v2 cutover also
@@ -1435,13 +1455,12 @@ export async function handleGenerateTripDayV2(
         // post-ready enrichment phase), so "ready" == "fully persisted" here. Re-fetch
         // metadata fresh so we merge on top of holding_bay / heartbeat writes above.
         if (finalStatus === 'ready') {
-          const { data: fpRow } = await supabase
-            .from('trips').select('metadata').eq('id', tripId).maybeSingle();
-          const fpMeta = (fpRow?.metadata as any) || {};
+          const fpMeta = (stRow?.metadata as any) || {};
           statusUpdate.metadata = { ...fpMeta, fully_persisted: true, fully_persisted_at: new Date().toISOString() };
         }
         await supabase.from('trips').update(statusUpdate).eq('id', tripId);
-        console.log(`[v2] [STATUS_FINALIZE] status=${finalStatus} fully_persisted=${finalStatus === 'ready'} days=${mergedDays.length}/${totalDays}`);
+        console.log(`[v2] [STATUS_FINALIZE] status=${finalStatus} allComplete=${allComplete} heal=${heal} days=${dbDays.length}/${totalDays}`);
+        }
       } catch (e) {
         console.warn('[v2] status finalize failed (non-blocking):', (e as Error)?.message);
       }
