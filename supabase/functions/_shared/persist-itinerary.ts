@@ -274,6 +274,24 @@ export async function persistTripItinerary(
     } catch (e) {
       console.warn(`[${label}] final gate failed (non-blocking):`, e);
     }
+  } else if (options.finalGate && options.mergeDayNumber != null) {
+    // INCOMPLETE-VIEW per-day write: the full gate above is completeness-gated
+    // (the last-day strips are unsafe on a partial view), which let a fill that
+    // couldn't see the whole trip merge its own day RAW — Naples shipped a
+    // "Nightcap at 00:00" on D1 exactly this way (the midnight clamp provably
+    // fixes it, but no complete-view pass ever owned D1's final write). Run the
+    // DAY-LOCAL repairs on just this day; the dangerous strips stay off.
+    try {
+      const dn = Number(options.mergeDayNumber);
+      const dayObj = days.find((d: any) => Number(d?.dayNumber) === dn);
+      if (dayObj && Array.isArray(dayObj.activities) && dayObj.activities.length > 0) {
+        const { selfCheckAndRepair } = await import('./itinerary-self-check.ts');
+        const sc = selfCheckAndRepair([dayObj], { skipLastDayStrips: true });
+        if (sc.repaired > 0) console.log(`[${label}] [FINAL_GATE_DAY_SCOPED] day=${dn} repaired=${sc.repaired}`);
+      }
+    } catch (e) {
+      console.warn(`[${label}] day-scoped final gate failed (non-blocking):`, e);
+    }
   }
 
   // ── FROZEN GATE (single backend chokepoint) ─────────────────────
