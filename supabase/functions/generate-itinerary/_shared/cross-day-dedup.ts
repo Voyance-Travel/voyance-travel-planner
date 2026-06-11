@@ -145,9 +145,21 @@ export async function crossDayDedup(days: any[], city: string, fetchAlternatives
       const key = lc(a?.location?.name || a?.venue_name || a?.venueName || a?.title || a?.name);
       const keyOk = !!key && key.length >= 6;
       const mt = keyOk ? mealTypeOf(a) : null;
+      // PLACEHOLDER meal card: the 8g injector ships "Lunch in <city>" when it has
+      // no venue. lc() strips the leading "Lunch in/at", so a generic card's key is
+      // literally just the city name — treat it like a duplicate and run the SAME
+      // venue swap (inline catalog → Places fallback) so it ships with a real
+      // restaurant instead of a placeholder. (Owner: placeholder names read as
+      // unfinished — resolve them with the search we already have.)
+      const cityLcG = lc(c3City || '').trim();
+      const isGenericMeal = !!mt && (
+        key === cityLcG ||                                                        // "Lunch in Amsterdam" → key "amsterdam"
+        /find (?:a |your )?(?:local|good|great|perfect)?\s*(?:spot|place|restaurant|caf[eé]|eatery)/.test(key) || // "Lunch — find a local spot in <city>"
+        (/^(breakfast|brunch|lunch|dinner)\b/.test(key) && cityLcG.length > 0 && key.endsWith(cityLcG))           // prefix-strip missed (em-dash etc.)
+      );
       if (mt) {
-        if (usedMealNames.has(key)) {
-          // duplicate restaurant across days → swap (auto-locks ok; not user must-dos)
+        if (usedMealNames.has(key) || isGenericMeal) {
+          // duplicate OR placeholder restaurant → swap (auto-locks ok; not user must-dos)
           if (!isUserMustDo(a)) {
             const label = mt[0].toUpperCase() + mt.slice(1);
             const fb = getRandomFallbackRestaurant(c3City, mt, usedMealNames);

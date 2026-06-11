@@ -774,6 +774,64 @@ export async function handleGenerateTripDayV2(
     else mergedDays.push(newDayPayload);
     mergedDays.sort((a: any, b: any) => (a?.dayNumber ?? 0) - (b?.dayNumber ?? 0));
 
+    // ── 8a2. THIN-DAY LANDMARK BACKFILL (heal, middle days only) ────────
+    // The thin-day heal re-generates a light middle day, but the regen itself can
+    // come back light. Owner: a thin day-3-of-5 is a planning failure — middle
+    // days must carry ~2 real activities, NOT get relabeled as "rest". Floor:
+    // fill from city_landmarks_cache (the wizard's own suggest-landmarks cache —
+    // real venues like "Acropolis of Athens"; populated for every city a user
+    // builds, zero extra LLM cost). Skips anything already on the trip; cards
+    // flow through every later gate (dedup, meals, self-check) in this request.
+    if (heal && dayNumber > 1 && dayNumber < totalDays) {
+      try {
+        const dayObj: any = newDayPayload;
+        const acts: any[] = Array.isArray(dayObj.activities) ? dayObj.activities : (dayObj.activities = []);
+        const lcb = (s: unknown) => String(s ?? '').toLowerCase();
+        const isLogB = (a: any) => ['transport', 'transportation', 'transit', 'flight', 'accommodation', 'logistics'].includes(lcb(a?.category)) || /check.?in|check.?out|transfer|airport|\bflight\b|return to|travel to|\bdepart/i.test(lcb(a?.title || a?.name));
+        const isMealB = (a: any) => ['breakfast', 'lunch', 'dinner', 'dining', 'restaurant'].includes(lcb(a?.category)) || /\b(breakfast|brunch|lunch|dinner)\b/i.test(lcb(a?.title || a?.name));
+        const realCount = acts.filter((a) => !isLogB(a) && !isMealB(a)).length;
+        if (realCount < 2) {
+          const city = String(facts.destination.city || '').trim();
+          const { data: lmRow } = await supabase
+            .from('city_landmarks_cache').select('landmarks').ilike('city', `%${city}%`).limit(1).maybeSingle();
+          const landmarks: any[] = Array.isArray(lmRow?.landmarks) ? lmRow!.landmarks : [];
+          const tripBlob = mergedDays
+            .flatMap((dd: any) => (Array.isArray(dd?.activities) ? dd.activities : []))
+            .map((a: any) => lcb(a?.title || a?.name) + ' ' + lcb(a?.location?.name)).join(' | ');
+          const fresh = landmarks.filter((l: any) => l?.name && !tripBlob.includes(lcb(l.name)));
+          const pMinB = (s: unknown) => { const m = String(s ?? '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+          const hhmmB = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+          const taken = acts.map((a) => pMinB(a?.startTime || a?.time)).filter((m): m is number => m != null);
+          const slotFree = (m: number) => taken.every((t) => Math.abs(t - m) >= 75);
+          const slots = [600, 900, 990].filter(slotFree); // 10:00, 15:00, 16:30
+          let added = 0;
+          for (const lm of fresh) {
+            if (added >= Math.min(2 - realCount, slots.length)) break;
+            const start = slots[added];
+            acts.push({
+              id: `backfill-${dayNumber}-${added}-${String(lm.name).replace(/[^a-z0-9]/gi, '').slice(0, 12)}`,
+              title: String(lm.name),
+              name: String(lm.name),
+              category: String(lm.category || 'sightseeing'),
+              description: `One of ${city}'s essential stops.`,
+              startTime: hhmmB(start), time: hhmmB(start), endTime: hhmmB(start + 105),
+              durationMinutes: 105,
+              location: { name: String(lm.name) },
+              source: 'thin-day-backfill',
+            });
+            taken.push(start);
+            added++;
+          }
+          if (added > 0) {
+            acts.sort((a: any, b: any) => (pMinB(a?.startTime || a?.time) ?? 1e9) - (pMinB(b?.startTime || b?.time) ?? 1e9));
+            console.log(`[v2] [THIN_DAY_BACKFILL] day=${dayNumber} added=${added} from landmarks cache (real=${realCount}→${realCount + added})`);
+          }
+        }
+      } catch (e) {
+        console.warn('[v2] thin-day backfill failed (non-blocking):', (e as Error)?.message);
+      }
+    }
+
     const tripMeta = (tripRow?.metadata as any) || {};
 
     // ── 8b. Cross-day quality passes (run every day; cheap + idempotent) ─
