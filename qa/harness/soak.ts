@@ -73,7 +73,9 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 if (import.meta.main) {
   const URL_ = Deno.env.get('SUPABASE_URL'), ANON = Deno.env.get('SUPABASE_ANON_KEY');
   const EMAIL = Deno.env.get('VOYANCE_EMAIL'), PASS = Deno.env.get('VOYANCE_PASSWORD');
-  if (!URL_ || !ANON || !EMAIL || !PASS) { console.error('need SUPABASE_URL, SUPABASE_ANON_KEY, VOYANCE_EMAIL, VOYANCE_PASSWORD'); Deno.exit(2); }
+  const missing = [['SUPABASE_URL', URL_], ['SUPABASE_ANON_KEY', ANON], ['VOYANCE_EMAIL', EMAIL], ['VOYANCE_PASSWORD', PASS]]
+    .filter(([, v]) => !v).map(([k]) => k);
+  if (missing.length) { console.error(`missing env: ${missing.join(', ')} (see qa/harness/README.md)`); Deno.exit(2); }
   const sb = createClient(URL_, ANON);
   const { data: auth, error: aerr } = await sb.auth.signInWithPassword({ email: EMAIL, password: PASS });
   if (aerr || !auth.user) { console.error('sign-in failed:', aerr?.message); Deno.exit(2); }
