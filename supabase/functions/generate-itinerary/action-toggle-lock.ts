@@ -86,15 +86,43 @@ export async function handleToggleActivityLock(ctx: ActionContext): Promise<Resp
   let updatedCount = 0;
 
   if (isValidUUID(activityId)) {
-    // Direct UUID update
+    // Direct UUID update. NOTE { count: 'exact' } — without it supabase-js
+    // returns count=null, so updatedCount stayed 0 even on a successful write
+    // and the JSON sync below (gated on updatedCount > 0) never ran.
     const { error, count } = await supabase
       .from('itinerary_activities')
-      .update({ is_locked: isLocked, updated_at: new Date().toISOString() })
+      .update({ is_locked: isLocked, updated_at: new Date().toISOString() }, { count: 'exact' })
       .eq('id', activityId)
       .eq('trip_id', tripId);
-    
+
     updateError = error;
     updatedCount = count ?? 0;
+
+    // V2 cards carry UUID-shaped JSON ids, which are the row's EXTERNAL id —
+    // not its primary key. The PK match above finds nothing for them, and this
+    // branch used to return success having written nowhere (Step-4 E1: lock
+    // toggle 200-ok'd, but neither table nor JSON changed). Retry by
+    // external_id, then fall back to the JSON itself.
+    if (!updateError && updatedCount === 0) {
+      const { error: extErr, count: extCount } = await supabase
+        .from('itinerary_activities')
+        .update({ is_locked: isLocked, updated_at: new Date().toISOString() }, { count: 'exact' })
+        .eq('external_id', activityId)
+        .eq('trip_id', tripId);
+      updateError = extErr;
+      updatedCount = extCount ?? 0;
+      if (updatedCount > 0) {
+        console.log(`[toggle-activity-lock] UUID id matched by external_id, rows=${updatedCount}`);
+      }
+    }
+    if (!updateError && updatedCount === 0) {
+      const jsonOk = await tryUpdateLockInJson();
+      if (jsonOk) {
+        console.log(`[toggle-activity-lock] UUID id ${activityId} not in normalized table; lock persisted in itinerary_data JSON`);
+        return okJson({ success: true, activityId, isLocked, method: 'json_fallback' });
+      }
+      return errorJson('Activity not found to lock (no PK/external match and JSON update failed)', 404);
+    }
   } else {
     // Fallback: match by trip + day + title + time (for ephemeral frontend IDs)
     console.log(`[toggle-activity-lock] Non-UUID activityId: ${activityId}, using fallback match`);
@@ -203,7 +231,7 @@ export async function handleToggleActivityLock(ctx: ActionContext): Promise<Resp
     if (actByExternal?.id) {
       const { error, count } = await supabase
         .from('itinerary_activities')
-        .update({ is_locked: isLocked, updated_at: new Date().toISOString() })
+        .update({ is_locked: isLocked, updated_at: new Date().toISOString() }, { count: 'exact' })
         .eq('id', actByExternal.id)
         .eq('trip_id', tripId);
       updateError = error;
@@ -213,7 +241,7 @@ export async function handleToggleActivityLock(ctx: ActionContext): Promise<Resp
       // Fallback match by day + title + optional start_time
       let query = supabase
         .from('itinerary_activities')
-        .update({ is_locked: isLocked, updated_at: new Date().toISOString() })
+        .update({ is_locked: isLocked, updated_at: new Date().toISOString() }, { count: 'exact' })
         .eq('itinerary_day_id', dayRow.id)
         .eq('trip_id', tripId)
         .eq('title', activityTitle);

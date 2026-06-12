@@ -237,10 +237,15 @@ if (import.meta.main) {
   // ── E7 REGENERATE DAY (locked card must survive) ──────────────────────────
   console.log('── E7 REGENERATE DAY');
   {
+    // Mirror useSpendCredits: config key REGENERATE_DAY maps to api action
+    // 'regenerate_day' and ALWAYS carries an idempotencyKey in metadata.
     const { data: sc, error: scerr } = await sb.functions.invoke('spend-credits', {
-      body: { action: 'REGENERATE_DAY', tripId, dayIndex: dayN - 1 },
+      body: {
+        action: 'regenerate_day', tripId, dayIndex: dayN - 1,
+        metadata: { idempotencyKey: `regenerate_day:${tripId}:qa:${Date.now()}-${crypto.randomUUID().slice(0, 8)}` },
+      },
     });
-    check('E7', !scerr && !(sc as any)?.error, `spend REGENERATE_DAY ${scerr ? 'ERROR ' + scerr.message : 'ok'}`);
+    check('E7', !scerr && !(sc as any)?.error, `spend regenerate_day ${scerr ? 'ERROR ' + scerr.message : (sc as any)?.error ? 'API ERROR ' + JSON.stringify((sc as any).error) : 'ok'}`);
     const row = await readTrip();
     const days = daysOf(row);
     const d = days.find((x: any) => x?.dayNumber === dayN);
