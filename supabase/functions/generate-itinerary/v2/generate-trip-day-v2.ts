@@ -780,9 +780,15 @@ export async function handleGenerateTripDayV2(
     // days must carry ~2 real activities, NOT get relabeled as "rest". Floor:
     // fill from city_landmarks_cache (the wizard's own suggest-landmarks cache —
     // real venues like "Acropolis of Athens"; populated for every city a user
-    // builds, zero extra LLM cost). Skips anything already on the trip; cards
-    // flow through every later gate (dedup, meals, self-check) in this request.
-    if (heal && dayNumber > 1 && dayNumber < totalDays) {
+    // builds, zero extra LLM cost). Skips anything already on the trip.
+    // Defined here, INVOKED after the final cross-day dedup (8h2): the heal's
+    // LLM output can look full at merge-time and then be thinned BY the dedup
+    // (run 5 Athens: D3 healed twice, dedup dropped the dup venues each time,
+    // 5 fresh landmarks sat unused because the backfill had already passed).
+    // Backfill cards skip the dedup by construction — they're filtered against
+    // every title already on the trip — and still pass the 8i self-check.
+    const runThinDayBackfill = async () => {
+      if (!(heal && dayNumber > 1 && dayNumber < totalDays)) return;
       try {
         const dayObj: any = newDayPayload;
         const acts: any[] = Array.isArray(dayObj.activities) ? dayObj.activities : (dayObj.activities = []);
@@ -835,7 +841,7 @@ export async function handleGenerateTripDayV2(
       } catch (e) {
         console.warn('[v2] thin-day backfill failed (non-blocking):', (e as Error)?.message);
       }
-    }
+    };
 
     const tripMeta = (tripRow?.metadata as any) || {};
 
@@ -1313,6 +1319,11 @@ export async function handleGenerateTripDayV2(
     // Barcelona shipped Syra Coffee on days 2 AND 3 — day 3 was an 8g injection).
     // Running de-dup again here, after all injections, is the final word.
     if (isLastDay || heal) await runCrossDayDedup();
+
+    // ── 8h3. Thin-day landmark backfill — POST-dedup so realCount is judged on
+    // the day as it will actually ship. Defined back at 8a2; see comment there
+    // for why it must run after the final dedup (run-5 Athens autopsy).
+    await runThinDayBackfill();
 
     // ── 8i. SELF-CHECK GATE — verify + repair + score before the write ──
     // The auditor's checks, run inside generation as the final quality gate so
