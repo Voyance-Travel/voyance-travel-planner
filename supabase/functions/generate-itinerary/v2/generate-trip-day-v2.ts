@@ -1516,7 +1516,7 @@ export async function handleGenerateTripDayV2(
         // THAT flipped a healthy ready trip back to partial (Tokyo). UPGRADE-ONLY on
         // a heal: flip partial→ready once whole; never downgrade ready→partial.
         const { data: stRow } = await supabase
-          .from('trips').select('itinerary_data, itinerary_status, metadata').eq('id', tripId).maybeSingle();
+          .from('trips').select('itinerary_data, itinerary_status, metadata, journey_id, unlocked_day_count').eq('id', tripId).maybeSingle();
         const dbDays: any[] = Array.isArray((stRow?.itinerary_data as any)?.days) ? (stRow!.itinerary_data as any).days : mergedDays;
         const allComplete = Array.isArray(dbDays) && dbDays.length >= totalDays &&
           dbDays.slice(0, totalDays).every((d: any) => Array.isArray(d?.activities) && d.activities.length > 0);
@@ -1527,6 +1527,17 @@ export async function handleGenerateTripDayV2(
           : null;
         if (finalStatus) {
         const statusUpdate: Record<string, any> = { itinerary_status: finalStatus };
+        // ── JOURNEY LEGS ARE PREPAID: unlock their days on ready ──────────
+        // The journey is charged ONCE (on leg 1's tripId), and spend-credits
+        // sets unlocked_day_count only on the trip it charged — legs 2+ stayed
+        // at 0, so the UI locked every prepaid day and offered to sell them
+        // again ("Unlock all remaining for 240 credits" on a leg the user
+        // already paid for — owner's journey eyes-on, bug 13). Max-based so a
+        // larger existing count is never reduced.
+        if (finalStatus === 'ready' && (stRow as any)?.journey_id) {
+          statusUpdate.unlocked_day_count = Math.max(Number((stRow as any)?.unlocked_day_count || 0), totalDays);
+          console.log(`[v2] [JOURNEY_LEG_UNLOCKED] trip=${tripId} unlocked_day_count→${statusUpdate.unlocked_day_count}`);
+        }
         // ── Stamp fully_persisted=true alongside the ready flip — the OTHER half of
         // the V1 Phase-6 finalize (generation-core.ts:3305) that the v2 cutover also
         // dropped. Without it the frontend `isFinalizing` gate (TripDetail.tsx) treats

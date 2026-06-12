@@ -133,18 +133,31 @@ if (import.meta.main) {
     if (scerr || sc?.error) { console.error('  spend-credits failed:', scerr?.message ?? sc?.error, '(top up credits?)'); Deno.exit(2); }
     console.log(`  charged ${credits} credits`);
 
-    // 3) generate-trip — same kickoff body the wizard sends
-    const { error: gerr } = await sb.functions.invoke('generate-itinerary', {
-      body: {
-        action: 'generate-trip', tripId,
-        destination: t.city, destinationCountry: t.city.split(',').pop()?.trim() ?? '',
-        startDate: iso(s), endDate: iso(e),
-        travelers: 1, tripType: 'vacation', budgetTier: 'moderate',
-        userId: auth.user.id, isMultiCity: false, creditsCharged: credits,
-        requestedDays: t.days, isFirstTrip: false, mustDoActivities: '', perDayActivities: [],
-      },
+    // 3) generate-trip — same kickoff body the wizard sends. Raw fetch (real
+    // status/body on failure) + one retry after 20s: run-8 trip 19 (Quebec
+    // City) had its kickoff transiently non-2xx'd by the gateway and sat
+    // not_started until a manual retry answered 200 — same flake class the
+    // edit harness E7 already guards against.
+    const kickoffBody = JSON.stringify({
+      action: 'generate-trip', tripId,
+      destination: t.city, destinationCountry: t.city.split(',').pop()?.trim() ?? '',
+      startDate: iso(s), endDate: iso(e),
+      travelers: 1, tripType: 'vacation', budgetTier: 'moderate',
+      userId: auth.user.id, isMultiCity: false, creditsCharged: credits,
+      requestedDays: t.days, isFirstTrip: false, mustDoActivities: '', perDayActivities: [],
     });
-    if (gerr) console.warn('  kickoff returned error (may still run):', gerr.message);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const session = (await sb.auth.getSession()).data.session!;
+      const kr = await fetch(`${URL_}/functions/v1/generate-itinerary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}`, 'apikey': ANON! },
+        body: kickoffBody,
+      });
+      if (kr.ok) { await kr.text().catch(() => null); break; }
+      const errBody = await kr.text().catch(() => 'no body');
+      console.warn(`  kickoff attempt ${attempt}: HTTP ${kr.status} — ${errBody.slice(0, 160)}${attempt === 1 ? ' (retrying in 20s)' : ' (giving up; poll may still catch a late start)'}`);
+      if (attempt === 1) await sleep(20);
+    }
 
     // 4) poll → settle → audit
     let status = '';
