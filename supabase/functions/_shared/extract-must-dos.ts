@@ -43,6 +43,9 @@ const STOPWORDS = new Set([
 function cleanVenue(raw: string): string {
   let s = String(raw || '').trim();
   if (!s) return '';
+  // Strip leading bullet markers ("- Pantheon" → "Pantheon") so list-formatted
+  // blobs (Smart Finish research context) resolve to bare venue names.
+  s = s.replace(/^[-•*–]\s+/, '').trim();
   // Strip leading "Day N:" prefix
   s = s.replace(DAY_PREFIX_RE, '').trim();
   // Strip trailing time tokens like "9am-5pm" or "7:30 PM"
@@ -109,6 +112,27 @@ function splitMustDoEntries(metadata: unknown): string[] {
   for (const e of entries) {
     const cleaned = cleanVenue(e);
     if (!cleaned) continue;
+    // SCAFFOLDING GUARD: Smart Finish writes its research-context blob into
+    // metadata.mustDoActivities, so header/label lines flow through here —
+    // "SMART_FINISH_SOURCE_NOTES:", "USER'S RESEARCHED PLACES & ACTIVITIES
+    // (…):", "TRIP PRIORITIES:". A venue name never ends with a colon; one
+    // such header shipped as a LOCKED sightseeing card titled
+    // "SMART_FINISH_SOURCE_NOTES:" (Step-5 manual-mode QA, Seville). The
+    // experience filter can't catch these (ALL-CAPS tokens read as proper
+    // nouns), so drop them at the split.
+    if (/:$/.test(cleaned)) continue;
+    if (/\bSOURCE_NOTES\b|\bSMART_FINISH\b/i.test(cleaned)) continue;
+    // Fully-quoted entry = the user's preference text echoed into the blob
+    // ('"loves tapas and history"'), not a venue.
+    if (/^["'“”‘’].*["'“”‘’]$/.test(cleaned)) continue;
+    // "ALL-CAPS LABEL: value" line ("TRIP PRIORITIES: food, culture",
+    // "USER PREFERENCES: …") — a metadata label, not a venue.
+    if (/^[A-Z][A-Z0-9_'’\s&()/]*:\s/.test(cleaned)) continue;
+    // A long sentence ending in a period is an instruction ("Keep all
+    // user-provided anchors, then expand …"). Venue names are short and
+    // unpunctuated; abbreviation-final names ("Washington D.C.") stay under
+    // the 6-word floor.
+    if (/\.$/.test(cleaned) && cleaned.split(/\s+/).length >= 6) continue;
     if (/^(do\s+)?(flight|hotel|check.?in|check.?out|transfer)\b/i.test(cleaned)) continue;
     const key = cleaned.toLowerCase();
     if (seen.has(key)) continue;

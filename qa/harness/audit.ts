@@ -40,7 +40,10 @@ const isMeal = (a: any) => {
 const isNightcap = (t: string) => /\bnight ?cap\b|late[- ]?night (?:drink|jazz|stroll|out|bar|bite)|evening (?:drink|nightcap)/i.test(t);
 
 const VAGUE = new Set(['activity', 'lunch', 'dinner', 'breakfast', 'explore', 'free time', 'leisure', 'sightseeing', 'meal', 'restaurant', 'cafe', 'dining', 'activities', 'afternoon', 'morning', 'evening']);
-const LEAK = /(as an ai|i cannot|research context|prompt instruction|placeholder|lorem|\btbd\b|\btodo\b|step \d|scaffold)/i;
+const LEAK = /(as an ai|i cannot|research context|prompt instruction|placeholder|lorem|\btbd\b|\btodo\b|step \d|scaffold|source_notes|smart_finish)/i;
+// A title that ENDS with a colon is a scaffolding header, never a venue
+// ("SMART_FINISH_SOURCE_NOTES:") — parity with extract-must-dos' guard.
+const HEADERISH = /:\s*$/;
 const PLACEHOLDER_MEAL = /find (?:a |your )?(?:local|good|great|perfect)?\s*(?:spot|place|restaurant|caf[eé]|eatery)/i;
 const OUT_SCRIPT = /[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]/g;
 
@@ -88,7 +91,7 @@ export function auditDays(days: any[], opts: { city?: string; mustDo?: string; e
       if (latin >= 3 && cjk > 0 && cjk <= 3) add('G7.garble', dn, `"${t}"`);
       if (!isLog(a) && !isMeal(a)) {
         if (VAGUE.has(lc(t).trim())) add('G11.vague', dn, `"${t}"`);
-        if (LEAK.test(t)) add('G11.leak', dn, `"${t}"`);
+        if (LEAK.test(t) || HEADERISH.test(t)) add('G11.leak', dn, `"${t}"`);
         const ck = coreKey(a?.location?.name || t);
         if (ck.length >= 4) {
           if (seenCore.has(ck) && seenCore.get(ck) !== dn) add('G8.venueDup', dn, `"${t}" (~${ck}) also D${seenCore.get(ck)}`);
@@ -108,10 +111,17 @@ export function auditDays(days: any[], opts: { city?: string; mustDo?: string; e
         }
       }
     }
-    // thin middle day
+    // thin middle day — EXEMPT inter-city transition days (checkout AND
+    // check-in on the same day = the traveler changes cities). Owner's rule:
+    // a thin middle day is a planning failure "as long as it's not a travel
+    // day" — a train-day Lisbon→Porto with one real stop is correct pacing
+    // (Step-5 multicity QA, D4).
     if (dn > 1 && dn < total) {
+      const titles = acts.map((a) => lc(T(a)));
+      const isTransition = titles.some((t) => /check.?out/.test(t)) && titles.some((t) => /check.?in/.test(t));
       const real = acts.filter((a) => !isLog(a) && !isMeal(a) && !isNightcap(T(a))).length;
-      if (real < 2) add('G9.thinMiddleDay', dn, `${real} real activities`);
+      if (!isTransition && real < 2) add('G9.thinMiddleDay', dn, `${real} real activities`);
+      else if (isTransition && real < 1) add('G9.thinMiddleDay', dn, `${real} real activities (transition day floor: 1)`);
     }
     // post-departure activities (last day)
     if (isLast && total > 1) {
