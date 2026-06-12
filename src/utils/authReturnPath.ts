@@ -43,6 +43,18 @@ export function consumeReturnPath(fallback: string = '/profile'): string {
 }
 
 /**
+ * Clear the saved return path WITHOUT consuming it into a navigation.
+ * Must run on sign-out: the durable localStorage copy otherwise survives a
+ * full logout and is consumed by the NEXT account's login — landing them on a
+ * trip they don't own (RLS → "Trip Not Found") or one since deleted. Same
+ * shared-device hazard the invite-token clear already guards against.
+ */
+export function clearReturnPath(): void {
+  try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* */ }
+  try { localStorage.removeItem(DURABLE_KEY); } catch { /* */ }
+}
+
+/**
  * Peek at the saved return path without consuming it
  */
 export function peekReturnPath(): string | null {

@@ -698,6 +698,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { clearPendingInviteToken } = await import('@/utils/inviteTokenPersistence');
     clearPendingInviteToken();
 
+    // Clear the durable auth return path for the SAME reason: a /trip/:id saved
+    // under this account otherwise survives logout, and the NEXT login (a
+    // different account, or after the trip is deleted) is sent to it → RLS
+    // denies → "Trip Not Found" as the first post-login screen (owner repro
+    // during multi-account testing; also hits real shared-device users).
+    const { clearReturnPath } = await import('@/utils/authReturnPath');
+    clearReturnPath();
+
     // Clean up quiz-related keys
     Object.keys(localStorage)
       .filter(key => key.startsWith('voyance_quiz_'))
