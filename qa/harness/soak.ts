@@ -61,7 +61,10 @@ const MATRIX: Array<{ city: string; days: number }> = [
   { city: 'Tbilisi, Georgia', days: 5 },      // thin catalog
 ];
 
-const POLL_S = 15, POLL_MAX = 60, SETTLE_S = 90;
+// SETTLE_S 90→300: the run-7 Bangkok latent dup proved a late background heal
+// can inject content AFTER a 90s settle + audit read (G8 dup found hours
+// later). 5 minutes covers the heal tail without a delayed re-audit pass.
+const POLL_S = 15, POLL_MAX = 60, SETTLE_S = 300;
 
 function arg(name: string): string | undefined {
   const i = Deno.args.indexOf(`--${name}`);
