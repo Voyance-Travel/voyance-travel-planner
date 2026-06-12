@@ -2016,7 +2016,7 @@ export async function handleGenerateDay(
           // would otherwise preserve them as locked must_do anchors. Parity with
           // the V2 fresh path. See assert-must-do-coverage.ts.
           try { dropRedundantInjectedMustDos(_ccDays); } catch (_e) { /* non-blocking */ }
-          const _ccRes = await crossDayDedup(_ccDays, destination || '', makePlacesAlternatives(supabase));
+          const _ccRes = await crossDayDedup(_ccDays, destination || '', makePlacesAlternatives(supabase, userId));
           const _sc = selfCheckAndRepair(_ccDays);
           await persistTripItinerary(supabase, tripId, { ...((_ccRow!.itinerary_data as any) || {}), days: _ccDays }, { label: 'regen-cross-day', saveReason: 'regenerate-day-cleanup' });
           const _meta: any = (_ccRow?.metadata as any) || {};
