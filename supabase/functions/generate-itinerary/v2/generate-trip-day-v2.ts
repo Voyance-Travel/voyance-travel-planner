@@ -1556,6 +1556,13 @@ export async function handleGenerateTripDayV2(
           // verdict predates that truth, so drop it rather than ship a ready trip
           // wearing a false "missing meals" badge in the health panel.
           delete fpMeta.integrity_contract;
+          // Stale failure residue (chain_error from a long-dead trigger attempt,
+          // chain_broken_at_day, generation_error) must not survive onto a READY
+          // trip — the frontend poller reads these as failed/stalled and the
+          // status label flaps between progress beats (bug 14 churn).
+          fpMeta.chain_error = null;
+          fpMeta.chain_broken_at_day = null;
+          fpMeta.generation_error = null;
           statusUpdate.metadata = { ...fpMeta, fully_persisted: true, fully_persisted_at: new Date().toISOString() };
         }
         await supabase.from('trips').update(statusUpdate).eq('id', tripId);
