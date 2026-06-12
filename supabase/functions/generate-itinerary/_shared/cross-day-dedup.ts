@@ -143,7 +143,15 @@ export async function crossDayDedup(days: any[], city: string, fetchAlternatives
 
       // 2) cross-day venue passes
       const key = lc(a?.location?.name || a?.venue_name || a?.venueName || a?.title || a?.name);
-      const keyOk = !!key && key.length >= 6;
+      // A key qualifies when the raw form is substantial (>=6) OR its core-venue
+      // key is (>=4 — the SAME floor the audit's G8 gate uses). The raw >=6 floor
+      // alone exempted every short-named venue from BOTH dedup branches: Seville
+      // shipped "Lunch at Petra" (D2) + "Breakfast at Petra" (D3) because key
+      // "petra" is 5 chars — mt was forced null, so the card never registered in
+      // usedMealNames OR seenCore and the repeat was invisible here while the
+      // audit (coreKey >= 4) failed it. Detectors must share thresholds.
+      const ckGate = coreKey(a?.location?.name || a?.title || a?.name);
+      const keyOk = (!!key && key.length >= 6) || ckGate.length >= 4;
       const mt = keyOk ? mealTypeOf(a) : null;
       // PLACEHOLDER meal card: the 8g injector ships "Lunch in <city>" when it has
       // no venue. lc() strips the leading "Lunch in/at", so a generic card's key is
