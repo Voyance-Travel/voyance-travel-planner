@@ -1572,9 +1572,20 @@ export async function handleGenerateTripDayV2(
           // is an atomic check-and-set; the client call remains a backstop.
           if ((stRow?.metadata as any)?.free_first_trip_authorized === true) {
             try {
-              const { error: claimErr } = await supabase.rpc('claim_first_trip_benefit', { p_user_id: userId });
+              // NOT the claim_first_trip_benefit RPC: it raises 'unauthorized'
+              // unless auth.uid() = p_user_id, and this finalize runs under the
+              // SERVICE ROLE (auth.uid() NULL) — the first deploy of this claim
+              // silently no-op'd into the catch below (funnel re-test F4 still
+              // false on v347). Same atomic check-and-set, done directly; the
+              // WHERE first_trip_used=false keeps retries/double-claims inert.
+              const { data: claimed, error: claimErr } = await supabase
+                .from('profiles')
+                .update({ first_trip_used: true })
+                .eq('id', userId)
+                .eq('first_trip_used', false)
+                .select('id');
               if (claimErr) console.warn('[v2] first-trip claim failed (client backstop remains):', claimErr.message);
-              else console.log(`[v2] [FIRST_TRIP_CLAIMED] user=${userId} trip=${tripId}`);
+              else console.log(`[v2] [FIRST_TRIP_CLAIMED] user=${userId} trip=${tripId} rows=${claimed?.length ?? 0}`);
             } catch (e) {
               console.warn('[v2] first-trip claim threw (non-blocking):', (e as Error)?.message);
             }
