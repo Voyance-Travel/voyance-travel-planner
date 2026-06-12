@@ -181,6 +181,22 @@ export async function crossDayDedup(days: any[], city: string, fetchAlternatives
           continue;
         }
         if (isDup || isGenericMeal) {
+          // The swap installs a REAL venue, so stale placeholder markers must
+          // not survive it: save-time meal detection (isPlaceholderMealActivity)
+          // reads metadata.needsVenuePick/unverified_venue/preserveAsManualPick
+          // and treats the card as unresolved FOREVER — the save-path meal guard
+          // then re-injects a sentinel and the real card gets collapsed (Munich
+          // no-op save: "Lunch at Zum Alten Markt" → "Lunch — find a local spot
+          // in the destination", trip ready→partial).
+          const clearPlaceholderMarkers = (x: any) => {
+            if (x.metadata && typeof x.metadata === 'object') {
+              delete x.metadata.needsVenuePick;
+              delete x.metadata.unverified_venue;
+              delete x.metadata.preserveAsManualPick;
+            }
+            delete x.needsVenuePick;
+            x.needsRefinement = false;
+          };
           // duplicate OR placeholder restaurant → swap (auto-locks ok; not user must-dos)
           if (!isUserMustDo(a)) {
             const label = mt[0].toUpperCase() + mt.slice(1);
@@ -193,6 +209,7 @@ export async function crossDayDedup(days: any[], city: string, fetchAlternatives
               if (fb.address) a.location.address = fb.address;
               if (fb.description) a.description = fb.description;
               a.source = 'c3-restaurant-swap';
+              clearPlaceholderMarkers(a);
               usedMealNames.add(lc(fb.name));
               swaps++; swapResolved = true;
             } else if (fetchAlternatives) {
@@ -207,6 +224,7 @@ export async function crossDayDedup(days: any[], city: string, fetchAlternatives
                 if (alt.address) a.location.address = alt.address;
                 a.description = alt.description || `A well-regarded spot in ${c3City}.`;
                 a.source = 'c3-places-swap';
+                clearPlaceholderMarkers(a);
                 usedMealNames.add(lc(alt.name));
                 swaps++; swapResolved = true;
               }
