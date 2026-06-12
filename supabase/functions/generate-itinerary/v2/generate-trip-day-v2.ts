@@ -1094,7 +1094,7 @@ export async function handleGenerateTripDayV2(
         // regenerate-day path runs the identical logic. See _shared/cross-day-dedup.ts.
         // bare city: the dedup's inline restaurant catalog + generic-meal
         // detection key on "Athens", not "Athens, Greece"
-        await crossDayDedup(mergedDays as any[], String(facts.destination.city || '').split(',')[0].trim(), makePlacesAlternatives(supabase));
+        await crossDayDedup(mergedDays as any[], String(facts.destination.city || '').split(',')[0].trim(), makePlacesAlternatives(supabase, userId));
         // ── must-do-aware cross-day collapse ──────────────────────────────
         // The title-keyed dedup above treats the SAME user must-do venue as
         // distinct when the model renders it with varying titles across days

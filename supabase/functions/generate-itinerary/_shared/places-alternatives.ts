@@ -10,11 +10,17 @@
  */
 import type { FetchAlternatives } from './cross-day-dedup.ts';
 
-export function makePlacesAlternatives(supabase: any): FetchAlternatives {
+export function makePlacesAlternatives(supabase: any, userId?: string): FetchAlternatives {
   return async (city: string, count: number) => {
     try {
+      // userId switches on recommend-restaurants' personalization: it loads
+      // user_preferences (dietary_restrictions, food likes/dislikes, taste
+      // graph) and scores dietaryFit. Without it every swap replacement was
+      // dietary-BLIND — a vegan profile's duplicate lunch could be swapped to
+      // any well-rated tapas bar (DNA depth probe, bug 15). The machinery
+      // already existed; the swap path just never identified the traveler.
       const { data, error } = await supabase.functions.invoke('recommend-restaurants', {
-        body: { destination: city, mealType: 'any', maxResults: Math.max(8, count), minRating: 4.0 },
+        body: { destination: city, mealType: 'any', maxResults: Math.max(8, count), minRating: 4.0, ...(userId ? { userId } : {}) },
       });
       if (error) { console.warn('[places-alt] recommend-restaurants error:', error?.message || error); return []; }
       const recs: any[] = (data?.recommendations || data?.restaurants || []);
