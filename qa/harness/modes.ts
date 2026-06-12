@@ -183,9 +183,15 @@ async function modeJourney() {
   await sleep(SETTLE_S);
   const cities = ['Rome', 'Florence', 'Venice'];
   for (let i = 0; i < legs.length; i++) {
-    const row = await readTrip(legs[i].id);
-    check('M2', row.itinerary_status === 'ready', `leg ${i + 1} (${cities[i]}) status=${row.itinerary_status}`);
+    const { data: row } = await sb.from('trips')
+      .select('itinerary_status, itinerary_data, metadata, destination, unlocked_day_count')
+      .eq('id', legs[i].id).single();
     const legDays = Math.round((new Date(legs[i].end_date).getTime() - new Date(legs[i].start_date).getTime()) / 86400000) + 1;
+    check('M2', (row as any).itinerary_status === 'ready', `leg ${i + 1} (${cities[i]}) status=${(row as any).itinerary_status}`);
+    // Journey legs are PREPAID (one charge on leg 1) — every day must arrive
+    // unlocked, or the UI re-sells paid days (bug 13, owner's eyes-on).
+    check('M2', Number((row as any).unlocked_day_count || 0) >= legDays,
+      `leg ${i + 1} unlocked_day_count=${(row as any).unlocked_day_count} (want >= ${legDays})`);
     reportIssues(`M2 leg ${i + 1}`, auditTripRow(row, { city: cities[i], expectedDays: legDays }));
   }
 }
