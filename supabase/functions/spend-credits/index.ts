@@ -476,6 +476,38 @@ serve(async (req) => {
         }
       }
 
+      // ── Idempotency for the DEFENSIVE path (no pendingChargeId) ──
+      // The client retries REFUND with the same originalIdempotencyKey after a
+      // gateway timeout — that is this path's whole purpose — but the check
+      // above only covers pendingChargeId, so every retry credited AGAIN
+      // (QA refund-test R3: two identical defensive refunds → +60 for one -30
+      // spend). Key the guard on the original spend's idempotencyKey, which
+      // the refund row now records in its metadata.
+      if (!pendingChargeId && originalIdempotencyKey) {
+        const { data: existingDefensive } = await supabaseAdmin
+          .from('credit_ledger')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('transaction_type', 'refund')
+          .contains('metadata', { originalIdempotencyKey })
+          .limit(1);
+
+        if (existingDefensive && existingDefensive.length > 0) {
+          console.log(`[spend-credits] REFUND: Idempotent hit — defensive refund already issued for key ${originalIdempotencyKey}`);
+          const balance = await syncBalanceCache(supabaseAdmin, user.id);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              refunded: refundAmount,
+              action: 'REFUND',
+              idempotent: true,
+              newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       // Add credits back via a new credit_purchases row (simplest safe approach — no expiry)
       const { error: purchaseErr } = await supabaseAdmin
         .from('credit_purchases')
@@ -510,6 +542,9 @@ serve(async (req) => {
           originalAction,
           tripId: tripId || null,
           pendingChargeId: pendingChargeId || null,
+          // recorded so defensive-path retries (same key, no pendingChargeId)
+          // hit the idempotency guard instead of crediting again
+          originalIdempotencyKey: originalIdempotencyKey || null,
         },
       });
 
