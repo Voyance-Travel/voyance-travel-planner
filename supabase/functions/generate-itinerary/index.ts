@@ -347,6 +347,20 @@ serve(async (req) => {
           console.log(
             `[generate-itinerary] Free-first-trip authorization for user=${authResult.userId} (profiles.first_trip_used=false)`
           );
+          // Stamp the trip so the V2 ready-finalize can CLAIM the benefit
+          // server-side. The claim used to live only in TripDetail.tsx (a
+          // browser callback after the client observed completion) — close
+          // the tab mid-generation or hit the API directly and the flag never
+          // flipped, making EVERY trip free forever (QA funnel test F4/F5:
+          // second uncharged kickoff authorized + generating).
+          try {
+            const { data: tRow } = await supabase.from('trips').select('metadata').eq('id', tripId).maybeSingle();
+            await supabase.from('trips').update({
+              metadata: { ...((tRow?.metadata as Record<string, unknown>) || {}), free_first_trip_authorized: true },
+            }).eq('id', tripId);
+          } catch (stampErr) {
+            console.warn('[generate-itinerary] free-first-trip stamp failed (claim falls back to client):', stampErr);
+          }
         }
       }
 
