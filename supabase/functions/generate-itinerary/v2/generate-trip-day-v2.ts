@@ -1549,6 +1549,20 @@ export async function handleGenerateTripDayV2(
         }
         await supabase.from('trips').update(statusUpdate).eq('id', tripId);
         console.log(`[v2] [STATUS_FINALIZE] status=${finalStatus} allComplete=${allComplete} heal=${heal} days=${dbDays.length}/${totalDays}`);
+        // ── JOURNEY LEG CHAIN (V2 port) — V1 kicked the next journey leg after
+        // its finalize (generation-core Phase-6 / action-generate-trip-day), but
+        // V2 never called it: leg 1 finished ready and legs 2+ sat not_started
+        // forever (Step-5 journey QA: Rome ready, Florence/Venice never started;
+        // zero journey trips have ever completed in prod). No-op for non-journey
+        // trips (journey_order null) and for legs already running/done.
+        if (finalStatus === 'ready') {
+          try {
+            const { triggerNextJourneyLeg } = await import('../action-save-itinerary.ts');
+            await triggerNextJourneyLeg(supabase, tripId);
+          } catch (e) {
+            console.warn('[v2] journey leg chain failed (non-blocking):', (e as Error)?.message);
+          }
+        }
         }
       } catch (e) {
         console.warn('[v2] status finalize failed (non-blocking):', (e as Error)?.message);
