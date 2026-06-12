@@ -290,6 +290,11 @@ serve(async (req) => {
       // ledger spend in the last 10 minutes that matches allowedSpendActions.
       // Mirrors the pattern already shipped for generate-trip retry/resume.
       if (!charge && (action === 'generate-day' || action === 'regenerate-day')) {
+        // lte(0), not lt(0): a regenerate under the FREE CAP writes a
+        // legitimate zero-delta committed ledger row (spend-credits free-cap /
+        // group-cap paths). Requiring a negative delta 403'd every user's
+        // free day-regenerate at this gate (GENERATION_NOT_AUTHORIZED) right
+        // after spend-credits had told the client the action was authorized.
         const { data: ledgerProof } = await supabase
           .from('credit_ledger')
           .select('id, action_type, created_at, metadata')
@@ -297,7 +302,7 @@ serve(async (req) => {
           .eq('trip_id', tripId)
           .in('action_type', allowedSpendActions)
           .eq('transaction_type', 'spend')
-          .lt('credits_delta', 0)
+          .lte('credits_delta', 0)
           .filter('metadata->>status', 'eq', 'committed')
           .gte('created_at', tenMinAgo)
           .order('created_at', { ascending: false })

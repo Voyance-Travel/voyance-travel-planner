@@ -250,7 +250,10 @@ serve(async (req) => {
               trip_id: tripId,
               activity_id: null,
               notes: `${action.replace(/_/g, ' ')} - group cap (${used + 1}/${cap})`,
-              metadata: { ...metadata, day_index: dayIndex, group_cap_used: true, activityId: activityId || null },
+              // status:'committed' — generate-itinerary's proof-of-charge gate
+              // accepts only committed ledger spends; without it a free-cap
+              // regenerate 403s at generate-day (GENERATION_NOT_AUTHORIZED).
+              metadata: { ...metadata, day_index: dayIndex, group_cap_used: true, status: 'committed', activityId: activityId || null },
             });
           if (groupLedgerErr) console.error('[spend-credits] Group cap ledger insert failed:', groupLedgerErr);
 
@@ -338,7 +341,9 @@ serve(async (req) => {
             trip_id: tripId,
             activity_id: null,
             notes: `${action.replace(/_/g, ' ')} - free (${currentUsage + 1}/${freeCap})`,
-            metadata: { ...metadata, day_index: dayIndex, free_cap_used: true, usage: currentUsage + 1, cap: freeCap, activityId: activityId || null },
+            // status:'committed' — see group-cap insert above; the per-day
+            // generation gate must recognize a free-cap spend as authorization.
+            metadata: { ...metadata, day_index: dayIndex, free_cap_used: true, status: 'committed', usage: currentUsage + 1, cap: freeCap, activityId: activityId || null },
           });
         if (freeCapLedgerErr) console.error('[spend-credits] Free cap ledger insert failed:', freeCapLedgerErr);
 
