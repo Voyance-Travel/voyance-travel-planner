@@ -32,7 +32,9 @@ const arg = (n: string) => { const i = Deno.args.indexOf(`--${n}`); return i >= 
 const tripId = arg('trip');
 const URL_ = Deno.env.get('SUPABASE_URL')!, ANON = Deno.env.get('SUPABASE_ANON_KEY')!;
 const A_EMAIL = Deno.env.get('VOYANCE_EMAIL'), A_PASS = Deno.env.get('VOYANCE_PASSWORD');
-const B_EMAIL = Deno.env.get('COLLAB2_EMAIL'), B_PASS = Deno.env.get('COLLAB2_PASSWORD');
+// second account: accept either COLLAB2_* or VOYANCE_*2 naming
+const B_EMAIL = Deno.env.get('COLLAB2_EMAIL') ?? Deno.env.get('VOYANCE_EMAIL2');
+const B_PASS = Deno.env.get('COLLAB2_PASSWORD') ?? Deno.env.get('VOYANCE_PASSWORD2');
 if (!tripId) { console.error('--trip required (owned by account A)'); Deno.exit(2); }
 const missing = [['VOYANCE_EMAIL', A_EMAIL], ['VOYANCE_PASSWORD', A_PASS], ['COLLAB2_EMAIL', B_EMAIL], ['COLLAB2_PASSWORD', B_PASS]].filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) { console.error(`missing env: ${missing.join(', ')} — add the 2nd account to qa/harness/.env (COLLAB2_EMAIL / COLLAB2_PASSWORD)`); Deno.exit(2); }
