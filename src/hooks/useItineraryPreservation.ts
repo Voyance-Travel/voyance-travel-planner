@@ -47,8 +47,20 @@ function isDestructive(prev: Snapshot, next: { dayCount: number; diningCount: nu
 export function useItineraryPreservation(tripId: string | undefined, trip: any): void {
   const restoredOnceRef = useRef(false);
 
+  // READY-ONLY GUARD: this hook must be completely inert unless the trip is
+  // ready. During live generation day/dining counts legitimately fluctuate as
+  // the chain writes day-by-day — the "destructive change" heuristic misreads
+  // that as data loss and RESTORES a stale mid-generation snapshot OVER the
+  // server's in-progress writes (with allowReduction + allowFrozenWrite, no
+  // less). The server re-heals, statuses churn, and the user watches
+  // ready/failed/paused flap in a loop (owner's journey eyes-on, bug 14).
+  // Snapshotting mid-generation is equally wrong: it makes a half-built trip
+  // the "good" baseline that a later READY trip gets compared against.
+  const isReady = String(trip?.itinerary_status || '') === 'ready';
+
   // 1. Snapshot whenever a healthy itinerary is rendered.
   useEffect(() => {
+    if (!isReady) return;
     if (!tripId || !trip?.itinerary_data) return;
     const days = (trip.itinerary_data as any)?.days || [];
     if (days.length === 0) return;
@@ -59,11 +71,12 @@ export function useItineraryPreservation(tripId: string | undefined, trip: any):
     } catch (e) {
       console.warn('[ItineraryPreservation] snapshot failed:', e);
     }
-  }, [tripId, trip?.itinerary_data]);
+  }, [tripId, trip?.itinerary_data, isReady]);
 
   // 2. On mount + on trip changes, compare current state vs last snapshot.
   // If destructive change detected within TTL, restore.
   useEffect(() => {
+    if (!isReady) return;
     if (!tripId || !trip?.itinerary_data || restoredOnceRef.current) return;
     let raw: string | null = null;
     try { raw = sessionStorage.getItem(SNAPSHOT_KEY_PREFIX + tripId); } catch { return; }
@@ -107,5 +120,5 @@ export function useItineraryPreservation(tripId: string | undefined, trip: any):
         console.error('[ItineraryPreservation] restore failed:', e);
       }
     })();
-  }, [tripId, trip?.itinerary_data]);
+  }, [tripId, trip?.itinerary_data, isReady]);
 }
