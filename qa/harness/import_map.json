@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "@/integrations/supabase/client": "./sb-shim.ts"
+  }
+}
