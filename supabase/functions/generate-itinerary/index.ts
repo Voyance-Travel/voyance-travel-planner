@@ -392,6 +392,12 @@ serve(async (req) => {
       console.log(
         `[generate-itinerary] Proof-of-charge OK: charge=${charge.id} action=${charge.action} status=${charge.status}`
       );
+      // Carry the AUTHORIZING spend action to the handler: generate-day uses it
+      // to bump unlocked_day_count server-side when the charge was unlock_day.
+      // That bump used to live only in useUnlockDay (browser callback) — kill
+      // the tab between charge and bump and the user paid for a day that still
+      // renders locked. Same client-side-side-effect class as bugs 12/13.
+      (params as any).__chargeAction = charge.action;
     }
 
     // Rate limit check

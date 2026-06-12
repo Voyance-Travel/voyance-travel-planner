@@ -2029,6 +2029,26 @@ export async function handleGenerateDay(
       } catch (e) { console.warn('[generate-day] regen cross-day cleanup failed (non-blocking):', e); }
     }
 
+    // ── SERVER-SIDE UNLOCK-COUNT BUMP ────────────────────────────────────
+    // When this generation was authorized by an unlock_day charge (the gate
+    // stamps params.__chargeAction), the user PAID for this day — unlock it
+    // here, where the work finished. The bump used to live only in
+    // useUnlockDay (a browser callback after the response): kill the tab
+    // between charge and bump and the paid day rendered locked forever. Same
+    // client-side-side-effect class as the first-trip claim (bug 12) and the
+    // journey-leg unlocks (bug 13). Max-based, never reduces; the client's
+    // own bump remains as a harmless backstop.
+    if ((params as any)?.__chargeAction === 'unlock_day' && typeof dayNumber === 'number') {
+      try {
+        const { data: unlockRow } = await supabase.from('trips').select('unlocked_day_count').eq('id', tripId).maybeSingle();
+        const newCount = Math.max(Number(unlockRow?.unlocked_day_count ?? 0), dayNumber);
+        await supabase.from('trips').update({ unlocked_day_count: newCount }).eq('id', tripId);
+        console.log(`[generate-day] [UNLOCK_DAY_BUMP] trip=${tripId} unlocked_day_count→${newCount}`);
+      } catch (e) {
+        console.warn('[generate-day] unlock-count bump failed (client backstop remains):', e);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
