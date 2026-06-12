@@ -93,11 +93,21 @@ export function isPlaceholderMealActivity(activity: any): boolean {
   // Scoped strictly to swap-sourced cards whose title AND venue are concrete.
   {
     const src = String(activity?.source || '');
-    if (/^c3-(restaurant|places)-swap$/.test(src)) {
-      const t = (activity?.title || activity?.name || '').toString();
-      const v = (activity?.location?.name || activity?.venue_name || '').toString();
-      if (v && !PLACEHOLDER_MEAL_TITLE_RE.test(t) && !PLACEHOLDER_MEAL_TITLE_RE.test(v)) return false;
-    }
+    const t = (activity?.title || activity?.name || '').toString();
+    const v = (activity?.location?.name || activity?.venue_name || '').toString().trim();
+    const concreteText = v.length > 2 && !PLACEHOLDER_MEAL_TITLE_RE.test(t) && !PLACEHOLDER_MEAL_TITLE_RE.test(v);
+    if (/^c3-(restaurant|places)-swap$/.test(src) && concreteText) return false;
+    // ESTABLISHMENT-FORM EXEMPTION (generalizes the swap exemption above):
+    // fix-placeholders stamps unverified_venue on LLM dining cards, so a
+    // regenerated day's "Breakfast at Chez Boulay" arrived flagged — the
+    // save-path guard called it a placeholder, injected a protected "find a
+    // local spot" sentinel, and the collapse dropped the NAMED meal (Quebec
+    // City edit-regression round 3: all three meals became sentinels, trip
+    // ready→partial). A meal titled "… at <Venue>" with a concrete venue is
+    // named coverage — strictly better for the user than the sentinel that
+    // would replace it. The generic "Lunch in <City>" form has no "at", so it
+    // still counts as a placeholder and still gets venue-resolved (G6 parity).
+    if (concreteText && /\b(?:breakfast|brunch|lunch|dinner|supper)\b\s+(?:at|@)\s+\S/i.test(t)) return false;
   }
   const meta = (activity?.metadata || {}) as Record<string, unknown>;
   if (meta.needsVenuePick === true || meta.unverified_venue === true) return true;
