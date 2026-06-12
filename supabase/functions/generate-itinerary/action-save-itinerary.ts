@@ -60,7 +60,10 @@ export async function triggerNextJourneyLeg(supabase: any, tripId: string): Prom
       .eq('journey_order', nextOrder)
       .single();
 
-    if (!nextLeg || nextLeg.itinerary_status !== 'queued') {
+    // Accept 'not_started' too: splitJourneyIfNeeded creates legs 2+ as
+    // not_started (it never writes 'queued'), so requiring 'queued' made the
+    // chain no-op on EVERY journey ever created (Step-5 QA).
+    if (!nextLeg || !['queued', 'not_started'].includes(String(nextLeg.itinerary_status))) {
       console.log(`[triggerNextJourneyLeg] No queued next leg for journey ${currentTrip.journey_id} order ${nextOrder}`);
       return;
     }

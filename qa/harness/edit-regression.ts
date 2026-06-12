@@ -257,16 +257,36 @@ if (import.meta.main) {
     }));
     const keepActivities = backendActivities.filter((a: any) => a.isLocked).map((a: any) => a.id);
     check('E7', keepActivities.includes(lockTarget.id), `locked card in keepActivities (${keepActivities.length} kept)`);
-    const { data: gen, error: gerr } = await sb.functions.invoke('generate-itinerary', {
-      body: {
-        action: 'generate-day', tripId, dayNumber: dayN, totalDays: expectedDays,
-        destination: row.destination, date: d.date,
-        travelers: 1, budgetTier: 'moderate', tripType: 'vacation',
-        previousDayActivities: (d.activities ?? []).map((a: any) => a.title || a.name).filter(Boolean),
-        keepActivities, currentActivities: backendActivities, variationNonce: Date.now(),
-      },
-    });
-    const newDay = (gen as any)?.day;
+    // Raw fetch (not sb.functions.invoke) so a failure surfaces the REAL
+    // status/body, plus one retry — round-4 Tbilisi failed with an opaque
+    // "non-2xx" that an identical manual call 2 min later answered with 200
+    // (transient gateway/worker timeout on a long LLM generation).
+    const genBody = {
+      action: 'generate-day', tripId, dayNumber: dayN, totalDays: expectedDays,
+      destination: row.destination, date: d.date,
+      travelers: 1, budgetTier: 'moderate', tripType: 'vacation',
+      previousDayActivities: (d.activities ?? []).map((a: any) => a.title || a.name).filter(Boolean),
+      keepActivities, currentActivities: backendActivities, variationNonce: Date.now(),
+    };
+    const callGenDay = async (): Promise<{ ok: boolean; status: number; json: any; text: string }> => {
+      const session = (await sb.auth.getSession()).data.session!;
+      const r = await fetch(`${URL_}/functions/v1/generate-itinerary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}`, 'apikey': ANON! },
+        body: JSON.stringify(genBody),
+      });
+      const text = await r.text();
+      let json: any = null; try { json = JSON.parse(text); } catch { /* non-JSON body */ }
+      return { ok: r.ok, status: r.status, json, text };
+    };
+    let genRes = await callGenDay();
+    if (!genRes.ok) {
+      console.log(`     generate-day attempt 1: ${genRes.status} ${genRes.text.slice(0, 200)} — retrying in 30s`);
+      await sleep(30);
+      genRes = await callGenDay();
+    }
+    const gerr = genRes.ok ? null : { message: `${genRes.status} ${genRes.text.slice(0, 200)}` };
+    const newDay = genRes.json?.day;
     check('E7', !gerr && !!newDay && Array.isArray(newDay.activities) && newDay.activities.length > 0,
       `generate-day ${gerr ? 'ERROR ' + gerr.message : `returned ${newDay?.activities?.length ?? 0} activities`}`);
     if (newDay?.activities?.length) {
