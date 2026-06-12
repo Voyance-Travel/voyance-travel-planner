@@ -678,6 +678,12 @@ export async function persistTripItinerary(
             a.startTime = hM(nm); a.time = a.startTime;
             a.endTime = hM(Math.min(nm + 55, 1439));
             wrapN++; reclamped++;
+          } else if (m != null && m > 1320 && /\bdinner\b/i.test(String(a?.title ?? a?.name ?? ''))) {
+            // cascade pushed a dinner past 22:00 (Fes: 21:xx → 22:35). Cap it
+            // back to 21:30 — a snug evening beats an absurd dinner time.
+            a.startTime = '21:30'; a.time = '21:30';
+            a.endTime = '22:45';
+            reclamped++;
           }
         }
       }

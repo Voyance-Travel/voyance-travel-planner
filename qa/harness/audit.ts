@@ -74,7 +74,9 @@ export function auditDays(days: any[], opts: { city?: string; mustDo?: string; e
       const t = T(a); const s = start(a);
       if (isMeal(a)) {
         if (s != null && s < 390) add('G3.earlyMeal', dn, `"${t}" at ${a.startTime}`);
-        if (/\bdinner\b/i.test(t) && s != null && s > 1305) add('G5.lateDinner', dn, `"${t}" at ${a.startTime}`);
+        // fail line 22:00 — aligned with the persist re-clamp's dinner cap (21:30),
+        // so a capped dinner always passes; 22:35+ absurdities still fail
+        if (/\bdinner\b/i.test(t) && s != null && s > 1320) add('G5.lateDinner', dn, `"${t}" at ${a.startTime}`);
         const blob = lc(t) + ' ' + lc(a?.location?.name);
         if (PLACEHOLDER_MEAL.test(blob)) add('G6.placeholderMeal', dn, `"${t}" / loc "${a?.location?.name ?? ''}"`);
         else if (cityLc && new RegExp(`^(breakfast|brunch|lunch|dinner)\\s+(in|at)\\s+${cityLc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i').test(t.trim()))
