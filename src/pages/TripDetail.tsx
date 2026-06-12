@@ -469,7 +469,13 @@ export default function TripDetail() {
 
   const generationPoller = useGenerationPoller({
     tripId: tripId || null,
-    enabled: isServerGenerating || isFinalizing,
+    // 'partial' keeps the poller alive: a paused trip is routinely completed
+    // by BACKGROUND heals minutes later, but with the poller disabled the view
+    // sat on "Generation paused" forever and only a hard refresh revealed the
+    // finished itinerary (bug 14 residue, owner's journey eyes-on). The poller
+    // self-downgrades to a 60s background cadence on dead verdicts, so this
+    // does not reintroduce the 8s re-render runaway.
+    enabled: isServerGenerating || isFinalizing || trip?.itinerary_status === 'partial',
     interval: 3000,
     resumeInFlight: resumeInFlightRef.current || resumingGeneration,
     onReady: async () => {

@@ -474,11 +474,19 @@ export function useGenerationPoller({
 
     // Interval-based polling as fallback (8s instead of 2s — realtime handles instant updates)
     const fallbackInterval = Math.max(interval, 8000);
+    let lastSlowPoll = 0;
     const timer = setInterval(() => {
-      // C-POLL-1: skip the fallback poll once a stall is confirmed dead — avoids
-      // re-detecting/re-logging/re-rendering forever. Realtime + visibility still
-      // poll() directly and reset this on a genuine revival.
-      if (terminallyStalledRef.current) return;
+      // C-POLL-1 (amended): once a stall is confirmed dead, drop to a SLOW
+      // background poll (60s) instead of stopping outright. The full stop made
+      // a late server revival invisible — background heals routinely finish
+      // AFTER the stall verdict, and the view sat on "Generation paused" until
+      // a hard refresh (bug 14 residue, owner's journey eyes-on). 60s keeps
+      // the 8s re-log/re-render runaway fixed while the verdict self-heals;
+      // realtime + visibility still poll instantly on genuine events.
+      if (terminallyStalledRef.current) {
+        if (Date.now() - lastSlowPoll < 60_000) return;
+        lastSlowPoll = Date.now();
+      }
       poll();
     }, fallbackInterval);
 
