@@ -100,7 +100,13 @@ export function selfCheckAndRepair(days: any[], opts?: { skipLastDayStrips?: boo
   // stray U+62BD 抽). Strip the minority out-of-script chars (CJK/kana/Hangul) but
   // PRESERVE genuine CJK venue names (Tokyo/Seoul), where the string is CJK-dominant,
   // and PRESERVE Latin accents (ü, á, é) + punctuation (em-dash).
-  const OUT_SCRIPT = /[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]/g;
+  // Emoji are out-of-script too: Florence shipped "Lunch at Osteria Serviti" +
+  // U+1F362 (Step-5 journey QA). \p{Extended_Pictographic} needs the u flag —
+  // without it the class only matches surrogate HALVES, and whether those
+  // halves fall in the CJK ranges depends on the emoji: the audit's literal
+  // detected this one while this strip missed it (detector drift inside one
+  // regex literal). VS16/ZWJ/keycap combiners stripped alongside.
+  const OUT_SCRIPT = /[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]|\p{Extended_Pictographic}|[\u{FE0F}\u{200D}\u{20E3}]/gu;
   const stripGarble = (s: any): string => {
     const str = String(s ?? '');
     if (!str) return str;

@@ -45,7 +45,13 @@ const LEAK = /(as an ai|i cannot|research context|prompt instruction|placeholder
 // ("SMART_FINISH_SOURCE_NOTES:") — parity with extract-must-dos' guard.
 const HEADERISH = /:\s*$/;
 const PLACEHOLDER_MEAL = /find (?:a |your )?(?:local|good|great|perfect)?\s*(?:spot|place|restaurant|caf[eé]|eatery)/i;
-const OUT_SCRIPT = /[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]/g;
+// Emoji are out-of-script too: Florence shipped "Lunch at Osteria Serviti" +
+// U+1F362 (Step-5 journey QA). \p{Extended_Pictographic} needs the u flag —
+// without it the class only matches surrogate HALVES, and whether those
+// halves fall in the CJK ranges depends on the emoji: the audit's literal
+// detected this one while this strip missed it (detector drift inside one
+// regex literal). VS16/ZWJ/keycap combiners stripped alongside.
+const OUT_SCRIPT = /[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]|\p{Extended_Pictographic}|[\u{FE0F}\u{200D}\u{20E3}]/gu;
 
 const STOP_CORE = new Set(['the', 'a', 'an', 'of', 'and', 'or', 'to', 'in', 'at', 'on', 'by', 'with', 'your', 'via', 'for',
   'wander', 'wandering', 'explore', 'exploring', 'visit', 'visiting', 'tour', 'touring', 'discover', 'discovering',
