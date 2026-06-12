@@ -1562,6 +1562,23 @@ export async function handleGenerateTripDayV2(
           } catch (e) {
             console.warn('[v2] journey leg chain failed (non-blocking):', (e as Error)?.message);
           }
+          // ── FIRST-TRIP BENEFIT CLAIM (server-authoritative) ──────────
+          // The kickoff gate stamps metadata.free_first_trip_authorized when
+          // it grants an uncharged generation off profiles.first_trip_used.
+          // Consume the flag HERE, where ready is stamped — the old claim
+          // lived only in TripDetail.tsx (browser callback), so closing the
+          // tab mid-generation left the flag false and EVERY subsequent trip
+          // generated free (QA funnel test F4/F5). claim_first_trip_benefit
+          // is an atomic check-and-set; the client call remains a backstop.
+          if ((stRow?.metadata as any)?.free_first_trip_authorized === true) {
+            try {
+              const { error: claimErr } = await supabase.rpc('claim_first_trip_benefit', { p_user_id: userId });
+              if (claimErr) console.warn('[v2] first-trip claim failed (client backstop remains):', claimErr.message);
+              else console.log(`[v2] [FIRST_TRIP_CLAIMED] user=${userId} trip=${tripId}`);
+            } catch (e) {
+              console.warn('[v2] first-trip claim threw (non-blocking):', (e as Error)?.message);
+            }
+          }
         }
         }
       } catch (e) {
