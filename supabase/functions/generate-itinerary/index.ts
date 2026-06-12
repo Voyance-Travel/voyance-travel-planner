@@ -1,4 +1,4 @@
-// deploy-marker: pr29-pr32 (bundles #24 DNA fix, #25 share-RPC, #29 Stripe credit security, #32 guide-gen charge) — forces Lovable bundler to redeploy edge functions
+// deploy-marker: v343-emoji-garble-fix (bundles Bug #10: emoji garble stripper drift fix from 53a061727)
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 
