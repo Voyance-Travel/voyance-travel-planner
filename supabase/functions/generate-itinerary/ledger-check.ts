@@ -332,10 +332,26 @@ export async function ledgerCheck(
       let repeat = doneLower.some((d) => fuzzyMatch(t, d));
       // Canonical venue match — catches "Louvre Museum Priority Visit" vs
       // "Louvre Museum Exploration" even when usedVenues plumbing is empty.
+      // STRICT comparator here, NOT the shared venueNamesMatch: its 0.5
+      // word-overlap floor for <=2-word names let a single shared generic
+      // token kill a real activity — Kyiv first-save dropped "Artisan Walk
+      // down Andreyivskyy Descent" because canonical "andriyivskyy descent"
+      // (prior day, DIFFERENT spelling) overlapped on the one word "descent".
+      // This pass deletes content the generator shipped and the audit passed,
+      // so it must be at most as aggressive as they are: equality, or every
+      // word of the smaller canonical name present in the larger (full
+      // subset). "louvre museum" ⊂ "louvre museum exploration" still matches;
+      // a one-generic-word brush no longer does.
       if (!repeat) {
         const cand = canonicalActivityVenueName(a.title || a.name || '');
         if (cand && cand.length > 3) {
-          repeat = doneCanon.some((d) => venueNamesMatch(cand, d));
+          const candWords = new Set(cand.split(/\s+/));
+          repeat = doneCanon.some((d) => {
+            if (cand === d) return true;
+            const dWords = new Set(d.split(/\s+/));
+            const [small, large] = candWords.size <= dWords.size ? [candWords, dWords] : [dWords, candWords];
+            return [...small].every((w) => large.has(w));
+          });
         }
       }
       if (repeat) {
