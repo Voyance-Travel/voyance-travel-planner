@@ -351,9 +351,13 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   (params as any).__saveTraceId = saveTraceId;
 
   // Verify trip access
+  // `destination` is load-bearing: the STEP-2 meal guard and terminalCleanup
+  // resolve their city from `trip.destination`. Without it every fallback
+  // venue became "…find a local spot in the destination" and the
+  // verified_venues pool lookup was skipped (Munich no-op-save bug).
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('user_id, start_date, end_date, flight_selection, metadata, itinerary_status')
+    .select('user_id, start_date, end_date, flight_selection, metadata, itinerary_status, destination')
     .eq('id', tripId)
     .single();
 
@@ -534,17 +538,16 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         // proxy for departure time (downstream §15z buffers from this).
         savedDepartureTime24 = String(transferCard.endTime || transferCard.end_time);
         departureBackfillSource = 'airport_transfer_card';
-      } else {
-        const checkoutCard = [...acts].reverse().find((a) => {
-          const cat = String(a?.category || '').toLowerCase();
-          if (cat === 'checkout' || cat === 'check-out') return true;
-          return /\bcheck[-\s]?out\b/i.test(String(a?.title || ''));
-        });
-        if (checkoutCard && (checkoutCard.endTime || checkoutCard.end_time)) {
-          savedDepartureTime24 = String(checkoutCard.endTime || checkoutCard.end_time);
-          departureBackfillSource = 'checkout_card';
-        }
       }
+      // NO checkout-card fallback. Treating checkout END as the FLIGHT time is
+      // self-referential and destructive: §15z buffers 180+45min back from it
+      // and rebuilds the very morning it derived the time from. Munich no-op
+      // save: checkout 11:10 → "departure 11:30" → checkout retimed to 07:00,
+      // transfer injected at 07:55, the real 08:30 breakfast dropped as "inside
+      // the airport window". A last day with no flight card and no transfer
+      // card has NO clock — meal-policy's no-clock branch (no required meals,
+      // keep the logical day) and §15z's no-time no-op match generation, which
+      // is the behavior that passed the 20-trip streak.
     }
     if (savedDepartureTime24) {
       console.log(

@@ -83,6 +83,22 @@ function pickStartMins(a: any): number | null {
 
 /** A placeholder/unverified slot never satisfies meal compliance. */
 export function isPlaceholderMealActivity(activity: any): boolean {
+  // VENUE-RESOLVED SWAP EXEMPTION: the cross-day dedup's venue swap
+  // (c3-restaurant-swap / c3-places-swap) replaces a placeholder with a REAL
+  // catalog/Places venue, but cards swapped before 2026-06-12 still carry the
+  // original sentinel's metadata flags. Those persisted cards must count as
+  // real meals — treating them as placeholders made every save-itinerary pass
+  // re-inject a sentinel and drop the real venue (Munich no-op-save bug:
+  // "Lunch at Zum Alten Markt" → "Lunch — find a local spot…", ready→partial).
+  // Scoped strictly to swap-sourced cards whose title AND venue are concrete.
+  {
+    const src = String(activity?.source || '');
+    if (/^c3-(restaurant|places)-swap$/.test(src)) {
+      const t = (activity?.title || activity?.name || '').toString();
+      const v = (activity?.location?.name || activity?.venue_name || '').toString();
+      if (v && !PLACEHOLDER_MEAL_TITLE_RE.test(t) && !PLACEHOLDER_MEAL_TITLE_RE.test(v)) return false;
+    }
+  }
   const meta = (activity?.metadata || {}) as Record<string, unknown>;
   if (meta.needsVenuePick === true || meta.unverified_venue === true) return true;
   if (meta.preserveAsManualPick === true) return true;
