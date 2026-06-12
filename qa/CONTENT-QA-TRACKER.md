@@ -17,6 +17,7 @@ Goal: avg ≥ 90, zero HIGH-severity issues. Re-run after each fix lands and rec
 | Date | Trips | Avg | Critical | Note |
 |------|-------|-----|----------|------|
 | baseline | 18 | 53 | 8 | before V2 fixes deployed |
+| 2026-06-12 | 60 | ~97 | 0 | RE-BASELINE post-campaign (audit.ts over all fresh QA trips): **58/60 clean**, 0 HIGH-severity. Residual: 1 G7 garble + 1 G8 cross-day dup — both MED, both pre-fix fixtures. Categories C1/C2/C4/C5/C6/C7/C8 = **0 hits**; C3 dup = 1. The 53→~97 jump is the 15 deployed fixes. |
 
 ---
 
