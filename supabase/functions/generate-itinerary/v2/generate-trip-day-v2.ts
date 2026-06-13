@@ -788,7 +788,12 @@ export async function handleGenerateTripDayV2(
     // Backfill cards skip the dedup by construction — they're filtered against
     // every title already on the trip — and still pass the 8i self-check.
     const runThinDayBackfill = async () => {
-      if (!(heal && dayNumber > 1 && dayNumber < totalDays)) return;
+      // Mid-trip heal days OR any single-day trip. The day-trip case
+      // (dayNumber === 1 === totalDays) was excluded before, so a vague 1-day
+      // request shipped a thin day with no real venues — and the landmark cache
+      // is often empty for the city (e.g. Atlanta), so the resolver fallback
+      // below supplies real venues when the cache can't.
+      if (!((heal && dayNumber > 1 && dayNumber < totalDays) || totalDays === 1)) return;
       try {
         const dayObj: any = newDayPayload;
         const acts: any[] = Array.isArray(dayObj.activities) ? dayObj.activities : (dayObj.activities = []);
@@ -797,7 +802,8 @@ export async function handleGenerateTripDayV2(
         const isMealB = (a: any) => ['breakfast', 'lunch', 'dinner', 'dining', 'restaurant'].includes(lcb(a?.category)) || /\b(breakfast|brunch|lunch|dinner)\b/i.test(lcb(a?.title || a?.name));
         const isDrinkB = (a: any) => /\bnight ?cap\b|late[- ]?night (?:drink|jazz|stroll|out|bar|bite)|evening (?:drink|nightcap)/i.test(lcb(a?.title || a?.name));
         const realCount = acts.filter((a) => !isLogB(a) && !isMealB(a) && !isDrinkB(a)).length;
-        if (realCount < 2) {
+        const targetReal = totalDays === 1 ? 4 : 2; // a single full local day wants a richer fill
+        if (realCount < targetReal) {
           // BARE city — facts.destination.city carries the wizard's full
           // "Athens, Greece" but city_landmarks_cache stores "Athens"; the
           // ilike('%Athens, Greece%') lookup matched nothing and the backfill
@@ -809,15 +815,50 @@ export async function handleGenerateTripDayV2(
           const tripBlob = mergedDays
             .flatMap((dd: any) => (Array.isArray(dd?.activities) ? dd.activities : []))
             .map((a: any) => lcb(a?.title || a?.name) + ' ' + lcb(a?.location?.name)).join(' | ');
-          const fresh = landmarks.filter((l: any) => l?.name && !tripBlob.includes(lcb(l.name)));
+          let candidates: any[] = landmarks.filter((l: any) => l?.name && !tripBlob.includes(lcb(l.name)));
+          // Cache empty/exhausted (e.g. Atlanta has no landmark row) → REASON OUT
+          // real venues for the vibe with the grounded resolver (model proposes;
+          // cross-city + filler rejection disposes). Safe fallback: [] on error,
+          // leaving the day as-is. Killable via VIBE_RESOLVER_DISABLED.
+          if (candidates.length < targetReal - realCount && Deno.env.get('VIBE_RESOLVER_DISABLED') !== 'true') {
+            try {
+              const vibeBits: string[] = [String((tripMeta as any)?.additionalNotes || '')];
+              try {
+                const { extractMustDoExperiences } = await import('../../_shared/extract-must-dos.ts');
+                vibeBits.push(extractMustDoExperiences(tripMeta).join('; '));
+              } catch { /* non-fatal */ }
+              const vibe = vibeBits.filter(Boolean).join(' ').trim() || 'a balanced first-time day';
+              const { resolveVibeToVenues } = await import('../../_shared/resolve-vibe-venues.ts');
+              const callModel = async (sys: string, usr: string): Promise<string> => {
+                const rr = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ model: 'google/gemini-2.5-flash', temperature: 0.4, messages: [{ role: 'system', content: sys }, { role: 'user', content: usr }] }),
+                });
+                if (!rr.ok) return '';
+                const jj = await rr.json().catch(() => null);
+                return jj?.choices?.[0]?.message?.content ?? '';
+              };
+              const resolved = await resolveVibeToVenues({ destination: facts.destination.city, vibe, limit: targetReal, callModel });
+              const extra = resolved
+                .map((v) => ({ name: v.name, category: v.category || 'sightseeing' }))
+                .filter((v) => !tripBlob.includes(lcb(v.name)) && !candidates.some((c: any) => lcb(c.name) === lcb(v.name)));
+              if (extra.length) {
+                candidates = [...candidates, ...extra];
+                console.log(`[v2] [THIN_DAY_RESOLVER] day=${dayNumber} city=${city} resolved=${extra.length} real venue(s) (cache had ${landmarks.length})`);
+              }
+            } catch (e) {
+              console.warn('[v2] vibe resolver failed (non-blocking):', (e as Error)?.message);
+            }
+          }
           const pMinB = (s: unknown) => { const m = String(s ?? '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; };
           const hhmmB = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
           const taken = acts.map((a) => pMinB(a?.startTime || a?.time)).filter((m): m is number => m != null);
           const slotFree = (m: number) => taken.every((t) => Math.abs(t - m) >= 75);
-          const slots = [600, 900, 990].filter(slotFree); // 10:00, 15:00, 16:30
+          const slots = (totalDays === 1 ? [540, 660, 870, 990, 1140] : [600, 900, 990]).filter(slotFree); // single-day → richer fill
           let added = 0;
-          for (const lm of fresh) {
-            if (added >= Math.min(2 - realCount, slots.length)) break;
+          for (const lm of candidates) {
+            if (added >= Math.min(targetReal - realCount, slots.length)) break;
             const start = slots[added];
             acts.push({
               id: `backfill-${dayNumber}-${added}-${String(lm.name).replace(/[^a-z0-9]/gi, '').slice(0, 12)}`,
