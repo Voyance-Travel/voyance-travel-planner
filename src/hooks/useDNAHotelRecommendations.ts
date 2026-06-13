@@ -29,6 +29,34 @@ export interface IdealHotelProfile {
   searchKeywords: string[];
 }
 
+// Defense-in-depth: strip out-of-script glyphs (CJK/emoji) and any leaked
+// JSON scaffolding from the AI-generated ideal-stay profile, mirroring the
+// edge function's sanitizeProfile. The model occasionally emits stray CJK
+// (e.g. "Graça漫") or bleeds raw JSON keys into a field; this guarantees the
+// drawer never renders garbled text even if a stale edge build or a cached
+// React-Query entry slips a dirty profile through. (bug #20)
+const OUT_SCRIPT = /[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]|\p{Extended_Pictographic}|[\u{FE0F}\u{200D}\u{20E3}]/gu;
+const cleanStr = (s: unknown): string =>
+  String(s ?? '').replace(OUT_SCRIPT, '').replace(/\s+/g, ' ').trim();
+const cleanList = (arr: unknown): string[] =>
+  Array.isArray(arr)
+    ? arr
+        .map(cleanStr)
+        .filter((s) => s.length > 0 && !/[\[\]{}"]|idealtypes|idealneighborhoods|idealamenities|searchkeywords|avoidtypes|:\s*\[/i.test(s))
+        .filter((s, i, a) => a.indexOf(s) === i)
+    : [];
+function sanitizeIdealProfile(p: IdealHotelProfile): IdealHotelProfile {
+  return {
+    idealTypes: cleanList(p?.idealTypes),
+    idealNeighborhoods: cleanList(p?.idealNeighborhoods),
+    idealAmenities: cleanList(p?.idealAmenities),
+    priceRange: p?.priceRange,
+    styleDescription: cleanStr(p?.styleDescription),
+    avoidTypes: cleanList(p?.avoidTypes),
+    searchKeywords: cleanList(p?.searchKeywords),
+  };
+}
+
 export interface DNARecommendedHotel extends HotelOption {
   dnaMatchScore: number;
   matchReasons: string[];
@@ -118,7 +146,7 @@ async function fetchIdealProfile(
     throw new Error(data?.error || 'Failed to generate hotel profile');
   }
 
-  return data.profile;
+  return sanitizeIdealProfile(data.profile);
 }
 
 // ============================================================================

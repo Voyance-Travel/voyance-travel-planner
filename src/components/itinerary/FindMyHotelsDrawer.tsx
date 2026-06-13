@@ -591,9 +591,14 @@ function generateBookingUrl(hotelName: string, destination: string): string {
     .replace(/\s*\([A-Z]{3}\)\s*/g, '') // remove "(AUS)" etc.
     .trim();
   
-  // Include both hotel name and full destination for accuracy
+  // Include both hotel name and full destination for accuracy.
+  // Do NOT pass dest_type=city: the ss query is "<hotel>, <city>", and telling
+  // Booking to treat that whole string as a CITY made it resolve to the wrong
+  // place (no city is named "Grand Hotel Barcelona, Barcelona" → default match).
+  // Letting Booking autocomplete the ss lands on the right property. Also drops
+  // the malformed trailing empty &nflt=.
   const query = encodeURIComponent(`${hotelName}, ${cleanDest}`);
-  return `https://www.booking.com/searchresults.html?ss=${query}&dest_type=city&nflt=`;
+  return `https://www.booking.com/searchresults.html?ss=${query}`;
 }
 
 export default FindMyHotelsDrawer;

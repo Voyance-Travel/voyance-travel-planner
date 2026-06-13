@@ -24,6 +24,8 @@ export interface SaveItineraryOptimisticOptions {
   skipLedgerCheck?: boolean;
   /** Bypass cached-version conflict check after the user explicitly chose to keep their changes. */
   force?: boolean;
+  /** Intentional trims (e.g. flight-arrival/departure reflow) opt past the destructive-shrink integrity guard. */
+  allowReduction?: boolean;
 }
 
 /**
@@ -104,6 +106,7 @@ export async function saveItineraryOptimistic(
   const safeRes = await safeUpdateItineraryData(tripId, itineraryData as any, {}, {
     allowFrozenWrite: options.allowFrozenWrite ?? true,
     skipLedgerCheck: options.skipLedgerCheck,
+    allowReduction: options.allowReduction,
     reason: options.reason || 'optimistic-update',
   });
 

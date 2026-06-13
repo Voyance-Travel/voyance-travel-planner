@@ -2686,7 +2686,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // On inter-city departure days (not last day of trip), inject the actual journey card
   // (e.g., "Flight to Rome", "Train to Kyoto") after the station/airport transfer.
   const nextLegCity = input.nextLegCity;
-  if (isLastDayInCity && !isLastDay && nextLegTransport && nextLegCity) {
+  if (isLastDayInCity && !isLastDay && nextLegCity) {
     const hasJourneyCard = activities.some((a: any) => {
       const t = (a.title || '').toLowerCase();
       const cat = (a.category || '').toLowerCase();
@@ -2697,15 +2697,18 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
 
     if (!hasJourneyCard) {
-      const modeLabel = nextLegTransport.charAt(0).toUpperCase() + nextLegTransport.slice(1);
-      const isFlightMode = nextLegTransport.toLowerCase().includes('flight') || nextLegTransport.toLowerCase().includes('fly');
+      // An unset leg ('') renders as a neutral "Travel to <city>" card — never
+      // a fabricated flight. Only an explicit 'flight' mode is treated as one.
+      const isUnspecifiedLeg = !nextLegTransport;
+      const modeLabel = isUnspecifiedLeg ? 'Travel' : (nextLegTransport.charAt(0).toUpperCase() + nextLegTransport.slice(1));
+      const isFlightMode = !isUnspecifiedLeg && (nextLegTransport.toLowerCase().includes('flight') || nextLegTransport.toLowerCase().includes('fly'));
       const journeyCategory = isFlightMode ? 'flight' : 'intercity_transport';
 
       // Determine timing
       const defaultDurations: Record<string, number> = { flight: 120, train: 180, bus: 240, ferry: 180 };
       const journeyDuration = nextLegTransportDetails?.duration
-        ? parseInt(nextLegTransportDetails.duration, 10) || defaultDurations[nextLegTransport] || 120
-        : defaultDurations[nextLegTransport] || 120;
+        ? parseInt(nextLegTransportDetails.duration, 10) || defaultDurations[nextLegTransport || ''] || 120
+        : defaultDurations[nextLegTransport || ''] || 120;
 
       let journeyStartMins: number;
       if (nextLegTransportDetails?.departureTime) {
@@ -2726,13 +2729,17 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       const journeyEndMins = journeyStartMins + journeyDuration;
       const hubName = isFlightMode
         ? (nextLegTransportDetails?.departureAirport || nextLegTransportDetails?.stationName || 'Airport')
+        : isUnspecifiedLeg
+        ? (nextLegTransportDetails?.departureStation || nextLegTransportDetails?.stationName || '')
         : (nextLegTransportDetails?.departureStation || nextLegTransportDetails?.stationName || 'Station');
 
       const journeyCard = {
-        id: `day${dayNumber}-journey-${nextLegTransport}-${Date.now()}`,
+        id: `day${dayNumber}-journey-${nextLegTransport || 'travel'}-${Date.now()}`,
         title: `${modeLabel} to ${nextLegCity}`,
         name: `${modeLabel} to ${nextLegCity}`,
-        description: `${modeLabel} from ${hubName} to ${nextLegCity}.${nextLegTransportDetails?.carrier ? ` ${nextLegTransportDetails.carrier}` : ''}`,
+        description: isUnspecifiedLeg
+          ? `Onward travel to ${nextLegCity}. Add your flight, train, or other transport details.`
+          : `${modeLabel} from ${hubName} to ${nextLegCity}.${nextLegTransportDetails?.carrier ? ` ${nextLegTransportDetails.carrier}` : ''}`,
         startTime: minutesToHHMM(journeyStartMins),
         endTime: minutesToHHMM(journeyEndMins),
         category: journeyCategory,
@@ -2854,6 +2861,14 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
       // Exempt hotel/airport-like targets — covered by bookend/logistics passes.
       if (HOTEL_AIRPORT_RE.test(targetRaw)) continue;
+
+      // Exempt the legitimate inter-city journey leg: its destination is the
+      // NEXT city, scheduled on the FOLLOWING day, so it is never an orphan
+      // within this day. Covers "Travel/Train/Bus/Drive to <next city>".
+      // Without this the onward-travel card is wrongly stripped as an orphan,
+      // leaving a transition day with no journey leg (and a flight, whose
+      // label is a noun, surviving while non-flight modes did not).
+      if (nextLegCity && targetNorm.includes(normKey(String(nextLegCity)))) continue;
 
       // Already matches a scheduled non-logistics activity? leave it alone.
       let matched = false;
@@ -3773,7 +3788,9 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 12. NON-FLIGHT DEPARTURE: strip airport activities ---
-  if (isLastDayInCity && !isLastDay && nextLegTransport && nextLegTransport !== 'flight') {
+  // Runs for an explicit non-flight mode AND for an unset leg ('') — only a
+  // leg the user actually marked 'flight' keeps airport/flight cards.
+  if (isLastDayInCity && !isLastDay && nextLegTransport !== 'flight') {
     const beforeCount = activities.length;
     activities = activities.filter((a: any) => {
       const t = (a.title || '').toLowerCase();
@@ -4075,10 +4092,15 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // --- 14. DEPARTURE DAY: prune activities after the last departure card ---
   // The flight/departure-transport card must be the final item on departure days.
   if (isDepartureDay && activities.length > 1) {
-    const DEPARTURE_ROLES = new Set(['flight', 'airport-transport', 'airport-security']);
+    const DEPARTURE_ROLES = new Set(['flight', 'airport-transport', 'airport-security', 'intercity-departure']);
     const classifyDep = (a: any): string => {
       const t = (a.title || '').toLowerCase();
       const cat = (a.category || '').toLowerCase();
+      // The inter-city journey leg (train/bus/car/unset "Travel to <city>") is
+      // itself the departure on a mid-trip city-change day — it must count as a
+      // terminal departure card so it is neither pruned nor left stranded behind
+      // an airport-transfer card.
+      if (cat === 'intercity_transport') return 'intercity-departure';
       if (cat === 'flight' || t.includes('flight departure') || t.includes('departure flight')) return 'flight';
       if (t.includes('airport departure') || t.includes('airport security') || t.includes('security and boarding') ||
           t.includes('departure and security')) return 'airport-security';
@@ -4128,10 +4150,13 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // Sightseeing / wellness / dining / hotel-grounds activities scheduled after the
   // checkout card are incoherent (the user has already left the hotel).
   if (isDepartureDay && activities.length > 1) {
-    const DEPARTURE_ROLES_14b = new Set(['flight', 'airport-transport', 'airport-security']);
+    const DEPARTURE_ROLES_14b = new Set(['flight', 'airport-transport', 'airport-security', 'intercity-departure']);
     const classifyDep14b = (a: any): string => {
       const t = (a.title || '').toLowerCase();
       const cat = (a.category || '').toLowerCase();
+      // The inter-city journey leg is the legitimate onward-travel card after
+      // checkout on a mid-trip city-change day — keep it (don't prune).
+      if (cat === 'intercity_transport') return 'intercity-departure';
       if (cat === 'flight' || t.includes('flight departure') || t.includes('departure flight')) return 'flight';
       if (t.includes('airport departure') || t.includes('airport security') || t.includes('security and boarding') ||
           t.includes('departure and security')) return 'airport-security';
@@ -4419,7 +4444,14 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   //   - no non-logistics, non-locked card starts at/after the airport-transfer start
   // Universal Locking honored — locked/user/manual/extracted/pinned rows preserved.
   // Closes the recurring "Florence 16:15 / Barcelona 15:30 / Madrid 21:05" drift.
-  if ((isLastDay || (isLastDayInCity && !isTransitionDay)) && !isHotelChange) {
+  // FINAL departure-day logistics = the trip's return-home flight (airport
+  // transfer, departure card, "add your return flight" prompt). On a MID-TRIP
+  // city departure this only applies when the onward leg is actually a flight;
+  // for a train/car/unset onward leg there is no return flight, so running it
+  // wrongly prunes the inter-city journey card and injects a return-flight
+  // prompt. Gate the mid-trip branch on an explicit flight onward leg.
+  const midTripOnwardIsFlight = String(nextLegTransport || '').toLowerCase() === 'flight';
+  if ((isLastDay || (isLastDayInCity && !isTransitionDay && midTripOnwardIsFlight)) && !isHotelChange) {
     console.log(
       `[DEPARTURE_15Z_RAN] day=${dayNumber} isLastDay=${isLastDay} isLastDayInCity=${isLastDayInCity} ` +
       `isTransitionDay=${isTransitionDay} isHotelChange=${isHotelChange} ` +

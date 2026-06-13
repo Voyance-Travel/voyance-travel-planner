@@ -156,8 +156,12 @@ export async function compileDayFacts(
                 resolvedIsLastDayInCity = true;
                 const nextCity = tripCities.find((c: any) => c.city_order === city.city_order + 1);
                 if (nextCity) {
-                  const isSameCountry = nextCity.country === city.country;
-                  resolvedNextLegTransport = (nextCity as any).transport_type || (isSameCountry ? 'train' : 'flight');
+                  // Respect the user's chosen transport mode. When none was
+                  // chosen we do NOT guess a flight (or a train) — an unset leg
+                  // stays '' so the departure is rendered as a neutral "onward
+                  // travel" leg, never a fabricated flight + airport transfers.
+                  // The traveler supplies the actual mode/details.
+                  resolvedNextLegTransport = (nextCity as any).transport_type || '';
                   resolvedNextLegCity = nextCity.city_name || '';
                   if ((nextCity as any).transport_details) {
                     const rawNext = (nextCity as any).transport_details;

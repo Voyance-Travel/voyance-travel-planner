@@ -4401,6 +4401,7 @@ export default function TripDetail() {
                           /check.?in/i.test(a.title || a.name || '')
                         ))
                       }
+                      isDayTrip={!!trip.start_date && !!trip.end_date && trip.start_date === trip.end_date}
                       isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
                       hasInterCityTransport={activeDays.some((d: any) => d.isTransitionDay)}
                       flightsBookedElsewhere={!!(trip?.metadata as any)?.flightsBookedElsewhere}

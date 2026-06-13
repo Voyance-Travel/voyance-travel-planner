@@ -129,6 +129,21 @@ const COUNTRY_CITY_TOKENS: Record<string, Array<{ re: RegExp; name: string }>> =
     { re: /\bguadalajara\b/i, name: 'Guadalajara' },
     { re: /\b(mérida|merida)\b/i, name: 'Mérida' },
   ],
+  portugal: [
+    // Hub tokens fold in their own day-trip suburbs so a legitimate
+    // greater-metro venue (e.g. a Vila Nova de Gaia port cellar on a Porto
+    // day, or Sintra on a Lisbon day) is NOT flagged as cross-city — only a
+    // venue from a genuinely different trip city is. (bug: Gaia venue on a
+    // Lisbon day)
+    { re: /\b(lisbon|lisboa|sintra|cascais|bel[ée]m|estoril)\b/i, name: 'Lisbon' },
+    { re: /\b(porto|oporto|vila nova de gaia|gaia)\b/i, name: 'Porto' },
+    { re: /\b(faro|algarve|lagos|albufeira)\b/i, name: 'Faro' },
+    { re: /\bcoimbra\b/i, name: 'Coimbra' },
+    { re: /\bbraga\b/i, name: 'Braga' },
+    { re: /\baveiro\b/i, name: 'Aveiro' },
+    { re: /\bfunchal\b/i, name: 'Funchal' },
+    { re: /\b[ée]vora\b/i, name: 'Évora' },
+  ],
 };
 
 /** Map a destination string ("Venice, Italy", "Rome", "Paris, France") to a country key. */
@@ -176,6 +191,9 @@ function inferCountry(destination: string): string | null {
   if (/\bmexico\b/.test(d) ||
       /\b(mexico city|cdmx|ciudad de méxico|ciudad de mexico|cancun|tulum|oaxaca|guadalajara|mérida|merida)\b/.test(d))
     return 'mexico';
+  if (/\bportugal\b/.test(d) ||
+      /\b(lisbon|lisboa|porto|oporto|vila nova de gaia|sintra|cascais|faro|algarve|coimbra|braga|aveiro|funchal|[ée]vora)\b/.test(d))
+    return 'portugal';
   return null;
 }
 
@@ -226,6 +244,12 @@ export function isCrossCityAddress(activity: any, destination: string): string |
   }
   if (typeof activity?.venue_name === 'string') fields.push(activity.venue_name);
   if (typeof activity?.venueName === 'string') fields.push(activity.venueName);
+  // The venue's city often lives ONLY in the title/name (e.g. "Wine Cellars
+  // of Vila Nova de Gaia" on a Lisbon day, with no address). Scan those too —
+  // detectCrossCityMention still allows the destination's own city when it is
+  // named in the same string, so a legitimate "... in Lisbon" never trips.
+  if (typeof activity?.title === 'string') fields.push(activity.title);
+  if (typeof activity?.name === 'string') fields.push(activity.name);
 
   for (const f of fields) {
     const hit = detectCrossCityMention(f, destination);

@@ -604,7 +604,16 @@ export async function runCascadeAndPersist(
       itineraryData.days = recompute.updatedDays;
 
       const { saveItineraryOptimistic } = await import('@/services/itineraryOptimisticUpdate');
-      const saveResult = await saveItineraryOptimistic(tripId, itineraryData);
+      // The arrival/departure reflow legitimately trims activities that no
+      // longer fit around the real flight time. That is an intentional shrink,
+      // so it must opt past the destructive-write integrity guard and the
+      // frozen-trip gate — otherwise the re-time is silently rejected and the
+      // day reverts to its pre-flight schedule (bug #21).
+      const saveResult = await saveItineraryOptimistic(tripId, itineraryData, {
+        allowReduction: true,
+        allowFrozenWrite: true,
+        reason: 'transport-arrival-cascade',
+      });
       if (!saveResult.success && saveResult.error === 'version_conflict') {
         console.warn('[cascade] Version conflict during transport cascade — another edit occurred');
       }

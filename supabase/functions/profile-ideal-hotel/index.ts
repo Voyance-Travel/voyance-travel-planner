@@ -7,6 +7,34 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+// Sanitize LLM-authored profile fields (bug 20, owner eyes-on): the tool-call
+// output can carry CJK garble appended to names ("Poblenou" + a stray CJK char)
+// and leaked JSON scaffolding bled into a neighborhood string
+// ("Eixample Esquerra...],idealTypes:[") that rendered raw in the hotel
+// ideal-stay chips. Strip out-of-script garble and drop entries carrying
+// structural JSON chars or field-name fragments. Applied on both fresh parse
+// and cached read so existing bad caches self-heal.
+const OUT_SCRIPT = /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF]|\p{Extended_Pictographic}|[\u{FE0F}\u{200D}\u{20E3}]/gu;
+const cleanStr = (s: unknown): string => String(s ?? '').replace(OUT_SCRIPT, '').replace(/\s+/g, ' ').trim();
+const cleanList = (arr: unknown): string[] => {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map(cleanStr)
+    .filter((s) => s.length > 0 && !/[\[\]{}"]|idealtypes|idealneighborhoods|idealamenities|searchkeywords|avoidtypes|:\s*\[/i.test(s))
+    .filter((s, i, a) => a.indexOf(s) === i);
+};
+function sanitizeProfile(p: any) {
+  return {
+    idealTypes: cleanList(p?.idealTypes),
+    idealNeighborhoods: cleanList(p?.idealNeighborhoods),
+    idealAmenities: cleanList(p?.idealAmenities),
+    priceRange: p?.priceRange,
+    styleDescription: cleanStr(p?.styleDescription),
+    avoidTypes: cleanList(p?.avoidTypes),
+    searchKeywords: cleanList(p?.searchKeywords),
+  };
+}
+
 interface DNATraits {
   planning: number;
   social: number;
@@ -117,7 +145,8 @@ serve(async (req) => {
     if (userId) {
       const cached = await getCachedProfile(userId, destination);
       if (cached) {
-        return new Response(JSON.stringify({ success: true, profile: cached }), {
+        // heal stale garbled caches on read (bug 20)
+        return new Response(JSON.stringify({ success: true, profile: sanitizeProfile(cached) }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -265,15 +294,15 @@ Recommend their ideal hotel profile. Think about:
       ? JSON.parse(toolCall.function.arguments)
       : toolCall.function.arguments;
 
-    const profile: IdealHotelProfile = {
-      idealTypes: parsed.idealTypes || [],
-      idealNeighborhoods: parsed.idealNeighborhoods || [],
-      idealAmenities: parsed.idealAmenities || [],
+    const profile: IdealHotelProfile = sanitizeProfile({
+      idealTypes: parsed.idealTypes,
+      idealNeighborhoods: parsed.idealNeighborhoods,
+      idealAmenities: parsed.idealAmenities,
       priceRange,
-      styleDescription: parsed.styleDescription || '',
-      avoidTypes: parsed.avoidTypes || [],
-      searchKeywords: parsed.searchKeywords || [],
-    };
+      styleDescription: parsed.styleDescription,
+      avoidTypes: parsed.avoidTypes,
+      searchKeywords: parsed.searchKeywords,
+    });
 
     // Cache the result
     if (userId) {

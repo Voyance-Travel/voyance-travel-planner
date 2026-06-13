@@ -27,10 +27,19 @@ const DAY_PREFIX_RE = /^\s*Day\s+\d+\s*[:\-–]\s*/i;
 const TRAILING_TIME_RE = /\s*(?:~?\d{1,2}(?::\d{2})?\s*(?:AM|PM)?(?:\s*[-–]\s*\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)?)\s*$/i;
 
 // Experience-verb prefix: descriptive activity, not a venue name.
-const EXPERIENCE_VERB_RE = /^(?:watch|see|experience|enjoy|try|catch|witness|explore|wander|stroll|relax|unwind|hunt|sample|taste|attend|listen|find|discover|do|have|go|grab|take|spend)\b/i;
+const EXPERIENCE_VERB_RE = /^(?:watch|see|experience|enjoy|try|catch|witness|explore|wander|walk|roam|stroll|relax|unwind|hunt|sample|taste|attend|listen|find|discover|do|have|go|grab|take|spend|check\s*out|soak)\b/i;
 // Experience nouns that, when present without a proper noun, indicate an
 // activity wish rather than a venue.
 const EXPERIENCE_NOUN_RE = /\b(?:sunset|sunrise|vibes|atmosphere|nightlife|rooftop|beach day|day trip|hidden gem|local life|street food|live music)\b/i;
+// Major events / occasions / festivals. A user naming one (e.g. "plan a day in
+// Atlanta for the World Cup") means it as the OCCASION/theme of the trip, not a
+// venue to drop a literal "World Cup" activity card on. These read as proper
+// nouns to the venue heuristic, so without this they get locked as must-do
+// venues and rendered as a single literal activity — conflating the occasion
+// with the real ask ("walk around, see the sights"). Classify them as soft
+// experience wishes instead so they inform the vibe but never become a locked
+// card.
+const EVENT_THEME_RE = /\b(?:world cup|fifa|olympics?|olympic games|paralympics?|super ?bowl|world series|nba finals|stanley cup|march madness|the masters|wimbledon|us open|french open|australian open|roland garros|grand prix|formula\s?1|f1\b|world athletics|coachella|glastonbury|tomorrowland|lollapalooza|burning man|sxsw|oktoberfest|mardi gras|carnival|carnaval|la tomatina|running of the bulls|comic ?con|new year'?s eve|marathon|pride parade|pride festival|pride week)\b/i;
 // Tokens that should NOT count as proper nouns when capitalized
 // (sentence-initial articles, prepositions, etc.).
 const STOPWORDS = new Set([
@@ -71,6 +80,8 @@ function isExperiencePhrase(s: string): boolean {
   if (!s) return false;
   const trimmed = s.trim();
   if (EXPERIENCE_VERB_RE.test(trimmed)) return true;
+  // A major event/occasion is a theme, not a venue (see EVENT_THEME_RE).
+  if (EVENT_THEME_RE.test(trimmed)) return true;
 
   const tokens = trimmed.split(/\s+/);
   const hasProperNoun = tokens.some((tok, idx) => {

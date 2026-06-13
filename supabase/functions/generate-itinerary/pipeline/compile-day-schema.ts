@@ -428,8 +428,35 @@ Start the day at 09:00 with the arrival sequence.`;
     // ===== LAST DAY / LAST DAY IN CITY: DEPARTURE LOGIC =====
     const isMidTripCityDeparture = resolvedIsLastDayInCity && !isLastDay;
     const isNonFlightDeparture = isMidTripCityDeparture && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight';
+    // No transport mode chosen for this inter-city leg → do NOT assume a flight.
+    const isUnspecifiedMidTripDeparture = isMidTripCityDeparture && !resolvedNextLegTransport;
 
-    if (isNonFlightDeparture) {
+    if (isUnspecifiedMidTripDeparture) {
+      // Strip any return-flight constraint — there is no flight on this leg.
+      flightContext = { ...flightContext, returnDepartureTime: undefined, returnDepartureTime24: undefined, latestLastActivityTime: undefined };
+      if (flightContext.context) {
+        flightContext.context = flightContext.context.replace(/🚨 LAST DAY TIMING CONSTRAINT:[\s\S]*?(?=\n={5,}|\n🚨|$)/, '');
+      }
+      const nextCityLabel = resolvedNextLegCity || 'the next city';
+      const hotelNameDisplay = flightContext.hotelName || 'Your Hotel';
+      dayConstraints = `
+=== DEPARTURE DAY: ONWARD TRAVEL TO ${nextCityLabel.toUpperCase()} ===
+
+⚠️ The traveler has NOT chosen a transport mode for this leg. DO NOT assume or
+invent a flight. DO NOT mention airports, flights, boarding gates, security
+checkpoints, or a specific carrier. Keep the onward journey generic — the
+traveler will add their own mode and times later.
+
+TIMELINE (relaxed — no fixed departure time is known):
+- Breakfast at ${hotelNameDisplay}
+- Hotel Checkout (late morning)
+- A single "Travel to ${nextCityLabel}" card (category: "transport") for the
+  onward journey — no mode-specific detail, no airport.
+
+REQUIRED: breakfast + checkout + one generic "Travel to ${nextCityLabel}" card.
+Light sightseeing before checkout is fine. Do NOT add airport transfers or
+flight cards. Do NOT fabricate a departure time.`;
+    } else if (isNonFlightDeparture) {
       // Strip return flight data to prevent prompt conflict
       flightContext = { ...flightContext, returnDepartureTime: undefined, returnDepartureTime24: undefined, latestLastActivityTime: undefined };
       if (flightContext.context) {

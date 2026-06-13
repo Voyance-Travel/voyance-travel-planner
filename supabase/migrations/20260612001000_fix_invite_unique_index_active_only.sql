@@ -15,6 +15,10 @@
 -- (replaced_at IS NULL), which is what the name always promised. Soft-deleted
 -- history rows no longer block a fresh active invite.
 
+-- The old index was backed by a table CONSTRAINT, so a bare DROP INDEX fails
+-- ('cannot drop index ... because constraint ... requires it'). Drop the
+-- constraint first (a no-op if it was only ever an index), then the index.
+ALTER TABLE public.trip_invites DROP CONSTRAINT IF EXISTS unique_active_email_invite;
 DROP INDEX IF EXISTS public.unique_active_email_invite;
 
 CREATE UNIQUE INDEX unique_active_email_invite

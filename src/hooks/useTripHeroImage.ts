@@ -15,7 +15,7 @@ import {
   getDestinationImages as getCuratedImages,
   generateDestinationGradient
 } from '@/utils/destinationImages';
-import { getHeroImageByName, getDestinationCanonicalImage } from '@/services/destinationImagesAPI';
+import { getHeroImageByName, getDestinationCanonicalImage, writeBackDestinationCanonicalImage } from '@/services/destinationImagesAPI';
 import { supabase } from '@/integrations/supabase/client';
 import { isUntrustedHeroUrl } from '@/lib/heroUrlPolicy';
 import { detectCrossCityMention } from '@/lib/crossCityFilter';
@@ -254,6 +254,14 @@ export function useTripHeroImage({
           : null;
         if (result?.url && !isUntrustedHeroUrl(result.url) && !xcity) {
           setApiImageUrl(result.url);
+          // Seed the canonical destinations.hero_image_url so the NEXT trip to
+          // this city (for any user) resolves instantly from the DB tier instead
+          // of re-paying this ~2-8s live fetch every render. Mirrors
+          // DestinationHeroImage's write-back; the helper only fills NULL rows,
+          // so it never clobbers a curated canonical image. (Atlanta "delayed
+          // / missing" hero — destinations row was NULL, so every render
+          // re-fetched live.)
+          writeBackDestinationCanonicalImage(destination, result.url);
           if (result.source === 'unsplash' && result.photographer) {
             setApiAttribution({
               photographer: result.photographer,
