@@ -440,10 +440,9 @@ export async function prepareContext(supabase: any, tripId: string, userId?: str
           
           for (let n = 0; n < nights; n++) {
             const isTransition = n === 0 && i > 0;
-            const isSameCountry = isTransition && tripCities[i - 1].country === city.country;
-            const defaultTransport = isSameCountry ? 'train' : 'flight';
+            // Respect the chosen mode; never guess a flight when none was set.
             const resolvedTransport = isTransition
-              ? (city.transport_type || tripCities[i - 1].transport_type || defaultTransport)
+              ? (city.transport_type || tripCities[i - 1].transport_type || '')
               : undefined;
 
             // Date-aware hotel resolution for split-stay within a single city
@@ -488,8 +487,7 @@ export async function prepareContext(supabase: any, tripId: string, userId?: str
             if (n === nights - 1) {
               const nextCity = tripCities.find((c: any) => c.city_order === city.city_order + 1);
               if (nextCity) {
-                const isSameCountryNext = nextCity.country === city.country;
-                nextLegTransport = (nextCity as any).transport_type || (isSameCountryNext ? 'train' : 'flight');
+                nextLegTransport = (nextCity as any).transport_type || '';
                 nextLegCity = nextCity.city_name || '';
                 if ((nextCity as any).transport_details) {
                   const rawTd = (nextCity as any).transport_details;
@@ -573,14 +571,13 @@ export async function prepareContext(supabase: any, tripId: string, userId?: str
           
           for (let n = 0; n < nights; n++) {
             const isTransition = n === 0 && i > 0;
-            const isSameCountry = isTransition && sorted[i - 1].country === dest.country;
             dayMap.push({
               cityName: dest.city,
               country: dest.country,
               isTransitionDay: isTransition,
               transitionFrom: isTransition ? sorted[i - 1].city : undefined,
               transitionTo: isTransition ? dest.city : undefined,
-              transportType: isTransition ? (isSameCountry ? 'train' : 'flight') : undefined,
+              transportType: isTransition ? ((dest as any).transport_type || '') : undefined,
             });
           }
         }
@@ -1104,7 +1101,7 @@ These help the traveler prepare for their trip.
           if (dayCity.isLastDayInCity) {
             // Look ahead to find the next city's transport mode
             const nextDayInfo = context.multiCityDayMap?.[dayNumber];
-            const nextLegTransport = dayCity.nextLegTransport || nextDayInfo?.transportType || 'flight';
+            const nextLegTransport = dayCity.nextLegTransport || nextDayInfo?.transportType || '';
             const nextLegCity = dayCity.nextLegCity || nextDayInfo?.cityName || 'the next destination';
             const isNonFlightFullGen = nextLegTransport !== 'flight';
             const transportLabelFullGen = nextLegTransport.toUpperCase();

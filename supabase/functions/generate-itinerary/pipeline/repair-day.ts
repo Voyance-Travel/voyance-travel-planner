@@ -2686,26 +2686,29 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // On inter-city departure days (not last day of trip), inject the actual journey card
   // (e.g., "Flight to Rome", "Train to Kyoto") after the station/airport transfer.
   const nextLegCity = input.nextLegCity;
-  if (isLastDayInCity && !isLastDay && nextLegTransport && nextLegCity) {
+  if (isLastDayInCity && !isLastDay && nextLegCity) {
     const hasJourneyCard = activities.some((a: any) => {
       const t = (a.title || '').toLowerCase();
       const cat = (a.category || '').toLowerCase();
       const cityLower = nextLegCity.toLowerCase();
       return (cat === 'flight' || cat === 'transport' || cat === 'intercity_transport') && (
-        t.includes(cityLower) || t.includes('journey to') || t.includes('flight to') || t.includes('train to')
+        t.includes(cityLower) || t.includes('journey to') || t.includes('flight to') || t.includes('train to') || t.includes('travel to')
       );
     });
 
     if (!hasJourneyCard) {
-      const modeLabel = nextLegTransport.charAt(0).toUpperCase() + nextLegTransport.slice(1);
-      const isFlightMode = nextLegTransport.toLowerCase().includes('flight') || nextLegTransport.toLowerCase().includes('fly');
+      // An unset leg ('') renders as a neutral "Travel to <city>" card — never
+      // a fabricated flight. Only an explicit 'flight' mode is treated as one.
+      const isUnspecifiedLeg = !nextLegTransport;
+      const modeLabel = isUnspecifiedLeg ? 'Travel' : (nextLegTransport.charAt(0).toUpperCase() + nextLegTransport.slice(1));
+      const isFlightMode = !isUnspecifiedLeg && (nextLegTransport.toLowerCase().includes('flight') || nextLegTransport.toLowerCase().includes('fly'));
       const journeyCategory = isFlightMode ? 'flight' : 'intercity_transport';
 
       // Determine timing
       const defaultDurations: Record<string, number> = { flight: 120, train: 180, bus: 240, ferry: 180 };
       const journeyDuration = nextLegTransportDetails?.duration
-        ? parseInt(nextLegTransportDetails.duration, 10) || defaultDurations[nextLegTransport] || 120
-        : defaultDurations[nextLegTransport] || 120;
+        ? parseInt(nextLegTransportDetails.duration, 10) || defaultDurations[nextLegTransport || ''] || 120
+        : defaultDurations[nextLegTransport || ''] || 120;
 
       let journeyStartMins: number;
       if (nextLegTransportDetails?.departureTime) {
@@ -2726,13 +2729,17 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       const journeyEndMins = journeyStartMins + journeyDuration;
       const hubName = isFlightMode
         ? (nextLegTransportDetails?.departureAirport || nextLegTransportDetails?.stationName || 'Airport')
+        : isUnspecifiedLeg
+        ? (nextLegTransportDetails?.departureStation || nextLegTransportDetails?.stationName || '')
         : (nextLegTransportDetails?.departureStation || nextLegTransportDetails?.stationName || 'Station');
 
       const journeyCard = {
-        id: `day${dayNumber}-journey-${nextLegTransport}-${Date.now()}`,
+        id: `day${dayNumber}-journey-${nextLegTransport || 'travel'}-${Date.now()}`,
         title: `${modeLabel} to ${nextLegCity}`,
         name: `${modeLabel} to ${nextLegCity}`,
-        description: `${modeLabel} from ${hubName} to ${nextLegCity}.${nextLegTransportDetails?.carrier ? ` ${nextLegTransportDetails.carrier}` : ''}`,
+        description: isUnspecifiedLeg
+          ? `Onward travel to ${nextLegCity}. Add your flight, train, or other transport details.`
+          : `${modeLabel} from ${hubName} to ${nextLegCity}.${nextLegTransportDetails?.carrier ? ` ${nextLegTransportDetails.carrier}` : ''}`,
         startTime: minutesToHHMM(journeyStartMins),
         endTime: minutesToHHMM(journeyEndMins),
         category: journeyCategory,
@@ -3773,7 +3780,9 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 12. NON-FLIGHT DEPARTURE: strip airport activities ---
-  if (isLastDayInCity && !isLastDay && nextLegTransport && nextLegTransport !== 'flight') {
+  // Runs for an explicit non-flight mode AND for an unset leg ('') — only a
+  // leg the user actually marked 'flight' keeps airport/flight cards.
+  if (isLastDayInCity && !isLastDay && nextLegTransport !== 'flight') {
     const beforeCount = activities.length;
     activities = activities.filter((a: any) => {
       const t = (a.title || '').toLowerCase();
