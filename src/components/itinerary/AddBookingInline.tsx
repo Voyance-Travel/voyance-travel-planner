@@ -103,7 +103,7 @@ interface AddFlightInlineProps {
   /** All existing legs for multi-leg editing */
   existingLegs?: ManualFlightEntry[];
   /** Multi-city route for auto-generating leg slots: [{from: 'Atlanta', to: 'London'}, {from: 'London', to: 'Paris'}, {from: 'Paris', to: 'Atlanta'}] */
-  multiCityRoute?: Array<{ from: string; to: string; date?: string }>;
+  multiCityRoute?: Array<{ from: string; to: string; date?: string; mode?: string }>;
 }
 
 interface AddHotelInlineProps {

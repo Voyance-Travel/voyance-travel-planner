@@ -463,6 +463,39 @@ export interface CityHotelInfo {
   departureTransfer?: SelectedTransfer | null;
 }
 
+// Ground-transport modes for multi-city legs. A leg the user set to one of
+// these is NOT a flight and must be excluded from the flight form.
+const NON_FLIGHT_MODES = new Set(['train', 'bus', 'car', 'ferry', 'drive', 'self']);
+
+/**
+ * Build the multi-city route for the flight form, RESPECTING each leg's chosen
+ * transport mode. Each city's `transportType` describes how the traveller
+ * arrives at it; legs set to train/car/bus/ferry are dropped so the flight form
+ * never pre-fills airport legs for ground transport (the user picked a flight,
+ * car, or train — we only force a flight when the leg actually is one). The
+ * trip-bookending outbound (origin → first city) and return (last city →
+ * origin) default to flight only when no other mode was chosen for that city.
+ */
+function buildFlightOnlyRoute(
+  allHotels: CityHotelInfo[] | undefined,
+  originCity: string | undefined,
+  startDate: string,
+  endDate: string,
+): Array<{ from: string; to: string; date?: string; mode?: string }> | undefined {
+  if (!allHotels || allHotels.length <= 1) return undefined;
+  const route: Array<{ from: string; to: string; date?: string; mode?: string }> = [];
+  // Outbound: how the traveller reaches the FIRST city.
+  if (originCity) route.push({ from: originCity, to: allHotels[0].cityName, date: startDate, mode: allHotels[0].transportType });
+  // Inter-city: each leg's mode is the DESTINATION city's transportType.
+  for (let i = 0; i < allHotels.length - 1; i++) {
+    route.push({ from: allHotels[i].cityName, to: allHotels[i + 1].cityName, date: allHotels[i].checkOutDate, mode: allHotels[i + 1].transportType });
+  }
+  // Return home defaults to a flight.
+  if (originCity) route.push({ from: allHotels[allHotels.length - 1].cityName, to: originCity, date: endDate, mode: 'flight' });
+  const flightLegs = route.filter((r) => !NON_FLIGHT_MODES.has((r.mode || '').toLowerCase()));
+  return flightLegs.length > 0 ? flightLegs : undefined;
+}
+
 export interface EditorialItineraryProps {
   tripId: string;
   destination: string;
@@ -8850,18 +8883,7 @@ export function EditorialItinerary({
                 isDestinationArrival: leg.isDestinationArrival || undefined,
                 isDestinationDeparture: leg.isDestinationDeparture || undefined,
               })) : undefined}
-              multiCityRoute={allHotels && allHotels.length > 1 ? (() => {
-                const route: Array<{ from: string; to: string; date?: string }> = [];
-                // Outbound: origin → first city
-                if (originCity) route.push({ from: originCity, to: allHotels[0].cityName, date: startDate });
-                // Inter-city: each city → next city
-                for (let i = 0; i < allHotels.length - 1; i++) {
-                  route.push({ from: allHotels[i].cityName, to: allHotels[i + 1].cityName, date: allHotels[i].checkOutDate });
-                }
-                // Return: last city → origin
-                if (originCity) route.push({ from: allHotels[allHotels.length - 1].cityName, to: originCity, date: endDate });
-                return route;
-              })() : undefined}
+              multiCityRoute={buildFlightOnlyRoute(allHotels, originCity, startDate, endDate)}
               existingOutbound={!allFlightLegs.length && flightSelection?.outbound ? {
                 airline: flightSelection.outbound.airline || '',
                 flightNumber: flightSelection.outbound.flightNumber || '',
@@ -8907,15 +8929,7 @@ export function EditorialItinerary({
                 setAddFlightDialogOpen(false);
                 onBookingAdded?.();
               }}
-              multiCityRoute={allHotels && allHotels.length > 1 ? (() => {
-                const route: Array<{ from: string; to: string; date?: string }> = [];
-                if (originCity) route.push({ from: originCity, to: allHotels[0].cityName, date: startDate });
-                for (let i = 0; i < allHotels.length - 1; i++) {
-                  route.push({ from: allHotels[i].cityName, to: allHotels[i + 1].cityName, date: allHotels[i].checkOutDate });
-                }
-                if (originCity) route.push({ from: allHotels[allHotels.length - 1].cityName, to: originCity, date: endDate });
-                return route;
-              })() : undefined}
+              multiCityRoute={buildFlightOnlyRoute(allHotels, originCity, startDate, endDate)}
             />
           </DialogContent>
         </Dialog>
@@ -10230,6 +10244,13 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
   
   // Multi-city: check if arriving by train/bus (not flight)
   const isTrainBusArrival = arrivalCityInfo?.transportType && ['train', 'bus', 'ferry', 'car'].includes(arrivalCityInfo.transportType);
+  // Human label for the chosen non-flight mode, so an incomplete leg prompts
+  // for the RIGHT thing ("Add your train details") instead of forcing a flight.
+  const arrivalModeLabel = arrivalCityInfo?.transportType === 'train' ? 'Train'
+    : arrivalCityInfo?.transportType === 'bus' ? 'Bus'
+    : arrivalCityInfo?.transportType === 'ferry' ? 'Ferry'
+    : arrivalCityInfo?.transportType === 'car' ? 'Drive'
+    : 'Flight';
   const transportDetails = arrivalCityInfo?.transportDetails;
   
   // Determine flight completeness: need arrival time for game plan to be useful
@@ -10522,6 +10543,30 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
               </Button>
             )}
           </div>
+        ) : isTrainBusArrival ? (
+          // Non-flight arrival the user explicitly chose (train/bus/car/ferry)
+          // but with no times yet — prompt for THAT mode, never a flight.
+          <div className="flex items-center justify-between gap-3 p-3 bg-secondary/30 rounded-lg border border-border">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                <Train className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">Add Your {arrivalModeLabel} Details</p>
+                <p className="text-xs text-muted-foreground">We'll plan your arrival day around your arrival time</p>
+              </div>
+            </div>
+            {onNavigateToBookings && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onNavigateToBookings}
+                className="shrink-0"
+              >
+                Add Details
+              </Button>
+            )}
+          </div>
         ) : (
           // No flight data at all
           <div className="flex items-center justify-between gap-3 p-3 bg-secondary/30 rounded-lg border border-border">
@@ -10535,9 +10580,9 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
               </div>
             </div>
             {(onAddFlightInline || onNavigateToBookings) && (
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={onAddFlightInline || onNavigateToBookings}
                 className="shrink-0"
               >
