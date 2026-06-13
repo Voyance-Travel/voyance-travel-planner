@@ -66,3 +66,14 @@ Deno.test('Italy: a Venice venue stays on a Venice day', () => {
 Deno.test('Unknown country: no false positives (filter is a no-op)', () => {
   assertEquals(detectCrossCityMention('Some Venue, Atlantis', 'Atlantis'), null);
 });
+
+// USA support — US trips previously had zero cross-city protection (no country
+// entry), so a hallucinated out-of-city venue slipped through.
+Deno.test('USA: a Philadelphia venue is flagged on an Atlanta day', () => {
+  assertEquals(detectCrossCityMention('Liberty Bell, Philadelphia', 'Atlanta, GA'), 'Philadelphia');
+});
+
+Deno.test('USA: a real Atlanta venue stays on an Atlanta day', () => {
+  assertEquals(isCrossCityAddress({ title: 'Georgia Aquarium', category: 'sightseeing' }, 'Atlanta, GA'), null);
+  assertEquals(isCrossCityAddress({ title: 'Centennial Olympic Park', category: 'park' }, 'Atlanta, GA'), null);
+});
