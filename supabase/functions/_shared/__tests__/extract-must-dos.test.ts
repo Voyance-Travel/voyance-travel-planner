@@ -61,3 +61,21 @@ Deno.test('isExperiencePhrase unit cases', () => {
   assertEquals(isExperiencePhrase('Trevi Fountain'), false);
   assertEquals(isExperiencePhrase('Colosseum'), false);
 });
+
+// A major event/occasion is the trip's THEME, not a venue to lock as a literal
+// activity card ("plan a day in Atlanta for the World Cup" → World Cup is the
+// occasion, the real ask is walking around / seeing sights).
+Deno.test('event/occasion → soft experience, not a locked venue', () => {
+  const m = meta(['the World Cup', 'walk around the sights', 'World of Coca-Cola']);
+  assertEquals(extractMustDoVenues(m), ['World of Coca-Cola']);
+  assertEquals(extractMustDoExperiences(m).some((s) => /world cup/i.test(s)), true);
+  // a real venue alongside an event keeps its venue identity
+  assertEquals(extractMustDoVenues(meta(['Wimbledon', 'Tower of London'])), ['Tower of London']);
+  const { isExperiencePhrase } = __test__;
+  assertEquals(isExperiencePhrase('Olympics'), true);
+  assertEquals(isExperiencePhrase('Oktoberfest'), true);
+  assertEquals(isExperiencePhrase('World Cup'), true);
+  // "walk around" / "check out the sights" are experiences, not venues
+  assertEquals(isExperiencePhrase('walk around the sights'), true);
+  assertEquals(isExperiencePhrase('check out the sites'), true);
+});
