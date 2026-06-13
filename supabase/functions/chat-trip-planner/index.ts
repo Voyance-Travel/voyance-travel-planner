@@ -365,7 +365,15 @@ serve(async (req) => {
     }
 
     console.log("[chat-trip-planner] Calling AI gateway with", messages.length, "messages");
-    const response = await fetch(
+    // Extraction is ONE call per trip — cheap to run on a stronger reasoning
+    // model. Set CHAT_EXTRACTOR_MODEL to any VALID OpenRouter id (e.g.
+    // 'google/gemini-2.5-pro' or 'anthropic/claude-sonnet-4') to upgrade
+    // vague-intent reasoning. If that model errors (bad/deprecated id, outage,
+    // no tool-calling), we retry once with the known-good default so chat trip
+    // creation never 500s on a misconfigured model.
+    const FALLBACK_MODEL = "google/gemini-2.5-flash";
+    const configuredModel = Deno.env.get("CHAT_EXTRACTOR_MODEL") || FALLBACK_MODEL;
+    const callGateway = (modelId: string) => fetch(
       "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
@@ -374,12 +382,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          // Extraction is ONE call per trip — cheap to run on a stronger
-          // reasoning model. Set CHAT_EXTRACTOR_MODEL (any OpenRouter id, e.g.
-          // 'google/gemini-3-pro-preview' or 'anthropic/claude-sonnet-4') to
-          // upgrade the vague-intent reasoning without a code change. Falls
-          // back to the fast default.
-          model: Deno.env.get("CHAT_EXTRACTOR_MODEL") || "google/gemini-2.5-flash",
+          model: modelId,
           messages: [
             { role: "system", content: buildSystemPrompt() + personalizationContext },
             ...messages,
@@ -610,6 +613,15 @@ serve(async (req) => {
         }),
       }
     );
+
+    let response = await callGateway(configuredModel);
+    // Self-heal a bad/deprecated CHAT_EXTRACTOR_MODEL: on a gateway error
+    // (not a rate/credit limit, which are real and surfaced to the user),
+    // retry once with the known-good default rather than 500-ing chat creation.
+    if (!response.ok && response.status !== 429 && response.status !== 402 && configuredModel !== FALLBACK_MODEL) {
+      console.warn(`[chat-trip-planner] extractor model "${configuredModel}" failed (HTTP ${response.status}); falling back to ${FALLBACK_MODEL}`);
+      response = await callGateway(FALLBACK_MODEL);
+    }
 
     console.log("[chat-trip-planner] AI gateway response status:", response.status);
     if (!response.ok) {
