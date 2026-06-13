@@ -78,6 +78,12 @@ When the user describes their trip, your #1 job is to faithfully capture EVERYTH
 The mustDoActivities field should contain a RICH, DETAILED summary of everything the user wants, not just venue names. Include their reasoning, timing preferences, and constraints. Example:
   "Whole day at the U.S. Open (do NOT plan other activities this day). Dinner at Nobu at 7:30 PM (reservation confirmed). Want authentic sushi spots — no tourist restaurants. Flying Delta from JFK, arriving 3 PM on Day 1."
 
+CONCRETE vs VAGUE — CRITICAL (do NOT pad mustDoActivities):
+- mustDoActivities is ONLY for things the user CONCRETELY named or pinned: a real venue/restaurant/museum/attraction, a specific event or show, a timed reservation, or a named day-trip town. Each entry must be a thing the itinerary can actually book or point a map at.
+- VAGUE INTENT IS NOT A MUST-DO. When the user only describes a vibe — "walk around", "see the sights", "explore downtown", "fun/free/cheap things to do", "wander", "just chill", "soak it up" — do NOT invent paraphrased must-dos like "free downtown activities" or "fun things to do". Those become literal junk cards and crowd out real attractions. Leave mustDoActivities EMPTY (or with only the concrete items) and put the vibe in additionalNotes (e.g., "wants a casual walk-around day, light and free"). The itinerary generator will fill the day with the destination's REAL named attractions that match that vibe.
+- An EVENT the user is traveling for (World Cup, a festival, a marathon) is the trip's OCCASION/context — put it in additionalNotes as context ("trip is built around the World Cup"), NOT as a literal mustDoActivities entry, unless they named a specific ticketed session/venue.
+- A short or vague request yielding an EMPTY mustDoActivities is correct and expected. Never fabricate entries to make it look complete.
+
 LANGUAGE & OUTPUT QUALITY — MANDATORY:
 - ALL output MUST be in clean, fluent, correctly spelled English. Double-check spelling of common words.
 - For non-Latin-script destinations (China, Japan, Korea, Thailand, Arabic countries, Russia), ALWAYS use standard English transliterations or well-known English names. Examples: "Beijing" not "北京", "Chongqing" not "重慆", "Shinjuku" not "新宿".
@@ -368,7 +374,12 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          // Extraction is ONE call per trip — cheap to run on a stronger
+          // reasoning model. Set CHAT_EXTRACTOR_MODEL (any OpenRouter id, e.g.
+          // 'google/gemini-3-pro-preview' or 'anthropic/claude-sonnet-4') to
+          // upgrade the vague-intent reasoning without a code change. Falls
+          // back to the fast default.
+          model: Deno.env.get("CHAT_EXTRACTOR_MODEL") || "google/gemini-2.5-flash",
           messages: [
             { role: "system", content: buildSystemPrompt() + personalizationContext },
             ...messages,
@@ -457,7 +468,7 @@ serve(async (req) => {
                     mustDoActivities: {
                       type: "string",
                       description:
-                        "Comma-separated list of SPECIFIC activities, events, venues, and experiences the user wants to do. Include time constraints when mentioned. IMPORTANT: Expand multi-day references into per-day entries with explicit day numbers. Instead of 'US Open tennis both days', write 'US Open tennis 9am-6pm Day 1, US Open tennis 9am-6pm Day 2, US Open tennis 9am-6pm Day 3'. Instead of 'comedy show Friday night', write 'comedy show Day 3 evening' (calculating the day number from the start date). Be exhaustive — capture EVERY specific activity, event, restaurant, show, or experience the user mentions. This is the MOST IMPORTANT field for itinerary quality. When the user provides a full day-by-day plan, extract ALL venue names, restaurants, and timed activities as 'Day N Time Activity' entries. This can be a very long string — that is fine. Capture EVERYTHING.",
+                        "Comma-separated list of CONCRETE, NAMED activities, events, venues, restaurants, and timed reservations the user EXPLICITLY mentioned. Include time constraints when mentioned. Expand multi-day references into per-day entries with explicit day numbers (e.g. 'US Open tennis 9am-6pm Day 1, … Day 2'; 'comedy show Day 3 evening'). When the user gives a full day-by-day plan, extract ALL named venues/restaurants/timed activities as 'Day N Time Activity'. CRITICAL: capture only what the user concretely named — do NOT invent or paraphrase VAGUE intent ('walk around', 'see the sights', 'fun/free things to do', 'explore downtown') into entries; that is a vibe for additionalNotes, not a must-do, and fabricated filler ('free downtown activities') ships as junk cards. An empty list is correct when the user was vague — never pad it.",
                     },
                     additionalNotes: {
                       type: "string",
