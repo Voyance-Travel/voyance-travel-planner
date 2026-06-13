@@ -61,6 +61,8 @@ export interface TripHealthPanelProps {
   hasHotel: boolean;
   hasAirportTransfer?: boolean;
   hasInterCityTransport?: boolean;
+  /** 0-night day trip: suppress the flights + hotel checklist rows entirely. */
+  isDayTrip?: boolean;
   isMultiCity?: boolean;
   flightsBookedElsewhere?: boolean;
   hotelBookedElsewhere?: boolean;
@@ -773,6 +775,7 @@ export function TripHealthPanel({
   hasHotel,
   hasAirportTransfer = false,
   hasInterCityTransport = false,
+  isDayTrip = false,
   isMultiCity = false,
   flightsBookedElsewhere = false,
   hotelBookedElsewhere = false,
@@ -798,8 +801,10 @@ export function TripHealthPanel({
       });
     }).length;
 
-    // Build checklist
-    const items: ChecklistItem[] = [
+    // Build checklist. A 0-night day trip has no overnight stay and no flight
+    // to log, so the flights + hotel rows are omitted entirely (would otherwise
+    // nag "Add flights"/"Add hotel" and cap completion below 100%).
+    const items: ChecklistItem[] = isDayTrip ? [] : [
       {
         id: 'flights',
         label: 'Flights booked',
@@ -894,9 +899,10 @@ export function TripHealthPanel({
     // Compute completion %
     const completionFactors = [
       planned / Math.max(totalDaysExpected, 1),
-      flightsDone ? 1 : 0,
-      hotelDone ? 1 : 0,
     ];
+    if (!isDayTrip) {
+      completionFactors.push(flightsDone ? 1 : 0, hotelDone ? 1 : 0);
+    }
     if (isMultiCity) completionFactors.push(hasInterCityTransport ? 1 : 0);
     const completion = Math.round(
       (completionFactors.reduce((a, b) => a + b, 0) / completionFactors.length) * 100
@@ -909,7 +915,7 @@ export function TripHealthPanel({
       completionPct: completion,
       daysPlanned: planned,
     };
-  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere, refreshResultsByDay, tripFlightSelection, mustDoCoverage]);
+  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isDayTrip, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere, refreshResultsByDay, tripFlightSelection, mustDoCoverage]);
 
   // ── Stabilize warnings against transient/loading day data ────────────────
   // Errors commit immediately (user-actionable). Warnings only commit after

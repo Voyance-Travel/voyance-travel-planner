@@ -2292,6 +2292,12 @@ export function EditorialItinerary({
     const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     return Math.max(diff, days.length);
   }, [startDate, endDate, days.length]);
+
+  // Day trip = a single calendar day with no overnight stay (0 nights). For
+  // these, flights and a hotel are nonsensical, so we suppress the flight +
+  // accommodation booking prompts entirely. (Owner: "for a day trip just
+  // staying for a day we do not need to force flights and hotels.")
+  const isDayTrip = expectedTotalDays <= 1;
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
   // Persisted option group selections (key = optionGroup id, value = selected activity id)
   const [optionSelections, setOptionSelections] = useState<Record<string, string>>(
@@ -6277,7 +6283,7 @@ export function EditorialItinerary({
               { id: 'itinerary', label: 'Itinerary', fullLabel: 'Itinerary', icon: <Calendar className="h-4 w-4" /> },
               { id: 'budget', label: 'Budget', fullLabel: 'Budget', icon: <Wallet className="h-4 w-4" /> },
               { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
-              { id: 'details', label: 'Details', fullLabel: 'Flights & Hotels', icon: <Plane className="h-4 w-4" /> },
+              { id: 'details', label: 'Details', fullLabel: isDayTrip ? 'Trip Details' : 'Flights & Hotels', icon: <Plane className="h-4 w-4" /> },
               { id: 'needtoknow', label: 'Need to Know', fullLabel: 'Need to Know', icon: <Shield className="h-4 w-4" />, mobileOverflow: true },
               ...(collaborators.length > 0 ? [{ id: 'collab', label: 'Group', fullLabel: 'Group Chat & Vote', icon: <MessageCircle className="h-4 w-4" /> }] : []),
             ].map((tab) => (
@@ -7934,6 +7940,10 @@ export function EditorialItinerary({
             />
 
 
+            {/* Flights + Accommodation are hidden for a 0-night day trip —
+                there is no overnight stay and (typically) no flight to log. */}
+            {!isDayTrip && (
+            <>
             {/* FLIGHT SECTION - Editorial Style */}
             <section className="space-y-3 sm:space-y-5" data-section="flights">
               <div className="flex items-center justify-between">
@@ -8468,6 +8478,8 @@ export function EditorialItinerary({
                 </div>
               )}
             </section>
+            </>
+            )}
           </motion.div>
         )}
 
