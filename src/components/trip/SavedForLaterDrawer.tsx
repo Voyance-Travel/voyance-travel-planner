@@ -116,7 +116,7 @@ export function SavedForLaterDrawer({ trip, onPlaced }: { trip: any; onPlaced?: 
                 {h.resolved?.venueName && h.resolved.venueName !== titleOf(h) && (
                   <p className="text-xs text-muted-foreground mt-0.5">{h.resolved.venueName}</p>
                 )}
-                {!h.resolved && <p className="text-xs text-muted-foreground mt-0.5">Tap to place — pick a day</p>}
+                {!h.resolved && <p className="text-xs text-muted-foreground mt-0.5">Tap to place: pick a day</p>}
               </button>
             ))}
 
@@ -146,18 +146,18 @@ export function SavedForLaterDrawer({ trip, onPlaced }: { trip: any; onPlaced?: 
                   </div>
                 ) : (
                   <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
-                    <p className="text-sm text-foreground">There’s room on Day {day} — we’ll just add it.</p>
+                    <p className="text-sm text-foreground">There’s room on Day {day}, we’ll just add it.</p>
                   </div>
                 )}
 
                 <div className="flex flex-col gap-2">
                   {preview.candidate && (
                     <Button disabled={busy} onClick={() => commit('swap')}>
-                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : `Swap — replace ${preview.candidate.title}`}
+                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : `Swap to replace ${preview.candidate.title}`}
                     </Button>
                   )}
                   <Button variant={preview.candidate ? 'outline' : 'default'} disabled={busy} onClick={() => commit('add')}>
-                    {preview.candidate ? `Add both — Day ${day} gets busy` : `Add to Day ${day}`}
+                    {preview.candidate ? `Add both, Day ${day} gets busy` : `Add to Day ${day}`}
                   </Button>
                   <Button variant="ghost" disabled={busy} onClick={() => setStep('pickDay')}>Pick another day</Button>
                 </div>

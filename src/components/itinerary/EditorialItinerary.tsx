@@ -476,7 +476,7 @@ const NON_FLIGHT_MODES = new Set(['train', 'bus', 'car', 'ferry', 'drive', 'self
  * trip-bookending outbound (origin → first city) and return (last city →
  * origin) default to flight only when no other mode was chosen for that city.
  */
-function buildFlightOnlyRoute(
+export function buildFlightOnlyRoute(
   allHotels: CityHotelInfo[] | undefined,
   originCity: string | undefined,
   startDate: string,
@@ -7973,7 +7973,7 @@ export function EditorialItinerary({
             />
 
 
-            {/* Flights + Accommodation are hidden for a 0-night day trip —
+            {/* Flights + Accommodation are hidden for a 0-night day trip:
                 there is no overnight stay and (typically) no flight to log. */}
             {!isDayTrip && (
             <>
