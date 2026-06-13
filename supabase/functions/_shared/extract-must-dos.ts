@@ -40,6 +40,21 @@ const EXPERIENCE_NOUN_RE = /\b(?:sunset|sunrise|vibes|atmosphere|nightlife|rooft
 // experience wishes instead so they inform the vibe but never become a locked
 // card.
 const EVENT_THEME_RE = /\b(?:world cup|fifa|olympics?|olympic games|paralympics?|super ?bowl|world series|nba finals|stanley cup|march madness|the masters|wimbledon|us open|french open|australian open|roland garros|grand prix|formula\s?1|f1\b|world athletics|coachella|glastonbury|tomorrowland|lollapalooza|burning man|sxsw|oktoberfest|mardi gras|carnival|carnaval|la tomatina|running of the bulls|comic ?con|new year'?s eve|marathon|pride parade|pride festival|pride week)\b/i;
+// Generic "things to do" FILLER — a vague paraphrase the NL extractor produces
+// from soft intent like "walk around and see the sights" ("free downtown
+// activities", "fun things to do", "cheap local spots", "explore the area").
+// These name no venue; locking them as must-dos schedules literal placeholder
+// cards ("Free downtown activities") instead of real attractions, so the day
+// looks full but the user "didn't actually find activities". Classify them as
+// a soft vibe so the generator fills the day with REAL named venues instead.
+// Requires a generic noun (activities/things/spots/stuff/sights/places/area)
+// AND no proper noun — a real venue ("Ponce City Market") is never matched.
+const GENERIC_ACTIVITY_NOUN_RE = /\b(?:activities|things\s+to\s+do|stuff(?:\s+to\s+do)?|spots?|sights?|sightseeing|places?(?:\s+to\s+(?:go|visit|see))?|attractions?|the\s+area|around\s+town|downtown|nearby|local\s+(?:scene|gems?|favou?rites?))\b/i;
+const GENERIC_FILLER_QUALIFIER_RE = /\b(?:free|fun|cheap|budget|cool|nice|good|great|popular|touristy?|local|casual|chill|relaxed|easy|walk(?:able|ing)?|explore|see|do|downtown|outdoor|indoor|hidden|off[\s-]the[\s-]beaten)\b/i;
+// Venue-type nouns: when an event word appears INSIDE a named venue ("Olympic
+// Park", "World Cup Stadium", "Carnival Museum"), it is a real place to visit,
+// not the event itself — so it must stay a venue, not get soft-classified.
+const VENUE_TYPE_RE = /\b(?:park|stadium|arena|museum|cent(?:er|re)|hall|square|gardens?|market|tower|bridge|gallery|theat(?:er|re)|stations?|plaza|pavilion|hotel|bar|club|pub|restaurant|caf[eé]|street|avenue|district|quarter|cathedral|basilica|palace|castle|temple|shrine|monument|memorial|library|aquarium|zoo)\b/i;
 // Tokens that should NOT count as proper nouns when capitalized
 // (sentence-initial articles, prepositions, etc.).
 const STOPWORDS = new Set([
@@ -80,8 +95,10 @@ function isExperiencePhrase(s: string): boolean {
   if (!s) return false;
   const trimmed = s.trim();
   if (EXPERIENCE_VERB_RE.test(trimmed)) return true;
-  // A major event/occasion is a theme, not a venue (see EVENT_THEME_RE).
-  if (EVENT_THEME_RE.test(trimmed)) return true;
+  // A major event/occasion is a theme, not a venue (see EVENT_THEME_RE) —
+  // unless the event word sits inside a named venue ("Olympic Park"), which
+  // stays a real place to visit.
+  if (EVENT_THEME_RE.test(trimmed) && !VENUE_TYPE_RE.test(trimmed)) return true;
 
   const tokens = trimmed.split(/\s+/);
   const hasProperNoun = tokens.some((tok, idx) => {
@@ -94,6 +111,13 @@ function isExperiencePhrase(s: string): boolean {
   });
 
   if (EXPERIENCE_NOUN_RE.test(trimmed) && !hasProperNoun) return true;
+  // Generic "things to do" filler (no venue identity): a generic activity noun
+  // + a vague qualifier + no proper noun → soft vibe, not a must-do venue.
+  if (
+    !hasProperNoun &&
+    GENERIC_ACTIVITY_NOUN_RE.test(trimmed) &&
+    GENERIC_FILLER_QUALIFIER_RE.test(trimmed)
+  ) return true;
   if (tokens.length > 7 && !hasProperNoun) return true;
   return false;
 }

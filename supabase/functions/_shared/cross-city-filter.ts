@@ -144,6 +144,31 @@ const COUNTRY_CITY_TOKENS: Record<string, Array<{ re: RegExp; name: string }>> =
     { re: /\bfunchal\b/i, name: 'Funchal' },
     { re: /\b[ée]vora\b/i, name: 'Évora' },
   ],
+  usa: [
+    { re: /\b(new york|nyc|manhattan|brooklyn)\b/i, name: 'New York' },
+    { re: /\b(los angeles|hollywood|santa monica|\bl\.?a\.?\b)\b/i, name: 'Los Angeles' },
+    { re: /\bchicago\b/i, name: 'Chicago' },
+    { re: /\b(san francisco|\bsf\b)\b/i, name: 'San Francisco' },
+    { re: /\batlanta\b/i, name: 'Atlanta' },
+    { re: /\bphiladelphia\b/i, name: 'Philadelphia' },
+    { re: /\bboston\b/i, name: 'Boston' },
+    { re: /\b(washington(?:\s+d\.?c\.?)?|d\.?c\.?)\b/i, name: 'Washington DC' },
+    { re: /\bmiami\b/i, name: 'Miami' },
+    { re: /\bseattle\b/i, name: 'Seattle' },
+    { re: /\bdenver\b/i, name: 'Denver' },
+    { re: /\bnashville\b/i, name: 'Nashville' },
+    { re: /\baustin\b/i, name: 'Austin' },
+    { re: /\bdallas\b/i, name: 'Dallas' },
+    { re: /\bhouston\b/i, name: 'Houston' },
+    { re: /\b(new orleans|nola)\b/i, name: 'New Orleans' },
+    { re: /\b(las vegas|vegas)\b/i, name: 'Las Vegas' },
+    { re: /\bportland\b/i, name: 'Portland' },
+    { re: /\bsan diego\b/i, name: 'San Diego' },
+    { re: /\bphoenix\b/i, name: 'Phoenix' },
+    { re: /\borlando\b/i, name: 'Orlando' },
+    { re: /\bsavannah\b/i, name: 'Savannah' },
+    { re: /\bcharleston\b/i, name: 'Charleston' },
+  ],
 };
 
 /** Map a destination string ("Venice, Italy", "Rome", "Paris, France") to a country key. */
@@ -194,6 +219,9 @@ function inferCountry(destination: string): string | null {
   if (/\bportugal\b/.test(d) ||
       /\b(lisbon|lisboa|porto|oporto|vila nova de gaia|sintra|cascais|faro|algarve|coimbra|braga|aveiro|funchal|[ée]vora)\b/.test(d))
     return 'portugal';
+  if (/\b(usa|u\.s\.a|united states|america)\b/.test(d) ||
+      /\b(new york|nyc|los angeles|chicago|san francisco|atlanta|philadelphia|boston|washington|miami|seattle|denver|nashville|austin|dallas|houston|new orleans|las vegas|vegas|portland|san diego|phoenix|orlando|savannah|charleston)\b/.test(d))
+    return 'usa';
   return null;
 }
 

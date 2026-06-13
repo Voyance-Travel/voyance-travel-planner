@@ -79,3 +79,22 @@ Deno.test('event/occasion → soft experience, not a locked venue', () => {
   assertEquals(isExperiencePhrase('walk around the sights'), true);
   assertEquals(isExperiencePhrase('check out the sites'), true);
 });
+
+// Generic "things to do" filler the NL extractor invents from soft intent must
+// be treated as a soft vibe, NOT scheduled as literal placeholder cards — that
+// was the "didn't actually find activities" report (5 vague cards, 0 real ones).
+Deno.test('generic filler → soft vibe, real venues survive', () => {
+  const m = meta(['World Cup events', 'free downtown activities', 'fun downtown activities', 'Georgia Aquarium']);
+  // only the real venue is a must-do; the event + filler are soft
+  assertEquals(extractMustDoVenues(m), ['Georgia Aquarium']);
+  const { isExperiencePhrase } = __test__;
+  assertEquals(isExperiencePhrase('free downtown activities'), true);
+  assertEquals(isExperiencePhrase('fun things to do'), true);
+  assertEquals(isExperiencePhrase('cheap local spots'), true);
+  assertEquals(isExperiencePhrase('cool things to do downtown'), true);
+  // real named venues are NEVER filler (proper noun present)
+  assertEquals(isExperiencePhrase('Ponce City Market'), false);
+  assertEquals(isExperiencePhrase('World of Coca-Cola'), false);
+  assertEquals(isExperiencePhrase('Centennial Olympic Park'), false); // event word inside a venue name
+  assertEquals(isExperiencePhrase('Mercedes-Benz Stadium'), false);
+});
