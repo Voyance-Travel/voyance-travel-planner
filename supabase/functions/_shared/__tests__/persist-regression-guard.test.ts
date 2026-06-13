@@ -83,8 +83,11 @@ Deno.test('regression: healthy old (12 meaningful) → degraded new (3) is BLOCK
   assertEquals(regressionBlocked, true);
   // itinerary_data must NOT be in the update payload
   assertEquals('itinerary_data' in captured.updatePayload, false);
-  // status still applied
-  assertEquals(captured.updatePayload.itinerary_status, 'failed');
+  // itinerary_status from extraUpdate is STRIPPED on a blocked write
+  // (stripContentVerdictFromBlockedWrite). The block PRESERVED the healthy
+  // on-disk itinerary, so the trip keeps its prior status rather than being
+  // demoted by a rejected attempt — only the server commit gate moves status.
+  assertEquals('itinerary_status' in captured.updatePayload, false);
   // rejected_attempts ring buffer stamped
   const rejected = captured.updatePayload.metadata?.rejected_attempts;
   assertEquals(Array.isArray(rejected), true);

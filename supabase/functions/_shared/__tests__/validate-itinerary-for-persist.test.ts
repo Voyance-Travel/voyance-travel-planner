@@ -31,6 +31,10 @@ Deno.test('ok=true on a clean day', () => {
 });
 
 Deno.test('flags MISSING_REQUIRED_MEAL when breakfast absent on full day', () => {
+  // Day 2 must be a MID-TRIP full day to require all three meals. The last day
+  // of a trip with no return flight set is intentionally kept light (no
+  // mandatory meals — see meal-policy.ts), so a 3rd day keeps Day 2 in the
+  // middle where breakfast is genuinely required.
   const days = [
     fullDay(1, [activity('a', 'Arrival', '14:00', '15:00')]),
     fullDay(2, [
@@ -38,6 +42,11 @@ Deno.test('flags MISSING_REQUIRED_MEAL when breakfast absent on full day', () =>
       activity('m', 'Museum', '10:00', '13:00'),
       dining('l', 'Lunch at L', '13:30', '14:30', 'Local trattoria with great pasta.'),
       dining('d', 'Dinner at D', '19:30', '21:00', 'Family-run osteria, get the tiramisu.'),
+    ]),
+    fullDay(3, [
+      dining('b3', 'Breakfast at B3', '08:30', '09:30', 'Cozy bakery with fresh pastries.'),
+      dining('l3', 'Lunch at L3', '13:00', '14:00', 'Dim sum institution, classic carts.'),
+      dining('d3', 'Dinner at D3', '19:30', '21:00', 'Harbourfront seafood, book ahead.'),
     ]),
   ];
   const v = validateItineraryForPersist(days, { destination: 'Hong Kong' });

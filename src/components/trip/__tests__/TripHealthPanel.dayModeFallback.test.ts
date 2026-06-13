@@ -30,7 +30,13 @@ describe('analyzeHealth — Day 1 arrival-band fallback (no persisted dayMode)',
     expect(missing.find((i) => /Day 1/.test(i.message) && /breakfast/.test(i.message))).toBeUndefined();
   });
 
-  it('arrival 08:00 → DOES require breakfast', () => {
+  // analyzeHealth deliberately does NOT surface meal-coverage warnings to users
+  // (the detector false-fires on departure/arrival edge cases and made good
+  // itineraries look broken — see TripHealthPanel `void missingMeals`). Meal
+  // coverage is tracked server-side only. The arrival-band requiredMeals logic
+  // itself (08:00 → breakfast required) is covered directly in
+  // inferDayMode.departureFallback.test.ts.
+  it('early arrival 08:00 missing breakfast → still NOT surfaced as a user warning', () => {
     const days = [
       day(1, [
         { name: 'A', category: 'sightseeing', startTime: '11:00', endTime: '12:00' },
@@ -47,7 +53,7 @@ describe('analyzeHealth — Day 1 arrival-band fallback (no persisted dayMode)',
       tripFlightSelection: { outbound: { arrival_time: '08:00' } },
     });
     const missingBreakfast = issues.find((i) => /Day 1/.test(i.message) && /breakfast/.test(i.message));
-    expect(missingBreakfast).toBeDefined();
+    expect(missingBreakfast).toBeUndefined();
   });
 });
 
