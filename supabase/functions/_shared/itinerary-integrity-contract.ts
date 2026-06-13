@@ -662,6 +662,12 @@ export function checkItineraryIntegrity(
 export const BLOCKING_INTEGRITY_CODES: Set<string> = new Set([
   'LOGISTICS_ONLY_CURATED_DAY', // a curated day with nothing but transit = effectively empty
   'MEAL_COVERAGE_MISSING',      // a day missing a required meal entirely
+  // Day 1 arrival anchor disagrees with the real flight clock. MUST block: it
+  // is the ships-as-ready-with-wrong-arrival bug (Amsterdam 20:00 / Lisbon
+  // 19:00). commit-itinerary self-heals it (re-stamps the anchor, re-verifies,
+  // ships ready as `repaired_codes`); that self-heal is gated on `!verdict.ok`,
+  // so this code MUST be blocking or the heal never runs and the bad time ships.
+  'FLIGHT_ANCHOR_COMMIT_MISMATCH',
 ]);
 
 /**
