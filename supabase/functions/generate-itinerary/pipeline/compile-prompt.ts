@@ -462,7 +462,7 @@ export async function compilePrompt(
   // LOCAL day trip to relaxed — a walk-around local day shouldn't be a sprint.
   const rawPacing = (typeof paramPacing === 'string' ? paramPacing : ((metadata?.pacing as string) || '')).toLowerCase();
   const userChosePacing = rawPacing === 'relaxed' || rawPacing === 'packed';
-  const RELAXED_LANG_RE = /\b(walk around|wander|stroll|chill|relax(?:ed|ing)?|laid.?back|leisurely|slow(?:\s*(?:pace|day))?|take it easy|low.?key|unwind|mosey)\b/i;
+  const RELAXED_LANG_RE = /\b(walk(?:ing)? around|wander|stroll|chill|relax(?:ed|ing)?|laid.?back|leisurely|slow(?:\s*(?:pace|day))?|take it easy|low.?key|unwind|mosey)\b/i;
   const _notesForPace = String((metadata?.additionalNotes as string) || '');
   const effectivePacing = userChosePacing
     ? rawPacing
