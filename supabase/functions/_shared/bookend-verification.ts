@@ -160,7 +160,7 @@ export interface BookendTrace {
  */
 export async function runBookendVerification(
   days: any[],
-  opts: { destination?: string | null; label?: string; expectedTotalDays?: number } = {},
+  opts: { destination?: string | null; label?: string; expectedTotalDays?: number; isLocalDayTrip?: boolean } = {},
 ): Promise<{
   scanned: number;
   expected: number;
@@ -198,8 +198,13 @@ export async function runBookendVerification(
   const expectedTotalDays = opts.expectedTotalDays && opts.expectedTotalDays > 0
     ? opts.expectedTotalDays
     : days.length;
+  // A 0-night LOCAL day trip (no hotel, no flights) is a full exploration day,
+  // NOT a departure day — the `days.length === 1` clause below would otherwise
+  // always stamp it `departure_day` and inject return-flight / terminal
+  // logistics. The caller passes this from compile-day-facts' isLocalDayTrip.
+  const isLocalDayTrip = !!opts.isLocalDayTrip;
   let departureDayIdx = -1;
-  if (days.length >= expectedTotalDays) {
+  if (!isLocalDayTrip && days.length >= expectedTotalDays) {
     // Only the LAST calendar day can be the departure day — and only when
     // either the trip is genuinely 1 day long OR its tail is a real
     // departure terminal (flight / airport transfer). Prior version
@@ -244,7 +249,9 @@ export async function runBookendVerification(
       (last?.endTime as string | undefined) ||
       null;
 
-    const dayExpects = !isDepartureDay && activities.length > 0 && !isDepartureTerminal(last);
+    // A local day trip has no hotel, so it expects NO end-of-day hotel-return
+    // bookend either — suppress the runStep8 "Return to Your Hotel" injection.
+    const dayExpects = !isDepartureDay && !isLocalDayTrip && activities.length > 0 && !isDepartureTerminal(last);
     const alreadyPersisted = !!last && (
       isTrueReturn(last) ||
       BOOKEND_SOURCES.has(String(last?.source || '').toLowerCase())
@@ -255,6 +262,8 @@ export async function runBookendVerification(
 
     if (isDepartureDay) {
       reason = 'departure_day';
+    } else if (isLocalDayTrip) {
+      reason = 'local_day_trip';
     } else if (!dayExpects && !alreadyPersisted) {
       reason = last && isDepartureTerminal(last) ? 'terminal_departure_logistics' : 'no_activities';
     } else if (alreadyPersisted) {

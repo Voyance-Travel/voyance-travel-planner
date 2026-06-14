@@ -72,3 +72,65 @@ Deno.test("bookend-verify: arrival logistics WITHOUT a real bookend correctly fl
   assertEquals(trace?.isDepartureDay, false);
   assertEquals(trace?.expected, true, "non-departure day with non-terminal last card expects a bookend");
 });
+
+// Regression: a 0-night LOCAL day trip (single day, no hotel, no flights) must
+// NOT be stamped a departure day. The `days.length === 1` shortcut would
+// otherwise force `departure_day` on it and inject return-flight / terminal
+// logistics, stripping the real sightseeing into a hotel-transfer shell.
+Deno.test("bookend-verify: local day trip (isLocalDayTrip) is NOT a departure day", async () => {
+  const days = [
+    {
+      dayNumber: 1,
+      activities: [
+        { id: "s1", category: "sightseeing", title: "Centennial Olympic Park",
+          startTime: "10:00", endTime: "12:00" },
+        { id: "l1", category: "dining", title: "Lunch at Ponce City Market",
+          startTime: "13:00", endTime: "14:00" },
+        { id: "s2", category: "sightseeing", title: "World of Coca-Cola",
+          startTime: "15:00", endTime: "17:00" },
+        { id: "d1", category: "dining", title: "Dinner in Midtown",
+          startTime: "19:00", endTime: "20:30" },
+      ],
+      metadata: {},
+    },
+  ];
+
+  const res = await runBookendVerification(days, {
+    label: "test", destination: "Atlanta", expectedTotalDays: 1, isLocalDayTrip: true,
+  });
+
+  const trace = (days[0] as any).metadata?.quality?.bookend_trace;
+  assertEquals(trace?.isDepartureDay, false, "a local day trip is not a departure day");
+  // No phantom hotel-return / departure terminal injected.
+  assertEquals(res.injected, 0, "no bookend logistics injected on a no-hotel local day");
+  const titles = days[0].activities.map((a: any) => a.title);
+  assertEquals(titles.includes("World of Coca-Cola"), true, "real sightseeing must survive");
+  assertEquals(
+    titles.some((t: string) => /return to .*hotel|departure|airport|check[- ]?out/i.test(t)),
+    false,
+    "no phantom departure/hotel cards added",
+  );
+});
+
+// Control: a genuine 1-day trip WITH a flight tail (round-trip same day) is
+// still correctly a departure day — the isLocalDayTrip suppression must not
+// over-reach and disable departure handling for real same-day flight trips.
+Deno.test("bookend-verify: single-day flight trip (no isLocalDayTrip) stays a departure day", async () => {
+  const days = [
+    {
+      dayNumber: 1,
+      activities: [
+        { id: "s1", category: "sightseeing", title: "City Walk",
+          startTime: "10:00", endTime: "12:00" },
+        { id: "f", category: "flight", title: "Departure Flight",
+          startTime: "18:00", endTime: "20:00",
+          source: "repair-departure-flight" },
+      ],
+      metadata: {},
+    },
+  ];
+
+  await runBookendVerification(days, { label: "test", expectedTotalDays: 1 });
+  const trace = (days[0] as any).metadata?.quality?.bookend_trace;
+  assertEquals(trace?.isDepartureDay, true, "a same-day flight trip is still a departure day");
+});

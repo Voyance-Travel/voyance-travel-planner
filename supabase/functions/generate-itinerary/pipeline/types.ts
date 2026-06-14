@@ -255,6 +255,10 @@ export interface CompiledFacts {
   flightContext: any;
   isFirstDay: boolean;
   isLastDay: boolean;
+  // 0-night, same-city, no-hotel, no-flight day → a full exploration day, not
+  // an arrival/departure day. Single source of truth; demotes isFirstDay/
+  // isLastDay above to false so no consumer applies travel framing.
+  isLocalDayTrip: boolean;
 
   // Split-stay: hotel changed from previous day within same city
   resolvedIsHotelChange: boolean;

@@ -60,6 +60,10 @@ export interface RepairDayInput {
   dayNumber: number;
   isFirstDay: boolean;
   isLastDay: boolean;
+  // 0-night local day trip (no hotel, no flights) → full exploration day, not a
+  // departure day. Authoritative single source from compile-day-facts; required
+  // because the orchestrator demotes isFirstDay/isLastDay to false for it.
+  isLocalDayTrip?: boolean;
 
   // Flight context for pre-arrival filter and departure sequence
   arrivalTime24?: string;
@@ -531,13 +535,20 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   const paceScore: number = typeof input.paceScore === 'number' ? input.paceScore : 0;
   const isFastPaced = paceScore >= 4;
 
-  // A 0-night LOCAL day trip: the only day (isFirstDay && isLastDay) with no
-  // hotel and no flight clocks. It is a FULL local day, NOT a departure day —
-  // so suppress all departure-day handling (checkout, post-checkout prune,
-  // airport/return-flight logistics) that would otherwise strip the day down
-  // to meals + a phantom "Checkout from Your Hotel".
-  const isSingleDayLocal = isFirstDay && isLastDay && !hasHotel
-    && !arrivalTime24 && !returnDepartureTime24;
+  // A 0-night LOCAL day trip: the only day of the trip, with no hotel and no
+  // flight clocks. It is a FULL local day, NOT a departure day — so suppress
+  // all departure-day handling (checkout, post-checkout prune, airport/return-
+  // flight logistics) that would otherwise strip the day down to meals + a
+  // phantom "Checkout from Your Hotel".
+  //
+  // Two sources, OR'd: (1) the explicit `isLocalDayTrip` flag threaded from
+  // compile-day-facts via the v2 orchestrator — authoritative, and required
+  // because the orchestrator demotes isFirstDay/isLastDay to false for a local
+  // day (so the structural check alone would miss it); (2) the structural
+  // check (isFirstDay && isLastDay && no hotel/flight) — kept as a standalone
+  // fallback for callers/tests that pass the raw day flags without isLocalDayTrip.
+  const isSingleDayLocal = !!(input as any).isLocalDayTrip
+    || (isFirstDay && isLastDay && !hasHotel && !arrivalTime24 && !returnDepartureTime24);
 
   // Clone activities array to mutate
   let activities: any[] = [...(input.day.activities || [])];

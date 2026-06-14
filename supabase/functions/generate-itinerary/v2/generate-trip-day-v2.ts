@@ -132,6 +132,14 @@ export async function handleGenerateTripDayV2(
     const totalDays = facts.dates.totalDays;
     const isFirstDay = dayNumber === 1;
     const isLastDay = totalDays > 0 && dayNumber === totalDays;
+    // NOTE: `isLastDay`/`isFirstDay` stay TRUE for a 0-night local day trip —
+    // it genuinely IS the trip's only/last day, so the last-day CATCH-ALLS
+    // (must-do coverage @ 8g, thin-day heal scheduling @ ~1088, cross-day
+    // dedup) must still run. What a local day trip is NOT is an arrival or a
+    // DEPARTURE day. That distinction is `isArrivalDay`/`isDepartureDay`,
+    // derived once below from dayFacts.isLocalDayTrip; the arrival/departure-
+    // specific passes (executioner, terminalCleanup, departure stamps/cleanup)
+    // key off those, not the raw day flags.
 
     // Compute the calendar date for this day.
     const dayDate = (() => {
@@ -279,11 +287,30 @@ export async function handleGenerateTripDayV2(
     const repairDepartureTime24 = dayFacts.flightContext?.returnDepartureTime24 || facts.departure.time24 || undefined;
     const mealPolicyForDay = facts.mealPolicy(dayNumber);
 
+    // ── LOCAL DAY-TRIP (0-night, no hotel, no flights) ───────────────────
+    // compile-day-facts is the single source of truth (dayFacts.isLocalDayTrip)
+    // and already demoted the PROMPT-side flags so compile-prompt frames a full
+    // exploration day. Here we derive the arrival/departure-specific flags the
+    // post-LLM passes use. A local day trip is NEITHER an arrival nor a
+    // departure day, so the executioner / terminalCleanup / departure stamps +
+    // final departure-cleanup are all suppressed — but isFirstDay/isLastDay
+    // stay true so the last-day catch-alls (must-do coverage, thin-day heal,
+    // dedup) still run. Re-checked against the orchestrator's authoritative
+    // hotel/flight signals so a 1-day trip that DOES have a hotel or flight is
+    // treated as a normal arrival+departure day.
+    const isLocalDayTrip = !!dayFacts.isLocalDayTrip
+      && !repairHasHotel && !repairArrivalTime24 && !repairDepartureTime24;
+    const isArrivalDay = isFirstDay && !isLocalDayTrip;
+    const isDepartureDay = isLastDay && !isLocalDayTrip;
+    if (isLocalDayTrip) {
+      console.log(`[v2] LOCAL_DAY_TRIP day=${dayNumber} — full exploration day; arrival/departure passes suppressed, last-day catch-alls retained.`);
+    }
+
     // ── 5a. STAMP ARRIVAL ANCHOR TRUTH (Day 1, post-LLM, pre-validate) ──
     // Authoritative overwrite of the arrival-flight card's start/end to
     // the user's ground-truth landing time, before any other pass can
     // touch it. Idempotent — safe to call again later in the pipeline.
-    if (isFirstDay && repairArrivalTime24) {
+    if (isArrivalDay && repairArrivalTime24) {
       const stamp = stampArrivalAnchorTruth(ai.day, {
         isFirstDay: true,
         arrivalTime24: repairArrivalTime24,
@@ -300,7 +327,7 @@ export async function handleGenerateTripDayV2(
     // ── 5b. STAMP DEPARTURE ANCHOR TRUTH (last day, post-LLM, pre-validate) ──
     // Mirror of arrival stamper — overwrite hallucinated departure-flight
     // card with the user's real return-departure time.
-    if (isLastDay && repairDepartureTime24) {
+    if (isDepartureDay && repairDepartureTime24) {
       const stampDep = stampDepartureAnchorTruth(ai.day, {
         isLastDay: true,
         departureTime24: repairDepartureTime24,
@@ -358,6 +385,7 @@ export async function handleGenerateTripDayV2(
         dayNumber,
         isFirstDay,
         isLastDay,
+        isLocalDayTrip,
         arrivalTime24: repairArrivalTime24,
         returnDepartureTime24: repairDepartureTime24,
         arrivalAirport: facts.arrival.airport || undefined,
@@ -478,16 +506,19 @@ export async function handleGenerateTripDayV2(
         const execCtx = {
           dayNumber,
           totalDays,
-          isFirstDay,
-          isLastDay,
-          arrivalTime24: isFirstDay ? facts.arrival.time24 : null,
-          departureTime24: isLastDay ? facts.departure.time24 : null,
+          // Arrival/departure flags — false for a local day trip so the
+          // executioner skips departure-transfer flagging + orphan-transit
+          // handling and never treats the day as having a flight terminal.
+          isFirstDay: isArrivalDay,
+          isLastDay: isDepartureDay,
+          arrivalTime24: isArrivalDay ? facts.arrival.time24 : null,
+          departureTime24: isDepartureDay ? facts.departure.time24 : null,
           dayTitle: finalDay?.title || finalDay?.theme || null,
           budgetTier: facts.preferences.budgetTier ?? null,
           geoFlagOnly: !geoDropEnabled,
           geoDropEnabled,
           rawFlightSelection: null,
-          destinationIata: isFirstDay ? facts.destination.iata : null,
+          destinationIata: isArrivalDay ? facts.destination.iata : null,
           hotelName: facts.hotel.name,
         } as any;
         const exec = runScheduleExecutioner(finalDay.activities, execCtx);
@@ -726,11 +757,14 @@ export async function handleGenerateTripDayV2(
       // terminalCleanup is a static import (top of file) — a dynamic import here
       // silently failed in the bundled edge runtime, so per-day departure cleanup never ran.
       terminalCleanup(finalDay.activities, {
-        departureTime24: isLastDay ? (repairDepartureTime24 || undefined) : undefined,
+        departureTime24: isDepartureDay ? (repairDepartureTime24 || undefined) : undefined,
         city: facts.destination.city,
         dayNumber,
-        isFirstDay,
-        isLastDay,
+        isFirstDay: isArrivalDay,
+        // isDepartureDay (not isLastDay): a local day trip is the last day but
+        // has no departure barrier — keep terminalCleanup from stripping the
+        // afternoon/evening as if it were post-flight.
+        isLastDay: isDepartureDay,
         hotelName: facts.hotel.name || undefined,
       });
     } catch (e) {
@@ -1034,6 +1068,9 @@ export async function handleGenerateTripDayV2(
         destination: facts.destination.city,
         label: 'v2-bookend',
         expectedTotalDays: totalDays,
+        // 0-night local day trip → not a departure day (no return-flight/terminal
+        // injection). Only valid when the whole trip is this single local day.
+        isLocalDayTrip: isLocalDayTrip && totalDays === 1,
       });
       console.log(
         `[v2] [BOOKEND_VERIFY_SUMMARY] scanned=${verify.scanned} expected=${verify.expected} injected=${verify.injected} missing=${verify.missing}`,
@@ -1279,7 +1316,10 @@ export async function handleGenerateTripDayV2(
     // the airport transfer, plus duplicate "Departure" rows. Re-run vague-title
     // sanitize + terminalCleanup on the LAST day here, as the absolute final
     // step before the write, so nothing re-introduced after cleanup survives.
-    if (isLastDay) {
+    // isDepartureDay (not isLastDay): a 0-night local day trip has no departure
+    // terminal — running this final terminalCleanup would strip its real
+    // afternoon/evening as if it were post-flight.
+    if (isDepartureDay) {
       try {
         const ld: any = mergedDays.find((d: any) => (d?.dayNumber ?? d?.day_number) === totalDays) || mergedDays[mergedDays.length - 1];
         if (ld && Array.isArray(ld.activities)) {
