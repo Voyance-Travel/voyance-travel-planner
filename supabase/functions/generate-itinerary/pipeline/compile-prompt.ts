@@ -38,6 +38,7 @@ import {
   type ScheduledMustDo,
 } from '../must-do-priorities.ts';
 import { extractMustDoVenues, detectEventTheme } from '../../_shared/extract-must-dos.ts';
+import { findHostCityEvent } from '../../_shared/host-city-events.ts';
 import { formatGenerationRules } from '../budget-constraints.ts';
 import {
   analyzePreBookedCommitments,
@@ -820,7 +821,27 @@ If this describes a primary purpose (event, wedding, conference), dedicate appro
     // NEVER a vague "{event} vibes" mood card. (extract-must-dos already keeps
     // it out of the hard must-do gate; this gives the model the right framing.)
     const eventTheme = detectEventTheme(additionalNotes);
-    if (eventTheme && !mustDoPrompt.trim()) {
+    // CURATED PATH (bulletproof): if we have authoritative facts for this event
+    // in this city on this date, give the model the REAL venue + fixture so it
+    // places an accurate, grounded experience. A deterministic backstop in the
+    // v2 chain injects it anyway if the model omits it. See host-city-events.ts.
+    const hostEvent = eventTheme ? findHostCityEvent(destination, date?.split('T')[0], additionalNotes) : null;
+    if (hostEvent && !mustDoPrompt.trim()) {
+      const { event: ev, matchOnDate } = hostEvent;
+      const ff = ev.primaryExperience;
+      const matchLine = matchOnDate
+        ? (/ vs /i.test(matchOnDate.fixture)
+            ? `- 📅 TODAY there is a ${ev.event} match in ${destination}: **${matchOnDate.fixture}** (${matchOnDate.stage}) at ${ev.stadium}${matchOnDate.kickoffLocal ? `, kickoff ${matchOnDate.kickoffLocal} ET` : ''}. Build an activity around watching it — at the Fan Festival's 47-foot Jumbotron OR a downtown sports bar.${matchOnDate.kickoffLocal ? '' : ' Do NOT invent a kickoff time; keep it flexible and suggest confirming the official schedule.'}`
+            : `- 📅 TODAY there is a ${ev.event} ${matchOnDate.stage} at ${ev.stadium}${matchOnDate.kickoffLocal ? `, kickoff ${matchOnDate.kickoffLocal} ET` : ''}. Build a watch activity around it (Fan Festival Jumbotron or a downtown sports bar).`)
+        : '';
+      mustDoPrompt = `
+## 🎉 ${ev.event.toUpperCase()} IN ${String(destination).toUpperCase()} — REAL EVENT (use these EXACT facts)
+The traveler is here for the ${ev.event}. These are AUTHORITATIVE facts — use them verbatim, do not substitute:
+- 🔴 REQUIRED activity: **${ff.name}** — at ${ff.venue} (${ff.address}). ${ff.note} Include this as a real activity card titled "${ff.name}".
+${matchLine ? matchLine + '\n' : ''}- Let the dining and overall vibe lean celebratory and social, but keep the rest of the day REAL ${destination} venues.
+- NEVER output a vague "${eventTheme} vibes/spirit/atmosphere" card — only concrete, real venues.
+`;
+    } else if (eventTheme && !mustDoPrompt.trim()) {
       mustDoPrompt = `
 ## 🎉 MAJOR EVENT CONTEXT — "${eventTheme}" (REQUIRED — weave it through the day)
 The traveler is in ${destination} specifically for the ${eventTheme}. This is the PRIMARY reason for the trip — the day MUST visibly revolve around it, not ignore it.
