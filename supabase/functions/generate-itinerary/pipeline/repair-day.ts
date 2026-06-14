@@ -531,6 +531,14 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   const paceScore: number = typeof input.paceScore === 'number' ? input.paceScore : 0;
   const isFastPaced = paceScore >= 4;
 
+  // A 0-night LOCAL day trip: the only day (isFirstDay && isLastDay) with no
+  // hotel and no flight clocks. It is a FULL local day, NOT a departure day —
+  // so suppress all departure-day handling (checkout, post-checkout prune,
+  // airport/return-flight logistics) that would otherwise strip the day down
+  // to meals + a phantom "Checkout from Your Hotel".
+  const isSingleDayLocal = isFirstDay && isLastDay && !hasHotel
+    && !arrivalTime24 && !returnDepartureTime24;
+
   // Clone activities array to mutate
   let activities: any[] = [...(input.day.activities || [])];
   const lockedIds = new Set((lockedActivities || []).map(l => l.id));
@@ -1888,7 +1896,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // Validation can miss subtle cases (no security card, late checkout) but
   // repairDepartureSequence's R5 must still re-anchor late checkouts and R3
   // must still pull leisure activities back before the airport transfer.
-  const isDepartureDayForSequence = isLastDay || (isLastDayInCity && !isTransitionDay);
+  const isDepartureDayForSequence = (isLastDay || (isLastDayInCity && !isTransitionDay)) && !isSingleDayLocal;
   if (isDepartureDayForSequence) {
     const seqRepairs = repairDepartureSequence(activities, returnDepartureTime24, hotelName, lockedIds);
     repairs.push(...seqRepairs);
@@ -2135,7 +2143,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 7. HOTEL CHECK-IN GUARANTEE (Day 1, transition day — NOT hotel change, handled above) ---
-  const needsCheckIn = !isHotelChange && (dayNumber === 1 || isTransitionDay);
+  const needsCheckIn = !isHotelChange && (dayNumber === 1 || isTransitionDay) && !isSingleDayLocal;
   if (needsCheckIn && activities.length > 0) {
     const hasCheckIn = activities.some((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
@@ -2369,7 +2377,11 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // we are still mid-stay and MUST NOT inject a checkout (would orphan a "checkout" mid-trip).
   const _intoSameCity = isLastDayInCity && (input as any).nextLegCity
     && String((input as any).nextLegCity).toLowerCase().trim() === String(resolvedDestination || '').toLowerCase().trim();
-  const needsCheckout = !isHotelChange && !_intoSameCity && (isLastDay || (isLastDayInCity && !isTransitionDay));
+  // Only inject a checkout when there is actually a hotel to check out of.
+  // A 0-night day trip (no hotel) was getting a placeholder "Checkout from Your
+  // Hotel" — and that checkout then triggered the §14/§14b post-checkout prune
+  // that stripped the day's sightseeing, leaving a thin meals-only day.
+  const needsCheckout = hasHotel && !isHotelChange && !_intoSameCity && (isLastDay || (isLastDayInCity && !isTransitionDay));
   if (needsCheckout && activities.length > 0) {
     const existingCheckout = activities.find((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
@@ -2461,7 +2473,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
   // --- 8b. DEPARTURE TRANSPORT GUARANTEE ---
   // Ensure every departure day has a transport card to the airport/station.
-  const isDepartureDay = isLastDay || (isLastDayInCity && !isTransitionDay);
+  const isDepartureDay = (isLastDay || (isLastDayInCity && !isTransitionDay)) && !isSingleDayLocal;
   if (isDepartureDay && activities.length > 0) {
     const isDepartureTransportRow = (a: any): boolean => {
       const t = (a?.title || '').toLowerCase();
@@ -3004,7 +3016,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
   if (activities.length > 0) {
     const effectiveHotelName = hotelName || 'Your Hotel';
-    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay, isFirstDay, isHotelChange, hotelCoordinates, resolvedDestination, paceScore);
+    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay, isFirstDay, isHotelChange, hotelCoordinates, resolvedDestination, paceScore, isSingleDayLocal);
     activities = bookendRepairs.activities;
     repairs.push(...bookendRepairs.repairs);
   }
@@ -4451,7 +4463,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // wrongly prunes the inter-city journey card and injects a return-flight
   // prompt. Gate the mid-trip branch on an explicit flight onward leg.
   const midTripOnwardIsFlight = String(nextLegTransport || '').toLowerCase() === 'flight';
-  if ((isLastDay || (isLastDayInCity && !isTransitionDay && midTripOnwardIsFlight)) && !isHotelChange) {
+  if ((isLastDay || (isLastDayInCity && !isTransitionDay && midTripOnwardIsFlight)) && !isHotelChange && !isSingleDayLocal) {
     console.log(
       `[DEPARTURE_15Z_RAN] day=${dayNumber} isLastDay=${isLastDay} isLastDayInCity=${isLastDayInCity} ` +
       `isTransitionDay=${isTransitionDay} isHotelChange=${isHotelChange} ` +
@@ -5357,6 +5369,7 @@ function repairBookends(
   hotelCoordinates?: { lat: number; lng: number },
   resolvedDestination?: string,
   paceScore: number = 0,
+  suppressHotelCards: boolean = false,
 ): { activities: any[]; repairs: RepairAction[] } {
   const repairs: RepairAction[] = [];
   // Local fallback — `repairDay` previously relied on closure scope which
@@ -5451,7 +5464,7 @@ function repairBookends(
   // accommodation cards at the start of the day that aren't check-in/checkout.
   // The traveler woke up at the hotel; "Return to Hotel" / "Freshen Up" as the
   // first activity is nonsensical.
-  if (!isDepartureDay) {
+  if (!isDepartureDay && !suppressHotelCards) {
     // On Day 1, find the check-in index so we only strip phantoms BEFORE check-in
     const day1CheckInIdx = isFirstDay
       ? activities.findIndex((a: any) => {
@@ -5630,7 +5643,7 @@ function repairBookends(
   }
 
   // 2. End-of-day hotel return — SKIP on departure days (traveler is at the airport/departed)
-  if (!isDepartureDay) {
+  if (!isDepartureDay && !suppressHotelCards) {
     // On first day, only inject "Return to Hotel" if check-in has already happened
     const hasCheckedIn = !isFirstDay || activities.some((a: any) => {
       const t = (a.title || '').toLowerCase();
@@ -5917,7 +5930,7 @@ function repairBookends(
     // =========================================================================
 
     // 5a. Strip leading transport cards (traveler wakes up at hotel, not mid-transit)
-    if (!isDepartureDay) {
+    if (!isDepartureDay && !suppressHotelCards) {
       while (deduped.length > 0 && isTransport(deduped[0])) {
         repairs.push({
           code: FAILURE_CODES.LOGISTICS_SEQUENCE,
@@ -5930,7 +5943,7 @@ function repairBookends(
     }
 
     // 5b. Strip or cap trailing transport cards (day must end at hotel, not mid-transit)
-    if (!isDepartureDay) {
+    if (!isDepartureDay && !suppressHotelCards) {
       while (deduped.length > 0 && isTransport(deduped[deduped.length - 1])) {
         const last = deduped[deduped.length - 1];
         const lastTitle = (last.title || '').toLowerCase();
