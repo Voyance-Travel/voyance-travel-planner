@@ -146,12 +146,20 @@ const sampleItineraries = [
 ];
 
 // Progress Step Indicator
-function StepIndicator({ currentStep, isMultiCity }: { currentStep: number; isMultiCity?: boolean }) {
-  const steps = [
-    { label: 'Trip Details', shortLabel: 'Details', step: 1 },
-    { label: isMultiCity ? 'Transport & Hotel' : 'Flight & Hotel', shortLabel: isMultiCity ? 'Transport' : 'Flight', step: 2 },
-    { label: 'Fine-Tune', shortLabel: 'Tune', step: 3 },
-  ];
+function StepIndicator({ currentStep, isMultiCity, isDayTrip }: { currentStep: number; isMultiCity?: boolean; isDayTrip?: boolean }) {
+  // Day trips (0 nights, single city) have no flights/lodging, so the wizard skips
+  // step 2 entirely — drop it from the indicator too. Keep the real step values (1/3)
+  // for active/complete matching; the visible badge number comes from the index.
+  const steps = isDayTrip
+    ? [
+        { label: 'Trip Details', shortLabel: 'Details', step: 1 },
+        { label: 'Fine-Tune', shortLabel: 'Tune', step: 3 },
+      ]
+    : [
+        { label: 'Trip Details', shortLabel: 'Details', step: 1 },
+        { label: isMultiCity ? 'Transport & Hotel' : 'Flight & Hotel', shortLabel: isMultiCity ? 'Transport' : 'Flight', step: 2 },
+        { label: 'Fine-Tune', shortLabel: 'Tune', step: 3 },
+      ];
 
   return (
     <div className="flex items-center justify-center gap-2 mb-6 sm:mb-8">
@@ -168,7 +176,7 @@ function StepIndicator({ currentStep, isMultiCity }: { currentStep: number; isMu
                     : 'bg-muted text-muted-foreground'
               )}
             >
-              {currentStep > s.step ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : s.step}
+              {currentStep > s.step ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : idx + 1}
             </div>
             <span
               className={cn(
@@ -2113,8 +2121,6 @@ export default function Start() {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
   }, []);
 
-  // Shorthand for the common Step 1 → Step 2 transition
-  const goToStep2 = useCallback(() => goToStep(2), [goToStep]);
 
   // Listen for browser back button to navigate between steps
   useEffect(() => {
@@ -2176,6 +2182,22 @@ export default function Start() {
   const [multiCityDestinations, setMultiCityDestinations] = useState<TripDestination[]>(
     plannerState.basics.destinations || []
   );
+
+  // Day trip = single-city, 0-night trip (start === end). It has no flights or
+  // lodging, so the Flight & Hotel step is meaningless — mirror the isDayTrip
+  // suppression already applied in EditorialItinerary / TripHealthPanel and skip
+  // step 2 in the wizard.
+  const isDayTrip = useMemo(
+    () => !isMultiCity && !!startDate && !!endDate && differenceInDays(endDate, startDate) === 0,
+    [isMultiCity, startDate, endDate]
+  );
+  // Advance past Trip Details: day trips jump straight to Fine-Tune (step 3),
+  // skipping the Flight & Hotel step (2); everything else goes to step 2.
+  const advancePastStep1 = useCallback(
+    () => goToStep(isDayTrip ? 3 : 2),
+    [goToStep, isDayTrip]
+  );
+
   const [multiCityTransports, setMultiCityTransports] = useState<InterCityTransport[]>(
     plannerState.basics.interCityTransports || []
   );
@@ -2295,7 +2317,10 @@ export default function Start() {
           if (savedDraft.isMultiCity) setIsMultiCity(savedDraft.isMultiCity);
           if (savedDraft.multiCityDestinations) setMultiCityDestinations(savedDraft.multiCityDestinations);
           if (savedDraft.multiCityTransports) setMultiCityTransports(savedDraft.multiCityTransports);
-          const restoredStep = savedDraft.currentStep || 3;
+          // Day trips skip the Flight & Hotel step — never restore onto step 2.
+          const draftIsDayTrip = !savedDraft.isMultiCity && savedDraft.startDate && savedDraft.endDate && savedDraft.startDate === savedDraft.endDate;
+          let restoredStep = savedDraft.currentStep || 3;
+          if (draftIsDayTrip && restoredStep === 2) restoredStep = 3;
           setCurrentStep(restoredStep);
           sessionStorage.removeItem(DRAFT_STORAGE_KEY);
           // Push history so back button works
@@ -2790,7 +2815,7 @@ export default function Start() {
       <section className="min-h-screen py-8 px-4">
         <div className="max-w-5xl mx-auto">
           {/* Progress Indicator */}
-          <StepIndicator currentStep={currentStep} isMultiCity={isMultiCity} />
+          <StepIndicator currentStep={currentStep} isMultiCity={isMultiCity} isDayTrip={isDayTrip} />
 
           {/* Main content with sidebar */}
           <div className="flex gap-12">
@@ -3300,7 +3325,7 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                       if (!user.quizCompleted) {
                         setShowDNAPrompt(true);
                       } else {
-                        goToStep2();
+                        advancePastStep1();
                       }
                     }}
                     onManualAuthRequired={() => {
@@ -3565,7 +3590,7 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
               className="w-full text-muted-foreground"
               onClick={() => {
                 setShowDNAPrompt(false);
-                goToStep2();
+                advancePastStep1();
               }}
             >
               Skip for now

@@ -40,6 +40,7 @@ import { repairDay } from '../pipeline/repair-day.ts';
 import { applyValidationGate } from '../pipeline/validation-gate.ts';
 import { validateDay } from '../pipeline/validate-day.ts';
 import { enrichAndValidateHours } from '../pipeline/enrich-day.ts';
+import { verifyAndDropVenues } from '../verify-drop-venues.ts';
 import { persistDay } from '../pipeline/persist-day.ts';
 import { persistTripItinerary } from '../../_shared/persist-itinerary.ts';
 import { writeActivityCostsFromItinerary } from '../../_shared/write-activity-costs.ts';
@@ -63,8 +64,9 @@ import { crossDayDedup } from '../_shared/cross-day-dedup.ts';
 import { makePlacesAlternatives } from '../_shared/places-alternatives.ts';
 import { ledgerCheck } from '../ledger-check.ts';
 import { nuclearCrossCitySweep, nuclearDiningStrip, nuclearWellnessSweep } from '../fix-placeholders.ts';
-import { scrubEventVibeFiller } from '../sanitization.ts';
+import { scrubEventVibeFiller, scrubNextDayTipLeak } from '../sanitization.ts';
 import { ensureHostCityEventExperience } from '../../_shared/host-city-events.ts';
+import { resolveScheduleOverlaps } from '../../_shared/schedule-overlap.ts';
 import { noopTrace, attachTrace, withStage, type Trace } from '../../_shared/trace-recorder.ts';
 import { runDetectorRepairs } from './detector-repairs.ts';
 import { findEmptyDays, mapTableRowsToActivities, applyHealedDay } from './completeness-gate.ts';
@@ -478,6 +480,31 @@ export async function handleGenerateTripDayV2(
     );
 
     let finalDay: any = { ...gated.day, activities: enriched };
+
+    // ── 6a0. Venue grounding — drop NAMED venues Google Places can't verify
+    // (hallucinations like "Marrakesh Market → modern Israeli cuisine"). Runs
+    // BEFORE the meal-coverage gate + thin-day backfill so dropped slots get
+    // refilled. STRICTLY FAIL-OPEN: only confident not-found / cross-city /
+    // low-overlap drops; no key, API errors, timeouts, budget, or cache hits all
+    // keep the venue. See verify-drop-venues.ts.
+    try {
+      const googleKey = Deno.env.get('GOOGLE_MAPS_API_KEY');
+      if (googleKey) {
+        const vd = await verifyAndDropVenues(finalDay.activities, {
+          destination: facts.destination.city,
+          supabaseUrl: Deno.env.get('SUPABASE_URL') || '',
+          supabaseKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+          googleKey,
+          timeBudgetMs: 20_000,
+        });
+        if (vd.dropped.length > 0) {
+          finalDay.activities = vd.activities;
+          console.log(`[v2] [VENUE_GROUNDING] day=${dayNumber} checked=${vd.checked} verified=${vd.verified} dropped=${vd.dropped.length}: ${vd.dropped.map((d) => `${d.title}(${d.reason})`).join(', ')}`);
+        }
+      }
+    } catch (e) {
+      console.warn('[v2] venue grounding failed (non-blocking):', e);
+    }
 
     // ── 6a. Phase C: v2 detector→repair upgrades ────────────────────────
     // Closing-hours drop + overlap auto-shift (cap 90min/day) + transit-sanity widen.
@@ -1096,6 +1123,16 @@ export async function handleGenerateTripDayV2(
           });
           console.log(`[v2] [HOST_CITY_EVENT] day=${dnum} injected "${r.event?.primaryExperience.name}" (deterministic backstop)`);
         }
+      } catch (_e) { /* non-blocking */ }
+      try {
+        // Timeline-integrity guard — ABSOLUTE LAST timing step. After every
+        // injection (meals, host-city events) nothing may be double-booked.
+        const ov = resolveScheduleOverlaps(d.activities);
+        if (ov.fixed > 0) console.log(`[v2] [OVERLAP_FIX] day=${dnum} resolved ${ov.fixed} overlapping block(s)`);
+        // Strip next-day scheduling scaffolding that leaks into insider tips
+        // ("…Wake 08:30. Breakfast at West Egg Café (10 min drive…").
+        const tipFix = scrubNextDayTipLeak(d.activities);
+        if (tipFix > 0) console.log(`[v2] [TIP_LEAK_SCRUB] day=${dnum} cleaned ${tipFix} tip(s)`);
       } catch (_e) { /* non-blocking */ }
     }
 

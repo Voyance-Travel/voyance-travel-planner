@@ -229,12 +229,80 @@ export function ensureHostCityEventExperience(
   const found = findHostCityEvent(ctx.destination, ctx.dateISO, ctx.notes);
   if (!found) return { activities: acts, injected: false, event: null };
   const venueLc = found.event.primaryExperience.venue.toLowerCase();
+  // Token-based venue match (tolerant of "Centennial Park" vs "Centennial
+  // Olympic Park") rather than a brittle full-substring match.
+  const venueTokens = venueLc.split(/\s+/).map((t) => t.replace(/[^a-z]/g, '')).filter((t) => t.length > 3);
   const already = acts.some((a) => {
-    const t = `${a?.title ?? a?.name ?? ''} ${a?.location ?? ''}`.toLowerCase();
-    return t.includes(venueLc) || (a?.source === 'host-city-event');
+    if (a?.source === 'host-city-event') return true;
+    const cat = String(a?.category ?? '').toLowerCase();
+    const title = String(a?.title ?? a?.name ?? '').toLowerCase();
+    // A transit/logistics card that merely PASSES the venue ("Taxi through
+    // Centennial Olympic Park") is NOT the event experience — it must not
+    // suppress the deterministic injection.
+    if (/\b(transit|transport|transfer|logistics|commute)\b/.test(cat) ||
+        /\b(taxi|transfer|drive|driving|travel (?:to|through|past)|head (?:to|toward)|pass(?:ing)? through|walk (?:to|past)|en route|uber|lyft)\b/.test(title)) {
+      return false;
+    }
+    const hay = `${title} ${String(a?.location ?? '').toLowerCase()}`;
+    if (/fan\s*fest(?:ival)?\b|fan\s*zone\b/.test(hay)) return true;
+    return venueTokens.length > 0 && venueTokens.filter((tok) => hay.includes(tok)).length >= Math.max(1, venueTokens.length - 1);
   });
   if (already) return { activities: acts, injected: false, event: found.event };
   const card = buildEventActivity(found.event, found.matchOnDate, `hce-d${ctx.dayNumber ?? 1}`);
+  const placed = placeCardInGap(acts, card);
+  return { activities: placed, injected: true, event: found.event };
+}
+
+const _pm = (s: any): number | null => { const m = String(s ?? '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+const _fm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+/**
+ * placeCardInGap — slot the event card into a REAL free gap in the day so it
+ * never double-books. Earlier the card was pushed at a fixed 15:30 + naive
+ * re-sort, which collided with whatever the model scheduled there (e.g. a fan
+ * fest overlapping the High Museum). We find the gap nearest the card's
+ * preferred start that fits its duration (with a 15-min buffer), shrink it to
+ * fit if needed, and only fall back to "after the last activity" when the day
+ * is genuinely packed. Mutates card times; returns the sorted activities.
+ */
+function placeCardInGap(acts: any[], card: any): any[] {
+  const BUF = 15;
+  const prefStart = _pm(card.startTime) ?? (15 * 60 + 30);
+  const wantDur = Math.max(60, ((_pm(card.endTime) ?? 0) - (_pm(card.startTime) ?? 0)) || 120);
+  const DAY_START = 8 * 60, DAY_END = 23 * 60;
+  const timed = acts
+    .map((a) => ({ s: _pm(a.startTime || a.time), e: _pm(a.endTime) }))
+    .filter((x): x is { s: number; e: number } => x.s != null)
+    .map((x) => ({ s: x.s, e: x.e ?? x.s + 60 }))
+    .sort((a, b) => a.s - b.s);
+
+  // Build the free gaps across the day.
+  const gaps: Array<{ start: number; end: number }> = [];
+  let cursor = DAY_START;
+  for (const t of timed) {
+    if (t.s - cursor >= 60 + 2 * BUF) gaps.push({ start: cursor, end: t.s });
+    cursor = Math.max(cursor, t.e);
+  }
+  if (DAY_END - cursor >= 60 + 2 * BUF) gaps.push({ start: cursor, end: DAY_END });
+
+  let chosen: { start: number; dur: number } | null = null;
+  let bestDist = Infinity;
+  for (const g of gaps) {
+    const avail = (g.end - BUF) - (g.start + BUF);
+    if (avail < 60) continue;
+    const dur = Math.min(wantDur, avail);
+    const start = Math.min(Math.max(prefStart, g.start + BUF), g.end - BUF - dur);
+    const dist = Math.abs(start - prefStart);
+    if (dist < bestDist) { bestDist = dist; chosen = { start, dur }; }
+  }
+  if (chosen) {
+    card.startTime = _fm(chosen.start); card.time = card.startTime; card.endTime = _fm(chosen.start + chosen.dur);
+  } else {
+    // Day is packed — append after the last activity (still no overlap).
+    const lastEnd = timed.length ? Math.max(...timed.map((t) => t.e)) : prefStart;
+    const start = lastEnd + BUF;
+    card.startTime = _fm(start); card.time = card.startTime; card.endTime = _fm(start + Math.min(wantDur, 120));
+  }
   acts.push(card);
-  return { activities: acts, injected: true, event: found.event };
+  return acts.sort((a, b) => ((_pm(a.startTime || a.time) ?? 9999) - (_pm(b.startTime || b.time) ?? 9999)));
 }

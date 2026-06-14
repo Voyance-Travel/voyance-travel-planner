@@ -189,7 +189,7 @@ export async function verifyVenueWithGooglePlaces(
 ): Promise<VenueVerification | null> {
   if (!GOOGLE_MAPS_API_KEY) {
     console.log('[Stage 4] Google Maps API key not configured, skipping venue verification');
-    return null;
+    return { isValid: false, confidence: 0, errored: true }; // couldn't check → fail-open
   }
 
   try {
@@ -234,7 +234,7 @@ export async function verifyVenueWithGooglePlaces(
 
     if (!result.ok) {
       console.log(`[Stage 4] Google Places API error for "${venueName}":`, result.status, result.errorText);
-      return null;
+      return { isValid: false, confidence: 0, errored: true }; // API error → fail-open (keep venue)
     }
 
     const place = result.data?.places?.[0];
@@ -342,7 +342,7 @@ export async function verifyVenueWithGooglePlaces(
     } else {
       console.log(`[Stage 4] Venue verification error for "${venueName}":`, error);
     }
-    return null;
+    return { isValid: false, confidence: 0, errored: true }; // timeout/network → fail-open
   }
 }
 

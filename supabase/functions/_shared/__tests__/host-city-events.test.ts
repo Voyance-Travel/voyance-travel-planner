@@ -46,6 +46,43 @@ Deno.test('ensure is idempotent — does not double-inject when a fan fest is al
   assertEquals(r.activities.length, 1);
 });
 
+Deno.test('a TRANSIT card through the venue does NOT suppress the injection (Run-2 bug)', () => {
+  // "Taxi through Centennial Olympic Park" mentions the venue but is not the
+  // event experience — the Fan Festival must still be guaranteed.
+  const acts = [{ title: 'Taxi through Centennial Olympic Park', category: 'transport', location: 'Centennial Olympic Park' }];
+  const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta, GA', dateISO: '2026-06-21', notes: NOTES });
+  assert(r.injected, 'a transit pass-through must not block the deterministic injection');
+  assert(r.activities.some((a) => /fan festival/i.test(a.title)), 'fan festival injected');
+});
+
+Deno.test('a real "Fan Zone … Centennial Park" card (token-tolerant) IS recognized, no double-inject', () => {
+  // "Centennial Park" (missing "Olympic") must still match "Centennial Olympic
+  // Park" so we do not inject a near-duplicate (Run-1 issue).
+  const acts = [{ title: 'World Cup Fan Zone Walk in Centennial Park', category: 'activity' }];
+  const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta', dateISO: '2026-06-21', notes: NOTES });
+  assertEquals(r.injected, false, 'an existing fan-zone card at the park suppresses a duplicate injection');
+});
+
+Deno.test('injected event card never overlaps an existing activity (timeline integrity)', () => {
+  const pm = (s: string) => { const m = s.match(/(\d{1,2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : 0; };
+  // A day where the model already scheduled something across the fan-fest's
+  // preferred 15:30 slot (the real failure: fan fest overlapped High Museum).
+  const acts = [
+    { title: 'Breakfast', category: 'dining', startTime: '08:30', endTime: '09:45' },
+    { title: 'MLK Park', category: 'cultural', startTime: '10:05', endTime: '12:35' },
+    { title: 'Lunch', category: 'dining', startTime: '12:55', endTime: '14:10' },
+    { title: 'BeltLine', category: 'activity', startTime: '14:30', endTime: '16:30' },
+    { title: 'High Museum of Art', category: 'cultural', startTime: '16:45', endTime: '18:45' },
+    { title: 'Dinner at Paschal’s', category: 'dining', startTime: '20:20', endTime: '22:20' },
+  ];
+  const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta', dateISO: '2026-06-21', notes: NOTES });
+  assert(r.injected);
+  const blocks = r.activities.map((a: any) => [pm(a.startTime), pm(a.endTime)]).sort((x, y) => x[0] - y[0]);
+  for (let i = 1; i < blocks.length; i++) {
+    assert(blocks[i][0] >= blocks[i - 1][1], `overlap: block starting ${blocks[i][0]} begins before previous ends ${blocks[i - 1][1]}`);
+  }
+});
+
 Deno.test('verified semifinal kickoff IS stated', () => {
   const acts: any[] = [];
   const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta', dateISO: '2026-07-15', notes: NOTES });
