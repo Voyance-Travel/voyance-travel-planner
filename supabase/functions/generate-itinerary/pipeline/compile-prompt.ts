@@ -456,9 +456,17 @@ export async function compilePrompt(
       : ((metadata?.generationRules as any[]) || [])
   );
 
-  const effectivePacing = typeof paramPacing === 'string'
-    ? paramPacing
-    : ((metadata?.pacing as string) || 'balanced');
+  // Pacing: honor a DELIBERATE choice (relaxed/packed); otherwise 'balanced' is
+  // just the default, so infer a relaxed pace from the trip's own words
+  // ("walk around", "chill", "stroll", "take it easy"…) and default a 0-night
+  // LOCAL day trip to relaxed — a walk-around local day shouldn't be a sprint.
+  const rawPacing = (typeof paramPacing === 'string' ? paramPacing : ((metadata?.pacing as string) || '')).toLowerCase();
+  const userChosePacing = rawPacing === 'relaxed' || rawPacing === 'packed';
+  const RELAXED_LANG_RE = /\b(walk around|wander|stroll|chill|relax(?:ed|ing)?|laid.?back|leisurely|slow(?:\s*(?:pace|day))?|take it easy|low.?key|unwind|mosey)\b/i;
+  const _notesForPace = String((metadata?.additionalNotes as string) || '');
+  const effectivePacing = userChosePacing
+    ? rawPacing
+    : ((RELAXED_LANG_RE.test(_notesForPace) || totalDays === 1) ? 'relaxed' : 'balanced');
 
   const effectiveIsFirstTimeVisitor = typeof paramIsFirstTimeVisitor === 'boolean'
     ? paramIsFirstTimeVisitor
@@ -695,7 +703,7 @@ RULES FOR USER-SPECIFIED ACTIVITIES:
   mustDoPrompt += `\n## VISITOR TYPE\n${effectiveIsFirstTimeVisitor ? 'Traveler is a FIRST-TIME visitor. Prioritize iconic landmarks and essential highlights for this city.' : 'Traveler is a RETURNING visitor. Prioritize hidden gems, local favorites, and deeper neighborhood exploration over tourist staples.'}\n`;
 
   const pacingGuidance: Record<string, string> = {
-    relaxed: 'PACING = RELAXED: Fewer activities with generous downtime and slower transitions.',
+    relaxed: 'PACING = RELAXED: Plan only 3–5 stops for the whole day INCLUDING meals (do NOT pack it). Generous downtime, slower transitions, and an earlier wind-down — the last non-dining activity should end by ~21:00 and the day should not run past a relaxed dinner.',
     balanced: 'PACING = BALANCED: Normal day density with a healthy mix of activities and breathing room.',
     packed: 'PACING = PACKED: Maximize meaningful activities while keeping sequencing realistic.',
   };

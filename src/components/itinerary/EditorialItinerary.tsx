@@ -1292,10 +1292,15 @@ function getDayTotalCost(
   destinationCountry?: string,
   isManualMode: boolean = false
 ): number {
-  // Only sum confirmed costs (not estimates) so day badges match the canonical Trip Total
+  // Sum the SAME amount shown on each activity card — estimates included — so
+  // the day total matches the visible per-activity prices. (Previously
+  // confirmed-only via `isEstimated ? 0`, which made the badge diverge from the
+  // cards: $35 total next to ~$139 of shown prices. getActivityCostInfo already
+  // applies the ledger override when a booking exists, so booked items still sum
+  // at their confirmed value.)
   return activities.reduce((sum, act) => {
     const info = getActivityCostInfo(act, travelers, budgetTier, destinationCity, destinationCountry, isManualMode);
-    return sum + (isManualMode ? info.amount : (info.isEstimated ? 0 : info.amount));
+    return sum + (info.amount || 0);
   }, 0);
 }
 
