@@ -828,7 +828,7 @@ If this describes a primary purpose (event, wedding, conference), dedicate appro
     const hostEvent = eventTheme ? findHostCityEvent(destination, date?.split('T')[0], additionalNotes) : null;
     if (hostEvent && !mustDoPrompt.trim()) {
       const { event: ev, matchOnDate } = hostEvent;
-      const ff = ev.fanFestival;
+      const ff = ev.primaryExperience;
       const matchLine = matchOnDate
         ? (/ vs /i.test(matchOnDate.fixture)
             ? `- 📅 TODAY there is a ${ev.event} match in ${destination}: **${matchOnDate.fixture}** (${matchOnDate.stage}) at ${ev.stadium}${matchOnDate.kickoffLocal ? `, kickoff ${matchOnDate.kickoffLocal} ET` : ''}. Build an activity around watching it — at the Fan Festival's 47-foot Jumbotron OR a downtown sports bar.${matchOnDate.kickoffLocal ? '' : ' Do NOT invent a kickoff time; keep it flexible and suggest confirming the official schedule.'}`

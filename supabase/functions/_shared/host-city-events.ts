@@ -1,18 +1,19 @@
 /**
- * host-city-events — curated, AUTHORITATIVE facts for major events in host
- * cities, so the generator can DETERMINISTICALLY inject a real, grounded event
- * experience (a real Fan Festival at a real venue; the real fixture on a match
- * date) instead of relying on the model to improvise — which it does only
- * ~1-in-4 runs and sometimes fabricates ("World Cup Fan Vibes").
+ * host-city-events — curated, AUTHORITATIVE facts for major recurring events in
+ * host cities, so the generator can DETERMINISTICALLY inject a real, grounded
+ * event experience (a real festival/fan site at a real venue; the real fixture
+ * on a match date) instead of relying on the model to improvise — which it does
+ * only ~1-in-4 runs and sometimes fabricates ("World Cup Fan Vibes").
  *
  * ── DATA PROVENANCE & MAINTENANCE ─────────────────────────────────────────
- * Seeded from public sources (FIFA.com, Discover Atlanta, 11Alive, Axios
- * Atlanta) as of June 2026. The Fan Festival venue/dates are well-established;
- * exact match KICKOFF times are intentionally OMITTED unless verified (only the
- * semifinal had a stated 3 p.m. ET). We never assert a kickoff time we can't
- * verify — a wrong time is worse than none. ⚠️ OWNER: verify against the
- * official FIFA schedule before launch; schedules can change. One tournament =
- * this data goes stale after 2026-07-19.
+ * Each entry cites its source + verification date inline. We assert only
+ * STABLE facts (venue/grounds) and VERIFIED dates; we never fabricate a date or
+ * a kickoff/start time. Events whose only known venues are ticketed (e.g. the
+ * LA 2028 Olympic ceremonies) are intentionally NOT given a deterministic
+ * injection — they still get the grounded-prompt + vibe-scrub floor via
+ * extract-must-dos' EVENT_THEME_RE. ⚠️ OWNER: verify dates against the official
+ * source before launch; recurring-event dates change yearly — update the
+ * `window`/`matches` each year (the venues are stable).
  */
 
 export interface HostCityMatch {
@@ -31,37 +32,47 @@ export interface HostCityEvent {
   event: string;
   /** Matches the event in free-text trip notes. */
   eventRe: RegExp;
-  /** Normalized city tokens this applies to (lowercase). */
+  /** Normalized city tokens this applies to (lowercase, a-z + space only). */
   cityKeys: string[];
   /** Inclusive ISO date window the event experience is offered. */
   window: { start: string; end: string };
-  fanFestival: {
+  /**
+   * The real, accessible, grounded experience to anchor the day on — a festival
+   * grounds, fan site, or parade route. NOT a ticketed-only venue.
+   */
+  primaryExperience: {
+    /** The activity title, e.g. 'FIFA Fan Festival at Centennial Olympic Park'. */
     name: string;
+    /** Real venue/area used for the dedup check + location field. */
     venue: string;
-    address: string;
-    /** Free-form note on hours/entry shown in the activity description. */
+    address?: string;
+    /** Description body — the concrete, real details of the experience. */
     note: string;
+    /** Default placement (24h) — festivals afternoon, marathons morning. */
+    defaultStart?: string;
+    defaultEnd?: string;
   };
-  stadium: string;
-  matches: HostCityMatch[];
+  /** Optional: a stadium for fixture-based events (World Cup). */
+  stadium?: string;
+  /** Optional: dated fixtures (World Cup). Empty/undefined for festivals. */
+  matches?: HostCityMatch[];
 }
 
-/**
- * Atlanta — FIFA World Cup 2026. Matches at Mercedes-Benz Stadium; the free
- * FIFA Fan Festival at Centennial Olympic Park (gates from noon, 47-ft
- * Jumbotron screenings, Coca-Cola Fan Zone, beer garden, concerts).
- */
+// ── Atlanta · FIFA World Cup 2026 ───────────────────────────────────────────
+// Sources: FIFA.com, Discover Atlanta, 11Alive, Axios Atlanta (verified 2026-06).
 const ATLANTA_WC2026: HostCityEvent = {
   id: 'wc2026-atlanta',
   event: 'FIFA World Cup 2026',
   eventRe: /\b(?:world cup|fifa|wc\s?2026)\b/i,
   cityKeys: ['atlanta'],
   window: { start: '2026-06-11', end: '2026-07-19' },
-  fanFestival: {
+  primaryExperience: {
     name: 'FIFA Fan Festival at Centennial Olympic Park',
     venue: 'Centennial Olympic Park',
     address: '265 Park Ave SW, Atlanta, GA 30313',
     note: 'Free entry; gates from noon. Match screenings on a 47-foot Jumbotron, the Coca-Cola Fan Zone, a beer garden, food stands, and live music.',
+    defaultStart: '15:30',
+    defaultEnd: '17:30',
   },
   stadium: 'Mercedes-Benz Stadium',
   matches: [
@@ -76,7 +87,70 @@ const ATLANTA_WC2026: HostCityEvent = {
   ],
 };
 
-export const HOST_CITY_EVENTS: HostCityEvent[] = [ATLANTA_WC2026];
+// ── Munich · Oktoberfest 2026 ────────────────────────────────────────────────
+// Source: oktoberfest.de / muenchen.de (verified 2026-06). 191st Oktoberfest,
+// Theresienwiese, Sep 19 – Oct 4 2026; free entry, beer tents open ~10:00.
+const MUNICH_OKTOBERFEST_2026: HostCityEvent = {
+  id: 'oktoberfest-munich-2026',
+  event: 'Oktoberfest',
+  eventRe: /\boktoberfest\b|\bwiesn\b/i,
+  cityKeys: ['munich', 'munchen', 'muenchen'],
+  window: { start: '2026-09-19', end: '2026-10-04' },
+  primaryExperience: {
+    name: 'Oktoberfest at the Theresienwiese',
+    venue: 'Theresienwiese',
+    address: 'Theresienwiese, 80336 München, Germany',
+    note: 'The original Oktoberfest fairgrounds — free entry to the grounds; 14 large beer tents (reserve ahead on weekends), Bavarian food, and fairground rides. Traditional dress (Tracht) encouraged.',
+    defaultStart: '13:00',
+    defaultEnd: '16:00',
+  },
+};
+
+// ── New Orleans · Mardi Gras 2027 ────────────────────────────────────────────
+// Source: mardigrasneworleans.com / neworleans.com / nola.com (verified 2026-06).
+// Fat Tuesday Feb 9 2027; major parades roll the final days along the Uptown /
+// St. Charles Avenue route (free, public).
+const NOLA_MARDIGRAS_2027: HostCityEvent = {
+  id: 'mardigras-neworleans-2027',
+  event: 'Mardi Gras',
+  eventRe: /\bmardi\s?gras\b|\bfat tuesday\b|\bcarnival\b/i,
+  cityKeys: ['new orleans', 'nola'],
+  window: { start: '2027-02-03', end: '2027-02-09' },
+  primaryExperience: {
+    name: 'Mardi Gras parades on St. Charles Avenue',
+    venue: 'St. Charles Avenue',
+    address: 'St. Charles Ave, New Orleans, LA',
+    note: 'Catch a Mardi Gras krewe parade along the classic Uptown/St. Charles Avenue route — free and public; bring a bag for throws (beads, doubloons). Parades roll mostly afternoon into evening the final days before Fat Tuesday (Feb 9, 2027).',
+    defaultStart: '15:00',
+    defaultEnd: '18:00',
+  },
+};
+
+// ── New York City · TCS New York City Marathon 2026 ──────────────────────────
+// Source: nyrr.org (verified 2026-06). Sun Nov 1 2026; 5-borough course,
+// Staten Island start → Central Park finish. Free to spectate along the route.
+const NYC_MARATHON_2026: HostCityEvent = {
+  id: 'nyc-marathon-2026',
+  event: 'TCS New York City Marathon',
+  eventRe: /\bmarathon\b/i,
+  cityKeys: ['new york', 'nyc', 'manhattan', 'brooklyn'],
+  window: { start: '2026-11-01', end: '2026-11-01' },
+  primaryExperience: {
+    name: 'Cheer the NYC Marathon on First Avenue',
+    venue: 'First Avenue, Manhattan',
+    address: 'First Ave, Manhattan, New York, NY',
+    note: 'Watch the TCS New York City Marathon (50th running of the five-borough course) — free to spectate. First Avenue in Manhattan (Mile ~16–18) is one of the loudest stretches; the finish line is in Central Park. Runners pass mid-morning into the afternoon.',
+    defaultStart: '10:30',
+    defaultEnd: '12:30',
+  },
+};
+
+export const HOST_CITY_EVENTS: HostCityEvent[] = [
+  ATLANTA_WC2026,
+  MUNICH_OKTOBERFEST_2026,
+  NOLA_MARDIGRAS_2027,
+  NYC_MARATHON_2026,
+];
 
 function normCity(s: unknown): string {
   return String(s ?? '').toLowerCase().normalize('NFKD').replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -85,7 +159,7 @@ function normCity(s: unknown): string {
 /**
  * findHostCityEvent — returns the matching curated event + the match on `dateISO`
  * (if any), but ONLY when the trip notes actually reference the event (so a
- * generic Atlanta trip during the window is unaffected). Null otherwise.
+ * generic trip during the window is unaffected). Null otherwise.
  */
 export function findHostCityEvent(
   destination: unknown,
@@ -100,45 +174,43 @@ export function findHostCityEvent(
     if (!ev.cityKeys.some((k) => city.includes(k))) continue;
     if (date < ev.window.start || date > ev.window.end) continue;
     if (!ev.eventRe.test(notesStr)) continue;
-    const matchOnDate = ev.matches.find((m) => m.date === date) || null;
+    const matchOnDate = ev.matches?.find((m) => m.date === date) || null;
     return { event: ev, matchOnDate };
   }
   return null;
 }
 
 /**
- * buildFanFestivalActivity — a real, grounded event activity for the day,
- * tailored to whether there is a match on the date. Timing is a flexible
- * afternoon slot (the festival is all-day); the pipeline's repair/sort passes
- * place it. No fabricated kickoff time — only the verified one (if present) is
- * stated, otherwise we point at the screenings.
+ * buildEventActivity — a real, grounded event activity for the day. For
+ * fixture-based events (World Cup) on a match date it folds in the real fixture
+ * (and the verified kickoff, if any); otherwise it's the primary experience.
+ * Timing comes from the event's defaults; the pipeline's repair/sort passes
+ * place it. No fabricated times.
  */
-export function buildFanFestivalActivity(
+export function buildEventActivity(
   event: HostCityEvent,
   matchOnDate: HostCityMatch | null,
   idSuffix = 'hce',
 ): any {
-  const ff = event.fanFestival;
-  let description: string;
+  const pe = event.primaryExperience;
+  let description = pe.note;
   if (matchOnDate) {
     const isTeams = / vs /i.test(matchOnDate.fixture);
     const kick = matchOnDate.kickoffLocal ? ` (kickoff ${matchOnDate.kickoffLocal} ET)` : '';
     const watch = isTeams
-      ? `Catch today's ${event.event} match — ${matchOnDate.fixture}${kick} at ${event.stadium} — live on the 47-foot Jumbotron`
-      : `Catch today's ${event.event} ${matchOnDate.stage}${kick} live on the 47-foot Jumbotron`;
-    description = `${watch}. ${ff.note} Confirm exact kickoff on the official ${event.event} schedule.`;
-  } else {
-    description = `Soak up the ${event.event} atmosphere at the official fan festival. ${ff.note}`;
+      ? `Today's ${event.event} match — ${matchOnDate.fixture}${kick}${event.stadium ? ` at ${event.stadium}` : ''} — screens live here.`
+      : `Today's ${event.event} ${matchOnDate.stage}${kick} screens live here.`;
+    description = `${watch} ${pe.note}${matchOnDate.kickoffLocal ? '' : ` Confirm exact kickoff on the official ${event.event} schedule.`}`;
   }
   return {
-    id: `${idSuffix}-fanfest`,
-    title: ff.name,
-    name: ff.name,
+    id: `${idSuffix}-event`,
+    title: pe.name,
+    name: pe.name,
     category: 'activity',
-    startTime: '15:30',
-    endTime: '17:30',
-    location: ff.venue,
-    address: ff.address,
+    startTime: pe.defaultStart || '15:30',
+    endTime: pe.defaultEnd || '17:30',
+    location: pe.venue,
+    address: pe.address,
     description,
     source: 'host-city-event',
   };
@@ -146,9 +218,8 @@ export function buildFanFestivalActivity(
 
 /**
  * ensureHostCityEventExperience — DETERMINISTIC guarantee. If a curated event
- * applies to this day and no activity already sits at the fan-festival venue,
- * inject the real fan-festival activity. Mutates + returns the activities array.
- * Returns whether it injected.
+ * applies to this day and no activity already sits at the primary-experience
+ * venue, inject the real event activity. Mutates + returns the activities array.
  */
 export function ensureHostCityEventExperience(
   activities: any[],
@@ -157,13 +228,13 @@ export function ensureHostCityEventExperience(
   const acts = Array.isArray(activities) ? activities : [];
   const found = findHostCityEvent(ctx.destination, ctx.dateISO, ctx.notes);
   if (!found) return { activities: acts, injected: false, event: null };
-  const venueLc = found.event.fanFestival.venue.toLowerCase();
+  const venueLc = found.event.primaryExperience.venue.toLowerCase();
   const already = acts.some((a) => {
     const t = `${a?.title ?? a?.name ?? ''} ${a?.location ?? ''}`.toLowerCase();
-    return t.includes(venueLc) || /fan fest(?:ival)?\b/.test(t);
+    return t.includes(venueLc) || (a?.source === 'host-city-event');
   });
   if (already) return { activities: acts, injected: false, event: found.event };
-  const card = buildFanFestivalActivity(found.event, found.matchOnDate, `hce-d${ctx.dayNumber ?? 1}`);
+  const card = buildEventActivity(found.event, found.matchOnDate, `hce-d${ctx.dayNumber ?? 1}`);
   acts.push(card);
   return { activities: acts, injected: true, event: found.event };
 }

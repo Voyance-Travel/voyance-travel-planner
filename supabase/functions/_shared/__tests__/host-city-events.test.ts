@@ -52,3 +52,35 @@ Deno.test('verified semifinal kickoff IS stated', () => {
   assert(r.injected);
   assert(/15:00 ET/.test(r.activities[0].description), 'verified semifinal kickoff is shown');
 });
+
+// ── Recurring mega-events ───────────────────────────────────────────────────
+
+Deno.test('Oktoberfest — Munich in-window injects Theresienwiese', () => {
+  const r = ensureHostCityEventExperience([], { destination: 'Munich, Germany', dateISO: '2026-09-25', notes: 'here for Oktoberfest' });
+  assert(r.injected);
+  assertEquals(r.event!.id, 'oktoberfest-munich-2026');
+  assertEquals(r.activities[0].location, 'Theresienwiese');
+  assertEquals(r.activities[0].startTime, '13:00');
+});
+
+Deno.test('Mardi Gras — New Orleans Fat Tuesday injects St. Charles parades', () => {
+  const r = ensureHostCityEventExperience([], { destination: 'New Orleans, LA', dateISO: '2027-02-09', notes: 'in town for Mardi Gras' });
+  assert(r.injected);
+  assertEquals(r.event!.id, 'mardigras-neworleans-2027');
+  assert(/St\. Charles/i.test(r.activities[0].title));
+});
+
+Deno.test('NYC Marathon — race day injects a First Avenue spectating spot (morning slot)', () => {
+  const r = ensureHostCityEventExperience([], { destination: 'New York, NY', dateISO: '2026-11-01', notes: 'watching the marathon' });
+  assert(r.injected);
+  assertEquals(r.event!.id, 'nyc-marathon-2026');
+  assertEquals(r.activities[0].startTime, '10:30');
+});
+
+Deno.test('marathon keyword does NOT fire in a non-host city', () => {
+  assertEquals(findHostCityEvent('Boston, MA', '2026-11-01', 'running the marathon'), null);
+});
+
+Deno.test('Oktoberfest does NOT fire off-window (e.g. a July Munich trip)', () => {
+  assertEquals(findHostCityEvent('Munich', '2026-07-10', 'Oktoberfest vibes'), null);
+});

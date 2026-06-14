@@ -1094,7 +1094,7 @@ export async function handleGenerateTripDayV2(
             const pm = (s: any) => { const m = String(s?.startTime || s?.time || '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : 9999; };
             return pm(x) - pm(y);
           });
-          console.log(`[v2] [HOST_CITY_EVENT] day=${dnum} injected "${r.event?.fanFestival.name}" (deterministic backstop)`);
+          console.log(`[v2] [HOST_CITY_EVENT] day=${dnum} injected "${r.event?.primaryExperience.name}" (deterministic backstop)`);
         }
       } catch (_e) { /* non-blocking */ }
     }
