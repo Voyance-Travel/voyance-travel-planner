@@ -14,6 +14,9 @@
  *   G10 non-logistics activity after the departure barrier on the last day
  *   G11 vague/placeholder titles + prompt-scaffolding leaks
  *   G12 must-do appears exactly once (when --mustdo given)
+ *   G13 overlapping activity times (two stops booked at once)
+ *   G14 day runs unreasonably late (non-dining stop after 23:00 / anything after 23:45)
+ *   G15 over-packed day (relaxed/day-trip cap 6, else 9 non-logistics stops)
  *
  * Modes:
  *   deno run -A audit.ts --file days.json [--city "Athens"] [--mustdo "Acropolis"]
@@ -65,13 +68,17 @@ const coreKey = (raw: unknown): string => {
   return [...new Set(toks)].sort().join(' ');
 };
 
-export function auditDays(days: any[], opts: { city?: string; mustDo?: string; expectedDays?: number } = {}): AuditIssue[] {
+export function auditDays(days: any[], opts: { city?: string; mustDo?: string; expectedDays?: number; pacing?: string } = {}): AuditIssue[] {
   const issues: AuditIssue[] = [];
   const add = (gate: string, day: number | null, detail: string) => issues.push({ gate, day, detail });
   const total = days.length;
   if (opts.expectedDays && total !== opts.expectedDays) add('G1.days', null, `have ${total}, expected ${opts.expectedDays}`);
   const cityLc = lc(opts.city ?? '').trim();
   const seenCore = new Map<string, number>(); // coreKey -> first day
+  const endMin = (a: any): number | null => { const m = String(a?.endTime ?? '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+  const hhmm = (m: number | null): string => m == null ? '??' : `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  // Relaxed/day-trip density cap; packed trips legitimately fit more.
+  const overpackCap = (opts.pacing === 'relaxed' || total === 1) ? 6 : 9;
 
   days.forEach((d: any, idx: number) => {
     const dn = Number(d?.dayNumber ?? idx + 1);
@@ -117,6 +124,33 @@ export function auditDays(days: any[], opts: { city?: string; mustDo?: string; e
         }
       }
     }
+    // G13 — overlapping activity times (two stops booked at once). A plan you
+    // can't physically follow. The auditor was blind to this; a live Atlanta day
+    // shipped a fan-fest overlapping a museum + a dinner overlapping a bar.
+    {
+      const timed = acts.map((a) => ({ t: T(a), s: start(a), e: endMin(a) }))
+        .filter((x) => x.s != null).sort((x, y) => x.s! - y.s!);
+      for (let i = 1; i < timed.length; i++) {
+        const prevEnd = timed[i - 1].e ?? timed[i - 1].s!;
+        if (timed[i].s! < prevEnd) add('G13.overlap', dn, `"${timed[i].t}" ${hhmm(timed[i].s)} overlaps "${timed[i - 1].t}" ending ${hhmm(prevEnd)}`);
+      }
+    }
+    // G14 — day runs unreasonably late: a non-dining stop ending after 23:00, or
+    // anything ending after 23:45.
+    {
+      for (const a of acts) {
+        if (isLog(a)) continue;
+        const e = endMin(a);
+        if (e == null) continue;
+        if (!isMeal(a) && !isNightcap(T(a)) && e > 23 * 60) add('G14.runsLate', dn, `"${T(a)}" ends ${hhmm(e)}`);
+        else if (e > 23 * 60 + 45) add('G14.runsLate', dn, `"${T(a)}" ends ${hhmm(e)}`);
+      }
+    }
+    // G15 — over-packed day (relaxed/day-trip cap 6, else 9 non-logistics stops).
+    {
+      const stops = acts.filter((a) => !isLog(a)).length;
+      if (stops > overpackCap) add('G15.overpacked', dn, `${stops} non-logistics stops (cap ${overpackCap})`);
+    }
     // thin middle day — EXEMPT inter-city transition days (checkout AND
     // check-in on the same day = the traveler changes cities). Owner's rule:
     // a thin middle day is a planning failure "as long as it's not a travel
@@ -152,9 +186,16 @@ export function auditDays(days: any[], opts: { city?: string; mustDo?: string; e
   return issues;
 }
 
-export function auditTripRow(row: any, opts: { city?: string; mustDo?: string; expectedDays?: number } = {}): AuditIssue[] {
+export function auditTripRow(row: any, opts: { city?: string; mustDo?: string; expectedDays?: number; pacing?: string } = {}): AuditIssue[] {
   const issues: AuditIssue[] = [];
   const days: any[] = Array.isArray(row?.itinerary_data?.days) ? row.itinerary_data.days : [];
+  // Infer effective pacing for the density gate (G15): explicit pace, else relaxed
+  // from walk-around language in the notes, else the caller-supplied value.
+  const _notes = String(row?.metadata?.additionalNotes ?? '').toLowerCase();
+  const _pace = String(row?.metadata?.pacing ?? '').toLowerCase();
+  const inferred = _pace === 'relaxed' || _pace === 'packed' ? _pace
+    : /\b(walk(?:ing)? around|wander|stroll|chill|relax|leisurely|slow|take it easy|unwind)\b/.test(_notes) ? 'relaxed' : '';
+  opts = { ...opts, pacing: opts.pacing ?? (inferred || undefined) };
   if (String(row?.itinerary_status) !== 'ready') issues.push({ gate: 'G1.status', day: null, detail: `status=${row?.itinerary_status}` });
   if (row?.metadata?.fully_persisted !== true) issues.push({ gate: 'G1.fullyPersisted', day: null, detail: 'not stamped' });
   const codes: string[] = Array.isArray(row?.metadata?.integrity_contract?.codes) ? row.metadata.integrity_contract.codes : [];
