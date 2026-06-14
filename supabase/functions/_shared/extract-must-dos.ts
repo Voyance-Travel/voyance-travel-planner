@@ -39,7 +39,21 @@ const EXPERIENCE_NOUN_RE = /\b(?:sunset|sunrise|vibes|atmosphere|nightlife|rooft
 // with the real ask ("walk around, see the sights"). Classify them as soft
 // experience wishes instead so they inform the vibe but never become a locked
 // card.
-const EVENT_THEME_RE = /\b(?:world cup|fifa|olympics?|olympic games|paralympics?|super ?bowl|world series|nba finals|stanley cup|march madness|the masters|wimbledon|us open|french open|australian open|roland garros|grand prix|formula\s?1|f1\b|world athletics|coachella|glastonbury|tomorrowland|lollapalooza|burning man|sxsw|oktoberfest|mardi gras|carnival|carnaval|la tomatina|running of the bulls|comic ?con|new year'?s eve|marathon|pride parade|pride festival|pride week)\b/i;
+export const EVENT_THEME_RE = /\b(?:world cup|fifa|olympics?|olympic games|paralympics?|super ?bowl|world series|nba finals|stanley cup|march madness|the masters|wimbledon|us open|french open|australian open|roland garros|grand prix|formula\s?1|f1\b|world athletics|coachella|glastonbury|tomorrowland|lollapalooza|burning man|sxsw|oktoberfest|mardi gras|carnival|carnaval|la tomatina|running of the bulls|comic ?con|new year'?s eve|marathon|pride parade|pride festival|pride week)\b/i;
+
+/**
+ * detectEventTheme — returns the matched major-event phrase (e.g. "World Cup")
+ * when the text references a recognized event/occasion that is the trip's THEME
+ * rather than a literal venue, else null. Used by compile-prompt to build a
+ * grounded event block, and by sanitization to scrub vague "{event} vibes"
+ * filler. See mem://day-trip-and-event-theme.
+ */
+export function detectEventTheme(text: unknown): string | null {
+  const s = typeof text === 'string' ? text : '';
+  if (!s.trim()) return null;
+  const m = s.match(EVENT_THEME_RE);
+  return m ? m[0] : null;
+}
 // Generic "things to do" FILLER — a vague paraphrase the NL extractor produces
 // from soft intent like "walk around and see the sights" ("free downtown
 // activities", "fun things to do", "cheap local spots", "explore the area").

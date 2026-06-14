@@ -37,7 +37,7 @@ import {
   getBlockedTimeRange,
   type ScheduledMustDo,
 } from '../must-do-priorities.ts';
-import { extractMustDoVenues } from '../../_shared/extract-must-dos.ts';
+import { extractMustDoVenues, detectEventTheme } from '../../_shared/extract-must-dos.ts';
 import { formatGenerationRules } from '../budget-constraints.ts';
 import {
   analyzePreBookedCommitments,
@@ -813,7 +813,29 @@ The traveler's overall trip context${_hardLines.length ? ' (the HARD RULES above
 If this describes a primary purpose (event, wedding, conference), dedicate appropriate days to it.
 `;
 
-    if (!mustDoPrompt.trim()) {
+    // A MAJOR EVENT / OCCASION (World Cup, Olympics, a festival…) is the trip's
+    // THEME, not a single literal "{event}" stop. It must be woven through the
+    // day as REAL, grounded experiences — a fan festival at a known central
+    // venue, downtown bars/breweries to watch matches, a celebratory vibe — and
+    // NEVER a vague "{event} vibes" mood card. (extract-must-dos already keeps
+    // it out of the hard must-do gate; this gives the model the right framing.)
+    const eventTheme = detectEventTheme(additionalNotes);
+    if (eventTheme && !mustDoPrompt.trim()) {
+      mustDoPrompt = `
+## 🎉 MAJOR EVENT CONTEXT — "${eventTheme}" (weave it through the whole day)
+The traveler is in ${destination} for the ${eventTheme}. This is the ENERGY of the trip — build a great ${destination} day that LEANS INTO it with REAL, grounded experiences (not one generic card):
+- Include a real FAN FESTIVAL / fan zone at a known central public space (a major downtown park or plaza) where crowds gather.
+- Include at least one downtown SPORTS BAR, brewery, or pub known for big-event crowds to WATCH the action with people.
+- Let the dining and overall vibe lean celebratory and social.
+
+TITLE RULES (critical):
+- Every event activity MUST be CONCRETE — a real venue + what you do ("${eventTheme} Fan Festival at <real park>", "Watch the match at <real downtown bar>").
+- NEVER output a vague mood card like "${eventTheme} Fan Vibes", "${eventTheme}-themed ...", or "${eventTheme} spirit/atmosphere/energy". Those are filler and are forbidden.
+
+TIMING (be honest):
+- You do NOT have the official ${eventTheme} schedule — do NOT invent specific kickoff/start times. Frame any match/game watching FLEXIBLY (e.g. "afternoon match watch party", "evening match at a downtown pub") and, in the description, suggest the traveler confirm the official ${eventTheme} schedule for exact times.
+`;
+    } else if (!mustDoPrompt.trim()) {
       const detectedFromNotes = parseMustDoInput(additionalNotes, destination, false, preferences?.startDate || date?.split('T')[0], totalDays);
       const eventItems = detectedFromNotes.filter((p: any) => p.activityType === 'all_day_event' || p.activityType === 'half_day_event');
       if (eventItems.length > 0) {

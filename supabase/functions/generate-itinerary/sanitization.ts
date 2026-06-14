@@ -13,6 +13,54 @@ import {
   MAX_WALK_DURATION_MINUTES,
 } from '../_shared/transit-mode.ts';
 import { isTransitActivity } from '../_shared/transit-detect.ts';
+import { EVENT_THEME_RE } from '../_shared/extract-must-dos.ts';
+
+// A vague "feeling" word that, coupled with a major event, marks a FABRICATED
+// mood card ("World Cup Fan Vibes", "Olympics spirit") rather than a real,
+// grounded experience. See mem://day-trip-and-event-theme.
+const EVENT_VIBE_FILLER_RE = /\b(?:fan\s+)?(?:vibes?|spirit|fever|atmosphere|energy|mania|buzz|hype|fervou?r|excitement)\b/i;
+// Concrete, real event experiences we KEEP (a real venue + a real action).
+const EVENT_REAL_EXPERIENCE_RE = /\bfan\s*fest(?:ival)?\b|\bfan\s*zone\b|\bwatch(?:ing)?\b|\bviewing\b|\bwatch\s*party\b|\bmatch\b|\bgame\b|\bscreening\b|\bstadium\b|\barena\b|\bbar\b|\bbrewery\b|\bpub\b|\btailgate\b/i;
+// A real-place noun in the "… at <X>" tail — distinguishes a genuine venue
+// ("Centennial Olympic Park") from the event itself ("the World Cup"). Needed
+// because real venues legitimately contain an event word ("Olympic Park").
+const VENUE_NOUN_RE = /\b(?:park|stadium|arena|field|grounds?|market|museum|gallery|plaza|square|garden|centre|center|hall|district|street|avenue|road|bar|brewery|pub|tavern|restaurant|caf[eé]|bistro|brasserie|hotel|theat(?:er|re)|stadium|club|lounge|rooftop|brewpub|taproom|beer\s*garden|fan\s*fest(?:ival)?|fan\s*zone)\b/i;
+
+/**
+ * scrubEventVibeFiller — deterministic backstop for the "event as a stop" bug.
+ * A title that couples a recognized major event (EVENT_THEME_RE) with a vague
+ * feeling word (vibes/spirit/fever/…) and is NOT a concrete event experience
+ * (fan fest / watch party / real venue) is fabricated filler. When it carries a
+ * real "… at <Venue>" tail we relabel to the venue (keep the real place); with
+ * no venue we drop the card. The compile-prompt grounded-event block is what
+ * produces the GOOD version; this guarantees the bad version never ships even
+ * when the model ignores the prompt. Mutates + returns the activities array.
+ */
+export function scrubEventVibeFiller(activities: any[]): any[] {
+  if (!Array.isArray(activities)) return activities;
+  const out: any[] = [];
+  for (const a of activities) {
+    if (!a) continue;
+    const title = String(a.title || a.name || '');
+    const isFabricated = EVENT_THEME_RE.test(title)
+      && EVENT_VIBE_FILLER_RE.test(title)
+      && !EVENT_REAL_EXPERIENCE_RE.test(title);
+    if (!isFabricated) { out.push(a); continue; }
+    const atMatch = title.match(/\bat\s+(.+)$/i);
+    const venue = atMatch?.[1]?.trim().replace(/^the\s+/i, '');
+    // Relabel only when the tail is a REAL place (has a venue noun) — not the
+    // event itself ("the World Cup" has no venue noun → drop instead).
+    if (venue && venue.length > 2 && VENUE_NOUN_RE.test(venue)) {
+      a.title = venue;
+      a.name = venue;
+      console.log(`[EVENT_VIBE_SCRUB] relabeled fabricated "${title}" → "${venue}"`);
+      out.push(a);
+    } else {
+      console.log(`[EVENT_VIBE_SCRUB] dropped fabricated event-vibe card "${title}"`);
+    }
+  }
+  return out;
+}
 
 // =============================================================================
 // ALWAYS-FREE VENUE PATTERNS — shared across sanitization, repair, and generation
@@ -2073,6 +2121,13 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
     if (removed > 0) {
       console.log(`[sanitize] Hard dedup removed ${removed} repeated dining activit${removed === 1 ? 'y' : 'ies'} from day ${dayNumber}`);
     }
+  }
+
+  // Backstop: a major event woven into the trip must surface as REAL grounded
+  // experiences (fan fest / watch party / real venue), never a vague
+  // "{event} vibes" mood card. Relabel-to-venue or drop the fabricated ones.
+  if (Array.isArray(day.activities)) {
+    day.activities = scrubEventVibeFiller(day.activities);
   }
 
   return day;
