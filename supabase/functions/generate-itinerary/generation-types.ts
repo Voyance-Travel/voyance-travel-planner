@@ -366,6 +366,10 @@ export interface ValidationContext {
 export interface VenueVerification {
   isValid: boolean;
   confidence: number;
+  /** True when verification could NOT run (no API key, Places HTTP error, or a
+   *  network/timeout exception). Distinguishes "we couldn't check" (fail-open:
+   *  keep the venue) from a genuine `null` not-found / geo-reject (drop). */
+  errored?: boolean;
   placeId?: string;
   formattedAddress?: string;
   coordinates?: { lat: number; lng: number };

@@ -40,6 +40,7 @@ import { repairDay } from '../pipeline/repair-day.ts';
 import { applyValidationGate } from '../pipeline/validation-gate.ts';
 import { validateDay } from '../pipeline/validate-day.ts';
 import { enrichAndValidateHours } from '../pipeline/enrich-day.ts';
+import { verifyAndDropVenues } from '../verify-drop-venues.ts';
 import { persistDay } from '../pipeline/persist-day.ts';
 import { persistTripItinerary } from '../../_shared/persist-itinerary.ts';
 import { writeActivityCostsFromItinerary } from '../../_shared/write-activity-costs.ts';
@@ -479,6 +480,31 @@ export async function handleGenerateTripDayV2(
     );
 
     let finalDay: any = { ...gated.day, activities: enriched };
+
+    // ── 6a0. Venue grounding — drop NAMED venues Google Places can't verify
+    // (hallucinations like "Marrakesh Market → modern Israeli cuisine"). Runs
+    // BEFORE the meal-coverage gate + thin-day backfill so dropped slots get
+    // refilled. STRICTLY FAIL-OPEN: only confident not-found / cross-city /
+    // low-overlap drops; no key, API errors, timeouts, budget, or cache hits all
+    // keep the venue. See verify-drop-venues.ts.
+    try {
+      const googleKey = Deno.env.get('GOOGLE_MAPS_API_KEY');
+      if (googleKey) {
+        const vd = await verifyAndDropVenues(finalDay.activities, {
+          destination: facts.destination.city,
+          supabaseUrl: Deno.env.get('SUPABASE_URL') || '',
+          supabaseKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+          googleKey,
+          timeBudgetMs: 20_000,
+        });
+        if (vd.dropped.length > 0) {
+          finalDay.activities = vd.activities;
+          console.log(`[v2] [VENUE_GROUNDING] day=${dayNumber} checked=${vd.checked} verified=${vd.verified} dropped=${vd.dropped.length}: ${vd.dropped.map((d) => `${d.title}(${d.reason})`).join(', ')}`);
+        }
+      }
+    } catch (e) {
+      console.warn('[v2] venue grounding failed (non-blocking):', e);
+    }
 
     // ── 6a. Phase C: v2 detector→repair upgrades ────────────────────────
     // Closing-hours drop + overlap auto-shift (cap 90min/day) + transit-sanity widen.
