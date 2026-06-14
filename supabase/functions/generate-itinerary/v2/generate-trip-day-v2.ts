@@ -63,8 +63,9 @@ import { crossDayDedup } from '../_shared/cross-day-dedup.ts';
 import { makePlacesAlternatives } from '../_shared/places-alternatives.ts';
 import { ledgerCheck } from '../ledger-check.ts';
 import { nuclearCrossCitySweep, nuclearDiningStrip, nuclearWellnessSweep } from '../fix-placeholders.ts';
-import { scrubEventVibeFiller } from '../sanitization.ts';
+import { scrubEventVibeFiller, scrubNextDayTipLeak } from '../sanitization.ts';
 import { ensureHostCityEventExperience } from '../../_shared/host-city-events.ts';
+import { resolveScheduleOverlaps } from '../../_shared/schedule-overlap.ts';
 import { noopTrace, attachTrace, withStage, type Trace } from '../../_shared/trace-recorder.ts';
 import { runDetectorRepairs } from './detector-repairs.ts';
 import { findEmptyDays, mapTableRowsToActivities, applyHealedDay } from './completeness-gate.ts';
@@ -1096,6 +1097,16 @@ export async function handleGenerateTripDayV2(
           });
           console.log(`[v2] [HOST_CITY_EVENT] day=${dnum} injected "${r.event?.primaryExperience.name}" (deterministic backstop)`);
         }
+      } catch (_e) { /* non-blocking */ }
+      try {
+        // Timeline-integrity guard — ABSOLUTE LAST timing step. After every
+        // injection (meals, host-city events) nothing may be double-booked.
+        const ov = resolveScheduleOverlaps(d.activities);
+        if (ov.fixed > 0) console.log(`[v2] [OVERLAP_FIX] day=${dnum} resolved ${ov.fixed} overlapping block(s)`);
+        // Strip next-day scheduling scaffolding that leaks into insider tips
+        // ("…Wake 08:30. Breakfast at West Egg Café (10 min drive…").
+        const tipFix = scrubNextDayTipLeak(d.activities);
+        if (tipFix > 0) console.log(`[v2] [TIP_LEAK_SCRUB] day=${dnum} cleaned ${tipFix} tip(s)`);
       } catch (_e) { /* non-blocking */ }
     }
 

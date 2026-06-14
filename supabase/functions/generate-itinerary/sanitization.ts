@@ -36,6 +36,40 @@ const VENUE_NOUN_RE = /\b(?:park|stadium|arena|field|grounds?|market|museum|gall
  * produces the GOOD version; this guarantees the bad version never ships even
  * when the model ignores the prompt. Mutates + returns the activities array.
  */
+// Next-day scheduling scaffolding that leaks into an insider tip, e.g.
+// "…Wake 08:30. Breakfast at West Egg Café (10 min drive, ~$15)". Everything
+// from the next-day marker onward is cut.
+const NEXTDAY_TIP_LEAK_RE = /\s*(?:\bwake\s+\d{1,2}:\d{2}\b|\b(?:tomorrow|next morning|the next day|day\s*2|day\s*two)\b).*$/is;
+const TIP_FIELDS = ['tip', 'tips', 'insiderTip', 'insider_tip', 'proTip', 'pro_tip', 'localTip'];
+
+/**
+ * scrubNextDayTipLeak — strip next-day planning scaffolding bleeding into
+ * insider-tip fields (sanitizeGeneratedDay is V1-only, so the v2 chain calls
+ * this directly). Mutates activities; returns count of tips cleaned.
+ */
+export function scrubNextDayTipLeak(activities: any[]): number {
+  if (!Array.isArray(activities)) return 0;
+  let n = 0;
+  const clean = (s: string) => s.replace(NEXTDAY_TIP_LEAK_RE, '').replace(/[\s.,;]+$/, '').trim();
+  for (const a of activities) {
+    if (!a) continue;
+    for (const f of TIP_FIELDS) {
+      const v = a[f];
+      if (typeof v === 'string' && NEXTDAY_TIP_LEAK_RE.test(v)) {
+        const c = clean(v);
+        if (c !== v) { a[f] = c; n++; }
+      } else if (Array.isArray(v)) {
+        for (let i = 0; i < v.length; i++) {
+          if (typeof v[i] === 'string' && NEXTDAY_TIP_LEAK_RE.test(v[i])) {
+            const c = clean(v[i]); if (c !== v[i]) { v[i] = c; n++; }
+          }
+        }
+      }
+    }
+  }
+  return n;
+}
+
 export function scrubEventVibeFiller(activities: any[]): any[] {
   if (!Array.isArray(activities)) return activities;
   const out: any[] = [];
