@@ -1527,6 +1527,10 @@ export async function handleGenerateTripDayV2(
         { ...(tripRow?.itinerary_data || {}), days: mergedDays },
         {
           label: 'v2-generate-trip-day', saveReason: 'regenerate-day-v2', finalGate: true,
+          // 0-night local day trip → persist's bookend pass must not re-stamp it
+          // departure_day / inject a hotel-return (it runs after the orchestrator's
+          // own bookend and would otherwise clobber the trace).
+          isLocalDayTrip,
           // V2 parallel-race fix: never overwrite the whole days array. A fill (non-last,
           // non-heal) request atomically merges ONLY its own day; the finalize (last-day or
           // heal) merges every cleaned day. No whole-array overwrite ⇒ no concurrent day is

@@ -89,6 +89,14 @@ export function countNonMealMeaningfulActivities(days: any[]): number {
 export interface PersistItineraryOptions {
   destination?: string | null;
   skipContract?: boolean;
+  /**
+   * 0-night LOCAL day trip (single day, no hotel, no flights). Forwarded to the
+   * bookend verification so it does NOT stamp the day `departure_day` or inject
+   * a "Return to Your Hotel" — a same-city day out has no departure terminal.
+   * Single source: compile-day-facts → v2 orchestrator. See
+   * mem://day-trip-and-event-theme.
+   */
+  isLocalDayTrip?: boolean;
   extraUpdate?: Record<string, any>;
   /** Label for log lines (e.g. 'save-itinerary', 'generate-trip-day'). */
   label?: string;
@@ -733,6 +741,9 @@ export async function persistTripItinerary(
       // Pass canonical total so Day 1 of an N>1 trip is never auto-stamped
       // as departure when the JSON briefly carries only Day 1 (Bangkok).
       expectedTotalDays: canonicalTotalDays,
+      // 0-night local day trip → not a departure day (only meaningful when the
+      // whole trip is that single local day).
+      isLocalDayTrip: options.isLocalDayTrip && canonicalTotalDays === 1,
     });
   } catch (e) {
     console.warn(`[${label}] bookend verification failed (non-blocking):`, e);
