@@ -73,6 +73,10 @@ const HOTEL = /check[\s-]?in|check[\s-]?out|return to .*hotel|taxi to your hotel
 const FLIGHT = /\bflight\b|airport|terminal|boarding/i;
 const FILLER = /free downtown|things to do|explore the area|^activity$|find (a|your) (local|the perfect)/i;
 const WORLDCUP_LITERAL = acts.some((a) => /^world cup$|the world cup$/i.test(String(a.title || a.name || '').trim()));
+// Fabricated vague event-vibe filler (the bug): "{event} (fan )?vibes/spirit/themed/atmosphere".
+const EVENT_VIBE_FILLER = acts.some((a) => /\b(world cup|olympics?|fifa|super bowl|festival)\b/i.test(String(a.title || a.name || '')) && /\b(?:fan\s+)?(?:vibes?|spirit|fever|atmosphere|energy|themed)\b/i.test(String(a.title || a.name || '')));
+// Grounded event content we LIKE (informational): fan fest / watch party / downtown bar.
+const groundedEvent = acts.filter((a) => /\bfan\s*fest(ival)?\b|\bfan\s*zone\b|\bwatch(ing)?\b|\bwatch\s*party\b|\bmatch\b|\bsports?\s*bar\b|\bbrewery\b|\bpub\b/i.test(String(a.title || a.name || '')));
 const mealHits = (re: RegExp) => acts.some((a) => re.test(`${a.title || ''} ${a.name || ''}`) || /dining/i.test(String(a.category || '')) && re.test(String(a.title || a.name || '')));
 const hasBreakfast = acts.some((a) => /breakfast|brunch/i.test(`${a.title || a.name}`));
 const hasLunch = acts.some((a) => /lunch/i.test(`${a.title || a.name}`));
@@ -92,6 +96,7 @@ const checks: [string, boolean][] = [
   ['has real sightseeing (≥2)', sightseeing.length >= 2],
   ['no generic filler', !acts.some((a) => FILLER.test(String(a.title || a.name || '')))],
   ['no literal "World Cup" card', !WORLDCUP_LITERAL],
+  ['no fabricated "{event} vibes" filler', !EVENT_VIBE_FILLER],
   ['bookend_trace.reason === local_day_trip', trace?.reason === 'local_day_trip'],
   ['bookend_trace.isDepartureDay === false', trace?.isDepartureDay === false],
 ];
@@ -100,6 +105,10 @@ console.log('\n── metadata.quality traces ──');
 console.log('  bookend_trace:', JSON.stringify(trace));
 console.log('  meal_audit:', JSON.stringify(mealAudit));
 console.log('  executioner_audit:', JSON.stringify(execAudit));
+
+console.log(`\n── event integration (informational) ──`);
+console.log(`  grounded event experiences (fan fest / watch party / sports bar): ${groundedEvent.length}`);
+for (const a of groundedEvent) console.log(`    + ${a.title || a.name}`);
 
 console.log('\n── GRADE ──');
 let pass = 0;
