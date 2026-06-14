@@ -64,6 +64,7 @@ import { makePlacesAlternatives } from '../_shared/places-alternatives.ts';
 import { ledgerCheck } from '../ledger-check.ts';
 import { nuclearCrossCitySweep, nuclearDiningStrip, nuclearWellnessSweep } from '../fix-placeholders.ts';
 import { scrubEventVibeFiller } from '../sanitization.ts';
+import { ensureHostCityEventExperience } from '../../_shared/host-city-events.ts';
 import { noopTrace, attachTrace, withStage, type Trace } from '../../_shared/trace-recorder.ts';
 import { runDetectorRepairs } from './detector-repairs.ts';
 import { findEmptyDays, mapTableRowsToActivities, applyHealedDay } from './completeness-gate.ts';
@@ -1068,6 +1069,33 @@ export async function handleGenerateTripDayV2(
         const before = acts.length;
         d.activities = scrubEventVibeFiller(acts);
         if (d.activities.length !== before) console.log(`[v2] [EVENT_VIBE_SCRUB] day=${d.dayNumber} ${before}→${d.activities.length}`);
+      } catch (_e) { /* non-blocking */ }
+      try {
+        // BULLETPROOF backstop: if the trip is for a curated host-city event
+        // (e.g. World Cup in Atlanta) on this day's date and the model omitted
+        // the real fan festival, inject it deterministically from authoritative
+        // data, then re-sort so it sits in chronological order. See
+        // host-city-events.ts. Runs AFTER the scrub so its real card survives.
+        const dnum = (d?.dayNumber ?? d?.day_number ?? 1);
+        let dDate: string | null = null;
+        if (facts.dates.startDate) {
+          const dd = new Date(facts.dates.startDate + 'T00:00:00Z');
+          dd.setUTCDate(dd.getUTCDate() + (Number(dnum) - 1));
+          dDate = dd.toISOString().slice(0, 10);
+        }
+        const r = ensureHostCityEventExperience(d.activities, {
+          destination: facts.destination.city,
+          dateISO: dDate,
+          notes: (tripMeta as any)?.additionalNotes,
+          dayNumber: dnum,
+        });
+        if (r.injected) {
+          d.activities = r.activities.sort((x: any, y: any) => {
+            const pm = (s: any) => { const m = String(s?.startTime || s?.time || '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : 9999; };
+            return pm(x) - pm(y);
+          });
+          console.log(`[v2] [HOST_CITY_EVENT] day=${dnum} injected "${r.event?.fanFestival.name}" (deterministic backstop)`);
+        }
       } catch (_e) { /* non-blocking */ }
     }
 
