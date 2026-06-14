@@ -822,10 +822,10 @@ If this describes a primary purpose (event, wedding, conference), dedicate appro
     const eventTheme = detectEventTheme(additionalNotes);
     if (eventTheme && !mustDoPrompt.trim()) {
       mustDoPrompt = `
-## 🎉 MAJOR EVENT CONTEXT — "${eventTheme}" (weave it through the whole day)
-The traveler is in ${destination} for the ${eventTheme}. This is the ENERGY of the trip — build a great ${destination} day that LEANS INTO it with REAL, grounded experiences (not one generic card):
-- Include a real FAN FESTIVAL / fan zone at a known central public space (a major downtown park or plaza) where crowds gather.
-- Include at least one downtown SPORTS BAR, brewery, or pub known for big-event crowds to WATCH the action with people.
+## 🎉 MAJOR EVENT CONTEXT — "${eventTheme}" (REQUIRED — weave it through the day)
+The traveler is in ${destination} specifically for the ${eventTheme}. This is the PRIMARY reason for the trip — the day MUST visibly revolve around it, not ignore it.
+- 🔴 REQUIRED: include AT LEAST ONE real ${eventTheme} experience among the day's activities — either a FAN FESTIVAL / fan zone at a known central public space (a major downtown park or plaza) where crowds gather, OR a downtown SPORTS BAR / brewery / pub known for big-event crowds to WATCH a match with people. A day with ZERO event experiences is WRONG.
+- Strongly prefer including BOTH a fan-zone-style daytime experience AND an evening watch spot.
 - Let the dining and overall vibe lean celebratory and social.
 
 TITLE RULES (critical):
