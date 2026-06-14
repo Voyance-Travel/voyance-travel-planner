@@ -688,6 +688,29 @@ RULES:
 
   const airportTransferMinutes = destination ? await getAirportTransferMinutes(supabase, destination) : 45;
 
+  // ── LOCAL DAY-TRIP (0-night, same-city, no hotel, no flights) ─────────────
+  // A standalone single day is a FULL exploration day — NOT an arrival or a
+  // departure day. This is the SINGLE SOURCE OF TRUTH for that distinction.
+  // When true, every arrival/departure pathway must be skipped or the day gets
+  // stripped to a hotel-transfer shell: compile-prompt's "CRITICAL ARRIVAL/
+  // DEPARTURE DAY INSTRUCTIONS" blocks + hotel-breakfast framing, AND the
+  // post-LLM executioner / bookend-validator / repair departure prunes.
+  // We surface the flag AND demote isFirstDay/isLastDay in the RETURNED facts
+  // so compile-prompt frames it as a normal exploration day. (Internal uses of
+  // isFirstDay/isLastDay above — flight-fallback + logging — already ran with
+  // the structural values and are no-ops for a no-flight day.) The v2
+  // orchestrator additionally demotes its own local copies for the post-LLM
+  // passes, guarded by its authoritative hotel/flight signals.
+  const isLocalDayTrip = totalDays === 1
+    && !flightContext.arrivalTime24
+    && !flightContext.returnDepartureTime24
+    && !flightContext.hotelName
+    && !flightContext.hotelAddress
+    && !resolvedHotelOverride;
+  if (isLocalDayTrip) {
+    console.log(`[compile-day-facts] LOCAL_DAY_TRIP — Day ${dayNumber}/${totalDays} treated as a full exploration day (no arrival/departure framing).`);
+  }
+
   return {
     resolvedIsTransitionDay,
     resolvedTransitionFrom,
@@ -705,8 +728,9 @@ RULES:
     lockedActivities,
     lockedSlotsInstruction,
     flightContext,
-    isFirstDay,
-    isLastDay,
+    isFirstDay: isLocalDayTrip ? false : isFirstDay,
+    isLastDay: isLocalDayTrip ? false : isLastDay,
+    isLocalDayTrip,
     resolvedIsHotelChange,
     resolvedPreviousHotelName,
     resolvedPreviousHotelAddress,
