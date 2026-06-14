@@ -31,9 +31,11 @@ const { data: auth, error: aerr } = await sb.auth.signInWithPassword({
 if (aerr || !auth.user) { console.error('sign-in failed:', aerr?.message); Deno.exit(2); }
 const userId = auth.user.id;
 
-const d = new Date(); d.setDate(d.getDate() + 55);
-const iso = (x: Date) => x.toISOString().slice(0, 10);
-const day = iso(d);
+// --date YYYY-MM-DD to target a specific day (default: an in-window World Cup
+// match date so the CURATED deterministic injection is exercised, not just the
+// prompt layer). 2026-06-21 = Spain vs Saudi Arabia at Mercedes-Benz Stadium.
+const dateArg = (() => { const i = Deno.args.indexOf('--date'); return i >= 0 ? Deno.args[i + 1] : undefined; })();
+const day = dateArg || '2026-06-21';
 
 const { data: trip, error: terr } = await sb.from('trips').insert({
   user_id: userId, name: 'QA S1 — Atlanta day trip', destination: 'Atlanta, GA',

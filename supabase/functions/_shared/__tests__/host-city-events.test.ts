@@ -46,6 +46,23 @@ Deno.test('ensure is idempotent — does not double-inject when a fan fest is al
   assertEquals(r.activities.length, 1);
 });
 
+Deno.test('a TRANSIT card through the venue does NOT suppress the injection (Run-2 bug)', () => {
+  // "Taxi through Centennial Olympic Park" mentions the venue but is not the
+  // event experience — the Fan Festival must still be guaranteed.
+  const acts = [{ title: 'Taxi through Centennial Olympic Park', category: 'transport', location: 'Centennial Olympic Park' }];
+  const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta, GA', dateISO: '2026-06-21', notes: NOTES });
+  assert(r.injected, 'a transit pass-through must not block the deterministic injection');
+  assert(r.activities.some((a) => /fan festival/i.test(a.title)), 'fan festival injected');
+});
+
+Deno.test('a real "Fan Zone … Centennial Park" card (token-tolerant) IS recognized, no double-inject', () => {
+  // "Centennial Park" (missing "Olympic") must still match "Centennial Olympic
+  // Park" so we do not inject a near-duplicate (Run-1 issue).
+  const acts = [{ title: 'World Cup Fan Zone Walk in Centennial Park', category: 'activity' }];
+  const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta', dateISO: '2026-06-21', notes: NOTES });
+  assertEquals(r.injected, false, 'an existing fan-zone card at the park suppresses a duplicate injection');
+});
+
 Deno.test('verified semifinal kickoff IS stated', () => {
   const acts: any[] = [];
   const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta', dateISO: '2026-07-15', notes: NOTES });

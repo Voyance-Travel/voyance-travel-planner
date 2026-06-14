@@ -229,9 +229,23 @@ export function ensureHostCityEventExperience(
   const found = findHostCityEvent(ctx.destination, ctx.dateISO, ctx.notes);
   if (!found) return { activities: acts, injected: false, event: null };
   const venueLc = found.event.primaryExperience.venue.toLowerCase();
+  // Token-based venue match (tolerant of "Centennial Park" vs "Centennial
+  // Olympic Park") rather than a brittle full-substring match.
+  const venueTokens = venueLc.split(/\s+/).map((t) => t.replace(/[^a-z]/g, '')).filter((t) => t.length > 3);
   const already = acts.some((a) => {
-    const t = `${a?.title ?? a?.name ?? ''} ${a?.location ?? ''}`.toLowerCase();
-    return t.includes(venueLc) || (a?.source === 'host-city-event');
+    if (a?.source === 'host-city-event') return true;
+    const cat = String(a?.category ?? '').toLowerCase();
+    const title = String(a?.title ?? a?.name ?? '').toLowerCase();
+    // A transit/logistics card that merely PASSES the venue ("Taxi through
+    // Centennial Olympic Park") is NOT the event experience — it must not
+    // suppress the deterministic injection.
+    if (/\b(transit|transport|transfer|logistics|commute)\b/.test(cat) ||
+        /\b(taxi|transfer|drive|driving|travel (?:to|through|past)|head (?:to|toward)|pass(?:ing)? through|walk (?:to|past)|en route|uber|lyft)\b/.test(title)) {
+      return false;
+    }
+    const hay = `${title} ${String(a?.location ?? '').toLowerCase()}`;
+    if (/fan\s*fest(?:ival)?\b|fan\s*zone\b/.test(hay)) return true;
+    return venueTokens.length > 0 && venueTokens.filter((tok) => hay.includes(tok)).length >= Math.max(1, venueTokens.length - 1);
   });
   if (already) return { activities: acts, injected: false, event: found.event };
   const card = buildEventActivity(found.event, found.matchOnDate, `hce-d${ctx.dayNumber ?? 1}`);
