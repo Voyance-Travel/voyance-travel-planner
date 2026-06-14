@@ -63,6 +63,7 @@ import { crossDayDedup } from '../_shared/cross-day-dedup.ts';
 import { makePlacesAlternatives } from '../_shared/places-alternatives.ts';
 import { ledgerCheck } from '../ledger-check.ts';
 import { nuclearCrossCitySweep, nuclearDiningStrip, nuclearWellnessSweep } from '../fix-placeholders.ts';
+import { scrubEventVibeFiller } from '../sanitization.ts';
 import { noopTrace, attachTrace, withStage, type Trace } from '../../_shared/trace-recorder.ts';
 import { runDetectorRepairs } from './detector-repairs.ts';
 import { findEmptyDays, mapTableRowsToActivities, applyHealedDay } from './completeness-gate.ts';
@@ -1059,6 +1060,14 @@ export async function handleGenerateTripDayV2(
       try {
         const ws = nuclearWellnessSweep(acts, facts.destination.city || '', facts.hotel.name || undefined);
         if (ws > 0) console.log(`[v2] [NUCLEAR_WELLNESS] day=${d.dayNumber} swept=${ws}`);
+      } catch (_e) { /* non-blocking */ }
+      try {
+        // Major-event vibe-filler scrub. sanitizeGeneratedDay (which also hosts
+        // it) is a V1-only path and never runs in the v2 chain, so the scrub
+        // must be invoked here or a "{event} vibes" card ships unscrubbed.
+        const before = acts.length;
+        d.activities = scrubEventVibeFiller(acts);
+        if (d.activities.length !== before) console.log(`[v2] [EVENT_VIBE_SCRUB] day=${d.dayNumber} ${before}→${d.activities.length}`);
       } catch (_e) { /* non-blocking */ }
     }
 
