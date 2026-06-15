@@ -39,11 +39,32 @@ Deno.test('ensure injects the real fan festival when absent', () => {
   assert(!/kickoff \d/.test(ff.description), 'no fabricated kickoff time on a group match');
 });
 
-Deno.test('ensure is idempotent — does not double-inject when a fan fest is already present', () => {
-  const acts = [{ title: 'FIFA Fan Festival at Centennial Olympic Park', category: 'activity', location: 'Centennial Olympic Park' }];
+Deno.test('does not double-inject the fan fest when present (but does add the watch party)', () => {
+  const acts = [{ title: 'FIFA Fan Festival at Centennial Olympic Park', category: 'activity', location: 'Centennial Olympic Park', startTime: '15:30', endTime: '17:30' }];
   const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta', dateISO: '2026-06-21', notes: NOTES });
-  assertEquals(r.injected, false);
-  assertEquals(r.activities.length, 1);
+  assertEquals(r.activities.filter((a) => /fan festival/i.test(a.title)).length, 1, 'no duplicate fan fest');
+  assert(r.activities.some((a) => /brewhouse/i.test(`${a.title} ${a.location}`)), 'watch party added');
+});
+
+Deno.test('UPGRADES a bare "Centennial Olympic Park" card to the real Fan Festival (keeps its slot)', () => {
+  const acts = [{ title: 'Explore Centennial Olympic Park', category: 'sightseeing', startTime: '14:30', endTime: '16:30', location: 'Centennial Olympic Park' }];
+  const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta', dateISO: '2026-06-21', notes: NOTES });
+  assert(r.injected);
+  const ff = r.activities.find((a) => /fan festival/i.test(a.title))!;
+  assert(ff, 'fan fest present');
+  assert(/Centennial Olympic Park/i.test(ff.location), 'kept the real venue');
+  assert(/Spain vs Saudi Arabia|Jumbotron|fan zone/i.test(ff.description), 'has the real what-is-there description');
+  assertEquals(ff.startTime, '14:30', 'kept the model time slot');
+  assert(r.activities.some((a) => /brewhouse/i.test(`${a.title} ${a.location}`)), 'watch party also added');
+});
+
+Deno.test('UPGRADES a wrong-venue fan fest (GWCC) to the curated Centennial venue', () => {
+  const acts = [{ title: 'FIFA Fan Fest at Georgia World Congress Center', category: 'activity', startTime: '15:00', endTime: '17:00', location: 'Georgia World Congress Center' }];
+  const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta, GA', dateISO: '2026-06-21', notes: NOTES });
+  assert(r.injected);
+  const ff = r.activities.find((a) => /fan festival/i.test(a.title))!;
+  assert(/Centennial Olympic Park/i.test(`${ff.title} ${ff.location}`), 'moved to the real Fan Fest venue');
+  assert(!r.activities.some((a) => /Georgia World Congress/i.test(`${a.title} ${a.location}`)), 'hallucinated venue gone');
 });
 
 Deno.test('a TRANSIT card through the venue does NOT suppress the injection (Run-2 bug)', () => {
@@ -60,7 +81,10 @@ Deno.test('a real "Fan Zone … Centennial Park" card (token-tolerant) IS recogn
   // Park" so we do not inject a near-duplicate (Run-1 issue).
   const acts = [{ title: 'World Cup Fan Zone Walk in Centennial Park', category: 'activity' }];
   const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta', dateISO: '2026-06-21', notes: NOTES });
-  assertEquals(r.injected, false, 'an existing fan-zone card at the park suppresses a duplicate injection');
+  // The fan-zone card is recognized (not upgraded/duplicated); only the watch
+  // party is added.
+  assert(r.activities.some((a) => /fan zone walk/i.test(a.title)), 'original fan-zone card kept');
+  assertEquals(r.activities.filter((a) => /fan fest|fan zone/i.test(`${a.title}`)).length, 1, 'no duplicate fan experience');
 });
 
 Deno.test('injected event card never overlaps an existing activity (timeline integrity)', () => {
@@ -120,4 +144,22 @@ Deno.test('marathon keyword does NOT fire in a non-host city', () => {
 
 Deno.test('Oktoberfest does NOT fire off-window (e.g. a July Munich trip)', () => {
   assertEquals(findHostCityEvent('Munich', '2026-07-10', 'Oktoberfest vibes'), null);
+});
+
+Deno.test('World Cup day ALSO gets a downtown watch-party bar alongside the Fan Fest', () => {
+  const acts = [{ title: 'Lunch at Sweet Auburn', category: 'dining', startTime: '12:30', endTime: '13:30' }];
+  const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta', dateISO: '2026-06-21', notes: NOTES });
+  assert(r.injected);
+  const titles = r.activities.map((a) => `${a.title} @ ${a.location}`);
+  assert(titles.some((t) => /fan festival.*centennial olympic park/i.test(t)), `fan fest: ${titles.join(' | ')}`);
+  assert(titles.some((t) => /brewhouse/i.test(t)), `watch-party bar: ${titles.join(' | ')}`);
+});
+
+Deno.test('does not double-inject the watch party when the model already made one', () => {
+  const acts = [
+    { title: 'FIFA Fan Festival at Centennial Olympic Park', category: 'activity', location: 'Centennial Olympic Park', startTime: '15:30', endTime: '17:30' },
+    { title: 'Watch the match at Fadó Irish Pub', category: 'activity', startTime: '19:00', endTime: '21:00' },
+  ];
+  const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta', dateISO: '2026-06-21', notes: NOTES });
+  assert(!r.activities.some((a) => /brewhouse/i.test(`${a.title} ${a.location}`)), 'kept the model watch party, no double');
 });

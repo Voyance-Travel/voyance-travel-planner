@@ -44,3 +44,21 @@ Deno.test('a day already within budget is untouched', () => {
   ];
   assertEquals(trimRelaxedDay(day, { maxActivities: 2 }).dropped.length, 0);
 });
+
+Deno.test('relaxed World Cup day keeps both event stops + 3 meals = 5 (drops generic)', () => {
+  const day = [
+    { category: 'dining', title: 'Breakfast', startTime: '08:30' },
+    { category: 'activity', title: 'Generic Sight A', startTime: '10:00' },
+    { category: 'dining', title: 'Lunch', startTime: '12:30' },
+    { category: 'activity', title: 'FIFA Fan Festival', source: 'host-city-event', startTime: '15:30' },
+    { category: 'activity', title: 'Generic Sight B', startTime: '16:30' },
+    { category: 'activity', title: 'Watch the match at Brewhouse', source: 'host-city-event', startTime: '18:30' },
+    { category: 'dining', title: 'Dinner', startTime: '20:00' },
+  ];
+  const r = trimRelaxedDay(day, { maxActivities: 2 });
+  const titles = r.activities.map((a) => a.title);
+  assertEquals(r.activities.length, 5);
+  assert(titles.includes('FIFA Fan Festival') && titles.includes('Watch the match at Brewhouse'), 'both event stops kept');
+  assert(!titles.includes('Generic Sight A') && !titles.includes('Generic Sight B'), 'generic sights dropped to fit the cap');
+  assertEquals(titles.filter((t) => /Breakfast|Lunch|Dinner/.test(t)).length, 3, '3 meals kept');
+});

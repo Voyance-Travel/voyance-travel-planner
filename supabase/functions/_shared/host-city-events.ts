@@ -52,6 +52,20 @@ export interface HostCityEvent {
     defaultStart?: string;
     defaultEnd?: string;
   };
+  /**
+   * Optional SECOND curated experience injected alongside the primary. For
+   * spectator-sport events (World Cup, …) this is a real downtown WATCH-PARTY
+   * bar to catch the match with a crowd — so the day is built AROUND the games,
+   * not just touching them. Undefined for festivals/marathons (no watch party).
+   */
+  secondaryExperience?: {
+    name: string;
+    venue: string;
+    address?: string;
+    note: string;
+    defaultStart?: string;
+    defaultEnd?: string;
+  };
   /** Optional: a stadium for fixture-based events (World Cup). */
   stadium?: string;
   /** Optional: dated fixtures (World Cup). Empty/undefined for festivals. */
@@ -73,6 +87,18 @@ const ATLANTA_WC2026: HostCityEvent = {
     note: 'Free entry; gates from noon. Match screenings on a 47-foot Jumbotron, the Coca-Cola Fan Zone, a beer garden, food stands, and live music.',
     defaultStart: '15:30',
     defaultEnd: '17:30',
+  },
+  // Downtown watch-party bar. Source: 11Alive / Discover Atlanta (verified 2026-06)
+  // — Brewhouse Cafe, Atlanta's original soccer bar (1997, "America's Best Soccer
+  // Bar" 2024-25); the new South Downtown location is a few blocks from the
+  // stadium with 25 screens broadcasting every match.
+  secondaryExperience: {
+    name: 'Watch the match at Brewhouse Cafe (Downtown)',
+    venue: 'Brewhouse Cafe',
+    address: '89 Broad St SW, Atlanta, GA 30303',
+    note: "Catch the game with the crowd at Atlanta's original soccer bar — the South Downtown location, a few blocks from the stadium, has 25 big screens showing every match. Pints, pub food, and proper match-day atmosphere.",
+    defaultStart: '18:30',
+    defaultEnd: '20:30',
   },
   stadium: 'Mercedes-Benz Stadium',
   matches: [
@@ -187,12 +213,15 @@ export function findHostCityEvent(
  * Timing comes from the event's defaults; the pipeline's repair/sort passes
  * place it. No fabricated times.
  */
+type EventExperience = HostCityEvent['primaryExperience'];
+
 export function buildEventActivity(
   event: HostCityEvent,
   matchOnDate: HostCityMatch | null,
   idSuffix = 'hce',
+  exp: EventExperience = event.primaryExperience,
 ): any {
-  const pe = event.primaryExperience;
+  const pe = exp;
   let description = pe.note;
   if (matchOnDate) {
     const isTeams = / vs /i.test(matchOnDate.fixture);
@@ -232,25 +261,59 @@ export function ensureHostCityEventExperience(
   // Token-based venue match (tolerant of "Centennial Park" vs "Centennial
   // Olympic Park") rather than a brittle full-substring match.
   const venueTokens = venueLc.split(/\s+/).map((t) => t.replace(/[^a-z]/g, '')).filter((t) => t.length > 3);
-  const already = acts.some((a) => {
-    if (a?.source === 'host-city-event') return true;
+  const hayOf = (a: any) => `${String(a?.title ?? a?.name ?? '')} ${String(a?.location?.name ?? a?.location ?? '')}`.toLowerCase();
+  const isTransitOrProtected = (a: any) => {
+    if (a?.locked || a?.isLocked || a?.isUserAuthored) return true;
     const cat = String(a?.category ?? '').toLowerCase();
     const title = String(a?.title ?? a?.name ?? '').toLowerCase();
-    // A transit/logistics card that merely PASSES the venue ("Taxi through
-    // Centennial Olympic Park") is NOT the event experience — it must not
-    // suppress the deterministic injection.
-    if (/\b(transit|transport|transfer|logistics|commute)\b/.test(cat) ||
-        /\b(taxi|transfer|drive|driving|travel (?:to|through|past)|head (?:to|toward)|pass(?:ing)? through|walk (?:to|past)|en route|uber|lyft)\b/.test(title)) {
-      return false;
+    return /\b(transit|transport|transfer|logistics|commute|flight|accommodation)\b/.test(cat)
+      || /\b(taxi|transfer|drive|driving|travel (?:to|through|past)|head (?:to|toward)|pass(?:ing)? through|walk (?:to|past)|en route|uber|lyft)\b/.test(title);
+  };
+  const isFanFestish = (a: any) => /fan\s*fest(?:ival)?\b|fan\s*zone\b/.test(hayOf(a));
+  const atCuratedVenue = (a: any) => venueTokens.length > 0 && venueTokens.filter((tok) => hayOf(a).includes(tok)).length >= Math.max(1, venueTokens.length - 1);
+
+  const ev = found.event, matchOnDate = found.matchOnDate, sfx = `hce-d${ctx.dayNumber ?? 1}`;
+  let cur = acts;
+  let injected = false;
+
+  // ── PRIMARY (fan fest): AUTHORITATIVE — upgrade a bare-venue card ("Explore
+  // Centennial Olympic Park") OR a wrong-venue fan-fest ("…at Georgia World
+  // Congress Center") to the real curated experience (correct venue + what's
+  // actually there), keeping the model's slot; else inject into a gap. ──
+  {
+    const idx = cur.findIndex((a) => a && a.source !== 'host-city-event' && !isTransitOrProtected(a) && (isFanFestish(a) || atCuratedVenue(a)));
+    if (idx >= 0) {
+      const ex = cur[idx];
+      if (!(isFanFestish(ex) && atCuratedVenue(ex))) {
+        const card = buildEventActivity(ev, matchOnDate, sfx, ev.primaryExperience);
+        card.startTime = ex.startTime ?? ex.time ?? card.startTime;
+        card.time = card.startTime;
+        card.endTime = ex.endTime ?? card.endTime;
+        cur = cur.map((a, i) => (i === idx ? card : a));
+        injected = true;
+      }
+    } else {
+      cur = placeCardInGap(cur, buildEventActivity(ev, matchOnDate, sfx, ev.primaryExperience));
+      injected = true;
     }
-    const hay = `${title} ${String(a?.location ?? '').toLowerCase()}`;
-    if (/fan\s*fest(?:ival)?\b|fan\s*zone\b/.test(hay)) return true;
-    return venueTokens.length > 0 && venueTokens.filter((tok) => hay.includes(tok)).length >= Math.max(1, venueTokens.length - 1);
-  });
-  if (already) return { activities: acts, injected: false, event: found.event };
-  const card = buildEventActivity(found.event, found.matchOnDate, `hce-d${ctx.dayNumber ?? 1}`);
-  const placed = placeCardInGap(acts, card);
-  return { activities: placed, injected: true, event: found.event };
+  }
+
+  // ── SECONDARY (watch-party bar): for spectator-sport events, DETERMINISTICALLY
+  // ensure a downtown watch-party stop exists alongside the fan fest, so the day
+  // is built AROUND the games. Keep an existing watch-party card if the model
+  // made one; otherwise inject the curated bar. ──
+  const sec = ev.secondaryExperience;
+  if (sec) {
+    const secKey = sec.venue.toLowerCase().split(/\s+/).map((t) => t.replace(/[^a-z]/g, '')).filter((t) => t.length > 4).sort((a, b) => b.length - a.length)[0] || sec.venue.toLowerCase();
+    const isWatchPartyish = (a: any) => /\bwatch (?:the )?(?:match|game)\b|\bwatch party\b|\bviewing party\b|\bsports bar\b/.test(hayOf(a));
+    const hasWatchParty = cur.some((a) => a && !isTransitOrProtected(a) && (hayOf(a).includes(secKey) || isWatchPartyish(a)));
+    if (!hasWatchParty) {
+      cur = placeCardInGap(cur, buildEventActivity(ev, matchOnDate, `${sfx}-2`, sec));
+      injected = true;
+    }
+  }
+
+  return { activities: cur, injected, event: ev };
 }
 
 const _pm = (s: any): number | null => { const m = String(s ?? '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null; };

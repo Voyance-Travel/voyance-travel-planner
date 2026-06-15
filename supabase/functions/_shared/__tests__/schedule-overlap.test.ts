@@ -30,3 +30,22 @@ Deno.test('leaves a clean schedule untouched', () => {
   const acts = [{ title: 'A', startTime: '09:00', endTime: '10:00' }, { title: 'B', startTime: '11:00', endTime: '12:00' }];
   assertEquals(resolveScheduleOverlaps(acts).fixed, 0);
 });
+
+import { dropOrphanTransit } from '../schedule-overlap.ts';
+Deno.test('drops a trailing "Travel to X" with no activity after it', () => {
+  const day = [
+    { title: 'Lunch', category: 'dining', startTime: '12:00', endTime: '13:00' },
+    { title: 'FIFA Fan Festival', category: 'activity', startTime: '14:30', endTime: '16:30' },
+    { title: 'Travel to 9 Mile Station at Ponce City Market', category: 'transport', startTime: '19:50', endTime: '20:10' },
+  ];
+  const r = dropOrphanTransit(day);
+  assertEquals(r.dropped, 1);
+  assert(!r.activities.some((a) => /travel to/i.test(a.title)));
+});
+Deno.test('keeps a transit that IS followed by a real activity', () => {
+  const day = [
+    { title: 'Travel to Museum', category: 'transport', startTime: '10:00', endTime: '10:20' },
+    { title: 'Museum visit', category: 'cultural', startTime: '10:30', endTime: '12:00' },
+  ];
+  assertEquals(dropOrphanTransit(day).dropped, 0);
+});

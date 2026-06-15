@@ -15,6 +15,32 @@ const pm = (s: any): number | null => {
 };
 const fm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
+const TRANSIT_RE = /\b(transit|transport|transfer|logistics|commute)\b/i;
+const isTransitCard = (a: any): boolean =>
+  TRANSIT_RE.test(String(a?.category ?? '')) ||
+  /\b(taxi|transfer|drive|driving|travel (?:to|through|past)|head (?:to|toward)|en route|uber|lyft|train to|bus to|walk to)\b/i.test(String(a?.title ?? a?.name ?? ''));
+
+/**
+ * dropOrphanTransit — a "Travel to X" card with no real activity AFTER it (in
+ * time order) is a dead end: the destination venue was dropped (e.g. by venue
+ * grounding) leaving the traveler going nowhere. Remove any trailing run of
+ * transit cards. Mutates + returns the array.
+ */
+export function dropOrphanTransit(activities: any[]): { activities: any[]; dropped: number } {
+  if (!Array.isArray(activities) || activities.length === 0) return { activities: activities ?? [], dropped: 0 };
+  const byTime = [...activities]
+    .map((a, i) => ({ a, i, s: pm(a.startTime || a.time) }))
+    .sort((x, y) => (x.s ?? 9999) - (y.s ?? 9999));
+  const dropIdx = new Set<number>();
+  // Walk from the end; drop trailing transit until we hit a real activity.
+  for (let k = byTime.length - 1; k >= 0; k--) {
+    if (isTransitCard(byTime[k].a)) dropIdx.add(byTime[k].i);
+    else break;
+  }
+  if (dropIdx.size === 0) return { activities, dropped: 0 };
+  return { activities: activities.filter((_, i) => !dropIdx.has(i)), dropped: dropIdx.size };
+}
+
 /** Mutates + returns the activities array with all start/end overlaps removed. */
 export function resolveScheduleOverlaps(
   activities: any[],

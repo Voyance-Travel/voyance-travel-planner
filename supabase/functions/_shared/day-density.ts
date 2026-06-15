@@ -36,11 +36,19 @@ export function trimRelaxedDay(activities: any[], opts: { maxActivities?: number
   const order = new Map<any, number>(activities.map((a, i) => [a, i]));
   const byTime = [...activities].sort((a, b) => startMin(a) - startMin(b));
   const dropSet = new Set<any>();
-  let dining = 0, acts = 0;
+  // Protected stops (host-city events like the Fan Fest + watch party, must-dos,
+  // locked) are kept AND consume the budget — so a World-Cup day of 3 meals + a
+  // fan fest + a watch party = 5 stops, not 5+2. Transit is always kept (orphan
+  // transit is cleaned separately).
+  let mealBudget = 3, actBudget = maxAct;
+  for (const a of byTime) {
+    if (isTransit(a)) continue;
+    if (isProtected(a)) { if (isDining(a)) mealBudget = Math.max(0, mealBudget - 1); else actBudget = Math.max(0, actBudget - 1); }
+  }
   for (const a of byTime) {
     if (isTransit(a) || isProtected(a)) continue;
-    if (isDining(a)) { if (dining < 3) dining++; else dropSet.add(a); continue; }
-    if (acts < maxAct) acts++; else dropSet.add(a);
+    if (isDining(a)) { if (mealBudget > 0) mealBudget--; else dropSet.add(a); }
+    else if (actBudget > 0) actBudget--; else dropSet.add(a);
   }
   const kept = activities.filter((a) => !dropSet.has(a));
   const dropped = [...dropSet].sort((a, b) => (order.get(a)! - order.get(b)!)).map((a) => String(a.title ?? a.name ?? '?'));
