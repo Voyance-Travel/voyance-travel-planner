@@ -559,11 +559,12 @@ function TripDetailsStep({
 
       <div className={cn("space-y-4 sm:space-y-5 mx-auto px-1", planMode === 'multi' ? "max-w-xl" : "max-w-md")}>
         {/* Plan Mode Selection */}
-        <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+        {/* MVP: only Single City (AI) + Build Myself (paste) are exposed.
+            Multi-City and the free-text "Just Tell Us" chat are hidden behind
+            the wall for now — their code remains but is unreachable from the UI. */}
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
           {[
             { mode: 'single' as const, icon: MapPin, label: 'Single City', tooltip: 'AI-powered itinerary for one destination. We handle everything.', onClick: () => { setPlanMode('single'); handleToggleMultiCity(false); } },
-            { mode: 'multi' as const, icon: Route, label: 'Multi-City', tooltip: 'Plan a trip across multiple cities with smart inter-city logistics.', onClick: () => { setPlanMode('multi'); handleToggleMultiCity(true); } },
-            { mode: 'chat' as const, icon: MessageSquareText, label: 'Just Tell Us', tooltip: 'Describe your dream trip or paste research. Our AI builds it for you.', onClick: () => setPlanMode('chat') },
             { mode: 'manual' as const, icon: PenLine, label: 'Build Myself', tooltip: 'Full manual control. Organize your own research without AI generation.', onClick: () => setPlanMode('manual') },
           ].map(({ mode, icon: Icon, label, tooltip, onClick }) => (
             <div key={mode} className="relative group">
