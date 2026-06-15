@@ -71,6 +71,26 @@ Deno.test('snap handles a BULK multi-day batch — every stranded event card acr
   }
 });
 
+Deno.test('FINAL pass clears the live soak overlaps — meal injected on top of a model activity', () => {
+  // Verbatim from prod trip 4232cade (Reykjavik D2): the meal-coverage gate
+  // dropped breakfast at 08:30 onto an 08:30–09:45 museum, and lunch 12:30
+  // under a 13:10 "Freshen Up". Both are G13 overlaps the auditor caught.
+  const acts = [
+    { title: 'Art by the Sea at Sun Voyager', startTime: '07:40', endTime: '08:10' },
+    { title: 'Einar Jónsson Museum Plaza', startTime: '08:30', endTime: '09:45' },
+    { title: 'Breakfast at Íslenski Barinn', category: 'dining', source: 'c3-places-swap', startTime: '08:30', endTime: '09:15' },
+    { title: 'Political History Stroll', startTime: '10:05', endTime: '11:20' },
+    { title: 'Lunch at KRÖST', category: 'dining', source: 'c3-places-swap', startTime: '12:30', endTime: '13:30' },
+    { title: 'Freshen Up at Your Hotel', category: 'accommodation', startTime: '13:10', endTime: '13:40' },
+    { title: 'Dinner at KRÖST', category: 'dining', startTime: '19:00', endTime: '20:15' },
+  ];
+  const { fixed } = resolveScheduleOverlaps(acts);
+  assert(fixed >= 2, `expected the two injected overlaps fixed, got ${fixed}`);
+  // No card may start before the previous one ends (the G13 invariant).
+  const timed = acts.map((a) => ({ s: pm(a.startTime), e: pm(a.endTime) })).sort((x, y) => x.s - y.s);
+  for (let i = 1; i < timed.length; i++) assert(timed[i].s >= timed[i - 1].e, `overlap survived at index ${i}: ${JSON.stringify(timed[i])}`);
+});
+
 Deno.test('snap: leaves a non-event card alone even if far from any preferred', () => {
   const acts = [{ title: 'Late bar', startTime: '23:00', endTime: '00:30', preferredStart: '18:00' }];
   assertEquals(snapEventCardsToPreferred(acts).moved, 0, 'only source=host-city-event cards are snapped');

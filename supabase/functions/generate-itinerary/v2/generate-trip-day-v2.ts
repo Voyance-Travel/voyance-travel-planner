@@ -1546,6 +1546,21 @@ export async function handleGenerateTripDayV2(
       }
     } catch (_e) { /* non-blocking */ }
 
+    // ── 8h6. FINAL overlap resolution — the genuinely last timing step. The 8e
+    // resolver runs before the meal-coverage gate (8g), which injects meals at
+    // canonical times (08:30/12:30/19:00) ON TOP of the model's existing
+    // activities; cross-day swap (8h2), cap, and event-snap also move cards
+    // afterward. A live soak showed breakfast 08:30 overlapping a museum and a
+    // 12:30 lunch overlapping "Freshen Up" across 4/5 cities. Re-resolve here so
+    // no double-booking ships regardless of which late pass introduced it.
+    try {
+      for (const dd of mergedDays) {
+        if (!Array.isArray(dd?.activities)) continue;
+        const ov = resolveScheduleOverlaps(dd.activities);
+        if (ov.fixed > 0) console.log(`[v2] [FINAL_OVERLAP_FIX] day=${dd.dayNumber ?? '?'} resolved ${ov.fixed} late-injected overlap(s)`);
+      }
+    } catch (_e) { /* non-blocking */ }
+
     // ── 8i. SELF-CHECK GATE — verify + repair + score before the write ──
     // The auditor's checks, run inside generation as the final quality gate so
     // nothing broken ships: repairs any HIGH-severity issue that slipped through
