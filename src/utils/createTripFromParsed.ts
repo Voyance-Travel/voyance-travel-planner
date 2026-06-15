@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import type { ParsedTripInput, ParsedActivity, ParsedDay } from '@/types/parsedTrip';
 import { sanitizeAIOutput } from '@/utils/textSanitizer';
-import { normalizeTimeTo24h } from '@/utils/timeFormat';
+import { normalizeTimeTo24h, parseTimeToMinutes } from '@/utils/timeFormat';
 import { buildUserAnchors, type UserAnchor } from '@/utils/userAnchors';
 
 interface ItineraryActivity {
@@ -53,7 +53,46 @@ function mapCategory(cat?: string): string {
   return mapping[cat || ''] || 'activity';
 }
 
-function activityToItinerary(activity: ParsedActivity, isSelected: boolean): ItineraryActivity {
+// Coarse time-of-day labels are what pasted ChatGPT/Claude itineraries actually
+// use ("Morning", "Lunch", "Evening") instead of clock times. Map them to
+// representative minutes so the converted day has a REAL, sortable schedule.
+// Without this, normalizeTimeTo24h('Morning') is undefined → startTime becomes
+// the literal word, parseTimeToMinutes('Morning') === 0, and every card
+// collapses to minute 0 under an empty band (the "converter was bad" bug).
+const TIME_LABEL_MIN: Record<string, number> = {
+  'dawn': 420, 'sunrise': 420, 'early morning': 450, 'breakfast': 510,
+  'morning': 540, 'mid-morning': 630, 'midmorning': 630, 'brunch': 630, 'late morning': 690,
+  'midday': 720, 'noon': 720, 'lunch': 750,
+  'early afternoon': 810, 'afternoon': 840, 'mid-afternoon': 900, 'late afternoon': 990,
+  'evening': 1110, 'sunset': 1140, 'dusk': 1140, 'golden hour': 1140,
+  'dinner': 1170, 'night': 1260, 'late night': 1320, 'nightcap': 1320,
+};
+const fmHHMM = (mins: number): string =>
+  `${String(Math.floor(mins / 60) % 24).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+
+/**
+ * Resolve clock times for a day's activities IN ORDER. An explicit clock time
+ * is respected as-is; a coarse label is anchored to its band but never moved
+ * earlier than the running cursor; an unlabeled stop takes the next slot. The
+ * cursor advances ~90 min per stop so cards never stack at one minute.
+ */
+function assignClockTimes(activities: ParsedActivity[]): string[] {
+  let cursor = 8 * 60; // first slot defaults to 08:00 when nothing else signals
+  return activities.map((a) => {
+    const real = normalizeTimeTo24h(a.time);
+    let mins: number;
+    if (real) {
+      mins = parseTimeToMinutes(real); // explicit clock — honor it verbatim
+    } else {
+      const base = TIME_LABEL_MIN[String(a.time ?? '').toLowerCase().trim()];
+      mins = base != null ? Math.max(base, cursor) : cursor;
+    }
+    cursor = Math.max(cursor, mins) + 90;
+    return fmHHMM(mins);
+  });
+}
+
+function activityToItinerary(activity: ParsedActivity, isSelected: boolean, clock?: string): ItineraryActivity {
   const id = crypto.randomUUID();
   // Merge notes into description — do NOT set `tips` as that triggers VoyanceInsight badges
   // which are meant only for AI-generated content, not user's raw research notes
@@ -65,7 +104,9 @@ function activityToItinerary(activity: ParsedActivity, isSelected: boolean): Iti
     name: activity.name,
     title: activity.name, // keep for backward compat
     description: combinedDescription,
-    startTime: normalizeTimeTo24h(activity.time) || activity.time || undefined,
+    // Prefer the resolved clock; fall back to a real parsed time. Never leak the
+    // raw label ("Morning") into startTime — it sorts to 0 and shows as a word.
+    startTime: clock || normalizeTimeTo24h(activity.time) || undefined,
     category: mapCategory(activity.category),
     type: mapCategory(activity.category) as any,
     estimatedCost: activity.cost !== undefined
@@ -97,7 +138,7 @@ function convertDay(day: ParsedDay): ItineraryDay {
   // The "choose one" UI is intentionally NOT rendered for parsed activities;
   // Smart Finish (generate-itinerary) will curate the best single recommendation.
   const seen = new Set<string>();
-  const activities: ItineraryActivity[] = [];
+  const selected: ParsedActivity[] = [];
 
   for (const activity of day.activities) {
     if (activity.isOption && activity.optionGroup) {
@@ -105,8 +146,13 @@ function convertDay(day: ParsedDay): ItineraryDay {
       if (seen.has(activity.optionGroup)) continue;
       seen.add(activity.optionGroup);
     }
-    activities.push(activityToItinerary(activity, true));
+    selected.push(activity);
   }
+
+  // Resolve real clock times over the kept activities (in paste order) so the
+  // day sorts and bands correctly instead of collapsing every card to 00:00.
+  const clocks = assignClockTimes(selected);
+  const activities = selected.map((activity, i) => activityToItinerary(activity, true, clocks[i]));
 
   return {
     dayNumber: day.dayNumber,
@@ -235,19 +281,26 @@ export async function createTripFromParsed(
           // Treat every parsed activity as a user anchor.
           const userAnchors: UserAnchor[] = [];
           for (const day of parsed.days || []) {
-            for (const activity of (day.activities || [])) {
-              if (activity.isOption && activity.optionGroup) continue; // skip alternates
+            // Mirror convertDay: drop alternates, then resolve clocks in order so
+            // anchor times match the itinerary cards they lock.
+            const seenG = new Set<string>();
+            const dayActs = (day.activities || []).filter((a) => {
+              if (a.isOption && a.optionGroup) { if (seenG.has(a.optionGroup)) return false; seenG.add(a.optionGroup); }
+              return true;
+            });
+            const anchorClocks = assignClockTimes(dayActs);
+            dayActs.forEach((activity, i) => {
               userAnchors.push({
                 dayNumber: day.dayNumber,
                 title: activity.name,
-                startTime: normalizeTimeTo24h(activity.time) || activity.time || undefined,
+                startTime: anchorClocks[i],
                 category: mapCategory(activity.category),
                 venueName: activity.location || undefined,
                 lockedSource: `manual_paste:${activity.name}`,
                 source: 'manual_paste',
                 raw: activity.name,
               });
-            }
+            });
           }
           return {
             source: 'manual_paste',

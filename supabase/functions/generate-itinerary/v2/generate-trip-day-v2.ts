@@ -1517,6 +1517,23 @@ export async function handleGenerateTripDayV2(
       console.warn('[v2] relaxed-day cap failed (non-blocking):', e);
     }
 
+    // ── 8h4b. Snap curated event cards back to their intended slot. The cap
+    // above (and venue-grounding/dedup drops) free space that was packed at
+    // injection time, when placeCardInGap may have parked an event card in a
+    // late fallback slot (a live WC run left the watch party at 23:15). Pull it
+    // back to its preferred time, then re-resolve overlaps so nothing collides.
+    try {
+      const { snapEventCardsToPreferred } = await import('../../_shared/schedule-overlap.ts');
+      for (const dd of mergedDays) {
+        if (!Array.isArray(dd?.activities)) continue;
+        const s = snapEventCardsToPreferred(dd.activities);
+        if (s.moved > 0) {
+          dd.activities = resolveScheduleOverlaps(s.activities).activities;
+          console.log(`[v2] [EVENT_SNAP] day=${dd.dayNumber ?? '?'} re-slotted ${s.moved} event card(s) to preferred time`);
+        }
+      }
+    } catch (_e) { /* non-blocking */ }
+
     // ── 8h5. Drop a dangling "Travel to X" at the end of a day — the
     // destination venue was removed (venue grounding / dedup / cap) leaving an
     // orphan transit going nowhere (live WC day ended on "Travel to 9 Mile
@@ -1526,6 +1543,21 @@ export async function handleGenerateTripDayV2(
         if (!Array.isArray(dd?.activities)) continue;
         const o = dropOrphanTransit(dd.activities);
         if (o.dropped > 0) { dd.activities = o.activities; console.log(`[v2] [ORPHAN_TRANSIT] day=${dd.dayNumber ?? '?'} dropped ${o.dropped} trailing transit`); }
+      }
+    } catch (_e) { /* non-blocking */ }
+
+    // ── 8h6. FINAL overlap resolution — the genuinely last timing step. The 8e
+    // resolver runs before the meal-coverage gate (8g), which injects meals at
+    // canonical times (08:30/12:30/19:00) ON TOP of the model's existing
+    // activities; cross-day swap (8h2), cap, and event-snap also move cards
+    // afterward. A live soak showed breakfast 08:30 overlapping a museum and a
+    // 12:30 lunch overlapping "Freshen Up" across 4/5 cities. Re-resolve here so
+    // no double-booking ships regardless of which late pass introduced it.
+    try {
+      for (const dd of mergedDays) {
+        if (!Array.isArray(dd?.activities)) continue;
+        const ov = resolveScheduleOverlaps(dd.activities);
+        if (ov.fixed > 0) console.log(`[v2] [FINAL_OVERLAP_FIX] day=${dd.dayNumber ?? '?'} resolved ${ov.fixed} late-injected overlap(s)`);
       }
     } catch (_e) { /* non-blocking */ }
 

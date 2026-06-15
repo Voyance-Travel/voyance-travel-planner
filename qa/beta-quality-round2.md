@@ -110,3 +110,28 @@ Vienna 4d · Tokyo 6d Honeymoon · Lisbon 6d · Barcelona 5d · Marrakech 4d · 
 
 **Net: 6/7 fresh clean; the fix this round targeted (nightcap/breakfast-floor) is confirmed working.
 Remaining: a narrow departure-day meal-reinjection edge on Istanbul.**
+
+---
+
+## 7/7 close-out (after all 4 fixes deployed)
+Re-tested Istanbul (the one fail) TWICE on the deployed fixes:
+- **Departure-day fix:** D5 = checkout + taxi + flight, **no post-departure breakfast.** ✅
+- **Must-do dedup fix:** rebuilt WITH the Spice Bazaar must-do (the exact 3-copy case).
+  Eyes-on (not just the audit): Spice Bazaar appears **exactly once** (D1, venue "Spice Bazaar
+  (Egyptian Bazaar)"). Note: a transient mid-generation state briefly showed 2 with title variants
+  that the title-keyed audit did NOT flag — caught only by looking at the cards; the dedup collapsed
+  it to 1 in the stable state. Full audit: **PASS.**
+- Soft: D4 thin (1 real activity) — pacing, not a failure.
+
+**Result: 7/7 fresh trips clean on hard gates** (Vienna, Tokyo, Lisbon, Barcelona, Marrakech,
+Mexico City, Istanbul), all render, **verified by reading the content — not just the automated pass.**
+
+## Four real bugs fixed + validated this session
+1. Render hang — every fresh trip stuck "Loading…" (V2 never stamped fully_persisted). FIXED.
+2. Content timing — nightcap at 2pm / 00:00, breakfast 06:20 under floor. FIXED + validated (Lisbon/Barcelona).
+3. Departure-day meal — placeholder breakfast after the airport transfer. FIXED + validated (Istanbul D5).
+4. Must-do variant-dedup — one must-do rendered as 3 cards with different titles. FIXED + validated.
+
+**Honest bar going forward:** stable floor + content reads clean on a broad sample (verified by eyes,
+not just structural checks) + tools work. QA is asymptotic — a wide sweep will keep finding narrow
+edges. This is "earned, verified by looking," not "bug-free."

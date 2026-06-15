@@ -249,6 +249,12 @@ export function buildEventActivity(
     address: pe.address,
     description,
     source: 'host-city-event',
+    // The intended slot, preserved verbatim. placeCardInGap may push this card
+    // into a late fallback slot when the model's day is full; once the relaxed
+    // cap later drops the generic stops that crowded it, snapEventCardsToPreferred
+    // pulls it back here so a watch party never strands at 23:15.
+    preferredStart: pe.defaultStart || '15:30',
+    preferredEnd: pe.defaultEnd || '17:30',
   };
 }
 
