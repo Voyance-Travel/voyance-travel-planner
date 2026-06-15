@@ -28,6 +28,49 @@ Deno.test('snap + resolve: no card is left past 21:30 once a freed evening slot 
   for (const a of out) assert(pm(a.startTime) <= pm('21:00'), `${a.title} should not start after 21:00, got ${a.startTime}`);
 });
 
+Deno.test('snap is venue-agnostic — strands EVERY curated event card and each snaps back to its own slot', () => {
+  // Not WC-specific: one row per curated event, each with a different venue and
+  // a different preferred slot, all stranded late by a packed-day fallback.
+  const cases = [
+    { venue: 'Centennial Olympic Park (Fan Fest)', stranded: '23:15', pref: '15:30' },
+    { venue: 'Brewhouse Cafe (watch party)',       stranded: '23:40', pref: '18:30' },
+    { venue: 'Theresienwiese (Oktoberfest)',       stranded: '22:50', pref: '13:00' },
+    { venue: 'St. Charles Avenue (Mardi Gras)',    stranded: '23:10', pref: '15:00' },
+    { venue: 'First Avenue, Manhattan (Marathon)', stranded: '21:30', pref: '10:30' },
+  ];
+  for (const c of cases) {
+    const acts = [
+      { title: 'Breakfast', category: 'dining', startTime: '08:30', endTime: '09:30' },
+      { title: c.venue, source: 'host-city-event', startTime: c.stranded, endTime: '00:50', preferredStart: c.pref, preferredEnd: '17:30' },
+    ];
+    const { moved } = snapEventCardsToPreferred(acts);
+    assertEquals(moved, 1, `${c.venue} should snap`);
+    const card = acts.find((a) => a.source === 'host-city-event')!;
+    assertEquals(card.startTime, c.pref, `${c.venue} → its own preferred slot, not a hardcoded one`);
+  }
+});
+
+Deno.test('snap handles a BULK multi-day batch — every stranded event card across all days fixed', () => {
+  const days = Array.from({ length: 6 }, (_, d) => ({
+    dayNumber: d + 1,
+    activities: [
+      { title: 'Lunch', category: 'dining', startTime: '12:30', endTime: '13:30' },
+      { title: `Event venue day ${d + 1}`, source: 'host-city-event', startTime: '23:15', endTime: '01:15', preferredStart: '16:00', preferredEnd: '18:00' },
+    ],
+  }));
+  let totalMoved = 0;
+  for (const dd of days) {
+    const s = snapEventCardsToPreferred(dd.activities);
+    if (s.moved) dd.activities = resolveScheduleOverlaps(s.activities).activities;
+    totalMoved += s.moved;
+  }
+  assertEquals(totalMoved, 6, 'all six days re-slotted');
+  for (const dd of days) {
+    const card = dd.activities.find((a: any) => a.source === 'host-city-event')!;
+    assert(pm(card.startTime) <= pm('18:30'), `day ${dd.dayNumber}: ${card.startTime} should be afternoon, not late`);
+  }
+});
+
 Deno.test('snap: leaves a non-event card alone even if far from any preferred', () => {
   const acts = [{ title: 'Late bar', startTime: '23:00', endTime: '00:30', preferredStart: '18:00' }];
   assertEquals(snapEventCardsToPreferred(acts).moved, 0, 'only source=host-city-event cards are snapped');
