@@ -23,18 +23,13 @@ import { NotificationBell } from '@/components/common/NotificationBell';
 import { VoyanceWordmark } from '@/components/common/VoyanceWordmark';
 import { usePopupCoordination } from '@/stores/popup-coordination-store';
 
-// Explore dropdown items
-const exploreItems = [
-  { href: ROUTES.EXPLORE, label: 'Browse Destinations', icon: Compass, description: 'Find your next adventure' },
-  { href: ROUTES.DESTINATIONS, label: 'Featured Trips', icon: Map, description: 'Curated journeys by destination' },
-  { href: ROUTES.ARCHETYPES, label: 'Travel Types', icon: Users, description: 'See all 29 traveler types' },
-];
+// MVP: marketing/discovery surfaces are hidden behind the wall. The routes and
+// pages still exist (reachable by direct URL) — they're just removed from the
+// nav so the app is the bare create-a-trip → view-it loop. To restore, re-add
+// the items below.
+const exploreItems: Array<{ href: string; label: string; icon: typeof Compass; description: string }> = [];
 
-const navLinks = [
-  { href: ROUTES.HOW_IT_WORKS, label: 'How It Works' },
-  { href: ROUTES.PRICING, label: 'Pricing' },
-  { href: ROUTES.ABOUT, label: 'About' },
-];
+const navLinks: Array<{ href: string; label: string }> = [];
 
 const userMenuItems = [
   { href: ROUTES.PROFILE.VIEW, label: 'My Profile', icon: User, tourId: 'profile-link' },
@@ -138,7 +133,8 @@ export default function TopNav() {
 
           {/* Desktop Navigation */}
           <div className="hidden lg:flex items-center gap-6">
-            {/* Explore Dropdown */}
+            {/* Explore Dropdown (MVP: hidden — exploreItems is empty) */}
+            {exploreItems.length > 0 && (
             <div className="relative" ref={exploreMenuRef} data-site-tour="explore-menu">
               <button
                 onClick={() => setIsExploreOpen(!isExploreOpen)}
@@ -182,6 +178,7 @@ export default function TopNav() {
                 )}
               </AnimatePresence>
             </div>
+            )}
 
             {/* Other nav links */}
             {navLinks.map((link) => (
@@ -399,7 +396,8 @@ export default function TopNav() {
                 </div>
               )}
 
-              {/* Explore Section */}
+              {/* Explore Section (MVP: hidden — exploreItems is empty) */}
+              {exploreItems.length > 0 && (
               <div className="pb-3 mb-3 border-b border-border">
                 <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Explore
@@ -422,6 +420,7 @@ export default function TopNav() {
                   );
                 })}
               </div>
+              )}
 
               {/* Nav Links */}
               {navLinks.map((link) => (
