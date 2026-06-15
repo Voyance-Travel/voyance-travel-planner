@@ -41,6 +41,39 @@ export function dropOrphanTransit(activities: any[]): { activities: any[]; dropp
   return { activities: activities.filter((_, i) => !dropIdx.has(i)), dropped: dropIdx.size };
 }
 
+/**
+ * snapEventCardsToPreferred — pull a curated host-city event card back toward its
+ * intended slot. When the model's day is full at injection time, placeCardInGap
+ * parks the card in a late fallback slot (a live World-Cup run put the Brewhouse
+ * watch party at 23:15, after dinner). The relaxed-density cap then drops the
+ * generic stops that crowded it — freeing the right slot — but the event card is
+ * left stranded. Run this AFTER the cap: any host-city-event card whose start has
+ * drifted more than `maxDriftMin` from its `preferredStart` is reset to that slot
+ * (duration preserved). Re-run resolveScheduleOverlaps afterwards to tidy any
+ * collision the move introduces. Mutates + returns the array.
+ */
+export function snapEventCardsToPreferred(
+  activities: any[],
+  opts: { maxDriftMin?: number } = {},
+): { activities: any[]; moved: number } {
+  if (!Array.isArray(activities) || activities.length === 0) return { activities: activities ?? [], moved: 0 };
+  const maxDrift = opts.maxDriftMin ?? 120;
+  let moved = 0;
+  for (const a of activities) {
+    if (a?.source !== 'host-city-event' || !a?.preferredStart) continue;
+    const cur = pm(a.startTime || a.time);
+    const pref = pm(a.preferredStart);
+    if (cur == null || pref == null || Math.abs(cur - pref) <= maxDrift) continue;
+    const dur = Math.max(60, (pm(a.endTime) ?? cur + 120) - cur);
+    a.startTime = fm(pref);
+    a.time = a.startTime;
+    a.endTime = a.preferredEnd && pm(a.preferredEnd) != null ? a.preferredEnd : fm(pref + dur);
+    moved++;
+  }
+  if (moved > 0) activities.sort((x, y) => ((pm(x.startTime || x.time) ?? 9999) - (pm(y.startTime || y.time) ?? 9999)));
+  return { activities, moved };
+}
+
 /** Mutates + returns the activities array with all start/end overlaps removed. */
 export function resolveScheduleOverlaps(
   activities: any[],

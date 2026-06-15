@@ -1517,6 +1517,23 @@ export async function handleGenerateTripDayV2(
       console.warn('[v2] relaxed-day cap failed (non-blocking):', e);
     }
 
+    // ── 8h4b. Snap curated event cards back to their intended slot. The cap
+    // above (and venue-grounding/dedup drops) free space that was packed at
+    // injection time, when placeCardInGap may have parked an event card in a
+    // late fallback slot (a live WC run left the watch party at 23:15). Pull it
+    // back to its preferred time, then re-resolve overlaps so nothing collides.
+    try {
+      const { snapEventCardsToPreferred } = await import('../../_shared/schedule-overlap.ts');
+      for (const dd of mergedDays) {
+        if (!Array.isArray(dd?.activities)) continue;
+        const s = snapEventCardsToPreferred(dd.activities);
+        if (s.moved > 0) {
+          dd.activities = resolveScheduleOverlaps(s.activities).activities;
+          console.log(`[v2] [EVENT_SNAP] day=${dd.dayNumber ?? '?'} re-slotted ${s.moved} event card(s) to preferred time`);
+        }
+      }
+    } catch (_e) { /* non-blocking */ }
+
     // ── 8h5. Drop a dangling "Travel to X" at the end of a day — the
     // destination venue was removed (venue grounding / dedup / cap) leaving an
     // orphan transit going nowhere (live WC day ended on "Travel to 9 Mile
