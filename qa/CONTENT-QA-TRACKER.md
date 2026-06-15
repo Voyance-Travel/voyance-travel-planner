@@ -171,3 +171,16 @@ The relabel windows had a dead gap 16:00–17:00 (between lunch-end and dinner-s
 ## Round 17 — Google Places venue source for non-catalog cities (#1) + de-dup consolidation
 THE real fix for non-catalog cities (Seoul, Cairo, …): crossDayDedup is now async and takes an optional fetchAlternatives callback. When a cross-day duplicate restaurant needs swapping and the inline 15-city catalog has no match, it lazily (once per trip) fetches a real-venue pool from the recommend-restaurants edge fn (Google Places New API) via _shared/places-alternatives.ts and swaps to an unused one (source 'c3-places-swap'). Catalog cities + trips with no dups never trigger a Places call (cost-safe).
 CONSOLIDATION: replaced the ~100-line v2 inline runCrossDayDedup with a call to the shared crossDayDedup — both fresh (v2) and regen paths now run the IDENTICAL logic (kills the duplication tech-debt). Removed the now-unused getRandomFallbackRestaurant import from v2. Verified: async shared fn produces identical catalog-city results (Tokyo drops 2nd dinner + relabels, Barcelona swaps Syra, 0 dup venues); all 4 files deno-check clean. Live non-catalog verification pending (Seoul build).
+
+<!-- ROUND 18 — the ~97 was FALSE COMFORT: the auditor was blind to 3 real defects -->
+## Round 18 — auditor blind spots exposed by the live S1 day-trip pass (2026-06-14)
+The "~97 avg / 0 critical" (2026-06-12) gave false confidence. The User-Journey live pass (S1 Atlanta day trip) found a genuinely **terrible** day that the auditor would have scored CLEAN, because `audit.ts` had **no gate** for:
+  • **OVERLAPPING activity times** — a fan-fest 16:35–18:35 overlapping the High Museum 17:55–19:55, and dinner 20:20–22:20 overlapping a bar 21:45–23:15. (Round 11 logged "C10 OVERLAP" but no auditor gate was ever added.)
+  • **OVER-PACKING** — 7–8 stops to 22:10 for a "relaxed, walk around" local day. G9 catches THIN days; nothing caught TOO-MANY.
+  • **VENUE EXISTENCE** — "Marrakesh Market → modern Israeli cuisine" (a likely hallucination). G8 catches dups, G11 catches vague, but nothing verified a real-looking venue actually exists.
+
+**NEW AUDITOR GATES** (qa/harness/audit.ts): **G13** overlapping times, **G14** day runs unreasonably late (non-dining after 23:00 / anything after 23:45), **G15** over-packed (relaxed/day-trip cap 6, else 9). G15 reads effective pacing from metadata (explicit pace, else walk-around language). Verified on the captured bad day → flags 3× G13 + G15 (was previously silent).
+
+**GENERATION FIXES this pass (PR #119, deploy state mixed):** `resolveScheduleOverlaps` (no double-booking), `scrubNextDayTipLeak` ("…Wake 08:30. Breakfast at…" leaking into tips), `trimRelaxedDay` (relaxed/day-trip density cap ≤3 meals + ≤2 stops — the prompt alone was ignored by the model), **venue grounding** (drop named venues Google Places can't verify, fail-open), price-total = sum of card prices, relaxed-pace inference. LIVE-VERIFIED on prod: overlaps=0 ✅, tip-leak gone ✅, venues real ✅; pace STILL 7-stops on the deployed build → relaxed-cap (e25b1379e) pending one more deploy.
+
+**Open / next:** re-run the auditor over a fresh multi-day batch once e25b1379e deploys + record a new avg WITH G13–G15 active (the old avg didn't measure them). Venue-existence is enforced generation-side (grounding), not as a pure auditor rule.

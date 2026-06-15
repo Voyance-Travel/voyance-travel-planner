@@ -1480,6 +1480,32 @@ export async function handleGenerateTripDayV2(
     // for why it must run after the final dedup (run-5 Athens autopsy).
     await runThinDayBackfill();
 
+    // ── 8h4. RELAXED-DAY DENSITY CAP — deterministic backstop to the relaxed
+    // prompt (the model over-delivers: a live "walk around" Atlanta day came
+    // back with 7 stops to 22:10). Runs AFTER the backfill so it caps the final
+    // count: ≤3 meals + ≤2 non-meal stops + transit/protected. Relaxed when the
+    // pace is chosen relaxed, the notes use walk-around language, or it's a
+    // 0-night day trip — and never when 'packed' was explicitly chosen.
+    try {
+      const _pace = String((tripMeta as any)?.pacing || '').toLowerCase();
+      const _notes = String((tripMeta as any)?.additionalNotes || '').toLowerCase();
+      const RELAXED_RE = /\b(walk(?:ing)? around|wander|stroll|chill|relax(?:ed|ing)?|laid.?back|leisurely|slow(?:\s*(?:pace|day))?|take it easy|low.?key|unwind)\b/;
+      const isRelaxedDay = _pace !== 'packed' && (_pace === 'relaxed' || RELAXED_RE.test(_notes) || totalDays === 1);
+      if (isRelaxedDay) {
+        const { trimRelaxedDay } = await import('../../_shared/day-density.ts');
+        for (const dd of mergedDays) {
+          if (!Array.isArray(dd?.activities)) continue;
+          const t = trimRelaxedDay(dd.activities, { maxActivities: 2 });
+          if (t.dropped.length > 0) {
+            dd.activities = t.activities;
+            console.log(`[v2] [RELAXED_CAP] day=${dd.dayNumber ?? '?'} dropped ${t.dropped.length}: ${t.dropped.join(', ')}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[v2] relaxed-day cap failed (non-blocking):', e);
+    }
+
     // ── 8i. SELF-CHECK GATE — verify + repair + score before the write ──
     // The auditor's checks, run inside generation as the final quality gate so
     // nothing broken ships: repairs any HIGH-severity issue that slipped through
