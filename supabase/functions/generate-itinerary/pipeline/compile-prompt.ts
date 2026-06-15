@@ -828,12 +828,21 @@ If this describes a primary purpose (event, wedding, conference), dedicate appro
     // venue, downtown bars/breweries to watch matches, a celebratory vibe — and
     // NEVER a vague "{event} vibes" mood card. (extract-must-dos already keeps
     // it out of the hard must-do gate; this gives the model the right framing.)
-    const eventTheme = detectEventTheme(additionalNotes);
+    // Detect the event from ALL intent fields — the chat extractor often drops
+    // "World Cup" from additionalNotes and stashes it in mustDoActivities, so
+    // checking one field misses it.
+    const eventIntentText = [
+      additionalNotes,
+      typeof paramMustDoActivities === 'string' ? paramMustDoActivities : (Array.isArray(paramMustDoActivities) ? paramMustDoActivities.join(' ') : ''),
+      (metadata as any)?.mustDoActivities,
+      (metadata as any)?.tripContext,
+    ].filter(Boolean).join(' • ');
+    const eventTheme = detectEventTheme(eventIntentText);
     // CURATED PATH (bulletproof): if we have authoritative facts for this event
     // in this city on this date, give the model the REAL venue + fixture so it
     // places an accurate, grounded experience. A deterministic backstop in the
     // v2 chain injects it anyway if the model omits it. See host-city-events.ts.
-    const hostEvent = eventTheme ? findHostCityEvent(destination, date?.split('T')[0], additionalNotes) : null;
+    const hostEvent = eventTheme ? findHostCityEvent(destination, date?.split('T')[0], eventIntentText) : null;
     if (hostEvent && !mustDoPrompt.trim()) {
       const { event: ev, matchOnDate } = hostEvent;
       const ff = ev.primaryExperience;

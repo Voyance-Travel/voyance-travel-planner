@@ -163,3 +163,14 @@ Deno.test('does not double-inject the watch party when the model already made on
   const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta', dateISO: '2026-06-21', notes: NOTES });
   assert(!r.activities.some((a) => /brewhouse/i.test(`${a.title} ${a.location}`)), 'kept the model watch party, no double');
 });
+
+Deno.test('WC fires via event-adjacent language when the extractor dropped "World Cup"', () => {
+  const intent = 'lives in Atlanta, no flights or hotel • fan fest, watch the match, see some sights around the games';
+  const r = findHostCityEvent('Atlanta, GA', '2026-06-21', intent);
+  assert(r, 'should fire on event-adjacent terms');
+  assertEquals(r!.event.id, 'wc2026-atlanta');
+});
+
+Deno.test('a FESTIVAL does NOT false-fire on event-adjacent "watch the game"', () => {
+  assertEquals(findHostCityEvent('Munich', '2026-09-25', 'watch the game and grab a beer'), null);
+});
