@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,8 +13,15 @@ serve(async (req) => {
   }
 
   try {
+    // AUTH GATE (IDOR fix): the previous check only required an Authorization
+    // header to be PRESENT, never validated it — so any caller could read any
+    // trip's learnings/feedback by tripId. Validate the token, and for a real
+    // user caller require they OWN the trip (internal/service-role callers — the
+    // batch + post-trip-email invokers — are trusted).
+    const auth = await parseAuth(req);
+    if (auth instanceof Response) return auth;
+
     const { tripId } = await req.json();
-    
     if (!tripId) {
       return new Response(
         JSON.stringify({ error: 'tripId is required' }),
@@ -21,19 +29,24 @@ serve(async (req) => {
       );
     }
 
-    // Get auth header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     // Create Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    if (auth.userId !== 'service_role') {
+      const { data: tripOwner } = await supabase
+        .from('trips')
+        .select('user_id')
+        .eq('id', tripId)
+        .single();
+      if (!tripOwner || tripOwner.user_id !== auth.userId) {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     // Get the trip learning
     const { data: learning, error: learningError } = await supabase
