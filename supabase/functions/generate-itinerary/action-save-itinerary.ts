@@ -360,7 +360,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // verified_venues pool lookup was skipped (Munich no-op-save bug).
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('user_id, start_date, end_date, flight_selection, metadata, itinerary_status, destination')
+    .select('user_id, start_date, end_date, flight_selection, metadata, itinerary_status, destination, creation_source')
     .eq('id', tripId)
     .single();
 
@@ -486,6 +486,20 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // ── STEP 2: MEAL COMPLIANCE GUARD ─────────────────────────────
   let mealGuardInjections = 0;
 
+  // Build-It-Myself / manual-paste trips are USER CONTENT ONLY ("No AI
+  // generation — you're in full control"). The meal-coverage guard must NOT
+  // inject "Breakfast — find a local spot in <city>" placeholders into them
+  // (it was doing so on every save, and the two guard blocks below even
+  // double-injected an 08:30 breakfast). Skip meal injection for manual trips
+  // unless the user explicitly ran Smart Finish (which opts into AI polish).
+  const isManualTrip =
+    ['manual_paste', 'manual_builder'].includes(String((trip as any)?.creation_source || '')) &&
+    (trip?.metadata as any)?.smartFinishCompleted !== true &&
+    (trip?.metadata as any)?.creation_source !== 'smart_finish';
+  if (isManualTrip) {
+    console.log(`[save-itinerary] MEAL_GUARD_SKIP manual trip (creation_source=${(trip as any)?.creation_source}) — no placeholder meal injection`);
+  }
+
   // Extract flight times so meal policy respects actual departure/arrival
   const flightSel = trip?.flight_selection as Record<string, any> | null;
   let savedArrivalTime24: string | undefined =
@@ -603,7 +617,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       }
     };
 
-    for (let i = 0; i < itineraryDays.length; i++) {
+    for (let i = 0; !isManualTrip && i < itineraryDays.length; i++) {
       const day = itineraryDays[i];
       if (!day?.activities || !Array.isArray(day.activities)) continue;
 
@@ -931,7 +945,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         lunch:     { start: '12:30', end: '13:30' },
         dinner:    { start: '19:30', end: '21:00' },
       };
-      for (let i = 0; i < itineraryDays.length; i++) {
+      for (let i = 0; !isManualTrip && i < itineraryDays.length; i++) {
         const day = itineraryDays[i];
         if (!day?.activities || !Array.isArray(day.activities)) continue;
         const dayNumber = day.dayNumber || (i + 1);
@@ -962,6 +976,25 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         if (!policy.requiredMeals?.length) continue;
         const detected = detectMealSlots(day.activities);
         let stillMissing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
+        // IDEMPOTENCY: STEP 2 above may have already injected a placeholder
+        // sentinel for this meal (tags: ['dining', mealType, 'meal-guard']).
+        // detectMealSlots does NOT count a needsVenuePick sentinel as a real
+        // meal, so without this guard STEP 2.6 re-injects the SAME slot — the
+        // duplicate-08:30-breakfast bug. Drop any meal that already has a
+        // STEP-2 meal-guard card so the two blocks can't double-inject.
+        if (stillMissing.length > 0) {
+          const _guardMeals = new Set<string>(
+            (day.activities || [])
+              .filter((a: any) => Array.isArray(a?.tags) && a.tags.includes('meal-guard'))
+              .flatMap((a: any) => (a.tags as string[]).filter((t) => ['breakfast', 'lunch', 'dinner'].includes(t))),
+          );
+          if (_guardMeals.size > 0) {
+            stillMissing = stillMissing.filter((m: RequiredMeal) => {
+              if (_guardMeals.has(m)) { console.log(`[MEAL_PERSIST_DEDUP] day=${dayNumber} meal=${m} already has a STEP-2 meal-guard card — skipping re-inject`); return false; }
+              return true;
+            });
+          }
+        }
         // Departure-day guard: don't inject a meal sentinel whose hard-coded
         // slot lands inside the airport-transfer window — §15z would still
         // strip it (preserveAsManualPick exemption is dropped post-cutoff)
