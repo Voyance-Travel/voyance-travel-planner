@@ -22,10 +22,11 @@ const {data:trip}=await sb.from('trips').insert({user_id:uid,name:'QA WC chat',d
 const session=(await sb.auth.getSession()).data.session!;
 await fetch(`${URL_}/functions/v1/generate-itinerary`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`,'apikey':ANON},body:JSON.stringify({action:'generate-trip-day',tripId:trip!.id,dayNumber:1,totalDays:1,destination:ex?.destination||'Atlanta, GA',destinationCountry:'United States',date:start,travelers:ex?.travelers||2,tripType:'vacation',budgetTier:'moderate'})}).then(r=>r.text());
 await new Promise(r=>setTimeout(r,9000));
-const {data}=await sb.from('trips').select('itinerary_data').eq('id',trip!.id).single();
+const {data}=await sb.from('trips').select('itinerary_data,metadata').eq('id',trip!.id).single();
+console.log('TRIP',trip!.id,'storedNotes=',JSON.stringify(((data as any)?.metadata?.additionalNotes||'').slice(0,90)));
 const acts=((data as any)?.itinerary_data?.days?.[0]?.activities)||[];
 console.log(`\nGENERATED DAY (${acts.length} activities):`);
-for(const a of acts){const fh=/\bflight\b|airport|hotel|check.?in|check.?out/i.test(`${a.title||a.name} ${a.category}`)?'  🏨FLIGHT/HOTEL':'';console.log(`  ${a.startTime||'--'} ${(a.category||'').padEnd(11)} ${a.title||a.name}${fh}`);if(a.description)console.log(`       "${String(a.description).slice(0,110)}"`);}
+for(const a of acts){const fh=/\bflight\b|airport|hotel|check.?in|check.?out/i.test(`${a.title||a.name} ${a.category}`)?'  🏨FLIGHT/HOTEL':'';console.log(`  ${a.startTime||'--'} ${(a.category||'').padEnd(11)} ${a.title||a.name}  src=${a.source||'-'}${fh}`);if(a.description)console.log(`       "${String(a.description).slice(0,110)}"`);}
 const fanfest=acts.some((a:any)=>/fan fest|fan zone/i.test(`${a.title||a.name}`));
 const bareVenue=acts.some((a:any)=>/centennial olympic park/i.test(`${a.title||a.name}`)&&!/fan fest|fan zone|world cup/i.test(`${a.title||a.name}`));
 const flightHotel=acts.some((a:any)=>/\bflight\b|airport|hotel|check.?in|check.?out/i.test(`${a.title||a.name} ${a.category}`));

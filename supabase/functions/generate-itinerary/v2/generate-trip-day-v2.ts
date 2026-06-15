@@ -1110,10 +1110,21 @@ export async function handleGenerateTripDayV2(
           dd.setUTCDate(dd.getUTCDate() + (Number(dnum) - 1));
           dDate = dd.toISOString().slice(0, 10);
         }
+        // Detect the event from ALL intent fields — the chat extractor often
+        // drops "World Cup" from additionalNotes and stashes it in
+        // mustDoActivities / tripContext instead, so checking only one field
+        // misses it (live: notes="no flights…", World Cup in must-dos).
+        const intentText = [
+          (tripMeta as any)?.additionalNotes,
+          Array.isArray((tripMeta as any)?.mustDoActivities) ? (tripMeta as any).mustDoActivities.join(' ') : (tripMeta as any)?.mustDoActivities,
+          (tripMeta as any)?.tripContext,
+          (tripMeta as any)?.occasion,
+          (tripMeta as any)?.tripType,
+        ].filter(Boolean).join(' • ');
         const r = ensureHostCityEventExperience(d.activities, {
           destination: facts.destination.city,
           dateISO: dDate,
-          notes: (tripMeta as any)?.additionalNotes,
+          notes: intentText,
           dayNumber: dnum,
         });
         if (r.injected) {

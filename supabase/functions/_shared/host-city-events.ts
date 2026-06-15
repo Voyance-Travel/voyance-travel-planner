@@ -196,10 +196,17 @@ export function findHostCityEvent(
   const date = typeof dateISO === 'string' ? dateISO.slice(0, 10) : '';
   const notesStr = String(notes ?? '');
   if (!city || !date || !notesStr.trim()) return null;
+  // Event-adjacent language for FIXTURE-based (sports) events — the chat
+  // extractor frequently paraphrases "World Cup" away, leaving only "fan fest /
+  // watch the match / the games". In the right city + an in-window match date,
+  // that's a strong enough signal to fire. Scoped to fixture events so it can't
+  // false-fire a festival/marathon.
+  const EVENT_ADJACENT_RE = /\bfan\s*fest(?:ival)?\b|\bfan\s*zone\b|\bwatch (?:the )?(?:match|game)\b|\bwatch party\b|\bthe (?:games|matches)\b|\bworld cup\b|\bworld-cup\b/i;
   for (const ev of HOST_CITY_EVENTS) {
     if (!ev.cityKeys.some((k) => city.includes(k))) continue;
     if (date < ev.window.start || date > ev.window.end) continue;
-    if (!ev.eventRe.test(notesStr)) continue;
+    const adjacentOk = !!(ev.matches && ev.matches.length > 0) && EVENT_ADJACENT_RE.test(notesStr);
+    if (!ev.eventRe.test(notesStr) && !adjacentOk) continue;
     const matchOnDate = ev.matches?.find((m) => m.date === date) || null;
     return { event: ev, matchOnDate };
   }
