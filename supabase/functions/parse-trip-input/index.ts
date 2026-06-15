@@ -356,6 +356,52 @@ function inferDestinationCurrency(destination: string): string | null {
   return null;
 }
 
+// ── Clock-time resolution ────────────────────────────────────────────────────
+// Pasted ChatGPT/Claude itineraries carry COARSE labels ("Morning", "Lunch",
+// "Dinner") rather than clock times. Emit a real, sortable HH:MM at the SOURCE
+// so the parse output (and its preview) already has a schedule — not only after
+// the frontend convert. MIRROR of src/utils/createTripFromParsed.ts
+// (TIME_LABEL_MIN / assignClockTimes); keep the two in sync.
+const TIME_LABEL_MIN: Record<string, number> = {
+  'dawn': 420, 'sunrise': 420, 'early morning': 450, 'breakfast': 510,
+  'morning': 540, 'mid-morning': 630, 'midmorning': 630, 'brunch': 630, 'late morning': 690,
+  'midday': 720, 'noon': 720, 'lunch': 750,
+  'early afternoon': 810, 'afternoon': 840, 'mid-afternoon': 900, 'late afternoon': 990,
+  'evening': 1110, 'sunset': 1140, 'dusk': 1140, 'golden hour': 1140,
+  'dinner': 1170, 'night': 1260, 'late night': 1320, 'nightcap': 1320,
+};
+function clockToMin(raw?: string): number | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  let m = s.match(/^(\d{1,2}):(\d{2})\s*([ap]m)?$/i);
+  if (m) { let h = +m[1]; const min = +m[2]; const ap = m[3]?.toLowerCase(); if (ap === 'pm' && h < 12) h += 12; if (ap === 'am' && h === 12) h = 0; return (h > 23 || min > 59) ? null : h * 60 + min; }
+  m = s.match(/^(\d{1,2})\s*([ap]m)$/i);
+  if (m) { let h = +m[1]; const ap = m[2].toLowerCase(); if (ap === 'pm' && h < 12) h += 12; if (ap === 'am' && h === 12) h = 0; return h > 23 ? null : h * 60; }
+  return null;
+}
+const fmHHMM = (mins: number): string =>
+  `${String(Math.floor(mins / 60) % 24).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+
+/** Resolve activity.time → HH:MM in paste order. Explicit clocks honored;
+ * labels anchored but never earlier than the cursor; either/or alternates share
+ * one slot (cursor advances once per group). Mutates the activities. */
+export function assignClocksToDay(activities: any[]): void {
+  if (!Array.isArray(activities)) return;
+  let cursor = 8 * 60;
+  const groupSlot: Record<string, number> = {};
+  for (const a of activities) {
+    const grp = (a?.isOption && a?.optionGroup) ? String(a.optionGroup) : null;
+    if (grp && grp in groupSlot) { a.time = fmHHMM(groupSlot[grp]); continue; }
+    const real = clockToMin(a?.time);
+    let mins: number;
+    if (real != null) mins = real;
+    else { const base = TIME_LABEL_MIN[String(a?.time ?? '').toLowerCase().trim()]; mins = base != null ? Math.max(base, cursor) : cursor; }
+    a.time = fmHHMM(mins);
+    if (grp) groupSlot[grp] = mins;
+    cursor = Math.max(cursor, mins) + 90;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -834,6 +880,8 @@ serve(async (req) => {
               activity.currency = destinationCurrency;
             }
           }
+          // Resolve coarse labels → real clock times at the source.
+          assignClocksToDay(day.activities);
         }
       }
     }
