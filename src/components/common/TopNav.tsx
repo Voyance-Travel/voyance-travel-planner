@@ -23,13 +23,17 @@ import { NotificationBell } from '@/components/common/NotificationBell';
 import { VoyanceWordmark } from '@/components/common/VoyanceWordmark';
 import { usePopupCoordination } from '@/stores/popup-coordination-store';
 
-// MVP: marketing/discovery surfaces are hidden behind the wall. The routes and
-// pages still exist (reachable by direct URL) — they're just removed from the
-// nav so the app is the bare create-a-trip → view-it loop. To restore, re-add
-// the items below.
+// MVP: keep the nav usable, not bare. A new visitor must be able to understand
+// the product (How It Works) and see what it costs (Pricing) — Single City
+// generation spends credits, so pricing is load-bearing, not optional. The
+// Explore discovery dropdown and the About page stay hidden behind the wall
+// (routes still exist by direct URL). To restore those, re-add exploreItems.
 const exploreItems: Array<{ href: string; label: string; icon: typeof Compass; description: string }> = [];
 
-const navLinks: Array<{ href: string; label: string }> = [];
+const navLinks = [
+  { href: ROUTES.HOW_IT_WORKS, label: 'How It Works' },
+  { href: ROUTES.PRICING, label: 'Pricing' },
+];
 
 const userMenuItems = [
   { href: ROUTES.PROFILE.VIEW, label: 'My Profile', icon: User, tourId: 'profile-link' },
