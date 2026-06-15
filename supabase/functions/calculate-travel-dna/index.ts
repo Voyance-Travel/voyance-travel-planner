@@ -8,6 +8,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -2237,8 +2238,18 @@ serve(async (req) => {
   }
   
   try {
-    const { answers, userId, existingOverrides, precomputedTraits, fineGrainedTraits } = await req.json();
-    
+    // AUTH GATE (IDOR fix): this writes travel_dna_profiles with the service role,
+    // so it must not trust a body userId from an unauthenticated caller. Accept a
+    // trusted internal/service-role call (enrich-manual-trip forwards the user JWT)
+    // or a valid user JWT — in which case the persisted profile is forced to the
+    // authenticated user, never a body-supplied id.
+    const auth = await parseAuth(req);
+    if (auth instanceof Response) return auth;
+    const { answers, userId: bodyUserId, existingOverrides, precomputedTraits, fineGrainedTraits } = await req.json();
+    const userId = auth.userId === 'service_role'
+      ? bodyUserId
+      : auth.userId;
+
     if (!answers) {
       return new Response(
         JSON.stringify({ error: 'Missing quiz answers' }),

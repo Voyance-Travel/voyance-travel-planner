@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -73,7 +74,18 @@ serve(async (req) => {
   }
 
   try {
-    const { userId, dryRun } = await req.json().catch(() => ({}));
+    // AUTH GATE (IDOR fix): this function writes travel_dna_profiles + trait_drift_log
+    // with the service role. It must NOT trust a body-supplied userId from an
+    // unauthenticated caller. Accept either a trusted internal/service-role call
+    // (the *-batch invokers) or a valid user JWT — in which case the caller may
+    // only recompute THEIR OWN drift.
+    const auth = await parseAuth(req);
+    if (auth instanceof Response) return auth;
+    const body = await req.json().catch(() => ({}));
+    const dryRun = body?.dryRun;
+    const userId = auth.userId === 'service_role'
+      ? (typeof body?.userId === 'string' ? body.userId : '')
+      : auth.userId; // a real user can only recompute their own drift
     if (!userId || typeof userId !== 'string') {
       return new Response(
         JSON.stringify({ error: 'userId is required' }),

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "npm:stripe@18.5.0";
 import { okResponse, errorResponse, corsResponse, exceptionResponse } from "../_shared/edge-response.ts";
+import { parseAuth } from "../_shared/require-auth.ts";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -15,9 +16,15 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
+    // AUTH GATE (IDOR fix): previously unauthenticated — anyone with a session ID
+    // could read its customer email / amount / metadata. Require a valid token,
+    // and bind the session to the caller (sessions carry metadata.user_id).
+    const auth = await parseAuth(req);
+    if (auth instanceof Response) return auth;
+
     const body = await req.json().catch(() => ({}));
     const sessionId = typeof body?.sessionId === 'string' ? body.sessionId.trim() : '';
-    
+
     if (!sessionId || sessionId.length > 200) {
       return errorResponse("sessionId is required", "INVALID_INPUT");
     }
@@ -32,10 +39,18 @@ serve(async (req) => {
       expand: ['line_items', 'line_items.data.price.product'],
     });
 
-    logStep("Session retrieved", { 
-      status: session.status, 
-      paymentStatus: session.payment_status 
+    logStep("Session retrieved", {
+      status: session.status,
+      paymentStatus: session.payment_status
     });
+
+    // Bind the session to the caller — checkout sessions carry metadata.user_id
+    // (set in create-checkout / create-embedded-checkout). A real user may only
+    // read their own session; internal/service-role callers are trusted.
+    if (auth.userId !== 'service_role' && session.metadata?.user_id !== auth.userId) {
+      logStep("Forbidden — session does not belong to caller", { caller: auth.userId });
+      return errorResponse("Forbidden", "FORBIDDEN", 403);
+    }
 
     // Extract product info
     const lineItems = session.line_items?.data || [];
@@ -50,7 +65,7 @@ serve(async (req) => {
       };
     });
 
-    return new Response(JSON.stringify({
+    return okResponse({
       status: session.status,
       paymentStatus: session.payment_status,
       customerEmail: session.customer_details?.email,
@@ -58,9 +73,6 @@ serve(async (req) => {
       currency: session.currency,
       products,
       metadata: session.metadata,
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
