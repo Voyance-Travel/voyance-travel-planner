@@ -66,7 +66,7 @@ import { ledgerCheck } from '../ledger-check.ts';
 import { nuclearCrossCitySweep, nuclearDiningStrip, nuclearWellnessSweep } from '../fix-placeholders.ts';
 import { scrubEventVibeFiller, scrubNextDayTipLeak } from '../sanitization.ts';
 import { ensureHostCityEventExperience } from '../../_shared/host-city-events.ts';
-import { resolveScheduleOverlaps } from '../../_shared/schedule-overlap.ts';
+import { resolveScheduleOverlaps, dropOrphanTransit } from '../../_shared/schedule-overlap.ts';
 import { noopTrace, attachTrace, withStage, type Trace } from '../../_shared/trace-recorder.ts';
 import { runDetectorRepairs } from './detector-repairs.ts';
 import { findEmptyDays, mapTableRowsToActivities, applyHealedDay } from './completeness-gate.ts';
@@ -1505,6 +1505,18 @@ export async function handleGenerateTripDayV2(
     } catch (e) {
       console.warn('[v2] relaxed-day cap failed (non-blocking):', e);
     }
+
+    // ── 8h5. Drop a dangling "Travel to X" at the end of a day — the
+    // destination venue was removed (venue grounding / dedup / cap) leaving an
+    // orphan transit going nowhere (live WC day ended on "Travel to 9 Mile
+    // Station" with no activity there). Runs last so it sees the final set.
+    try {
+      for (const dd of mergedDays) {
+        if (!Array.isArray(dd?.activities)) continue;
+        const o = dropOrphanTransit(dd.activities);
+        if (o.dropped > 0) { dd.activities = o.activities; console.log(`[v2] [ORPHAN_TRANSIT] day=${dd.dayNumber ?? '?'} dropped ${o.dropped} trailing transit`); }
+      }
+    } catch (_e) { /* non-blocking */ }
 
     // ── 8i. SELF-CHECK GATE — verify + repair + score before the write ──
     // The auditor's checks, run inside generation as the final quality gate so

@@ -46,6 +46,26 @@ Deno.test('ensure is idempotent — does not double-inject when a fan fest is al
   assertEquals(r.activities.length, 1);
 });
 
+Deno.test('UPGRADES a bare "Centennial Olympic Park" card to the real Fan Festival (keeps its slot)', () => {
+  const acts = [{ title: 'Explore Centennial Olympic Park', category: 'sightseeing', startTime: '14:30', endTime: '16:30', location: 'Centennial Olympic Park' }];
+  const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta', dateISO: '2026-06-21', notes: NOTES });
+  assert(r.injected);
+  assertEquals(r.activities.length, 1, 'upgraded in place, not added');
+  assert(/fan festival/i.test(r.activities[0].title), `got "${r.activities[0].title}"`);
+  assert(/Centennial Olympic Park/i.test(r.activities[0].location), 'kept the real venue');
+  assert(/Spain vs Saudi Arabia|Jumbotron|fan zone/i.test(r.activities[0].description), 'has the real what-is-there description');
+  assertEquals(r.activities[0].startTime, '14:30', 'kept the model time slot');
+});
+
+Deno.test('UPGRADES a wrong-venue fan fest (GWCC) to the curated Centennial venue', () => {
+  const acts = [{ title: 'FIFA Fan Fest at Georgia World Congress Center', category: 'activity', startTime: '15:00', endTime: '17:00', location: 'Georgia World Congress Center' }];
+  const r = ensureHostCityEventExperience(acts, { destination: 'Atlanta, GA', dateISO: '2026-06-21', notes: NOTES });
+  assert(r.injected);
+  assertEquals(r.activities.length, 1);
+  assert(/Centennial Olympic Park/i.test(`${r.activities[0].title} ${r.activities[0].location}`), 'moved to the real Fan Fest venue');
+  assert(!/Georgia World Congress/i.test(`${r.activities[0].title} ${r.activities[0].location}`), 'hallucinated venue gone');
+});
+
 Deno.test('a TRANSIT card through the venue does NOT suppress the injection (Run-2 bug)', () => {
   // "Taxi through Centennial Olympic Park" mentions the venue but is not the
   // event experience — the Fan Festival must still be guaranteed.

@@ -232,22 +232,45 @@ export function ensureHostCityEventExperience(
   // Token-based venue match (tolerant of "Centennial Park" vs "Centennial
   // Olympic Park") rather than a brittle full-substring match.
   const venueTokens = venueLc.split(/\s+/).map((t) => t.replace(/[^a-z]/g, '')).filter((t) => t.length > 3);
-  const already = acts.some((a) => {
-    if (a?.source === 'host-city-event') return true;
+  const hayOf = (a: any) => `${String(a?.title ?? a?.name ?? '')} ${String(a?.location?.name ?? a?.location ?? '')}`.toLowerCase();
+  const isTransitOrProtected = (a: any) => {
+    if (a?.locked || a?.isLocked || a?.isUserAuthored) return true;
     const cat = String(a?.category ?? '').toLowerCase();
     const title = String(a?.title ?? a?.name ?? '').toLowerCase();
-    // A transit/logistics card that merely PASSES the venue ("Taxi through
-    // Centennial Olympic Park") is NOT the event experience — it must not
-    // suppress the deterministic injection.
-    if (/\b(transit|transport|transfer|logistics|commute)\b/.test(cat) ||
-        /\b(taxi|transfer|drive|driving|travel (?:to|through|past)|head (?:to|toward)|pass(?:ing)? through|walk (?:to|past)|en route|uber|lyft)\b/.test(title)) {
-      return false;
+    return /\b(transit|transport|transfer|logistics|commute|flight|accommodation)\b/.test(cat)
+      || /\b(taxi|transfer|drive|driving|travel (?:to|through|past)|head (?:to|toward)|pass(?:ing)? through|walk (?:to|past)|en route|uber|lyft)\b/.test(title);
+  };
+  const isFanFestish = (a: any) => /fan\s*fest(?:ival)?\b|fan\s*zone\b/.test(hayOf(a));
+  const atCuratedVenue = (a: any) => venueTokens.length > 0 && venueTokens.filter((tok) => hayOf(a).includes(tok)).length >= Math.max(1, venueTokens.length - 1);
+
+  // An existing card that REPRESENTS this event experience: a fan-fest-ish card
+  // (even at the wrong venue, e.g. the model put it at "Georgia World Congress
+  // Center" instead of Centennial Olympic Park) OR a bare card sitting at the
+  // curated venue ("Explore Centennial Olympic Park" with no event framing).
+  const idx = acts.findIndex((a) => a && a.source !== 'host-city-event' && !isTransitOrProtected(a) && (isFanFestish(a) || atCuratedVenue(a)));
+
+  if (idx >= 0) {
+    const ex = acts[idx];
+    // Already the authoritative experience (a real fan fest AT the curated
+    // venue) — leave it; don't double-inject.
+    if (isFanFestish(ex) && atCuratedVenue(ex)) {
+      return { activities: acts, injected: false, event: found.event };
     }
-    const hay = `${title} ${String(a?.location ?? '').toLowerCase()}`;
-    if (/fan\s*fest(?:ival)?\b|fan\s*zone\b/.test(hay)) return true;
-    return venueTokens.length > 0 && venueTokens.filter((tok) => hay.includes(tok)).length >= Math.max(1, venueTokens.length - 1);
-  });
-  if (already) return { activities: acts, injected: false, event: found.event };
+    // UPGRADE a bare-venue card OR a wrong-venue fan-fest to the curated, real
+    // experience — correct venue + what's actually there (jumbotron, fan zone,
+    // today's fixture) — keeping the model's chosen time slot so the schedule
+    // isn't disturbed. This is the "it just named the park, not the fan fest"
+    // fix + the "fan fest at the wrong venue" fix.
+    const card = buildEventActivity(found.event, found.matchOnDate, `hce-d${ctx.dayNumber ?? 1}`);
+    card.startTime = ex.startTime ?? ex.time ?? card.startTime;
+    card.time = card.startTime;
+    card.endTime = ex.endTime ?? card.endTime;
+    const out = [...acts];
+    out[idx] = card;
+    return { activities: out, injected: true, event: found.event };
+  }
+
+  // No event card at all — inject the curated one into a real gap.
   const card = buildEventActivity(found.event, found.matchOnDate, `hce-d${ctx.dayNumber ?? 1}`);
   const placed = placeCardInGap(acts, card);
   return { activities: placed, injected: true, event: found.event };
