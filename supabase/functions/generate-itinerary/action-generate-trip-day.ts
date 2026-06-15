@@ -31,6 +31,32 @@ import { computeMatchVerdict } from '../_shared/match-verdict.ts';
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
 /**
+ * Has a refund already been issued for this trip's generation? Both this
+ * server-side failure path AND the client-side spend-credits REFUND path write
+ * a `transaction_type='refund'` ledger row carrying `trip_id`. They used to
+ * share no dedup key, so a server refund + a client promise-rejection refund
+ * could BOTH credit the same failed generation (double refund). Guarding both
+ * sides on trip_id makes them mutually exclusive. Fails closed on error (treat
+ * as "already issued" → skip) so a transient read error never double-credits.
+ */
+async function tripRefundAlreadyIssued(supabase: any, tripId: string): Promise<boolean> {
+  if (!tripId) return false;
+  try {
+    const { data, error } = await supabase
+      .from('credit_ledger')
+      .select('id')
+      .eq('trip_id', tripId)
+      .eq('transaction_type', 'refund')
+      .limit(1);
+    if (error) { console.warn('[generate-trip-day] refund-guard read failed, skipping refund to be safe:', error); return true; }
+    return !!(data && data.length > 0);
+  } catch (e) {
+    console.warn('[generate-trip-day] refund-guard threw, skipping refund to be safe:', e);
+    return true;
+  }
+}
+
+/**
  * Trigger generation of the next journey leg after this one completes.
  */
 async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<void> {
@@ -988,17 +1014,21 @@ async function _handleGenerateTripDayInner(
       const totalCharged = creditsCharged || 0;
       if (totalCharged > 0) {
         try {
-          await supabase.from('credit_purchases').insert({
-            user_id: userId, credit_type: 'refund', amount: totalCharged, remaining: totalCharged,
-            source: 'system_refund', stripe_session_id: null,
-          });
-          await supabase.from('credit_ledger').insert({
-            user_id: userId, transaction_type: 'refund', credits_delta: totalCharged, is_free_credit: false,
-            action_type: 'refund', trip_id: tripId,
-            notes: `Server-side refund: all ${totalDays} days failed. +${totalCharged} credits restored.`,
-            metadata: { reason: 'server_generation_all_failed', error: lastError },
-          });
-          console.log(`[generate-trip-day] Full refund: ${totalCharged} credits (all days failed)`);
+          if (await tripRefundAlreadyIssued(supabase, tripId)) {
+            console.log(`[generate-trip-day] Refund already issued for trip ${tripId} — skipping full refund (dedup vs client REFUND path)`);
+          } else {
+            await supabase.from('credit_purchases').insert({
+              user_id: userId, credit_type: 'refund', amount: totalCharged, remaining: totalCharged,
+              source: 'system_refund', stripe_session_id: null,
+            });
+            await supabase.from('credit_ledger').insert({
+              user_id: userId, transaction_type: 'refund', credits_delta: totalCharged, is_free_credit: false,
+              action_type: 'refund', trip_id: tripId,
+              notes: `Server-side refund: all ${totalDays} days failed. +${totalCharged} credits restored.`,
+              metadata: { reason: 'server_generation_all_failed', error: lastError },
+            });
+            console.log(`[generate-trip-day] Full refund: ${totalCharged} credits (all days failed)`);
+          }
         } catch (refundErr) {
           console.error(`[generate-trip-day] Refund failed:`, refundErr);
         }
@@ -1048,17 +1078,21 @@ async function _handleGenerateTripDayInner(
         const refundAmount = creditsPerDay * failedDays.length;
         if (refundAmount > 0) {
           try {
-            await supabase.from('credit_purchases').insert({
-              user_id: userId, credit_type: 'refund', amount: refundAmount, remaining: refundAmount,
-              source: 'system_refund', stripe_session_id: null,
-            });
-            await supabase.from('credit_ledger').insert({
-              user_id: userId, transaction_type: 'refund', credits_delta: refundAmount, is_free_credit: false,
-              action_type: 'refund', trip_id: tripId,
-              notes: `Server-side refund: ${failedDays.length}/${effectiveTotalDays} days failed. +${refundAmount} credits restored.`,
-              metadata: { reason: 'server_generation_partial_fail', failedDays },
-            });
-            console.log(`[generate-trip-day] Partial refund: ${refundAmount} credits for ${failedDays.length} failed days`);
+            if (await tripRefundAlreadyIssued(supabase, tripId)) {
+              console.log(`[generate-trip-day] Refund already issued for trip ${tripId} — skipping partial refund (dedup vs client REFUND path)`);
+            } else {
+              await supabase.from('credit_purchases').insert({
+                user_id: userId, credit_type: 'refund', amount: refundAmount, remaining: refundAmount,
+                source: 'system_refund', stripe_session_id: null,
+              });
+              await supabase.from('credit_ledger').insert({
+                user_id: userId, transaction_type: 'refund', credits_delta: refundAmount, is_free_credit: false,
+                action_type: 'refund', trip_id: tripId,
+                notes: `Server-side refund: ${failedDays.length}/${effectiveTotalDays} days failed. +${refundAmount} credits restored.`,
+                metadata: { reason: 'server_generation_partial_fail', failedDays },
+              });
+              console.log(`[generate-trip-day] Partial refund: ${refundAmount} credits for ${failedDays.length} failed days`);
+            }
           } catch (refundErr) {
             console.error(`[generate-trip-day] Refund failed:`, refundErr);
           }
@@ -3380,7 +3414,7 @@ async function _handleGenerateTripDayInner(
               const creditsPerDay = Math.round(totalCharged / Math.max(1, effectiveTotalDays));
               return creditsPerDay * failedDays.length;
             })();
-        if (refundAmount > 0) {
+        if (refundAmount > 0 && !(await tripRefundAlreadyIssued(supabase, tripId))) {
           await supabase.from('credit_purchases').insert({
             user_id: userId, credit_type: 'refund', amount: refundAmount, remaining: refundAmount,
             source: 'system_refund', stripe_session_id: null,

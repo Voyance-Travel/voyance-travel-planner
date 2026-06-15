@@ -508,6 +508,37 @@ serve(async (req) => {
         }
       }
 
+      // ── Cross-path idempotency for trip_generation refunds ──
+      // The server-side generation-failure path (action-generate-trip-day.ts)
+      // inserts a `system_refund` ledger row keyed only by trip_id — it carries
+      // neither pendingChargeId nor originalIdempotencyKey, so the two guards
+      // above can't see it. Without this, a server refund + this client
+      // (promise-rejection) refund BOTH credit the same failed generation.
+      // Guard on trip_id so only the first refund for a given trip wins.
+      if (originalAction === 'trip_generation' && tripId) {
+        const { data: existingTripRefund } = await supabaseAdmin
+          .from('credit_ledger')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('transaction_type', 'refund')
+          .eq('trip_id', tripId)
+          .limit(1);
+        if (existingTripRefund && existingTripRefund.length > 0) {
+          console.log(`[spend-credits] REFUND: Idempotent hit — a refund already exists for trip ${tripId} (cross-path guard)`);
+          const balance = await syncBalanceCache(supabaseAdmin, user.id);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              refunded: refundAmount,
+              action: 'REFUND',
+              idempotent: true,
+              newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       // Add credits back via a new credit_purchases row (simplest safe approach — no expiry)
       const { error: purchaseErr } = await supabaseAdmin
         .from('credit_purchases')
