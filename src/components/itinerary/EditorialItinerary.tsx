@@ -68,6 +68,8 @@ import { timeToMinutes, minutesToTime } from './editorial/time-utils';
 import { InterCityTransportStrip } from './editorial/InterCityTransportStrip';
 import { FlightSyncWarning } from './editorial/FlightSyncWarning';
 import { ReconcilingHint, BoardingPassViewButton } from './editorial/small-components';
+import { formatTime, sanitizeAiText, isFuzzyLocationMatch } from './editorial/format-utils';
+import { getActivityType, isNoteBlockedActivity, getActivityRating, getActivityReviewCount, getActivityPhoto, getHotelHeroImage } from './editorial/activity-utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -595,52 +597,6 @@ const weatherIcons: Record<string, React.ReactNode> = {
 // HELPERS
 // =============================================================================
 
-function formatTime(time: string | undefined): string {
-  if (!time || typeof time !== 'string') return '';
-  
-  // Strip any non-ASCII characters (e.g. stray Chinese/Unicode from AI output)
-  const cleanTime = time.replace(/[^\x00-\x7F]/g, '').trim();
-  if (!cleanTime) return '';
-  
-  if (/\d{1,2}:\d{2}\s*(AM|PM)/i.test(cleanTime)) {
-    return cleanTime;
-  }
-  
-  const match = cleanTime.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return cleanTime;
-  
-  const hours = parseInt(match[1], 10);
-  const minutes = match[2];
-  
-  if (isNaN(hours)) return cleanTime;
-  
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const displayHours = hours % 12 || 12;
-  return `${displayHours}:${minutes} ${period}`;
-}
-
-/** Strip stray non-ASCII characters from AI-generated text fields */
-function sanitizeAiText(text: string | undefined): string {
-  if (!text || typeof text !== 'string') return '';
-  return text.replace(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/g, '').trim();
-}
-
-/** Fuzzy location match — handles "Mandarin Oriental, Marrakech" vs "Mandarin Oriental" vs "Mandarin" */
-function isFuzzyLocationMatch(
-  a?: { name?: string; address?: string } | null,
-  b?: { name?: string; address?: string } | null,
-): boolean {
-  if (!a || !b) return false;
-  if (a.name && b.name && a.name === b.name) return true;
-  if (a.address && b.address && a.address === b.address) return true;
-  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (a.name && b.name) {
-    const an = normalize(a.name);
-    const bn = normalize(b.name);
-    if (an.length >= 4 && bn.length >= 4 && (an.includes(bn) || bn.includes(an))) return true;
-  }
-  return false;
-}
 
 // FX rates, conversion helpers, and `formatCurrency` are imported at the top
 // of this file from `@/lib/currency` — the shared module ensures this header
@@ -1195,59 +1151,6 @@ function getActivityCost(
   return getActivityCostInfo(activity, travelers, budgetTier, destinationCity, destinationCountry, isManualMode).amount;
 }
 
-function getActivityType(activity: EditorialActivity): string {
-  const raw = activity.category || activity.type || 'activity';
-  return typeof raw === 'string' ? raw : String(raw);
-}
-
-// AI-concierge notes must never attach to a transit/logistics row. Mirrors the
-// CONCIERGE_HIDDEN_TYPES set used to hide the concierge entry point on those
-// cards — the save path guards the data too, so an id mix-up can't land a note
-// on the preceding transit card (the original "note shows on Travel to X" bug).
-const NOTE_BLOCKED_TYPES = ['transportation', 'transport', 'transit', 'travel', 'logistics'];
-function isNoteBlockedActivity(activity: EditorialActivity): boolean {
-  return NOTE_BLOCKED_TYPES.includes(getActivityType(activity));
-}
-
-function getActivityRating(activity: EditorialActivity): number | null {
-  if (typeof activity.rating === 'number') return activity.rating;
-  if (typeof activity.rating === 'object' && activity.rating?.value) return activity.rating.value;
-  return null;
-}
-
-function getActivityReviewCount(activity: EditorialActivity): number | null {
-  if (typeof activity.rating === 'object' && activity.rating?.totalReviews) {
-    return activity.rating.totalReviews;
-  }
-  return null;
-}
-
-function getActivityPhoto(activity: EditorialActivity): string | null {
-  // Prefer explicit image_url (set by writeback) over photos array
-  const directUrl = (activity as any).image_url;
-  if (directUrl && typeof directUrl === 'string' && directUrl.startsWith('http')) return directUrl;
-  if (!activity.photos || activity.photos.length === 0) return null;
-  const photo = activity.photos[0];
-  if (typeof photo === 'string') return photo;
-  if (typeof photo === 'object' && photo.url) return photo.url;
-  return null;
-}
-
-function getHotelHeroImage(h: any): string | null {
-  if (!h) return null;
-  const fromVal = (v: any): string | null => {
-    if (typeof v === 'string' && v.trim()) return v;
-    if (v && typeof v === 'object' && typeof v.url === 'string' && v.url.trim()) return v.url;
-    return null;
-  };
-  const direct = fromVal(h.imageUrl) || fromVal(h.image_url);
-  if (direct) return direct;
-  const imgs = Array.isArray(h.images) ? h.images : [];
-  for (const v of imgs) { const u = fromVal(v); if (u) return u; }
-  const photos = Array.isArray(h.photos) ? h.photos : [];
-  for (const v of photos) { const u = fromVal(v); if (u) return u; }
-  return null;
-}
 
 function getDayTotalCost(
   activities: EditorialActivity[], 
