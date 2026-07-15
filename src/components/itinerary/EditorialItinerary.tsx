@@ -67,6 +67,7 @@ import { TimeEditModal } from './editorial/TimeEditModal';
 import { timeToMinutes, minutesToTime } from './editorial/time-utils';
 import { InterCityTransportStrip } from './editorial/InterCityTransportStrip';
 import { FlightSyncWarning } from './editorial/FlightSyncWarning';
+import { ReconcilingHint, BoardingPassViewButton } from './editorial/small-components';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -205,46 +206,6 @@ import { pickBannerVariant } from '@/lib/itinerary/integrityBannerCopy';
 // BOARDING PASS VIEW BUTTON (inline helper)
 // =============================================================================
 
-// Bounded "Reconciling…" hint — wraps useReconcilingState so the predicate
-// in the IIFE-rendered header strip can still drive a hook safely.
-function ReconcilingHint({
-  active,
-  site,
-  tripId,
-}: { active: boolean; site: string; tripId?: string | null }) {
-  const { visible } = useReconcilingState(active, { site, tripId });
-  if (!visible) return null;
-  return (
-    <div className="text-[11px] text-muted-foreground/60 text-center mt-1" aria-live="polite">
-      Reconciling…
-    </div>
-  );
-}
-
-
-function BoardingPassViewButton({ storagePath }: { storagePath: string }) {
-  const handleView = async () => {
-    try {
-      const { data } = await supabase.storage
-        .from('boarding-passes')
-        .createSignedUrl(storagePath, 3600);
-      if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank');
-      }
-    } catch {
-      console.error('Failed to open boarding pass');
-    }
-  };
-  return (
-    <button
-      onClick={handleView}
-      className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
-    >
-      <FileText className="h-3 w-3" />
-      Boarding Pass
-    </button>
-  );
-}
 
 // =============================================================================
 // TYPES
