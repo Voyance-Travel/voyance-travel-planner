@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Clock, Hotel, MapPin, Plane, Sparkles, Train } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { safeFormatDate } from '@/utils/dateUtils';
 import { AirportHotelTransfer, type SelectedTransfer } from '../AirportHotelTransfer';
 import type { FlightSelection, HotelSelection, CityHotelInfo } from '../EditorialItinerary';
 

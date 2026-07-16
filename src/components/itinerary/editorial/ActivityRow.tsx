@@ -6,8 +6,9 @@ import { TransitModePicker } from '../TransitModePicker';
 import { VoyanceInsight } from '../VoyanceInsight';
 import { VoyancePickCallout } from '../VoyancePickCallout';
 import { getActivityPhoto, getActivityRating, getActivityReviewCount, getActivityType } from './activity-utils';
-import { getActivityCostInfo } from './cost-utils';
+import { basisLabel, getActivityCostInfo } from './cost-utils';
 import { formatTime } from './format-utils';
+import { activityStyles } from '../EditorialItinerary';
 import { InlineBookingActions } from '@/components/booking/InlineBookingActions';
 import { GuideBookmarkButton } from '@/components/guides/GuideBookmarkButton';
 import { AISavedNotes } from '@/components/itinerary/AISavedNotes';
@@ -18,6 +19,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useActivityImage } from '@/hooks/useActivityImage';
 import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
+import { getRenderedStartTime, getRenderedEndTime } from '@/lib/itinerary/displayTime';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
+import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
+import { isWeakAddress } from '@/lib/address-quality';
+import { resolveActivityDisplayDescription } from '@/lib/itinerary/diningDescriptionFallback';
+import { getCollaboratorColor, type CollaboratorAttribution } from '@/utils/collaboratorAttribution';
+import type { TripPayment } from '@/services/tripPaymentsAPI';
+import type { BookingItemState } from '@/services/bookingStateMachine';
 import { AlertTriangle, ArrowRightLeft, Bus, Calendar, Camera, Car, ChevronDown, ChevronRight, Clock, Copy, Edit3, FileText, Footprints, Lightbulb, Lock, MapPin, MessageCircle, MoreHorizontal, MoveDown, MoveUp, Navigation2, Sparkles, Star, Train, Trash2, Unlock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 

@@ -10,7 +10,8 @@ import { TransitGapIndicator, computeDeadGaps, computeGapMinutes, computeOpenWin
 import { TransportComparisonCard } from '../TransportComparisonCard';
 import { ActivityRow } from './ActivityRow';
 import { getActivityCostInfo, getDayTotalCost } from './cost-utils';
-import { isFuzzyLocationMatch } from './format-utils';
+import { isFuzzyLocationMatch, normalizeDestination } from './format-utils';
+import { weatherIcons } from '../EditorialItinerary';
 import { isWalkingLeg } from '@/lib/cost-estimation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,7 +19,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
-import { AnimatePresence } from 'framer-motion';
+import { resolveCountry } from '@/utils/cityCountryMap';
+import { getDisplayDayTitle } from '@/utils/dayTitleCoherence';
+import { timeOfDayBand } from '@/lib/itinerary/timeOfDayBand';
+import type { CollaboratorAttribution } from '@/utils/collaboratorAttribution';
+import type { TripPayment } from '@/services/tripPaymentsAPI';
+import type { BookingItemState } from '@/services/bookingStateMachine';
+import type { RefreshResult, ProposedChange } from '@/hooks/useRefreshDay';
+import type { DayBreakdown } from '@/hooks/useTripDayBreakdown';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, Check, ChevronDown, ChevronUp, ClipboardPaste, Clock, Compass, Loader2, Lock, MapPin, MoreHorizontal, Plus, RefreshCw, Route, Sparkles, Train, Unlock } from 'lucide-react';
 import { useState } from 'react';
 
