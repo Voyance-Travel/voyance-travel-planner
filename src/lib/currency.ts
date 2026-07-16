@@ -29,10 +29,14 @@ import { EXCHANGE_RATES_FROM_USD, RATES_AS_OF_LABEL, convertFromUSD } from '../.
  */
 export function formatCurrency(
   amount: number | null | undefined,
-  currency: string = 'USD'
+  currency: string = 'USD',
+  opts?: { zeroAsFree?: boolean }
 ): string {
   if (amount === null || amount === undefined) return '-';
-  if (amount === 0) return 'Free';
+  // A zero *cost* reads as "Free" (a free attraction), but a zero *total*
+  // ("Paid so far", "To be paid") must read as "$0" — nothing was paid, it
+  // isn't free. Callers formatting a running total pass zeroAsFree: false.
+  if (amount === 0 && (opts?.zeroAsFree ?? true)) return 'Free';
   try {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -57,12 +61,13 @@ export function formatCurrency(
  */
 export function formatMoneyFromUsdCents(
   usdCents: number,
-  targetCurrency: string = 'USD'
+  targetCurrency: string = 'USD',
+  opts?: { zeroAsFree?: boolean }
 ): string {
   const usd = usdCents / 100;
   const amount =
     targetCurrency.toUpperCase() === 'USD' ? usd : convertFromUSD(usd, targetCurrency);
-  return formatCurrency(amount, targetCurrency);
+  return formatCurrency(amount, targetCurrency, opts);
 }
 
 /**

@@ -9,7 +9,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, isBefore, isAfter, differenceInMinutes, differenceInDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
-import { openMapLocation, toTravelMode } from '@/utils/mapNavigation';
+import { openMapLocation, toTravelMode, isRoutableLocation } from '@/utils/mapNavigation';
 import { parseTimeToMinutes } from '@/utils/timeFormat';
 import {
   ArrowLeft, Calendar, MapPin, Clock, ChevronRight, Sun, Moon,
@@ -1352,7 +1352,7 @@ function TodayView({
                     {!isPastDay && (
                       <>
                         <div className="flex items-center gap-2 mt-3">
-                          {activity.location && (
+                          {isRoutableLocation(activity.location, activity.name) && (
                             <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full" onClick={() => {
                               openMapLocation({
                                 name: activity.location?.name || activity.name,

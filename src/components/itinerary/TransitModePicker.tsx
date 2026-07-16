@@ -375,7 +375,7 @@ export function TransitModePicker({
                 <div className="flex items-start gap-2 p-2.5 rounded-lg bg-primary/5 border border-primary/15">
                   <Sparkles className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-[10px] font-semibold text-primary uppercase tracking-wide">AI Recommendation</p>
+                    <p className="text-[10px] font-semibold text-primary uppercase tracking-wide">Recommended</p>
                     <p className="text-xs text-foreground/80 mt-0.5">{aiRecommendation}</p>
                   </div>
                 </div>

@@ -457,7 +457,7 @@ export function SmartFinishBanner({
                   ? failureReason 
                     ? `Your credits were refunded. ${failureReason}`
                     : 'Your credits were refunded. Click below to try enriching your itinerary again.'
-                  : 'Smart Finish adds insider tips, timing hacks, route optimization, and DNA-matched fixes to your itinerary.'}
+                  : 'Smart Finish adds insider tips, timing hacks, route optimization, and DNA-matched fixes. Your trip stays fully editable and shareable for free — this is optional polish.'}
               </p>
 
               {/* Feature pills (only show when not in retry mode) */}
@@ -528,7 +528,11 @@ export function SmartFinishBanner({
               </Button>
             )}
             <p className="text-[10px] text-center text-muted-foreground mt-1.5">
-              {enrichmentFailed ? 'No additional credits charged.' : 'Your research. Our polish.'}
+              {enrichmentFailed
+                ? 'No additional credits charged.'
+                : totalCredits >= CREDIT_COSTS.SMART_FINISH
+                  ? `You have ${totalCredits} credits — enough to Smart Finish now.`
+                  : 'Your research. Our polish.'}
             </p>
           </div>
         </div>

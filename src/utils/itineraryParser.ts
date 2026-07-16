@@ -355,26 +355,95 @@ function parseLocation(raw: unknown): ParsedLocation | undefined {
   return undefined;
 }
 
+const CURRENCY_SIGNS: Array<[RegExp, string]> = [
+  [/€|\beur\b|\beuros?\b/i, 'EUR'],
+  [/£|\bgbp\b|\bpounds?\b/i, 'GBP'],
+  [/¥|\bjpy\b|\byen\b/i, 'JPY'],
+  [/₹|\binr\b|\brupees?\b/i, 'INR'],
+  [/\bcad\b|\bca\$/i, 'CAD'],
+  [/\baud\b|\ba\$/i, 'AUD'],
+  [/\$|\busd\b|\bdollars?\b/i, 'USD'],
+];
+
+function detectCurrency(s: string): string | undefined {
+  for (const [re, code] of CURRENCY_SIGNS) {
+    if (re.test(s)) return code;
+  }
+  return undefined;
+}
+
+const NUM_RE = /\d[\d,]*(?:\.\d+)?/;
+const RANGE_RE = /(\d[\d,]*(?:\.\d+)?)\s*(?:–|—|-|~|\bto\b)\s*[€£$₹¥]?\s*(\d[\d,]*(?:\.\d+)?)/i;
+const toNum = (s: string) => parseFloat(s.replace(/,/g, ''));
+
+/**
+ * Parse a free-text cost string (as pasted from ChatGPT/Claude itineraries) into
+ * a structured cost. Handles "Free", currency symbols, and ranges like
+ * "€45–€70" (stored as the midpoint so a genuinely paid stop never renders "Free").
+ */
+function parseCostString(raw: string): ParsedCost | undefined {
+  const s = raw.trim();
+  if (!s) return undefined;
+
+  const currency = detectCurrency(s);
+
+  // "Free" / "included" / "no charge" — only when no price digits are present
+  // ("Buy 1 get 1 free, €20" must fall through to the number parse below).
+  if (!/\d/.test(s) && /\b(free|no charge|complimentary|included|gratis|n\/?a|none)\b/i.test(s)) {
+    return { amount: 0 };
+  }
+
+  // Range → midpoint estimate (e.g. "€45–€70" → 58)
+  const range = s.match(RANGE_RE);
+  if (range) {
+    const amount = Math.round((toNum(range[1]) + toNum(range[2])) / 2);
+    return currency ? { amount, currency } : { amount };
+  }
+
+  // Single number → that value
+  const single = s.match(NUM_RE);
+  if (single) {
+    const amount = toNum(single[0]);
+    if (!isNaN(amount)) return currency ? { amount, currency } : { amount };
+  }
+
+  return undefined;
+}
+
 /**
  * Parse cost from various formats
  */
 function parseCost(raw: unknown): ParsedCost | undefined {
   // CRITICAL: numeric 0 is a valid cost (free venue) — do NOT treat it as falsy
   if (raw === null || raw === undefined || raw === '') return undefined;
-  
+
   if (typeof raw === 'number') {
     return isNaN(raw) ? undefined : { amount: raw };
   }
-  
+
+  // String costs — common in pasted itineraries ("€45–€70", "$30", "Free")
+  if (typeof raw === 'string') {
+    return parseCostString(raw);
+  }
+
   if (typeof raw === 'object' && raw !== null) {
     const cost = raw as Record<string, unknown>;
-    const amount = extractNumber(cost, ['amount', 'value', 'price', 'total', 'perPerson', 'per_person']);
-    return {
-      amount,
-      currency: extractString(cost, ['currency']),
-    };
+    let amount = extractNumber(cost, ['amount', 'value', 'price', 'total', 'perPerson', 'per_person']);
+    let currency = extractString(cost, ['currency']);
+    // Fallback: the amount may be a currency-symbol string ("€45") or a range
+    // ("€45–€70") that extractNumber's parseFloat can't handle — parse it as text.
+    if (amount === undefined) {
+      const str = extractString(cost, ['amount', 'value', 'price', 'total', 'display', 'text', 'label', 'estimate', 'range', 'perPerson', 'per_person']);
+      const parsed = str ? parseCostString(str) : undefined;
+      if (parsed) {
+        amount = parsed.amount;
+        if (!currency) currency = parsed.currency;
+      }
+    }
+    if (amount === undefined) return undefined;
+    return currency ? { amount, currency } : { amount };
   }
-  
+
   return undefined;
 }
 

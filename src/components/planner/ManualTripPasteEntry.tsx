@@ -231,7 +231,7 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
           Build It Yourself
         </h2>
         <p className="text-sm text-muted-foreground">
-          Paste your research and we'll organize it. No AI generation - you're in full control.
+          Paste your research and we'll organize it for free — no AI required to organize. You're in control of every edit.
         </p>
         <p className="text-xs text-muted-foreground/70 mt-1">
           Perfect for travelers who already have their plan and just need a clean organizer.
@@ -307,7 +307,7 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
                   {parsed.destination ? `Trip to ${parsed.destination}` : 'Your Trip'}
                 </h3>
                 <Badge variant="secondary" className="text-xs">
-                  {parsed.days.length} {parsed.days.length === 1 ? 'day' : 'days'} · {totalActivities} activities
+                  {parsed.days.length} {parsed.days.length === 1 ? 'day' : 'days'} · {totalActivities} stops
                 </Badge>
               </div>
 

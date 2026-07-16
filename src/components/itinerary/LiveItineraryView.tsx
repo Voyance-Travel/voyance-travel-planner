@@ -18,7 +18,7 @@ import { ActivityFeedbackModal } from './ActivityFeedbackModal';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import SafeImage from '@/components/SafeImage';
 import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
-import { openMapLocation } from '@/utils/mapNavigation';
+import { openMapLocation, isRoutableLocation } from '@/utils/mapNavigation';
 import type { ActivityContext } from '@/types/feedback';
 import { cn } from '@/lib/utils';
 import { formatTime12h } from '@/utils/timeFormat';
@@ -139,7 +139,11 @@ function TimelineActivityCard({
   const isCompleted = status === 'completed' || status === 'skipped';
   const isSkipped = status === 'skipped';
 
+  // Rest-break / hotel-return placeholders have no real destination.
+  const canRoute = isRoutableLocation(activity.location, activity.name);
+
   const handleOpenMaps = () => {
+    if (!canRoute) return;
     if (activity.location?.lat && activity.location?.lng) {
       openMapLocation({ name: activity.name, lat: activity.location.lat, lng: activity.location.lng });
     } else if (activity.location?.address) {
@@ -300,7 +304,7 @@ function TimelineActivityCard({
                       <CheckCircle className="w-3.5 h-3.5" />
                       Done
                     </Button>
-                    {activity.location && (
+                    {canRoute && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -714,7 +718,7 @@ export function LiveItineraryView({
                       <CheckCircle className="w-4 h-4" />
                       Mark Done
                     </Button>
-                    {currentActivity.location && (
+                    {isRoutableLocation(currentActivity.location, currentActivity.name) && (
                       <Button
                         size="sm"
                         variant="outline"

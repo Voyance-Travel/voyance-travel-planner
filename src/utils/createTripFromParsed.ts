@@ -70,6 +70,24 @@ const TIME_LABEL_MIN: Record<string, number> = {
 const fmHHMM = (mins: number): string =>
   `${String(Math.floor(mins / 60) % 24).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
 
+// Defensive cost coercion. The parse-trip-input schema types cost as a number,
+// but if a range ("€45–€70") or currency-symbol string ("$30") ever slips
+// through, storing it verbatim in estimatedCost.amount makes a genuinely paid
+// stop render as "Free". Coerce number|string → number (range → midpoint).
+function coerceCostAmount(raw: unknown): number | undefined {
+  if (typeof raw === 'number') return isNaN(raw) ? undefined : raw;
+  if (typeof raw !== 'string') return undefined;
+  const s = raw.trim();
+  if (!s) return undefined;
+  if (!/\d/.test(s) && /\b(free|no charge|complimentary|included|gratis|none)\b/i.test(s)) return 0;
+  const toNum = (n: string) => parseFloat(n.replace(/,/g, ''));
+  const range = s.match(/(\d[\d,]*(?:\.\d+)?)\s*(?:–|—|-|~|\bto\b)\s*[€£$₹¥]?\s*(\d[\d,]*(?:\.\d+)?)/i);
+  if (range) return Math.round((toNum(range[1]) + toNum(range[2])) / 2);
+  const single = s.match(/\d[\d,]*(?:\.\d+)?/);
+  if (single) { const n = toNum(single[0]); if (!isNaN(n)) return n; }
+  return undefined;
+}
+
 /**
  * Resolve clock times for a day's activities IN ORDER. An explicit clock time
  * is respected as-is; a coarse label is anchored to its band but never moved
@@ -109,12 +127,20 @@ function activityToItinerary(activity: ParsedActivity, isSelected: boolean, cloc
     startTime: clock || normalizeTimeTo24h(activity.time) || undefined,
     category: mapCategory(activity.category),
     type: mapCategory(activity.category) as any,
-    estimatedCost: activity.cost !== undefined
-      ? { amount: activity.cost, currency: activity.currency || 'USD' }
-      : undefined,
-    location: activity.location
-      ? { name: activity.location, address: activity.location }
-      : { name: '', address: '' },
+    estimatedCost: (() => {
+      const amount = coerceCostAmount(activity.cost);
+      return amount !== undefined
+        ? { amount, currency: activity.currency || 'USD' }
+        : undefined;
+    })(),
+    // Venue Name must be the venue/activity name, not the address — the edit
+    // modal's "Venue Name" field reads location.name, and Preview shows both, so
+    // duplicating the address into name produced "venue name = address" and a
+    // repeated address in Preview. Only fill address when it's a distinct string.
+    location: {
+      name: activity.name || activity.location || '',
+      address: (activity.location && activity.location !== activity.name) ? activity.location : '',
+    },
     coordinates: null,
     venue: null,
     bookingRequired: activity.bookingRequired || false,
@@ -157,7 +183,9 @@ function convertDay(day: ParsedDay): ItineraryDay {
   return {
     dayNumber: day.dayNumber,
     date: day.date,
-    title: day.theme ? `Day ${day.dayNumber}: ${day.theme}` : `Day ${day.dayNumber}`,
+    // Store just the theme as the title — the itinerary renderers already prefix
+    // "Day N" themselves, so embedding "Day N:" here produced "Day 1 Day 1: …".
+    title: day.theme || undefined,
     theme: day.theme,
     activities,
     metadata: day.dailyBudget ? { dailyBudget: day.dailyBudget } : undefined,

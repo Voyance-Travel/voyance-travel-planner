@@ -14,6 +14,37 @@ export interface MapLocation {
 
 export type MapProvider = 'apple' | 'google' | 'auto';
 
+// Placeholder / rest-break cards ("Return to your hotel", "Freshen up", "Free
+// time") have no real destination. Routing them opens a map searching the
+// literal phrase, which lands the user on a random pin. These are the whole-
+// string phrases we must NOT route when there are no coordinates or address.
+const NON_ROUTABLE_PLACEHOLDER_RE =
+  /^(?:return\s+to\s+(?:your\s+|the\s+)?hotel|(?:head\s+)?back\s+to\s+(?:your\s+|the\s+)?hotel|to\s+(?:your\s+|the\s+)?hotel|at\s+(?:your\s+|the\s+)?hotel|freshen\s*up|rest(?:\s*break)?|relax(?:ation)?|downtime|free\s*time|leisure(?:\s*time)?|check[\s-]?in|check[\s-]?out|checkout|overnight|sleep|nap|breakfast\s+at\s+(?:your\s+|the\s+)?hotel)$/i;
+
+/**
+ * Whether a location has a real, mappable destination. True when it has
+ * coordinates or a concrete address/name; false for bare placeholder cards
+ * (hotel returns, rest breaks, free time) that would otherwise route to a
+ * meaningless map search. Pass the activity title as `fallbackName` when the
+ * location object itself is empty.
+ */
+export function isRoutableLocation(
+  location?: MapLocation | null,
+  fallbackName?: string
+): boolean {
+  // Real coordinates are always routable.
+  if (location && location.lat !== undefined && location.lng !== undefined) {
+    return true;
+  }
+  // A concrete street address is routable unless it's itself a placeholder.
+  const addr = (location?.address || '').trim();
+  if (addr && !NON_ROUTABLE_PLACEHOLDER_RE.test(addr)) return true;
+  // Otherwise the only handle is a name — routable only if it names a real place.
+  const name = (location?.name || fallbackName || '').trim();
+  if (!name) return false;
+  return !NON_ROUTABLE_PLACEHOLDER_RE.test(name);
+}
+
 /**
  * Detects if user is on iOS (iPhone, iPad, iPod)
  */
