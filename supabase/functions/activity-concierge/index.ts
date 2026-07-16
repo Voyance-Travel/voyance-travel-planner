@@ -1,6 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { parseAuth } from "../_shared/require-auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Pinned to match _shared/traveler-dna.ts so the SupabaseClient types line up.
+import { createClient as createPinnedClient } from "npm:@supabase/supabase-js@2.90.1";
+import { fetchTravelerDNA, buildCompactDNASummary } from "../_shared/traveler-dna.ts";
+
+interface TravelerDNAContext {
+  summary: string;
+  dietary: string[];
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -43,7 +51,8 @@ interface SurroundingContext {
 function buildSystemPrompt(
   activity: ActivityContext,
   trip: TripContext,
-  surrounding: SurroundingContext
+  surrounding: SurroundingContext,
+  dna: TravelerDNAContext
 ): string {
   return `You are a Voyance AI concierge providing personalized advice about a specific activity on the user's trip.
 
@@ -58,6 +67,8 @@ CONTEXT:
 ${surrounding.previous_activity ? `- Previous activity: ${surrounding.previous_activity}` : ""}
 ${surrounding.next_activity ? `- Next activity: ${surrounding.next_activity}` : ""}
 ${activity.description ? `- Activity description: ${activity.description}` : ""}
+${dna.summary ? `\nTRAVELER PROFILE (their Travel DNA — tailor EVERY suggestion to this, don't recite it back):\n- ${dna.summary}` : ""}
+${dna.dietary.length ? `- DIETARY (hard constraint — any food/venue suggestion MUST comply, no exceptions): ${dna.dietary.join(", ")}` : ""}
 
 YOUR ROLE:
 1. You are a knowledgeable local concierge who knows this venue intimately
@@ -67,7 +78,8 @@ YOUR ROLE:
 5. Keep responses concise and practical — this is trip planning, not an essay
 6. NEVER make up fake venue names. Only suggest real, verifiable restaurants/attractions.
 7. Be aware of the trip type (Luminary = luxury, Explorer = mid-range, Budget = affordable) and tailor suggestions accordingly.
-8. Format with short paragraphs and bullet points for readability.`;
+8. Format with short paragraphs and bullet points for readability.
+9. Match the traveler's Travel DNA above — their pace, style, and interests should shape what you recommend and how. Any dietary constraint is non-negotiable: never suggest a venue or dish that violates it, including in alternatives.`;
 }
 
 const ALTERNATIVES_TOOL = {
@@ -160,10 +172,29 @@ serve(async (req) => {
     const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY is not configured");
 
+    // Load the traveler's own Travel DNA so advice + alternatives are tailored
+    // to them (and dietary constraints are enforced). Best-effort: any failure
+    // degrades to the generic concierge rather than breaking the request.
+    const dnaContext: TravelerDNAContext = { summary: "", dietary: [] };
+    try {
+      const svc = createPinnedClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!,
+      );
+      const { dna, hasData } = await fetchTravelerDNA(svc, authUserId);
+      if (hasData) {
+        dnaContext.summary = buildCompactDNASummary(dna);
+        dnaContext.dietary = dna.dietaryRestrictions ?? [];
+      }
+    } catch (e) {
+      console.warn("[activity-concierge] DNA fetch failed, using generic prompt", e);
+    }
+
     const systemPrompt = buildSystemPrompt(
       activityContext,
       tripContext,
-      surroundingContext
+      surroundingContext,
+      dnaContext
     );
 
     // Check if the latest user message is asking for alternatives
@@ -190,7 +221,6 @@ serve(async (req) => {
         method: "POST",
         headers: {
           Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
           "X-Lovable-AIG-SDK": "vercel-ai-sdk",
           "Content-Type": "application/json",
         },

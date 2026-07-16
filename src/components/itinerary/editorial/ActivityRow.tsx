@@ -403,6 +403,25 @@ export function ActivityRow({
           </div>
         )}
 
+        {/* Why this fits — the DNA personalization proof, surfaced in Preview so
+            the traveller sees WHY each pick matches them before they commit. Only
+            when a real description already fills the description slot (otherwise
+            whyThisFits is used as that fallback above and would duplicate). */}
+        {(() => {
+          const why = activity.personalization?.whyThisFits
+            ? sanitizeActivityText(activity.personalization.whyThisFits)
+            : '';
+          if (!why || !sanitizeActivityText(activity.description) || isCheckIn) return null;
+          return (
+            <div className="mt-4 flex items-start gap-2 rounded-lg bg-primary/5 border border-primary/10 px-3 py-2.5">
+              <Sparkles className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                <span className="font-medium text-foreground/80">Why this fits: </span>{why}
+              </p>
+            </div>
+          );
+        })()}
+
         {/* Voyance Tip — always expanded */}
         {sanitizeActivityText(activity.tips) && !isCheckIn && (
           <div className="mt-4 pt-3 border-t border-border/30">
