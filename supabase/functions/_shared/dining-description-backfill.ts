@@ -152,7 +152,7 @@ export function buildDeterministicDiningDescription(
 // Templated meal-guard leaks that look "filled" but carry zero insider value.
 // Treat as missing so a real fallback / LLM blurb can replace them.
 const TEMPLATED_LEAK_RE =
-  /(— a real local spot worth visiting|—\s*pick a (?:restaurant|caf[eé]|spot)|^\s*(?:breakfast|brunch|lunch|dinner|drinks|nightcap)\s+at\s+[^.!?]+\.?\s*$)/i;
+  /(— a real local spot worth visiting|—\s*pick a (?:restaurant|caf[eé]|spot)|^\s*(?:breakfast|brunch|lunch|dinner|drinks|nightcap)\s+at\s+[^.!?]+\.?\s*$|^\s*a well-rated\b[^.!?]*\bspot\s+in\b)/i;
 
 export function isTemplatedDiningDescription(desc: string): boolean {
   return TEMPLATED_LEAK_RE.test(desc.trim());

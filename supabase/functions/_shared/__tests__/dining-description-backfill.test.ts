@@ -167,3 +167,26 @@ Deno.test("ensureDayDiningDescriptions returns counters", () => {
   assertEquals(c.whyThisFits, 1);
   assertEquals(c.venueTemplate, 1);
 });
+
+Deno.test("places-alternatives 'well-rated spot' fallback is treated as templated + upgraded", () => {
+  // The Places backfill (places-alternatives.ts) writes "A well-rated <cuisine>
+  // spot in <city>." — a real-length string that ISN'T a meal-guard leak, so it
+  // used to survive ensureDiningDescription untouched (the generic-dining bug).
+  assertEquals(isTemplatedDiningDescription("A well-rated Portuguese spot in Porto."), true);
+  assertEquals(isTemplatedDiningDescription("A well-rated restaurant spot in Porto."), true);
+  // A genuine editorial blurb of the same length must NOT be flagged.
+  assertEquals(
+    isTemplatedDiningDescription("Start with coffee and a pastry before walking into the old city."),
+    false,
+  );
+  const act: any = {
+    category: "dining",
+    title: "Breakfast at DAMA pé de cabra",
+    location: { name: "DAMA pé de cabra" },
+    description: "A well-rated restaurant spot in Porto.",
+  };
+  const r = ensureDiningDescription(act, "Porto, Portugal");
+  assertEquals(r.changed, true);
+  assertEquals(r.source, "venueTemplate");
+  assertEquals(act.description.includes("DAMA pé de cabra"), true);
+});
