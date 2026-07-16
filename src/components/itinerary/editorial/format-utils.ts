@@ -47,3 +47,12 @@ export function isFuzzyLocationMatch(
   }
   return false;
 }
+
+/** Strip airport codes/suffixes from a destination name ("Paris (CDG)" → "Paris") */
+export function normalizeDestination(dest: string): string {
+  return (dest || '')
+    .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
+    .replace(/\b(international\s+)?airport\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
