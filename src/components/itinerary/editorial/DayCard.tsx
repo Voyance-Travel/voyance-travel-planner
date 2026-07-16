@@ -548,11 +548,19 @@ export function DayCard({
                 if (refreshResult && refreshResult.dayNumber === day.dayNumber) return null;
                 const acts = day.activities || [];
                 let zeroGapCount = 0;
+                // Transit/logistics entries ARE the travel buffer — a pair touching
+                // one is fine. Route rows may be typed transportation/transit/travel/
+                // logistics/flight, or only recognisable by a "Travel to…" title, so
+                // match broadly. The old check only caught the exact category
+                // 'transport', which is why visible route rows still triggered a
+                // false "no travel buffer" warning.
+                const isTransit = (a: any) => {
+                  const cat = (a?.category || a?.type || '').toLowerCase();
+                  if (['transport', 'transportation', 'transit', 'travel', 'logistics', 'flight', 'accommodation'].includes(cat)) return true;
+                  return /\b(travel (?:to|through|past)|walk to|drive|driving|transfer|taxi|uber|lyft|train to|bus to|ferry|en route|head (?:to|toward))\b/i.test(String(a?.title || a?.name || ''));
+                };
                 for (let i = 0; i < acts.length - 1; i++) {
-                  // Transport entries ARE the travel buffer — skip pairs involving them
-                  const catA = ((acts[i] as any).category || '').toLowerCase();
-                  const catB = ((acts[i + 1] as any).category || '').toLowerCase();
-                  if (catA === 'transport' || catB === 'transport') continue;
+                  if (isTransit(acts[i]) || isTransit(acts[i + 1])) continue;
 
                   const gap = computeGapMinutes(
                     acts[i].endTime,
@@ -573,7 +581,7 @@ export function DayCard({
                     <div className="flex items-start sm:items-center gap-2 min-w-0 flex-1">
                       <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5 sm:mt-0" aria-hidden="true" />
                       <p className="text-xs text-muted-foreground">
-                        <span className="font-medium">{zeroGapCount} {zeroGapCount === 1 ? 'activity' : 'activities'}</span> {zeroGapCount === 1 ? 'has' : 'have'} no travel buffer.
+                        <span className="font-medium">{zeroGapCount} {zeroGapCount === 1 ? 'stop' : 'stops'}</span> may need a travel buffer. Smart Finish can verify route timing.
                       </p>
                     </div>
                     {onRefreshDay && (
