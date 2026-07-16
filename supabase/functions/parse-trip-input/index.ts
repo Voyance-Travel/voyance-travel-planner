@@ -184,6 +184,8 @@ Keep the action as a note if it adds context:
 | "Meiji Shrine (free)" | name: "Meiji Shrine", cost: 0 |
 | "teamLab Planets ($30)" | name: "teamLab Planets", cost: 30 |
 | "Afuri Ramen (~$15)" | name: "Afuri Ramen", cost: 15 |
+| "Cooking class (€45–€70)" | name: "Cooking class", cost: 58, currency: "EUR" (range → midpoint) |
+| "Louvre (£20-25 pp)" | name: "Louvre", cost: 23, currency: "GBP" (range → midpoint) |
 | "Franklin BBQ (preorder required)" | name: "Franklin BBQ", notes: "preorder required", bookingRequired: true |
 | "Uchi (elevated, $$$)" | name: "Uchi", notes: "elevated, $$$" |
 
@@ -268,7 +270,8 @@ Use these exact category values:
 6. When in doubt about category, use "activity"
 7. Detect currency from symbols: $ → USD, € → EUR, ¥ → JPY, £ → GBP
 8. "Free" or "free" → cost: 0
-9. Be thorough but don't hallucinate data that isn't in the text.`;
+9. Cost RANGES ("€45–€70", "$20-30", "15 to 25") → output the MIDPOINT as a single number (e.g. 58, 25, 20). A real price must NEVER be dropped to 0 just because it was written as a range — 0 means genuinely free only.
+10. Be thorough but don't hallucinate data that isn't in the text.`;
 
 /**
  * Infer the canonical currency for a destination string.
