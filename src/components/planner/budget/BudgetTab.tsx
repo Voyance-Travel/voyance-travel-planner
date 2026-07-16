@@ -1031,7 +1031,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             />
             {snapshot.paidCents > 0 && (
               <p className="text-xs text-muted-foreground mt-2">
-                Paid so far: {formatCurrency(snapshot.paidCents)} · To be paid: {formatCurrency(toBePaidCents)}
+                Paid so far: {formatCurrency(snapshot.paidCents)} · To be paid: {formatMoneyFromUsdCents(toBePaidCents, displayCurrency, { zeroAsFree: false })}
               </p>
             )}
           </CardContent>

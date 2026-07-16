@@ -1342,7 +1342,7 @@ export function PaymentsTab({
               <CheckCircle2 className="h-4 w-4 text-green-600" />
             </div>
             <div>
-              <p className="text-sm font-medium">{displayMoney(paidAmount)}</p>
+              <p className="text-sm font-medium">{formatMoneyFromUsdCents(paidAmount, displayCurrency, { zeroAsFree: false })}</p>
               <p className="text-xs text-muted-foreground">Paid so far</p>
             </div>
           </div>

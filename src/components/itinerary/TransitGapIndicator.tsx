@@ -619,7 +619,7 @@ export function TransitGapIndicator({
                   <Sparkles className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-primary mb-0.5">
-                      AI Recommendation
+                      Recommended
                     </p>
                     <p className="text-xs text-muted-foreground leading-relaxed">{aiRecommendation}</p>
                   </div>

@@ -279,7 +279,7 @@ export function AirportHotelTransfer({
                     <div className="flex items-start gap-2.5 p-3 rounded-lg bg-primary/5 border border-primary/10">
                       <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-xs font-medium text-primary mb-0.5">AI Recommendation</p>
+                        <p className="text-xs font-medium text-primary mb-0.5">Recommended</p>
                         <p className="text-xs text-muted-foreground leading-relaxed">{aiRecommendation}</p>
                       </div>
                     </div>
