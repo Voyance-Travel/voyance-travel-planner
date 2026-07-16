@@ -11,6 +11,7 @@ import { TransportComparisonCard } from '../TransportComparisonCard';
 import { ActivityRow } from './ActivityRow';
 import { getActivityCostInfo, getDayTotalCost } from './cost-utils';
 import { isFuzzyLocationMatch } from './format-utils';
+import { isWalkingLeg } from '@/lib/cost-estimation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
