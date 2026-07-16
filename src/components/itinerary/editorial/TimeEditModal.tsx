@@ -5,8 +5,15 @@ import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Clock } from 'lucide-react';
-import { timeToMinutes } from './time-utils';
+import { timeToMinutes, minutesToTime } from './time-utils';
 import type { EditorialActivity } from '../EditorialItinerary';
+
+// When an activity has no explicit end time, derive a sensible one (start + 90m)
+// so the modal never opens with an impossible end-before-start (e.g. start 20:15,
+// end 13:00). Clamped to end-of-day by minutesToTime.
+function defaultEndFor(start: string): string {
+  return minutesToTime(timeToMinutes(start) + 90);
+}
 
 interface TimeEditModalProps {
   isOpen: boolean;
@@ -16,14 +23,16 @@ interface TimeEditModalProps {
 }
 
 export function TimeEditModal({ isOpen, activity, onClose, onSave }: TimeEditModalProps) {
-  const [startTime, setStartTime] = useState(activity?.startTime || activity?.time || '12:00');
-  const [endTime, setEndTime] = useState(activity?.endTime || '13:00');
+  const initialStart = activity?.startTime || activity?.time || '12:00';
+  const [startTime, setStartTime] = useState(initialStart);
+  const [endTime, setEndTime] = useState(activity?.endTime || defaultEndFor(initialStart));
   const [cascade, setCascade] = useState(true);
 
   useEffect(() => {
     if (activity) {
-      setStartTime(activity.startTime || activity.time || '12:00');
-      setEndTime(activity.endTime || '13:00');
+      const s = activity.startTime || activity.time || '12:00';
+      setStartTime(s);
+      setEndTime(activity.endTime || defaultEndFor(s));
       setCascade(true);
     }
   }, [activity]);

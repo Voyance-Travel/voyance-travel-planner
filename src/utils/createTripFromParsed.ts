@@ -157,7 +157,9 @@ function convertDay(day: ParsedDay): ItineraryDay {
   return {
     dayNumber: day.dayNumber,
     date: day.date,
-    title: day.theme ? `Day ${day.dayNumber}: ${day.theme}` : `Day ${day.dayNumber}`,
+    // Store just the theme as the title — the itinerary renderers already prefix
+    // "Day N" themselves, so embedding "Day N:" here produced "Day 1 Day 1: …".
+    title: day.theme || undefined,
     theme: day.theme,
     activities,
     metadata: day.dailyBudget ? { dailyBudget: day.dailyBudget } : undefined,
