@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { openMapLocation } from '@/utils/mapNavigation';
+import { openMapLocation, isRoutableLocation } from '@/utils/mapNavigation';
 import { motion } from 'framer-motion';
 import { 
   Clock, MapPin, Check, Play, CircleDot, 
@@ -87,7 +87,12 @@ export function LiveActivityCard({
   const isCompleted = status === 'completed' || status === 'skipped';
   const isCurrent = status === 'current';
 
+  // Rest-break / hotel-return placeholders have no real destination — don't
+  // offer directions (routing them just opens a map searching the phrase).
+  const canRoute = isRoutableLocation(activity.location, activity.name);
+
   const handleOpenMaps = () => {
+    if (!canRoute) return;
     if (activity.location?.lat && activity.location?.lng) {
       openMapLocation({
         name: activity.name,
@@ -197,15 +202,17 @@ export function LiveActivityCard({
         <div className="flex items-center gap-2 mt-4">
           {isCurrent && (
             <>
-              <Button
-                size="sm"
-                onClick={handleOpenMaps}
-                variant="outline"
-                className="flex-1"
-              >
-                <Navigation className="w-4 h-4 mr-1" />
-                Directions
-              </Button>
+              {canRoute && (
+                <Button
+                  size="sm"
+                  onClick={handleOpenMaps}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Navigation className="w-4 h-4 mr-1" />
+                  Directions
+                </Button>
+              )}
               <Button
                 size="sm"
                 onClick={() => {
