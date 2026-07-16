@@ -812,8 +812,28 @@ export async function handleGenerateTripDayV2(
     try {
       const prof: any = (facts as any).travelers?.profile ?? {};
       const ts: any = prof.traitScores ?? {};
+      // Interest matching in generateExplanation is a substring test against the
+      // activity text, so multi-word / snake_case interests ("arts_and_culture",
+      // "Arts & Culture") would never match a description that says "art galleries".
+      // Expand each interest into its own word tokens so the match is robust.
+      const rawInterests: string[] = (facts as any).preferences?.interests ?? prof.interests ?? [];
+      const INTEREST_STOP = new Set(['and', 'the', 'for', 'with', 'your', 'trip', 'travel', 'style', 'lover', 'seeker']);
+      const expandedInterests = Array.from(new Set(
+        rawInterests.flatMap((i: string) => {
+          const s = String(i).toLowerCase().trim();
+          const toks = s.split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !INTEREST_STOP.has(t));
+          // Add naive singular forms so "arts"/"galleries"/"museums" still match
+          // an "art gallery"/"museum" in the activity text (substring test).
+          const singulars = toks.flatMap((t) =>
+            t.endsWith('ies') && t.length > 4 ? [t.slice(0, -3) + 'y']
+            : t.endsWith('s') && t.length > 4 ? [t.slice(0, -1)]
+            : [],
+          );
+          return [s, ...toks, ...singulars];
+        }),
+      )).filter(Boolean);
       const explainCtx: any = {
-        interests: (facts as any).preferences?.interests ?? prof.interests ?? [],
+        interests: expandedInterests,
         foodLikes: prof.foodLikes ?? [],
         foodDislikes: prof.foodDislikes ?? [],
         dietaryRestrictions: (facts as any).preferences?.dietary ?? prof.dietaryRestrictions ?? [],
