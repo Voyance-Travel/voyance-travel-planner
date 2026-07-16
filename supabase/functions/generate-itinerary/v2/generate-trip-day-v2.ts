@@ -72,7 +72,6 @@ import { runDetectorRepairs } from './detector-repairs.ts';
 import { findEmptyDays, mapTableRowsToActivities, applyHealedDay } from './completeness-gate.ts';
 import { stampArrivalAnchorTruth } from '../../_shared/stamp-arrival-anchor-truth.ts';
 import { stampDepartureAnchorTruth } from '../../_shared/stamp-departure-anchor-truth.ts';
-import { generateExplanation } from '../explainability.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -811,42 +810,52 @@ export async function handleGenerateTripDayV2(
     // trips.itinerary_data at step 8 (the source the frontend reads). Non-blocking.
     try {
       const prof: any = (facts as any).travelers?.profile ?? {};
-      const ts: any = prof.traitScores ?? {};
-      // Interest matching in generateExplanation is a substring test against the
-      // activity text, so multi-word / snake_case interests ("arts_and_culture",
-      // "Arts & Culture") would never match a description that says "art galleries".
-      // Expand each interest into its own word tokens so the match is robust.
-      const rawInterests: string[] = (facts as any).preferences?.interests ?? prof.interests ?? [];
-      const INTEREST_STOP = new Set(['and', 'the', 'for', 'with', 'your', 'trip', 'travel', 'style', 'lover', 'seeker']);
-      const expandedInterests = Array.from(new Set(
-        rawInterests.flatMap((i: string) => {
-          const s = String(i).toLowerCase().trim();
-          const toks = s.split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !INTEREST_STOP.has(t));
-          // Add naive singular forms so "arts"/"galleries"/"museums" still match
-          // an "art gallery"/"museum" in the activity text (substring test).
-          const singulars = toks.flatMap((t) =>
-            t.endsWith('ies') && t.length > 4 ? [t.slice(0, -3) + 'y']
-            : t.endsWith('s') && t.length > 4 ? [t.slice(0, -1)]
-            : [],
-          );
-          return [s, ...toks, ...singulars];
-        }),
-      )).filter(Boolean);
-      const explainCtx: any = {
-        interests: expandedInterests,
-        foodLikes: prof.foodLikes ?? [],
-        foodDislikes: prof.foodDislikes ?? [],
-        dietaryRestrictions: (facts as any).preferences?.dietary ?? prof.dietaryRestrictions ?? [],
-        travelCompanions: prof.travelCompanions ?? prof.companions ?? [],
-        traits: Object.fromEntries(
-          Object.entries(ts).map(([k, v]) => [k, { value: Number(v) || 0, label: k }]),
-        ),
-        tripIntents: prof.tripIntents ?? [],
-        budgetTier: (facts as any).preferences?.budgetTier ?? prof.budgetTier,
-        archetype: (facts as any).travelers?.archetype ?? prof.archetype,
+      // Interest matching is a SUBSTRING test against activity text.
+      // The app's interests are broad categories ("Culture & History", "Food &
+      // Cuisine") that almost never appear verbatim in a specific description
+      // ("art galleries", "historic heartbeat", "scrambled eggs"), so raw matching
+      // yields ~zero chips. Expand each interest into (a) its own word tokens +
+      // singular forms AND (b) the concrete venue keywords that category actually
+      // produces, so the substring test reliably fires.
+      const INTEREST_SYNONYMS: Record<string, string[]> = {
+        culture: ['museum', 'gallery', 'galleries', 'art', 'arts', 'cultural', 'heritage', 'historic', 'historical', 'monument', 'cathedral', 'church', 'castle', 'palace', 'landmark', 'architecture', 'old town'],
+        history: ['historic', 'historical', 'heritage', 'monument', 'cathedral', 'castle', 'palace', 'ruins', 'old town', 'landmark'],
+        food: ['restaurant', 'dining', 'breakfast', 'lunch', 'dinner', 'brunch', 'tasting', 'market', 'tapas', 'wine', 'cafe', 'bakery', 'cuisine'],
+        cuisine: ['restaurant', 'dining', 'tasting', 'market', 'food', 'wine', 'tapas', 'gastronom'],
+        nature: ['park', 'garden', 'nature', 'outdoor', 'beach', 'hike', 'viewpoint', 'river', 'mountain', 'trail', 'miradouro'],
+        outdoors: ['park', 'garden', 'outdoor', 'beach', 'hike', 'viewpoint', 'trail', 'walk', 'stroll'],
+        adventure: ['adventure', 'tour', 'kayak', 'bike', 'climb', 'surf', 'zipline', 'excursion'],
+        thrills: ['adventure', 'thrill', 'extreme', 'adrenaline'],
+        relaxation: ['spa', 'wellness', 'relax', 'massage', 'thermal', 'beach', 'leisure'],
+        wellness: ['spa', 'wellness', 'relax', 'massage', 'yoga', 'thermal'],
+        nightlife: ['bar', 'club', 'nightlife', 'fado', 'live music', 'nightcap', 'drinks', 'cocktail', 'pub'],
+        entertainment: ['show', 'concert', 'music', 'theatre', 'theater', 'nightlife', 'fado', 'performance', 'live'],
       };
+      const INTEREST_STOP = new Set(['and', 'the', 'for', 'with', 'your', 'trip', 'travel', 'style', 'lover', 'seeker']);
+      const rawInterests: string[] = ((facts as any).preferences?.interests ?? prof.interests ?? [])
+        .map((s: any) => String(s || '').trim()).filter(Boolean);
+      const dietary: string[] = ((facts as any).preferences?.dietary ?? prof.dietaryRestrictions ?? [])
+        .map((s: any) => String(s || '').trim()).filter(Boolean);
+      // Per-interest matcher: the ORIGINAL category label + the concrete venue
+      // keywords ("needles") it maps to — so we cite "Culture & History" (what
+      // the traveler actually picked) while matching on "museum"/"gallery"/etc.
+      const interestMatchers = rawInterests.map((orig) => {
+        const needles = new Set<string>();
+        for (const t of orig.toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length >= 3 && !INTEREST_STOP.has(x))) {
+          needles.add(t);
+          if (t.endsWith('ies') && t.length > 4) needles.add(t.slice(0, -3) + 'y');
+          else if (t.endsWith('s') && t.length > 4) needles.add(t.slice(0, -1));
+          for (const syn of (INTEREST_SYNONYMS[t] ?? [])) needles.add(syn);
+        }
+        // Word-boundary regex (prefix match) so a short needle like "art" hits
+        // "art galleries" / "artisan" but NOT "hearty", "bar" not "barbecue".
+        const escaped = [...needles].map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        const re = escaped.length ? new RegExp(`\\b(?:${escaped.join('|')})`, 'i') : null;
+        return { label: orig, re };
+      });
       // Placeholders / logistics carry no DNA rationale — skip them.
       const SKIP_WHY_RE = /transport|transit|accommodation|logistics|flight|check.?in|check.?out|freshen|return to|departure|arrival transfer/i;
+      const DINING_RE = /dining|restaurant|breakfast|lunch|dinner|brunch|cafe|caf[eé]|food|meal/i;
       for (const a of (finalDay.activities || [])) {
         if (!a) continue;
         const cat = String((a as any).category || (a as any).type || '').toLowerCase();
@@ -854,23 +863,32 @@ export async function handleGenerateTripDayV2(
         if (SKIP_WHY_RE.test(cat) || SKIP_WHY_RE.test(title.toLowerCase())) continue;
         const existing = (a as any).personalization?.whyThisFits;
         if (existing && String(existing).trim()) continue;
-        const exp = generateExplanation(
-          {
-            title,
-            category: cat || 'activity',
-            tags: Array.isArray((a as any).tags) ? (a as any).tags : [],
-            description: (a as any).description || '',
-          },
-          explainCtx,
-        );
-        // Only attach a checkable rationale (skip the generic fallback) so the
-        // chip means something when it appears.
-        if (exp.matchedInputs.length > 0 && exp.whyThisFits) {
+        const tags = Array.isArray((a as any).tags) ? (a as any).tags.map((t: any) => String(t).toLowerCase()) : [];
+        const allText = `${title} ${(a as any).description || ''} ${cat} ${tags.join(' ')}`.toLowerCase();
+
+        const reasons: string[] = [];
+        const cited: string[] = [];
+        // Interests → cite the ORIGINAL category label, match on its keywords.
+        for (const m of interestMatchers) {
+          if (m.re && m.re.test(allText)) {
+            reasons.push(`reflects your interest in ${m.label}`);
+            cited.push(`interest:${m.label}`);
+            if (reasons.length >= 2) break;
+          }
+        }
+        // Dietary (dining only) — a concrete, checkable accommodation.
+        if ((DINING_RE.test(cat) || DINING_RE.test(title)) && dietary[0]) {
+          reasons.push(`suits your ${dietary[0]} needs`);
+          cited.push(`dietary:${dietary[0]}`);
+        }
+        // Only attach when there's a genuine match — the chip is real proof.
+        if (reasons.length > 0) {
+          const body = `Chosen because it ${reasons.join(' and ')}.`;
           (a as any).personalization = {
             ...((a as any).personalization || {}),
-            whyThisFits: exp.whyThisFits,
-            matchedInputs: exp.matchedInputs,
-            citationType: exp.citationType,
+            whyThisFits: body,
+            matchedInputs: cited,
+            citationType: cited[0]?.split(':')[0] || 'interest',
           };
         }
       }
