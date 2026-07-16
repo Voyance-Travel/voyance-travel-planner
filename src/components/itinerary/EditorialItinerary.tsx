@@ -357,7 +357,7 @@ export interface EditorialItineraryProps {
 // CONSTANTS & STYLES
 // =============================================================================
 
-const activityStyles: Record<string, { icon: React.ReactNode; label: string }> = {
+export const activityStyles: Record<string, { icon: React.ReactNode; label: string }> = {
   transportation: { icon: <Plane className="h-4 w-4" />, label: 'Transport' },
   transport: { icon: <Car className="h-4 w-4" />, label: 'Transport' },
   transit: { icon: <Train className="h-4 w-4" />, label: 'Travel' },
@@ -375,7 +375,7 @@ const activityStyles: Record<string, { icon: React.ReactNode; label: string }> =
   shopping: { icon: <ShoppingBag className="h-4 w-4" />, label: 'Shopping' },
 };
 
-const weatherIcons: Record<string, React.ReactNode> = {
+export const weatherIcons: Record<string, React.ReactNode> = {
   sunny: <Sun className="h-4 w-4 text-amber-500" />,
   clear: <Sun className="h-4 w-4 text-amber-500" />,
   'partly-cloudy': <Cloud className="h-4 w-4 text-slate-400" />,
