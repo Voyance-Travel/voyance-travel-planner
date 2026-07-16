@@ -1008,6 +1008,15 @@ export function ActivityRow({
                     </div>
                     ) : null;
                   })()}
+                  {/* Why this fits — Travel DNA rationale. Shown only when a real
+                      description exists, so it never duplicates the whyThisFits
+                      description fallback rendered above. */}
+                  {!compact && activity.personalization?.whyThisFits && sanitizeActivityText(activity.description) && !isDowntime && !isTransport && !isCheckIn && (
+                    <div className={cn("mt-1.5 flex items-start gap-1.5 text-xs", !canViewPremium && "blur-sm pointer-events-none select-none")}>
+                      <Sparkles className="h-3 w-3 text-primary shrink-0 mt-0.5" />
+                      <span className="text-muted-foreground"><span className="font-medium text-foreground/80">Why this fits:</span> {activity.personalization.whyThisFits}</span>
+                    </div>
+                  )}
                 </>
               );
             })()}
