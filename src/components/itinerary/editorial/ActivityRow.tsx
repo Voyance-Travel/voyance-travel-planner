@@ -1173,14 +1173,15 @@ export function ActivityRow({
                           ? "bg-primary/10 text-primary"
                           : "hover:bg-secondary text-muted-foreground"
                       )}
-                      aria-label={activity.isLocked ? "Unlock Activity" : "Lock Activity"}
+                      aria-label={activity.isLocked ? "Unlock this stop" : "Lock this stop to keep it fixed"}
                       data-tour="lock-button"
                     >
                       {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <span className="text-xs font-medium">{activity.isLocked ? 'Unlock Activity' : 'Lock Activity'}</span>
+                  <TooltipContent side="bottom" className="max-w-[220px]">
+                    <span className="text-xs font-medium">{activity.isLocked ? 'Locked — this stop stays fixed' : 'Keep this stop fixed'}</span>
+                    <span className="block text-[11px] opacity-80 mt-0.5">Locked stops aren't changed by Smart Finish, refreshes, or collaborators.</span>
                   </TooltipContent>
                 </Tooltip>
                 

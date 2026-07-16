@@ -565,7 +565,7 @@ function TripDetailsStep({
         <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
           {[
             { mode: 'single' as const, icon: MapPin, label: 'Single City', tooltip: 'AI-powered itinerary for one destination. We handle everything.', onClick: () => { setPlanMode('single'); handleToggleMultiCity(false); } },
-            { mode: 'manual' as const, icon: PenLine, label: 'Build Myself', tooltip: 'Full manual control. Organize your own research without AI generation.', onClick: () => setPlanMode('manual') },
+            { mode: 'manual' as const, icon: PenLine, label: 'Build Myself', tooltip: 'Full manual control. Organize your own research — no AI required to organize.', onClick: () => setPlanMode('manual') },
           ].map(({ mode, icon: Icon, label, tooltip, onClick }) => (
             <div key={mode} className="relative group">
               <button
