@@ -15,10 +15,17 @@ jobs:
         with: { deno-version: v1.x }
       - name: Install
         run: bun install --frozen-lockfile
+      - name: Typecheck
+        # THE guard against decomposition/refactor breakage. Vite/esbuild strips
+        # types WITHOUT cross-file checking, so a dropped import (e.g. a function
+        # left referenced after its definition moved to another module) builds
+        # green and then throws "X is not defined" at runtime. tsc resolves names
+        # across files and fails on it. MUST use -p tsconfig.app.json: the root
+        # tsconfig has files:[] and only *references* the app project, so a bare
+        # `tsc --noEmit` checks nothing.
+        run: bunx tsc --noEmit -p tsconfig.app.json
       - name: Build
-        # Fails the PR on a broken production build (TS errors, bad imports,
-        # missing modules) — the most common regression a green unit-test run
-        # would otherwise miss. Mirrors the local `vite build` gate.
+        # Production bundle must succeed (Vite/Rollup resolution, asset handling).
         run: bun run build
       - name: Vitest
         run: bun run test
