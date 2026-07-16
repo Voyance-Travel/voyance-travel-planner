@@ -205,6 +205,31 @@ serve(async (req) => {
       }
     }
 
+    // ─── Load the traveler's Travel DNA so cuts respect WHO they are ───
+    // A cheaper swap that betrays their travel style (all fine dining → chains
+    // for a food-obsessed traveller, or a hostel for a comfort-seeker) is a bad
+    // suggestion even when it saves money. Dietary is a hard constraint on swaps.
+    let dnaClause = "";
+    if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+      try {
+        const { createClient } = await import("npm:@supabase/supabase-js@2.90.1");
+        const { fetchTravelerDNA, buildCompactDNASummary } = await import("../_shared/traveler-dna.ts");
+        const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+        const { dna, hasData } = await fetchTravelerDNA(sb, userId);
+        if (hasData) {
+          const summary = buildCompactDNASummary(dna);
+          const dietary = dna.dietaryRestrictions ?? [];
+          dnaClause = `\n\nTRAVELER PROFILE (their Travel DNA — every cut must respect this):\n- ${summary}` +
+            (dietary.length
+              ? `\n- DIETARY (hard constraint): every dining swap MUST comply with: ${dietary.join(", ")}. Never swap to a venue that violates it.`
+              : "") +
+            `\nProtect what their DNA cares about most and take savings from categories they're indifferent to. A swap that saves money but betrays their travel style is a bad suggestion.`;
+        }
+      } catch (dnaErr) {
+        console.warn("[budget-coach] DNA fetch failed:", dnaErr);
+      }
+    }
+
     // Build a concise itinerary summary for the prompt (post-filter).
     // Drop $0 / unknown-cost rows — they aren't candidates for "make cheaper"
     // and their presence encourages the model to invent items to fill gaps.
@@ -321,7 +346,7 @@ CRITICAL COST RULES:
 - If no reference pricing is available for a swap, use the lowest reasonable amount from the reference data for that category.
 - For swap_type="swap" the new_cost MUST be strictly LESS than current_cost. For swap_type="drop" new_cost MUST be 0.
 - All costs are in whole currency units (e.g., 50 for $50), NOT cents.
-- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}${priorityOverrunsClause}${deepCutsClause}${coverageClause}`;
+- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}${priorityOverrunsClause}${deepCutsClause}${coverageClause}${dnaClause}`;
 
     const userPrompt = `The user's travel itinerary to ${destination || "their destination"} costs ${currency} ${currentTotal} but their budget is ${currency} ${budgetTarget}. They need to cut ${currency} ${gap}.
 
