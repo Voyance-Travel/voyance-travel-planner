@@ -72,6 +72,7 @@ import { runDetectorRepairs } from './detector-repairs.ts';
 import { findEmptyDays, mapTableRowsToActivities, applyHealedDay } from './completeness-gate.ts';
 import { stampArrivalAnchorTruth } from '../../_shared/stamp-arrival-anchor-truth.ts';
 import { stampDepartureAnchorTruth } from '../../_shared/stamp-departure-anchor-truth.ts';
+import { generateExplanation } from '../explainability.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -798,6 +799,63 @@ export async function handleGenerateTripDayV2(
       });
     } catch (e) {
       console.warn(`[v2] terminalCleanup failed (non-blocking) day=${dayNumber}:`, e);
+    }
+
+    // ── 6d. Travel-DNA rationale ("Why this fits") ─────────────────────
+    // The legacy chain emitted personalization.whyThisFits (LLM + explainability
+    // fallback); the V2 chain — the LIVE path — never did, so the DNA rationale
+    // chip had NO data to render on any generated trip. Compute it here
+    // deterministically (no LLM cost) from the traveler's own profile, and
+    // attach ONLY when a genuine match is found so the chip is real proof, not
+    // filler. Runs on the in-memory finalDay.activities, which flow straight into
+    // trips.itinerary_data at step 8 (the source the frontend reads). Non-blocking.
+    try {
+      const prof: any = (facts as any).travelers?.profile ?? {};
+      const ts: any = prof.traitScores ?? {};
+      const explainCtx: any = {
+        interests: (facts as any).preferences?.interests ?? prof.interests ?? [],
+        foodLikes: prof.foodLikes ?? [],
+        foodDislikes: prof.foodDislikes ?? [],
+        dietaryRestrictions: (facts as any).preferences?.dietary ?? prof.dietaryRestrictions ?? [],
+        travelCompanions: prof.travelCompanions ?? prof.companions ?? [],
+        traits: Object.fromEntries(
+          Object.entries(ts).map(([k, v]) => [k, { value: Number(v) || 0, label: k }]),
+        ),
+        tripIntents: prof.tripIntents ?? [],
+        budgetTier: (facts as any).preferences?.budgetTier ?? prof.budgetTier,
+        archetype: (facts as any).travelers?.archetype ?? prof.archetype,
+      };
+      // Placeholders / logistics carry no DNA rationale — skip them.
+      const SKIP_WHY_RE = /transport|transit|accommodation|logistics|flight|check.?in|check.?out|freshen|return to|departure|arrival transfer/i;
+      for (const a of (finalDay.activities || [])) {
+        if (!a) continue;
+        const cat = String((a as any).category || (a as any).type || '').toLowerCase();
+        const title = String((a as any).title || (a as any).name || '');
+        if (SKIP_WHY_RE.test(cat) || SKIP_WHY_RE.test(title.toLowerCase())) continue;
+        const existing = (a as any).personalization?.whyThisFits;
+        if (existing && String(existing).trim()) continue;
+        const exp = generateExplanation(
+          {
+            title,
+            category: cat || 'activity',
+            tags: Array.isArray((a as any).tags) ? (a as any).tags : [],
+            description: (a as any).description || '',
+          },
+          explainCtx,
+        );
+        // Only attach a checkable rationale (skip the generic fallback) so the
+        // chip means something when it appears.
+        if (exp.matchedInputs.length > 0 && exp.whyThisFits) {
+          (a as any).personalization = {
+            ...((a as any).personalization || {}),
+            whyThisFits: exp.whyThisFits,
+            matchedInputs: exp.matchedInputs,
+            citationType: exp.citationType,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn(`[v2] whyThisFits enrichment failed (non-blocking) day=${dayNumber}:`, e);
     }
 
     // ── 7. Persist tables (itinerary_days + itinerary_activities) ──────
