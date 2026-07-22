@@ -800,6 +800,102 @@ export async function handleGenerateTripDayV2(
       console.warn(`[v2] terminalCleanup failed (non-blocking) day=${dayNumber}:`, e);
     }
 
+    // ── 6d. Travel-DNA rationale ("Why this fits") ─────────────────────
+    // The legacy chain emitted personalization.whyThisFits (LLM + explainability
+    // fallback); the V2 chain — the LIVE path — never did, so the DNA rationale
+    // chip had NO data to render on any generated trip. Compute it here
+    // deterministically (no LLM cost) from the traveler's own profile, and
+    // attach ONLY when a genuine match is found so the chip is real proof, not
+    // filler. Runs on the in-memory finalDay.activities, which flow straight into
+    // trips.itinerary_data at step 8 (the source the frontend reads). Non-blocking.
+    try {
+      const prof: any = (facts as any).travelers?.profile ?? {};
+      // Interest matching is a SUBSTRING test against activity text.
+      // The app's interests are broad categories ("Culture & History", "Food &
+      // Cuisine") that almost never appear verbatim in a specific description
+      // ("art galleries", "historic heartbeat", "scrambled eggs"), so raw matching
+      // yields ~zero chips. Expand each interest into (a) its own word tokens +
+      // singular forms AND (b) the concrete venue keywords that category actually
+      // produces, so the substring test reliably fires.
+      const INTEREST_SYNONYMS: Record<string, string[]> = {
+        culture: ['museum', 'gallery', 'galleries', 'art', 'arts', 'cultural', 'heritage', 'historic', 'historical', 'monument', 'cathedral', 'church', 'castle', 'palace', 'landmark', 'architecture', 'old town'],
+        history: ['historic', 'historical', 'heritage', 'monument', 'cathedral', 'castle', 'palace', 'ruins', 'old town', 'landmark'],
+        food: ['restaurant', 'dining', 'breakfast', 'lunch', 'dinner', 'brunch', 'tasting', 'market', 'tapas', 'wine', 'cafe', 'bakery', 'cuisine'],
+        cuisine: ['restaurant', 'dining', 'tasting', 'market', 'food', 'wine', 'tapas', 'gastronom'],
+        nature: ['park', 'garden', 'nature', 'outdoor', 'beach', 'hike', 'viewpoint', 'river', 'mountain', 'trail', 'miradouro'],
+        outdoors: ['park', 'garden', 'outdoor', 'beach', 'hike', 'viewpoint', 'trail', 'walk', 'stroll'],
+        adventure: ['adventure', 'tour', 'kayak', 'bike', 'climb', 'surf', 'zipline', 'excursion'],
+        thrills: ['adventure', 'thrill', 'extreme', 'adrenaline'],
+        relaxation: ['spa', 'wellness', 'relax', 'massage', 'thermal', 'beach', 'leisure'],
+        wellness: ['spa', 'wellness', 'relax', 'massage', 'yoga', 'thermal'],
+        nightlife: ['bar', 'club', 'nightlife', 'fado', 'live music', 'nightcap', 'drinks', 'cocktail', 'pub'],
+        entertainment: ['show', 'concert', 'music', 'theatre', 'theater', 'nightlife', 'fado', 'performance', 'live'],
+      };
+      const INTEREST_STOP = new Set(['and', 'the', 'for', 'with', 'your', 'trip', 'travel', 'style', 'lover', 'seeker']);
+      const rawInterests: string[] = ((facts as any).preferences?.interests ?? prof.interests ?? [])
+        .map((s: any) => String(s || '').trim()).filter(Boolean);
+      const dietary: string[] = ((facts as any).preferences?.dietary ?? prof.dietaryRestrictions ?? [])
+        .map((s: any) => String(s || '').trim()).filter(Boolean);
+      // Per-interest matcher: the ORIGINAL category label + the concrete venue
+      // keywords ("needles") it maps to — so we cite "Culture & History" (what
+      // the traveler actually picked) while matching on "museum"/"gallery"/etc.
+      const interestMatchers = rawInterests.map((orig) => {
+        const needles = new Set<string>();
+        for (const t of orig.toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length >= 3 && !INTEREST_STOP.has(x))) {
+          needles.add(t);
+          if (t.endsWith('ies') && t.length > 4) needles.add(t.slice(0, -3) + 'y');
+          else if (t.endsWith('s') && t.length > 4) needles.add(t.slice(0, -1));
+          for (const syn of (INTEREST_SYNONYMS[t] ?? [])) needles.add(syn);
+        }
+        // Word-boundary regex (prefix match) so a short needle like "art" hits
+        // "art galleries" / "artisan" but NOT "hearty", "bar" not "barbecue".
+        const escaped = [...needles].map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        const re = escaped.length ? new RegExp(`\\b(?:${escaped.join('|')})`, 'i') : null;
+        return { label: orig, re };
+      });
+      // Placeholders / logistics carry no DNA rationale — skip them.
+      const SKIP_WHY_RE = /transport|transit|accommodation|logistics|flight|check.?in|check.?out|freshen|return to|departure|arrival transfer/i;
+      const DINING_RE = /dining|restaurant|breakfast|lunch|dinner|brunch|cafe|caf[eé]|food|meal/i;
+      for (const a of (finalDay.activities || [])) {
+        if (!a) continue;
+        const cat = String((a as any).category || (a as any).type || '').toLowerCase();
+        const title = String((a as any).title || (a as any).name || '');
+        if (SKIP_WHY_RE.test(cat) || SKIP_WHY_RE.test(title.toLowerCase())) continue;
+        const existing = (a as any).personalization?.whyThisFits;
+        if (existing && String(existing).trim()) continue;
+        const tags = Array.isArray((a as any).tags) ? (a as any).tags.map((t: any) => String(t).toLowerCase()) : [];
+        const allText = `${title} ${(a as any).description || ''} ${cat} ${tags.join(' ')}`.toLowerCase();
+
+        const reasons: string[] = [];
+        const cited: string[] = [];
+        // Interests → cite the ORIGINAL category label, match on its keywords.
+        for (const m of interestMatchers) {
+          if (m.re && m.re.test(allText)) {
+            reasons.push(`reflects your interest in ${m.label}`);
+            cited.push(`interest:${m.label}`);
+            if (reasons.length >= 2) break;
+          }
+        }
+        // Dietary (dining only) — a concrete, checkable accommodation.
+        if ((DINING_RE.test(cat) || DINING_RE.test(title)) && dietary[0]) {
+          reasons.push(`suits your ${dietary[0]} needs`);
+          cited.push(`dietary:${dietary[0]}`);
+        }
+        // Only attach when there's a genuine match — the chip is real proof.
+        if (reasons.length > 0) {
+          const body = `Chosen because it ${reasons.join(' and ')}.`;
+          (a as any).personalization = {
+            ...((a as any).personalization || {}),
+            whyThisFits: body,
+            matchedInputs: cited,
+            citationType: cited[0]?.split(':')[0] || 'interest',
+          };
+        }
+      }
+    } catch (e) {
+      console.warn(`[v2] whyThisFits enrichment failed (non-blocking) day=${dayNumber}:`, e);
+    }
+
     // ── 7. Persist tables (itinerary_days + itinerary_activities) ──────
     const persisted = await withStage(trace, 'persist_gate', { dayNumber }, () =>
       persistDay({
